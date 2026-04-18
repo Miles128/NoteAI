@@ -33,12 +33,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.base import (
+from agents_backup.base import (
     AgentRole, TaskStatus, AgentTask, Chunk,
     ProcessingResult, CrossChunkContext, MessageBus
 )
-from agents.semantic_chunker import SemanticChunker, ChunkConfig
-from agents.context_manager import ContextManager
+from agents_backup.semantic_chunker import SemanticChunker, ChunkConfig
+from agents_backup.context_manager import ContextManager
 from config.settings import config
 from prompts import (
     EXTRACTOR_SYSTEM_PROMPT,

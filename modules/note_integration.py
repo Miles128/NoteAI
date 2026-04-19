@@ -419,7 +419,7 @@ class NoteIntegration:
 
         prompt = PromptTemplate(
             template=TOPIC_EXTRACTION_PROMPT,
-            input_variables=["titles", "chunks_info", "min_topic_count", "total_words", "max_input", "required_topics"]
+            input_variables=["titles", "chunks_info", "total_words", "max_input", "min_topic_count"]
         )
         llm = ChatOpenAI(
             api_key=config.api_key,
@@ -434,10 +434,9 @@ class NoteIntegration:
             response = chain.invoke({
                 "titles": titles,
                 "chunks_info": chunks_info,
-                "min_topic_count": min_topic_count,
                 "total_words": total_words,
                 "max_input": max_input,
-                "required_topics": min_topic_count
+                "min_topic_count": min_topic_count
             })
 
             result = json.loads(response.content)

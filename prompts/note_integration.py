@@ -41,10 +41,13 @@ TOPIC_EXTRACTION_PROMPT = """你是一位专业的知识整理专家。以下是
 请执行以下任务：
 
 1. 分析所有文档标题和内容块，提取主要主题
-2. 确保主题数量不少于 {min_topic_count} 个
+2. 主题数量**必须远大于** {min_topic_count} 个，建议至少是 {min_topic_count} × 2 或更多
 3. 每个主题需要关联其对应的内容块
 
-主题数量计算规则：总字数 {total_words} / LLM最大输入 {max_input} = {required_topics}，向上取整
+上下文信息：
+- 总字数：{total_words}
+- LLM 单次最大处理字数：{max_input}
+- 最小主题数（基于上下文估算）：{min_topic_count}
 
 请以以下JSON格式输出：
 {{
@@ -61,7 +64,9 @@ TOPIC_EXTRACTION_PROMPT = """你是一位专业的知识整理专家。以下是
 注意：
 - 每个chunk可以归属多个主题
 - 主题名称应简洁明了
-- 确保所有主题的知识完整性"""
+- 确保所有主题的知识完整性
+- 主题数量应远大于 {min_topic_count}，但不要为了凑数而强行拆分无关内容
+- 如果内容丰富，可以适当增加主题数量，让每个主题更加聚焦"""
 
 CHUNK_COMPRESSION_PROMPT = """你是一位专业的知识编辑。以下是关于某个主题的Markdown内容块：
 

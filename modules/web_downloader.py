@@ -21,6 +21,11 @@ from utils.helpers import (
     check_api_config, APIConfigError, NetworkError, is_network_error,
     clean_markdown_content, optimize_markdown_format
 )
+from utils.tag_extractor import (
+    extract_tags_from_text,
+    generate_yaml_frontmatter,
+    add_yaml_frontmatter_to_content
+)
 
 
 class WebDownloader:
@@ -459,9 +464,18 @@ class WebDownloader:
                 file_path = save_dir / filename
 
                 try:
+                    tags = extract_tags_from_text(result['content'])
+                    content_with_frontmatter = add_yaml_frontmatter_to_content(
+                        result['content'],
+                        title=result['title'],
+                        tags=tags,
+                        source=url
+                    )
+                    
                     with open(file_path, 'w', encoding='utf-8') as f:
-                        f.write(result['content'])
+                        f.write(content_with_frontmatter)
                     result['file_path'] = str(file_path)
+                    result['tags'] = tags
                     logger.info(f"已保存: {file_path}")
                 except Exception as e:
                     result['error'] = f"保存失败: {str(e)}"

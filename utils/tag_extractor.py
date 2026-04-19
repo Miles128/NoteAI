@@ -2,9 +2,16 @@ import re
 import math
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Any
+from typing import List, Dict, Set, Optional, Any, Tuple
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    import yaml
+    PYYAML_AVAILABLE = True
+except ImportError:
+    yaml = None
+    PYYAML_AVAILABLE = False
 
 
 STOPWORDS: Set[str] = {
@@ -23,6 +30,97 @@ STOPWORDS: Set[str] = {
 MIN_WORD_LEN = 2
 MAX_TAGS = 5
 MIN_TF_IDF_SCORE = 0.01
+
+
+def _parse_yaml_value_simple(value: str) -> Any:
+    """
+    简单的 YAML 值解析器（fallback，用于没有 PyYAML 时）。
+    支持基本类型：字符串、数字、布尔值、列表。
+    """
+    value = value.strip()
+    
+    if not value:
+        return None
+    
+    if value.startswith('[') and value.endswith(']'):
+        list_content = value[1:-1].strip()
+        if not list_content:
+            return []
+        items = []
+        current = ""
+        in_quotes = None
+        i = 0
+        while i < len(list_content):
+            c = list_content[i]
+            if c in ['"', "'"]:
+                if in_quotes == c:
+                    in_quotes = None
+                elif in_quotes is None:
+                    in_quotes = c
+                else:
+                    current += c
+            elif c == ',' and in_quotes is None:
+                items.append(current.strip())
+                current = ""
+            else:
+                current += c
+            i += 1
+        if current:
+            items.append(current.strip())
+        result = []
+        for item in items:
+            item = item.strip()
+            if item.startswith('"') and item.endswith('"'):
+                item = item[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+            elif item.startswith("'") and item.endswith("'"):
+                item = item[1:-1].replace("\\'", "'").replace('\\\\', '\\')
+            result.append(item)
+        return result
+    
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+    if value.startswith("'") and value.endswith("'"):
+        return value[1:-1].replace("\\'", "'").replace('\\\\', '\\')
+    
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    if value.lower() == 'null':
+        return None
+    
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    
+    return value
+
+
+def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
+    """
+    简单的 YAML front matter 解析器（fallback）。
+    只支持基本的 key: value 格式，用于没有 PyYAML 时。
+    """
+    result = {}
+    lines = content.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        
+        if ':' in line:
+            key, value = line.split(':', 1)
+            key = key.strip()
+            if key:
+                result[key] = _parse_yaml_value_simple(value)
+    
+    return result
 
 
 def tokenize(text: str) -> List[str]:
@@ -436,6 +534,10 @@ def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
         frontmatter, body = parse_yaml_frontmatter(content)
         # frontmatter = {'title': '测试', 'tags': ['tag1', 'tag2']}
         # body = '正文内容'
+    
+    注意：
+        - 优先使用 PyYAML 解析（如果已安装）
+        - 如果 PyYAML 不可用，使用内置的简单解析器作为 fallback
     """
     frontmatter = {}
     body = content
@@ -456,13 +558,15 @@ def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     if frontmatter_end_index is None:
         return frontmatter, body
     
-    import yaml
-    try:
-        frontmatter_content = '\n'.join(frontmatter_lines)
-        if frontmatter_content.strip():
-            frontmatter = yaml.safe_load(frontmatter_content) or {}
-    except Exception:
-        frontmatter = {}
+    frontmatter_content = '\n'.join(frontmatter_lines)
+    if frontmatter_content.strip():
+        try:
+            if PYYAML_AVAILABLE and yaml is not None:
+                frontmatter = yaml.safe_load(frontmatter_content) or {}
+            else:
+                frontmatter = _parse_yaml_frontmatter_simple(frontmatter_content)
+        except Exception:
+            frontmatter = {}
     
     remaining_lines = lines[frontmatter_end_index + 1:]
     while remaining_lines and remaining_lines[0].strip() == '':

@@ -17,6 +17,10 @@ from utils.helpers import (
     clean_markdown_content, optimize_markdown_format,
     extract_pdf_text, extract_pdf_pages
 )
+from utils.tag_extractor import (
+    extract_tags_from_text,
+    add_yaml_frontmatter_to_content
+)
 
 class BaseConverter(ABC):
     """转换器基类"""
@@ -281,6 +285,14 @@ class FileConverterManager:
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path), ai_assist=ai_assist)
             
+            # 提取标签并添加YAML front matter
+            tags = extract_tags_from_text(markdown_content)
+            markdown_content = add_yaml_frontmatter_to_content(
+                markdown_content,
+                tags=tags,
+                source=file_path
+            )
+            
             # 保存文件
             output_dir = ensure_dir(output_path)
             output_filename = sanitize_filename(file_path_obj.stem) + '.md'
@@ -298,6 +310,7 @@ class FileConverterManager:
 
             result['success'] = True
             result['output_path'] = str(output_file)
+            result['tags'] = tags
 
             logger.info(f"文件转换成功: {output_file}")
             

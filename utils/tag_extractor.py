@@ -1,9 +1,17 @@
 import re
 import math
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional, Any, Tuple
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    import yaml
+    PYYAML_AVAILABLE = True
+except ImportError:
+    yaml = None
+    PYYAML_AVAILABLE = False
 
 
 STOPWORDS: Set[str] = {
@@ -24,6 +32,97 @@ MAX_TAGS = 5
 MIN_TF_IDF_SCORE = 0.01
 
 
+def _parse_yaml_value_simple(value: str) -> Any:
+    """
+    简单的 YAML 值解析器（fallback，用于没有 PyYAML 时）。
+    支持基本类型：字符串、数字、布尔值、列表。
+    """
+    value = value.strip()
+    
+    if not value:
+        return None
+    
+    if value.startswith('[') and value.endswith(']'):
+        list_content = value[1:-1].strip()
+        if not list_content:
+            return []
+        items = []
+        current = ""
+        in_quotes = None
+        i = 0
+        while i < len(list_content):
+            c = list_content[i]
+            if c in ['"', "'"]:
+                if in_quotes == c:
+                    in_quotes = None
+                elif in_quotes is None:
+                    in_quotes = c
+                else:
+                    current += c
+            elif c == ',' and in_quotes is None:
+                items.append(current.strip())
+                current = ""
+            else:
+                current += c
+            i += 1
+        if current:
+            items.append(current.strip())
+        result = []
+        for item in items:
+            item = item.strip()
+            if item.startswith('"') and item.endswith('"'):
+                item = item[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+            elif item.startswith("'") and item.endswith("'"):
+                item = item[1:-1].replace("\\'", "'").replace('\\\\', '\\')
+            result.append(item)
+        return result
+    
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+    if value.startswith("'") and value.endswith("'"):
+        return value[1:-1].replace("\\'", "'").replace('\\\\', '\\')
+    
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    if value.lower() == 'null':
+        return None
+    
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    
+    return value
+
+
+def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
+    """
+    简单的 YAML front matter 解析器（fallback）。
+    只支持基本的 key: value 格式，用于没有 PyYAML 时。
+    """
+    result = {}
+    lines = content.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        
+        if ':' in line:
+            key, value = line.split(':', 1)
+            key = key.strip()
+            if key:
+                result[key] = _parse_yaml_value_simple(value)
+    
+    return result
+
+
 def tokenize(text: str) -> List[str]:
     """中英文混合分词"""
     text = text.lower()
@@ -36,7 +135,11 @@ def tokenize(text: str) -> List[str]:
     while pos < len(text):
         m = chinese_pattern.match(text, pos)
         if m:
-            words.extend(list(m.group()))
+            chinese_text = m.group()
+            if len(chinese_text) >= 2:
+                words.append(chinese_text)
+            else:
+                words.extend(list(chinese_text))
             pos = m.end()
             continue
         m = english_pattern.match(text, pos)
@@ -51,7 +154,17 @@ def tokenize(text: str) -> List[str]:
         words.append(text[pos])
         pos += 1
 
-    return [w for w in words if len(w) >= MIN_WORD_LEN and w not in STOPWORDS]
+    result = []
+    for w in words:
+        if w in STOPWORDS:
+            continue
+        if re.match(r'[\u4e00-\u9fff]+', w):
+            if len(w) >= 1:
+                result.append(w)
+        else:
+            if len(w) >= MIN_WORD_LEN:
+                result.append(w)
+    return result
 
 
 def compute_tf(tokens: List[str]) -> Dict[str, float]:
@@ -87,12 +200,15 @@ def extract_tags_from_text(text: str, idf: Dict[str, float] = None) -> List[str]
     if not tokens:
         return []
     tf = compute_tf(tokens)
+    
     if idf is None:
-        documents = [tokens]
-        idf = compute_idf(documents)
-    tfidf = compute_tfidf(tf, idf)
-    sorted_terms = sorted(tfidf.items(), key=lambda x: x[1], reverse=True)
-    tags = [term for term, score in sorted_terms if score >= MIN_TF_IDF_SCORE][:MAX_TAGS]
+        sorted_terms = sorted(tf.items(), key=lambda x: x[1], reverse=True)
+        tags = [term for term, score in sorted_terms][:MAX_TAGS]
+    else:
+        tfidf = compute_tfidf(tf, idf)
+        sorted_terms = sorted(tfidf.items(), key=lambda x: x[1], reverse=True)
+        tags = [term for term, score in sorted_terms if score >= MIN_TF_IDF_SCORE][:MAX_TAGS]
+    
     return tags
 
 
@@ -260,3 +376,363 @@ def tag_markdown_files(
             pass
 
     return results
+
+
+def _escape_yaml_string(value: str) -> str:
+    """
+    转义YAML字符串中的特殊字符。
+    处理：引号、反斜杠、换行符、冒号后跟空格等。
+    """
+    if not value:
+        return '""'
+    
+    needs_quoting = False
+    special_chars = ['"', '\\', '\n', '\r', '\t', '#', ': ', '[', ']', '{', '}', ',', '*', '&', '!', '|', '>', '%', '@', '`']
+    
+    for char in special_chars:
+        if char in value:
+            needs_quoting = True
+            break
+    
+    if value.startswith((' ', '-', '?', ':')) or value.endswith(' '):
+        needs_quoting = True
+    
+    if not needs_quoting:
+        return value
+    
+    value = value.replace('\\', '\\\\')
+    value = value.replace('"', '\\"')
+    value = value.replace('\n', '\\n')
+    value = value.replace('\r', '\\r')
+    value = value.replace('\t', '\\t')
+    
+    return f'"{value}"'
+
+
+def _format_yaml_value(value: Any) -> str:
+    """
+    格式化YAML值，根据类型选择合适的表示方式。
+    """
+    if value is None:
+        return 'null'
+    elif isinstance(value, bool):
+        return 'true' if value else 'false'
+    elif isinstance(value, (int, float)):
+        return str(value)
+    elif isinstance(value, list):
+        if not value:
+            return '[]'
+        items = ', '.join(_escape_yaml_string(str(item)) for item in value)
+        return f'[{items}]'
+    elif isinstance(value, datetime):
+        return _escape_yaml_string(value.strftime('%Y-%m-%d'))
+    else:
+        return _escape_yaml_string(str(value))
+
+
+def generate_yaml_frontmatter(
+    title: str = "",
+    tags: List[str] = None,
+    date: datetime = None,
+    source: str = "",
+    word_count: int = None,
+    language: str = "",
+    extra_fields: Dict[str, Any] = None
+) -> str:
+    """
+    生成标准的 YAML front matter。
+    
+    参数：
+        title: 文档标题
+        tags: 标签列表
+        date: 创建/处理日期（默认当前日期）
+        source: 来源（URL或文件路径）
+        word_count: 字数统计
+        language: 语言检测结果（chinese/english）
+        extra_fields: 额外的自定义字段
+    
+    返回：
+        完整的 YAML front matter 字符串（包含 --- 分隔符）
+    
+    格式说明：
+        ---
+        title: "文档标题"
+        tags: [tag1, tag2, tag3]
+        date: "2026-04-19"
+        source: "https://example.com"
+        word_count: 1234
+        language: "chinese"
+        ---
+    
+    兼容性：
+        - 与 Obsidian、Jekyll、Hugo、Hexo 等主流静态站点生成器兼容
+        - 与 VS Code、Typora 等 Markdown 编辑器兼容
+    """
+    fields = {}
+    
+    if title:
+        fields['title'] = title
+    
+    if tags:
+        fields['tags'] = tags
+    else:
+        fields['tags'] = []
+    
+    if date is None:
+        date = datetime.now()
+    fields['date'] = date
+    
+    if source:
+        fields['source'] = source
+    
+    if word_count is not None:
+        fields['word_count'] = word_count
+    
+    if language:
+        fields['language'] = language
+    
+    if extra_fields:
+        fields.update(extra_fields)
+    
+    lines = ['---']
+    
+    ordered_keys = ['title', 'tags', 'date', 'source', 'word_count', 'language']
+    for key in ordered_keys:
+        if key in fields:
+            value = fields.pop(key)
+            lines.append(f"{key}: {_format_yaml_value(value)}")
+    
+    for key, value in sorted(fields.items()):
+        lines.append(f"{key}: {_format_yaml_value(value)}")
+    
+    lines.append('---')
+    lines.append('')
+    
+    return '\n'.join(lines)
+
+
+def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
+    """
+    解析 Markdown 文件中的 YAML front matter。
+    
+    参数：
+        content: Markdown 文件完整内容
+    
+    返回：
+        (frontmatter_dict, remaining_content)
+        - frontmatter_dict: 解析出的 YAML 字段字典
+        - remaining_content: 去除 front matter 后的正文内容
+    
+    示例：
+        content = '''---
+        title: "测试"
+        tags: [tag1, tag2]
+        ---
+        
+        正文内容
+        '''
+        frontmatter, body = parse_yaml_frontmatter(content)
+        # frontmatter = {'title': '测试', 'tags': ['tag1', 'tag2']}
+        # body = '正文内容'
+    
+    注意：
+        - 优先使用 PyYAML 解析（如果已安装）
+        - 如果 PyYAML 不可用，使用内置的简单解析器作为 fallback
+    """
+    frontmatter = {}
+    body = content
+    
+    if not content.startswith('---\n'):
+        return frontmatter, body
+    
+    lines = content.split('\n')
+    frontmatter_lines = []
+    frontmatter_end_index = None
+    
+    for i, line in enumerate(lines[1:], start=1):
+        if line == '---':
+            frontmatter_end_index = i
+            break
+        frontmatter_lines.append(line)
+    
+    if frontmatter_end_index is None:
+        return frontmatter, body
+    
+    frontmatter_content = '\n'.join(frontmatter_lines)
+    if frontmatter_content.strip():
+        try:
+            if PYYAML_AVAILABLE and yaml is not None:
+                frontmatter = yaml.safe_load(frontmatter_content) or {}
+            else:
+                frontmatter = _parse_yaml_frontmatter_simple(frontmatter_content)
+        except Exception:
+            frontmatter = {}
+    
+    remaining_lines = lines[frontmatter_end_index + 1:]
+    while remaining_lines and remaining_lines[0].strip() == '':
+        remaining_lines.pop(0)
+    body = '\n'.join(remaining_lines)
+    
+    return frontmatter, body
+
+
+def add_yaml_frontmatter_to_content(
+    content: str,
+    title: str = "",
+    tags: List[str] = None,
+    source: str = "",
+    language: str = "",
+    extra_fields: Dict[str, Any] = None
+) -> str:
+    """
+    为 Markdown 内容添加 YAML front matter。
+    
+    如果内容已存在 front matter，则更新它；否则添加新的。
+    
+    参数：
+        content: 原始 Markdown 内容
+        title: 文档标题（如未提供，尝试从内容中提取）
+        tags: 标签列表
+        source: 来源（URL或文件路径）
+        language: 语言
+        extra_fields: 额外字段
+    
+    返回：
+        添加了 front matter 的完整内容
+    """
+    existing_frontmatter, body = parse_yaml_frontmatter(content)
+    
+    if not title:
+        title_match = re.match(r'^#\s+(.+)$', body.lstrip(), re.MULTILINE)
+        if title_match:
+            title = title_match.group(1).strip()
+    
+    if tags is None:
+        tags = extract_tags_from_text(body)
+    
+    word_count = len(re.findall(r'[\u4e00-\u9fff]|[a-zA-Z]+', body))
+    
+    if not language:
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', body))
+        language = 'chinese' if chinese_chars > 10 else 'english'
+    
+    new_frontmatter = generate_yaml_frontmatter(
+        title=title,
+        tags=tags,
+        source=source,
+        word_count=word_count,
+        language=language,
+        extra_fields=extra_fields
+    )
+    
+    return new_frontmatter + body
+
+
+def add_yaml_frontmatter_to_file(
+    file_path: str,
+    title: str = "",
+    tags: List[str] = None,
+    source: str = "",
+    language: str = "",
+    extra_fields: Dict[str, Any] = None
+) -> bool:
+    """
+    为 Markdown 文件添加 YAML front matter。
+    
+    参数：
+        file_path: Markdown 文件路径
+        title: 文档标题
+        tags: 标签列表
+        source: 来源
+        language: 语言
+        extra_fields: 额外字段
+    
+    返回：
+        是否成功
+    """
+    p = Path(file_path)
+    if not p.exists() or not p.suffix.lower() == '.md':
+        return False
+    
+    try:
+        content = p.read_text(encoding='utf-8')
+        new_content = add_yaml_frontmatter_to_content(
+            content,
+            title=title,
+            tags=tags,
+            source=source,
+            language=language,
+            extra_fields=extra_fields
+        )
+        p.write_text(new_content, encoding='utf-8')
+        return True
+    except Exception:
+        return False
+
+
+def process_and_tag_file_with_yaml(
+    file_path: str,
+    source: str = "",
+    title: str = ""
+) -> Dict[str, Any]:
+    """
+    处理单个文件，提取标签并添加 YAML front matter。
+    
+    参数：
+        file_path: Markdown 文件路径
+        source: 来源信息（URL或原文件路径）
+        title: 可选的标题覆盖
+    
+    返回：
+        包含处理结果的字典：{'success': bool, 'tags': list, 'title': str}
+    """
+    result = {
+        'success': False,
+        'tags': [],
+        'title': title,
+        'word_count': 0,
+        'language': ''
+    }
+    
+    p = Path(file_path)
+    if not p.exists() or not p.suffix.lower() == '.md':
+        return result
+    
+    try:
+        content = p.read_text(encoding='utf-8')
+        
+        existing_frontmatter, body = parse_yaml_frontmatter(content)
+        
+        if not title:
+            title = existing_frontmatter.get('title', '')
+            if not title:
+                from utils.helpers import extract_title_from_markdown
+                title = extract_title_from_markdown(body) or p.stem
+        
+        tags = extract_tags_from_text(body)
+        
+        word_count = len(re.findall(r'[\u4e00-\u9fff]|[a-zA-Z]+', body))
+        
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', body))
+        language = 'chinese' if chinese_chars > 10 else 'english'
+        
+        new_frontmatter = generate_yaml_frontmatter(
+            title=title,
+            tags=tags,
+            source=source,
+            word_count=word_count,
+            language=language
+        )
+        
+        new_content = new_frontmatter + body
+        p.write_text(new_content, encoding='utf-8')
+        
+        result['success'] = True
+        result['tags'] = tags
+        result['title'] = title
+        result['word_count'] = word_count
+        result['language'] = language
+        
+        return result
+    except Exception as e:
+        return result

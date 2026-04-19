@@ -51,3 +51,6 @@ local_config.py
 config.local.py
 .env
 .env.local
+
+# Trae IDE
+.trae/

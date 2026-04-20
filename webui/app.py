@@ -551,16 +551,16 @@ class Api:
         )
 
 
-def try_restore_workspace(window):
-    """尝试从系统目录恢复工作区
+def try_restore_workspace_config():
+    """尝试从系统目录恢复工作区配置（不操作窗口）
     
-    处理以下情况：
-    1. 没有保存的工作区状态 → 什么都不做
-    2. 有保存的工作区状态且路径有效 → 自动恢复工作区
-    3. 有保存的工作区状态但路径无效 → 记录日志，等待用户重新选择
+    此函数在 webview.start() 之前调用，只设置配置，
+    不操作窗口（因为窗口尚未初始化）。
     
     Returns:
-        (success: bool, message: str)
+        (workspace_name: str 或 None, message: str)
+        - workspace_name: 如果成功恢复，返回工作区名称
+        - message: 描述信息
     """
     try:
         workspace_info = workspace_manager.get_workspace_info()
@@ -572,15 +572,15 @@ def try_restore_workspace(window):
         
         if not is_saved:
             print(f"[INFO] 没有保存的工作区状态")
-            return False, "没有保存的工作区"
+            return None, "没有保存的工作区"
         
         if not is_valid:
             print(f"[INFO] 已保存的工作区路径不存在: {saved_path}")
-            return False, f"工作区路径已不存在: {saved_path}"
+            return None, f"工作区路径已不存在: {saved_path}"
         
         if not workspace_path:
             print(f"[WARNING] 工作区信息不一致: is_valid=True 但 workspace_path=None")
-            return False, "工作区状态不一致"
+            return None, "工作区状态不一致"
         
         workspace = Path(workspace_path)
         
@@ -591,16 +591,15 @@ def try_restore_workspace(window):
             print(f"[WARNING] 设置工作区文件夹失败: {message}")
         
         workspace_name = workspace.name
-        window.set_title(f"NoteAI - {workspace_name}")
         
-        print(f"[INFO] 已自动恢复工作区: {workspace_path}")
-        return True, f"已恢复工作区: {workspace_name}"
+        print(f"[INFO] 已自动恢复工作区配置: {workspace_path}")
+        return workspace_name, f"已恢复工作区: {workspace_name}"
         
     except Exception as e:
-        print(f"[ERROR] 恢复工作区时发生错误: {e}")
+        print(f"[ERROR] 恢复工作区配置时发生错误: {e}")
         import traceback
         traceback.print_exc()
-        return False, f"恢复工作区失败: {str(e)}"
+        return None, f"恢复工作区失败: {str(e)}"
 
 
 def main():
@@ -620,9 +619,21 @@ def main():
 
     api.set_window(window)
     
-    try_restore_workspace(window)
+    workspace_name, message = try_restore_workspace_config()
     
-    webview.start()
+    def after_window_start():
+        """窗口启动后的回调函数
+        
+        在此函数中可以安全地调用 window.set_title() 等窗口操作
+        """
+        if workspace_name:
+            try:
+                window.set_title(f"NoteAI - {workspace_name}")
+                print(f"[INFO] 已设置窗口标题: NoteAI - {workspace_name}")
+            except Exception as e:
+                print(f"[WARNING] 设置窗口标题失败: {e}")
+    
+    webview.start(func=after_window_start)
 
 
 if __name__ == "__main__":

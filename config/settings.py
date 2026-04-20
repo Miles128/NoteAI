@@ -1,14 +1,244 @@
 import os
+import sys
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass, field, fields
 from typing import Optional, Dict, Any, Tuple
 import json
+import shutil
 from pydantic import BaseModel, Field, validator
 
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
 # 项目配置文件路径
 PROJECT_CONFIG_PATH = str(Path(__file__).parent / "config.json")
+
+
+def get_system_app_data_dir() -> Path:
+    """获取系统应用数据目录（跨平台）
+    
+    - macOS: ~/Library/Application Support/NoteAI
+    - Windows: %APPDATA%/NoteAI 或 %LOCALAPPDATA%/NoteAI
+    - Linux: ~/.config/NoteAI
+    
+    Returns:
+        应用数据目录的 Path 对象
+    """
+    app_name = "NoteAI"
+    
+    if sys.platform == "darwin":
+        # macOS
+        base_dir = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        # Windows
+        base_dir = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        # Linux 等
+        base_dir = Path.home() / ".config"
+    
+    return base_dir / app_name
+
+
+# 系统级工作区配置文件路径
+SYSTEM_APP_DATA_DIR = get_system_app_data_dir()
+WORKSPACE_STATE_FILE = SYSTEM_APP_DATA_DIR / "workspace_state.json"
+
+
+class WorkspaceStateError(Exception):
+    """工作区状态操作异常"""
+    pass
+
+
+class WorkspaceStateManager:
+    """工作区状态管理器
+    
+    负责：
+    1. 保存工作区路径到系统指定目录
+    2. 从系统指定目录加载工作区路径
+    3. 原子写入防止数据损坏
+    4. 错误处理和恢复机制
+    """
+    
+    def __init__(self, state_file: Path = None):
+        self.state_file = state_file or WORKSPACE_STATE_FILE
+        self._ensure_dir_exists()
+    
+    def _ensure_dir_exists(self):
+        """确保目录存在"""
+        try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        except (PermissionError, OSError) as e:
+            raise WorkspaceStateError(f"无法创建应用数据目录: {e}")
+    
+    def _atomic_write(self, data: Dict[str, Any]) -> bool:
+        """原子写入文件
+        
+        策略：先写入临时文件，成功后再替换原文件
+        防止写入过程中崩溃导致数据损坏
+        """
+        try:
+            temp_dir = self.state_file.parent
+            fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=".tmp")
+            
+            try:
+                os.close(fd)
+                with open(temp_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                
+                os.fsync(os.open(temp_path, os.O_RDONLY))
+                
+                if self.state_file.exists():
+                    old_path = self.state_file.with_suffix(".json.bak")
+                    if old_path.exists():
+                        old_path.unlink()
+                    shutil.copy2(self.state_file, old_path)
+                
+                shutil.move(temp_path, self.state_file)
+                
+                return True
+            finally:
+                if Path(temp_path).exists():
+                    try:
+                        Path(temp_path).unlink()
+                    except:
+                        pass
+        except PermissionError:
+            raise WorkspaceStateError("保存工作区状态失败：没有写入权限")
+        except OSError as e:
+            raise WorkspaceStateError(f"保存工作区状态失败：{e}")
+    
+    def save_workspace(self, workspace_path: str, additional_data: Dict[str, Any] = None) -> Tuple[bool, str]:
+        """保存工作区状态
+        
+        Args:
+            workspace_path: 工作区路径
+            additional_data: 附加数据（可选）
+        
+        Returns:
+            (success, message)
+        """
+        if not workspace_path:
+            return False, "工作区路径为空"
+        
+        workspace = Path(workspace_path)
+        if not workspace.exists():
+            return False, f"工作区路径不存在: {workspace_path}"
+        
+        data = {
+            "workspace_path": str(workspace),
+            "last_opened_at": self._get_timestamp(),
+            "version": "1.0.0"
+        }
+        
+        if additional_data:
+            data.update(additional_data)
+        
+        try:
+            success = self._atomic_write(data)
+            if success:
+                return True, f"工作区已保存: {workspace_path}"
+            return False, "保存工作区失败"
+        except WorkspaceStateError as e:
+            return False, str(e)
+    
+    def load_workspace(self) -> Tuple[Optional[str], Dict[str, Any]]:
+        """加载工作区状态
+        
+        Returns:
+            (workspace_path 或 None, 完整状态数据)
+        """
+        if not self.state_file.exists():
+            return None, {}
+        
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            workspace_path = data.get("workspace_path")
+            if workspace_path:
+                workspace = Path(workspace_path)
+                if not workspace.exists():
+                    return None, data
+            
+            return workspace_path, data
+        except json.JSONDecodeError:
+            return self._try_restore_from_backup()
+        except (PermissionError, OSError) as e:
+            print(f"加载工作区状态时出错: {e}")
+            return self._try_restore_from_backup()
+    
+    def _try_restore_from_backup(self) -> Tuple[Optional[str], Dict[str, Any]]:
+        """尝试从备份文件恢复"""
+        backup_file = self.state_file.with_suffix(".json.bak")
+        if not backup_file.exists():
+            return None, {}
+        
+        try:
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            workspace_path = data.get("workspace_path")
+            if workspace_path:
+                workspace = Path(workspace_path)
+                if not workspace.exists():
+                    return None, data
+            
+            print("已从备份文件恢复工作区状态")
+            return workspace_path, data
+        except Exception:
+            return None, {}
+    
+    def clear_workspace_state(self) -> Tuple[bool, str]:
+        """清除工作区状态（用于用户关闭工作区时）
+        
+        Returns:
+            (success, message)
+        """
+        try:
+            if self.state_file.exists():
+                old_path = self.state_file.with_suffix(".json.bak")
+                if old_path.exists():
+                    old_path.unlink()
+                shutil.copy2(self.state_file, old_path)
+                self.state_file.unlink()
+            return True, "工作区状态已清除"
+        except Exception as e:
+            return False, f"清除工作区状态失败: {e}"
+    
+    def get_workspace_info(self) -> Dict[str, Any]:
+        """获取工作区详细信息
+        
+        Returns:
+            包含工作区信息的字典
+        """
+        workspace_path, data = self.load_workspace()
+        
+        info = {
+            "is_saved": workspace_path is not None,
+            "workspace_path": workspace_path,
+            "last_opened_at": data.get("last_opened_at"),
+            "state_file": str(self.state_file),
+            "state_file_exists": self.state_file.exists()
+        }
+        
+        if workspace_path:
+            workspace = Path(workspace_path)
+            info["is_valid"] = workspace.exists()
+            info["workspace_name"] = workspace.name if info["is_valid"] else None
+        else:
+            info["is_valid"] = False
+            info["workspace_name"] = None
+        
+        return info
+    
+    def _get_timestamp(self) -> str:
+        """获取当前时间戳"""
+        from datetime import datetime
+        return datetime.now().isoformat()
+
+
+# 全局工作区状态管理器实例
+workspace_manager = WorkspaceStateManager()
 
 NOTES_FOLDER = "Notes"
 ORGANIZED_FOLDER = "Organized"

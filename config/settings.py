@@ -208,28 +208,70 @@ class WorkspaceStateManager:
     def get_workspace_info(self) -> Dict[str, Any]:
         """获取工作区详细信息
         
-        Returns:
-            包含工作区信息的字典
-        """
-        workspace_path, data = self.load_workspace()
+        此方法直接读取状态文件，获取完整的状态信息，
+        包括原始保存的路径（即使路径已不存在）。
         
+        Returns:
+            包含工作区信息的字典：
+            - is_saved: 状态文件是否存在且包含 workspace_path
+            - saved_path: 原始保存的工作区路径（可能不存在）
+            - workspace_path: 实际可用的工作区路径（不存在时为 None）
+            - is_valid: 保存的路径是否仍然存在
+            - workspace_name: 工作区名称（如果路径有效）
+            - last_opened_at: 最后打开时间
+            - state_file: 状态文件路径
+            - state_file_exists: 状态文件是否存在
+        """
         info = {
-            "is_saved": workspace_path is not None,
-            "workspace_path": workspace_path,
-            "last_opened_at": data.get("last_opened_at"),
+            "is_saved": False,
+            "saved_path": None,
+            "workspace_path": None,
+            "is_valid": False,
+            "workspace_name": None,
+            "last_opened_at": None,
             "state_file": str(self.state_file),
             "state_file_exists": self.state_file.exists()
         }
         
-        if workspace_path:
-            workspace = Path(workspace_path)
-            info["is_valid"] = workspace.exists()
-            info["workspace_name"] = workspace.name if info["is_valid"] else None
-        else:
-            info["is_valid"] = False
-            info["workspace_name"] = None
+        if not self.state_file.exists():
+            return info
+        
+        try:
+            with open(self.state_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        except Exception:
+            data = self._try_read_backup()
+        
+        saved_path = data.get("workspace_path")
+        
+        if saved_path:
+            info["is_saved"] = True
+            info["saved_path"] = saved_path
+            info["last_opened_at"] = data.get("last_opened_at")
+            
+            workspace = Path(saved_path)
+            if workspace.exists():
+                info["is_valid"] = True
+                info["workspace_path"] = saved_path
+                info["workspace_name"] = workspace.name
+            else:
+                info["is_valid"] = False
+                info["workspace_path"] = None
+                info["workspace_name"] = None
         
         return info
+    
+    def _try_read_backup(self) -> Dict[str, Any]:
+        """尝试从备份文件读取数据"""
+        backup_file = self.state_file.with_suffix(".json.bak")
+        if not backup_file.exists():
+            return {}
+        
+        try:
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
     
     def _get_timestamp(self) -> str:
         """获取当前时间戳"""

@@ -63,7 +63,8 @@ class Api:
             "saved_workspace": {
                 "is_saved": workspace_info.get("is_saved", False),
                 "is_valid": workspace_info.get("is_valid", False),
-                "saved_path": workspace_info.get("workspace_path"),
+                "saved_path": workspace_info.get("saved_path"),
+                "workspace_path": workspace_info.get("workspace_path"),
                 "workspace_name": workspace_info.get("workspace_name"),
                 "last_opened_at": workspace_info.get("last_opened_at"),
                 "state_file": workspace_info.get("state_file")
@@ -553,24 +554,35 @@ class Api:
 def try_restore_workspace(window):
     """尝试从系统目录恢复工作区
     
+    处理以下情况：
+    1. 没有保存的工作区状态 → 什么都不做
+    2. 有保存的工作区状态且路径有效 → 自动恢复工作区
+    3. 有保存的工作区状态但路径无效 → 记录日志，等待用户重新选择
+    
     Returns:
         (success: bool, message: str)
     """
     try:
-        workspace_path, state_data = workspace_manager.load_workspace()
+        workspace_info = workspace_manager.get_workspace_info()
         
-        if not workspace_path:
-            workspace_info = workspace_manager.get_workspace_info()
-            if workspace_info.get("is_saved") and not workspace_info.get("is_valid"):
-                saved_path = workspace_info.get("workspace_path")
-                print(f"[INFO] 已保存的工作区路径不存在: {saved_path}")
-                return False, f"工作区路径已不存在: {saved_path}"
+        is_saved = workspace_info.get("is_saved", False)
+        is_valid = workspace_info.get("is_valid", False)
+        saved_path = workspace_info.get("saved_path")
+        workspace_path = workspace_info.get("workspace_path")
+        
+        if not is_saved:
+            print(f"[INFO] 没有保存的工作区状态")
             return False, "没有保存的工作区"
         
+        if not is_valid:
+            print(f"[INFO] 已保存的工作区路径不存在: {saved_path}")
+            return False, f"工作区路径已不存在: {saved_path}"
+        
+        if not workspace_path:
+            print(f"[WARNING] 工作区信息不一致: is_valid=True 但 workspace_path=None")
+            return False, "工作区状态不一致"
+        
         workspace = Path(workspace_path)
-        if not workspace.exists():
-            print(f"[INFO] 工作区路径不存在: {workspace_path}")
-            return False, f"工作区路径不存在: {workspace_path}"
         
         config.workspace_path = workspace_path
         

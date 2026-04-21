@@ -2788,15 +2788,24 @@
             }
         }
 
+        async function initWorkspaceAsync() {
+            try {
+                await checkWorkspaceStatus();
+                await loadFileTree();
+                console.log('[INFO] 工作区异步初始化完成');
+            } catch (e) {
+                console.error('工作区初始化失败:', e);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', async function() {
             initResizer();
             initSystemThemeListener();
 
             if (window.pywebview) {
                 try {
-                    await checkWorkspaceStatus();
-                    await loadFileTree();
-
+                    initWorkspaceAsync();
+                    
                     const themePref = await window.pywebview.api.get_theme_preference();
                     applyTheme(themePref || 'system');
                     setTheme(themePref || 'system');

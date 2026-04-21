@@ -6,11 +6,12 @@ import sys
 from pathlib import Path
 import threading
 import webview
+from webview import FileDialog
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import config
+from config.settings import config, workspace_manager
 from utils.logger import logger
 from utils.helpers import APIConfigError, NetworkError, is_network_error, test_api_connection
 from modules.web_downloader import WebDownloader
@@ -52,11 +53,59 @@ class Api:
 
     def get_workspace_status(self):
         """获取工作文件夹状态"""
+        workspace_info = workspace_manager.get_workspace_info()
+        
         return {
             "is_set": config.is_workspace_set(),
             "workspace_path": config.workspace_path,
             "notes_folder": config.get_notes_folder(),
-            "organized_folder": config.get_organized_folder()
+            "organized_folder": config.get_organized_folder(),
+            "saved_workspace": {
+                "is_saved": workspace_info.get("is_saved", False),
+                "is_valid": workspace_info.get("is_valid", False),
+                "saved_path": workspace_info.get("saved_path"),
+                "workspace_path": workspace_info.get("workspace_path"),
+                "workspace_name": workspace_info.get("workspace_name"),
+                "last_opened_at": workspace_info.get("last_opened_at"),
+                "state_file": workspace_info.get("state_file")
+            }
+        }
+    
+    def check_workspace_path_valid(self):
+        """检查当前工作区路径是否仍然有效
+        
+        用于检测工作区路径是否被删除、移动等情况
+        """
+        if not config.workspace_path:
+            return {
+                "is_valid": False,
+                "message": "工作区路径未设置",
+                "path": None
+            }
+        
+        path = Path(config.workspace_path)
+        if not path.exists():
+            return {
+                "is_valid": False,
+                "message": "工作区路径已不存在",
+                "path": config.workspace_path
+            }
+        
+        return {
+            "is_valid": True,
+            "message": "工作区路径有效",
+            "path": config.workspace_path
+        }
+    
+    def clear_saved_workspace(self):
+        """清除系统目录中保存的工作区状态
+        
+        当用户不想自动恢复工作区时使用
+        """
+        success, message = workspace_manager.clear_workspace_state()
+        return {
+            "success": success,
+            "message": message
         }
 
     def update_window_title(self):
@@ -66,10 +115,18 @@ class Api:
             self.window.set_title(f"NoteAI - {workspace_name}")
 
     def open_workspace(self):
-        """打开工作区对话框并设置工作文件夹"""
+        """打开工作区对话框并设置工作文件夹
+        
+        此方法会：
+        1. 让用户选择文件夹
+        2. 设置工作区路径
+        3. 创建标准子文件夹
+        4. 同时保存到项目配置文件和系统应用数据目录（双重保存）
+        5. 无论之前是否有保存的工作区，都会覆盖更新系统目录
+        """
         try:
             result = self.window.create_file_dialog(
-                webview.FOLDER_DIALOG,
+                FileDialog.FOLDER,
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -81,15 +138,26 @@ class Api:
                     workspace_path = str(Path(result))
 
                 config.workspace_path = workspace_path
-                success, message = config.setup_workspace_folders()
+                setup_success, setup_message = config.setup_workspace_folders()
+                
                 config.save_to_file()
+                
+                ws_save_success, ws_save_message = workspace_manager.save_workspace(workspace_path)
+                if not ws_save_success:
+                    print(f"[WARNING] 保存工作区到系统目录失败: {ws_save_message}")
+                else:
+                    print(f"[INFO] {ws_save_message}")
 
                 workspace_name = Path(workspace_path).name
                 self.window.set_title(f"NoteAI - {workspace_name}")
 
+                final_message = setup_message
+                if not ws_save_success:
+                    final_message = f"{setup_message}\n（警告：工作区状态保存失败）"
+
                 return {
-                    "success": success,
-                    "message": message,
+                    "success": setup_success,
+                    "message": final_message,
                     "workspace_path": workspace_path,
                     "notes_folder": config.get_notes_folder(),
                     "organized_folder": config.get_organized_folder()
@@ -120,7 +188,7 @@ class Api:
         """打开文件夹选择对话框"""
         try:
             result = self.window.create_file_dialog(
-                webview.FOLDER_DIALOG,
+                FileDialog.FOLDER,
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -140,7 +208,7 @@ class Api:
         """添加文件"""
         try:
             result = self.window.create_file_dialog(
-                webview.OPEN_DIALOG,
+                FileDialog.OPEN_FILES,
                 directory=str(Path.home()),
                 allow_multiple=True,
                 file_types=[
@@ -483,6 +551,57 @@ class Api:
         )
 
 
+def try_restore_workspace_config():
+    """尝试从系统目录恢复工作区配置（不操作窗口）
+    
+    此函数在 webview.start() 之前调用，只设置配置，
+    不操作窗口（因为窗口尚未初始化）。
+    
+    Returns:
+        (workspace_name: str 或 None, message: str)
+        - workspace_name: 如果成功恢复，返回工作区名称
+        - message: 描述信息
+    """
+    try:
+        workspace_info = workspace_manager.get_workspace_info()
+        
+        is_saved = workspace_info.get("is_saved", False)
+        is_valid = workspace_info.get("is_valid", False)
+        saved_path = workspace_info.get("saved_path")
+        workspace_path = workspace_info.get("workspace_path")
+        
+        if not is_saved:
+            print(f"[INFO] 没有保存的工作区状态")
+            return None, "没有保存的工作区"
+        
+        if not is_valid:
+            print(f"[INFO] 已保存的工作区路径不存在: {saved_path}")
+            return None, f"工作区路径已不存在: {saved_path}"
+        
+        if not workspace_path:
+            print(f"[WARNING] 工作区信息不一致: is_valid=True 但 workspace_path=None")
+            return None, "工作区状态不一致"
+        
+        workspace = Path(workspace_path)
+        
+        config.workspace_path = workspace_path
+        
+        success, message = config.setup_workspace_folders()
+        if not success:
+            print(f"[WARNING] 设置工作区文件夹失败: {message}")
+        
+        workspace_name = workspace.name
+        
+        print(f"[INFO] 已自动恢复工作区配置: {workspace_path}")
+        return workspace_name, f"已恢复工作区: {workspace_name}"
+        
+    except Exception as e:
+        print(f"[ERROR] 恢复工作区配置时发生错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, f"恢复工作区失败: {str(e)}"
+
+
 def main():
     """启动应用"""
     api = Api()
@@ -499,7 +618,22 @@ def main():
     )
 
     api.set_window(window)
-    webview.start()
+    
+    workspace_name, message = try_restore_workspace_config()
+    
+    def after_window_start():
+        """窗口启动后的回调函数
+        
+        在此函数中可以安全地调用 window.set_title() 等窗口操作
+        """
+        if workspace_name:
+            try:
+                window.set_title(f"NoteAI - {workspace_name}")
+                print(f"[INFO] 已设置窗口标题: NoteAI - {workspace_name}")
+            except Exception as e:
+                print(f"[WARNING] 设置窗口标题失败: {e}")
+    
+    webview.start(func=after_window_start)
 
 
 if __name__ == "__main__":

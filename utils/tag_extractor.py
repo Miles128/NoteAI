@@ -457,6 +457,81 @@ def compute_doc_frequency_from_filenames() -> Tuple[Dict[str, int], int]:
     return dict(doc_freq), total_docs
 
 
+def compute_doc_frequency_from_other_files(current_filename: str) -> Tuple[Dict[str, int], int]:
+    """基于文件名计算工作区中其他文件的关键词的文档频率
+    
+    只使用 Notes 目录下的文件名，不打开文件读取标题。
+    排除当前文件，只统计其他文件。
+    
+    文档频率：关键词在多少个不同的文件中出现过
+    
+    Args:
+        current_filename: 当前文件名（需要排除的文件）
+    
+    Returns:
+        (关键词到出现文档数的映射, 其他文档总数)
+    """
+    md_files = get_notes_folder_md_files()
+    
+    other_files = [f for f in md_files if f.name != current_filename]
+    total_docs = len(other_files)
+    
+    if total_docs == 0:
+        return {}, 0
+    
+    doc_freq = defaultdict(int)
+    
+    for md_file in other_files:
+        try:
+            keywords = extract_keywords_from_filename(md_file.name)
+            unique_keywords = set(keywords)
+            for kw in unique_keywords:
+                doc_freq[kw] += 1
+        except Exception:
+            continue
+    
+    return dict(doc_freq), total_docs
+
+
+def extract_tags_from_current_file(
+    current_keywords: List[str],
+    other_file_freq: Dict[str, int],
+    min_count: int
+) -> List[str]:
+    """从当前文件的关键词中提取标签
+    
+    规则（必须同时满足）：
+    1. 标签必须来自当前文件的文件名（在 current_keywords 中）
+    2. 标签必须在其他文件中出现过 >= min_count 次
+    
+    如果没有符合的，返回空列表（不添加任何标签）。
+    如果有多个符合的，最多加 5 个标签。
+    
+    Args:
+        current_keywords: 当前文件的关键词列表
+        other_file_freq: 其他文件中关键词的出现频率
+        min_count: 最小出现次数（默认 3）
+    
+    Returns:
+        标签列表（0-5 个）
+    """
+    if not current_keywords or not other_file_freq:
+        return []
+    
+    candidates = []
+    
+    for kw in current_keywords:
+        count = other_file_freq.get(kw, 0)
+        if count >= min_count:
+            candidates.append((kw, count))
+    
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    
+    tags = [kw for kw, count in candidates]
+    
+    return tags[:MAX_TAGS]
+
+
 def extract_tags_by_doc_frequency(
     doc_freq: Dict[str, int],
     total_docs: int,
@@ -499,14 +574,16 @@ def extract_tags_by_doc_frequency(
 def process_and_tag_file_by_doc_freq(file_path: str) -> List[str]:
     """基于文档频率处理单个文件并打标签
     
-    算法规则：
-    1. 只使用 Notes 目录下的文件名，不打开文件读取标题
-    2. 统计每个关键词的文档频率（出现的文件数）
-    3. 备选标签必须在其他 md 文件的文件名中出现过 3 次及以上
-    4. 如果不符合第 3 点，就不要加为标签
-    5. 标签数量：最多 5 个，最少可以是 0 个、1 个、2 个等
-    6. 优先选择当前文件包含的关键词
-    7. 排除常用词汇和非专有名词（步骤、功能、方法等）
+    算法规则（必须同时满足）：
+    1. 标签必须来自当前文件的文件名
+    2. 标签必须在 Notes 文件夹里的其他 MD 文件的文件名中出现过 3 次及以上
+    
+    如果没有符合的，就一个标签都不加。
+    如果有多个符合的，最多加 5 个标签。
+    
+    附加规则：
+    - 只使用 Notes 目录下的文件名，不打开文件读取标题
+    - 排除常用词汇和非专有名词（步骤、功能、方法等）
     
     Args:
         file_path: Markdown 文件路径
@@ -518,14 +595,22 @@ def process_and_tag_file_by_doc_freq(file_path: str) -> List[str]:
     if not p.exists() or not p.suffix.lower() == '.md':
         return []
     
-    doc_freq, total_docs = compute_doc_frequency_from_filenames()
+    current_filename = p.name
+    current_keywords = extract_keywords_from_filename(current_filename)
     
-    if total_docs == 0:
+    if not current_keywords:
         return []
     
-    current_file_keywords = extract_keywords_from_filename(p.name)
+    other_file_freq, other_count = compute_doc_frequency_from_other_files(current_filename)
     
-    tags = extract_tags_by_doc_frequency(doc_freq, total_docs, current_file_keywords)
+    if other_count == 0:
+        return []
+    
+    tags = extract_tags_from_current_file(
+        current_keywords,
+        other_file_freq,
+        MIN_DOC_FREQ_COUNT
+    )
     
     if tags:
         append_tags_to_markdown(str(p), tags)

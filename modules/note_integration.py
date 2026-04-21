@@ -125,16 +125,25 @@ class NoteIntegration:
             current_step[0] = 2
             report_progress("阶段2/4: 提取主题和块归属...", 0.3)
 
-            topic_result = self._extract_topics_with_mapping(docs_for_extraction, chunks)
-            topics = topic_result['topics']
-            topic_chunk_mapping = topic_result['topic_chunk_mapping']
+            if user_topics:
+                topics = [{"name": t, "description": "", "chunk_ids": []} for t in user_topics]
+                topic_chunk_mapping = self._map_chunks_to_user_topics(user_topics, chunks)
+                for topic in topics:
+                    topic_name = topic['name']
+                    if topic_name in topic_chunk_mapping:
+                        topic['chunk_ids'] = topic_chunk_mapping[topic_name]
+                    logger.info(f"使用用户指定主题: {topic_name}, 关联 {len(topic['chunk_ids'])} 个 chunks")
+            else:
+                topic_result = self._extract_topics_with_mapping(docs_for_extraction, chunks)
+                topics = topic_result['topics']
+                topic_chunk_mapping = topic_result['topic_chunk_mapping']
 
-            for topic in topics:
-                topic_name = topic['name']
-                if topic_name in topic_chunk_mapping:
-                    topic['chunk_ids'] = topic_chunk_mapping[topic_name]
-                else:
-                    topic['chunk_ids'] = []
+                for topic in topics:
+                    topic_name = topic['name']
+                    if topic_name in topic_chunk_mapping:
+                        topic['chunk_ids'] = topic_chunk_mapping[topic_name]
+                    else:
+                        topic['chunk_ids'] = []
 
             report_progress(f"阶段2/4: 提取了 {len(topics)} 个主题", 0.4)
 
@@ -237,6 +246,101 @@ class NoteIntegration:
             'was_compressed': was_compressed,
             'original_word_count': original_word_count
         }
+
+    def _map_chunks_to_user_topics(self, user_topics: List[str], chunks: List[Dict]) -> Dict[str, List[str]]:
+        """使用 LLM 将 chunks 映射到用户指定的主题
+
+        Args:
+            user_topics: 用户指定的主题列表
+            chunks: 文档拆分后的块列表
+
+        Returns:
+            {主题名称: [chunk_id, ...], ...}
+        """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import PromptTemplate
+
+        topic_chunk_mapping = {t: [] for t in user_topics}
+
+        chunks_info = '\n'.join([
+            f"- {c['chunk_id']}: {c['content'][:150]}... ({c['word_count']}字)"
+            for c in chunks[:80]
+        ])
+        if len(chunks) > 80:
+            chunks_info += f"\n- ... 还有 {len(chunks) - 80} 个 chunks"
+
+        topics_text = '\n'.join([f"{i+1}. {t}" for i, t in enumerate(user_topics)])
+
+        mapping_prompt = """你是一位专业的知识整理专家。以下是多个内容块和一组主题：
+
+主题列表：
+{topics}
+
+内容块：
+{chunks_info}
+
+请将每个内容块分配到最相关的主题中。一个内容块可以属于多个主题。
+
+请以以下JSON格式输出：
+{{
+    "mapping": {{
+        "主题名称": ["chunk_id_1", "chunk_id_2", ...],
+        ...
+    }}
+}}
+
+注意：
+- 每个chunk至少归属一个主题
+- 如果某个主题没有相关chunk，其列表为空
+- 确保所有chunk_id都存在于输入中"""
+
+        prompt = PromptTemplate(
+            template=mapping_prompt,
+            input_variables=["topics", "chunks_info"]
+        )
+        llm = ChatOpenAI(
+            api_key=config.api_key,
+            base_url=config.api_base,
+            model=config.model_name,
+            temperature=0.3,
+            max_tokens=config.max_tokens
+        )
+        chain = prompt | llm
+
+        try:
+            response = chain.invoke({
+                "topics": topics_text,
+                "chunks_info": chunks_info
+            })
+            result = json.loads(response.content)
+            mapping = result.get('mapping', {})
+
+            for topic_name, chunk_ids in mapping.items():
+                if topic_name in topic_chunk_mapping:
+                    topic_chunk_mapping[topic_name] = chunk_ids
+
+            logger.info(f"用户主题映射完成: {[(t, len(ids)) for t, ids in topic_chunk_mapping.items()]}")
+            return topic_chunk_mapping
+
+        except Exception as e:
+            logger.warning(f"LLM 主题映射失败，使用关键词匹配: {e}")
+            return self._fallback_chunk_mapping(user_topics, chunks)
+
+    def _fallback_chunk_mapping(self, user_topics: List[str], chunks: List[Dict]) -> Dict[str, List[str]]:
+        """降级策略：基于关键词匹配将 chunks 分配到主题"""
+        topic_chunk_mapping = {t: [] for t in user_topics}
+
+        for chunk in chunks:
+            content_lower = chunk['content'].lower()
+            for topic in user_topics:
+                if topic.lower() in content_lower:
+                    topic_chunk_mapping[topic].append(chunk['chunk_id'])
+
+        for topic in user_topics:
+            if not topic_chunk_mapping[topic]:
+                topic_chunk_mapping[topic] = [c['chunk_id'] for c in chunks[:max(1, len(chunks) // len(user_topics))]]
+
+        return topic_chunk_mapping
 
     def _split_documents_by_heading(self, documents: List[Dict]) -> List[Dict]:
         """按 Heading 拆分文档为 chunks
@@ -404,6 +508,9 @@ class NoteIntegration:
                 "topic_chunk_mapping": {"topic_name": ["chunk_id", ...], ...}
             }
         """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import PromptTemplate
+
         total_words = sum(c['word_count'] for c in chunks)
         max_input = config.max_tokens * 4
         min_topic_count = math.ceil(total_words / max_input) if max_input > 0 else 1
@@ -499,6 +606,9 @@ class NoteIntegration:
         Returns:
             压缩后的 chunk（包含原文字数和压缩后字数）
         """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import PromptTemplate
+
         prompt = PromptTemplate(
             template=CHUNK_COMPRESSION_PROMPT,
             input_variables=["original_content", "target_ratio"]
@@ -542,6 +652,9 @@ class NoteIntegration:
         Returns:
             生成的主题笔记内容
         """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import PromptTemplate
+
         prompt = PromptTemplate(
             template=TOPIC_NOTE_GENERATION_PROMPT,
             input_variables=["topic_name", "content", "target_word_count"]

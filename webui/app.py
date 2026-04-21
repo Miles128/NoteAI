@@ -3,6 +3,8 @@ Webview 应用 - 使用 HTML/CSS/JS 做 UI，Python 做后端
 """
 
 import sys
+import re
+import shutil
 from pathlib import Path
 import threading
 import webview
@@ -13,7 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from config.settings import config, workspace_manager
 from utils.logger import logger
-from utils.helpers import APIConfigError, NetworkError, is_network_error, test_api_connection
+from utils.helpers import APIConfigError, NetworkError, is_network_error, test_api_connection, check_api_config
 from modules.web_downloader import WebDownloader
 from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
@@ -29,6 +31,16 @@ class Api:
 
     def set_window(self, window):
         self.window = window
+
+    def move_window(self, dx, dy):
+        """根据增量移动窗口"""
+        if self.window:
+            try:
+                x = self.window.x + dx
+                y = self.window.y + dy
+                self.window.move(x, y)
+            except Exception as e:
+                print(f"移动窗口失败: {e}")
 
     def minimize_window(self):
         """最小化窗口"""
@@ -264,7 +276,7 @@ class Api:
             self.show_message("警告", "AI辅助模式需要配置有效的API Key\n\n请在设置中配置API，或关闭AI辅助使用基础模式。", "warning")
             return
 
-        save_path = config.get_raw_folder()
+        save_path = config.get_notes_folder()
         if not save_path:
             self.show_message("错误", "无法获取Notes文件夹路径", "error")
             return
@@ -350,6 +362,86 @@ class Api:
 
         threading.Thread(target=task, daemon=True).start()
     
+    def extract_topics(self):
+        """从 Notes 目录提取主题
+        
+        扫描 Notes 目录下所有 MD 文件名，调用 LLM 提取主题列表
+        """
+        if not config.is_workspace_set():
+            return {"success": False, "error": "请先设置工作文件夹"}
+
+        notes_path = config.get_notes_folder()
+        if not notes_path:
+            return {"success": False, "error": "无法获取 Notes 文件夹路径"}
+
+        notes_dir = Path(notes_path)
+        if not notes_dir.exists():
+            return {"success": False, "error": "Notes 文件夹不存在"}
+
+        md_files = list(notes_dir.rglob("*.md"))
+        if not md_files:
+            return {"success": False, "error": "Notes 文件夹中没有 Markdown 文件"}
+
+        is_valid, error_msg = check_api_config()
+        if not is_valid:
+            return {"success": False, "error": f"API 配置无效: {error_msg}"}
+
+        filenames = [f.stem for f in md_files if not f.name.startswith('.')]
+        titles_text = '\n'.join([f"{i+1}. {name}" for i, name in enumerate(filenames)])
+
+        try:
+            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "正在调用 LLM 分析主题...")')
+            self.update_status("正在调用 LLM 分析主题...")
+
+            from langchain_openai import ChatOpenAI
+            from langchain_core.prompts import PromptTemplate
+            from prompts.note_integration import TOPIC_INTEGRATION_PROMPT
+
+            prompt = PromptTemplate(
+                template=TOPIC_INTEGRATION_PROMPT,
+                input_variables=["titles"]
+            )
+            llm = ChatOpenAI(
+                api_key=config.api_key,
+                base_url=config.api_base,
+                model=config.model_name,
+                temperature=0.5,
+                max_tokens=config.max_tokens
+            )
+            chain = prompt | llm
+
+            response = chain.invoke({"titles": titles_text})
+            content = response.content.strip()
+
+            self.window.evaluate_js('updateProgress("integration-progress", 0.7, "正在解析主题结果...")')
+            self.update_status("正在解析主题结果...")
+
+            topics = []
+            for line in content.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+                if '|' in line:
+                    name = line.split('|')[0].strip()
+                    name = re.sub(r'^主题\d+[：:]\s*', '', name).strip()
+                    if name:
+                        topics.append(name)
+                else:
+                    name = re.sub(r'^[\d]+[.、)\s]+', '', line).strip()
+                    name = re.sub(r'^主题\d+[：:]\s*', '', name).strip()
+                    if name:
+                        topics.append(name)
+
+            if not topics:
+                return {"success": False, "error": "LLM 未返回有效主题"}
+
+            logger.info(f"提取了 {len(topics)} 个主题: {topics}")
+            return {"success": True, "topics": topics}
+
+        except Exception as e:
+            logger.error(f"提取主题失败: {e}")
+            return {"success": False, "error": f"提取主题失败: {str(e)}"}
+    
     def start_note_integration(self, auto_topic, topics):
         """开始笔记整合"""
         if not config.is_workspace_set():
@@ -358,6 +450,7 @@ class Api:
 
         source_path = config.get_notes_folder()
         output_path = config.get_organized_folder()
+        used_path = config.get_used_folder()
 
         if not source_path or not output_path:
             self.show_message("错误", "无法获取工作文件夹路径", "error")
@@ -372,6 +465,9 @@ class Api:
                     )
                     self.update_status(message)
 
+                Path(output_path).mkdir(parents=True, exist_ok=True)
+                Path(used_path).mkdir(parents=True, exist_ok=True)
+
                 integrator = NoteIntegration(progress_callback)
                 documents = integrator.load_documents_from_folder(source_path)
 
@@ -383,6 +479,22 @@ class Api:
 
                 user_topics = topics if topics else None
                 result = integrator.integrate(documents, output_path, user_topics=user_topics)
+
+                used_dir = Path(used_path)
+                for doc_path in doc_paths:
+                    src = Path(doc_path)
+                    if not src.exists():
+                        continue
+                    dst = used_dir / src.name
+                    if dst.exists():
+                        stem = src.stem
+                        suffix = src.suffix
+                        counter = 1
+                        while dst.exists():
+                            dst = used_dir / f"{stem}_{counter}{suffix}"
+                            counter += 1
+                    shutil.move(str(src), str(dst))
+
                 self.show_message("完成", f"整合完成！\n处理了 {result['document_count']} 篇文档\n生成了 {result['topic_count']} 个主题\n保存至: {output_path}")
 
             except APIConfigError as e:
@@ -487,10 +599,13 @@ class Api:
                         })
                     else:
                         if item.suffix.lower() in ['.md', '.txt', '.markdown', '.pdf', '.doc', '.docx']:
+                            stat = item.stat()
                             files.append({
                                 "name": item.name,
                                 "path": rel_path,
-                                "type": "file"
+                                "type": "file",
+                                "size": stat.st_size,
+                                "modified": stat.st_mtime
                             })
                 dirs.sort(key=lambda x: x['name'].lower())
                 files.sort(key=lambda x: x['name'].lower())
@@ -614,7 +729,8 @@ def main():
         height=900,
         min_size=(1000, 700),
         js_api=api,
-        frameless=False
+        frameless=True,
+        easy_drag=False
     )
 
     api.set_window(window)

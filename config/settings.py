@@ -42,6 +42,7 @@ def get_system_app_data_dir() -> Path:
 # 系统级工作区配置文件路径
 SYSTEM_APP_DATA_DIR = get_system_app_data_dir()
 WORKSPACE_STATE_FILE = SYSTEM_APP_DATA_DIR / "workspace_state.json"
+API_CONFIG_FILE = SYSTEM_APP_DATA_DIR / "api_config.json"
 
 
 class WorkspaceStateError(Exception):
@@ -285,6 +286,7 @@ workspace_manager = WorkspaceStateManager()
 NOTES_FOLDER = "Notes"
 ORGANIZED_FOLDER = "Organized"
 RAW_FOLDER = "Raw"
+USED_FOLDER = "Used"
 
 @dataclass
 class AppConfig:
@@ -378,6 +380,12 @@ class AppConfig:
         if not self.workspace_path:
             return ""
         return str(Path(self.workspace_path) / RAW_FOLDER)
+
+    def get_used_folder(self) -> str:
+        """获取Used子文件夹路径"""
+        if not self.workspace_path:
+            return ""
+        return str(Path(self.workspace_path) / USED_FOLDER)
 
     def setup_workspace_folders(self) -> Tuple[bool, str]:
         """
@@ -483,13 +491,23 @@ class AppConfig:
             except Exception as e:
                 print(f"加载配置时发生未知错误: {e}, 使用默认配置")
 
+        api_data = {}
+        if os.path.exists(API_CONFIG_FILE):
+            try:
+                with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    api_data = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
+                print(f"加载API配置失败: {e}")
+            except Exception as e:
+                print(f"加载API配置时发生未知错误: {e}")
+
         env_mappings = {
-            'api_key': ('NOTEAI_API_KEY', file_data.get('api_key', '')),
-            'api_base': ('NOTEAI_API_BASE', file_data.get('api_base', 'https://api.openai.com/v1')),
-            'model_name': ('NOTEAI_MODEL_NAME', file_data.get('model_name', 'gpt-4')),
-            'temperature': ('NOTEAI_TEMPERATURE', file_data.get('temperature', 0.7)),
-            'max_tokens': ('NOTEAI_MAX_TOKENS', file_data.get('max_tokens', 32000)),
-            'max_context_tokens': ('NOTEAI_MAX_CONTEXT', file_data.get('max_context_tokens', 128000)),
+            'api_key': ('NOTEAI_API_KEY', api_data.get('api_key', file_data.get('api_key', ''))),
+            'api_base': ('NOTEAI_API_BASE', api_data.get('api_base', file_data.get('api_base', 'https://api.openai.com/v1'))),
+            'model_name': ('NOTEAI_MODEL_NAME', api_data.get('model_name', file_data.get('model_name', 'gpt-4'))),
+            'temperature': ('NOTEAI_TEMPERATURE', api_data.get('temperature', file_data.get('temperature', 0.7))),
+            'max_tokens': ('NOTEAI_MAX_TOKENS', api_data.get('max_tokens', file_data.get('max_tokens', 32000))),
+            'max_context_tokens': ('NOTEAI_MAX_CONTEXT', api_data.get('max_context_tokens', file_data.get('max_context_tokens', 128000))),
             'workspace_path': ('NOTEAI_WORKSPACE_PATH', file_data.get('workspace_path', '')),
         }
 
@@ -517,7 +535,7 @@ class AppConfig:
         return cls(**init_kwargs)
     
     def save_to_file(self, config_path: str = None):
-        """保存配置到文件"""
+        """保存配置到文件，API相关配置仅保存到系统目录"""
         if config_path is None:
             config_path = PROJECT_CONFIG_PATH
 
@@ -529,14 +547,17 @@ class AppConfig:
         os.environ['NOTEAI_MAX_TOKENS'] = str(self.max_tokens)
         os.environ['NOTEAI_MAX_CONTEXT'] = str(self.max_context_tokens)
 
+        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens'}
+
         try:
             Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
+            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields}
+
             with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(self.__dict__, f, ensure_ascii=False, indent=2)
+                json.dump(non_api_config, f, ensure_ascii=False, indent=2)
 
             print(f"配置已保存到: {config_path}")
-            return True, "配置保存成功"
         except PermissionError:
             error_msg = "保存配置失败：没有写入权限"
             print(error_msg)
@@ -545,6 +566,22 @@ class AppConfig:
             error_msg = f"保存配置失败：{e}"
             print(error_msg)
             return False, error_msg
+
+        try:
+            SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+            api_config = {k: v for k, v in self.__dict__.items() if k in api_fields}
+
+            with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(api_config, f, ensure_ascii=False, indent=2)
+
+            print(f"API配置已保存到: {API_CONFIG_FILE}")
+        except PermissionError:
+            print(f"保存API配置到系统目录失败：没有写入权限")
+        except Exception as e:
+            print(f"保存API配置到系统目录失败：{e}")
+
+        return True, "配置保存成功"
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

@@ -12,82 +12,107 @@
         }
 
         :root {
-            /* 深色主题（默认） */
-            --bg: #1e1e1e;
-            --sidebar-bg: #252526;
-            --surface: #2d2d2d;
-            --surface-hover: #3c3c3c;
-            --text: #cccccc;
-            --text-muted: #858585;
-            --primary: #705cf1;
-            --primary-dark: #5a48e0;
-            --primary-light: #3d3d5c;
-            --primary-hover: #4a4a6a;
-            --border: #404040;
-            --success: #08b94e;
-            --warning: #ec7500;
-            --error: #e93147;
-            --scrollbar: #424242;
-            --topbar-bg: #252526;
-            --statusbar-bg: #252526;
+            --bg: #f5f5f7;
+            --sidebar-bg: rgba(246, 246, 248, 0.88);
+            --surface: rgba(255, 255, 255, 0.92);
+            --surface-hover: rgba(0, 0, 0, 0.04);
+            --text: #1d1d1f;
+            --text-muted: #86868b;
+            --primary: #007AFF;
+            --primary-dark: #0056CC;
+            --primary-light: rgba(0, 122, 255, 0.1);
+            --primary-hover: rgba(0, 122, 255, 0.16);
+            --border: rgba(0, 0, 0, 0.1);
+            --success: #34C759;
+            --warning: #FF9500;
+            --error: #FF3B30;
+            --scrollbar: rgba(0, 0, 0, 0.2);
+            --topbar-bg: rgba(246, 246, 248, 0.88);
+            --statusbar-bg: rgba(246, 246, 248, 0.88);
+            --card-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
+            --card-radius: 8px;
+            --btn-radius: 7px;
+            --input-radius: 7px;
+            --glass-blur: blur(40px) saturate(180%);
         }
 
-        /* 亮色主题 */
         [data-theme="light"] {
-            --bg: #ffffff;
-            --sidebar-bg: #f5f5f5;
-            --surface: #ffffff;
-            --surface-hover: #e8e8e8;
-            --text: #333333;
-            --text-muted: #666666;
-            --primary: #705cf1;
-            --primary-dark: #5a48e0;
-            --primary-light: #e8e5fc;
-            --primary-hover: #d4cff9;
-            --border: #e0e0e0;
-            --scrollbar: #cccccc;
-            --topbar-bg: #f5f5f5;
-            --statusbar-bg: #f5f5f5;
+            --bg: #f5f5f7;
+            --sidebar-bg: rgba(246, 246, 248, 0.88);
+            --surface: rgba(255, 255, 255, 0.92);
+            --surface-hover: rgba(0, 0, 0, 0.04);
+            --text: #1d1d1f;
+            --text-muted: #86868b;
+            --primary: #007AFF;
+            --primary-dark: #0056CC;
+            --primary-light: rgba(0, 122, 255, 0.1);
+            --primary-hover: rgba(0, 122, 255, 0.16);
+            --border: rgba(0, 0, 0, 0.1);
+            --scrollbar: rgba(0, 0, 0, 0.2);
+            --topbar-bg: rgba(246, 246, 248, 0.88);
+            --statusbar-bg: rgba(246, 246, 248, 0.88);
         }
 
-        /* 系统主题检测 */
+        [data-theme="dark"] {
+            --bg: #1e1e1e;
+            --sidebar-bg: rgba(44, 44, 46, 0.88);
+            --surface: rgba(44, 44, 46, 0.92);
+            --surface-hover: rgba(255, 255, 255, 0.06);
+            --text: #f5f5f7;
+            --text-muted: #98989d;
+            --primary: #0A84FF;
+            --primary-dark: #409CFF;
+            --primary-light: rgba(10, 132, 255, 0.15);
+            --primary-hover: rgba(10, 132, 255, 0.2);
+            --border: rgba(255, 255, 255, 0.08);
+            --success: #30D158;
+            --warning: #FF9F0A;
+            --error: #FF453A;
+            --scrollbar: rgba(255, 255, 255, 0.15);
+            --topbar-bg: rgba(44, 44, 46, 0.88);
+            --statusbar-bg: rgba(44, 44, 46, 0.88);
+            --card-shadow: 0 0.5px 2px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
         @media (prefers-color-scheme: light) {
             :root:not([data-theme="dark"]) {
-                --bg: #ffffff;
-                --sidebar-bg: #f5f5f5;
-                --surface: #ffffff;
-                --surface-hover: #e8e8e8;
-                --text: #333333;
-                --text-muted: #666666;
-                --primary: #705cf1;
-                --primary-dark: #5a48e0;
-                --primary-light: #e8e5fc;
-                --primary-hover: #d4cff9;
-                --border: #e0e0e0;
-                --scrollbar: #cccccc;
-                --topbar-bg: #f5f5f5;
-                --statusbar-bg: #f5f5f5;
+                --bg: #f5f5f7;
+                --sidebar-bg: rgba(246, 246, 248, 0.88);
+                --surface: rgba(255, 255, 255, 0.92);
+                --surface-hover: rgba(0, 0, 0, 0.04);
+                --text: #1d1d1f;
+                --text-muted: #86868b;
+                --primary: #007AFF;
+                --primary-dark: #0056CC;
+                --primary-light: rgba(0, 122, 255, 0.1);
+                --primary-hover: rgba(0, 122, 255, 0.16);
+                --border: rgba(0, 0, 0, 0.1);
+                --scrollbar: rgba(0, 0, 0, 0.2);
+                --topbar-bg: rgba(246, 246, 248, 0.88);
+                --statusbar-bg: rgba(246, 246, 248, 0.88);
             }
         }
 
         .custom-titlebar {
-            height: 32px;
+            height: 48px;
             background: var(--topbar-bg);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            -webkit-app-region: drag;
             user-select: none;
             flex-shrink: 0;
+            padding: 0 14px;
+            border-bottom: 0.5px solid var(--border);
         }
 
         .titlebar-drag {
             flex: 1;
             display: flex;
             align-items: center;
-            padding-left: 12px;
             gap: 8px;
-            -webkit-app-region: drag;
+            cursor: default;
             min-width: 0;
         }
 
@@ -95,41 +120,77 @@
             font-size: 13px;
             font-weight: 600;
             color: var(--text);
+            letter-spacing: -0.2px;
         }
 
         .titlebar-workspace-separator {
-            width: 1px;
+            width: 0.5px;
             height: 16px;
-            background: var(--border);
-            margin: 0 8px;
+            background: rgba(0, 0, 0, 0.12);
+            margin: 0 6px;
         }
 
         .titlebar-btn.workspace-btn {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 10px;
+            padding: 5px 12px;
             width: auto;
             min-width: 46px;
-            background: transparent;
-            color: var(--text-muted);
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text);
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 13px;
+            font-weight: 400;
             transition: all 0.15s;
             pointer-events: auto;
             -webkit-app-region: no-drag;
         }
 
         .titlebar-btn.workspace-btn:hover {
-            background: var(--surface-hover);
-            color: var(--text);
+            background: rgba(0, 0, 0, 0.08);
         }
 
         .titlebar-btn.workspace-btn svg {
             width: 16px;
             height: 16px;
+            color: #007AFF;
+        }
+
+        .titlebar-btn.tab-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            width: auto;
+            min-width: auto;
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+
+        .titlebar-btn.tab-btn:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text);
+        }
+
+        .titlebar-btn.tab-btn.active {
+            background: rgba(0, 122, 255, 0.1);
+            color: var(--primary);
+        }
+
+        .titlebar-btn.tab-btn svg {
+            width: 15px;
+            height: 15px;
+            color: #007AFF;
         }
 
         #workspace-name-display {
@@ -142,66 +203,81 @@
 
         .titlebar-controls {
             display: flex;
-            -webkit-app-region: no-drag;
+            gap: 4px;
         }
 
         .titlebar-btn {
-            width: 46px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: transparent;
             border: none;
             cursor: pointer;
-            color: var(--text-muted);
-            transition: background-color 0.15s;
+            color: #007AFF;
+            border-radius: 6px;
+            transition: all 0.15s;
         }
 
         .titlebar-btn:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 122, 255, 0.1);
+            color: #0056CC;
+        }
+
+        .titlebar-btn:hover svg {
+            stroke: currentColor;
         }
 
         .titlebar-btn-close:hover {
-            background: #e81123;
+            background: #FF3B30;
             color: white;
+        }
+
+        .titlebar-btn-close:hover svg {
+            stroke: currentColor;
         }
 
         .titlebar-btn svg {
             width: 16px;
             height: 16px;
+            color: #007AFF;
         }
 
         .titlebar-separator {
-            width: 1px;
+            width: 0.5px;
             height: 16px;
-            background: var(--border);
+            background: rgba(0, 0, 0, 0.12);
             margin: 0 4px;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: var(--bg);
             color: var(--text);
-            line-height: 1.6;
+            line-height: 1.5;
             height: 100vh;
             overflow: hidden;
             padding: 0;
             margin: 0;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .app-container {
             display: flex;
-            height: calc(100vh - 32px);
+            height: calc(100vh - 52px);
             overflow: hidden;
         }
 
         .sidebar {
-            width: auto;
-            min-width: 140px;
-            max-width: 400px;
+            width: 520px;
+            min-width: 180px;
+            max-width: 600px;
             background: var(--sidebar-bg);
-            border-right: 1px solid var(--border);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-right: 0.5px solid var(--border);
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
@@ -225,6 +301,7 @@
             min-width: 300px;
             flex: 1;
             overflow: hidden;
+            background: var(--bg);
         }
 
         .right-area.hidden {
@@ -239,22 +316,50 @@
         }
 
         .resizer {
-            width: 4px;
+            width: 5px;
             cursor: col-resize;
-            background: var(--border);
-            transition: background 0.2s;
+            background: transparent;
+            transition: background 0.15s;
             flex-shrink: 0;
+            position: relative;
+            -webkit-app-region: no-drag;
+        }
+
+        .resizer::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0.5px;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.1);
+            transition: all 0.15s;
         }
 
         .resizer:hover {
+            background: rgba(0, 122, 255, 0.06);
+        }
+
+        .resizer:hover::after {
+            width: 2px;
+            background: var(--primary);
+        }
+
+        .resizer.resizing {
+            background: rgba(0, 122, 255, 0.1);
+        }
+
+        .resizer.resizing::after {
+            width: 2px;
             background: var(--primary);
         }
 
         .resizer-vertical {
-            height: 4px;
+            height: 0.5px;
             cursor: row-resize;
-            background: var(--border);
-            transition: background 0.2s;
+            background: rgba(0, 0, 0, 0.1);
+            transition: background 0.15s;
             flex-shrink: 0;
         }
 
@@ -269,11 +374,14 @@
             right: 0;
             bottom: 0;
             width: 400px;
-            background: var(--surface);
-            border-left: 1px solid var(--border);
+            background: rgba(246, 246, 248, 0.92);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-left: 0.5px solid var(--border);
             z-index: 1000;
             transform: translateX(100%);
-            transition: transform 0.3s ease;
+            transition: transform 0.25s ease;
+            box-shadow: -2px 0 16px rgba(0, 0, 0, 0.06);
         }
 
         .about-panel-overlay.active {
@@ -291,27 +399,29 @@
             position: absolute;
             top: 16px;
             right: 16px;
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             border: none;
             background: transparent;
             cursor: pointer;
-            color: var(--text-muted);
+            color: #007AFF;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 6px;
+            transition: all 0.15s;
         }
 
         .about-panel-close:hover {
-            background: var(--surface-hover);
-            color: var(--text);
+            background: rgba(0, 122, 255, 0.1);
+            color: #0056CC;
         }
 
         .about-panel h2 {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 600;
             margin-bottom: 8px;
+            letter-spacing: -0.3px;
         }
 
         .about-panel .about-version {
@@ -326,10 +436,10 @@
 
         .about-panel .about-features {
             text-align: left;
-            background: var(--bg);
-            padding: 16px;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 14px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .about-panel .about-features h3 {
@@ -357,49 +467,6 @@
             font-size: 13px;
         }
 
-        .sidebar-header {
-            display: flex;
-            flex-direction: row;
-            gap: 4px;
-            padding: 12px;
-            border-bottom: 1px solid var(--border);
-            min-height: 48px;
-            align-items: stretch;
-        }
-
-        .tool-btn {
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 8px;
-            padding: 8px 12px;
-            font-size: 13px;
-            color: var(--text-muted);
-            background: transparent;
-            border: 1px solid transparent;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .tool-btn:hover {
-            background: var(--surface-hover);
-            color: var(--text);
-        }
-
-        .tool-btn.active {
-            background: var(--primary-hover);
-            color: var(--primary);
-            border-color: var(--primary);
-        }
-
-        .tool-btn svg {
-            width: 18px;
-            height: 18px;
-            flex-shrink: 0;
-        }
-
         .file-tree-container {
             flex: 1;
             overflow-y: auto;
@@ -417,16 +484,18 @@
             display: flex;
             align-items: center;
             gap: 4px;
-            padding: 6px 12px;
+            padding: 5px 10px;
             font-size: 13px;
             color: var(--text);
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
             white-space: nowrap;
+            border-radius: 6px;
+            margin: 1px 6px;
         }
 
         .tree-item:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 0, 0, 0.05);
         }
 
         .tree-item.folder {
@@ -434,7 +503,7 @@
         }
 
         .tree-item.file {
-            color: var(--text-muted);
+            color: #3a3a3c;
         }
 
         .tree-toggle {
@@ -454,7 +523,8 @@
         .tree-toggle svg {
             width: 12px;
             height: 12px;
-            opacity: 0.6;
+            color: #007AFF;
+            opacity: 0.8;
         }
 
         .tree-icon {
@@ -465,17 +535,44 @@
         }
 
         .tree-icon.folder-icon {
-            color: var(--warning);
+            color: #007AFF;
         }
 
         .tree-icon.file-icon {
-            color: var(--text-muted);
+            color: #5AC8FA;
         }
 
         .tree-name {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .tree-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-left: auto;
+            padding-left: 8px;
+        }
+
+        .tree-size {
+            font-size: 11px;
+            color: var(--text-muted);
+            opacity: 0.7;
+            min-width: 52px;
+            text-align: right;
+        }
+
+        .tree-modified {
+            font-size: 11px;
+            color: var(--text-muted);
+            opacity: 0.7;
+            min-width: 110px;
+            text-align: right;
         }
 
         .tree-children {
@@ -496,19 +593,19 @@
             align-items: center;
             gap: 12px;
             padding: 10px 16px;
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text);
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
             border-left: 3px solid transparent;
         }
 
         .nav-item:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 0, 0, 0.05);
         }
 
         .nav-item.active {
-            background: var(--primary-hover);
+            background: rgba(0, 122, 255, 0.08);
             border-left-color: var(--primary);
             color: var(--primary);
         }
@@ -534,7 +631,9 @@
         .section-header {
             height: 48px;
             background: var(--topbar-bg);
-            border-bottom: 1px solid var(--border);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-bottom: 0.5px solid var(--border);
             display: flex;
             align-items: center;
             padding: 0 16px;
@@ -545,7 +644,9 @@
         .topbar {
             height: 48px;
             background: var(--topbar-bg);
-            border-bottom: 1px solid var(--border);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-bottom: 0.5px solid var(--border);
             display: flex;
             align-items: center;
             padding: 0 16px;
@@ -598,19 +699,27 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 14px;
+            padding: 7px 16px;
             background: var(--primary);
             color: #ffffff;
             border: none;
-            border-radius: 6px;
+            border-radius: 7px;
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
+            box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 122, 255, 0.2);
         }
 
         .workspace-btn:hover {
-            background: var(--primary-dark);
+            background: #0A84FF;
+            box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 122, 255, 0.3);
+            transform: translateY(-0.5px);
+        }
+
+        .workspace-btn:active {
+            transform: translateY(0);
+            background: #0066D6;
         }
 
         .workspace-btn svg {
@@ -633,6 +742,7 @@
             width: 16px;
             height: 16px;
             flex-shrink: 0;
+            color: #007AFF;
         }
 
         .workspace-path {
@@ -648,14 +758,14 @@
         }
 
         .icon-btn {
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
             background: transparent;
             border: none;
             color: var(--text-muted);
@@ -663,7 +773,7 @@
 
         .icon-btn:hover {
             background: var(--surface-hover);
-            color: var(--text);
+            color: var(--primary);
         }
 
         .icon-btn svg {
@@ -672,18 +782,18 @@
         }
 
         .topbar-btn {
-            width: 36px;
-            height: 36px;
+            width: 34px;
+            height: 34px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 6px;
+            border-radius: 7px;
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
         }
 
         .topbar-btn:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 0, 0, 0.06);
         }
 
         .topbar-btn svg {
@@ -715,25 +825,30 @@
         }
 
         .section-title {
-            font-size: 20px;
+            font-size: 17px;
             font-weight: 600;
             color: var(--text);
-            margin-bottom: 20px;
+            margin-bottom: 16px;
+            letter-spacing: -0.3px;
         }
 
         .card {
             background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border: 0.5px solid var(--border);
+            border-radius: var(--card-radius);
+            padding: 18px;
+            margin-bottom: 14px;
+            box-shadow: var(--card-shadow);
         }
 
         .card-title {
             font-size: 14px;
             font-weight: 600;
             color: var(--text);
-            margin-bottom: 12px;
+            margin-bottom: 10px;
+            letter-spacing: -0.2px;
         }
 
         .form-group {
@@ -749,18 +864,19 @@
 
         .form-input {
             width: 100%;
-            padding: 10px 12px;
-            font-size: 14px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 13px;
+            background: rgba(255, 255, 255, 0.6);
+            border: 0.5px solid var(--border);
+            border-radius: var(--input-radius);
             color: var(--text);
             outline: none;
-            transition: border-color 0.2s;
+            transition: all 0.15s;
         }
 
         .form-input:focus {
             border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
         }
 
         .form-input::placeholder {
@@ -768,46 +884,79 @@
         }
 
         .form-textarea {
-            min-height: 120px;
+            min-height: 150px;
             resize: vertical;
-            font-family: 'Consolas', 'Monaco', monospace;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            -webkit-app-region: no-drag;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 20px;
-            font-size: 14px;
+            padding: 8px 18px;
+            font-size: 13px;
             font-weight: 500;
             border: none;
-            border-radius: 6px;
+            border-radius: var(--btn-radius);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.15s;
+            letter-spacing: -0.1px;
         }
 
         .btn-primary {
             background: var(--primary);
             color: #ffffff;
+            box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 122, 255, 0.2);
         }
 
         .btn-primary:hover {
-            background: var(--primary-dark);
+            background: #0A84FF;
+            box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 122, 255, 0.3);
+            transform: translateY(-0.5px);
         }
 
         .btn-primary:disabled {
-            background: var(--primary-light);
+            background: rgba(0, 122, 255, 0.35);
+            color: rgba(255, 255, 255, 0.6);
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .integration-hint {
+            font-size: 12px;
+            font-weight: 500;
+            color: #CC0000;
+            padding: 0 4px;
+            min-height: 18px;
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+            background: #0066D6;
+            box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-primary:disabled {
+            background: rgba(0, 122, 255, 0.4);
             cursor: not-allowed;
             opacity: 0.7;
+            transform: none;
+            box-shadow: none;
         }
 
         .btn-secondary {
-            background: var(--surface-hover);
+            background: rgba(0, 0, 0, 0.05);
             color: var(--text);
         }
 
         .btn-secondary:hover {
-            background: #4a4a4a;
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .btn-secondary:active {
+            background: rgba(0, 0, 0, 0.12);
         }
 
         .btn-group {
@@ -820,10 +969,10 @@
             width: 100%;
             min-height: 100px;
             padding: 8px;
-            background: var(--bg);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-family: 'Consolas', 'Monaco', monospace;
+            background: rgba(255, 255, 255, 0.5);
+            border: 0.5px solid var(--border);
+            border-radius: var(--input-radius);
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
             font-size: 12px;
             color: var(--text);
         }
@@ -834,17 +983,18 @@
 
         .progress-bar {
             width: 100%;
-            height: 6px;
-            background: var(--border);
-            border-radius: 3px;
+            height: 4px;
+            background: rgba(0, 0, 0, 0.06);
+            border-radius: 2px;
             overflow: hidden;
         }
 
         .progress-fill {
             height: 100%;
-            background: var(--primary);
+            background: linear-gradient(90deg, var(--primary), #5AC8FA);
             width: 0%;
             transition: width 0.3s;
+            border-radius: 2px;
         }
 
         .progress-text {
@@ -900,14 +1050,17 @@
         }
 
         .ai-toggle-card {
-            border: 1px solid var(--border);
+            border: 0.5px solid var(--border);
             background: var(--surface);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             transition: all 0.3s ease;
         }
 
         .ai-toggle-card.active {
-            border-color: var(--primary);
-            background: linear-gradient(135deg, var(--primary-light) 0%, var(--surface) 100%);
+            border-color: rgba(0, 122, 255, 0.3);
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.06) 0%, var(--surface) 100%);
+            box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.1);
         }
 
         .switch-container {
@@ -925,7 +1078,7 @@
             position: relative;
             width: 44px;
             height: 24px;
-            background: var(--border);
+            background: rgba(120, 120, 128, 0.16);
             border-radius: 12px;
             transition: all 0.3s ease;
             flex-shrink: 0;
@@ -938,9 +1091,10 @@
             left: 2px;
             width: 20px;
             height: 20px;
-            background: var(--text);
+            background: #ffffff;
             border-radius: 50%;
             transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
         }
 
         .switch-input:checked + .switch-slider {
@@ -961,8 +1115,8 @@
         .ai-status-box {
             margin-top: 12px;
             padding: 10px 14px;
-            border-radius: 6px;
-            background: var(--bg);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.03);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -971,8 +1125,8 @@
         }
 
         .ai-toggle-card.active .ai-status-box {
-            background: rgba(112, 92, 241, 0.15);
-            color: #a899f9;
+            background: rgba(0, 122, 255, 0.08);
+            color: var(--primary);
         }
 
         .status-dot {
@@ -984,7 +1138,7 @@
 
         .ai-toggle-card.active .status-dot {
             background: var(--primary);
-            box-shadow: 0 0 8px var(--primary);
+            box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
         }
 
         .status-text {
@@ -994,9 +1148,11 @@
         .status-bar {
             height: 24px;
             background: var(--statusbar-bg);
-            border-top: 1px solid var(--border);
-            padding: 0 16px;
-            font-size: 12px;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-top: 0.5px solid var(--border);
+            padding: 0 14px;
+            font-size: 11px;
             color: var(--text-muted);
             display: flex;
             align-items: center;
@@ -1026,9 +1182,9 @@
             gap: 8px;
             cursor: pointer;
             padding: 12px;
-            border-radius: 8px;
-            border: 2px solid var(--border);
-            transition: all 0.2s;
+            border-radius: 10px;
+            border: 2px solid transparent;
+            transition: all 0.15s;
             min-width: 90px;
         }
 
@@ -1042,16 +1198,16 @@
 
         .theme-option input:checked + .theme-preview {
             border-color: var(--primary);
-            box-shadow: 0 0 0 2px var(--primary-hover);
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
         }
 
         .theme-preview {
             width: 70px;
             height: 50px;
-            border-radius: 6px;
+            border-radius: 8px;
             overflow: hidden;
             border: 2px solid var(--border);
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
 
         .light-preview {
@@ -1102,52 +1258,68 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: var(--scrollbar);
+            background: rgba(0, 0, 0, 0.15);
             border-radius: 4px;
+            border: 2px solid transparent;
+            background-clip: content-box;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+            background: rgba(0, 0, 0, 0.25);
+            background-clip: content-box;
         }
 
         .preview-panel {
-            width: 100%;
-            min-width: 0;
-            background: var(--surface);
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
+            width: 600px;
+            min-width: 300px;
+            max-width: 1200px;
+            background: var(--surface);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
             overflow: hidden;
-            flex: 1;
+            position: relative;
         }
 
         .preview-panel.active {
-            width: 100%;
+            width: 600px;
             min-width: 300px;
         }
 
         .preview-resizer {
             width: 4px;
+            height: 100%;
             cursor: col-resize;
             background: var(--border);
             transition: background 0.2s;
             flex-shrink: 0;
+            -webkit-app-region: no-drag;
         }
 
         .preview-resizer:hover {
             background: var(--primary);
         }
 
+        .preview-content-wrapper {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+
         .preview-header {
             display: flex;
             align-items: center;
-            padding: 12px 16px;
-            border-bottom: 1px solid var(--border);
-            gap: 12px;
-            min-height: 48px;
+            padding: 10px 14px;
+            border-bottom: 0.5px solid var(--border);
+            gap: 10px;
+            min-height: 44px;
         }
 
         .preview-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text);
             flex: 1;
@@ -1162,20 +1334,24 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
             flex-shrink: 0;
+            background: transparent;
+            border: none;
+            color: #007AFF;
         }
 
         .preview-close-btn:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 122, 255, 0.1);
+            color: #0056CC;
         }
 
         .preview-close-btn svg {
             width: 16px;
             height: 16px;
-            color: var(--text-muted);
+            color: inherit;
         }
 
         .preview-content {
@@ -1200,7 +1376,8 @@
             width: 48px;
             height: 48px;
             margin-bottom: 12px;
-            opacity: 0.5;
+            color: #007AFF;
+            opacity: 0.6;
         }
 
         .preview-loading {
@@ -1214,12 +1391,12 @@
         }
 
         .preview-spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid var(--border);
+            width: 28px;
+            height: 28px;
+            border: 2.5px solid rgba(0, 122, 255, 0.12);
             border-top-color: var(--primary);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.8s linear infinite;
             margin-bottom: 12px;
         }
 
@@ -1243,31 +1420,34 @@
             width: 48px;
             height: 48px;
             margin-bottom: 12px;
-            opacity: 0.7;
+            color: #FF3B30;
+            opacity: 0.8;
         }
 
         .markdown-preview {
             font-size: 14px;
-            line-height: 1.7;
+            line-height: 1.65;
             color: var(--text);
         }
 
         .markdown-preview h1 {
-            font-size: 1.8em;
+            font-size: 1.7em;
             font-weight: 600;
             margin: 0.8em 0 0.5em 0;
             padding-bottom: 0.3em;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 0.5px solid var(--border);
+            letter-spacing: -0.3px;
         }
 
         .markdown-preview h2 {
-            font-size: 1.5em;
+            font-size: 1.4em;
             font-weight: 600;
             margin: 0.8em 0 0.5em 0;
+            letter-spacing: -0.2px;
         }
 
         .markdown-preview h3 {
-            font-size: 1.25em;
+            font-size: 1.2em;
             font-weight: 600;
             margin: 0.8em 0 0.5em 0;
         }
@@ -1292,17 +1472,18 @@
         }
 
         .markdown-preview code {
-            background: var(--bg);
+            background: rgba(0, 0, 0, 0.05);
             padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-family: 'Consolas', 'Monaco', monospace;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
             font-size: 0.9em;
+            color: var(--text);
         }
 
         .markdown-preview pre {
-            background: var(--bg);
-            padding: 12px;
-            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.04);
+            padding: 14px;
+            border-radius: 8px;
             overflow-x: auto;
             margin: 0.8em 0;
         }
@@ -1310,14 +1491,16 @@
         .markdown-preview pre code {
             background: transparent;
             padding: 0;
+            color: var(--text);
         }
 
         .markdown-preview blockquote {
-            border-left: 4px solid var(--primary);
+            border-left: 3px solid var(--primary);
             margin: 0.8em 0;
             padding: 0.5em 1em;
-            background: var(--bg);
+            background: rgba(0, 122, 255, 0.03);
             color: var(--text-muted);
+            border-radius: 0 6px 6px 0;
         }
 
         .markdown-preview a {
@@ -1336,19 +1519,19 @@
         }
 
         .markdown-preview th, .markdown-preview td {
-            border: 1px solid var(--border);
+            border: 0.5px solid var(--border);
             padding: 8px 12px;
             text-align: left;
         }
 
         .markdown-preview th {
-            background: var(--bg);
+            background: rgba(0, 0, 0, 0.03);
             font-weight: 600;
         }
 
         .markdown-preview hr {
             border: none;
-            border-top: 1px solid var(--border);
+            border-top: 0.5px solid var(--border);
             margin: 1.5em 0;
         }
 
@@ -1378,25 +1561,25 @@
             justify-content: center;
             gap: 12px;
             padding: 12px;
-            border-bottom: 1px solid var(--border);
-            background: var(--bg);
+            border-bottom: 0.5px solid var(--border);
+            background: rgba(0, 0, 0, 0.03);
         }
 
         .pdf-nav-btn {
-            width: 32px;
-            height: 32px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.15s;
+            transition: all 0.15s;
             background: var(--surface);
-            border: 1px solid var(--border);
+            border: 0.5px solid var(--border);
         }
 
         .pdf-nav-btn:hover:not(:disabled) {
-            background: var(--surface-hover);
+            background: rgba(0, 122, 255, 0.1);
         }
 
         .pdf-nav-btn:disabled {
@@ -1407,7 +1590,7 @@
         .pdf-nav-btn svg {
             width: 16px;
             height: 16px;
-            color: var(--text);
+            color: #007AFF;
         }
 
         .pdf-page-info {
@@ -1463,19 +1646,19 @@
         }
 
         .word-table th, .word-table td {
-            border: 1px solid var(--border);
+            border: 0.5px solid var(--border);
             padding: 8px 12px;
             text-align: left;
         }
 
         .word-table th {
-            background: var(--bg);
+            background: rgba(0, 0, 0, 0.03);
             font-weight: 600;
         }
 
         .preview-info {
             padding: 8px 16px;
-            border-top: 1px solid var(--border);
+            border-top: 0.5px solid var(--border);
             font-size: 12px;
             color: var(--text-muted);
             display: flex;
@@ -1487,7 +1670,7 @@
             align-items: center;
             justify-content: space-between;
             padding: 8px 12px;
-            border-bottom: 1px solid var(--border);
+            border-bottom: 0.5px solid var(--border);
             font-size: 13px;
             color: var(--text);
         }
@@ -1498,16 +1681,17 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             background: transparent;
             border: none;
-            color: var(--text-muted);
-            transition: background-color 0.15s;
+            color: #007AFF;
+            transition: all 0.15s;
         }
 
         .preview-close-btn:hover {
-            background: var(--surface-hover);
+            background: rgba(0, 122, 255, 0.1);
+            color: #0056CC;
         }
 
         .preview-close-btn svg {
@@ -1521,50 +1705,78 @@
         <div class="titlebar-drag">
             <span class="titlebar-title">NoteAI</span>
             <button class="titlebar-btn workspace-btn" onclick="openWorkspace()" title="打开工作区">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"></path>
-                    <circle cx="12" cy="13" r="4"></circle>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m20 20-2-2V8l-4-4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l2 2Z"></path>
+                    <path d="M7 9h10"></path>
+                    <path d="M7 13h6"></path>
                 </svg>
                 <span id="workspace-name-display"></span>
+            </button>
+            <div class="titlebar-separator"></div>
+            <button class="titlebar-btn tab-btn active" onclick="switchTab(0)" data-tab="web" title="网页下载">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="8 10 12 14 16 10"></polyline>
+                    <path d="M12 14V3"></path>
+                </svg>
+                下载
+            </button>
+            <button class="titlebar-btn tab-btn" onclick="switchTab(1)" data-tab="file" title="文件转换">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <path d="M12 18v-6"></path>
+                    <path d="M9 15h6"></path>
+                </svg>
+                转换
+            </button>
+            <button class="titlebar-btn tab-btn" onclick="switchTab(2)" data-tab="note" title="笔记整合">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+                </svg>
+                整合
             </button>
         </div>
         <div class="titlebar-controls">
             <button class="titlebar-btn" onclick="showSettings()" title="设置">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
             </button>
             <button class="titlebar-btn" onclick="showLog()" title="日志">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <line x1="8" y1="13" x2="16" y2="13"></line>
+                    <line x1="8" y1="17" x2="16" y2="17"></line>
                 </svg>
             </button>
             <button class="titlebar-btn" onclick="showAbout()" title="关于">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    <path d="M12 16v-4"></path>
+                    <path d="M12 8h.01"></path>
                 </svg>
             </button>
             <div class="titlebar-separator"></div>
             <button class="titlebar-btn" onclick="minimizeWindow()" title="最小化">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+                    <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+                    <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+                    <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
                 </svg>
             </button>
             <button class="titlebar-btn" onclick="maximizeWindow()" title="最大化">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="maximize-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" id="maximize-icon">
                     <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                 </svg>
             </button>
             <button class="titlebar-btn titlebar-btn-close" onclick="closeWindow()" title="关闭">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
                 </svg>
             </button>
         </div>
@@ -1572,33 +1784,6 @@
     <div class="app-container">
         <!-- 左侧边栏 -->
         <div class="sidebar sidebar-left">
-            <div class="sidebar-header">
-                <button class="tool-btn active" onclick="switchTab(0)" data-tab="web" title="网页下载">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                    下载
-                </button>
-                <button class="tool-btn" onclick="switchTab(1)" data-tab="file" title="文件转换">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                    </svg>
-                    转换
-                </button>
-                <button class="tool-btn" onclick="switchTab(2)" data-tab="note" title="笔记整合">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                    </svg>
-                    整合
-                </button>
-            </div>
-
             <div class="file-tree-container" id="file-tree">
                 <div class="tree-empty">暂无工作区</div>
             </div>
@@ -1705,19 +1890,17 @@
 
                         <div class="card" id="topic-card">
                             <div class="card-title">主题设置</div>
-                            <label class="checkbox-item">
-                                <input type="checkbox" id="auto-topic" checked onchange="toggleTopicInput()">
-                                自动提取主题
-                            </label>
-                            <div class="form-group" style="margin-top: 12px;">
-                                <div class="form-label">或手动输入主题（每行一个）</div>
-                                <textarea id="topic-list" class="form-input form-textarea" disabled placeholder="主题1&#10;主题2&#10;主题3"></textarea>
+                            <div class="form-group">
+                                <div class="form-label">点击提取主题，或手动输入（每行一个）</div>
+                                <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3"></textarea>
+                            </div>
+                            <div class="btn-group" style="margin-top: 8px;">
+                                <button class="btn btn-secondary" id="extract-topics-btn" onclick="extractTopics()" style="flex: 1;">提取主题</button>
+                                <button class="btn btn-primary" id="integrate-btn" onclick="startNoteIntegration()" style="flex: 1;" disabled>开始整合</button>
                             </div>
                         </div>
 
-                        <div class="btn-group">
-                            <button class="btn btn-primary" onclick="startNoteIntegration()">开始整合</button>
-                        </div>
+                        <div class="integration-hint" id="integration-hint"></div>
 
                         <div class="progress-container">
                             <div class="progress-bar">
@@ -1731,27 +1914,30 @@
 
             <!-- 预览面板 -->
             <div class="preview-panel" id="preview-panel" style="display: none;">
-                <div class="preview-header">
-                    <span id="preview-file-name">选择文件</span>
-                    <button class="preview-close-btn" onclick="closePreviewPanel()" title="关闭">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
-                    </button>
-                </div>
-                <div class="preview-content" id="preview-content">
-                    <div class="preview-empty" id="preview-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                        </svg>
-                        <div>选择文件以预览</div>
+                <div class="preview-resizer" id="preview-resizer"></div>
+                <div class="preview-content-wrapper">
+                    <div class="preview-header">
+                        <span id="preview-file-name">选择文件</span>
+                        <button class="preview-close-btn" onclick="closePreviewPanel()" title="关闭">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 6 6 18"></path>
+                                <path d="m6 6 12 12"></path>
+                            </svg>
+                        </button>
                     </div>
-                </div>
-                <div class="preview-info" id="preview-info" style="display: none;">
-                    <span id="preview-file-size"></span>
-                    <span id="preview-file-type"></span>
+                    <div class="preview-content" id="preview-content">
+                        <div class="preview-empty" id="preview-empty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                            <div>选择文件以预览</div>
+                        </div>
+                    </div>
+                    <div class="preview-info" id="preview-info" style="display: none;">
+                        <span id="preview-file-size"></span>
+                        <span id="preview-file-type"></span>
+                    </div>
                 </div>
             </div>
 
@@ -1762,9 +1948,9 @@
         <!-- 关于面板 -->
         <div class="about-panel-overlay" id="about-panel">
             <button class="about-panel-close" onclick="closeAboutPanel()">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
                 </svg>
             </button>
             <div class="about-panel" id="about-panel-content"></div>
@@ -1773,9 +1959,9 @@
         <!-- 设置面板 -->
         <div class="about-panel-overlay" id="settings-panel">
             <button class="about-panel-close" onclick="closeSettingsPanel()">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
                 </svg>
             </button>
             <div class="about-panel" id="settings-panel-content">
@@ -1844,9 +2030,9 @@
         <!-- 日志面板 -->
         <div class="about-panel-overlay" id="log-panel">
             <button class="about-panel-close" onclick="closeLogPanel()">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
                 </svg>
             </button>
             <div class="about-panel" id="log-panel-content">
@@ -1876,6 +2062,62 @@
             if (window.pywebview) {
                 pywebview.api.close_window();
             }
+        }
+
+        function initWindowDrag() {
+            const titlebar = document.querySelector('.titlebar-drag');
+            if (!titlebar || !window.pywebview) return;
+
+            let isDragging = false;
+            let dragStartX = 0;
+            let dragStartY = 0;
+            let accumDx = 0;
+            let accumDy = 0;
+            let rafId = null;
+
+            function flushMove() {
+                if (accumDx !== 0 || accumDy !== 0) {
+                    window.pywebview.api.move_window(accumDx, accumDy);
+                    accumDx = 0;
+                    accumDy = 0;
+                }
+                if (isDragging) {
+                    rafId = requestAnimationFrame(flushMove);
+                }
+            }
+
+            titlebar.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.titlebar-btn')) return;
+                isDragging = true;
+                dragStartX = e.screenX;
+                dragStartY = e.screenY;
+                accumDx = 0;
+                accumDy = 0;
+                rafId = requestAnimationFrame(flushMove);
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                accumDx += e.screenX - dragStartX;
+                accumDy += e.screenY - dragStartY;
+                dragStartX = e.screenX;
+                dragStartY = e.screenY;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isDragging) return;
+                isDragging = false;
+                if (rafId) {
+                    cancelAnimationFrame(rafId);
+                    rafId = null;
+                }
+                if (accumDx !== 0 || accumDy !== 0) {
+                    window.pywebview.api.move_window(accumDx, accumDy);
+                    accumDx = 0;
+                    accumDy = 0;
+                }
+            });
         }
 
         function toggleTheme() {
@@ -1967,27 +2209,88 @@
             }
         }
 
+        function restoreSidebarWidth() {
+            const sidebar = document.querySelector('.sidebar');
+            if (!sidebar) return;
+            const savedWidth = localStorage.getItem('sidebar-width');
+            if (savedWidth) {
+                const w = parseInt(savedWidth, 10);
+                if (w >= 180 && w <= 600) {
+                    sidebar.style.width = w + 'px';
+                }
+            }
+        }
+
         function initResizer() {
             const resizer = document.getElementById('sidebar-resizer');
             const sidebar = document.querySelector('.sidebar');
+            if (!resizer || !sidebar) {
+                console.log('[DEBUG] initResizer: resizer or sidebar not found', { resizer, sidebar });
+                return;
+            }
+            console.log('[DEBUG] initResizer: initialized successfully');
             let isResizing = false;
+
+            restoreSidebarWidth();
 
             resizer.addEventListener('mousedown', (e) => {
                 isResizing = true;
+                resizer.classList.add('resizing');
                 document.body.style.cursor = 'col-resize';
                 document.body.style.userSelect = 'none';
+                e.preventDefault();
             });
 
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
                 const newWidth = e.clientX;
-                if (newWidth >= 120 && newWidth <= 500) {
+                if (newWidth >= 180 && newWidth <= 600) {
                     sidebar.style.width = newWidth + 'px';
                 }
             });
 
             document.addEventListener('mouseup', () => {
+                if (!isResizing) return;
                 isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                localStorage.setItem('sidebar-width', sidebar.offsetWidth);
+            });
+        }
+
+        function initPreviewResizer() {
+            const resizer = document.getElementById('preview-resizer');
+            const previewPanel = document.getElementById('preview-panel');
+            if (!resizer || !previewPanel) {
+                console.log('[DEBUG] initPreviewResizer: resizer or previewPanel not found', { resizer, previewPanel });
+                return;
+            }
+            console.log('[DEBUG] initPreviewResizer: initialized successfully');
+            let isResizing = false;
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                resizer.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const panelRect = previewPanel.getBoundingClientRect();
+                const newWidth = panelRect.right - e.clientX;
+                if (newWidth >= 300 && newWidth <= 1200) {
+                    previewPanel.style.width = newWidth + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isResizing) return;
+                isResizing = false;
+                resizer.classList.remove('resizing');
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
             });
@@ -2018,7 +2321,7 @@
         }
 
         function switchTab(tabIndex) {
-            document.querySelectorAll('.tool-btn').forEach((item, i) => {
+            document.querySelectorAll('.tab-btn').forEach((item, i) => {
                 item.classList.toggle('active', i === tabIndex);
             });
             document.querySelectorAll('.tab-content').forEach((content, i) => {
@@ -2066,6 +2369,11 @@
             if (children && children.classList.contains('tree-children')) {
                 children.classList.toggle('hidden');
 
+                const toggle = element.querySelector('.tree-toggle');
+                if (toggle) {
+                    toggle.classList.toggle('collapsed');
+                }
+
                 const path = element.getAttribute('data-path');
                 if (path) {
                     const isCollapsed = children.classList.contains('hidden');
@@ -2073,6 +2381,20 @@
                     saveTreeState();
                 }
             }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes == null) return '';
+            if (bytes < 1024) return bytes + ' Byte';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' K';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' M';
+        }
+
+        function formatModifiedTime(timestamp) {
+            if (timestamp == null) return '';
+            const d = new Date(timestamp * 1000);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
         function renderFileTree(treeData, container) {
@@ -2097,12 +2419,20 @@
                     `;
 
                     if (isFolder) {
-                        html += `<span class="tree-icon folder-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span>`;
+                        html += `<span class="tree-toggle ${expandedState ? '' : 'collapsed'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>`;
+                        html += `<span class="tree-icon folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m20 20-2-2V8l-4-4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l2 2Z"></path></svg></span>`;
                     } else {
-                        html += `<span class="tree-icon file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>`;
+                        html += `<span class="tree-toggle" style="visibility:hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>`;
+                        html += `<span class="tree-icon file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>`;
                     }
 
-                    html += `<span class="tree-name">${node.name}</span></div>`;
+                    html += `<span class="tree-name">${node.name}</span>`;
+
+                    if (!isFolder) {
+                        html += `<span class="tree-meta"><span class="tree-size">${formatFileSize(node.size)}</span><span class="tree-modified">${formatModifiedTime(node.modified)}</span></span>`;
+                    }
+
+                    html += `</div>`;
 
                     if (hasChildren) {
                         html += `<div class="tree-children ${childrenHiddenClass}">${buildTreeHTML(node.children, indentLevel + 1)}</div>`;
@@ -2151,11 +2481,6 @@
                 window.pywebview.api.on_file_selected(path);
                 loadFilePreview(path, fileName);
             }
-        }
-
-        function toggleTopicInput() {
-            const autoTopic = document.getElementById('auto-topic').checked;
-            document.getElementById('topic-list').disabled = autoTopic;
         }
 
         function updateWebAIStatus() {
@@ -2233,8 +2558,8 @@
                 if (workspacePath) {
                     container.innerHTML = `
                         <div class="workspace-folder-display">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                <path d="M3 7C3 5.89543 3.89543 5 5 5H8.17157C8.70201 5 9.21071 5.21071 9.58579 5.58579L10.4142 6.41421C10.7893 6.78929 11.298 7 11.8284 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z"></path>
                             </svg>
                             <span class="workspace-path">${escapeHtml(workspacePath)}</span>
                         </div>
@@ -2242,8 +2567,8 @@
                 } else {
                     container.innerHTML = `
                         <button class="workspace-btn" onclick="openWorkspace()" title="打开工作区">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                                <path d="M3 7C3 5.89543 3.89543 5 5 5H8.17157C8.70201 5 9.21071 5.21071 9.58579 5.58579L10.4142 6.41421C10.7893 6.78929 11.298 7 11.8284 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z"></path>
                             </svg>
                             <span>打开工作区</span>
                         </button>
@@ -2381,16 +2706,78 @@
             }
         }
 
+        let topicsReady = false;
+
+        function updateIntegrateBtnState() {
+            const btn = document.getElementById('integrate-btn');
+            const hint = document.getElementById('integration-hint');
+            if (!btn) return;
+            btn.disabled = !topicsReady;
+            if (hint) {
+                hint.textContent = topicsReady ? '' : '请先点击提取主题按钮';
+            }
+        }
+
+        async function extractTopics() {
+            const btn = document.getElementById('extract-topics-btn');
+            const progressFill = document.getElementById('integration-progress-fill');
+            const progressText = document.getElementById('integration-status');
+            if (!btn || !window.pywebview) return;
+
+            btn.disabled = true;
+            btn.textContent = '提取中...';
+            if (progressFill) progressFill.style.width = '5%';
+            if (progressText) progressText.textContent = '正在扫描文件...';
+            updateStatus('正在提取主题...');
+
+            try {
+                if (progressFill) progressFill.style.width = '15%';
+                if (progressText) progressText.textContent = '正在读取文件列表...';
+
+                const result = await window.pywebview.api.extract_topics();
+
+                if (result.success) {
+                    if (progressFill) progressFill.style.width = '90%';
+                    if (progressText) progressText.textContent = '正在写入主题列表...';
+
+                    const topicList = document.getElementById('topic-list');
+                    topicList.value = result.topics.join('\n');
+                    topicsReady = true;
+                    updateIntegrateBtnState();
+
+                    if (progressFill) progressFill.style.width = '100%';
+                    if (progressText) progressText.textContent = `提取完成，共 ${result.topics.length} 个主题`;
+                    updateStatus(`主题提取完成，共 ${result.topics.length} 个主题`);
+                } else {
+                    if (progressFill) progressFill.style.width = '0%';
+                    if (progressText) progressText.textContent = '提取失败';
+                    alert('提取主题失败: ' + (result.error || '未知错误'));
+                }
+            } catch (e) {
+                if (progressFill) progressFill.style.width = '0%';
+                if (progressText) progressText.textContent = '提取失败';
+                console.error('提取主题失败:', e);
+                alert('提取主题失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '提取主题';
+            }
+        }
+
         async function startNoteIntegration() {
-            const btn = document.querySelector('#tab-2 .btn-primary');
+            if (!topicsReady) {
+                updateIntegrateBtnState();
+                return;
+            }
+
+            const btn = document.getElementById('integrate-btn');
             if (btn) {
                 btn.disabled = true;
                 btn.textContent = '整合中...';
             }
             try {
-                const autoTopic = document.getElementById('auto-topic').checked;
                 const topics = document.getElementById('topic-list').value.split('\n').map(t => t.trim()).filter(t => t);
-                await window.pywebview.api.start_note_integration(autoTopic, topics);
+                await window.pywebview.api.start_note_integration(false, topics);
             } catch (e) {
                 console.error('整合失败:', e);
                 alert('整合失败: ' + e.message);
@@ -2462,7 +2849,7 @@
                     conv_save_path: document.getElementById('conv-save-path').value || '',
                     integration_source_path: document.getElementById('integration-source-path').value || '',
                     integration_output_path: document.getElementById('integration-output-path').value || '',
-                    auto_topic: document.getElementById('auto-topic')?.checked || true,
+                    auto_topic: true,
                     topic_list: document.getElementById('topic-list').value || ''
                 };
 
@@ -2490,11 +2877,6 @@
                     el.addEventListener('input', debounce(autoSaveConfig, 1000));
                 }
             });
-
-            const autoTopicEl = document.getElementById('auto-topic');
-            if (autoTopicEl) {
-                autoTopicEl.addEventListener('change', autoSaveConfig);
-            }
         }
 
         function debounce(func, wait) {
@@ -2561,8 +2943,8 @@
             if (content) {
                 content.innerHTML = `
                     <div class="preview-empty" id="preview-empty">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
                         </svg>
                         <div>选择文件以预览</div>
@@ -2600,10 +2982,10 @@
             if (content) {
                 content.innerHTML = `
                     <div class="preview-error">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="10"></circle>
-                            <line x1="12" y1="8" x2="12" y2="12"></line>
-                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            <path d="M12 8v4"></path>
+                            <path d="M12 16h.01"></path>
                         </svg>
                         <div>${escapeHtml(message)}</div>
                     </div>
@@ -2648,13 +3030,13 @@
                     <div class="pdf-preview">
                         <div class="pdf-controls">
                             <div class="pdf-nav-btn" onclick="changePdfPage(-1)" id="pdf-prev-btn" ${pageNum <= 1 ? 'disabled' : ''}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="15 18 9 12 15 6"></polyline>
                                 </svg>
                             </div>
                             <span class="pdf-page-info">${pageNum} / ${totalPdfPages}</span>
                             <div class="pdf-nav-btn" onclick="changePdfPage(1)" id="pdf-next-btn" ${pageNum >= totalPdfPages ? 'disabled' : ''}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                                     <polyline points="9 18 15 12 9 6"></polyline>
                                 </svg>
                             </div>
@@ -2799,11 +3181,16 @@
         }
 
         document.addEventListener('DOMContentLoaded', async function() {
-            initResizer();
             initSystemThemeListener();
 
-            if (window.pywebview) {
+            async function initApp() {
+                if (!window.pywebview) return;
                 try {
+                    initWindowDrag();
+                    initResizer();
+                    initPreviewResizer();
+                    restoreSidebarWidth();
+                    updateIntegrateBtnState();
                     initWorkspaceAsync();
                     
                     const themePref = await window.pywebview.api.get_theme_preference();
@@ -2828,10 +3215,6 @@
                             convAiToggle.checked = uiConfig.conv_ai_assist || false;
                             updateConvAIStatus();
                         }
-
-                        const autoTopicEl = document.getElementById('auto-topic');
-                        if (autoTopicEl) autoTopicEl.checked = uiConfig.auto_topic !== false;
-                        toggleTopicInput();
 
                         const topicListEl = document.getElementById('topic-list');
                         if (topicListEl) topicListEl.value = uiConfig.topic_list || '';
@@ -2858,6 +3241,12 @@
                 } catch (e) {
                     console.error('初始化失败:', e);
                 }
+            }
+
+            if (window.pywebview) {
+                initApp();
+            } else {
+                window.addEventListener('pywebviewready', initApp);
             }
         });
     </script>

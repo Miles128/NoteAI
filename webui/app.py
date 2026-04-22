@@ -382,16 +382,40 @@ class Api:
         if not md_files:
             return {"success": False, "error": "Notes 文件夹中没有 Markdown 文件"}
 
+        notes_count = len(md_files)
+
+        filenames = []
+        for i, md_file in enumerate(md_files):
+            if not md_file.name.startswith('.'):
+                filenames.append(md_file.stem)
+                self.window.evaluate_js(
+                    f'updateProgress("integration-progress", {0.15 * (i + 1) / notes_count}, "读取 MD 文件中 - {md_file.name}")'
+                )
+                self.update_status(f"读取 MD 文件中 - {md_file.name}")
+
+        organized_count = 0
+        organized_path = config.get_organized_folder()
+        if organized_path:
+            organized_dir = Path(organized_path)
+            if organized_dir.exists():
+                organized_mds = list(organized_dir.rglob("*.md"))
+                organized_count = len(organized_mds)
+
+        lower = max(organized_count, int(notes_count / 3)) + 1
+        upper = max(organized_count, int(notes_count / 2)) + 2
+        lower = max(lower, 2)
+        upper = max(upper, lower + 1)
+
         is_valid, error_msg = check_api_config()
         if not is_valid:
+            self.update_status("请先设置大模型 API")
             return {"success": False, "error": f"API 配置无效: {error_msg}"}
 
-        filenames = [f.stem for f in md_files if not f.name.startswith('.')]
         titles_text = '\n'.join([f"{i+1}. {name}" for i, name in enumerate(filenames)])
 
         try:
-            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "正在调用 LLM 分析主题...")')
-            self.update_status("正在调用 LLM 分析主题...")
+            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "大模型思考中 - 分析主题...")')
+            self.update_status("大模型思考中 - 分析主题...")
 
             from langchain_openai import ChatOpenAI
             from langchain_core.prompts import PromptTemplate
@@ -399,7 +423,7 @@ class Api:
 
             prompt = PromptTemplate(
                 template=TOPIC_INTEGRATION_PROMPT,
-                input_variables=["titles"]
+                input_variables=["titles", "lower", "upper"]
             )
             llm = ChatOpenAI(
                 api_key=config.api_key,
@@ -410,7 +434,7 @@ class Api:
             )
             chain = prompt | llm
 
-            response = chain.invoke({"titles": titles_text})
+            response = chain.invoke({"titles": titles_text, "lower": lower, "upper": upper})
             content = response.content.strip()
 
             self.window.evaluate_js('updateProgress("integration-progress", 0.7, "正在解析主题结果...")')

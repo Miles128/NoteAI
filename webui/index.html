@@ -2741,7 +2741,24 @@
                     if (progressText) progressText.textContent = '正在写入主题列表...';
 
                     const topicList = document.getElementById('topic-list');
-                    topicList.value = result.topics.join('\n');
+                    topicList.value = '';
+                    
+                    for (let i = 0; i < result.topics.length; i++) {
+                        const topic = result.topics[i];
+                        if (topicList.value.length > 0) {
+                            topicList.value += '\n';
+                        }
+                        topicList.value += topic;
+                        topicList.scrollTop = topicList.scrollHeight;
+                        
+                        const progressPercent = 0.9 + (0.1 * (i + 1) / result.topics.length);
+                        if (progressFill) progressFill.style.width = (progressPercent * 100) + '%';
+                        if (progressText) progressText.textContent = `显示主题 ${i + 1}/${result.topics.length}: ${topic}`;
+                        updateStatus(`显示主题 ${i + 1}/${result.topics.length}: ${topic}`);
+                        
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                    
                     topicsReady = true;
                     updateIntegrateBtnState();
 

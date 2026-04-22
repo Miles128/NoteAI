@@ -44,7 +44,7 @@ class NoteIntegration:
 
         for i, md_file in enumerate(md_files):
             if self.progress_callback:
-                self.progress_callback(i + 1, len(md_files), f"正在加载: {md_file.name}", max_total)
+                self.progress_callback(i + 1, len(md_files), f"读取 MD 文件中 - {md_file.name}", max_total)
 
             try:
                 with open(md_file, 'r', encoding='utf-8') as f:
@@ -308,6 +308,8 @@ class NoteIntegration:
         chain = prompt | llm
 
         try:
+            if self.progress_callback:
+                self.progress_callback(1, 1, "大模型思考中 - 映射内容块到主题", -1)
             response = chain.invoke({
                 "topics": topics_text,
                 "chunks_info": chunks_info
@@ -538,6 +540,8 @@ class NoteIntegration:
         chain = prompt | llm
 
         try:
+            if self.progress_callback:
+                self.progress_callback(1, 1, "大模型思考中 - 提取主题和块归属映射", -1)
             response = chain.invoke({
                 "titles": titles,
                 "chunks_info": chunks_info,
@@ -623,6 +627,8 @@ class NoteIntegration:
         chain = prompt | llm
 
         try:
+            if self.progress_callback:
+                self.progress_callback(1, 1, "大模型思考中 - 压缩内容块", -1)
             response = chain.invoke({
                 "original_content": chunk['content'],
                 "target_ratio": compression_ratio
@@ -669,6 +675,8 @@ class NoteIntegration:
         chain = prompt | llm
 
         try:
+            if self.progress_callback:
+                self.progress_callback(1, 1, f"大模型思考中 - 生成主题「{topic_name}」笔记", -1)
             response = chain.invoke({
                 "topic_name": topic_name,
                 "content": content,

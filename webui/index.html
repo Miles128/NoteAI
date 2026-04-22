@@ -1001,6 +1001,11 @@
             font-size: 12px;
             color: var(--text-muted);
             margin-top: 8px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 120px;
+            overflow-y: auto;
+            line-height: 1.5;
         }
 
         .radio-group {
@@ -2738,7 +2743,6 @@
 
                 if (result.success) {
                     if (progressFill) progressFill.style.width = '90%';
-                    if (progressText) progressText.textContent = '正在写入主题列表...';
 
                     const topicList = document.getElementById('topic-list');
                     topicList.value = result.topics.join('\n');
@@ -2746,7 +2750,10 @@
                     updateIntegrateBtnState();
 
                     if (progressFill) progressFill.style.width = '100%';
-                    if (progressText) progressText.textContent = `提取完成，共 ${result.topics.length} 个主题`;
+                    if (progressText) {
+                        progressText.textContent += '\n\n✅ 提取完成，共 ' + result.topics.length + ' 个主题';
+                        progressText.scrollTop = progressText.scrollHeight;
+                    }
                     updateStatus(`主题提取完成，共 ${result.topics.length} 个主题`);
                 } else {
                     if (progressFill) progressFill.style.width = '0%';

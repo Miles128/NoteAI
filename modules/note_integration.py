@@ -302,8 +302,7 @@ class NoteIntegration:
 """
 
         # 构建chunks内容
-        chunks_content = '\n\n'.join([f"--- CHUNK {c['chunk_id']} ---
-{c['content']}" for c in chunks])
+        chunks_content = '\n\n'.join([f"--- CHUNK {c['chunk_id']} ---\n{c['content']}" for c in chunks])
 
         prompt = PromptTemplate(
             template=batch_prompt,

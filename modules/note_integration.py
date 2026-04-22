@@ -29,6 +29,7 @@ class NoteIntegration:
     def __init__(self, progress_callback: Optional[Callable] = None):
         self.progress_callback = progress_callback
         self.documents = []
+        self.chunk_cache = {}  # 缓存处理过的chunks，避免重复处理
     
     def load_documents_from_folder(self, folder_path: str) -> List[Dict]:
         """从文件夹加载Markdown文档"""
@@ -153,7 +154,9 @@ class NoteIntegration:
             def process_one(topic):
                 return self._process_topic(topic, chunks)
 
-            with ThreadPoolExecutor(max_workers=min(len(topics), 4)) as executor:
+            import multiprocessing
+            max_workers = min(len(topics), multiprocessing.cpu_count() * 2)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_topic = {executor.submit(process_one, t): t for t in topics}
                 for future in as_completed(future_to_topic):
                     topic_name = future_to_topic[future]["name"]
@@ -217,18 +220,37 @@ class NoteIntegration:
         threshold = config.max_tokens * 0.9 * 4
         was_compressed = False
 
-        if original_word_count > threshold:
-            compression_ratio = threshold / original_word_count
-            logger.info(f"主题「{topic_name}」需要压缩，比例: {compression_ratio:.2f}")
+        # 智能压缩判断：只有当内容确实需要压缩时才进行压缩
+        # 1. 检查总字数是否超过阈值
+        # 2. 检查内容密度（避免对已经很精炼的内容进行压缩）
+        need_compression = original_word_count > threshold
+        
+        if need_compression:
+            # 计算内容密度（非空白字符比例）
+            total_content = '\n\n'.join([c['content'] for c in topic_chunks])
+            non_whitespace_chars = len(''.join(total_content.split()))
+            content_density = non_whitespace_chars / len(total_content) if len(total_content) > 0 else 0
+            
+            # 如果内容密度已经很高（>0.8），说明内容已经很精炼，不需要压缩
+            if content_density > 0.8:
+                logger.info(f"主题「{topic_name}」内容密度较高 ({content_density:.2f})，跳过压缩")
+                final_content = '\n\n'.join([c['content'] for c in topic_chunks])
+                final_word_count = original_word_count
+            else:
+                compression_ratio = threshold / original_word_count
+                logger.info(f"主题「{topic_name}」需要压缩，比例: {compression_ratio:.2f}")
 
-            compressed_chunks = []
-            for chunk in topic_chunks:
-                compressed = self._compress_chunk(chunk, compression_ratio)
-                compressed_chunks.append(compressed)
-                was_compressed = True
+                # 批量压缩：将多个chunk合并为一个批次处理
+                batch_size = 5
+                compressed_chunks = []
+                for i in range(0, len(topic_chunks), batch_size):
+                    batch_chunks = topic_chunks[i:i+batch_size]
+                    batch_compressed = self._batch_compress_chunks(batch_chunks, compression_ratio)
+                    compressed_chunks.extend(batch_compressed)
+                    was_compressed = True
 
-            final_content = '\n\n'.join([c['content'] for c in compressed_chunks])
-            final_word_count = sum(c['word_count'] for c in compressed_chunks)
+                final_content = '\n\n'.join([c['content'] for c in compressed_chunks])
+                final_word_count = sum(c['word_count'] for c in compressed_chunks)
         else:
             final_content = '\n\n'.join([c['content'] for c in topic_chunks])
             final_word_count = original_word_count
@@ -246,6 +268,104 @@ class NoteIntegration:
             'was_compressed': was_compressed,
             'original_word_count': original_word_count
         }
+
+    def _batch_compress_chunks(self, chunks: List[Dict], compression_ratio: float) -> List[Dict]:
+        """批量压缩多个chunks
+
+        Args:
+            chunks: 要压缩的chunks列表
+            compression_ratio: 压缩比例
+
+        Returns:
+            压缩后的chunks列表
+        """
+        from langchain_openai import ChatOpenAI
+        from langchain_core.prompts import PromptTemplate
+
+        # 构建批量压缩提示词
+        batch_prompt = """你是一位专业的知识编辑。以下是多个关于某个主题的Markdown内容块：
+
+{chunks_content}
+
+由于上下文长度限制，需要将每个内容块压缩至约 {target_ratio:.0%} 的篇幅。
+
+请执行以下操作：
+1. 理解每个内容块的核心知识点和逻辑结构
+2. 保留所有关键概念、定义、结论
+3. 对于详细的举例、解释性文字可以精简
+4. 保持Markdown格式结构不变
+
+请按顺序输出每个压缩后的内容块，用以下格式分隔：
+
+--- CHUNK {chunk_id} ---
+{compressed_content}
+"""
+
+        # 构建chunks内容
+        chunks_content = '\n\n'.join([f"--- CHUNK {c['chunk_id']} ---
+{c['content']}" for c in chunks])
+
+        prompt = PromptTemplate(
+            template=batch_prompt,
+            input_variables=["chunks_content", "target_ratio"]
+        )
+        llm = ChatOpenAI(
+            api_key=config.api_key,
+            base_url=config.api_base,
+            model=config.model_name,
+            temperature=0.3,
+            max_tokens=config.max_tokens
+        )
+        chain = prompt | llm
+
+        try:
+            if self.progress_callback:
+                self.progress_callback(1, 1, "大模型思考中 - 批量压缩内容块", -1)
+            response = chain.invoke({
+                "chunks_content": chunks_content,
+                "target_ratio": compression_ratio
+            })
+
+            # 解析响应
+            compressed_chunks = []
+            response_content = response.content
+            chunk_sections = response_content.split('--- CHUNK ')
+            
+            for section in chunk_sections[1:]:  # 跳过第一个空部分
+                if section.strip():
+                    lines = section.split('---\n', 1)
+                    if len(lines) == 2:
+                        chunk_id = lines[0].strip()
+                        compressed_content = lines[1].strip()
+                        
+                        # 找到对应的原始chunk
+                        original_chunk = next((c for c in chunks if c['chunk_id'] == chunk_id), None)
+                        if original_chunk:
+                            compressed_word_count = self._count_words(compressed_content)
+                            compressed_chunks.append({
+                                **original_chunk,
+                                'content': compressed_content,
+                                'word_count': compressed_word_count,
+                                'original_word_count': original_chunk['word_count']
+                            })
+
+            # 如果解析失败，回退到单个压缩
+            if not compressed_chunks:
+                logger.warning("批量压缩解析失败，回退到单个压缩")
+                compressed_chunks = []
+                for chunk in chunks:
+                    compressed = self._compress_chunk(chunk, compression_ratio)
+                    compressed_chunks.append(compressed)
+
+            return compressed_chunks
+        except Exception as e:
+            logger.warning(f"批量压缩失败: {e}，回退到单个压缩")
+            # 回退到单个压缩
+            compressed_chunks = []
+            for chunk in chunks:
+                compressed = self._compress_chunk(chunk, compression_ratio)
+                compressed_chunks.append(compressed)
+            return compressed_chunks
 
     def _map_chunks_to_user_topics(self, user_topics: List[str], chunks: List[Dict]) -> Dict[str, List[str]]:
         """使用 LLM 将 chunks 映射到用户指定的主题
@@ -610,6 +730,14 @@ class NoteIntegration:
         Returns:
             压缩后的 chunk（包含原文字数和压缩后字数）
         """
+        # 生成缓存键
+        cache_key = f"{chunk['chunk_id']}_{compression_ratio:.2f}"
+        
+        # 检查缓存
+        if cache_key in self.chunk_cache:
+            logger.info(f"使用缓存的压缩结果: {chunk['chunk_id']}")
+            return self.chunk_cache[cache_key]
+
         from langchain_openai import ChatOpenAI
         from langchain_core.prompts import PromptTemplate
 
@@ -637,12 +765,17 @@ class NoteIntegration:
             compressed_content = clean_text(response.content)
             compressed_word_count = self._count_words(compressed_content)
 
-            return {
+            compressed_chunk = {
                 **chunk,
                 'content': compressed_content,
                 'word_count': compressed_word_count,
                 'original_word_count': chunk['word_count']
             }
+            
+            # 存入缓存
+            self.chunk_cache[cache_key] = compressed_chunk
+            
+            return compressed_chunk
         except Exception as e:
             logger.warning(f"压缩chunk失败 {chunk['chunk_id']}: {e}，使用原始内容")
             return chunk

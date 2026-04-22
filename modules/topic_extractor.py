@@ -8,6 +8,13 @@ from typing import List, Dict, Optional, Tuple
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import check_api_config
+from prompts.note_integration import (
+    TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
+    TOPIC_COUNT_SPECIFIED_INSTRUCTIONS,
+    OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS,
+    TOPIC_COUNT_AUTO_INSTRUCTIONS,
+    OUTPUT_FORMAT_AUTO_INSTRUCTIONS
+)
 
 
 class TopicExtractor:
@@ -146,45 +153,13 @@ class TopicExtractor:
             
             # 根据是否指定主题个数生成不同的提示词
             if is_specified:
-                # 用户指定了主题个数
-                topic_count_instructions = f"""主题数量要求（必须严格遵守）：
-- 必须恰好返回 {min_topics} 个主题
-- 不要多返回，也不要少返回"""
-                output_format_instructions = f"""输出格式（每行一个主题，共 {min_topics} 个）：
-主题1：名称 | 描述
-主题2：名称 | 描述
-...
-主题{min_topics}：名称 | 描述"""
+                topic_count_instructions = TOPIC_COUNT_SPECIFIED_INSTRUCTIONS.format(topic_count=min_topics)
+                output_format_instructions = OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS.format(topic_count=min_topics)
             else:
-                # 用户没有指定主题个数，让大模型从范围中选择最优解
-                topic_count_instructions = f"""主题数量要求（请根据内容选择最优解）：
-- 最少 {min_topics} 个主题
-- 最多 {max_topics} 个主题
-- 请根据文件名的语义相关性，在这个范围内选择最合适的主题数量
-- 如果文件名之间关联性很强，可以选择较少的主题数量
-- 如果文件名之间关联性较弱，可以选择较多的主题数量
-- 请在输出中说明你选择的主题数量的理由"""
-                output_format_instructions = """输出格式：
-首先，请用一句话说明你选择的主题数量以及理由。
-
-然后，按以下格式输出主题列表（每行一个主题）：
-主题1：名称 | 描述
-主题2：名称 | 描述
-...
-
-或者，你也可以使用 JSON 格式输出：
-{
-    "topic_count": 实际选择的主题数量,
-    "reason": "选择理由",
-    "topics": [
-        {"name": "主题名称", "description": "主题描述"},
-        ...
-    ]
-}"""
+                topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS.format(min_topics=min_topics, max_topics=max_topics)
+                output_format_instructions = OUTPUT_FORMAT_AUTO_INSTRUCTIONS
             
             # 构建最终提示词
-            from prompts.note_integration import TOPIC_EXTRACTION_BY_FILENAMES_PROMPT
-            
             final_prompt = TOPIC_EXTRACTION_BY_FILENAMES_PROMPT.format(
                 titles=titles_text,
                 topic_count_instructions=topic_count_instructions,

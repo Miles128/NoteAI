@@ -29,7 +29,9 @@ STOPWORDS: Set[str] = {
 
 MIN_WORD_LEN = 2
 MAX_TAGS = 5
+MIN_TAGS = 2
 MIN_TF_IDF_SCORE = 0.01
+MIN_DOC_FREQ_PERCENT = 0.05
 
 
 def _parse_yaml_value_simple(value: str) -> Any:
@@ -308,16 +310,180 @@ def append_tags_to_markdown(file_path: str, tags: List[str]):
     p.write_text(content, encoding='utf-8')
 
 
-def process_and_tag_file(file_path: str, idf: Dict[str, float] = None) -> List[str]:
-    """处理单个文件并打标签"""
+def get_workspace_md_files() -> List[Path]:
+    """获取工作区中所有 Markdown 文件
+    
+    Returns:
+        MD 文件路径列表，如果没有设置工作区则返回空列表
+    """
+    try:
+        from config.settings import config
+        workspace_path = config.workspace_path
+        if not workspace_path:
+            return []
+        workspace = Path(workspace_path)
+        if not workspace.exists():
+            return []
+        return list(workspace.rglob("*.md"))
+    except Exception:
+        return []
+
+
+def extract_keywords_from_title_or_filename(title: str, filename: str = None) -> List[str]:
+    """从标题或文件名中提取关键词
+    
+    Args:
+        title: 文档标题
+        filename: 可选的文件名（如果没有标题则使用文件名）
+    
+    Returns:
+        关键词列表
+    """
+    source_text = title
+    if not source_text and filename:
+        source_text = Path(filename).stem if isinstance(filename, str) else filename.stem
+    if not source_text:
+        return []
+    
+    tokens = tokenize(source_text)
+    
+    result = []
+    for t in tokens:
+        if t in STOPWORDS:
+            continue
+        if re.match(r'[\u4e00-\u9fff]+', t):
+            if len(t) >= 2:
+                result.append(t)
+        else:
+            if len(t) >= MIN_WORD_LEN:
+                result.append(t)
+    
+    return result
+
+
+def compute_doc_frequency_from_workspace() -> Tuple[Dict[str, int], int]:
+    """计算工作区中关键词的文档频率
+    
+    文档频率：关键词在多少个不同的文档中出现过
+    
+    Returns:
+        (关键词到出现文档数的映射, 总文档数)
+    """
+    md_files = get_workspace_md_files()
+    total_docs = len(md_files)
+    
+    if total_docs == 0:
+        return {}, 0
+    
+    doc_freq = defaultdict(int)
+    
+    for md_file in md_files:
+        try:
+            content = md_file.read_text(encoding='utf-8')
+            from utils.helpers import extract_title_from_markdown
+            title = extract_title_from_markdown(content)
+            keywords = extract_keywords_from_title_or_filename(title, md_file.name)
+            unique_keywords = set(keywords)
+            for kw in unique_keywords:
+                doc_freq[kw] += 1
+        except Exception:
+            continue
+    
+    return dict(doc_freq), total_docs
+
+
+def extract_tags_by_doc_frequency(
+    doc_freq: Dict[str, int],
+    total_docs: int,
+    current_file_keywords: List[str] = None
+) -> List[str]:
+    """基于文档频率提取标签
+    
+    规则：
+    1. 排除出现次数小于总文档数 5% 的关键词
+    2. 按出现次数从高到低排序
+    3. 提取 2-5 个标签
+    4. 如果当前有关键词，优先选择当前文件包含的关键词
+    
+    Args:
+        doc_freq: 关键词到出现文档数的映射
+        total_docs: 总文档数
+        current_file_keywords: 当前文件的关键词列表（可选）
+    
+    Returns:
+        标签列表
+    """
+    if not doc_freq or total_docs == 0:
+        return []
+    
+    min_count = max(1, int(total_docs * MIN_DOC_FREQ_PERCENT))
+    
+    candidates = []
+    for kw, count in doc_freq.items():
+        if count >= min_count:
+            in_current = current_file_keywords and kw in current_file_keywords
+            candidates.append((kw, count, in_current))
+    
+    candidates.sort(key=lambda x: (x[2], x[1]), reverse=True)
+    
+    keywords = [kw for kw, count, in_current in candidates]
+    
+    num_tags = max(MIN_TAGS, min(MAX_TAGS, len(keywords)))
+    if len(keywords) >= MIN_TAGS:
+        return keywords[:num_tags]
+    
+    return keywords[:MAX_TAGS]
+
+
+def process_and_tag_file_by_doc_freq(file_path: str) -> List[str]:
+    """基于文档频率处理单个文件并打标签
+    
+    新算法：
+    1. 从工作区所有 MD 文件的标题和文件名中提取关键词
+    2. 统计每个关键词的文档频率（出现的文档数）
+    3. 排除出现次数小于总文档数 5% 的关键词
+    4. 按出现次数排序，提取 2-5 个标签
+    5. 优先选择当前文件标题/文件名包含的关键词
+    
+    Args:
+        file_path: Markdown 文件路径
+    
+    Returns:
+        标签列表
+    """
     p = Path(file_path)
     if not p.exists() or not p.suffix.lower() == '.md':
         return []
-    content = p.read_text(encoding='utf-8')
-    tags = extract_tags_from_text(content, idf)
+    
+    doc_freq, total_docs = compute_doc_frequency_from_workspace()
+    
+    if total_docs == 0:
+        return []
+    
+    current_file_keywords = []
+    try:
+        content = p.read_text(encoding='utf-8')
+        from utils.helpers import extract_title_from_markdown
+        title = extract_title_from_markdown(content)
+        current_file_keywords = extract_keywords_from_title_or_filename(title, p.name)
+    except Exception:
+        pass
+    
+    tags = extract_tags_by_doc_frequency(doc_freq, total_docs, current_file_keywords)
+    
     if tags:
         append_tags_to_markdown(str(p), tags)
+    
     return tags
+
+
+def process_and_tag_file(file_path: str, idf: Dict[str, float] = None) -> List[str]:
+    """处理单个文件并打标签（使用新的文档频率算法）
+    
+    这是 process_and_tag_file_by_doc_freq 的别名，
+    保持原有接口兼容。
+    """
+    return process_and_tag_file_by_doc_freq(file_path)
 
 
 def tag_markdown_files(

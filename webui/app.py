@@ -384,6 +384,15 @@ class Api:
 
         notes_count = len(md_files)
 
+        filenames = []
+        for i, md_file in enumerate(md_files):
+            if not md_file.name.startswith('.'):
+                filenames.append(md_file.stem)
+                self.window.evaluate_js(
+                    f'updateProgress("integration-progress", {0.15 * (i + 1) / notes_count}, "读取 MD 文件中 - {md_file.name}")'
+                )
+                self.update_status(f"读取 MD 文件中 - {md_file.name}")
+
         organized_count = 0
         organized_path = config.get_organized_folder()
         if organized_path:
@@ -402,12 +411,11 @@ class Api:
             self.update_status("请先设置大模型 API")
             return {"success": False, "error": f"API 配置无效: {error_msg}"}
 
-        filenames = [f.stem for f in md_files if not f.name.startswith('.')]
         titles_text = '\n'.join([f"{i+1}. {name}" for i, name in enumerate(filenames)])
 
         try:
-            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "正在调用 LLM 分析主题...")')
-            self.update_status("正在调用 LLM 分析主题...")
+            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "大模型思考中 - 分析主题...")')
+            self.update_status("大模型思考中 - 分析主题...")
 
             from langchain_openai import ChatOpenAI
             from langchain_core.prompts import PromptTemplate

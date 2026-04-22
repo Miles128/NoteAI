@@ -401,10 +401,9 @@ class Api:
                 organized_mds = list(organized_dir.rglob("*.md"))
                 organized_count = len(organized_mds)
 
-        lower = max(organized_count, int(notes_count / 3)) + 1
-        upper = max(organized_count, int(notes_count / 2)) + 2
+        lower = max(organized_count, int(notes_count / 4))
         lower = max(lower, 2)
-        upper = max(upper, lower + 1)
+        upper = max(organized_count, int(notes_count / 2))
 
         is_valid, error_msg = check_api_config()
         if not is_valid:

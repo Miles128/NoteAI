@@ -2647,6 +2647,31 @@
             document.getElementById('about-panel').classList.remove('active');
             document.getElementById('log-panel').classList.remove('active');
             document.getElementById('settings-panel').classList.add('active');
+            loadApiConfigToForm();
+        }
+
+        async function loadApiConfigToForm() {
+            if (!window.pywebview) return;
+            try {
+                const apiConfig = await window.pywebview.api.get_api_config();
+                if (apiConfig) {
+                    const apiKeyEl = document.getElementById('api-key');
+                    const apiBaseEl = document.getElementById('api-base');
+                    const modelNameEl = document.getElementById('model-name');
+                    const tempEl = document.getElementById('temperature');
+                    const maxTokensEl = document.getElementById('max-tokens');
+                    const maxContextEl = document.getElementById('max-context');
+
+                    if (apiKeyEl) apiKeyEl.value = apiConfig.api_key || '';
+                    if (apiBaseEl) apiBaseEl.value = apiConfig.api_base || 'https://api.openai.com/v1';
+                    if (modelNameEl) modelNameEl.value = apiConfig.model_name || 'gpt-4';
+                    if (tempEl) tempEl.value = apiConfig.temperature || 0.7;
+                    if (maxTokensEl) maxTokensEl.value = apiConfig.max_tokens || 32000;
+                    if (maxContextEl) maxContextEl.value = apiConfig.max_context_tokens || 128000;
+                }
+            } catch (e) {
+                console.error('加载API配置失败:', e);
+            }
         }
 
         function closeSettingsPanel() {

@@ -1890,6 +1890,12 @@
 
                         <div class="card" id="topic-card">
                             <div class="card-title">主题设置</div>
+                            <div class="form-group" style="display: flex; gap: 12px; align-items: flex-end;">
+                                <div style="flex: 1;">
+                                    <div class="form-label">主题个数（留空则自动选择）</div>
+                                    <input type="number" id="topic-count" class="form-input" placeholder="例如：5" min="2" style="width: 100%;">
+                                </div>
+                            </div>
                             <div class="form-group">
                                 <div class="form-label">点击提取主题，或手动输入（每行一个）</div>
                                 <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3"></textarea>
@@ -2759,7 +2765,17 @@
                 if (progressFill) progressFill.style.width = '15%';
                 if (progressText) progressText.textContent = '正在读取文件列表...';
 
-                const result = await window.pywebview.api.extract_topics();
+                // 读取用户指定的主题个数
+                const topicCountInput = document.getElementById('topic-count');
+                let topicCount = null;
+                if (topicCountInput && topicCountInput.value.trim() !== '') {
+                    const count = parseInt(topicCountInput.value.trim());
+                    if (!isNaN(count) && count >= 2) {
+                        topicCount = count;
+                    }
+                }
+
+                const result = await window.pywebview.api.extract_topics(topicCount);
 
                 if (result.success) {
                     if (progressFill) progressFill.style.width = '90%';

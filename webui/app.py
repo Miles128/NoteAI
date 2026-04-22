@@ -19,6 +19,7 @@ from utils.helpers import APIConfigError, NetworkError, is_network_error, test_a
 from modules.web_downloader import WebDownloader
 from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
+from modules.topic_extractor import TopicExtractor
 from modules.file_preview import FilePreviewer
 from utils.tag_extractor import tag_markdown_files
 
@@ -362,107 +363,70 @@ class Api:
 
         threading.Thread(target=task, daemon=True).start()
     
-    def extract_topics(self):
-        """从 Notes 目录提取主题
+    def extract_topics(self, topic_count=None):
+        """从 Notes 和 Organized 目录提取主题
         
-        扫描 Notes 目录下所有 MD 文件名，调用 LLM 提取主题列表
+        扫描 Notes 和 Organized 目录下所有 MD 文件名，调用 LLM 提取主题列表
+        
+        Args:
+            topic_count: 用户指定的主题个数，如果为 None 则让大模型从范围中选择
+        
+        Returns:
+            包含 success、topics、error 等信息的字典
         """
         if not config.is_workspace_set():
             return {"success": False, "error": "请先设置工作文件夹"}
-
-        notes_path = config.get_notes_folder()
-        if not notes_path:
-            return {"success": False, "error": "无法获取 Notes 文件夹路径"}
-
-        notes_dir = Path(notes_path)
-        if not notes_dir.exists():
-            return {"success": False, "error": "Notes 文件夹不存在"}
-
-        md_files = list(notes_dir.rglob("*.md"))
-        if not md_files:
-            return {"success": False, "error": "Notes 文件夹中没有 Markdown 文件"}
-
-        notes_count = len(md_files)
-
-        filenames = []
-        for i, md_file in enumerate(md_files):
-            if not md_file.name.startswith('.'):
-                filenames.append(md_file.stem)
+        
+        # 解析主题个数参数
+        specified_topic_count = None
+        if topic_count is not None and topic_count != "":
+            try:
+                specified_topic_count = int(topic_count)
+                if specified_topic_count <= 0:
+                    specified_topic_count = None
+            except ValueError:
+                specified_topic_count = None
+        
+        def progress_callback(current, total, message):
+            """进度回调函数"""
+            try:
+                progress = current / total if total > 0 else 0
                 self.window.evaluate_js(
-                    f'updateProgress("integration-progress", {0.15 * (i + 1) / notes_count}, "读取 MD 文件中 - {md_file.name}")'
+                    f'updateProgress("integration-progress", {progress}, {repr(message)})'
                 )
-                self.update_status(f"读取 MD 文件中 - {md_file.name}")
-
-        organized_count = 0
-        organized_path = config.get_organized_folder()
-        if organized_path:
-            organized_dir = Path(organized_path)
-            if organized_dir.exists():
-                organized_mds = list(organized_dir.rglob("*.md"))
-                organized_count = len(organized_mds)
-
-        lower = max(organized_count, int(notes_count / 4))
-        lower = max(lower, 2)
-        upper = max(organized_count, int(notes_count / 2))
-
-        is_valid, error_msg = check_api_config()
-        if not is_valid:
-            self.update_status("请先设置大模型 API")
-            return {"success": False, "error": f"API 配置无效: {error_msg}"}
-
-        titles_text = '\n'.join([f"{i+1}. {name}" for i, name in enumerate(filenames)])
-
+                self.update_status(message)
+            except Exception as e:
+                print(f"[WARNING] 更新进度失败: {e}")
+        
         try:
-            self.window.evaluate_js('updateProgress("integration-progress", 0.3, "大模型思考中 - 分析主题...")')
-            self.update_status("大模型思考中 - 分析主题...")
-
-            from langchain_openai import ChatOpenAI
-            from langchain_core.prompts import PromptTemplate
-            from prompts.note_integration import TOPIC_INTEGRATION_PROMPT
-
-            prompt = PromptTemplate(
-                template=TOPIC_INTEGRATION_PROMPT,
-                input_variables=["titles", "lower", "upper"]
-            )
-            llm = ChatOpenAI(
-                api_key=config.api_key,
-                base_url=config.api_base,
-                model=config.model_name,
-                temperature=0.5,
-                max_tokens=config.max_tokens
-            )
-            chain = prompt | llm
-
-            response = chain.invoke({"titles": titles_text, "lower": lower, "upper": upper})
-            content = response.content.strip()
-
-            self.window.evaluate_js('updateProgress("integration-progress", 0.7, "正在解析主题结果...")')
-            self.update_status("正在解析主题结果...")
-
-            topics = []
-            for line in content.split('\n'):
-                line = line.strip()
-                if not line:
-                    continue
-                if '|' in line:
-                    name = line.split('|')[0].strip()
-                    name = re.sub(r'^主题\d+[：:]\s*', '', name).strip()
-                    if name:
-                        topics.append(name)
-                else:
-                    name = re.sub(r'^[\d]+[.、)\s]+', '', line).strip()
-                    name = re.sub(r'^主题\d+[：:]\s*', '', name).strip()
-                    if name:
-                        topics.append(name)
-
-            if not topics:
-                return {"success": False, "error": "LLM 未返回有效主题"}
-
-            logger.info(f"提取了 {len(topics)} 个主题: {topics}")
-            return {"success": True, "topics": topics}
-
+            # 创建主题提取器
+            extractor = TopicExtractor(progress_callback=progress_callback)
+            
+            # 提取主题
+            result = extractor.extract_topics(specified_topic_count=specified_topic_count)
+            
+            if result.get("success"):
+                topics = result.get("topics", [])
+                logger.info(f"提取了 {len(topics)} 个主题: {topics}")
+                
+                # 额外返回一些统计信息
+                return {
+                    "success": True,
+                    "topics": topics,
+                    "topic_count": result.get("topic_count"),
+                    "min_topics": result.get("min_topics"),
+                    "max_topics": result.get("max_topics"),
+                    "is_specified": result.get("is_specified"),
+                    "notes_count": result.get("notes_count"),
+                    "organized_count": result.get("organized_count")
+                }
+            else:
+                return result
+                
         except Exception as e:
             logger.error(f"提取主题失败: {e}")
+            import traceback
+            traceback.print_exc()
             return {"success": False, "error": f"提取主题失败: {str(e)}"}
     
     def start_note_integration(self, auto_topic, topics):

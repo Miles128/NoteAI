@@ -272,9 +272,12 @@ class Api:
             self.show_message("警告", "请输入至少一个URL", "warning")
             return
 
-        if ai_assist and not config.validate_api_config():
-            self.show_message("警告", "AI辅助模式需要配置有效的API Key\n\n请在设置中配置API，或关闭AI辅助使用基础模式。", "warning")
-            return
+        if ai_assist:
+            is_valid, error_msg = check_api_config()
+            if not is_valid:
+                self.update_status("请先设置大模型 API")
+                self.show_message("警告", "AI辅助模式需要配置有效的API Key\n\n请在设置中配置API，或关闭AI辅助使用基础模式。", "warning")
+                return
 
         save_path = config.get_notes_folder()
         if not save_path:
@@ -318,9 +321,12 @@ class Api:
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
             return
 
-        if ai_assist and not config.validate_api_config():
-            self.show_message("警告", "AI辅助模式需要配置有效的API Key\n\n请在设置中配置API，或关闭AI辅助使用基础模式。", "warning")
-            return
+        if ai_assist:
+            is_valid, error_msg = check_api_config()
+            if not is_valid:
+                self.update_status("请先设置大模型 API")
+                self.show_message("警告", "AI辅助模式需要配置有效的API Key\n\n请在设置中配置API，或关闭AI辅助使用基础模式。", "warning")
+                return
 
         save_path = config.get_notes_folder()
         raw_path = config.get_raw_folder()
@@ -384,6 +390,7 @@ class Api:
 
         is_valid, error_msg = check_api_config()
         if not is_valid:
+            self.update_status("请先设置大模型 API")
             return {"success": False, "error": f"API 配置无效: {error_msg}"}
 
         filenames = [f.stem for f in md_files if not f.name.startswith('.')]
@@ -406,18 +413,43 @@ class Api:
                 base_url=config.api_base,
                 model=config.model_name,
                 temperature=0.5,
-                max_tokens=config.max_tokens
+                max_tokens=config.max_tokens,
+                streaming=True
             )
             chain = prompt | llm
 
-            response = chain.invoke({"titles": titles_text})
-            content = response.content.strip()
+            full_content = ""
+            thinking_started = False
+            topic_section_started = False
+
+            for chunk in chain.stream({"titles": titles_text}):
+                token = chunk.content
+                full_content += token
+
+                if "---主题列表---" in full_content:
+                    topic_section_started = True
+                    if not thinking_started:
+                        thinking_started = True
+                    thinking_part = full_content.split("---主题列表---")[0]
+                    thinking_clean = thinking_part.replace("思考过程（自由分析）：", "").strip()
+                    escaped = thinking_clean.replace('\\', '\\\\').replace('`', '\\`').replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")
+                    self.window.evaluate_js(f'document.getElementById("integration-status").textContent = "{escaped}"')
+                else:
+                    thinking_clean = full_content.replace("思考过程（自由分析）：", "").strip()
+                    escaped = thinking_clean.replace('\\', '\\\\').replace('`', '\\`').replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")
+                    if escaped:
+                        self.window.evaluate_js(f'document.getElementById("integration-status").textContent = "{escaped}"')
 
             self.window.evaluate_js('updateProgress("integration-progress", 0.7, "正在解析主题结果...")')
             self.update_status("正在解析主题结果...")
 
+            content = full_content.strip()
+            topic_section = content
+            if "---主题列表---" in content:
+                topic_section = content.split("---主题列表---")[-1]
+
             topics = []
-            for line in content.split('\n'):
+            for line in topic_section.split('\n'):
                 line = line.strip()
                 if not line:
                     continue
@@ -446,6 +478,12 @@ class Api:
         """开始笔记整合"""
         if not config.is_workspace_set():
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
+            return
+
+        is_valid, error_msg = check_api_config()
+        if not is_valid:
+            self.update_status("请先设置大模型 API")
+            self.show_message("警告", "请先配置有效的大模型 API\n\n点击顶部「设置」按钮配置 API Key、API Base 和模型名称", "warning")
             return
 
         source_path = config.get_notes_folder()

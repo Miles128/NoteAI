@@ -182,10 +182,6 @@ class Api:
             traceback.print_exc()
             return {"success": False, "message": str(e), "workspace_path": "", "notes_folder": "", "organized_folder": ""}
 
-    def get_default_path(self):
-        """获取默认保存路径"""
-        return config.default_save_path
-    
     def get_api_config(self):
         """获取 API 配置"""
         return {
@@ -435,6 +431,10 @@ class Api:
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
             return
 
+        if not topics:
+            self.show_message("警告", "请先提取主题\n\n点击「提取主题」按钮获取主题列表后再整合", "warning")
+            return
+
         source_path = config.get_notes_folder()
         output_path = config.get_organized_folder()
         used_path = config.get_used_folder()
@@ -444,6 +444,7 @@ class Api:
             return
 
         def task():
+            doc_paths = []
             try:
                 def progress_callback(current, total, message, max_total=1.0):
                     effective_progress = (current / total) * max_total if total > 0 else 0
@@ -464,23 +465,7 @@ class Api:
 
                 doc_paths = [d['path'] for d in documents]
 
-                user_topics = topics if topics else None
-                result = integrator.integrate(documents, output_path, user_topics=user_topics)
-
-                used_dir = Path(used_path)
-                for doc_path in doc_paths:
-                    src = Path(doc_path)
-                    if not src.exists():
-                        continue
-                    dst = used_dir / src.name
-                    if dst.exists():
-                        stem = src.stem
-                        suffix = src.suffix
-                        counter = 1
-                        while dst.exists():
-                            dst = used_dir / f"{stem}_{counter}{suffix}"
-                            counter += 1
-                    shutil.move(str(src), str(dst))
+                result = integrator.integrate(documents, output_path, user_topics=topics)
 
                 self.show_message("完成", f"整合完成！\n处理了 {result['document_count']} 篇文档\n生成了 {result['topic_count']} 个主题\n保存至: {output_path}")
 
@@ -494,8 +479,33 @@ class Api:
                 self.update_status("任务中断：网络连接错误")
             except Exception as e:
                 self.show_message("错误", str(e), "error")
+            finally:
+                if doc_paths:
+                    self._move_docs_to_used(doc_paths, used_path)
 
         threading.Thread(target=task, daemon=True).start()
+
+    def _move_docs_to_used(self, doc_paths, used_path):
+        """将已处理的文档移动到 Used 文件夹"""
+        used_dir = Path(used_path)
+        if not used_dir.exists():
+            return
+        for doc_path in doc_paths:
+            src = Path(doc_path)
+            if not src.exists():
+                continue
+            dst = used_dir / src.name
+            if dst.exists():
+                stem = src.stem
+                suffix = src.suffix
+                counter = 1
+                while dst.exists():
+                    dst = used_dir / f"{stem}_{counter}{suffix}"
+                    counter += 1
+            try:
+                shutil.move(str(src), str(dst))
+            except Exception as e:
+                logger.warning(f"移动文件到Used失败 {src}: {e}")
 
     def save_api_config(self, config_data):
         """保存 API 配置"""

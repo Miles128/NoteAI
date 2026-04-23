@@ -1,7 +1,5 @@
 {
   "workspace_path": "/Users/sihai/Documents/My Notes",
-  "default_save_path": "/Users/sihai/NoteAI/notes",
-  "temp_path": "/Users/sihai/NoteAI/temp",
   "log_path": "/Users/sihai/NoteAI/logs",
   "batch_size": 5,
   "timeout": 30,

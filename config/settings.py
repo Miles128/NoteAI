@@ -304,9 +304,6 @@ class AppConfig:
     # 工作文件夹配置
     workspace_path: str = ""
 
-    # 路径配置
-    default_save_path: str = str(Path.home() / "NoteAI" / "notes")
-    temp_path: str = str(Path.home() / "NoteAI" / "temp")
     log_path: str = str(Path.home() / "NoteAI" / "logs")
     
     # 处理配置
@@ -352,9 +349,6 @@ class AppConfig:
     topic_list: str = ""
     
     def __post_init__(self):
-        # 确保目录存在
-        Path(self.default_save_path).mkdir(parents=True, exist_ok=True)
-        Path(self.temp_path).mkdir(parents=True, exist_ok=True)
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
 
     def is_workspace_set(self) -> bool:

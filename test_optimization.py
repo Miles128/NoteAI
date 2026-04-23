@@ -55,7 +55,7 @@ def test_optimization():
         result = integrator.integrate(
             documents,
             save_path=str(test_folder / "output"),
-            strategy="topic_v2"
+            user_topics=["测试主题"]
         )
         
         end_time = time.time()
@@ -64,7 +64,6 @@ def test_optimization():
         print("\n整合完成！")
         print(f"执行时间: {execution_time:.2f} 秒")
         print(f"文档数量: {result['document_count']}")
-        print(f"块数量: {result['chunk_count']}")
         print(f"主题数量: {result['topic_count']}")
         print(f"生成文件: {len(result['file_paths'])}")
         print(f"主题列表: {result['topics']}")

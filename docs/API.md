@@ -284,8 +284,6 @@ class AppConfig:
     model_name: str                 # 模型名称
     temperature: float              # 温度参数
     max_tokens: int                 # 最大令牌数
-    default_save_path: str          # 默认保存路径
-    temp_path: str                  # 临时文件路径
     log_path: str                   # 日志路径
     batch_size: int                 # 批处理大小
     timeout: int                    # 超时时间

@@ -1898,7 +1898,7 @@
                             </div>
                             <div class="form-group">
                                 <div class="form-label">点击提取主题，或手动输入（每行一个）</div>
-                                <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3"></textarea>
+                                <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3" oninput="updateIntegrateBtnState()"></textarea>
                             </div>
                             <div class="btn-group" style="margin-top: 8px;">
                                 <button class="btn btn-secondary" id="extract-topics-btn" onclick="extractTopics()" style="flex: 1;">提取主题</button>
@@ -2742,10 +2742,12 @@
         function updateIntegrateBtnState() {
             const btn = document.getElementById('integrate-btn');
             const hint = document.getElementById('integration-hint');
+            const topicList = document.getElementById('topic-list');
+            const hasTopics = topicList && topicList.value.trim().length > 0;
             if (!btn) return;
-            btn.disabled = !topicsReady;
+            btn.disabled = !(topicsReady && hasTopics);
             if (hint) {
-                hint.textContent = topicsReady ? '' : '请先点击提取主题按钮';
+                hint.textContent = (topicsReady && hasTopics) ? '' : '请先点击提取主题按钮';
             }
         }
 

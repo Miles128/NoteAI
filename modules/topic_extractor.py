@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Tuple
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import check_api_config
-from prompts.note_integration import (
+from prompts.topic_extraction import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
     TOPIC_COUNT_SPECIFIED_INSTRUCTIONS,
     OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS,
@@ -67,25 +67,31 @@ class TopicExtractor:
     def calculate_topic_range(self, notes_count: int, organized_count: int) -> Tuple[int, int]:
         """
         计算主题个数范围
-        
+
         如果没有指定主题个数，让大模型从以下范围中选择：
-        - 下限：organized 文件夹里文件的个数
-        - 上限：organized 文件夹里文件的个数 + notes 文件夹下文件数量的 1/2
-        
+        - 下限：max(organized_count, sqrt(total))
+        - 上限：max(organized_count + sqrt(total), sqrt(notes_count) + max(2, ceil(log2(notes_count + 1) * 2)))
+
         Args:
             notes_count: Notes 文件夹中的文件数量
             organized_count: Organized 文件夹中的文件数量
-            
+
         Returns:
             (min_topics, max_topics) 主题个数范围
         """
-        min_topics = max(organized_count, 2)
-        max_topics = max(organized_count + int(notes_count / 2), min_topics + 1)
-        
-        # 确保至少有 2 个主题
+        import math
+
+        total = notes_count + organized_count
+        sq_total = math.sqrt(total)
+        sq_notes = math.sqrt(notes_count)
+        log2_part = max(2, math.ceil(math.log2(notes_count + 1) * 2))
+
+        min_topics = max(organized_count, math.ceil(sq_total))
+        max_topics = max(math.ceil(organized_count + sq_total), math.ceil(sq_notes + log2_part))
+
         min_topics = max(min_topics, 2)
-        max_topics = max(max_topics, min_topics + 1)
-        
+        max_topics = max(max_topics, min_topics + 2)
+
         return min_topics, max_topics
     
     def extract_topics(self, specified_topic_count: Optional[int] = None) -> Dict:
@@ -216,10 +222,7 @@ class TopicExtractor:
         """
         解析大模型返回的主题列表
         
-        支持多种格式：
-        1. "主题1：名称 | 描述" 格式
-        2. "1. 名称" 格式
-        3. JSON 格式
+        预期格式：每行一个主题名称，无序号、无描述、无JSON
         
         Args:
             content: 大模型返回的内容
@@ -227,62 +230,21 @@ class TopicExtractor:
         Returns:
             主题名称列表
         """
+        import re
         topics = []
         
-        # 尝试解析 JSON 格式
-        try:
-            import json
-            data = json.loads(content)
-            if isinstance(data, dict) and 'topics' in data:
-                for item in data['topics']:
-                    if isinstance(item, dict) and 'name' in item:
-                        topics.append(item['name'])
-                    elif isinstance(item, str):
-                        topics.append(item)
-            elif isinstance(data, list):
-                for item in data:
-                    if isinstance(item, dict) and 'name' in item:
-                        topics.append(item['name'])
-                    elif isinstance(item, str):
-                        topics.append(item)
-            
-            if topics:
-                return topics
-        except json.JSONDecodeError:
-            pass
-        
-        # 尝试解析文本格式
         for line in content.split('\n'):
             line = line.strip()
             if not line:
                 continue
             
-            # 格式："主题1：名称 | 描述" 或 "主题1: 名称 | 描述"
+            line = re.sub(r'^主题\d+[：:]\s*', '', line).strip()
+            line = re.sub(r'^[\d\-\•\*]+[\.\、\)\s]+\s*', '', line).strip()
+            
             if '|' in line:
-                name = line.split('|')[0].strip()
-                # 移除 "主题X：" 或 "主题X:" 前缀
-                name = self._remove_topic_prefix(name)
-                if name:
-                    topics.append(name)
-            else:
-                # 格式："1. 名称" 或 "- 名称"
-                name = self._remove_number_prefix(line)
-                name = self._remove_topic_prefix(name)
-                if name:
-                    topics.append(name)
+                line = line.split('|')[0].strip()
+            
+            if line:
+                topics.append(line)
         
         return topics
-    
-    def _remove_topic_prefix(self, text: str) -> str:
-        """移除 "主题X：" 或 "主题X:" 前缀"""
-        import re
-        # 匹配 "主题1："、"主题1:"、"主题123：" 等格式
-        text = re.sub(r'^主题\d+[：:]\s*', '', text).strip()
-        return text
-    
-    def _remove_number_prefix(self, text: str) -> str:
-        """移除数字前缀，如 "1. "、"2、"、"- " 等"""
-        import re
-        # 匹配 "1. "、"2、"、"3) "、"- "、"• " 等格式
-        text = re.sub(r'^[\d\-\•\*]+[\.\、\)\s]+\s*', '', text).strip()
-        return text

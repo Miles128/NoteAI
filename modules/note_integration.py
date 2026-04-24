@@ -4,17 +4,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, extract_title_from_markdown,
     check_api_config, APIConfigError, NetworkError, is_network_error
 )
-from utils.tag_extractor import process_and_tag_file
-from prompts.note_integration import TOPIC_NOTE_GENERATION_PROMPT
+from utils.tag_extractor import process_and_tag_file_with_yaml
+from prompts.note_integration import TOPIC_NOTE_GENERATION_PROMPT, DOC_TOPIC_MAPPING_PROMPT
 
 class NoteIntegration:
     """笔记整合器"""
@@ -150,7 +147,7 @@ class NoteIntegration:
                 with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(result['content'])
 
-                process_and_tag_file(str(output_file))
+                process_and_tag_file_with_yaml(str(output_file))
                 output_files.append(str(output_file))
 
             logger.info("开始生成 WIKI.md 索引...")
@@ -213,29 +210,7 @@ class NoteIntegration:
 
         topics_text = '\n'.join([f"{i+1}. {t}" for i, t in enumerate(topics)])
 
-        mapping_prompt = """你是一位专业的知识整理专家。以下是多个文档的标题和一组主题：
-
-主题列表：
-{topics}
-
-文档列表：
-{docs_info}
-
-请将每个文档分配到最相关的主题中。一个文档只能归属一个最匹配的主题。
-
-请以以下JSON格式输出：
-{{
-    "mapping": {{
-        "主题名称": [文档索引, ...],
-        ...
-    }}
-}}
-
-注意：
-- 每个文档必须且只能归属一个主题
-- 选择与文档标题语义最匹配的主题
-- 如果某个主题没有匹配的文档，其列表为空
-- 文档索引从0开始"""
+        mapping_prompt = DOC_TOPIC_MAPPING_PROMPT
 
         prompt = PromptTemplate(
             template=mapping_prompt,
@@ -304,11 +279,15 @@ class NoteIntegration:
             if best_topic:
                 topic_doc_mapping[best_topic].append(i)
 
+        assigned = set()
+        for indices in topic_doc_mapping.values():
+            assigned.update(indices)
+
+        unassigned = [i for i in range(len(documents)) if i not in assigned]
+
         for topic in topics:
-            if not topic_doc_mapping[topic]:
-                remaining = [i for i in range(len(documents)) if i not in sum(topic_doc_mapping.values(), [])]
-                if remaining:
-                    topic_doc_mapping[topic] = [remaining[0]]
+            if not topic_doc_mapping[topic] and unassigned:
+                topic_doc_mapping[topic] = [unassigned.pop(0)]
 
         return topic_doc_mapping
 

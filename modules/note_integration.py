@@ -153,26 +153,23 @@ class NoteIntegration:
                 process_and_tag_file(str(output_file))
                 output_files.append(str(output_file))
 
+            logger.info("开始生成 WIKI.md 索引...")
             report_progress("阶段3/3: 生成 WIKI.md 索引...", 0.95)
 
-            wiki_content = self._generate_wiki_md(topic_results, output_files, save_dir)
-            
-            workspace_root = None
-            if save_path:
-                workspace_root = Path(save_path).parent
-            elif config.workspace_path:
-                workspace_root = Path(config.workspace_path)
+            wiki_content = self._generate_wiki_md(topic_results)
             
             wiki_path = None
-            if workspace_root and workspace_root.exists():
-                wiki_path = workspace_root / "WIKI.md"
+            if config.workspace_path and Path(config.workspace_path).exists():
+                wiki_path = Path(config.workspace_path) / "WIKI.md"
             else:
                 wiki_path = save_dir / "WIKI.md"
             
-            with open(wiki_path, 'w', encoding='utf-8') as f:
-                f.write(wiki_content)
-            
-            logger.info(f"WIKI.md 已生成: {wiki_path}")
+            try:
+                with open(wiki_path, 'w', encoding='utf-8') as f:
+                    f.write(wiki_content)
+                logger.info(f"WIKI.md 已生成: {wiki_path}")
+            except Exception as e:
+                logger.error(f"写入 WIKI.md 失败: {e}")
 
             report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件", 1.0)
 
@@ -373,13 +370,15 @@ class NoteIntegration:
             outline.append({'level': level, 'text': text})
         return outline
 
-    def _generate_wiki_md(self, topic_results: List[Dict], output_files: List[str], save_dir: Path) -> str:
+    def _generate_wiki_md(self, topic_results: List[Dict]) -> str:
         """生成 WIKI.md 内容
 
         Args:
-            topic_results: 主题处理结果列表
-            output_files: 输出文件路径列表（顺序与 topic_results 对应）
-            save_dir: 输出目录
+            topic_results: 主题处理结果列表，每个元素必须包含：
+                - topic_name: 主题名称
+                - content: 生成的内容
+                - document_count: 源文件数量
+                - source_files: 源文件列表 [{path, filename, title}, ...]
 
         Returns:
             WIKI.md 的完整内容
@@ -400,23 +399,24 @@ class NoteIntegration:
         for i, result in enumerate(topic_results):
             topic_name = result['topic_name']
             safe_name = sanitize_filename(topic_name)
-            lines.append(f"{i+1}. [{topic_name}]({safe_name}.md) - {result['document_count']} 个源文件")
+            doc_count = result.get('document_count', 0)
+            lines.append(f"{i+1}. [{topic_name}](./{safe_name}.md) - {doc_count} 个源文件")
         lines.append("")
         lines.append("---")
         lines.append("")
 
-        for i, result in enumerate(topic_results):
+        for result in topic_results:
             topic_name = result['topic_name']
             safe_name = sanitize_filename(topic_name)
             source_files = result.get('source_files', [])
-            output_file = Path(output_files[i]) if i < len(output_files) else None
+            content = result.get('content', '')
 
             lines.append(f"## {topic_name}")
             lines.append("")
 
             lines.append("### 文件大纲")
             lines.append("")
-            outline = self._extract_heading_outline(result['content'])
+            outline = self._extract_heading_outline(content)
             if outline:
                 for item in outline:
                     indent = "  " * (item['level'] - 1)
@@ -429,17 +429,13 @@ class NoteIntegration:
             lines.append("")
             if source_files:
                 for j, sf in enumerate(source_files):
-                    rel_path = None
-                    try:
-                        abs_path = Path(sf['path'])
-                        if output_file:
-                            rel_path = abs_path.relative_to(output_file.parent.parent)
-                    except ValueError:
-                        rel_path = sf['filename']
-                    display_path = str(rel_path) if rel_path else sf['filename']
-                    lines.append(f"{j+1}. **{sf['title']}**")
-                    lines.append(f"   - 文件名：`{sf['filename']}`")
-                    lines.append(f"   - 原始路径：`{sf['path']}`")
+                    title = sf.get('title', sf.get('filename', '未命名'))
+                    filename = sf.get('filename', '未知')
+                    path = sf.get('path', '')
+                    lines.append(f"{j+1}. **{title}**")
+                    lines.append(f"   - 文件名：`{filename}`")
+                    if path:
+                        lines.append(f"   - 原始路径：`{path}`")
                     lines.append("")
             else:
                 lines.append("> 无来源文件记录")
@@ -448,9 +444,6 @@ class NoteIntegration:
             lines.append("### 输出文件")
             lines.append("")
             lines.append(f"- 文件名：`{safe_name}.md`")
-            if output_file and output_file.exists():
-                stat = output_file.stat()
-                lines.append(f"- 文件大小：{stat.st_size} 字节")
             lines.append("")
             lines.append("---")
             lines.append("")

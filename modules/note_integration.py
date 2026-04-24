@@ -153,6 +153,27 @@ class NoteIntegration:
                 process_and_tag_file(str(output_file))
                 output_files.append(str(output_file))
 
+            report_progress("阶段3/3: 生成 WIKI.md 索引...", 0.95)
+
+            wiki_content = self._generate_wiki_md(topic_results, output_files, save_dir)
+            
+            workspace_root = None
+            if save_path:
+                workspace_root = Path(save_path).parent
+            elif config.workspace_path:
+                workspace_root = Path(config.workspace_path)
+            
+            wiki_path = None
+            if workspace_root and workspace_root.exists():
+                wiki_path = workspace_root / "WIKI.md"
+            else:
+                wiki_path = save_dir / "WIKI.md"
+            
+            with open(wiki_path, 'w', encoding='utf-8') as f:
+                f.write(wiki_content)
+            
+            logger.info(f"WIKI.md 已生成: {wiki_path}")
+
             report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件", 1.0)
 
             return {
@@ -160,7 +181,8 @@ class NoteIntegration:
                 'document_count': len(documents),
                 'topic_count': len(topic_results),
                 'topics': [r['topic_name'] for r in topic_results],
-                'file_paths': output_files
+                'file_paths': output_files,
+                'wiki_path': str(wiki_path)
             }
 
         except APIConfigError:
@@ -302,7 +324,7 @@ class NoteIntegration:
             doc_indices: 属于该主题的文档索引列表
 
         Returns:
-            {topic_name, content, document_count, original_word_count}
+            {topic_name, content, document_count, original_word_count, source_files}
         """
         topic_docs = [documents[i] for i in doc_indices]
 
@@ -315,12 +337,125 @@ class NoteIntegration:
             original_word_count
         )
 
+        source_files = [
+            {
+                'path': d['path'],
+                'filename': d['filename'],
+                'title': d['title']
+            }
+            for d in topic_docs
+        ]
+
         return {
             'topic_name': topic_name,
             'content': generated_content,
             'document_count': len(topic_docs),
-            'original_word_count': original_word_count
+            'original_word_count': original_word_count,
+            'source_files': source_files
         }
+
+    def _extract_heading_outline(self, content: str) -> List[Dict]:
+        """从 Markdown 内容中提取标题大纲
+
+        Args:
+            content: Markdown 内容
+
+        Returns:
+            [{level: int, text: str}, ...]
+        """
+        import re
+        pattern = r'^(#{1,6})\s+(.+)$'
+        matches = re.finditer(pattern, content, re.MULTILINE)
+        outline = []
+        for match in matches:
+            level = len(match.group(1))
+            text = match.group(2).strip()
+            outline.append({'level': level, 'text': text})
+        return outline
+
+    def _generate_wiki_md(self, topic_results: List[Dict], output_files: List[str], save_dir: Path) -> str:
+        """生成 WIKI.md 内容
+
+        Args:
+            topic_results: 主题处理结果列表
+            output_files: 输出文件路径列表（顺序与 topic_results 对应）
+            save_dir: 输出目录
+
+        Returns:
+            WIKI.md 的完整内容
+        """
+        from datetime import datetime
+
+        lines = []
+        lines.append("# 笔记整合索引 (WIKI)")
+        lines.append("")
+        lines.append(f"> 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append(f"> 共处理 **{len(topic_results)}** 个主题")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        lines.append("## 主题目录")
+        lines.append("")
+        for i, result in enumerate(topic_results):
+            topic_name = result['topic_name']
+            safe_name = sanitize_filename(topic_name)
+            lines.append(f"{i+1}. [{topic_name}]({safe_name}.md) - {result['document_count']} 个源文件")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+        for i, result in enumerate(topic_results):
+            topic_name = result['topic_name']
+            safe_name = sanitize_filename(topic_name)
+            source_files = result.get('source_files', [])
+            output_file = Path(output_files[i]) if i < len(output_files) else None
+
+            lines.append(f"## {topic_name}")
+            lines.append("")
+
+            lines.append("### 文件大纲")
+            lines.append("")
+            outline = self._extract_heading_outline(result['content'])
+            if outline:
+                for item in outline:
+                    indent = "  " * (item['level'] - 1)
+                    lines.append(f"{indent}- {item['text']}")
+            else:
+                lines.append("> 未检测到标题结构")
+            lines.append("")
+
+            lines.append("### 来源文件")
+            lines.append("")
+            if source_files:
+                for j, sf in enumerate(source_files):
+                    rel_path = None
+                    try:
+                        abs_path = Path(sf['path'])
+                        if output_file:
+                            rel_path = abs_path.relative_to(output_file.parent.parent)
+                    except ValueError:
+                        rel_path = sf['filename']
+                    display_path = str(rel_path) if rel_path else sf['filename']
+                    lines.append(f"{j+1}. **{sf['title']}**")
+                    lines.append(f"   - 文件名：`{sf['filename']}`")
+                    lines.append(f"   - 原始路径：`{sf['path']}`")
+                    lines.append("")
+            else:
+                lines.append("> 无来源文件记录")
+                lines.append("")
+
+            lines.append("### 输出文件")
+            lines.append("")
+            lines.append(f"- 文件名：`{safe_name}.md`")
+            if output_file and output_file.exists():
+                stat = output_file.stat()
+                lines.append(f"- 文件大小：{stat.st_size} 字节")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+
+        return '\n'.join(lines)
 
     def _count_words(self, text: str) -> int:
         """统计中文字符数（包含英文单词）"""

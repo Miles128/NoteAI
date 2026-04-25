@@ -21,7 +21,7 @@ from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
 from modules.topic_extractor import TopicExtractor
 from modules.file_preview import FilePreviewer
-from utils.tag_extractor import tag_markdown_files
+from utils.tag_extractor import tag_files_by_filename
 
 
 class Api:
@@ -183,9 +183,17 @@ class Api:
             return {"success": False, "message": str(e), "workspace_path": "", "notes_folder": "", "organized_folder": ""}
 
     def get_api_config(self):
-        """获取 API 配置"""
+        """获取 API 配置（API Key 脱敏处理）"""
+        masked_key = ""
+        if config.api_key:
+            key = config.api_key.strip()
+            if len(key) > 8:
+                masked_key = key[:4] + "****" + key[-4:]
+            else:
+                masked_key = "****"
         return {
-            "api_key": config.api_key,
+            "api_key": masked_key,
+            "api_key_configured": bool(config.api_key and config.api_key.strip()),
             "api_base": config.api_base,
             "model_name": config.model_name,
             "temperature": config.temperature,
@@ -253,7 +261,7 @@ class Api:
         """后台为新建的 Markdown 文件打标签"""
         def bg_task():
             try:
-                tagged = tag_markdown_files(file_paths)
+                tagged = tag_files_by_filename(file_paths)
                 logger.info(f"标签提取完成: {len(tagged)} 个文件")
             except Exception as e:
                 logger.warning(f"标签提取失败: {e}")
@@ -513,6 +521,12 @@ class Api:
         api_base = config_data.get("api_base", "https://api.openai.com/v1")
         model_name = config_data.get("model_name", "gpt-4")
 
+        if "****" in api_key:
+            api_key = config.api_key
+
+        if not api_key or not api_key.strip():
+            return {"success": False, "message": "API Key 不能为空"}
+
         connected, conn_msg = test_api_connection(api_key, api_base, model_name)
         if not connected:
             return {"success": False, "message": conn_msg}
@@ -661,6 +675,45 @@ class Api:
             "- 智能笔记主题整合\n\n"
             "使用Webview + HTML/CSS/JS开发"
         )
+
+    def save_file_content(self, path, content):
+        """保存文件内容（用于编辑器自动保存）
+        
+        Args:
+            path: 文件路径（相对于 workspace 或绝对路径）
+            content: 要保存的文本内容
+            
+        Returns:
+            包含 success、message 的字典
+        """
+        try:
+            workspace_path = config.workspace_path
+            
+            if workspace_path and not Path(path).is_absolute():
+                full_path = Path(workspace_path) / path
+            else:
+                full_path = Path(path)
+            
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"文件已保存: {full_path}")
+            
+            return {
+                'success': True,
+                'message': f'已保存: {full_path.name}'
+            }
+            
+        except Exception as e:
+            logger.error(f"保存文件失败 {path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
 
 def try_restore_workspace_config():

@@ -16,7 +16,8 @@ from .file_conversion import (
 from .note_integration import (
     TOPIC_NOTE_GENERATION_PROMPT,
     CONTENT_SUMMARIZE_PROMPT,
-    CONTENT_COMPRESS_PROMPT
+    CONTENT_COMPRESS_PROMPT,
+    DOC_TOPIC_MAPPING_PROMPT
 )
 
 from .topic_extraction import (
@@ -56,6 +57,7 @@ __all__ = [
     'TOPIC_NOTE_GENERATION_PROMPT',
     'CONTENT_SUMMARIZE_PROMPT',
     'CONTENT_COMPRESS_PROMPT',
+    'DOC_TOPIC_MAPPING_PROMPT',
     # topic extraction
     'TOPIC_EXTRACTION_BY_FILENAMES_PROMPT',
     'TOPIC_COUNT_SPECIFIED_INSTRUCTIONS',

@@ -4,6 +4,134 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NoteAI</title>
+
+    <script>
+    /* ============================================================
+       PySide6 URL Interception Bridge - 兼容 pywebview API
+       
+       此代码在前端实现了对 PySide6 URL 拦截机制的支持，
+       同时保持与 pywebview API 的 100% 兼容性。
+       
+       通信机制：
+       - JS -> Python: 通过导航到 noteai://api/method?args=[...] URL
+       - Python -> JS: 通过调用 window.__noteai_api_result__ / __noteai_api_error__
+       
+       如果运行在 pywebview 中：直接使用 window.pywebview.api
+       如果运行在 PySide6 中：使用 URL 拦截机制
+       ============================================================ */
+
+    (function() {
+        'use strict';
+
+        var call_queues = {};
+        var is_initialized = false;
+
+        var api_methods = [
+            'move_window', 'minimize_window', 'maximize_window', 'close_window',
+            'get_workspace_status', 'check_workspace_path_valid', 'clear_saved_workspace',
+            'update_window_title', 'open_workspace', 'get_api_config', 'browse_folder',
+            'add_files', 'update_status', 'update_progress', 'show_message',
+            'start_web_download', 'start_file_conversion', 'extract_topics',
+            'start_note_integration', 'save_api_config', 'get_ui_config', 'save_ui_config',
+            'refresh_log', 'get_theme_preference', 'save_theme_preference', 'get_workspace_tree',
+            'on_file_selected', 'get_file_preview', 'can_preview_file', 'show_about',
+            'save_file_content'
+        ];
+
+        api_methods.forEach(function(method) {
+            call_queues[method] = [];
+        });
+
+        function setup_pywebview_stub() {
+            if (!window.pywebview) {
+                window.pywebview = { api: {} };
+            }
+            if (!window.pywebview.api) {
+                window.pywebview.api = {};
+            }
+
+            api_methods.forEach(function(method_name) {
+                if (!window.pywebview.api[method_name]) {
+                    window.pywebview.api[method_name] = function() {
+                        var args = Array.prototype.slice.call(arguments);
+                        return call_api_method(method_name, args);
+                    };
+                }
+            });
+        }
+
+        function call_api_method(method_name, args) {
+            return new Promise(function(resolve, reject) {
+                var queue = call_queues[method_name];
+                if (!queue) {
+                    reject(new Error('Unknown API method: ' + method_name));
+                    return;
+                }
+
+                queue.push({ resolve: resolve, reject: reject });
+
+                try {
+                    var args_json = JSON.stringify(args);
+                    var url = 'noteai://api/' + method_name + '?args=' + encodeURIComponent(args_json);
+
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = url;
+                    document.body.appendChild(iframe);
+
+                    setTimeout(function() {
+                        if (iframe.parentNode) {
+                            document.body.removeChild(iframe);
+                        }
+                    }, 100);
+                } catch (e) {
+                    queue.pop();
+                    reject(e);
+                }
+            });
+        }
+
+        window.__noteai_api_result__ = function(method_name, result) {
+            var queue = call_queues[method_name];
+            if (queue && queue.length > 0) {
+                var call = queue.shift();
+                call.resolve(result);
+            }
+        };
+
+        window.__noteai_api_error__ = function(method_name, error_message) {
+            var queue = call_queues[method_name];
+            if (queue && queue.length > 0) {
+                var call = queue.shift();
+                call.reject(new Error(error_message));
+            }
+        };
+
+        function init_bridge() {
+            if (is_initialized) return;
+            is_initialized = true;
+
+            if (window.pywebview && window.pywebview.api && window.pywebview.api.get_workspace_status) {
+                console.log('[NoteAI] Running in pywebview mode');
+                return;
+            }
+
+            console.log('[NoteAI] Running in PySide6 mode (URL interception bridge)');
+            setup_pywebview_stub();
+
+            var event = new Event('pywebviewready');
+            window.dispatchEvent(event);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init_bridge);
+        } else {
+            init_bridge();
+        }
+
+    })();
+    </script>
+
     <style>
         * {
             margin: 0;
@@ -1360,6 +1488,37 @@
             color: inherit;
         }
 
+        .preview-split-btn {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            flex-shrink: 0;
+            background: transparent;
+            border: none;
+            color: #007AFF;
+        }
+
+        .preview-split-btn:hover {
+            background: rgba(0, 122, 255, 0.1);
+            color: #0056CC;
+        }
+
+        .preview-split-btn.active {
+            background: rgba(0, 122, 255, 0.15);
+            color: #0056CC;
+        }
+
+        .preview-split-btn svg {
+            width: 16px;
+            height: 16px;
+            color: inherit;
+        }
+
         .preview-content {
             flex: 1;
             overflow-y: auto;
@@ -1856,7 +2015,7 @@
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js"></script>
 
-    <!-- CodeMirror 6 编辑器 - ES Module 动态加载 -->
+    <!-- CodeMirror 6 编辑器 - 本地打包文件加载 -->
     <script>
         window.EditorBridge = {
             isReady: false,
@@ -1865,41 +2024,58 @@
         };
 
         async function initCodeMirror() {
-            try {
-                window.EditorBridge.loadAttempts++;
-                console.log('[EditorBridge] Attempting to load CodeMirror, attempt:', window.EditorBridge.loadAttempts);
+            window.EditorBridge.loadAttempts++;
+            console.log('[EditorBridge] Attempting to load CodeMirror, attempt:', window.EditorBridge.loadAttempts);
 
-                const cm = await import('https://esm.sh/codemirror@6.0.1');
-                const cmMarkdown = await import('https://esm.sh/@codemirror/lang-markdown@6.2.5');
-                const cmOneDark = await import('https://esm.sh/@codemirror/theme-one-dark@6.1.2');
-                const cmOneLight = await import('https://esm.sh/@codemirror/theme-one-light@6.1.2');
-                const cmCommands = await import('https://esm.sh/@codemirror/commands@6.6.0');
-                const cmState = await import('https://esm.sh/@codemirror/state@6.4.1');
-                const cmAutocomplete = await import('https://esm.sh/@codemirror/autocomplete@6.16.0');
-                const cmLint = await import('https://esm.sh/@codemirror/lint@6.8.0');
+            try {
+                const cm = await import('./codemirror-bundle.mjs');
+                console.log('[EditorBridge] Bundle loaded, exports:', Object.keys(cm));
 
                 window.EditorBridge.modules = {
-                    EditorState: cmState.EditorState,
+                    EditorState: cm.EditorState,
                     EditorView: cm.EditorView,
                     basicSetup: cm.basicSetup,
-                    markdown: cmMarkdown.markdown,
-                    oneDark: cmOneDark.oneDark,
-                    oneLight: cmOneLight.oneLight,
-                    keymap: cmCommands.keymap,
-                    indentWithTab: cmCommands.indentWithTab,
-                    EditorSelection: cmState.EditorSelection,
-                    defaultKeymap: cmCommands.defaultKeymap,
-                    historyKeymap: cmCommands.historyKeymap,
-                    closeBracketsKeymap: cmAutocomplete.closeBracketsKeymap,
-                    completionKeymap: cmAutocomplete.completionKeymap,
-                    lintKeymap: cmLint.lintKeymap
+                    markdown: cm.markdown,
+                    oneDark: cm.oneDark,
+                    oneLight: cm.oneLight,
+                    keymap: cm.keymap,
+                    indentWithTab: cm.indentWithTab,
+                    EditorSelection: cm.EditorSelection,
+                    defaultKeymap: cm.defaultKeymap,
+                    historyKeymap: cm.historyKeymap,
+                    closeBracketsKeymap: cm.closeBracketsKeymap,
+                    completionKeymap: cm.completionKeymap,
+                    lintKeymap: cm.lintKeymap
                 };
 
                 window.EditorBridge.isReady = true;
                 console.log('[EditorBridge] CodeMirror 6 modules loaded successfully');
             } catch (e) {
-                console.error('[EditorBridge] Failed to load CodeMirror:', e);
-                console.log('[EditorBridge] Will use textarea fallback for editing');
+                console.error('[EditorBridge] Failed to load CodeMirror bundle:', e);
+                try {
+                    const cm = await import('https://esm.sh/codemirror@6.0.1?bundle&deps=@codemirror/lang-markdown@6.2.5,@codemirror/theme-one-dark@6.1.2,@codemirror/theme-one-light@6.1.2,@codemirror/commands@6.6.0,@codemirror/autocomplete@6.16.0,@codemirror/lint@6.8.0');
+                    window.EditorBridge.modules = {
+                        EditorState: cm.EditorState,
+                        EditorView: cm.EditorView,
+                        basicSetup: cm.basicSetup,
+                        markdown: cm.markdown,
+                        oneDark: cm.oneDark,
+                        oneLight: cm.oneLight,
+                        keymap: cm.keymap,
+                        indentWithTab: cm.indentWithTab,
+                        EditorSelection: cm.EditorSelection,
+                        defaultKeymap: cm.defaultKeymap,
+                        historyKeymap: cm.historyKeymap,
+                        closeBracketsKeymap: cm.closeBracketsKeymap,
+                        completionKeymap: cm.completionKeymap,
+                        lintKeymap: cm.lintKeymap
+                    };
+                    window.EditorBridge.isReady = true;
+                    console.log('[EditorBridge] CodeMirror loaded from CDN fallback');
+                } catch (e2) {
+                    console.error('[EditorBridge] CDN fallback also failed:', e2);
+                    console.log('[EditorBridge] Will use textarea fallback for editing');
+                }
             }
         }
 
@@ -2130,6 +2306,11 @@
                 <div class="preview-content-wrapper">
                     <div class="preview-header">
                         <span id="preview-file-name">选择文件</span>
+                        <button class="preview-split-btn" id="preview-split-btn" onclick="toggleEditMode()" title="分栏编辑" style="display:none;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 3h7v18H3zM14 3h7v18h-7z"></path>
+                            </svg>
+                        </button>
                         <button class="preview-close-btn" onclick="closePreviewPanel()" title="关闭">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M18 6 6 18"></path>
@@ -2653,12 +2834,31 @@
             const previewContent = document.getElementById('preview-content');
             const editorContainer = document.getElementById('editor-container');
             const previewPanel = document.getElementById('preview-panel');
+            const splitBtn = document.getElementById('preview-split-btn');
 
             destroyCodeMirrorEditor();
 
             if (previewContent) previewContent.style.display = 'block';
             if (editorContainer) editorContainer.style.display = 'none';
             if (previewPanel) previewPanel.classList.remove('editor-active');
+            if (splitBtn) splitBtn.classList.remove('active');
+        }
+
+        function toggleEditMode() {
+            const splitBtn = document.getElementById('preview-split-btn');
+            if (window.mdEditor.isActive) {
+                exitEditMode();
+                if (currentPreviewData && currentPreviewData.type === 'markdown') {
+                    const content = document.getElementById('preview-content');
+                    if (content) content.innerHTML = renderMarkdownPreview(currentPreviewData.content);
+                }
+            } else {
+                if (currentPreviewData && currentPreviewData.type === 'markdown') {
+                    enterEditMode();
+                    initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+                    if (splitBtn) splitBtn.classList.add('active');
+                }
+            }
         }
 
         // ========== 编辑器内部分隔条拖动 ==========
@@ -3682,9 +3882,11 @@
             const content = document.getElementById('preview-content');
             const info = document.getElementById('preview-info');
             const fileNameEl = document.getElementById('preview-file-name');
+            const splitBtn = document.getElementById('preview-split-btn');
 
             exitEditMode();
 
+            if (splitBtn) splitBtn.style.display = 'none';
             if (panel) {
                 panel.style.display = 'none';
             }
@@ -3761,6 +3963,20 @@
 
         function renderTextPreview(content) {
             return `<pre class="text-preview">${escapeHtml(content)}</pre>`;
+        }
+
+        function renderMarkdownPreview(content) {
+            let html = '';
+            if (typeof marked !== 'undefined') {
+                try {
+                    html = marked.parse(content);
+                } catch (e) {
+                    html = '<pre>' + escapeHtml(content) + '</pre>';
+                }
+            } else {
+                html = renderMarkdown(content);
+            }
+            return `<div class="markdown-preview">${html}</div>`;
         }
 
         function renderPdfPage(pageNum) {
@@ -3892,18 +4108,25 @@
 
                     if (result.type === 'markdown') {
                         exitEditMode();
-                        enterEditMode();
-                        initCodeMirrorEditor(result.content, path);
+                        content.innerHTML = renderMarkdownPreview(result.content);
+                        const splitBtn = document.getElementById('preview-split-btn');
+                        if (splitBtn) splitBtn.style.display = 'flex';
                     } else if (result.type === 'text') {
                         exitEditMode();
                         content.innerHTML = renderTextPreview(result.content);
+                        const splitBtn = document.getElementById('preview-split-btn');
+                        if (splitBtn) splitBtn.style.display = 'none';
                     } else if (result.type === 'pdf') {
                         exitEditMode();
+                        const splitBtn = document.getElementById('preview-split-btn');
+                        if (splitBtn) splitBtn.style.display = 'none';
                         totalPdfPages = result.total_pages || 0;
                         currentPdfPage = 1;
                         renderPdfPage(1);
                     } else if (result.type === 'word') {
                         exitEditMode();
+                        const splitBtn = document.getElementById('preview-split-btn');
+                        if (splitBtn) splitBtn.style.display = 'none';
                         content.innerHTML = renderWordPreview(result);
                     }
 

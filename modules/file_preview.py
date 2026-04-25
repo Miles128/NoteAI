@@ -4,10 +4,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from io import BytesIO
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from utils.logger import logger
 from utils.helpers import get_file_extension, read_file_with_encoding
 
@@ -168,40 +164,6 @@ class FilePreviewer:
                 "success": False,
                 "error": f"PDF解析失败: {str(e)}"
             }
-
-    def _preview_pdf(self, file_path: str, file_size: int) -> Dict[str, Any]:
-        import fitz
-
-        try:
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-            pages_data = []
-            text_parts = []
-            for i, page in enumerate(doc):
-                text = page.get_text("text") or ""
-                pages_data.append({
-                    "page_number": i + 1,
-                    "text": text.strip(),
-                    "image": None,
-                    "width": 0,
-                    "height": 0
-                })
-                if text.strip():
-                    text_parts.append(text.strip())
-            doc.close()
-
-            return {
-                "success": True,
-                "type": "pdf",
-                "file_name": os.path.basename(file_path),
-                "file_size": file_size,
-                "total_pages": total_pages,
-                "pages": pages_data,
-                "full_text": "\n\n".join(text_parts)
-            }
-        except Exception as e:
-            logger.error(f"PDF预览失败 (PyMuPDF): {e}")
-            return self._preview_pdf_legacy(file_path, file_size)
 
     def _preview_word(self, file_path: str, file_size: int) -> Dict[str, Any]:
         from docx import Document

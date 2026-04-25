@@ -4,10 +4,6 @@ from typing import Optional, Callable, Dict, List
 from pathlib import Path
 from abc import ABC, abstractmethod
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from config.settings import config, RAW_FOLDER
 from utils.logger import logger
 from utils.helpers import (
@@ -18,8 +14,9 @@ from utils.helpers import (
     extract_pdf_text, extract_pdf_pages
 )
 from utils.tag_extractor import (
-    extract_tags_from_text,
-    add_yaml_frontmatter_to_content
+    extract_tags_from_filename,
+    add_yaml_frontmatter_to_content,
+    add_yaml_frontmatter_to_file
 )
 
 class BaseConverter(ABC):
@@ -285,11 +282,10 @@ class FileConverterManager:
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path), ai_assist=ai_assist)
             
-            # 提取标签并添加YAML front matter
-            tags = extract_tags_from_text(markdown_content)
+            # 添加YAML front matter
             markdown_content = add_yaml_frontmatter_to_content(
                 markdown_content,
-                tags=tags,
+                tags=[],
                 source=file_path
             )
             
@@ -307,6 +303,10 @@ class FileConverterManager:
 
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
+
+            tags = extract_tags_from_filename(str(output_file))
+            if tags:
+                add_yaml_frontmatter_to_file(str(output_file), tags=tags, source=file_path)
 
             result['success'] = True
             result['output_path'] = str(output_file)

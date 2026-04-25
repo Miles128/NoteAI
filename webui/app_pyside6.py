@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from urllib.parse import unquote, parse_qs, urlparse
 
-from PySide6.QtCore import Qt, QUrl, Slot, QObject, Signal, QTimer
+from PySide6.QtCore import Qt, QUrl, Slot, QObject, Signal, QTimer, QMetaObject
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage
@@ -41,6 +41,39 @@ class FileDialog:
     OPEN_FILES = 1
     FOLDER = 2
     SAVE_FILE = 3
+
+
+class JSBridge(QObject):
+    """线程安全的 JavaScript 桥接
+    
+    确保所有 JS 执行都在主线程中进行。
+    """
+    execute_js = Signal(str, object)  # js_code, web_view
+
+    def __init__(self):
+        super().__init__()
+        self.execute_js.connect(self._do_execute_js)
+
+    @Slot(str, object)
+    def _do_execute_js(self, js_code, web_view):
+        """在主线程中执行 JavaScript"""
+        if web_view and web_view.page():
+            web_view.page().runJavaScript(js_code)
+
+    def run_js(self, js_code, web_view):
+        """从任何线程调用，自动切换到主线程执行"""
+        self.execute_js.emit(str(js_code), web_view)
+
+
+_js_bridge = None
+
+
+def get_js_bridge():
+    """获取全局 JS 桥接实例"""
+    global _js_bridge
+    if _js_bridge is None:
+        _js_bridge = JSBridge()
+    return _js_bridge
 
 
 class Api:
@@ -722,8 +755,12 @@ class MainWindow(QMainWindow):
             self._web_view.setHtml(html_content)
 
     def evaluate_js(self, js_code):
-        """在 WebView 中执行 JavaScript"""
-        self._web_view.page().runJavaScript(js_code)
+        """在 WebView 中执行 JavaScript（线程安全）
+        
+        可以从任何线程调用，自动切换到主线程执行。
+        """
+        bridge = get_js_bridge()
+        bridge.run_js(js_code, self._web_view)
 
     def set_title(self, title):
         """设置窗口标题"""
@@ -997,6 +1034,9 @@ def _start_http_server_with_api(directory, api):
 
         def _call_api_method(self, method_name, args):
             """调用 API 方法"""
+            if method_name.startswith('_'):
+                raise ValueError(f"私有方法不可调用: {method_name}")
+
             if not hasattr(self._api, method_name):
                 raise ValueError(f"API 方法不存在: {method_name}")
 

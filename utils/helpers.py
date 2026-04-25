@@ -508,7 +508,7 @@ def read_file_with_encoding(file_path: str, encodings: List[str] = None) -> str:
         except UnicodeDecodeError:
             continue
     
-    raise UnicodeDecodeError(f"无法使用任何编码读取文件: {file_path}")
+    raise RuntimeError(f"无法使用任何编码读取文件: {file_path}")
 
 def validate_api_key(api_key: str) -> bool:
     """验证 API Key 是否有效"""
@@ -765,6 +765,14 @@ def _truncate_at_sentence_boundary(text: str, max_length: int) -> str:
     
     return text[:best_pos]
 
+def _estimate_tokens(text: str, model_name: str = "gpt-4") -> int:
+    try:
+        import tiktoken
+        encoding = tiktoken.encoding_for_model(model_name)
+        return len(encoding.encode(text))
+    except Exception:
+        return len(text) // 4
+
 def process_content_with_llm(content: str, max_tokens: int = 131072, model_name: str = "gpt-4") -> tuple:
     """
     使用LLM智能处理内容，当超出上下文限制时：
@@ -779,12 +787,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     Returns:
         (processed_content, was_summarized, was_truncated, estimated_tokens)
     """
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        estimated_tokens = len(encoding.encode(content))
-    except Exception:
-        estimated_tokens = len(content) // 4
+    estimated_tokens = _estimate_tokens(content, model_name)
     
     if estimated_tokens <= max_tokens:
         return (content, False, False, estimated_tokens)
@@ -796,12 +799,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     
     summarized_content = summarize_with_llm(content, target_ratio)
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        summarized_tokens = len(encoding.encode(summarized_content))
-    except Exception:
-        summarized_tokens = len(summarized_content) // 4
+    summarized_tokens = _estimate_tokens(summarized_content, model_name)
     
     if summarized_tokens <= max_tokens:
         logger.info(f"LLM摘要成功，压缩至{summarized_tokens} tokens")
@@ -811,12 +809,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     
     compressed_content = compress_with_llm(summarized_content, "heavy")
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        compressed_tokens = len(encoding.encode(compressed_content))
-    except Exception:
-        compressed_tokens = len(compressed_content) // 4
+    compressed_tokens = _estimate_tokens(compressed_content, model_name)
     
     if compressed_tokens <= max_tokens:
         logger.info(f"LLM压缩成功，压缩至{compressed_tokens} tokens")
@@ -831,12 +824,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
         suffix="\n\n---\n\n[内容已截断，超出上下文限制。已优先保留核心信息和关键逻辑。]"
     )
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        truncated_tokens = len(encoding.encode(truncated_content))
-    except Exception:
-        truncated_tokens = len(truncated_content) // 4
+    truncated_tokens = _estimate_tokens(truncated_content, model_name)
     
     logger.info(f"策略性截断完成，最终{truncated_tokens} tokens")
     return (truncated_content, True, True, truncated_tokens)

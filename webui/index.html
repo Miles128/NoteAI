@@ -1856,62 +1856,50 @@
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js"></script>
 
-    <!-- CodeMirror 6 编辑器 - ES Module 初始化 -->
-    <script type="module">
+    <!-- CodeMirror 6 编辑器 - ES Module 动态加载 -->
+    <script>
         window.EditorBridge = {
             isReady: false,
-            _readyCallbacks: [],
-            
             modules: {},
-            
-            onReady(callback) {
-                if (this.isReady) {
-                    callback();
-                } else {
-                    this._readyCallbacks.push(callback);
-                }
-            },
-            
-            _markReady() {
-                this.isReady = true;
-                this._readyCallbacks.forEach(cb => {
-                    try { cb(); } catch (e) { console.error('EditorBridge callback error:', e); }
-                });
-                this._readyCallbacks = [];
-            }
+            loadAttempts: 0
         };
 
         async function initCodeMirror() {
             try {
-                const { EditorState, EditorView, basicSetup } = await import('https://esm.sh/codemirror@6.0.1');
-                const { markdown } = await import('https://esm.sh/@codemirror/lang-markdown@6.2.5');
-                const { oneDark } = await import('https://esm.sh/@codemirror/theme-one-dark@6.1.2');
-                const { oneLight } = await import('https://esm.sh/@codemirror/theme-one-light@6.1.2');
-                const { keymap, indentWithTab } = await import('https://esm.sh/@codemirror/commands@6.6.0');
-                const { EditorSelection } = await import('https://esm.sh/@codemirror/state@6.4.1');
-                const { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap as viewKeymap, editable } = await import('https://esm.sh/@codemirror/view@6.28.0');
-                const { defaultKeymap, history, historyKeymap } = await import('https://esm.sh/@codemirror/commands@6.6.0');
-                const { bracketMatching } = await import('https://esm.sh/@codemirror/language@6.10.1');
-                const { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap } = await import('https://esm.sh/@codemirror/autocomplete@6.16.0');
-                const { lintKeymap } = await import('https://esm.sh/@codemirror/lint@6.8.0');
+                window.EditorBridge.loadAttempts++;
+                console.log('[EditorBridge] Attempting to load CodeMirror, attempt:', window.EditorBridge.loadAttempts);
 
-                EditorBridge.modules = {
-                    EditorState, EditorView, basicSetup,
-                    markdown, oneDark, oneLight, keymap, indentWithTab,
-                    EditorSelection, editable,
-                    lineNumbers, highlightActiveLineGutter, highlightSpecialChars,
-                    drawSelection, dropCursor, rectangularSelection, crosshairCursor,
-                    highlightActiveLine, viewKeymap,
-                    defaultKeymap, history, historyKeymap,
-                    bracketMatching,
-                    closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap,
-                    lintKeymap
+                const cm = await import('https://esm.sh/codemirror@6.0.1');
+                const cmMarkdown = await import('https://esm.sh/@codemirror/lang-markdown@6.2.5');
+                const cmOneDark = await import('https://esm.sh/@codemirror/theme-one-dark@6.1.2');
+                const cmOneLight = await import('https://esm.sh/@codemirror/theme-one-light@6.1.2');
+                const cmCommands = await import('https://esm.sh/@codemirror/commands@6.6.0');
+                const cmState = await import('https://esm.sh/@codemirror/state@6.4.1');
+                const cmAutocomplete = await import('https://esm.sh/@codemirror/autocomplete@6.16.0');
+                const cmLint = await import('https://esm.sh/@codemirror/lint@6.8.0');
+
+                window.EditorBridge.modules = {
+                    EditorState: cmState.EditorState,
+                    EditorView: cm.EditorView,
+                    basicSetup: cm.basicSetup,
+                    markdown: cmMarkdown.markdown,
+                    oneDark: cmOneDark.oneDark,
+                    oneLight: cmOneLight.oneLight,
+                    keymap: cmCommands.keymap,
+                    indentWithTab: cmCommands.indentWithTab,
+                    EditorSelection: cmState.EditorSelection,
+                    defaultKeymap: cmCommands.defaultKeymap,
+                    historyKeymap: cmCommands.historyKeymap,
+                    closeBracketsKeymap: cmAutocomplete.closeBracketsKeymap,
+                    completionKeymap: cmAutocomplete.completionKeymap,
+                    lintKeymap: cmLint.lintKeymap
                 };
 
-                EditorBridge._markReady();
-                console.log('[EditorBridge] CodeMirror 6 modules loaded');
+                window.EditorBridge.isReady = true;
+                console.log('[EditorBridge] CodeMirror 6 modules loaded successfully');
             } catch (e) {
                 console.error('[EditorBridge] Failed to load CodeMirror:', e);
+                console.log('[EditorBridge] Will use textarea fallback for editing');
             }
         }
 
@@ -2307,7 +2295,9 @@
             saveTimer: null,
             isScrollSyncing: false,
             originalContent: null,
-            isActive: false
+            isActive: false,
+            usingFallback: false,
+            getFallbackContent: null
         };
 
         // ========== marked.js 配置（带 highlight.js 代码高亮）==========
@@ -2362,29 +2352,46 @@
 
         // ========== 初始化 CodeMirror 6 编辑器 ==========
         function initCodeMirrorEditor(content, filePath) {
-            if (!window.EditorBridge || !window.EditorBridge.isReady) {
-                console.warn('[Editor] EditorBridge not ready yet, waiting...');
-                window.EditorBridge.onReady(() => {
-                    initCodeMirrorEditor(content, filePath);
-                });
-                return;
-            }
-
-            const M = window.EditorBridge.modules;
             const container = document.getElementById('cm-editor-container');
-            if (!container) {
-                console.error('[Editor] Editor container not found');
-                return;
-            }
+            if (!container) return;
 
             container.innerHTML = '';
-
-            const isDark = getEffectiveTheme() === 'dark';
-            const theme = isDark ? M.oneDark : M.oneLight;
 
             window.mdEditor.originalContent = content;
             window.mdEditor.filePath = filePath;
             window.mdEditor.isActive = true;
+
+            updateSaveStatus('saved', '加载中...');
+
+            if (!window.EditorBridge || !window.EditorBridge.isReady) {
+                console.warn('[Editor] EditorBridge not ready, waiting 5s...');
+                let waited = 0;
+                const checkInterval = setInterval(() => {
+                    waited += 200;
+                    if (window.EditorBridge && window.EditorBridge.isReady) {
+                        clearInterval(checkInterval);
+                        createCodeMirrorInstance(content, filePath, container);
+                    } else if (waited >= 5000) {
+                        clearInterval(checkInterval);
+                        console.warn('[Editor] EditorBridge timeout, using textarea fallback');
+                        createTextareaFallback(content, filePath, container);
+                    }
+                }, 200);
+                return;
+            }
+
+            try {
+                createCodeMirrorInstance(content, filePath, container);
+            } catch (e) {
+                console.error('[Editor] CodeMirror init failed:', e);
+                createTextareaFallback(content, filePath, container);
+            }
+        }
+
+        function createCodeMirrorInstance(content, filePath, container) {
+            const M = window.EditorBridge.modules;
+            const isDark = getEffectiveTheme() === 'dark';
+            const theme = isDark ? M.oneDark : M.oneLight;
 
             const updateListener = M.EditorView.updateListener.of((v) => {
                 if (v.docChanged) {
@@ -2402,19 +2409,7 @@
             });
 
             const extensions = [
-                M.editable,
-                M.lineNumbers(),
-                M.highlightActiveLineGutter(),
-                M.highlightSpecialChars(),
-                M.history(),
-                M.drawSelection(),
-                M.dropCursor(),
-                M.rectangularSelection(),
-                M.crosshairCursor(),
-                M.highlightActiveLine(),
-                M.bracketMatching(),
-                M.closeBrackets(),
-                M.autocompletion(),
+                M.basicSetup,
                 M.markdown(),
                 theme,
                 updateListener,
@@ -2439,28 +2434,43 @@
                 parent: container
             });
 
-            window.mdEditor.view.dispatch();
-            requestAnimationFrame(() => {
-                if (window.mdEditor.view) {
-                    window.mdEditor.view.requestMeasure();
-                }
-            });
-
             updateMarkdownPreview(content);
             updateSaveStatus('saved', '已保存');
             initPreviewScrollListener();
 
-            console.log('[Editor] CodeMirror initialized for:', filePath);
-            console.log('[Editor] Content length:', content.length);
+            console.log('[Editor] CodeMirror initialized for:', filePath, 'content length:', content.length);
+        }
+
+        function createTextareaFallback(content, filePath, container) {
+            window.mdEditor.usingFallback = true;
+            const textarea = document.createElement('textarea');
+            textarea.value = content;
+            textarea.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:none;background:var(--surface);color:var(--text);';
+            textarea.addEventListener('input', () => {
+                updateMarkdownPreview(textarea.value);
+                scheduleAutoSave(textarea.value);
+            });
+            container.appendChild(textarea);
+
+            updateMarkdownPreview(content);
+            updateSaveStatus('saved', '已保存(简易模式)');
+            initPreviewScrollListener();
+
+            window.mdEditor.getFallbackContent = () => textarea.value;
+            console.log('[Editor] Textarea fallback for:', filePath, 'content length:', content.length);
         }
 
         // ========== 销毁编辑器 ==========
         function destroyCodeMirrorEditor() {
-            if (window.mdEditor.view) {
-                if (window.mdEditor.saveTimer) {
-                    clearTimeout(window.mdEditor.saveTimer);
-                    window.mdEditor.saveTimer = null;
-                }
+            if (window.mdEditor.saveTimer) {
+                clearTimeout(window.mdEditor.saveTimer);
+                window.mdEditor.saveTimer = null;
+            }
+            if (window.mdEditor.usingFallback) {
+                performImmediateSave();
+                window.mdEditor.usingFallback = false;
+                window.mdEditor.getFallbackContent = null;
+            } else if (window.mdEditor.view) {
                 performImmediateSave();
                 window.mdEditor.view.destroy();
                 window.mdEditor.view = null;
@@ -2493,18 +2503,7 @@
 
             if (themeIndex >= 0) {
                 const effects = M.EditorView.reconfigure.of([
-                    M.lineNumbers(),
-                    M.highlightActiveLineGutter(),
-                    M.highlightSpecialChars(),
-                    M.history(),
-                    M.drawSelection(),
-                    M.dropCursor(),
-                    M.rectangularSelection(),
-                    M.crosshairCursor(),
-                    M.highlightActiveLine(),
-                    M.bracketMatching(),
-                    M.closeBrackets(),
-                    M.autocompletion(),
+                    M.basicSetup,
                     M.markdown(),
                     theme
                 ]);
@@ -2620,8 +2619,15 @@
         }
 
         function performImmediateSave() {
-            if (!window.mdEditor.view || !window.mdEditor.filePath) return;
-            const content = window.mdEditor.view.state.doc.toString();
+            if (!window.mdEditor.filePath) return;
+            let content;
+            if (window.mdEditor.usingFallback && window.mdEditor.getFallbackContent) {
+                content = window.mdEditor.getFallbackContent();
+            } else if (window.mdEditor.view) {
+                content = window.mdEditor.view.state.doc.toString();
+            } else {
+                return;
+            }
             if (window.mdEditor.saveTimer) {
                 clearTimeout(window.mdEditor.saveTimer);
                 window.mdEditor.saveTimer = null;
@@ -3887,11 +3893,7 @@
                     if (result.type === 'markdown') {
                         exitEditMode();
                         enterEditMode();
-                        requestAnimationFrame(() => {
-                            requestAnimationFrame(() => {
-                                initCodeMirrorEditor(result.content, path);
-                            });
-                        });
+                        initCodeMirrorEditor(result.content, path);
                     } else if (result.type === 'text') {
                         exitEditMode();
                         content.innerHTML = renderTextPreview(result.content);

@@ -767,14 +767,44 @@ def try_restore_workspace_config():
         return None, f"恢复工作区失败: {str(e)}"
 
 
+def _start_http_server(directory):
+    import threading
+    import socket
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    class CORSRequestHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=directory, **kwargs)
+
+        def end_headers(self):
+            self.send_header('Access-Control-Allow-Origin', '*')
+            super().end_headers()
+
+        def log_message(self, format, *args):
+            pass
+
+    def find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            return s.getsockname()[1]
+
+    port = find_free_port()
+    server = HTTPServer(('localhost', port), CORSRequestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"[INFO] HTTP server started on http://localhost:{port}")
+    return port
+
+
 def main():
     """启动应用"""
     api = Api()
 
     html_path = Path(__file__).parent / "index.html"
+    http_port = _start_http_server(str(html_path.parent))
     window = webview.create_window(
         "NoteAI",
-        url=str(html_path),
+        url=f"http://localhost:{http_port}/index.html",
         width=1400,
         height=900,
         min_size=(1000, 700),

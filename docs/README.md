@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-NoteAI是一个功能完善的AI驱动Markdown笔记知识库管理桌面应用，使用Python和Tkinter开发，集成了Langchain实现AI相关功能。
+NoteAI是一个功能完善的AI驱动Markdown笔记知识库管理桌面应用，使用Python和Pyside开发，集成了Langchain实现AI相关功能。
 
 ## 核心功能
 

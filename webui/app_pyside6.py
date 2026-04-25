@@ -2,10 +2,10 @@
 PySide6 WebView 应用 - 使用 QtWebEngine 替代 pywebview
 
 通信机制：
+- JS -> Python: 使用 HTTP API (fetch POST /api/method)
 - Python -> JS: 使用 QWebEnginePage.runJavaScript()
-- JS -> Python: 使用 URL 拦截机制 (noteai://api/...)
 
-这比 Qt WebChannel 更简单、更可靠。
+这比 URL 拦截和 Qt WebChannel 更简单、更可靠。
 """
 
 import sys
@@ -18,7 +18,7 @@ from urllib.parse import unquote, parse_qs, urlparse
 from PySide6.QtCore import Qt, QUrl, Slot, QObject, Signal, QTimer
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineUrlRequestInterceptor, QWebEngineUrlScheme, QWebEngineUrlSchemeHandler
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtGui import QShortcut, QKeySequence
 
 project_root = Path(__file__).parent.parent
@@ -33,116 +33,6 @@ from modules.note_integration import NoteIntegration
 from modules.topic_extractor import TopicExtractor
 from modules.file_preview import FilePreviewer
 from utils.tag_extractor import tag_files_by_filename
-
-
-class NoteAIUrlSchemeHandler(QWebEngineUrlSchemeHandler):
-    """处理 noteai:// 协议的 URL 拦截器"""
-
-    def __init__(self, api, parent=None):
-        super().__init__(parent)
-        self._api = api
-        self._pending_calls = {}
-        self._call_counter = 0
-
-    def requestStarted(self, request):
-        """处理 URL 请求"""
-        url = request.requestUrl()
-        path = url.path()
-        query = url.query()
-
-        print(f"[NoteAI] URL 请求: {url.toString()}")
-
-        if path.startswith('/api/'):
-            method_name = path[5:]
-            self._handle_api_call(method_name, query, request)
-        else:
-            request.fail(request.Error.UrlNotFound)
-
-    def _handle_api_call(self, method_name, query, request):
-        """处理 API 调用"""
-        try:
-            params = parse_qs(query)
-            args_json = params.get('args', ['[]'])[0]
-            args = json.loads(args_json)
-
-            if not hasattr(self._api, method_name):
-                print(f"[ERROR] API 方法不存在: {method_name}")
-                self._send_response(request, {"error": f"API 方法不存在: {method_name}"})
-                return
-
-            method = getattr(self._api, method_name)
-            result = method(*args)
-
-            self._send_response(request, {"success": True, "result": result})
-
-        except Exception as e:
-            print(f"[ERROR] API 调用失败 {method_name}: {e}")
-            import traceback
-            traceback.print_exc()
-            self._send_response(request, {"error": str(e)})
-
-    def _send_response(self, request, data):
-        """发送响应"""
-        response_data = json.dumps(data).encode('utf-8')
-        request.reply(b'application/json', response_data)
-
-
-class NoteAIEnginePage(QWebEnginePage):
-    """自定义 WebEnginePage，用于拦截 URL"""
-
-    def __init__(self, api, parent=None):
-        super().__init__(parent)
-        self._api = api
-        self._call_counter = 0
-        self._call_promises = {}
-
-    def acceptNavigationRequest(self, url, navigation_type, is_main_frame):
-        """拦截导航请求"""
-        url_str = url.toString()
-        
-        if url_str.startswith('noteai://api/'):
-            print(f"[NoteAI] 拦截 API 请求: {url_str}")
-            self._handle_api_url(url)
-            return False
-
-        return super().acceptNavigationRequest(url, navigation_type, is_main_frame)
-
-    def _handle_api_url(self, url):
-        """处理 API URL"""
-        try:
-            url_str = url.toString()
-            path_match = re.match(r'noteai://api/([^?]+)(?:\?(.*))?', url_str)
-            
-            if not path_match:
-                print(f"[ERROR] 无效的 API URL: {url_str}")
-                return
-
-            method_name = path_match.group(1)
-            query = path_match.group(2) or ''
-            params = parse_qs(query)
-            args_json = params.get('args', ['[]'])[0]
-            args = json.loads(args_json)
-
-            if not hasattr(self._api, method_name):
-                print(f"[ERROR] API 方法不存在: {method_name}")
-                self._evaluate_js(f'window.__noteai_api_error__({json.dumps(method_name)}, {json.dumps(f"API 方法不存在: {method_name}")})')
-                return
-
-            method = getattr(self._api, method_name)
-            result = method(*args)
-
-            result_json = json.dumps(result)
-            self._evaluate_js(f'window.__noteai_api_result__({json.dumps(method_name)}, {result_json})')
-
-        except Exception as e:
-            print(f"[ERROR] API 调用失败: {e}")
-            import traceback
-            traceback.print_exc()
-            self._evaluate_js(f'window.__noteai_api_error__({json.dumps(method_name)}, {json.dumps(str(e))})')
-
-    def _evaluate_js(self, js_code):
-        """执行 JavaScript"""
-        self.runJavaScript(js_code)
 
 
 class FileDialog:
@@ -812,8 +702,6 @@ class MainWindow(QMainWindow):
     def set_api(self, api):
         """设置 API 对象"""
         self._api = api
-        page = NoteAIEnginePage(api, self._web_view)
-        self._web_view.setPage(page)
 
     def load_url(self, url):
         """加载 URL 或 HTML 文件"""
@@ -999,7 +887,6 @@ def _download_codemirror_bundle(webui_dir):
         resp = urllib.request.urlopen(req)
         entry_content = resp.read().decode('utf-8')
 
-        import re
         match = re.search(r'export \* from "(/[^"]+\.bundle\.mjs)"', entry_content)
         if not match:
             print("[WARNING] Could not find bundle URL in esm.sh entry")
@@ -1017,19 +904,110 @@ def _download_codemirror_bundle(webui_dir):
         return False
 
 
-def _start_http_server(directory):
-    """启动本地 HTTP 服务器（供 QtWebEngine 加载本地资源）"""
+def _start_http_server_with_api(directory, api):
+    """启动本地 HTTP 服务器，支持静态文件和 API 调用"""
     import threading
     import socket
     from http.server import HTTPServer, SimpleHTTPRequestHandler
 
-    class CORSRequestHandler(SimpleHTTPRequestHandler):
+    class APIRequestHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
+            self._api = api
             super().__init__(*args, directory=directory, **kwargs)
 
         def end_headers(self):
             self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
             super().end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def do_GET(self):
+            parsed_path = urlparse(self.path)
+            path = parsed_path.path
+
+            if path.startswith('/api/'):
+                self._handle_api_get(path, parsed_path.query)
+                return
+
+            super().do_GET()
+
+        def do_POST(self):
+            parsed_path = urlparse(self.path)
+            path = parsed_path.path
+
+            if path.startswith('/api/'):
+                self._handle_api_post(path)
+                return
+
+            self.send_response(404)
+            self.end_headers()
+
+        def _handle_api_get(self, path, query):
+            """处理 GET API 请求（用于简单调用）"""
+            try:
+                method_name = path[5:]
+                params = parse_qs(query)
+                args_json = params.get('args', ['[]'])[0]
+                args = json.loads(args_json)
+
+                result = self._call_api_method(method_name, args)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+
+            except Exception as e:
+                print(f"[ERROR] API GET 调用失败: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        def _handle_api_post(self, path):
+            """处理 POST API 请求"""
+            try:
+                method_name = path[5:]
+
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8')
+                args = json.loads(body) if body else []
+
+                result = self._call_api_method(method_name, args)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+
+            except Exception as e:
+                print(f"[ERROR] API POST 调用失败: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        def _call_api_method(self, method_name, args):
+            """调用 API 方法"""
+            if not hasattr(self._api, method_name):
+                raise ValueError(f"API 方法不存在: {method_name}")
+
+            method = getattr(self._api, method_name)
+
+            if isinstance(args, list):
+                return method(*args)
+            elif isinstance(args, dict):
+                return method(**args)
+            else:
+                return method(args)
 
         def log_message(self, format, *args):
             pass
@@ -1040,10 +1018,18 @@ def _start_http_server(directory):
             return s.getsockname()[1]
 
     port = find_free_port()
-    server = HTTPServer(('localhost', port), CORSRequestHandler)
+
+    class HandlerFactory:
+        def __init__(self, api_instance):
+            self.api = api_instance
+
+        def __call__(self, *args, **kwargs):
+            return APIRequestHandler(*args, api=self.api, **kwargs)
+
+    server = HTTPServer(('localhost', port), HandlerFactory(api))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    print(f"[INFO] HTTP server started on http://localhost:{port}")
+    print(f"[INFO] HTTP server with API started on http://localhost:{port}")
     return port
 
 
@@ -1055,12 +1041,12 @@ def main():
 
     html_path = Path(__file__).parent / "index.html"
     _download_codemirror_bundle(str(html_path.parent))
-    http_port = _start_http_server(str(html_path.parent))
 
     window = MainWindow()
     api = Api()
-    window.set_api(api)
     api.set_window(window)
+
+    http_port = _start_http_server_with_api(str(html_path.parent), api)
 
     workspace_name, message = try_restore_workspace_config()
     if workspace_name:
@@ -1070,7 +1056,8 @@ def main():
         except Exception as e:
             print(f"[WARNING] 设置窗口标题失败: {e}")
 
-    window.load_url(f"http://localhost:{http_port}/index.html")
+    index_url = f"http://localhost:{http_port}/index.html?port={http_port}"
+    window.load_url(index_url)
     window.show()
 
     sys.exit(app.exec())

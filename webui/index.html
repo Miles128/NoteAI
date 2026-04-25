@@ -7,24 +7,24 @@
 
     <script>
     /* ============================================================
-       PySide6 URL Interception Bridge - 兼容 pywebview API
+       PySide6 HTTP API Bridge - 兼容 pywebview API
        
-       此代码在前端实现了对 PySide6 URL 拦截机制的支持，
+       此代码在前端实现了对 PySide6 HTTP API 机制的支持，
        同时保持与 pywebview API 的 100% 兼容性。
        
        通信机制：
-       - JS -> Python: 通过导航到 noteai://api/method?args=[...] URL
-       - Python -> JS: 通过调用 window.__noteai_api_result__ / __noteai_api_error__
+       - JS -> Python: 通过 fetch POST /api/method 调用 HTTP API
+       - Python -> JS: 通过 QWebEnginePage.runJavaScript() 回调
        
        如果运行在 pywebview 中：直接使用 window.pywebview.api
-       如果运行在 PySide6 中：使用 URL 拦截机制
+       如果运行在 PySide6 中：使用 HTTP API (fetch)
        ============================================================ */
 
     (function() {
         'use strict';
 
-        var call_queues = {};
         var is_initialized = false;
+        var http_port = null;
 
         var api_methods = [
             'move_window', 'minimize_window', 'maximize_window', 'close_window',
@@ -38,9 +38,15 @@
             'save_file_content'
         ];
 
-        api_methods.forEach(function(method) {
-            call_queues[method] = [];
-        });
+        function get_http_port() {
+            if (http_port) return http_port;
+            var params = new URLSearchParams(window.location.search);
+            http_port = params.get('port');
+            if (!http_port) {
+                http_port = window.location.port;
+            }
+            return http_port;
+        }
 
         function setup_pywebview_stub() {
             if (!window.pywebview) {
@@ -61,51 +67,31 @@
         }
 
         function call_api_method(method_name, args) {
-            return new Promise(function(resolve, reject) {
-                var queue = call_queues[method_name];
-                if (!queue) {
-                    reject(new Error('Unknown API method: ' + method_name));
-                    return;
+            var port = get_http_port();
+            if (!port) {
+                return Promise.reject(new Error('Cannot determine HTTP port'));
+            }
+
+            var url = 'http://localhost:' + port + '/api/' + method_name;
+
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(args || [])
+            })
+            .then(function(response) {
+                if (!response.ok) {
+                    throw new Error('API call failed: ' + response.status);
                 }
-
-                queue.push({ resolve: resolve, reject: reject });
-
-                try {
-                    var args_json = JSON.stringify(args);
-                    var url = 'noteai://api/' + method_name + '?args=' + encodeURIComponent(args_json);
-
-                    var iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = url;
-                    document.body.appendChild(iframe);
-
-                    setTimeout(function() {
-                        if (iframe.parentNode) {
-                            document.body.removeChild(iframe);
-                        }
-                    }, 100);
-                } catch (e) {
-                    queue.pop();
-                    reject(e);
-                }
+                return response.json();
+            })
+            .catch(function(error) {
+                console.error('[NoteAI] API call failed:', method_name, error);
+                throw error;
             });
         }
-
-        window.__noteai_api_result__ = function(method_name, result) {
-            var queue = call_queues[method_name];
-            if (queue && queue.length > 0) {
-                var call = queue.shift();
-                call.resolve(result);
-            }
-        };
-
-        window.__noteai_api_error__ = function(method_name, error_message) {
-            var queue = call_queues[method_name];
-            if (queue && queue.length > 0) {
-                var call = queue.shift();
-                call.reject(new Error(error_message));
-            }
-        };
 
         function init_bridge() {
             if (is_initialized) return;
@@ -116,7 +102,12 @@
                 return;
             }
 
-            console.log('[NoteAI] Running in PySide6 mode (URL interception bridge)');
+            var port = get_http_port();
+            if (port) {
+                console.log('[NoteAI] Running in PySide6 mode (HTTP API bridge on port ' + port + ')');
+            } else {
+                console.log('[NoteAI] Running in PySide6 mode (HTTP API bridge)');
+            }
             setup_pywebview_stub();
 
             var event = new Event('pywebviewready');

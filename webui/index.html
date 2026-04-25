@@ -1287,6 +1287,12 @@
             min-width: 300px;
         }
 
+        .preview-panel.editor-active {
+            flex: 1;
+            width: auto;
+            max-width: none;
+        }
+
         .preview-resizer {
             width: 4px;
             height: 100%;
@@ -1700,6 +1706,14 @@
         }
 
         /* ========== Markdown Editor Styles ========== */
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+
         .editor-split-container {
             display: flex;
             flex: 1;
@@ -2424,11 +2438,19 @@
                 parent: container
             });
 
+            window.mdEditor.view.dispatch();
+            requestAnimationFrame(() => {
+                if (window.mdEditor.view) {
+                    window.mdEditor.view.requestMeasure();
+                }
+            });
+
             updateMarkdownPreview(content);
             updateSaveStatus('saved', '已保存');
             initPreviewScrollListener();
 
             console.log('[Editor] CodeMirror initialized for:', filePath);
+            console.log('[Editor] Content length:', content.length);
         }
 
         // ========== 销毁编辑器 ==========
@@ -3864,7 +3886,11 @@
                     if (result.type === 'markdown') {
                         exitEditMode();
                         enterEditMode();
-                        initCodeMirrorEditor(result.content, path);
+                        requestAnimationFrame(() => {
+                            requestAnimationFrame(() => {
+                                initCodeMirrorEditor(result.content, path);
+                            });
+                        });
                     } else if (result.type === 'text') {
                         exitEditMode();
                         content.innerHTML = renderTextPreview(result.content);

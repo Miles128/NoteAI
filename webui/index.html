@@ -1698,7 +1698,211 @@
             width: 16px;
             height: 16px;
         }
+
+        /* ========== Markdown Editor Styles ========== */
+        .editor-split-container {
+            display: flex;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .editor-pane {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .editor-pane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: rgba(0, 0, 0, 0.02);
+            border-bottom: 0.5px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+
+        [data-theme="dark"] .editor-pane-header {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .editor-pane-title {
+            font-weight: 500;
+        }
+
+        .editor-save-status {
+            font-size: 10px;
+            opacity: 0.8;
+        }
+
+        .editor-save-status.saving {
+            color: var(--primary);
+        }
+
+        .editor-save-status.saved {
+            color: var(--success);
+        }
+
+        .editor-save-status.error {
+            color: var(--error);
+        }
+
+        .editor-inner-resizer {
+            width: 4px;
+            cursor: col-resize;
+            background: var(--border);
+            transition: background 0.2s;
+            flex-shrink: 0;
+            -webkit-app-region: no-drag;
+        }
+
+        .editor-inner-resizer:hover {
+            background: var(--primary);
+        }
+
+        .editor-inner-resizer.resizing {
+            background: var(--primary);
+        }
+
+        /* CodeMirror 容器 */
+        .cm-editor-container {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* CodeMirror 覆盖样式 */
+        .cm-editor {
+            height: 100%;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .cm-scroller {
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            line-height: 1.6;
+        }
+
+        .cm-content {
+            padding: 16px 8px;
+        }
+
+        .cm-gutters {
+            padding: 0 4px;
+        }
+
+        /* 预览区滚动 */
+        .editor-preview-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+        }
+
+        /* hljs 主题切换 */
+        .hljs-theme-light { display: block; }
+        .hljs-theme-dark { display: none; }
+        
+        [data-theme="dark"] .hljs-theme-light { display: none; }
+        [data-theme="dark"] .hljs-theme-dark { display: block; }
+
+        /* 空状态在编辑模式下隐藏 */
+        .editor-active .preview-empty {
+            display: none !important;
+        }
     </style>
+
+    <!-- marked.js - Markdown 渲染 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+
+    <!-- highlight.js - 代码高亮 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" id="hljs-light">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/javascript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/css.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/html.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/json.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/bash.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/typescript.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/go.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/rust.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/java.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/cpp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/php.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/ruby.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/swift.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/languages/kotlin.min.js"></script>
+
+    <!-- CodeMirror 6 编辑器 - ES Module 初始化 -->
+    <script type="module">
+        window.EditorBridge = {
+            isReady: false,
+            _readyCallbacks: [],
+            
+            modules: {},
+            
+            onReady(callback) {
+                if (this.isReady) {
+                    callback();
+                } else {
+                    this._readyCallbacks.push(callback);
+                }
+            },
+            
+            _markReady() {
+                this.isReady = true;
+                this._readyCallbacks.forEach(cb => {
+                    try { cb(); } catch (e) { console.error('EditorBridge callback error:', e); }
+                });
+                this._readyCallbacks = [];
+            }
+        };
+
+        async function initCodeMirror() {
+            try {
+                const { EditorState, EditorView, basicSetup } = await import('https://esm.sh/codemirror@6.0.1');
+                const { markdown } = await import('https://esm.sh/@codemirror/lang-markdown@6.2.5');
+                const { oneDark } = await import('https://esm.sh/@codemirror/theme-one-dark@6.1.2');
+                const { oneLight } = await import('https://esm.sh/@codemirror/theme-one-light@6.1.2');
+                const { keymap, indentWithTab } = await import('https://esm.sh/@codemirror/commands@6.6.0');
+                const { EditorSelection } = await import('https://esm.sh/@codemirror/state@6.4.1');
+                const { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap as viewKeymap } = await import('https://esm.sh/@codemirror/view@6.28.0');
+                const { defaultKeymap, history, historyKeymap } = await import('https://esm.sh/@codemirror/commands@6.6.0');
+                const { bracketMatching } = await import('https://esm.sh/@codemirror/language@6.10.1');
+                const { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap } = await import('https://esm.sh/@codemirror/autocomplete@6.16.0');
+                const { lintKeymap } = await import('https://esm.sh/@codemirror/lint@6.8.0');
+
+                EditorBridge.modules = {
+                    EditorState, EditorView, basicSetup,
+                    markdown, oneDark, oneLight, keymap, indentWithTab,
+                    EditorSelection,
+                    lineNumbers, highlightActiveLineGutter, highlightSpecialChars,
+                    drawSelection, dropCursor, rectangularSelection, crosshairCursor,
+                    highlightActiveLine, viewKeymap,
+                    defaultKeymap, history, historyKeymap,
+                    bracketMatching,
+                    closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap,
+                    lintKeymap
+                };
+
+                EditorBridge._markReady();
+                console.log('[EditorBridge] CodeMirror 6 modules loaded');
+            } catch (e) {
+                console.error('[EditorBridge] Failed to load CodeMirror:', e);
+            }
+        }
+
+        initCodeMirror();
+    </script>
 </head>
 <body>
     <div class="custom-titlebar">
@@ -1931,6 +2135,8 @@
                             </svg>
                         </button>
                     </div>
+
+                    <!-- 只读预览内容（非 MD 文件使用） -->
                     <div class="preview-content" id="preview-content">
                         <div class="preview-empty" id="preview-empty">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -1940,6 +2146,34 @@
                             <div>选择文件以预览</div>
                         </div>
                     </div>
+
+                    <!-- 编辑模式内容（MD 文件使用） -->
+                    <div class="editor-container" id="editor-container" style="display: none;">
+                        <div class="editor-split-container">
+                            <!-- 左侧：编辑器 -->
+                            <div class="editor-pane" id="editor-pane-left" style="flex: 1;">
+                                <div class="editor-pane-header">
+                                    <span class="editor-pane-title">源码</span>
+                                    <span class="editor-save-status" id="editor-save-status"></span>
+                                </div>
+                                <div class="cm-editor-container" id="cm-editor-container"></div>
+                            </div>
+
+                            <!-- 中间分隔条 -->
+                            <div class="editor-inner-resizer" id="editor-inner-resizer"></div>
+
+                            <!-- 右侧：预览 -->
+                            <div class="editor-pane" id="editor-pane-right" style="flex: 1;">
+                                <div class="editor-pane-header">
+                                    <span class="editor-pane-title">预览</span>
+                                </div>
+                                <div class="editor-preview-scroll" id="editor-preview-scroll">
+                                    <div class="markdown-preview" id="editor-preview-content"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="preview-info" id="preview-info" style="display: none;">
                         <span id="preview-file-size"></span>
                         <span id="preview-file-type"></span>
@@ -2052,6 +2286,423 @@
     </div>
 
     <script>
+        // ========== Markdown Editor 全局状态 ==========
+        window.mdEditor = {
+            view: null,
+            filePath: null,
+            saveTimer: null,
+            isScrollSyncing: false,
+            originalContent: null,
+            isActive: false
+        };
+
+        // ========== marked.js 配置（带 highlight.js 代码高亮）==========
+        function initMarked() {
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({
+                    gfm: true,
+                    breaks: true,
+                    highlight: function(code, lang) {
+                        if (typeof hljs !== 'undefined') {
+                            try {
+                                if (lang && hljs.getLanguage(lang)) {
+                                    return hljs.highlight(code, { language: lang }).value;
+                                }
+                                return hljs.highlightAuto(code).value;
+                            } catch (e) {
+                                console.warn('[Marked] Highlight error:', e);
+                            }
+                        }
+                        return code;
+                    }
+                });
+            }
+        }
+
+        // ========== 获取当前主题（dark/light） ==========
+        function getEffectiveTheme() {
+            const html = document.documentElement;
+            const dataTheme = html.getAttribute('data-theme');
+            if (dataTheme === 'dark') return 'dark';
+            if (dataTheme === 'light') return 'light';
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            return prefersDark ? 'dark' : 'light';
+        }
+
+        // ========== 切换 highlight.js 主题 ==========
+        function updateHljsTheme() {
+            const isDark = getEffectiveTheme() === 'dark';
+            const lightLink = document.getElementById('hljs-light');
+            const darkLink = document.getElementById('hljs-dark');
+            if (lightLink) lightLink.disabled = isDark;
+            if (darkLink) darkLink.disabled = !isDark;
+        }
+
+        // ========== 更新保存状态显示 ==========
+        function updateSaveStatus(status, text) {
+            const statusEl = document.getElementById('editor-save-status');
+            if (!statusEl) return;
+            statusEl.className = 'editor-save-status ' + status;
+            statusEl.textContent = text || '';
+        }
+
+        // ========== 初始化 CodeMirror 6 编辑器 ==========
+        function initCodeMirrorEditor(content, filePath) {
+            if (!window.EditorBridge || !window.EditorBridge.isReady) {
+                console.warn('[Editor] EditorBridge not ready yet, waiting...');
+                window.EditorBridge.onReady(() => {
+                    initCodeMirrorEditor(content, filePath);
+                });
+                return;
+            }
+
+            const M = window.EditorBridge.modules;
+            const container = document.getElementById('cm-editor-container');
+            if (!container) {
+                console.error('[Editor] Editor container not found');
+                return;
+            }
+
+            container.innerHTML = '';
+
+            const isDark = getEffectiveTheme() === 'dark';
+            const theme = isDark ? M.oneDark : M.oneLight;
+
+            window.mdEditor.originalContent = content;
+            window.mdEditor.filePath = filePath;
+            window.mdEditor.isActive = true;
+
+            const updateListener = M.EditorView.updateListener.of((v) => {
+                if (v.docChanged) {
+                    const newContent = v.state.doc.toString();
+                    updateMarkdownPreview(newContent);
+                    scheduleAutoSave(newContent);
+                }
+            });
+
+            const scrollListener = M.EditorView.domEventHandlers({
+                scroll: (event, view) => {
+                    if (window.mdEditor.isScrollSyncing) return;
+                    syncScrollFromEditor(view);
+                }
+            });
+
+            const extensions = [
+                M.lineNumbers(),
+                M.highlightActiveLineGutter(),
+                M.highlightSpecialChars(),
+                M.history(),
+                M.drawSelection(),
+                M.dropCursor(),
+                M.rectangularSelection(),
+                M.crosshairCursor(),
+                M.highlightActiveLine(),
+                M.bracketMatching(),
+                M.closeBrackets(),
+                M.autocompletion(),
+                M.markdown(),
+                theme,
+                updateListener,
+                scrollListener,
+                M.keymap.of([
+                    M.indentWithTab,
+                    ...M.closeBracketsKeymap,
+                    ...M.defaultKeymap,
+                    ...M.historyKeymap,
+                    ...M.completionKeymap,
+                    ...M.lintKeymap
+                ])
+            ];
+
+            const state = M.EditorState.create({
+                doc: content,
+                extensions: extensions
+            });
+
+            window.mdEditor.view = new M.EditorView({
+                state: state,
+                parent: container
+            });
+
+            updateMarkdownPreview(content);
+            updateSaveStatus('saved', '已保存');
+            initPreviewScrollListener();
+
+            console.log('[Editor] CodeMirror initialized for:', filePath);
+        }
+
+        // ========== 销毁编辑器 ==========
+        function destroyCodeMirrorEditor() {
+            if (window.mdEditor.view) {
+                if (window.mdEditor.saveTimer) {
+                    clearTimeout(window.mdEditor.saveTimer);
+                    window.mdEditor.saveTimer = null;
+                }
+                performImmediateSave();
+                window.mdEditor.view.destroy();
+                window.mdEditor.view = null;
+            }
+            window.mdEditor.filePath = null;
+            window.mdEditor.originalContent = null;
+            window.mdEditor.isActive = false;
+            window.mdEditor.isScrollSyncing = false;
+        }
+
+        // ========== 更新编辑器主题 ==========
+        function updateEditorTheme() {
+            if (!window.mdEditor.view || !window.EditorBridge || !window.EditorBridge.isReady) return;
+
+            const M = window.EditorBridge.modules;
+            const isDark = getEffectiveTheme() === 'dark';
+            const theme = isDark ? M.oneDark : M.oneLight;
+
+            const currentState = window.mdEditor.view.state;
+            const config = currentState.config;
+
+            let themeIndex = -1;
+            for (let i = 0; i < config.length; i++) {
+                const ext = config[i];
+                if (ext && (ext === M.oneDark || ext === M.oneLight)) {
+                    themeIndex = i;
+                    break;
+                }
+            }
+
+            if (themeIndex >= 0) {
+                const effects = M.EditorView.reconfigure.of([
+                    M.lineNumbers(),
+                    M.highlightActiveLineGutter(),
+                    M.highlightSpecialChars(),
+                    M.history(),
+                    M.drawSelection(),
+                    M.dropCursor(),
+                    M.rectangularSelection(),
+                    M.crosshairCursor(),
+                    M.highlightActiveLine(),
+                    M.bracketMatching(),
+                    M.closeBrackets(),
+                    M.autocompletion(),
+                    M.markdown(),
+                    theme
+                ]);
+                window.mdEditor.view.dispatch({ effects });
+            }
+
+            updateHljsTheme();
+
+            const content = window.mdEditor.view.state.doc.toString();
+            updateMarkdownPreview(content);
+        }
+
+        // ========== 更新 Markdown 预览 ==========
+        function updateMarkdownPreview(content) {
+            const previewEl = document.getElementById('editor-preview-content');
+            if (!previewEl) return;
+
+            let html = '';
+            if (typeof marked !== 'undefined') {
+                try {
+                    html = marked.parse(content);
+                } catch (e) {
+                    console.error('[Marked] Parse error:', e);
+                    html = '<pre>' + escapeHtml(content) + '</pre>';
+                }
+            } else {
+                html = renderMarkdown(content);
+            }
+
+            previewEl.innerHTML = html;
+        }
+
+        // ========== 滚动同步 - 编辑器到预览 ==========
+        function syncScrollFromEditor(view) {
+            const previewScroll = document.getElementById('editor-preview-scroll');
+            if (!previewScroll) return;
+
+            window.mdEditor.isScrollSyncing = true;
+
+            const cmScroller = view.scrollDOM;
+            const scrollRatio = cmScroller.scrollTop / (cmScroller.scrollHeight - cmScroller.clientHeight || 1);
+            const previewMaxScroll = previewScroll.scrollHeight - previewScroll.clientHeight;
+            previewScroll.scrollTop = scrollRatio * Math.max(0, previewMaxScroll);
+
+            setTimeout(() => {
+                window.mdEditor.isScrollSyncing = false;
+            }, 50);
+        }
+
+        // ========== 滚动同步 - 预览到编辑器 ==========
+        function initPreviewScrollListener() {
+            const previewScroll = document.getElementById('editor-preview-scroll');
+            if (!previewScroll) return;
+
+            previewScroll.removeEventListener('scroll', onPreviewScroll);
+            previewScroll.addEventListener('scroll', onPreviewScroll);
+        }
+
+        function onPreviewScroll(e) {
+            if (window.mdEditor.isScrollSyncing || !window.mdEditor.view) return;
+
+            window.mdEditor.isScrollSyncing = true;
+
+            const previewScroll = e.target;
+            const scrollRatio = previewScroll.scrollTop / (previewScroll.scrollHeight - previewScroll.clientHeight || 1);
+
+            const view = window.mdEditor.view;
+            const cmScroller = view.scrollDOM;
+            const maxScroll = cmScroller.scrollHeight - cmScroller.clientHeight;
+            cmScroller.scrollTop = scrollRatio * Math.max(0, maxScroll);
+
+            setTimeout(() => {
+                window.mdEditor.isScrollSyncing = false;
+            }, 50);
+        }
+
+        // ========== 自动保存（防抖）==========
+        function scheduleAutoSave(content) {
+            if (!window.mdEditor.filePath) return;
+
+            if (window.mdEditor.saveTimer) {
+                clearTimeout(window.mdEditor.saveTimer);
+            }
+
+            updateSaveStatus('saving', '保存中...');
+
+            window.mdEditor.saveTimer = setTimeout(() => {
+                performSave(content);
+            }, 800);
+        }
+
+        async function performSave(content) {
+            if (!window.mdEditor.filePath || !window.pywebview) {
+                updateSaveStatus('saved', '已保存');
+                return;
+            }
+
+            try {
+                const result = await window.pywebview.api.save_file_content(
+                    window.mdEditor.filePath,
+                    content
+                );
+                if (result.success) {
+                    updateSaveStatus('saved', '已保存');
+                } else {
+                    updateSaveStatus('error', '保存失败');
+                    console.error('[Editor] Save failed:', result.error);
+                }
+            } catch (e) {
+                updateSaveStatus('error', '保存失败');
+                console.error('[Editor] Save error:', e);
+            }
+        }
+
+        function performImmediateSave() {
+            if (!window.mdEditor.view || !window.mdEditor.filePath) return;
+            const content = window.mdEditor.view.state.doc.toString();
+            if (window.mdEditor.saveTimer) {
+                clearTimeout(window.mdEditor.saveTimer);
+                window.mdEditor.saveTimer = null;
+            }
+            performSave(content);
+        }
+
+        // ========== 进入/退出编辑模式 ==========
+        function enterEditMode() {
+            const previewContent = document.getElementById('preview-content');
+            const editorContainer = document.getElementById('editor-container');
+            const previewPanel = document.getElementById('preview-panel');
+
+            if (previewContent) previewContent.style.display = 'none';
+            if (editorContainer) editorContainer.style.display = 'flex';
+            if (previewPanel) previewPanel.classList.add('editor-active');
+
+            initEditorInnerResizer();
+            updateHljsTheme();
+        }
+
+        function exitEditMode() {
+            const previewContent = document.getElementById('preview-content');
+            const editorContainer = document.getElementById('editor-container');
+            const previewPanel = document.getElementById('preview-panel');
+
+            destroyCodeMirrorEditor();
+
+            if (previewContent) previewContent.style.display = 'block';
+            if (editorContainer) editorContainer.style.display = 'none';
+            if (previewPanel) previewPanel.classList.remove('editor-active');
+        }
+
+        // ========== 编辑器内部分隔条拖动 ==========
+        function initEditorInnerResizer() {
+            const resizer = document.getElementById('editor-inner-resizer');
+            const leftPane = document.getElementById('editor-pane-left');
+            const rightPane = document.getElementById('editor-pane-right');
+
+            if (!resizer || !leftPane || !rightPane) {
+                console.log('[DEBUG] initEditorInnerResizer: elements not found');
+                return;
+            }
+
+            let isResizing = false;
+            let startX = 0;
+            let leftStartFlex = 1;
+            let rightStartFlex = 1;
+
+            const savedLeftFlex = localStorage.getItem('editor-left-flex');
+            const savedRightFlex = localStorage.getItem('editor-right-flex');
+            if (savedLeftFlex && savedRightFlex) {
+                leftPane.style.flex = savedLeftFlex;
+                rightPane.style.flex = savedRightFlex;
+            }
+
+            resizer.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                resizer.classList.add('resizing');
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                startX = e.clientX;
+                const leftStyle = window.getComputedStyle(leftPane);
+                const rightStyle = window.getComputedStyle(rightPane);
+                leftStartFlex = parseFloat(leftStyle.flexGrow) || 1;
+                rightStartFlex = parseFloat(rightStyle.flexGrow) || 1;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                const dx = e.clientX - startX;
+                const totalFlex = leftStartFlex + rightStartFlex;
+                const containerWidth = leftPane.parentElement.clientWidth;
+                const flexPerPixel = totalFlex / containerWidth;
+                const flexDelta = dx * flexPerPixel;
+                let newLeftFlex = leftStartFlex + flexDelta;
+                let newRightFlex = rightStartFlex - flexDelta;
+                const minFlex = 0.3;
+                if (newLeftFlex < minFlex) {
+                    newLeftFlex = minFlex;
+                    newRightFlex = totalFlex - minFlex;
+                }
+                if (newRightFlex < minFlex) {
+                    newRightFlex = minFlex;
+                    newLeftFlex = totalFlex - minFlex;
+                }
+                leftPane.style.flex = newLeftFlex;
+                rightPane.style.flex = newRightFlex;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (!isResizing) return;
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                const leftStyle = window.getComputedStyle(leftPane);
+                const rightStyle = window.getComputedStyle(rightPane);
+                localStorage.setItem('editor-left-flex', leftStyle.flexGrow);
+                localStorage.setItem('editor-right-flex', rightStyle.flexGrow);
+            });
+        }
+
         function minimizeWindow() {
             if (window.pywebview) {
                 pywebview.api.minimize_window();
@@ -2164,6 +2815,8 @@
             if (window.pywebview) {
                 window.pywebview.api.save_theme_preference(theme);
             }
+
+            updateEditorTheme();
         }
 
         function applySystemTheme() {
@@ -2175,6 +2828,8 @@
             } else {
                 html.removeAttribute('data-theme');
             }
+
+            updateEditorTheme();
         }
 
         function initSystemThemeListener() {
@@ -2213,6 +2868,8 @@
                     darkIcon.style.display = 'none';
                 }
             }
+
+            updateEditorTheme();
         }
 
         function restoreSidebarWidth() {
@@ -2997,6 +3654,8 @@
             const info = document.getElementById('preview-info');
             const fileNameEl = document.getElementById('preview-file-name');
 
+            exitEditMode();
+
             if (panel) {
                 panel.style.display = 'none';
             }
@@ -3203,14 +3862,19 @@
                     const info = document.getElementById('preview-info');
 
                     if (result.type === 'markdown') {
-                        content.innerHTML = `<div class="markdown-preview">${renderMarkdown(result.content)}</div>`;
+                        exitEditMode();
+                        enterEditMode();
+                        initCodeMirrorEditor(result.content, path);
                     } else if (result.type === 'text') {
+                        exitEditMode();
                         content.innerHTML = renderTextPreview(result.content);
                     } else if (result.type === 'pdf') {
+                        exitEditMode();
                         totalPdfPages = result.total_pages || 0;
                         currentPdfPage = 1;
                         renderPdfPage(1);
                     } else if (result.type === 'word') {
+                        exitEditMode();
                         content.innerHTML = renderWordPreview(result);
                     }
 
@@ -3242,6 +3906,7 @@
 
         document.addEventListener('DOMContentLoaded', async function() {
             initSystemThemeListener();
+            initMarked();
 
             async function initApp() {
                 if (!window.pywebview) return;

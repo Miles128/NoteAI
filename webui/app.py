@@ -676,6 +676,45 @@ class Api:
             "使用Webview + HTML/CSS/JS开发"
         )
 
+    def save_file_content(self, path, content):
+        """保存文件内容（用于编辑器自动保存）
+        
+        Args:
+            path: 文件路径（相对于 workspace 或绝对路径）
+            content: 要保存的文本内容
+            
+        Returns:
+            包含 success、message 的字典
+        """
+        try:
+            workspace_path = config.workspace_path
+            
+            if workspace_path and not Path(path).is_absolute():
+                full_path = Path(workspace_path) / path
+            else:
+                full_path = Path(path)
+            
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            logger.info(f"文件已保存: {full_path}")
+            
+            return {
+                'success': True,
+                'message': f'已保存: {full_path.name}'
+            }
+            
+        except Exception as e:
+            logger.error(f"保存文件失败 {path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
 
 def try_restore_workspace_config():
     """尝试从系统目录恢复工作区配置（不操作窗口）

@@ -8,9 +8,8 @@ NoteAI - AI驱动的Markdown笔记知识库管理桌面应用
 2. 多格式文件转换（PDF、PPT、DOCX、TXT）
 3. LLM驱动的笔记主题整合
 
-前端框架支持：
-- PySide6 (优先): 使用 QtWebEngine，功能完整
-- pywebview (备选): 使用系统 WebView，轻量
+前端框架：
+- PySide6 + QtWebEngine
 """
 
 import sys
@@ -19,25 +18,8 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-PYSIDE6_AVAILABLE = False
-PYWEBVIEW_AVAILABLE = False
 
-try:
-    from PySide6.QtWidgets import QApplication
-    PYSIDE6_AVAILABLE = True
-    print("[INFO] PySide6 is available")
-except ImportError:
-    print("[INFO] PySide6 not available")
-
-try:
-    import webview
-    PYWEBVIEW_AVAILABLE = True
-    print("[INFO] pywebview is available")
-except ImportError:
-    print("[INFO] pywebview not available")
-
-
-def check_dependencies(use_pyside6=True):
+def check_dependencies():
     """检查依赖项"""
     dependencies = [
         ("langchain", "langchain"),
@@ -54,10 +36,8 @@ def check_dependencies(use_pyside6=True):
         ("pydantic", "pydantic"),
         ("tiktoken", "tiktoken"),
         ("markdownify", "markdownify"),
+        ("PySide6.QtWidgets", "PySide6"),
     ]
-
-    if not use_pyside6:
-        dependencies.append(("webview", "pywebview"))
 
     missing = []
     for module_name, package_name in dependencies:
@@ -74,47 +54,14 @@ def check_dependencies(use_pyside6=True):
     return True
 
 
-def main_pyside6():
-    """使用 PySide6 启动应用"""
-    if not PYSIDE6_AVAILABLE:
-        print("[ERROR] PySide6 is not installed")
-        print("请安装: uv pip install PySide6")
-        return False
-
-    from webui.app_pyside6 import main as pyside6_main
-    print("[INFO] Starting application with PySide6...")
-    pyside6_main()
-    return True
-
-
-def main_pywebview():
-    """使用 pywebview 启动应用"""
-    if not PYWEBVIEW_AVAILABLE:
-        print("[ERROR] pywebview is not installed")
-        print("请安装: uv pip install pywebview")
-        return False
-
-    from webui.app import main as webview_main
-    print("[INFO] Starting application with pywebview...")
-    webview_main()
-    return True
-
-
 def main():
-    """主函数 - 自动选择前端框架"""
-    use_pyside6 = PYSIDE6_AVAILABLE
-
-    if not check_dependencies(use_pyside6=use_pyside6):
+    """主函数"""
+    if not check_dependencies():
         input("按Enter键退出...")
         return
 
-    if use_pyside6:
-        success = main_pyside6()
-        if not success and PYWEBVIEW_AVAILABLE:
-            print("\n[INFO] Falling back to pywebview...")
-            main_pywebview()
-    else:
-        main_pywebview()
+    from webui.app import main as app_main
+    app_main()
 
 
 if __name__ == "__main__":

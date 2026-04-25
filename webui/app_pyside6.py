@@ -1019,14 +1019,7 @@ def _start_http_server_with_api(directory, api):
 
     port = find_free_port()
 
-    class HandlerFactory:
-        def __init__(self, api_instance):
-            self.api = api_instance
-
-        def __call__(self, *args, **kwargs):
-            return APIRequestHandler(*args, api=self.api, **kwargs)
-
-    server = HTTPServer(('localhost', port), HandlerFactory(api))
+    server = HTTPServer(('localhost', port), APIRequestHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"[INFO] HTTP server with API started on http://localhost:{port}")

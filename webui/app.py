@@ -45,33 +45,24 @@ class JSBridge(QObject):
     """线程安全的 JavaScript 桥接
     
     确保所有 JS 执行都在主线程中进行。
+    注意：必须在主线程中创建此对象（在 MainWindow._setup_ui() 中创建）。
     """
-    execute_js = Signal(str, object)  # js_code, web_view
+    execute_js = Signal(str)  # 只传递 js_code 字符串
 
-    def __init__(self):
+    def __init__(self, web_view):
         super().__init__()
+        self._web_view = web_view
         self.execute_js.connect(self._do_execute_js)
 
-    @Slot(str, object)
-    def _do_execute_js(self, js_code, web_view):
+    @Slot(str)
+    def _do_execute_js(self, js_code):
         """在主线程中执行 JavaScript"""
-        if web_view and web_view.page():
-            web_view.page().runJavaScript(js_code)
+        if self._web_view and self._web_view.page():
+            self._web_view.page().runJavaScript(js_code)
 
-    def run_js(self, js_code, web_view):
+    def run_js(self, js_code):
         """从任何线程调用，自动切换到主线程执行"""
-        self.execute_js.emit(str(js_code), web_view)
-
-
-_js_bridge = None
-
-
-def get_js_bridge():
-    """获取全局 JS 桥接实例"""
-    global _js_bridge
-    if _js_bridge is None:
-        _js_bridge = JSBridge()
-    return _js_bridge
+        self.execute_js.emit(str(js_code))
 
 
 class Api:
@@ -708,6 +699,7 @@ class MainWindow(QMainWindow):
         self._normal_geometry = None
         self._web_view = None
         self._api = None
+        self._js_bridge = None  # JSBridge 实例（在主线程创建）
 
         self._setup_ui()
 
@@ -726,6 +718,10 @@ class MainWindow(QMainWindow):
         layout.setSpacing(0)
 
         self._web_view = QWebEngineView()
+        
+        # 在主线程中创建 JSBridge（确保线程亲和性正确）
+        self._js_bridge = JSBridge(self._web_view)
+        
         layout.addWidget(self._web_view)
 
         self._setup_shortcuts()
@@ -757,8 +753,8 @@ class MainWindow(QMainWindow):
         
         可以从任何线程调用，自动切换到主线程执行。
         """
-        bridge = get_js_bridge()
-        bridge.run_js(js_code, self._web_view)
+        if self._js_bridge:
+            self._js_bridge.run_js(js_code)
 
     def set_title(self, title):
         """设置窗口标题"""

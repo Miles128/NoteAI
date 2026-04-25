@@ -1889,7 +1889,7 @@
                 const { oneLight } = await import('https://esm.sh/@codemirror/theme-one-light@6.1.2');
                 const { keymap, indentWithTab } = await import('https://esm.sh/@codemirror/commands@6.6.0');
                 const { EditorSelection } = await import('https://esm.sh/@codemirror/state@6.4.1');
-                const { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap as viewKeymap } = await import('https://esm.sh/@codemirror/view@6.28.0');
+                const { lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap as viewKeymap, editable } = await import('https://esm.sh/@codemirror/view@6.28.0');
                 const { defaultKeymap, history, historyKeymap } = await import('https://esm.sh/@codemirror/commands@6.6.0');
                 const { bracketMatching } = await import('https://esm.sh/@codemirror/language@6.10.1');
                 const { closeBrackets, autocompletion, closeBracketsKeymap, completionKeymap } = await import('https://esm.sh/@codemirror/autocomplete@6.16.0');
@@ -1898,7 +1898,7 @@
                 EditorBridge.modules = {
                     EditorState, EditorView, basicSetup,
                     markdown, oneDark, oneLight, keymap, indentWithTab,
-                    EditorSelection,
+                    EditorSelection, editable,
                     lineNumbers, highlightActiveLineGutter, highlightSpecialChars,
                     drawSelection, dropCursor, rectangularSelection, crosshairCursor,
                     highlightActiveLine, viewKeymap,
@@ -2402,6 +2402,7 @@
             });
 
             const extensions = [
+                M.editable,
                 M.lineNumbers(),
                 M.highlightActiveLineGutter(),
                 M.highlightSpecialChars(),

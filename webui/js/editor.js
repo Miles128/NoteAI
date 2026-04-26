@@ -480,27 +480,9 @@ function initEditorInnerResizer() {
     });
 }
 
-function minimizeWindow() {
-    if (window.pywebview) {
-        pywebview.api.minimize_window();
-    }
-}
-
-function maximizeWindow() {
-    if (window.pywebview) {
-        pywebview.api.maximize_window();
-    }
-}
-
-function closeWindow() {
-    if (window.pywebview) {
-        pywebview.api.close_window();
-    }
-}
-
 function initWindowDrag() {
     const titlebar = document.querySelector('.titlebar-drag');
-    if (!titlebar || !window.pywebview) return;
+    if (!titlebar || !window.api) return;
 
     let isDragging = false;
     let dragStartX = 0;
@@ -511,7 +493,7 @@ function initWindowDrag() {
 
     function flushMove() {
         if (accumDx !== 0 || accumDy !== 0) {
-            window.pywebview.api.move_window(accumDx, accumDy);
+            window.api.move_window(accumDx, accumDy);
             accumDx = 0;
             accumDy = 0;
         }
@@ -547,7 +529,7 @@ function initWindowDrag() {
             rafId = null;
         }
         if (accumDx !== 0 || accumDy !== 0) {
-            window.pywebview.api.move_window(accumDx, accumDy);
+            window.api.move_window(accumDx, accumDy);
             accumDx = 0;
             accumDy = 0;
         }
@@ -577,8 +559,5 @@ window.EditorModule = {
     exitEditMode,
     toggleEditMode,
     initEditorInnerResizer,
-    minimizeWindow,
-    maximizeWindow,
-    closeWindow,
     initWindowDrag
 };

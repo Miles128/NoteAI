@@ -194,8 +194,48 @@
         closeWindow,
         updateStatus,
         updateProgress,
-        showMessage
+        showMessage,
+
+        open_workspace: openWorkspace,
+        get_workspace_status: getWorkspaceStatus,
+        get_workspace_tree: getWorkspaceTree,
+        get_api_config: getApiConfig,
+        save_api_config: saveApiConfig,
+        get_ui_config: getUiConfig,
+        save_ui_config: saveUiConfig,
+        get_theme_preference: getThemePreference,
+        save_theme_preference: saveThemePreference,
+        add_files: addFiles,
+        browse_folder: browseFolder,
+        start_web_download: startWebDownload,
+        start_file_conversion: startFileConversion,
+        extract_topics: extractTopics,
+        start_note_integration: startNoteIntegration,
+        refresh_log: refreshLog,
+        on_file_selected: onFileSelected,
+        get_file_preview: getFilePreview,
+        can_preview_file: canPreviewFile,
+        save_file_content: saveFileContent,
+        read_note_file: getFilePreview,
+        save_note_file: saveFileContent,
+
+        move_window: moveWindow,
+        minimize_window: minimizeWindow,
+        maximize_window: maximizeWindow,
+        close_window: closeWindow,
+        update_status: updateStatus,
+        update_progress: updateProgress,
+        show_message: showMessage
     };
+
+    window.openWorkspace = openWorkspace;
+    window.minimizeWindow = minimizeWindow;
+    window.maximizeWindow = maximizeWindow;
+    window.closeWindow = closeWindow;
+    window.moveWindow = moveWindow;
+    window.updateStatus = updateStatus;
+    window.updateProgress = updateProgress;
+    window.showMessage = showMessage;
 
     window.pywebview = {
         api: {

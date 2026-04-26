@@ -39,4 +39,8 @@
         formatFileSizeForTree,
         formatModifiedTime
     };
+
+    window.escapeHtml = escapeHtml;
+    window.formatFileSize = formatFileSize;
+    window.formatModifiedTime = formatModifiedTime;
 })();

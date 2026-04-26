@@ -40,6 +40,8 @@
         showPreviewView
     };
 
+    window.TabsModule = window.tabs;
+
     window.switchTab = switchTab;
     window.showContentView = showContentView;
     window.showPreviewView = showPreviewView;

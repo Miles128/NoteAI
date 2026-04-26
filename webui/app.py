@@ -21,7 +21,7 @@ from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
 from modules.topic_extractor import TopicExtractor
 from modules.file_preview import FilePreviewer
-from utils.tag_extractor import tag_markdown_files
+from utils.tag_extractor import tag_files_by_filename
 
 
 class Api:
@@ -183,9 +183,17 @@ class Api:
             return {"success": False, "message": str(e), "workspace_path": "", "notes_folder": "", "organized_folder": ""}
 
     def get_api_config(self):
-        """获取 API 配置"""
+        """获取 API 配置（API Key 脱敏处理）"""
+        masked_key = ""
+        if config.api_key:
+            key = config.api_key.strip()
+            if len(key) > 8:
+                masked_key = key[:4] + "****" + key[-4:]
+            else:
+                masked_key = "****"
         return {
-            "api_key": config.api_key,
+            "api_key": masked_key,
+            "api_key_configured": bool(config.api_key and config.api_key.strip()),
             "api_base": config.api_base,
             "model_name": config.model_name,
             "temperature": config.temperature,
@@ -253,7 +261,7 @@ class Api:
         """后台为新建的 Markdown 文件打标签"""
         def bg_task():
             try:
-                tagged = tag_markdown_files(file_paths)
+                tagged = tag_files_by_filename(file_paths)
                 logger.info(f"标签提取完成: {len(tagged)} 个文件")
             except Exception as e:
                 logger.warning(f"标签提取失败: {e}")
@@ -512,6 +520,12 @@ class Api:
         api_key = config_data.get("api_key", "")
         api_base = config_data.get("api_base", "https://api.openai.com/v1")
         model_name = config_data.get("model_name", "gpt-4")
+
+        if "****" in api_key:
+            api_key = config.api_key
+
+        if not api_key or not api_key.strip():
+            return {"success": False, "message": "API Key 不能为空"}
 
         connected, conn_msg = test_api_connection(api_key, api_base, model_name)
         if not connected:

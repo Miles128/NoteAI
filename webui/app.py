@@ -33,14 +33,6 @@ from modules.file_preview import FilePreviewer
 from utils.tag_extractor import tag_files_by_filename
 
 
-class FileDialog:
-    """pywebview 兼容的文件对话框类型"""
-    OPEN_FILE = 0
-    OPEN_FILES = 1
-    FOLDER = 2
-    SAVE_FILE = 3
-
-
 class JSBridge(QObject):
     """线程安全的 JavaScript 桥接
     
@@ -89,10 +81,7 @@ class Api:
 
     def maximize_window(self):
         if self.window:
-            if self.window.attributes['fullscreen']:
-                self.window.set_fullscreen(False)
-            else:
-                self.window.set_fullscreen(True)
+            self.window._toggle_maximize()
 
     def close_window(self):
         if self.window:
@@ -155,7 +144,7 @@ class Api:
     def open_workspace(self):
         try:
             result = self.window.create_file_dialog(
-                FileDialog.FOLDER,
+                'folder',
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -219,7 +208,7 @@ class Api:
     def browse_folder(self):
         try:
             result = self.window.create_file_dialog(
-                FileDialog.FOLDER,
+                'folder',
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -238,7 +227,7 @@ class Api:
     def add_files(self):
         try:
             result = self.window.create_file_dialog(
-                FileDialog.OPEN_FILES,
+                'open_files',
                 directory=str(Path.home()),
                 allow_multiple=True,
                 file_types=[
@@ -786,15 +775,6 @@ class MainWindow(QMainWindow):
         geo.moveTo(int(x), int(y))
         self.setGeometry(geo)
 
-    @property
-    def attributes(self):
-        return {'fullscreen': self._is_maximized}
-
-    def set_fullscreen(self, fullscreen):
-        """设置全屏"""
-        if fullscreen != self._is_maximized:
-            self._toggle_maximize()
-
     def _toggle_maximize(self):
         """切换最大化/还原"""
         if self._is_maximized:
@@ -815,30 +795,30 @@ class MainWindow(QMainWindow):
 
     def create_file_dialog(self, dialog_type, directory=None, allow_multiple=False, file_types=None):
         """
-        pywebview 兼容的文件对话框
+        文件对话框
 
         dialog_type:
-        - 'folder' / FileDialog.FOLDER: 文件夹选择
-        - 'open_file' / FileDialog.OPEN_FILE: 单个文件
-        - 'open_files' / FileDialog.OPEN_FILES: 多个文件
+        - 'folder': 文件夹选择
+        - 'open_file': 单个文件
+        - 'open_files': 多个文件
         """
         if directory is None:
             directory = str(Path.home())
 
-        if dialog_type in ('folder', 2, FileDialog.FOLDER):
+        if dialog_type == 'folder':
             folder = QFileDialog.getExistingDirectory(self, "选择文件夹", directory)
             if folder:
                 return [folder] if allow_multiple else folder
             return None
 
-        elif dialog_type in ('open_file', 0, FileDialog.OPEN_FILE):
+        elif dialog_type == 'open_file':
             file_filter = self._build_file_filter(file_types)
             file_path, _ = QFileDialog.getOpenFileName(self, "选择文件", directory, file_filter)
             if file_path:
                 return [file_path] if allow_multiple else file_path
             return None
 
-        elif dialog_type in ('open_files', 1, FileDialog.OPEN_FILES):
+        elif dialog_type == 'open_files':
             file_filter = self._build_file_filter(file_types)
             files, _ = QFileDialog.getOpenFileNames(self, "选择文件", directory, file_filter)
             return files if files else None

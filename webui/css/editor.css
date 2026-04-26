@@ -1,0 +1,186 @@
+.editor-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.editor-split-container {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.editor-pane {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+.editor-pane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom: 0.5px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+[data-theme="dark"] .editor-pane-header {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.editor-pane-title {
+    font-weight: 500;
+}
+
+.editor-save-status {
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+.editor-save-status.saving {
+    color: var(--primary);
+}
+
+.editor-save-status.saved {
+    color: var(--success);
+}
+
+.editor-save-status.error {
+    color: var(--error);
+}
+
+.editor-inner-resizer {
+    width: 4px;
+    cursor: col-resize;
+    background: var(--border);
+    transition: background 0.2s;
+    flex-shrink: 0;
+    -webkit-app-region: no-drag;
+}
+
+.editor-inner-resizer:hover {
+    background: var(--primary);
+}
+
+.editor-inner-resizer.resizing {
+    background: var(--primary);
+}
+
+.cm-editor-container {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+.cm-editor {
+    height: 100%;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.cm-scroller {
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    line-height: 1.6;
+}
+
+.cm-content {
+    padding: 16px 8px;
+}
+
+.cm-gutters {
+    padding: 0 4px;
+}
+
+.editor-preview-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+}
+
+.hljs-theme-light { display: block; }
+.hljs-theme-dark { display: none; }
+
+[data-theme="dark"] .hljs-theme-light { display: none; }
+[data-theme="dark"] .hljs-theme-dark { display: block; }
+
+.editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.editor-toolbar-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+}
+
+.editor-toolbar-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.editor-toolbar-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+}
+
+.editor-toolbar-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.editor-toolbar-separator {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+.editor-mode-switch {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.editor-mode-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+}
+
+.editor-mode-btn:hover {
+    background: var(--surface-hover);
+}
+
+.editor-mode-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+}

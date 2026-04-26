@@ -6,12 +6,10 @@ from dataclasses import dataclass, field, fields
 from typing import Optional, Dict, Any, Tuple
 import json
 import shutil
-from pydantic import BaseModel, Field, validator
 
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
-# 项目配置文件路径
-PROJECT_CONFIG_PATH = str(Path(__file__).parent / "config.json")
+LEGACY_CONFIG_PATH = str(Path(__file__).parent / "config.json")
 
 
 def get_system_app_data_dir() -> Path:
@@ -41,6 +39,7 @@ def get_system_app_data_dir() -> Path:
 
 # 系统级工作区配置文件路径
 SYSTEM_APP_DATA_DIR = get_system_app_data_dir()
+SYSTEM_APP_CONFIG_FILE = SYSTEM_APP_DATA_DIR / "config.json"
 WORKSPACE_STATE_FILE = SYSTEM_APP_DATA_DIR / "workspace_state.json"
 API_CONFIG_FILE = SYSTEM_APP_DATA_DIR / "api_config.json"
 
@@ -351,7 +350,7 @@ class AppConfig:
     auto_topic: bool = True
     topic_list: str = ""
     
-    def __post_init__(self):
+    def ensure_dirs(self):
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
 
     def is_workspace_set(self) -> bool:
@@ -469,10 +468,47 @@ class AppConfig:
         return default
 
     @classmethod
+    def _migrate_legacy_config(cls):
+        """将项目目录下的旧 config.json 迁移到系统目录"""
+        legacy_path = Path(LEGACY_CONFIG_PATH)
+        if not legacy_path.exists():
+            return
+
+        try:
+            with open(legacy_path, 'r', encoding='utf-8') as f:
+                legacy_data = json.load(f)
+        except Exception:
+            return
+
+        SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        existing_data = {}
+        if SYSTEM_APP_CONFIG_FILE.exists():
+            try:
+                with open(SYSTEM_APP_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+            except Exception:
+                pass
+
+        for key, value in legacy_data.items():
+            if key not in existing_data:
+                existing_data[key] = value
+
+        try:
+            with open(SYSTEM_APP_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(existing_data, f, ensure_ascii=False, indent=2)
+            legacy_path.unlink()
+            print(f"[INFO] 已将旧配置迁移到系统目录: {SYSTEM_APP_CONFIG_FILE}")
+        except Exception as e:
+            print(f"[WARNING] 迁移旧配置失败: {e}")
+
+    @classmethod
     def load_from_file(cls, config_path: str = None) -> 'AppConfig':
         """从文件加载配置，环境变量优先"""
+        cls._migrate_legacy_config()
+
         if config_path is None:
-            config_path = PROJECT_CONFIG_PATH
+            config_path = str(SYSTEM_APP_CONFIG_FILE)
 
         file_data = {}
         if os.path.exists(config_path):
@@ -501,7 +537,6 @@ class AppConfig:
             'temperature': ('NOTEAI_TEMPERATURE', api_data.get('temperature', file_data.get('temperature', 0.7))),
             'max_tokens': ('NOTEAI_MAX_TOKENS', api_data.get('max_tokens', file_data.get('max_tokens', 32000))),
             'max_context_tokens': ('NOTEAI_MAX_CONTEXT', api_data.get('max_context_tokens', file_data.get('max_context_tokens', 128000))),
-            'workspace_path': ('NOTEAI_WORKSPACE_PATH', file_data.get('workspace_path', '')),
         }
 
         init_kwargs = {}
@@ -518,6 +553,10 @@ class AppConfig:
             else:
                 init_kwargs[key] = config_default
 
+        ws_path, _ = workspace_manager.load_workspace()
+        env_ws_path = os.environ.get('NOTEAI_WORKSPACE_PATH')
+        init_kwargs['workspace_path'] = env_ws_path if env_ws_path else (ws_path or '')
+
         for key, value in file_data.items():
             if key not in init_kwargs or init_kwargs[key] == '':
                 init_kwargs[key] = value
@@ -528,24 +567,18 @@ class AppConfig:
         return cls(**init_kwargs)
     
     def save_to_file(self, config_path: str = None):
-        """保存配置到文件，API相关配置仅保存到系统目录"""
+        """保存配置到系统目录"""
+        self.ensure_dirs()
         if config_path is None:
-            config_path = PROJECT_CONFIG_PATH
-
-        os.environ['NOTEAI_WORKSPACE_PATH'] = self.workspace_path
-        os.environ['NOTEAI_API_KEY'] = self.api_key
-        os.environ['NOTEAI_API_BASE'] = self.api_base
-        os.environ['NOTEAI_MODEL_NAME'] = self.model_name
-        os.environ['NOTEAI_TEMPERATURE'] = str(self.temperature)
-        os.environ['NOTEAI_MAX_TOKENS'] = str(self.max_tokens)
-        os.environ['NOTEAI_MAX_CONTEXT'] = str(self.max_context_tokens)
+            config_path = str(SYSTEM_APP_CONFIG_FILE)
 
         api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens'}
+        runtime_fields = api_fields | {'workspace_path'}
 
         try:
-            Path(config_path).parent.mkdir(parents=True, exist_ok=True)
+            SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields}
+            non_api_config = {k: v for k, v in self.__dict__.items() if k not in runtime_fields}
 
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)
@@ -582,3 +615,4 @@ class AppConfig:
 
 # 全局配置实例
 config = AppConfig.load_from_file()
+config.ensure_dirs()

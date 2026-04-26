@@ -8,7 +8,8 @@ from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, extract_title_from_markdown,
-    check_api_config, APIConfigError, NetworkError, is_network_error
+    check_api_config, APIConfigError, NetworkError, is_network_error,
+    call_llm
 )
 from utils.tag_extractor import process_and_tag_file_with_yaml
 from prompts.note_integration import TOPIC_NOTE_GENERATION_PROMPT, DOC_TOPIC_MAPPING_PROMPT
@@ -198,9 +199,6 @@ class NoteIntegration:
         Returns:
             {主题名称: [文档索引, ...], ...}
         """
-        from langchain_openai import ChatOpenAI
-        from langchain_core.prompts import PromptTemplate
-
         topic_doc_mapping = {t: [] for t in topics}
 
         docs_info = '\n'.join([
@@ -210,29 +208,16 @@ class NoteIntegration:
 
         topics_text = '\n'.join([f"{i+1}. {t}" for i, t in enumerate(topics)])
 
-        mapping_prompt = DOC_TOPIC_MAPPING_PROMPT
-
-        prompt = PromptTemplate(
-            template=mapping_prompt,
-            input_variables=["topics", "docs_info"]
-        )
-        llm = ChatOpenAI(
-            api_key=config.api_key,
-            base_url=config.api_base,
-            model=config.model_name,
-            temperature=0.3,
-            max_tokens=config.max_tokens
-        )
-        chain = prompt | llm
-
         try:
             if self.progress_callback:
                 self.progress_callback(1, 1, "大模型思考中 - 分配文件到主题", -1)
-            response = chain.invoke({
-                "topics": topics_text,
-                "docs_info": docs_info
-            })
-            result = json.loads(response.content)
+            response_text = call_llm(
+                DOC_TOPIC_MAPPING_PROMPT,
+                temperature=0.3,
+                topics=topics_text,
+                docs_info=docs_info
+            )
+            result = json.loads(response_text)
             mapping = result.get('mapping', {})
 
             for topic_name, doc_indices in mapping.items():
@@ -448,31 +433,17 @@ class NoteIntegration:
         Returns:
             生成的主题笔记内容
         """
-        from langchain_openai import ChatOpenAI
-        from langchain_core.prompts import PromptTemplate
-
-        prompt = PromptTemplate(
-            template=TOPIC_NOTE_GENERATION_PROMPT,
-            input_variables=["topic_name", "content", "target_word_count"]
-        )
-        llm = ChatOpenAI(
-            api_key=config.api_key,
-            base_url=config.api_base,
-            model=config.model_name,
-            temperature=0.4,
-            max_tokens=config.max_tokens
-        )
-        chain = prompt | llm
-
         try:
             if self.progress_callback:
                 self.progress_callback(1, 1, f"大模型思考中 - 生成主题「{topic_name}」笔记", -1)
-            response = chain.invoke({
-                "topic_name": topic_name,
-                "content": content,
-                "target_word_count": target_word_count
-            })
-            return clean_text(response.content)
+            response_text = call_llm(
+                TOPIC_NOTE_GENERATION_PROMPT,
+                temperature=0.4,
+                topic_name=topic_name,
+                content=content,
+                target_word_count=target_word_count
+            )
+            return clean_text(response_text)
         except Exception as e:
             logger.error(f"生成主题笔记失败 {topic_name}: {e}")
             return f"# {topic_name}\n\n内容生成失败，请参考源文档。"

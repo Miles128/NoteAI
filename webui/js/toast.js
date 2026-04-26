@@ -1,16 +1,14 @@
 (function() {
-    'use strict';
-
     function updateStatus(text) {
-        const el = document.getElementById('status-bar');
+        var el = document.getElementById('status-bar');
         if (el) {
             el.textContent = text;
         }
     }
 
     function updateProgress(elementId, progress, text) {
-        const fill = document.getElementById(elementId + '-fill');
-        const statusEl = document.getElementById(elementId.replace('progress', 'status'));
+        var fill = document.getElementById(elementId + '-fill');
+        var statusEl = document.getElementById(elementId.replace('progress', 'status'));
 
         if (fill) {
             fill.style.width = (progress * 100) + '%';
@@ -21,10 +19,7 @@
     }
 
     window.toast = {
-        updateStatus,
-        updateProgress
+        updateStatus: updateStatus,
+        updateProgress: updateProgress
     };
-
-    window.updateStatus = updateStatus;
-    window.updateProgress = updateProgress;
 })();

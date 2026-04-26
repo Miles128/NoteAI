@@ -68,14 +68,14 @@ function initCodeMirrorEditor(content, filePath) {
     updateSaveStatus('saved', '加载中...');
 
     if (!window.EditorBridge || !window.EditorBridge.isReady) {
-        console.warn('[Editor] EditorBridge not ready, waiting 5s...');
+        console.warn('[Editor] EditorBridge not ready, waiting...');
         let waited = 0;
         const checkInterval = setInterval(() => {
             waited += 200;
             if (window.EditorBridge && window.EditorBridge.isReady) {
                 clearInterval(checkInterval);
                 createCodeMirrorInstance(content, filePath, container);
-            } else if (waited >= 5000) {
+            } else if (waited >= 15000) {
                 clearInterval(checkInterval);
                 console.warn('[Editor] EditorBridge timeout, using textarea fallback');
                 createTextareaFallback(content, filePath, container);
@@ -394,17 +394,19 @@ function exitEditMode() {
 }
 
 function toggleEditMode() {
-    const splitBtn = document.getElementById('preview-split-btn');
+    var splitBtn = document.getElementById('preview-split-btn');
+    var previewData = window.PreviewModule ? window.PreviewModule.currentPreviewData : null;
+    var filePath = window.TreeModule ? window.TreeModule.selectedFilePath : null;
     if (window.mdEditor.isActive) {
         exitEditMode();
-        if (currentPreviewData && currentPreviewData.type === 'markdown') {
-            const content = document.getElementById('preview-content');
-            if (content) content.innerHTML = renderMarkdownPreview(currentPreviewData.content);
+        if (previewData && previewData.type === 'markdown') {
+            var content = document.getElementById('preview-content');
+            if (content) content.innerHTML = renderMarkdownPreview(previewData.content);
         }
     } else {
-        if (currentPreviewData && currentPreviewData.type === 'markdown') {
+        if (previewData && previewData.type === 'markdown') {
             enterEditMode();
-            initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+            initCodeMirrorEditor(previewData.content, filePath);
             if (splitBtn) splitBtn.classList.add('active');
         }
     }
@@ -484,55 +486,10 @@ function initWindowDrag() {
     const titlebar = document.querySelector('.titlebar-drag');
     if (!titlebar || !window.api) return;
 
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let accumDx = 0;
-    let accumDy = 0;
-    let rafId = null;
-
-    function flushMove() {
-        if (accumDx !== 0 || accumDy !== 0) {
-            window.api.move_window(accumDx, accumDy);
-            accumDx = 0;
-            accumDy = 0;
-        }
-        if (isDragging) {
-            rafId = requestAnimationFrame(flushMove);
-        }
-    }
-
     titlebar.addEventListener('mousedown', (e) => {
         if (e.target.closest('.titlebar-btn')) return;
-        isDragging = true;
-        dragStartX = e.screenX;
-        dragStartY = e.screenY;
-        accumDx = 0;
-        accumDy = 0;
-        rafId = requestAnimationFrame(flushMove);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        accumDx += e.screenX - dragStartX;
-        accumDy += e.screenY - dragStartY;
-        dragStartX = e.screenX;
-        dragStartY = e.screenY;
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (!isDragging) return;
-        isDragging = false;
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-        }
-        if (accumDx !== 0 || accumDy !== 0) {
-            window.api.move_window(accumDx, accumDy);
-            accumDx = 0;
-            accumDy = 0;
-        }
+        if (e.button !== 0) return;
+        window.api.start_system_move();
     });
 }
 

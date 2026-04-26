@@ -1,21 +1,25 @@
 function toggleTheme() {
-    const html = document.documentElement;
-    const currentTheme = html.getAttribute('data-theme');
-    const lightIcon = document.getElementById('theme-icon-light');
-    const darkIcon = document.getElementById('theme-icon-dark');
+    var html = document.documentElement;
+    var currentTheme = html.getAttribute('data-theme');
+    var lightIcon = document.getElementById('theme-icon-light');
+    var darkIcon = document.getElementById('theme-icon-dark');
 
-    if (currentTheme === 'light') {
-        html.setAttribute('data-theme', 'dark');
-        lightIcon.style.display = 'none';
-        darkIcon.style.display = 'block';
-    } else {
+    if (currentTheme === 'dark') {
         html.setAttribute('data-theme', 'light');
-        lightIcon.style.display = 'block';
-        darkIcon.style.display = 'none';
+        if (lightIcon) lightIcon.style.display = 'block';
+        if (darkIcon) darkIcon.style.display = 'none';
+        localStorage.setItem('noteai_theme', 'light');
+        if (window.api) window.api.save_theme_preference('light');
+    } else {
+        html.setAttribute('data-theme', 'dark');
+        if (lightIcon) lightIcon.style.display = 'none';
+        if (darkIcon) darkIcon.style.display = 'block';
+        localStorage.setItem('noteai_theme', 'dark');
+        if (window.api) window.api.save_theme_preference('dark');
     }
 
-    if (window.pywebview) {
-        window.pywebview.api.save_theme_preference(html.getAttribute('data-theme') || 'system');
+    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
+        window.EditorModule.updateEditorTheme();
     }
 }
 
@@ -33,9 +37,11 @@ function setTheme(theme) {
         radio.checked = radio.value === theme;
     });
 
-    if (window.pywebview) {
-        window.pywebview.api.save_theme_preference(theme);
+    if (window.api) {
+        window.api.save_theme_preference(theme);
     }
+
+    localStorage.setItem('noteai_theme', theme);
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
         window.EditorModule.updateEditorTheme();

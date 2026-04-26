@@ -1,6 +1,7 @@
 import re
 import os
 import hashlib
+import threading
 from pathlib import Path
 from typing import Optional, List, Tuple
 import unicodedata
@@ -13,6 +14,9 @@ class APIConfigError(Exception):
 class NetworkError(Exception):
     """网络连接错误异常"""
     pass
+
+
+_LLM_SEMAPHORE = threading.Semaphore(3)
 
 
 def is_network_error(exception: Exception) -> bool:
@@ -84,7 +88,6 @@ def call_llm(
     """
     from langchain_openai import ChatOpenAI
     from langchain_core.prompts import PromptTemplate
-    from langchain_core.exceptions import LangChainException
     from config.settings import config
 
     llm = ChatOpenAI(
@@ -101,7 +104,9 @@ def call_llm(
     )
 
     chain = prompt | llm
-    response = chain.invoke(kwargs)
+
+    with _LLM_SEMAPHORE:
+        response = chain.invoke(kwargs)
 
     if hasattr(response, "content"):
         return response.content.strip()
@@ -533,23 +538,38 @@ def detect_language(text: str) -> str:
     return 'english'
 
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
-    """重试装饰器"""
+    """重试装饰器，支持同步和异步函数"""
     import time
+    import asyncio
     from functools import wraps
-    
+
     def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_exception = e
-                    if attempt < max_retries - 1:
-                        time.sleep(delay * (attempt + 1))
-            raise last_exception
-        return wrapper
+        if asyncio.iscoroutinefunction(func):
+            @wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                last_exception = None
+                for attempt in range(max_retries):
+                    try:
+                        return await func(*args, **kwargs)
+                    except Exception as e:
+                        last_exception = e
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(delay * (attempt + 1))
+                raise last_exception
+            return async_wrapper
+        else:
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                last_exception = None
+                for attempt in range(max_retries):
+                    try:
+                        return func(*args, **kwargs)
+                    except Exception as e:
+                        last_exception = e
+                        if attempt < max_retries - 1:
+                            time.sleep(delay * (attempt + 1))
+                raise last_exception
+            return wrapper
     return decorator
 
 def summarize_with_llm(content: str, target_ratio: float = 0.5) -> str:

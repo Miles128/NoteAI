@@ -1,16 +1,14 @@
 (function() {
-    'use strict';
-
     function switchTab(tabIndex) {
-        document.querySelectorAll('.tab-btn').forEach((item, i) => {
+        document.querySelectorAll('.tab-btn').forEach(function(item, i) {
             item.classList.toggle('active', i === tabIndex);
         });
-        document.querySelectorAll('.tab-content').forEach((content, i) => {
+        document.querySelectorAll('.tab-content').forEach(function(content, i) {
             content.classList.toggle('active', i === tabIndex);
         });
 
-        const contentPanel = document.getElementById('content-panel');
-        const previewPanel = document.getElementById('preview-panel');
+        var contentPanel = document.getElementById('content-panel');
+        var previewPanel = document.getElementById('preview-panel');
 
         if (contentPanel && previewPanel) {
             contentPanel.style.display = 'flex';
@@ -19,25 +17,34 @@
     }
 
     function showContentView() {
-        const contentPanel = document.getElementById('content-panel');
-        const previewPanel = document.getElementById('preview-panel');
+        var contentPanel = document.getElementById('content-panel');
+        var previewPanel = document.getElementById('preview-panel');
 
         if (contentPanel) contentPanel.style.display = 'flex';
         if (previewPanel) previewPanel.style.display = 'none';
     }
 
     function showPreviewView() {
-        const contentPanel = document.getElementById('content-panel');
-        const previewPanel = document.getElementById('preview-panel');
+        var contentPanel = document.getElementById('content-panel');
+        var previewPanel = document.getElementById('preview-panel');
 
         if (contentPanel) contentPanel.style.display = 'none';
         if (previewPanel) previewPanel.style.display = 'flex';
     }
 
+    function initTabs() {
+        document.querySelectorAll('.tab-btn').forEach(function(btn, index) {
+            btn.addEventListener('click', function() {
+                switchTab(index);
+            });
+        });
+    }
+
     window.tabs = {
-        switchTab,
-        showContentView,
-        showPreviewView
+        switchTab: switchTab,
+        showContentView: showContentView,
+        showPreviewView: showPreviewView,
+        initTabs: initTabs
     };
 
     window.TabsModule = window.tabs;

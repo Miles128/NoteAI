@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List, Tuple
 from io import BytesIO
 
 from utils.logger import logger
-from utils.helpers import get_file_extension, read_file_with_encoding
+from utils.helpers import get_file_extension, read_file_with_encoding, format_file_size
 
 
 class FilePreviewer:
@@ -83,87 +83,19 @@ class FilePreviewer:
     def _preview_pdf(self, file_path: str, file_size: int) -> Dict[str, Any]:
         try:
             import fitz
-        except ImportError:
-            return self._preview_pdf_legacy(file_path, file_size)
-
-        pages_data = []
-        total_pages = 0
-        full_text = ""
-
-        try:
             doc = fitz.open(file_path)
             total_pages = len(doc)
-
-            for page_num in range(total_pages):
-                page = doc[page_num]
-
-                text = page.get_text("text") or ""
-
-                mat = fitz.Matrix(1.5, 1.5)
-                pix = page.get_pixmap(matrix=mat, alpha=False)
-                img_bytes = pix.tobytes("png")
-                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-
-                pages_data.append({
-                    "page_number": page_num + 1,
-                    "text": text,
-                    "image": img_base64,
-                    "width": pix.width,
-                    "height": pix.height
-                })
-
-                full_text += text + "\n\n"
-
             doc.close()
+        except Exception:
+            total_pages = 0
 
-            return {
-                "success": True,
-                "type": "pdf",
-                "file_name": os.path.basename(file_path),
-                "file_size": file_size,
-                "total_pages": total_pages,
-                "pages": pages_data,
-                "full_text": full_text.strip()
-            }
-        except Exception as e:
-            logger.error(f"PDF预览失败 (PyMuPDF): {e}")
-            return self._preview_pdf_legacy(file_path, file_size)
-
-    def _preview_pdf_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
-        import fitz
-
-        pages_data = []
-        total_pages = 0
-
-        try:
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-            for i, page in enumerate(doc):
-                text = page.get_text("text") or ""
-                pages_data.append({
-                    "page_number": i + 1,
-                    "text": text.strip(),
-                    "image": None,
-                    "width": 0,
-                    "height": 0
-                })
-            doc.close()
-
-            return {
-                "success": True,
-                "type": "pdf",
-                "file_name": os.path.basename(file_path),
-                "file_size": file_size,
-                "total_pages": total_pages,
-                "pages": pages_data,
-                "full_text": "\n\n".join([p["text"] for p in pages_data])
-            }
-        except Exception as e:
-            logger.error(f"PDF预览失败 (legacy): {e}")
-            return {
-                "success": False,
-                "error": f"PDF解析失败: {str(e)}"
-            }
+        return {
+            "success": True,
+            "type": "pdf",
+            "file_name": os.path.basename(file_path),
+            "file_size": file_size,
+            "total_pages": total_pages,
+        }
 
     def _preview_word(self, file_path: str, file_size: int) -> Dict[str, Any]:
         from docx import Document
@@ -213,15 +145,6 @@ class FilePreviewer:
                 'success': False,
                 'error': f'Word文档解析失败: {str(e)}'
             }
-
-
-def format_file_size(size_bytes: int) -> str:
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    else:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
 
 
 def get_file_type_display_name(ext: str) -> str:

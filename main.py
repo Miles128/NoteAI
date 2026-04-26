@@ -33,9 +33,10 @@ def check_dependencies():
         ("mammoth", "mammoth"),
         ("markdown", "markdown"),
         ("validators", "validators"),
-        ("pydantic", "pydantic"),
         ("tiktoken", "tiktoken"),
         ("markdownify", "markdownify"),
+        ("yaml", "PyYAML"),
+        ("jieba", "jieba"),
         ("PySide6.QtWidgets", "PySide6"),
     ]
 

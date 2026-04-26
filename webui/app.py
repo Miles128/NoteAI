@@ -62,31 +62,36 @@ class Api:
 
     def __init__(self):
         self.window = None
+        self._close_requested = False
 
     def set_window(self, window):
         self.window = window
 
     def move_window(self, dx, dy):
         if self.window:
-            try:
-                x = self.window.x + dx
-                y = self.window.y + dy
-                self.window.move(x, y)
-            except Exception as e:
-                print(f"移动窗口失败: {e}")
+            w = self.window
+            QTimer.singleShot(0, lambda _w=w, _dx=dx, _dy=dy: _w.move(int(_dx), int(_dy)))
+
+    def start_system_move(self):
+        if self.window:
+            w = self.window
+            QTimer.singleShot(0, lambda: w.start_system_move())
 
     def minimize_window(self):
         if self.window:
-            self.window.minimize()
+            w = self.window
+            QTimer.singleShot(0, lambda: w.minimize())
 
     def maximize_window(self):
         if self.window:
-            self.window._toggle_maximize()
+            w = self.window
+            QTimer.singleShot(0, lambda: w.maximize())
 
     def close_window(self):
+        self._close_requested = True
         if self.window:
-            self.window.destroy()
-        QApplication.quit()
+            w = self.window
+            QTimer.singleShot(0, lambda: w.close())
 
     def get_workspace_status(self):
         workspace_info = workspace_manager.get_workspace_info()
@@ -544,7 +549,7 @@ class Api:
         config.auto_topic = ui_config.get("auto_topic", True)
         config.topic_list = ui_config.get("topic_list", "")
         success, message = config.save_to_file()
-        return success, message
+        return {"success": success, "message": message}
 
     def refresh_log(self):
         logs = logger.get_logs(200)
@@ -697,7 +702,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("NoteAI")
         self.setMinimumSize(1000, 700)
         self.resize(1400, 900)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -708,12 +712,40 @@ class MainWindow(QMainWindow):
 
         self._web_view = QWebEngineView()
         
-        # 在主线程中创建 JSBridge（确保线程亲和性正确）
         self._js_bridge = JSBridge(self._web_view)
         
         layout.addWidget(self._web_view)
 
         self._setup_shortcuts()
+
+    def showEvent(self, event):
+        """窗口首次显示时配置 macOS 透明标题栏"""
+        super().showEvent(event)
+        if not hasattr(self, '_macos_titlebar_configured'):
+            self._macos_titlebar_configured = True
+            self._setup_macos_titlebar()
+
+    def _setup_macos_titlebar(self):
+        """配置 macOS 透明标题栏（保留原生红绿灯按钮，类似 Obsidian）"""
+        import sys
+        if sys.platform != 'darwin':
+            return
+        try:
+            from AppKit import NSWindow, NSWindowTitleVisibility
+            handle = self.windowHandle()
+            if not handle:
+                return
+            ns_view = handle.nsView()
+            if not ns_view:
+                return
+            ns_window = ns_view.window()
+            ns_window.setTitlebarAppearsTransparent_(True)
+            ns_window.setTitleVisibility_(NSWindowTitleHidden)
+            style_mask = ns_window.styleMask()
+            ns_window.setStyleMask_(style_mask | NSWindow.StyleMaskFullSizeContentView)
+            logger.info("macOS 透明标题栏已配置")
+        except Exception as e:
+            logger.warning(f"配置 macOS 透明标题栏失败: {e}")
 
     def set_api(self, api):
         """设置 API 对象"""
@@ -775,6 +807,12 @@ class MainWindow(QMainWindow):
         geo.moveTo(int(x), int(y))
         self.setGeometry(geo)
 
+    def start_system_move(self):
+        """使用系统原生拖拽移动窗口"""
+        handle = self.windowHandle()
+        if handle:
+            handle.startSystemMove()
+
     def _toggle_maximize(self):
         """切换最大化/还原"""
         if self._is_maximized:
@@ -784,6 +822,16 @@ class MainWindow(QMainWindow):
             self._normal_geometry = self.geometry()
             self.showMaximized()
             self._is_maximized = True
+
+    def closeEvent(self, event):
+        """重写关闭事件，确保应用退出"""
+        if self._api and hasattr(self._api, '_http_server'):
+            try:
+                self._api._http_server.shutdown()
+            except Exception:
+                pass
+        event.accept()
+        QApplication.instance().quit()
 
     def _setup_shortcuts(self):
         """设置快捷键"""
@@ -884,53 +932,105 @@ def try_restore_workspace_config():
         return None, f"恢复工作区失败: {str(e)}"
 
 
-def _download_codemirror_bundle(webui_dir):
-    """下载 CodeMirror bundle（用于 MD 编辑器）"""
-    import urllib.request
+def _build_codemirror_bundle(webui_dir):
+    """使用 esbuild 构建 CodeMirror bundle（用于 MD 编辑器）"""
+    import subprocess
     bundle_path = Path(webui_dir) / 'codemirror-bundle.mjs'
     if bundle_path.exists():
         print(f"[INFO] CodeMirror bundle already exists: {bundle_path}")
         return True
-    print("[INFO] Downloading CodeMirror bundle...")
+
+    print("[INFO] Building CodeMirror bundle with esbuild...")
+    build_dir = Path(webui_dir) / '_cm_build'
     try:
-        entry_url = 'https://esm.sh/codemirror@6.0.1?bundle&deps=@codemirror/lang-markdown@6.2.5,@codemirror/theme-one-dark@6.1.2,@codemirror/theme-one-light@6.1.2,@codemirror/commands@6.6.0,@codemirror/autocomplete@6.16.0,@codemirror/lint@6.8.0'
-        req = urllib.request.Request(entry_url, headers={'User-Agent': 'Mozilla/5.0'})
-        resp = urllib.request.urlopen(req)
-        entry_content = resp.read().decode('utf-8')
+        build_dir.mkdir(parents=True, exist_ok=True)
 
-        match = re.search(r'export \* from "(/[^"]+\.bundle\.mjs)"', entry_content)
-        if not match:
-            print("[WARNING] Could not find bundle URL in esm.sh entry")
-            return False
+        entry_content = '''export { EditorState, EditorSelection } from "@codemirror/state";
+export { EditorView, keymap } from "@codemirror/view";
+export { basicSetup } from "codemirror";
+export { markdown } from "@codemirror/lang-markdown";
+export { oneDark } from "@codemirror/theme-one-dark";
+export { indentWithTab, defaultKeymap, historyKeymap } from "@codemirror/commands";
+export { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
+export { lintKeymap } from "@codemirror/lint";
+import { EditorView } from "@codemirror/view";
+const oneLightTheme = EditorView.theme({"&":{backgroundColor:"#ffffff",color:"#333333"},".cm-content":{caretColor:"#333333"},".cm-cursor, .cm-dropCursor":{borderLeftColor:"#333333"},"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection":{backgroundColor:"#d7d4f0"},".cm-gutters":{backgroundColor:"#f7f7f7",color:"#999999",border:"none"},".cm-activeLineGutter":{backgroundColor:"#e8e8e8"},".cm-activeLine":{backgroundColor:"#f0f0f0"}},{dark:false});
+export const oneLight = [oneLightTheme];
+'''
+        (build_dir / 'entry.mjs').write_text(entry_content, encoding='utf-8')
 
-        bundle_url = 'https://esm.sh' + match.group(1)
-        print(f"[INFO] Downloading bundle from: {bundle_url}")
-        urllib.request.urlretrieve(bundle_url, str(bundle_path))
-        print(f"[INFO] CodeMirror bundle downloaded: {bundle_path} ({bundle_path.stat().st_size} bytes)")
+        pkg_json = '''{"type":"module","dependencies":{"codemirror":"^6.0.1","@codemirror/state":"^6.5.2","@codemirror/view":"^6.36.0","@codemirror/lang-markdown":"^6.3.1","@codemirror/theme-one-dark":"^6.1.2","@codemirror/commands":"^6.7.1","@codemirror/autocomplete":"^6.18.4","@codemirror/lint":"^6.8.2"},"devDependencies":{"esbuild":"^0.25.0"}}'''
+        (build_dir / 'package.json').write_text(pkg_json, encoding='utf-8')
+
+        print("[INFO] Installing npm dependencies...")
+        subprocess.run(['npm', 'install'], cwd=str(build_dir), capture_output=True, check=True)
+
+        print("[INFO] Bundling with esbuild...")
+        subprocess.run([
+            'npx', 'esbuild', 'entry.mjs',
+            '--bundle', '--format=esm',
+            '--outfile=' + str(bundle_path),
+            '--minify'
+        ], cwd=str(build_dir), capture_output=True, check=True)
+
+        print(f"[INFO] CodeMirror bundle built: {bundle_path} ({bundle_path.stat().st_size} bytes)")
         return True
     except Exception as e:
-        print(f"[WARNING] Failed to download CodeMirror bundle: {e}")
+        print(f"[WARNING] Failed to build CodeMirror bundle: {e}")
         import traceback
         traceback.print_exc()
         return False
+    finally:
+        import shutil
+        if build_dir.exists():
+            shutil.rmtree(str(build_dir), ignore_errors=True)
 
 
 def _start_http_server_with_api(directory, api):
     """启动本地 HTTP 服务器，支持静态文件和 API 调用"""
     import threading
     import socket
+    import secrets
     from http.server import HTTPServer, SimpleHTTPRequestHandler
 
+    api_token = secrets.token_hex(32)
+
     class APIRequestHandler(SimpleHTTPRequestHandler):
+        extensions_map = {
+            **SimpleHTTPRequestHandler.extensions_map,
+            '.mjs': 'application/javascript',
+            '.js': 'application/javascript',
+            '.css': 'text/css',
+            '.html': 'text/html',
+            '.json': 'application/json',
+            '.wasm': 'application/wasm',
+            '.map': 'application/json',
+        }
+
         def __init__(self, *args, **kwargs):
             self._api = api
+            self._token = api_token
             super().__init__(*args, directory=directory, **kwargs)
 
         def end_headers(self):
-            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Origin', f'http://localhost:{self.server.server_address[1]}')
             self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-API-Token')
             super().end_headers()
+
+        def _verify_token(self):
+            token = self.headers.get('X-API-Token', '')
+            if not token:
+                parsed = urlparse(self.path)
+                params = parse_qs(parsed.query)
+                token = params.get('token', [''])[0]
+            if not secrets.compare_digest(token, self._token):
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": "认证失败"}).encode('utf-8'))
+                return False
+            return True
 
         def do_OPTIONS(self):
             self.send_response(200)
@@ -941,16 +1041,84 @@ def _start_http_server_with_api(directory, api):
             path = parsed_path.path
 
             if path.startswith('/api/'):
+                if not self._verify_token():
+                    return
                 self._handle_api_get(path, parsed_path.query)
                 return
 
+            if path.startswith('/files/'):
+                if not self._verify_token():
+                    return
+                self._serve_workspace_file(path)
+                return
+
             super().do_GET()
+
+        def _serve_workspace_file(self, path):
+            """提供工作区文件的只读访问（用于 PDF.js 等前端渲染）"""
+            import os
+            import urllib.parse
+            from config.settings import config
+
+            if not config.workspace_path:
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            relative_path = path[len('/files/'):]
+            relative_path = urllib.parse.unquote(relative_path)
+
+            file_path = os.path.normpath(os.path.join(config.workspace_path, relative_path))
+
+            if not file_path.startswith(os.path.normpath(config.workspace_path)):
+                self.send_response(403)
+                self.end_headers()
+                return
+
+            if not os.path.isfile(file_path):
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            try:
+                file_size = os.path.getsize(file_path)
+                ext = os.path.splitext(file_path)[1].lower()
+                mime_types = {
+                    '.pdf': 'application/pdf',
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.gif': 'image/gif',
+                    '.svg': 'image/svg+xml',
+                    '.webp': 'image/webp',
+                }
+                mime_type = mime_types.get(ext, 'application/octet-stream')
+
+                self.send_response(200)
+                self.send_header('Content-Type', mime_type)
+                self.send_header('Content-Length', str(file_size))
+                encoded_name = urllib.parse.quote(os.path.basename(file_path))
+                self.send_header('Content-Disposition', f"inline; filename*=UTF-8''{encoded_name}")
+                self.end_headers()
+
+                with open(file_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+            except Exception as e:
+                print(f"[ERROR] Serving file {path}: {e}")
+                self.send_response(500)
+                self.end_headers()
 
         def do_POST(self):
             parsed_path = urlparse(self.path)
             path = parsed_path.path
 
             if path.startswith('/api/'):
+                if not self._verify_token():
+                    return
                 self._handle_api_post(path)
                 return
 
@@ -1006,13 +1174,22 @@ def _start_http_server_with_api(directory, api):
                 self.end_headers()
                 self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
 
+        _ALLOWED_API_METHODS = {
+            'get_workspace_status', 'check_workspace_path_valid', 'clear_saved_workspace',
+            'update_window_title', 'open_workspace', 'get_api_config', 'browse_folder',
+            'add_files', 'update_status', 'update_progress', 'show_message',
+            'start_web_download', 'start_file_conversion', 'extract_topics',
+            'start_note_integration', 'save_api_config', 'get_ui_config', 'save_ui_config',
+            'refresh_log', 'get_theme_preference', 'save_theme_preference',
+            'get_workspace_tree', 'on_file_selected', 'get_file_preview',
+            'can_preview_file', 'show_about', 'save_file_content',
+            'move_window', 'start_system_move', 'minimize_window', 'maximize_window', 'close_window',
+        }
+
         def _call_api_method(self, method_name, args):
             """调用 API 方法"""
-            if method_name.startswith('_'):
-                raise ValueError(f"私有方法不可调用: {method_name}")
-
-            if not hasattr(self._api, method_name):
-                raise ValueError(f"API 方法不存在: {method_name}")
+            if method_name not in self._ALLOWED_API_METHODS:
+                raise ValueError(f"API 方法不存在或不可调用: {method_name}")
 
             method = getattr(self._api, method_name)
 
@@ -1037,23 +1214,31 @@ def _start_http_server_with_api(directory, api):
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"[INFO] HTTP server with API started on http://localhost:{port}")
-    return port
+
+    api._http_server = server
+    return port, api_token
 
 
 def main():
     """启动 PySide6 版本应用"""
+    import os
+    import signal
+    os.environ['QT_MAC_WANTS_LAYER'] = '1'
+
     app = QApplication(sys.argv)
     app.setApplicationName("NoteAI")
     app.setOrganizationName("NoteAI")
 
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
     html_path = Path(__file__).parent / "index.html"
-    _download_codemirror_bundle(str(html_path.parent))
+    _build_codemirror_bundle(str(html_path.parent))
 
     window = MainWindow()
     api = Api()
     api.set_window(window)
 
-    http_port = _start_http_server_with_api(str(html_path.parent), api)
+    http_port, http_token = _start_http_server_with_api(str(html_path.parent), api)
 
     workspace_name, message = try_restore_workspace_config()
     if workspace_name:
@@ -1063,7 +1248,7 @@ def main():
         except Exception as e:
             print(f"[WARNING] 设置窗口标题失败: {e}")
 
-    index_url = f"http://localhost:{http_port}/index.html?port={http_port}"
+    index_url = f"http://localhost:{http_port}/index.html?port={http_port}&token={http_token}"
     window.load_url(index_url)
     window.show()
 

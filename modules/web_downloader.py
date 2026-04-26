@@ -50,8 +50,6 @@ class WebDownloader:
         使用多种策略确保能获取到有效的标题
         针对微信公众号、小红书、知乎等平台优化
         """
-        from bs4 import BeautifulSoup
-        
         soup = BeautifulSoup(html_content, 'html.parser')
         
         meta_selectors = [
@@ -200,8 +198,6 @@ class WebDownloader:
         Returns:
             处理后的HTML内容，所有img标签都有正确的src属性
         """
-        from bs4 import BeautifulSoup
-        
         soup = BeautifulSoup(html_content, 'html.parser')
         
         lazy_load_attributes = [

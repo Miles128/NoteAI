@@ -1,10 +1,10 @@
-let treeExpandedState = {};
-let selectedFilePath = null;
-let selectedFileName = null;
+var treeExpandedState = {};
+var selectedFilePath = null;
+var selectedFileName = null;
 
 function loadTreeState() {
     try {
-        const saved = localStorage.getItem('tree-expanded-state');
+        var saved = localStorage.getItem('tree-expanded-state');
         if (saved) {
             treeExpandedState = JSON.parse(saved);
         }
@@ -23,18 +23,18 @@ function saveTreeState() {
 }
 
 function toggleTreeFolder(element) {
-    const children = element.nextElementSibling;
+    var children = element.nextElementSibling;
     if (children && children.classList.contains('tree-children')) {
         children.classList.toggle('hidden');
 
-        const toggle = element.querySelector('.tree-toggle');
+        var toggle = element.querySelector('.tree-toggle');
         if (toggle) {
             toggle.classList.toggle('collapsed');
         }
 
-        const path = element.getAttribute('data-path');
+        var path = element.getAttribute('data-path');
         if (path) {
-            const isCollapsed = children.classList.contains('hidden');
+            var isCollapsed = children.classList.contains('hidden');
             treeExpandedState[path] = !isCollapsed;
             saveTreeState();
         }
@@ -49,37 +49,36 @@ function renderFileTree(treeData, container) {
 
     loadTreeState();
 
-    function buildTreeHTML(nodes, indentLevel = 0) {
-        return nodes.map(node => {
-            const hasChildren = node.children && node.children.length > 0;
-            const isFolder = node.type === 'folder';
-            const indent = indentLevel * 16;
+    function buildTreeHTML(nodes, indentLevel) {
+        indentLevel = indentLevel || 0;
+        return nodes.map(function(node) {
+            var hasChildren = node.children && node.children.length > 0;
+            var isFolder = node.type === 'folder';
+            var indent = indentLevel * 16;
 
-            const expandedState = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
-            const childrenHiddenClass = expandedState ? '' : 'hidden';
+            var expandedState = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
+            var childrenHiddenClass = expandedState ? '' : 'hidden';
 
-            let html = `
-                <div class="tree-item ${isFolder ? 'folder' : 'file'}" data-path="${node.path}" style="padding-left: ${indent}px;" onclick="${isFolder ? `window.TreeModule.toggleTreeFolder(this)` : `window.TreeModule.selectFile('${node.path}', '${node.name}')`}">
-            `;
+            var html = '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" data-path="' + node.path + '" style="padding-left: ' + indent + 'px;" onclick="' + (isFolder ? 'window.TreeModule.toggleTreeFolder(this)' : 'window.TreeModule.selectFile(\'' + node.path + '\', \'' + node.name + '\')') + '">';
 
             if (isFolder) {
-                html += `<span class="tree-toggle ${expandedState ? '' : 'collapsed'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>`;
-                html += `<span class="tree-icon folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m20 20-2-2V8l-4-4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l2 2Z"></path></svg></span>`;
+                html += '<span class="tree-toggle ' + (expandedState ? '' : 'collapsed') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>';
+                html += '<span class="tree-icon folder-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m20 20-2-2V8l-4-4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l2 2Z"></path></svg></span>';
             } else {
-                html += `<span class="tree-toggle" style="visibility:hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>`;
-                html += `<span class="tree-icon file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>`;
+                html += '<span class="tree-toggle" style="visibility:hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></span>';
+                html += '<span class="tree-icon file-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>';
             }
 
-            html += `<span class="tree-name">${node.name}</span>`;
+            html += '<span class="tree-name">' + escapeHtml(node.name) + '</span>';
 
             if (!isFolder) {
-                html += `<span class="tree-meta"><span class="tree-size">${formatFileSize(node.size)}</span><span class="tree-modified">${formatModifiedTime(node.modified)}</span></span>`;
+                html += '<span class="tree-meta"><span class="tree-size">' + formatFileSize(node.size) + '</span><span class="tree-modified">' + formatModifiedTime(node.modified) + '</span></span>';
             }
 
-            html += `</div>`;
+            html += '</div>';
 
             if (hasChildren) {
-                html += `<div class="tree-children ${childrenHiddenClass}">${buildTreeHTML(node.children, indentLevel + 1)}</div>`;
+                html += '<div class="tree-children ' + childrenHiddenClass + '">' + buildTreeHTML(node.children, indentLevel + 1) + '</div>';
             }
 
             return html;
@@ -90,18 +89,18 @@ function renderFileTree(treeData, container) {
 }
 
 async function loadFileTree() {
-    const container = document.getElementById('file-tree');
+    var container = document.getElementById('file-tree');
     if (!container) return;
 
-    if (!window.pywebview) {
+    if (!window.api) {
         container.innerHTML = '<div class="tree-empty">工作区未设置</div>';
         return;
     }
 
     try {
-        const treeData = await Promise.race([
-            window.pywebview.api.get_workspace_tree(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('加载超时')), 5000))
+        var treeData = await Promise.race([
+            window.api.get_workspace_tree(),
+            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, 5000); })
         ]);
         if (Array.isArray(treeData) && treeData.length === 0) {
             container.innerHTML = '<div class="tree-empty">工作区为空或未设置</div>';
@@ -118,8 +117,8 @@ function selectFile(path, fileName) {
     selectedFilePath = path;
     selectedFileName = fileName;
 
-    if (window.pywebview) {
-        window.pywebview.api.on_file_selected(path);
+    if (window.api) {
+        window.api.on_file_selected(path);
         if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
             window.PreviewModule.loadFilePreview(path, fileName);
         }
@@ -127,11 +126,11 @@ function selectFile(path, fileName) {
 }
 
 function updateWebAIStatus() {
-    const toggle = document.getElementById('web-ai-toggle');
-    const card = document.getElementById('web-ai-card');
-    const label = document.getElementById('web-ai-label');
-    const statusBox = document.getElementById('web-ai-status');
-    const isEnabled = toggle.checked;
+    var toggle = document.getElementById('web-ai-toggle');
+    var card = document.getElementById('web-ai-card');
+    var label = document.getElementById('web-ai-label');
+    var statusBox = document.getElementById('web-ai-status');
+    var isEnabled = toggle.checked;
 
     if (isEnabled) {
         card.classList.add('active');
@@ -145,11 +144,11 @@ function updateWebAIStatus() {
 }
 
 function updateConvAIStatus() {
-    const toggle = document.getElementById('conv-ai-toggle');
-    const card = document.getElementById('conv-ai-card');
-    const label = document.getElementById('conv-ai-label');
-    const statusBox = document.getElementById('conv-ai-status');
-    const isEnabled = toggle.checked;
+    var toggle = document.getElementById('conv-ai-toggle');
+    var card = document.getElementById('conv-ai-card');
+    var label = document.getElementById('conv-ai-label');
+    var statusBox = document.getElementById('conv-ai-status');
+    var isEnabled = toggle.checked;
 
     if (isEnabled) {
         card.classList.add('active');
@@ -163,15 +162,18 @@ function updateConvAIStatus() {
 }
 
 window.TreeModule = {
-    treeExpandedState,
-    selectedFilePath,
-    selectedFileName,
-    loadTreeState,
-    saveTreeState,
-    toggleTreeFolder,
-    renderFileTree,
-    loadFileTree,
-    selectFile,
-    updateWebAIStatus,
-    updateConvAIStatus
+    get treeExpandedState() { return treeExpandedState; },
+    set treeExpandedState(v) { treeExpandedState = v; },
+    get selectedFilePath() { return selectedFilePath; },
+    set selectedFilePath(v) { selectedFilePath = v; },
+    get selectedFileName() { return selectedFileName; },
+    set selectedFileName(v) { selectedFileName = v; },
+    loadTreeState: loadTreeState,
+    saveTreeState: saveTreeState,
+    toggleTreeFolder: toggleTreeFolder,
+    renderFileTree: renderFileTree,
+    loadFileTree: loadFileTree,
+    selectFile: selectFile,
+    updateWebAIStatus: updateWebAIStatus,
+    updateConvAIStatus: updateConvAIStatus
 };

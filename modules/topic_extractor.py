@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from config.settings import config
 from utils.logger import logger
-from utils.helpers import check_api_config
+from utils.helpers import check_api_config, call_llm
 from prompts.topic_extraction import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
     TOPIC_COUNT_SPECIFIED_INSTRUCTIONS,
@@ -165,29 +165,16 @@ class TopicExtractor:
                 topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS.format(min_topics=min_topics, max_topics=max_topics)
                 output_format_instructions = OUTPUT_FORMAT_AUTO_INSTRUCTIONS
             
-            # 构建最终提示词
-            final_prompt = TOPIC_EXTRACTION_BY_FILENAMES_PROMPT.format(
+            # 调用大模型
+            content = call_llm(
+                TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
+                temperature=0.5,
                 titles=titles_text,
                 topic_count_instructions=topic_count_instructions,
                 output_format_instructions=output_format_instructions,
                 notes_count=notes_count,
                 organized_count=organized_count
             )
-            
-            # 调用大模型
-            from langchain_openai import ChatOpenAI
-            
-            llm = ChatOpenAI(
-                api_key=config.api_key,
-                base_url=config.api_base,
-                model=config.model_name,
-                temperature=0.5,
-                max_tokens=config.max_tokens
-            )
-            
-            response = llm.invoke(final_prompt)
-            
-            content = response.content.strip()
             
             self._update_progress(7, 10, "正在解析主题结果...")
             

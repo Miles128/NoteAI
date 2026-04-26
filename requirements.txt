@@ -13,20 +13,15 @@ markdownify>=0.11.6
 readability-lxml>=0.8.1
 validators>=0.22.0
 
-# 数据验证
-pydantic>=2.5.0
-
 # 文档转换
 PyMuPDF>=1.23.0
 mammoth>=1.0.0
 python-docx>=1.0.0
 
-# GUI
-pywebview>=4.0
+# GUI (6.11 WebEngine has SIGTRAP crash on macOS, pin to <6.10)
+PySide6>=6.9.0,<6.10
 
 # 工具库
-Pillow>=10.0.0
 markdown>=3.5.0
-tqdm>=4.66.0
 PyYAML>=6.0
 jieba>=0.42.1

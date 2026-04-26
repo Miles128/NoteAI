@@ -34,7 +34,7 @@ class WebDownloader:
         Args:
             progress_callback: 进度回调函数
             ai_assist: 是否使用AI进行额外优化（默认False）
-            include_images: 是否在Markdown中保留图片URL链接（默认False）
+            include_images: 是否在Markdown中保留图片的外部 URL 链接（默认False，不下载图片到本地）
         """
         self.progress_callback = progress_callback
         self.ai_assist = ai_assist

@@ -328,11 +328,10 @@ class AppConfig:
     window_width: int = 1400
     window_height: int = 900
     
-    # 用户界面状态配置
     # 网页下载 AI 辅助开关（独立）
     web_ai_assist: bool = False
     
-    # 网页下载图片开关
+    # 网页下载图片开关（保留外部 URL 链接，不下载到本地）
     web_include_images: bool = False
     
     # 文件转换 AI 辅助开关（独立）

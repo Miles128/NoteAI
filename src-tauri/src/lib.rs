@@ -11,6 +11,7 @@ pub struct AppState {
     python_stdin: Arc<AsyncMutex<Option<ChildStdin>>>,
     pending_requests: StdMutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
     workspace_path: StdMutex<Option<String>>,
+    python_child: Arc<AsyncMutex<Option<Child>>>,
 }
 
 impl Default for AppState {
@@ -19,6 +20,7 @@ impl Default for AppState {
             python_stdin: Arc::new(AsyncMutex::new(None)),
             pending_requests: StdMutex::new(HashMap::new()),
             workspace_path: StdMutex::new(None),
+            python_child: Arc::new(AsyncMutex::new(None)),
         }
     }
 }
@@ -37,7 +39,7 @@ struct PyResponse {
     error: Option<String>,
 }
 
-async fn start_python_sidecar(app: tauri::AppHandle) -> Result<Child, String> {
+async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     let python_path = find_python()?;
 
     let script_path = {
@@ -121,8 +123,9 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<Child, String> {
 
     let state = app.state::<AppState>();
     *state.python_stdin.lock().await = stdin;
+    *state.python_child.lock().await = Some(child);
 
-    Ok(child)
+    Ok(())
 }
 
 fn find_python() -> Result<PathBuf, String> {
@@ -317,7 +320,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::block_on(async {
                 match start_python_sidecar(app_handle).await {
-                    Ok(_child) => {
+                    Ok(()) => {
                         println!("[INFO] Python sidecar started");
                     }
                     Err(e) => {

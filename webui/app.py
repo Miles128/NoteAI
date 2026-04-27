@@ -301,7 +301,7 @@ class Api:
                 mode_text = "AI辅助" if ai_assist else "基础"
                 self.update_status(f"下载完成（{mode_text}模式）：{success_count}/{len(results)}")
 
-                new_md_files = [r["file_path"] for r in results if r.get("success") and r.get("file_path", "").endswith(".md")]
+                new_md_files = [r["file_path"] for r in results if r.get("success") and r.get("file_path", "")]
                 if new_md_files:
                     self._tag_new_files(new_md_files)
             except APIConfigError as e:
@@ -351,7 +351,7 @@ class Api:
                 mode_text = "AI辅助" if ai_assist else "基础"
                 self.update_status(f"转换完成（{mode_text}模式）：{success_count}/{len(results)}")
 
-                new_md_files = [r["file_path"] for r in results if r.get("success") and r.get("file_path", "").endswith(".md")]
+                new_md_files = [r.get("output_path") or r.get("file_path") for r in results if r.get("success") and (r.get("output_path") or r.get("file_path"))]
                 if new_md_files:
                     self._tag_new_files(new_md_files)
             except APIConfigError as e:

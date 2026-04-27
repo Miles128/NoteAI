@@ -26,7 +26,10 @@ async function startFileConversion() {
                     var data = event.payload;
                     if (!data) return;
 
-                    if (data.type === 'file_conversion_complete') {
+                    if (data.type === 'progress' && data.element_id === 'conv-progress') {
+                        updateProgress('conv-progress', data.progress || 0, data.message || '');
+                        updateStatus(data.message || '转换中...');
+                    } else if (data.type === 'file_conversion_complete') {
                         updateProgress('conv-progress', 1, '转换完成');
                         updateStatus('转换完成');
                         if (btn) {

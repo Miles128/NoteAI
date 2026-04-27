@@ -25,6 +25,7 @@ class SidecarServer:
         self.note_integration = None
         self.topic_extractor = TopicExtractor()
         self._progress_callback = None
+        self._running_tasks = set()
 
     def _send_response(self, resp):
         sys.stdout.write(json.dumps(resp, ensure_ascii=False) + '\n')
@@ -41,13 +42,24 @@ class SidecarServer:
             }
         })
 
+    def _start_task(self, task_name, target, args=(), kwargs=None):
+        if task_name in self._running_tasks:
+            return False
+        self._running_tasks.add(task_name)
+
+        def _wrapped():
+            try:
+                target(*args, **(kwargs or {}))
+            finally:
+                self._running_tasks.discard(task_name)
+
+        threading.Thread(target=_wrapped, daemon=True).start()
+        return True
+
     def handle_request(self, request):
         method = request.get("method", "")
         params = request.get("params", {})
         req_id = request.get("id", "")
-        
-        sys.stderr.write(f"[DEBUG] handle_request: method={method}, params={params}\n")
-        sys.stderr.flush()
 
         handler_map = {
             "get_api_config": self._get_api_config,
@@ -69,16 +81,14 @@ class SidecarServer:
             "save_file_content": self._save_file_content,
             "get_workspace_tree": self._get_workspace_tree,
             "test_api_connection": self._test_api_connection,
+            "on_file_selected": self._on_file_selected,
+            "refresh_log": self._refresh_log,
         }
 
         handler = handler_map.get(method)
         if handler:
             try:
-                sys.stderr.write(f"[DEBUG] Calling handler for method: {method}\n")
-                sys.stderr.flush()
                 result = handler(params)
-                sys.stderr.write(f"[DEBUG] Handler result: {result}\n")
-                sys.stderr.flush()
                 self._send_response({"id": req_id, "result": result})
             except Exception as e:
                 import traceback
@@ -132,7 +142,9 @@ class SidecarServer:
         config.max_tokens = params.get("max_tokens", 32000)
         config.max_context_tokens = params.get("max_context_tokens", 128000)
 
-        config.save()
+        save_ok, save_msg = config.save()
+        if not save_ok:
+            return {"success": False, "message": save_msg}
         return {"success": True, "message": f"配置已保存，{conn_msg}"}
 
     def _get_ui_config(self, params):
@@ -158,7 +170,9 @@ class SidecarServer:
             config.auto_topic = params["auto_topic"]
         if "topic_list" in params:
             config.topic_list = params["topic_list"]
-        config.save()
+        save_ok, save_msg = config.save()
+        if not save_ok:
+            return {"success": False, "message": save_msg}
         return {"success": True, "message": "UI 配置已保存"}
 
     def _get_theme_preference(self, params):
@@ -166,7 +180,9 @@ class SidecarServer:
 
     def _save_theme_preference(self, params):
         config.theme_preference = params.get("theme", "system")
-        config.save()
+        save_ok, save_msg = config.save()
+        if not save_ok:
+            return {"success": False, "message": save_msg}
         return {"success": True}
 
     def _get_workspace_status(self, params):
@@ -183,7 +199,7 @@ class SidecarServer:
         return {"is_set": False, "saved_workspace": False}
 
     def _check_workspace_path_valid(self, params):
-        path = config.workspace_path
+        path = params.get("path", config.workspace_path)
         if path and Path(path).exists():
             return {"is_valid": True, "message": "工作区路径有效", "path": path}
         return {"is_valid": False, "message": "工作区路径无效", "path": path}
@@ -214,29 +230,35 @@ class SidecarServer:
         if not urls:
             return {"success": False, "message": "请输入至少一个URL"}
 
-        def _run():
-            try:
-                result = self.web_downloader.download_batch(
-                    urls, save_path,
-                    ai_assist=ai_assist,
-                    include_images=include_images
-                )
-                success_count = sum(1 for r in result if r.get("success"))
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
-                })
-            except Exception as e:
-                import traceback
-                sys.stderr.write(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
-                sys.stderr.flush()
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "web_download_error", "error": str(e)}
-                })
+        if not self._start_task("web_download", self._do_web_download, args=(urls, save_path, ai_assist, include_images)):
+            return {"success": False, "message": "下载任务正在进行中，请稍后"}
 
-        threading.Thread(target=_run, daemon=True).start()
         return {"success": True, "message": "下载已开始"}
+
+    def _do_web_download(self, urls, save_path, ai_assist, include_images):
+        try:
+            def progress_cb(current, total, message):
+                self._send_progress("web-progress", current / total if total > 0 else 0, message)
+
+            self.web_downloader.progress_callback = progress_cb
+            result = self.web_downloader.download_batch(
+                urls, save_path,
+                ai_assist=ai_assist,
+                include_images=include_images
+            )
+            success_count = sum(1 for r in result if r.get("success"))
+            self._send_response({
+                "id": "event",
+                "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
+            })
+        except Exception as e:
+            import traceback
+            sys.stderr.write(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
+            sys.stderr.flush()
+            self._send_response({
+                "id": "event",
+                "result": {"type": "web_download_error", "error": str(e)}
+            })
 
     def _start_file_conversion(self, params):
         ai_assist = params.get("ai_assist", False)
@@ -244,36 +266,40 @@ class SidecarServer:
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        def _run():
-            try:
-                result = self.file_converter.convert_folder(
-                    workspace, ai_assist=ai_assist
-                )
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "file_conversion_complete", "data": result}
-                })
-            except Exception as e:
-                import traceback
-                sys.stderr.write(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
-                sys.stderr.flush()
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "file_conversion_error", "error": str(e)}
-                })
+        if not self._start_task("file_conversion", self._do_file_conversion, args=(workspace, ai_assist)):
+            return {"success": False, "message": "转换任务正在进行中，请稍后"}
 
-        threading.Thread(target=_run, daemon=True).start()
         return {"success": True, "message": "转换已开始"}
+
+    def _do_file_conversion(self, workspace, ai_assist):
+        try:
+            result = self.file_converter.convert_folder(
+                workspace, ai_assist=ai_assist
+            )
+            self._send_response({
+                "id": "event",
+                "result": {"type": "file_conversion_complete", "data": result}
+            })
+        except Exception as e:
+            import traceback
+            sys.stderr.write(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
+            sys.stderr.flush()
+            self._send_response({
+                "id": "event",
+                "result": {"type": "file_conversion_error", "error": str(e)}
+            })
 
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
         workspace = config.workspace_path
         if not workspace:
-            return {"error": "请先设置工作区"}
+            return {"success": False, "message": "请先设置工作区"}
 
         result = self.topic_extractor.extract_topics(
             workspace, topic_count=topic_count
         )
+        if not result.get("success"):
+            return {"success": False, "message": result.get("error", "提取主题失败")}
         return result
 
     def _start_note_integration(self, params):
@@ -285,43 +311,34 @@ class SidecarServer:
 
         self.note_integration = NoteIntegration(workspace)
 
-        def _run():
-            try:
-                result = self.note_integration.integrate(
-                    auto_topic=auto_topic,
-                    topics=topics
-                )
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "note_integration_complete", "data": result}
-                })
-            except Exception as e:
-                import traceback
-                sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
-                sys.stderr.flush()
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "note_integration_error", "error": str(e)}
-                })
+        if not self._start_task("note_integration", self._do_note_integration, args=(auto_topic, topics)):
+            return {"success": False, "message": "整合任务正在进行中，请稍后"}
 
-        threading.Thread(target=_run, daemon=True).start()
         return {"success": True, "message": "整合已开始"}
+
+    def _do_note_integration(self, auto_topic, topics):
+        try:
+            result = self.note_integration.integrate(
+                auto_topic=auto_topic,
+                topics=topics
+            )
+            self._send_response({
+                "id": "event",
+                "result": {"type": "note_integration_complete", "data": result}
+            })
+        except Exception as e:
+            import traceback
+            sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
+            sys.stderr.flush()
+            self._send_response({
+                "id": "event",
+                "result": {"type": "note_integration_error", "error": str(e)}
+            })
 
     def _get_file_preview(self, params):
         path = params.get("path", "")
-        sys.stderr.write(f"[DEBUG] _get_file_preview: path={path}\n")
-        sys.stderr.write(f"[DEBUG] file_previewer.workspace_path={self.file_previewer.workspace_path}\n")
-        sys.stderr.write(f"[DEBUG] config.workspace_path={config.workspace_path}\n")
-        sys.stderr.flush()
-        
         full_path = self._resolve_path(path)
-        sys.stderr.write(f"[DEBUG] _get_file_preview: full_path={full_path}\n")
-        sys.stderr.flush()
-        
         result = self.file_previewer.get_preview_data(full_path)
-        sys.stderr.write(f"[DEBUG] _get_file_preview result: success={result.get('success')}\n")
-        sys.stderr.flush()
-        
         return result
 
     def _can_preview_file(self, params):
@@ -336,22 +353,24 @@ class SidecarServer:
             Path(full_path).write_text(params.get("content", ""), encoding="utf-8")
             return {"success": True, "message": "文件已保存"}
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            return {"success": False, "message": str(e)}
+
+    def _on_file_selected(self, params):
+        path = params.get("path", "")
+        full_path = self._resolve_path(path)
+        return {"success": True, "path": full_path}
+
+    def _refresh_log(self, params):
+        return {"success": True, "message": "日志已刷新"}
 
     def _resolve_path(self, path):
-        sys.stderr.write(f"[DEBUG] _resolve_path: input={path}, is_absolute={Path(path).is_absolute()}\n")
-        sys.stderr.flush()
-        
+        if not path:
+            return path
         if Path(path).is_absolute():
             return path
         workspace = config.workspace_path
         if workspace:
-            resolved = str(Path(workspace) / path)
-            sys.stderr.write(f"[DEBUG] _resolve_path: resolved={resolved}\n")
-            sys.stderr.flush()
-            return resolved
-        sys.stderr.write(f"[DEBUG] _resolve_path: no workspace, returning original path\n")
-        sys.stderr.flush()
+            return str(Path(workspace) / path)
         return path
 
     def _get_workspace_tree(self, params):

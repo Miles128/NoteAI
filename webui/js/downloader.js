@@ -36,7 +36,10 @@ async function startWebDownload() {
                     var data = event.payload;
                     if (!data) return;
 
-                    if (data.type === 'web_download_complete') {
+                    if (data.type === 'progress' && data.element_id === 'web-progress') {
+                        updateProgress('web-progress', data.progress || 0, data.message || '');
+                        updateStatus(data.message || '下载中...');
+                    } else if (data.type === 'web_download_complete') {
                         var successCount = data.success_count || 0;
                         var total = data.total || 0;
                         updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');

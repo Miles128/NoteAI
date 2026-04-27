@@ -131,11 +131,6 @@ async function canPreviewFile(path) {
 }
 
 async function saveFileContent(path, content) {
-    if (_isTauri) {
-        var invoke = window.__TAURI_INTERNALS__.invoke;
-        await invoke('write_file', { path: path, content: content });
-        return { success: true, message: '文件已保存' };
-    }
     return pyCall('save_file_content', { path: path, content: content });
 }
 

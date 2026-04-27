@@ -121,7 +121,10 @@ async function startNoteIntegration() {
                     var data = event.payload;
                     if (!data) return;
 
-                    if (data.type === 'note_integration_complete') {
+                    if (data.type === 'progress' && data.element_id === 'integration-progress') {
+                        updateProgress('integration-progress', data.progress || 0, data.message || '');
+                        updateStatus(data.message || '整合中...');
+                    } else if (data.type === 'note_integration_complete') {
                         updateProgress('integration-progress', 1, '整合完成');
                         updateStatus('整合完成');
                         if (btn) {

@@ -244,15 +244,25 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
     """
     import threading
     import re
+    from utils.logger import logger
+
+    logger.info(f"[API连接测试] 开始测试连接...")
+    logger.info(f"[API连接测试] API Base: {api_base}")
+    logger.info(f"[API连接测试] 模型名称: {model_name}")
+    logger.info(f"[API连接测试] API Key（前8后4）: {api_key[:8] + '...' + api_key[-4:] if len(api_key) > 12 else '***'}")
 
     if not api_key or not api_key.strip():
+        logger.error("[API连接测试] API Key 为空")
         return False, "API Key 为空，请先配置 API Key"
     if len(api_key.strip()) < 10:
+        logger.error("[API连接测试] API Key 格式无效")
         return False, "API Key 格式无效，请检查配置"
 
     api_key = api_key.strip()
     api_base = api_base.strip() if api_base else "https://api.openai.com/v1"
     model_name = model_name.strip() if model_name else "gpt-4"
+    
+    logger.info(f"[API连接测试] 规范化后: API Base={api_base}, 模型={model_name}")
 
     url_pattern = re.compile(
         r'^https?://'
@@ -264,12 +274,16 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
     )
 
     if not url_pattern.match(api_base):
+        logger.error(f"[API连接测试] URL 格式无效: {api_base}")
         return False, f"API Base URL 格式无效：{api_base}"
+    
+    logger.info("[API连接测试] URL 格式验证通过")
 
     result = [None, None]
 
     def _test():
         try:
+            logger.info("[API连接测试] 创建 ChatOpenAI 实例...")
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
                 api_key=api_key,
@@ -278,29 +292,40 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
                 temperature=0,
                 max_tokens=10
             )
+            logger.info("[API连接测试] 发送测试请求...")
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
+                logger.info(f"[API连接测试] 响应成功: {response.content[:50] if response.content else '空'}...")
                 result[0] = (True, "API 连接成功")
             else:
+                logger.error("[API连接测试] 响应格式异常")
                 result[0] = (False, "API 响应格式异常")
         except Exception as e:
+            import traceback
+            logger.error(f"[API连接测试] 异常: {str(e)}")
+            logger.error(f"[API连接测试] 异常堆栈: {traceback.format_exc()}")
             result[0] = (False, str(e))
 
+    logger.info("[API连接测试] 启动测试线程（超时15秒）...")
     thread = threading.Thread(target=_test)
     thread.daemon = True
     thread.start()
     thread.join(timeout=15)
 
     if thread.is_alive():
+        logger.error(f"[API连接测试] 超时（15秒）")
         return False, f"API 连接超时（15秒），请检查 API 地址：{api_base}"
 
     if result[0]:
         is_connected, msg = result[0]
+        logger.info(f"[API连接测试] 测试完成: 成功={is_connected}, 消息={msg}")
         if not is_connected:
             detailed_msg = _classify_api_error(msg, api_base, model_name)
+            logger.error(f"[API连接测试] 分类后的错误: {detailed_msg}")
             return False, detailed_msg
         return is_connected, msg
 
+    logger.error("[API连接测试] 未知错误")
     return False, "未知错误"
 
 def sanitize_filename(filename: str, max_length: int = 100) -> str:

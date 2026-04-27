@@ -502,18 +502,31 @@ class Api:
         api_key = config_data.get("api_key", "")
         api_base = config_data.get("api_base", "https://api.openai.com/v1")
         model_name = config_data.get("model_name", "gpt-4")
+        
+        logger.info(f"[API配置保存] 开始保存配置...")
+        logger.info(f"[API配置保存] 接收到的 API Key（前8后4）: {api_key[:8] + '...' + api_key[-4:] if len(api_key) > 12 else '***'}")
+        logger.info(f"[API配置保存] API Base: {api_base}")
+        logger.info(f"[API配置保存] 模型名称: {model_name}")
 
         if "****" in api_key or "..." in api_key or "***" in api_key:
+            logger.info(f"[API配置保存] 检测到掩码，使用已保存的 API Key")
             api_key = config.api_key
+            logger.info(f"[API配置保存] 使用已保存的 API Key（前8后4）: {api_key[:8] + '...' + api_key[-4:] if len(api_key) > 12 else '***'}")
 
         if not api_key or not api_key.strip():
+            logger.error("[API配置保存] API Key 为空")
             return {"success": False, "message": "API Key 不能为空"}
 
+        logger.info(f"[API配置保存] 开始测试 API 连接...")
         from utils.helpers import test_api_connection
         connected, conn_msg = test_api_connection(api_key, api_base, model_name)
+        logger.info(f"[API配置保存] 连接测试结果: 成功={connected}, 消息={conn_msg}")
+        
         if not connected:
+            logger.error(f"[API配置保存] 连接测试失败: {conn_msg}")
             return {"success": False, "message": conn_msg}
 
+        logger.info("[API配置保存] 连接测试成功，保存配置到文件...")
         config.api_key = api_key
         config.api_base = api_base
         config.model_name = model_name
@@ -521,9 +534,13 @@ class Api:
         config.max_tokens = config_data.get("max_tokens", 32000)
         config.max_context_tokens = config_data.get("max_context_tokens", 128000)
         success, message = config.save_to_file()
+        logger.info(f"[API配置保存] 配置保存结果: 成功={success}, 消息={message}")
+        
         if success:
+            logger.info("[API配置保存] 配置保存成功！")
             return {"success": True, "message": f"{conn_msg}\n\n{message}"}
         else:
+            logger.error(f"[API配置保存] 配置保存失败: {message}")
             return {"success": False, "message": message}
 
     def get_ui_config(self):

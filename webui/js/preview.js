@@ -5,6 +5,9 @@ function showContentView() {
     const contentPanel = document.getElementById('content-panel');
     const previewPanel = document.getElementById('preview-panel');
     const titlebarFileName = document.getElementById('titlebar-file-name');
+    const titlebarSplitBtn = document.getElementById('titlebar-split-btn');
+    const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
+    const titlebarSeparator = document.getElementById('titlebar-preview-separator');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
@@ -12,6 +15,9 @@ function showContentView() {
         titlebarFileName.style.display = 'none';
         titlebarFileName.textContent = '';
     }
+    if (titlebarSplitBtn) titlebarSplitBtn.style.display = 'none';
+    if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
+    if (titlebarSeparator) titlebarSeparator.style.display = 'none';
 }
 
 function showPreviewView() {
@@ -24,19 +30,28 @@ function showPreviewView() {
 
 function updateTitlebarFileName(fileName, isMarkdown) {
     const titlebarFileName = document.getElementById('titlebar-file-name');
-    if (titlebarFileName) {
-        if (fileName) {
+    const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
+    const titlebarSeparator = document.getElementById('titlebar-preview-separator');
+    
+    if (fileName) {
+        if (titlebarFileName) {
             titlebarFileName.textContent = fileName;
             titlebarFileName.style.display = 'block';
-        } else {
+        }
+        if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'flex';
+        if (titlebarSeparator) titlebarSeparator.style.display = 'block';
+    } else {
+        if (titlebarFileName) {
             titlebarFileName.style.display = 'none';
             titlebarFileName.textContent = '';
         }
+        if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
+        if (titlebarSeparator) titlebarSeparator.style.display = 'none';
     }
 }
 
 function showEditButton(show) {
-    const splitBtn = document.getElementById('preview-split-btn');
+    const splitBtn = document.getElementById('titlebar-split-btn');
     if (splitBtn) {
         splitBtn.style.display = show ? 'flex' : 'none';
     }

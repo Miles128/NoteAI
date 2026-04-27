@@ -137,6 +137,31 @@ body {
     gap: 2px;
 }
 
+.titlebar-left {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.titlebar-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: 0 12px;
+}
+
+.titlebar-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
 .titlebar-group-separator {
     width: 0.5px;
     height: 16px;
@@ -148,13 +173,11 @@ body {
     font-size: 13px;
     font-weight: 500;
     color: var(--text);
-    max-width: 400px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 4px 8px;
+    padding: 4px 12px;
     background: rgba(0, 0, 0, 0.03);
     border-radius: 4px;
+    text-align: center;
 }
 
 .titlebar-btn {

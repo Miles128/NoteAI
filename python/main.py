@@ -171,6 +171,7 @@ class SidecarServer:
         if path and Path(path).exists():
             config.workspace_path = path
             config.save()
+            self.file_previewer.workspace_path = path
             return {"success": True, "message": "工作区已设置", "workspace_path": path}
         return {"success": False, "message": "路径无效"}
 

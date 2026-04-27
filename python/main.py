@@ -208,14 +208,18 @@ class SidecarServer:
         from config.settings import WorkspaceStateManager
         WorkspaceStateManager.clear()
         config.workspace_path = ""
-        config.save()
+        save_ok, save_msg = config.save()
+        if not save_ok:
+            return {"success": False, "message": save_msg}
         return {"success": True, "message": "已清除保存的工作区"}
 
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
             config.workspace_path = path
-            config.save()
+            save_ok, save_msg = config.save()
+            if not save_ok:
+                return {"success": False, "message": save_msg}
             self.file_previewer.workspace_path = path
             return {"success": True, "message": "工作区已设置", "workspace_path": path}
         return {"success": False, "message": "路径无效"}

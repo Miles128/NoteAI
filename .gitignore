@@ -57,3 +57,6 @@ config.local.py
 
 # Downloaded bundles
 codemirror-bundle.mjs
+
+# Tauri
+src-tauri/target/

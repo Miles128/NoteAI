@@ -576,6 +576,10 @@ class AppConfig:
 
         return True, "配置保存成功"
     
+    def save(self, config_path: str = None):
+        """保存配置到文件（save_to_file 的别名，用于向后兼容）"""
+        return self.save_to_file(config_path)
+    
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return self.__dict__.copy()

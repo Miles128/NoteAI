@@ -503,7 +503,7 @@ class Api:
         api_base = config_data.get("api_base", "https://api.openai.com/v1")
         model_name = config_data.get("model_name", "gpt-4")
 
-        if "****" in api_key:
+        if "****" in api_key or "..." in api_key or "***" in api_key:
             api_key = config.api_key
 
         if not api_key or not api_key.strip():

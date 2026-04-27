@@ -109,7 +109,7 @@ class SidecarServer:
         api_base = params.get("api_base", "https://api.openai.com/v1")
         model_name = params.get("model_name", "gpt-4")
 
-        if "****" in api_key:
+        if "****" in api_key or "..." in api_key or "***" in api_key:
             api_key = config.api_key
 
         if not api_key or not api_key.strip():

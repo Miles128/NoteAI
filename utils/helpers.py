@@ -139,6 +139,97 @@ def check_api_config() -> Tuple[bool, str]:
     except Exception as e:
         return False, f"检查API配置时出错: {str(e)}"
 
+def _classify_api_error(error_msg: str, api_base: str, model_name: str) -> str:
+    """
+    分类 API 错误，返回更具体的错误信息
+
+    参数:
+        error_msg: 原始错误消息
+        api_base: API 基础 URL
+        model_name: 模型名称
+
+    返回:
+        分类后的错误信息
+    """
+    error_str = error_msg.lower()
+
+    if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+        if "api key" in error_str or "invalid" in error_str:
+            return "API 认证失败：密钥无效或已过期"
+        return "API 认证失败，请检查 API Key 是否正确"
+
+    if "403" in error_str or "forbidden" in error_str:
+        return "API 访问被拒绝：可能是账户余额不足或权限受限"
+
+    if "404" in error_str or "not found" in error_str:
+        if "model" in error_str:
+            return f"模型不存在或不可用：{model_name}"
+        return f"API 端点不存在，请检查 API Base URL：{api_base}"
+
+    if "429" in error_str or "rate limit" in error_str or "too many" in error_str:
+        return "API 请求频率超限，请稍后重试"
+
+    if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
+        return "API 服务器错误，请稍后重试或检查 API 状态"
+
+    if "connection" in error_str or "connect" in error_str:
+        if "refused" in error_str:
+            return f"无法连接到 API 服务器，连接被拒绝，请检查 API Base URL：{api_base}"
+        if "reset" in error_str:
+            return "API 连接被重置，请检查网络连接"
+        return f"无法连接到 API 服务器，请检查网络和 API 地址：{api_base}"
+
+    if "timeout" in error_str or "timed out" in error_str:
+        return f"API 连接超时，请检查网络和 API 地址：{api_base}"
+
+    if "dns" in error_str or "name or service not known" in error_str or "nodename nor servname" in error_str:
+        return f"DNS 解析失败，无法解析 API 地址：{api_base}"
+
+    if "ssl" in error_str or "certificate" in error_str:
+        return "SSL 证书验证失败，请检查 API 地址是否正确或网络环境"
+
+    if "proxy" in error_str:
+        return "代理连接失败，请检查代理配置"
+
+    if "invalid url" in error_str or "malformed" in error_str:
+        return f"API Base URL 格式无效：{api_base}"
+
+    if "insufficient_quota" in error_str or "quota" in error_str or "balance" in error_str:
+        return "API 配额不足或账户余额不足，请检查账户状态"
+
+    if "context_length" in error_str or "maximum context" in error_str:
+        return "请求内容超出模型上下文长度限制"
+
+    return f"API 连接失败：{error_msg}"
+
+
+def _normalize_api_base(api_base: str) -> str:
+    """
+    规范化 API Base URL，确保格式正确
+
+    参数:
+        api_base: 原始 API Base URL
+
+    返回:
+        规范化后的 URL
+    """
+    if not api_base:
+        return "https://api.openai.com/v1"
+
+    api_base = api_base.strip()
+
+    if not api_base.startswith("http://") and not api_base.startswith("https://"):
+        api_base = "https://" + api_base
+
+    if not api_base.endswith("/v1") and not api_base.endswith("/v1/"):
+        if api_base.endswith("/"):
+            api_base = api_base + "v1"
+        else:
+            api_base = api_base + "/v1"
+
+    return api_base
+
+
 def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[bool, str]:
     """
     测试 API 连接是否可用
@@ -152,11 +243,28 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
         (is_connected, message)
     """
     import threading
+    import re
 
     if not api_key or not api_key.strip():
         return False, "API Key 为空，请先配置 API Key"
     if len(api_key.strip()) < 10:
         return False, "API Key 格式无效，请检查配置"
+
+    api_key = api_key.strip()
+    api_base = api_base.strip() if api_base else "https://api.openai.com/v1"
+    model_name = model_name.strip() if model_name else "gpt-4"
+
+    url_pattern = re.compile(
+        r'^https?://'
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+        r'localhost|'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'(?::\d+)?'
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE
+    )
+
+    if not url_pattern.match(api_base):
+        return False, f"API Base URL 格式无效：{api_base}"
 
     result = [None, None]
 
@@ -181,25 +289,16 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
     thread = threading.Thread(target=_test)
     thread.daemon = True
     thread.start()
-    thread.join(timeout=10)
+    thread.join(timeout=15)
 
     if thread.is_alive():
-        return False, "API 连接超时，请检查 API 地址是否正确"
+        return False, f"API 连接超时（15秒），请检查 API 地址：{api_base}"
 
     if result[0]:
         is_connected, msg = result[0]
         if not is_connected:
-            error_str = msg.lower()
-            if "authentication" in error_str or "api key" in error_str or "unauthorized" in error_str:
-                return False, f"API 认证失败：密钥无效或已过期"
-            elif "connection" in error_str or "connect" in error_str or "network" in error_str:
-                return False, f"无法连接到 API 服务器，请检查网络和 API 地址"
-            elif "timeout" in error_str or "timed out" in error_str:
-                return False, f"API 连接超时，请检查 API 地址是否正确"
-            elif "model" in error_str or "not found" in error_str:
-                return False, f"模型不存在或不可用：{model_name}"
-            else:
-                return False, f"API 连接失败：{msg}"
+            detailed_msg = _classify_api_error(msg, api_base, model_name)
+            return False, detailed_msg
         return is_connected, msg
 
     return False, "未知错误"

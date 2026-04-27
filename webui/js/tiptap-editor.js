@@ -6,7 +6,9 @@ window.TiptapEditor = {
     originalContent: null,
     modules: {},
     modulesReady: false,
-    initPromise: null
+    initPromise: null,
+    toolbarBound: false,
+    destroying: false
 };
 
 window.TiptapEditor.initPromise = new Promise((resolve) => {
@@ -58,6 +60,8 @@ function initTiptapModules() {
 }
 
 function bindTiptapToolbarEvents() {
+    if (window.TiptapEditor.toolbarBound) return;
+
     const toolbar = document.getElementById('tiptap-toolbar');
     if (!toolbar) return;
 
@@ -69,14 +73,13 @@ function bindTiptapToolbarEvents() {
         const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
         executeTiptapAction(action, level);
     });
+
+    window.TiptapEditor.toolbarBound = true;
 }
 
 function executeTiptapAction(action, level) {
     const editor = window.TiptapEditor.instance;
-    if (!editor) {
-        console.warn('[Tiptap] No editor instance');
-        return;
-    }
+    if (!editor || window.TiptapEditor.destroying) return;
 
     try {
         switch (action) {
@@ -125,93 +128,66 @@ function executeTiptapAction(action, level) {
 
 function updateTiptapToolbarState() {
     const editor = window.TiptapEditor.instance;
-    if (!editor) return;
+    if (!editor || window.TiptapEditor.destroying) return;
 
     const toolbar = document.getElementById('tiptap-toolbar');
     if (!toolbar) return;
 
-    const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
-    buttons.forEach(btn => {
-        const action = btn.dataset.action;
-        const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
+    try {
+        const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
+        buttons.forEach(btn => {
+            const action = btn.dataset.action;
+            const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
 
-        if (action === 'undo') {
-            try {
-                btn.disabled = !editor.can().undo();
-            } catch (e) {
+            if (action === 'undo') {
+                try { btn.disabled = !editor.can().undo(); } catch (e) { btn.disabled = false; }
+            } else if (action === 'redo') {
+                try { btn.disabled = !editor.can().redo(); } catch (e) { btn.disabled = false; }
+            } else {
                 btn.disabled = false;
             }
-        } else if (action === 'redo') {
+
+            let isActive = false;
             try {
-                btn.disabled = !editor.can().redo();
-            } catch (e) {
-                btn.disabled = false;
-            }
-        } else {
-            btn.disabled = false;
-        }
+                if (action === 'heading' && level) isActive = editor.isActive('heading', { level });
+                else if (action === 'bulletList') isActive = editor.isActive('bulletList');
+                else if (action === 'orderedList') isActive = editor.isActive('orderedList');
+                else if (action === 'blockquote') isActive = editor.isActive('blockquote');
+                else if (action === 'codeBlock') isActive = editor.isActive('codeBlock');
+                else if (action === 'bold') isActive = editor.isActive('bold');
+                else if (action === 'italic') isActive = editor.isActive('italic');
+                else if (action === 'strike') isActive = editor.isActive('strike');
+                else if (action === 'code') isActive = editor.isActive('code');
+            } catch (e) {}
 
-        let isActive = false;
-        try {
-            if (action === 'heading' && level) {
-                isActive = editor.isActive('heading', { level });
-            } else if (action === 'bulletList') {
-                isActive = editor.isActive('bulletList');
-            } else if (action === 'orderedList') {
-                isActive = editor.isActive('orderedList');
-            } else if (action === 'blockquote') {
-                isActive = editor.isActive('blockquote');
-            } else if (action === 'codeBlock') {
-                isActive = editor.isActive('codeBlock');
-            } else if (action === 'bold') {
-                isActive = editor.isActive('bold');
-            } else if (action === 'italic') {
-                isActive = editor.isActive('italic');
-            } else if (action === 'strike') {
-                isActive = editor.isActive('strike');
-            } else if (action === 'code') {
-                isActive = editor.isActive('code');
-            }
-        } catch (e) {}
-
-        if (isActive) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
+            if (isActive) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+    } catch (e) {}
 }
 
 function createTiptapEditor(markdownContent, filePath) {
     const container = document.getElementById('tiptap-editor');
-    if (!container) {
-        console.error('[Tiptap] Editor container not found');
-        return false;
-    }
+    if (!container) return false;
 
     if (window.TiptapEditor.instance) {
         destroyTiptapEditor();
     }
 
     const M = window.TiptapEditor.modules;
-
-    if (!M.Editor || !M.StarterKit || !M.Markdown) {
-        console.error('[Tiptap] Required modules not available');
-        return false;
-    }
+    if (!M.Editor || !M.StarterKit || !M.Markdown) return false;
 
     container.innerHTML = '';
 
     window.TiptapEditor.filePath = filePath;
     window.TiptapEditor.originalContent = markdownContent;
     window.TiptapEditor.isActive = true;
+    window.TiptapEditor.destroying = false;
 
     try {
         const extensions = [
             M.StarterKit.configure({
-                heading: {
-                    levels: [1, 2, 3, 4, 5, 6]
-                }
+                heading: { levels: [1, 2, 3, 4, 5, 6] }
             }),
             M.Markdown.configure({
                 html: true,
@@ -233,6 +209,7 @@ function createTiptapEditor(markdownContent, filePath) {
                 }
             },
             onUpdate: ({ editor }) => {
+                if (window.TiptapEditor.destroying) return;
                 if (window.TiptapEditor.saveTimer) {
                     clearTimeout(window.TiptapEditor.saveTimer);
                 }
@@ -241,14 +218,16 @@ function createTiptapEditor(markdownContent, filePath) {
                 }, 1000);
             },
             onSelectionUpdate: () => {
-                updateTiptapToolbarState();
+                if (!window.TiptapEditor.destroying) {
+                    updateTiptapToolbarState();
+                }
             }
         });
 
         bindTiptapToolbarEvents();
         updateTiptapToolbarState();
 
-        console.log('[Tiptap] Editor created for:', filePath, 'content length:', (markdownContent || '').length);
+        console.log('[Tiptap] Editor created for:', filePath);
         return true;
     } catch (e) {
         console.error('[Tiptap] Failed to create editor:', e);
@@ -258,7 +237,7 @@ function createTiptapEditor(markdownContent, filePath) {
 }
 
 async function saveTiptapContent() {
-    if (!window.TiptapEditor.instance || !window.TiptapEditor.filePath) {
+    if (!window.TiptapEditor.instance || !window.TiptapEditor.filePath || window.TiptapEditor.destroying) {
         return;
     }
 
@@ -268,9 +247,6 @@ async function saveTiptapContent() {
 
         if (result && result.success) {
             window.TiptapEditor.originalContent = markdown;
-            console.log('[Tiptap] Saved:', window.TiptapEditor.filePath);
-        } else {
-            console.error('[Tiptap] Save failed:', result);
         }
     } catch (e) {
         console.error('[Tiptap] Save error:', e);
@@ -278,29 +254,32 @@ async function saveTiptapContent() {
 }
 
 function destroyTiptapEditor() {
+    if (window.TiptapEditor.destroying) return;
+    window.TiptapEditor.destroying = true;
+
     if (window.TiptapEditor.saveTimer) {
         clearTimeout(window.TiptapEditor.saveTimer);
         window.TiptapEditor.saveTimer = null;
     }
 
     if (window.TiptapEditor.instance) {
-        saveTiptapContent();
         try {
             window.TiptapEditor.instance.destroy();
-        } catch (e) {}
+        } catch (e) {
+            console.error('[Tiptap] Destroy error:', e);
+        }
         window.TiptapEditor.instance = null;
     }
 
     window.TiptapEditor.filePath = null;
     window.TiptapEditor.originalContent = null;
     window.TiptapEditor.isActive = false;
+    window.TiptapEditor.destroying = false;
 
     const container = document.getElementById('tiptap-editor');
     if (container) {
         container.innerHTML = '';
     }
-
-    console.log('[Tiptap] Editor destroyed');
 }
 
 function showEditorUI() {
@@ -314,11 +293,11 @@ function showEditorUI() {
 }
 
 function hideEditorUI() {
+    destroyTiptapEditor();
+
     const previewContent = document.getElementById('preview-content');
     const tiptapContainer = document.getElementById('tiptap-editor-container');
     const toolbar = document.getElementById('tiptap-toolbar');
-
-    destroyTiptapEditor();
 
     if (previewContent) previewContent.style.display = 'block';
     if (tiptapContainer) tiptapContainer.style.display = 'none';

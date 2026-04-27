@@ -384,8 +384,10 @@ function exitEditMode() {
     const toolbar = document.getElementById('tiptap-toolbar');
     const splitBtn = document.getElementById('titlebar-split-btn');
 
-    if (window.TiptapEditorModule && window.TiptapEditorModule.exitTiptapEditMode) {
-        window.TiptapEditorModule.exitTiptapEditMode();
+    if (window.TiptapEditor && window.TiptapEditor.isActive) {
+        if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+            window.TiptapEditorModule.hideEditorUI();
+        }
     }
 
     if (previewContent) previewContent.style.display = 'block';
@@ -401,34 +403,27 @@ async function toggleEditMode() {
         exitEditMode();
         if (currentPreviewData && currentPreviewData.type === 'markdown') {
             const content = document.getElementById('preview-content');
-            if (content && window.TiptapEditorModule) {
-                const markdown = window.TiptapEditorModule.getTiptapMarkdown();
-                if (markdown) {
-                    content.innerHTML = renderMarkdownPreview(markdown);
-                }
+            if (content) {
+                content.innerHTML = renderMarkdownPreview(currentPreviewData.content);
             }
         }
     } else {
         if (currentPreviewData && currentPreviewData.type === 'markdown') {
-            if (!window.TiptapLoader || !window.TiptapLoader.ready) {
-                const ready = await initTiptapEditor();
-                if (!ready) {
-                    console.error('[Editor] Tiptap not ready, falling back to CodeMirror');
+            if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
+                const success = await window.TiptapEditorModule.openMarkdownInEditor(
+                    currentPreviewData.content,
+                    selectedFilePath
+                );
+                if (!success) {
+                    console.warn('[Editor] Tiptap init failed, using CodeMirror fallback');
                     enterEditMode();
                     initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
                     if (splitBtn) splitBtn.classList.add('active');
-                    return;
                 }
-            }
-
-            enterEditMode();
-            const success = window.TiptapEditorModule.createTiptapEditor(
-                currentPreviewData.content, 
-                selectedFilePath
-            );
-            if (!success) {
-                console.warn('[Editor] Tiptap init failed, using CodeMirror fallback');
+            } else {
+                enterEditMode();
                 initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+                if (splitBtn) splitBtn.classList.add('active');
             }
         }
     }

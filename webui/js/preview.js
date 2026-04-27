@@ -72,7 +72,7 @@ async function loadFilePreview(path, fileName) {
     const previewTitle = document.getElementById('preview-file-name');
 
     if (!previewPanel || !previewContent) {
-        console.error('[Preview] Missing DOM elements:', { previewPanel: !!previewPanel, previewContent: !!previewContent });
+        console.error('[Preview] Missing DOM elements');
         return;
     }
 
@@ -82,8 +82,10 @@ async function loadFilePreview(path, fileName) {
         }
     }
 
-    if (window.EditorModule && window.EditorModule.exitEditMode) {
-        window.EditorModule.exitEditMode();
+    if (window.mdEditor && window.mdEditor.isActive) {
+        if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
+            window.EditorModule.destroyCodeMirrorEditor();
+        }
     }
 
     isPreviewActive = true;
@@ -92,12 +94,18 @@ async function loadFilePreview(path, fileName) {
         previewTitle.textContent = fileName;
     }
 
+    previewContent.style.display = 'block';
     previewContent.innerHTML = `
         <div class="preview-loading">
             <div class="preview-spinner"></div>
             <div>加载中...</div>
         </div>
     `;
+
+    const tiptapContainer = document.getElementById('tiptap-editor-container');
+    const toolbar = document.getElementById('tiptap-toolbar');
+    if (tiptapContainer) tiptapContainer.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'none';
 
     previewPanel.classList.add('active');
     showPreviewView();
@@ -261,8 +269,10 @@ function closePreview() {
         }
     }
 
-    if (window.EditorModule && window.EditorModule.isActive) {
-        window.EditorModule.exitEditMode();
+    if (window.mdEditor && window.mdEditor.isActive) {
+        if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
+            window.EditorModule.destroyCodeMirrorEditor();
+        }
     }
 
     showEditButton(false);

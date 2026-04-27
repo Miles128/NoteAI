@@ -9,6 +9,15 @@ window.TiptapModule.readyPromise = new Promise((resolve) => {
     window.TiptapModule.resolveReady = resolve;
 });
 
+window.TiptapEditor = {
+    instance: null,
+    filePath: null,
+    saveTimer: null,
+    isActive: false,
+    originalContent: null,
+    eventsBound: false
+};
+
 function loadTiptapModules() {
     if (window.TiptapModule.isReady) {
         return window.TiptapModule.readyPromise;
@@ -71,112 +80,26 @@ function loadTiptapModules() {
     return window.TiptapModule.readyPromise;
 }
 
-window.TiptapEditor = {
-    instance: null,
-    filePath: null,
-    saveTimer: null,
-    isActive: false,
-    originalContent: null
-};
-
-function createTiptapEditor(markdownContent, filePath) {
-    const container = document.getElementById('tiptap-editor');
-    if (!container) {
-        console.error('[Tiptap] Editor container not found');
-        return false;
+function bindTiptapToolbarEventsOnce() {
+    if (window.TiptapEditor.eventsBound) {
+        return;
     }
 
-    if (window.TiptapEditor.instance) {
-        destroyTiptapEditor();
-    }
-
-    window.TiptapEditor.filePath = filePath;
-    window.TiptapEditor.originalContent = markdownContent;
-    window.TiptapEditor.isActive = true;
-
-    const M = window.TiptapModule.modules;
-
-    if (!M.Editor || !M.StarterKit || !M.Markdown) {
-        console.error('[Tiptap] Required modules not available');
-        return false;
-    }
-
-    try {
-        const extensions = [
-            M.StarterKit.configure({
-                heading: {
-                    levels: [1, 2, 3, 4, 5, 6]
-                },
-                codeBlock: false
-            }),
-            M.Markdown.configure({
-                html: true,
-                tightLists: true,
-                bulletListMarker: '-',
-                linkify: false,
-                breaks: true,
-                transformPastedText: true
-            }),
-            M.Highlight,
-            M.CodeBlockLowlight.configure({
-                lowlight: M.lowlight
-            }),
-            M.Image.configure({
-                inline: true,
-                allowBase64: true
-            }),
-            M.TaskList,
-            M.TaskItem.configure({
-                nested: true
-            })
-        ];
-
-        window.TiptapEditor.instance = new M.Editor({
-            element: container,
-            extensions: extensions,
-            content: markdownContent,
-            editorProps: {
-                attributes: {
-                    class: 'tiptap-prose',
-                    spellcheck: 'true'
-                }
-            },
-            onUpdate: ({ editor }) => {
-                if (window.TiptapEditor.saveTimer) {
-                    clearTimeout(window.TiptapEditor.saveTimer);
-                }
-                window.TiptapEditor.saveTimer = setTimeout(() => {
-                    saveTiptapContent();
-                }, 1000);
-            },
-            onSelectionUpdate: ({ editor }) => {
-                updateTiptapToolbarState(editor);
-            }
-        });
-
-        bindTiptapToolbarEvents();
-        updateTiptapToolbarState(window.TiptapEditor.instance);
-
-        console.log('[Tiptap] Editor created for:', filePath);
-        return true;
-    } catch (e) {
-        console.error('[Tiptap] Failed to create editor:', e);
-        return false;
-    }
-}
-
-function bindTiptapToolbarEvents() {
     const toolbar = document.getElementById('tiptap-toolbar');
     if (!toolbar) return;
 
-    toolbar.querySelectorAll('.tiptap-btn[data-action]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const action = btn.dataset.action;
-            const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
-            executeTiptapAction(action, level);
-        });
+    toolbar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.tiptap-btn[data-action]');
+        if (!btn || btn.disabled) return;
+
+        e.preventDefault();
+        const action = btn.dataset.action;
+        const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
+        executeTiptapAction(action, level);
     });
+
+    window.TiptapEditor.eventsBound = true;
+    console.log('[Tiptap] Toolbar events bound');
 }
 
 function executeTiptapAction(action, level) {
@@ -226,14 +149,18 @@ function executeTiptapAction(action, level) {
             insertTiptapImage();
             break;
         case 'undo':
-            editor.chain().focus().undo().run();
+            if (editor.can().undo()) {
+                editor.chain().focus().undo().run();
+            }
             break;
         case 'redo':
-            editor.chain().focus().redo().run();
+            if (editor.can().redo()) {
+                editor.chain().focus().redo().run();
+            }
             break;
     }
 
-    updateTiptapToolbarState(editor);
+    updateTiptapToolbarState();
 }
 
 function insertTiptapImage() {
@@ -257,27 +184,30 @@ function insertTiptapImage() {
     input.click();
 }
 
-function updateTiptapToolbarState(editor) {
+function updateTiptapToolbarState() {
+    const editor = window.TiptapEditor.instance;
     if (!editor) return;
 
     const toolbar = document.getElementById('tiptap-toolbar');
     if (!toolbar) return;
 
-    toolbar.querySelectorAll('.tiptap-btn[data-action]').forEach(btn => {
+    const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
+    buttons.forEach(btn => {
         const action = btn.dataset.action;
         const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
 
-        let isActive = false;
-
-        if (action === 'heading' && level) {
-            isActive = editor.isActive('heading', { level });
-        } else if (action === 'undo') {
+        if (action === 'undo') {
             btn.disabled = !editor.can().undo();
-            return;
         } else if (action === 'redo') {
             btn.disabled = !editor.can().redo();
-            return;
         } else {
+            btn.disabled = false;
+        }
+
+        let isActive = false;
+        if (action === 'heading' && level) {
+            isActive = editor.isActive('heading', { level });
+        } else if (action !== 'undo' && action !== 'redo') {
             isActive = editor.isActive(action);
         }
 
@@ -287,6 +217,92 @@ function updateTiptapToolbarState(editor) {
             btn.classList.remove('active');
         }
     });
+}
+
+function createTiptapEditor(markdownContent, filePath) {
+    const container = document.getElementById('tiptap-editor');
+    if (!container) {
+        console.error('[Tiptap] Editor container not found');
+        return false;
+    }
+
+    if (window.TiptapEditor.instance) {
+        destroyTiptapEditor();
+    }
+
+    window.TiptapEditor.filePath = filePath;
+    window.TiptapEditor.originalContent = markdownContent;
+    window.TiptapEditor.isActive = true;
+
+    const M = window.TiptapModule.modules;
+
+    if (!M.Editor || !M.StarterKit || !M.Markdown) {
+        console.error('[Tiptap] Required modules not available');
+        return false;
+    }
+
+    try {
+        const extensions = [
+            M.StarterKit.configure({
+                heading: {
+                    levels: [1, 2, 3, 4, 5, 6]
+                }
+            }),
+            M.Markdown.configure({
+                html: true,
+                tightLists: true,
+                bulletListMarker: '-',
+                linkify: false,
+                breaks: true,
+                transformPastedText: true
+            }),
+            M.Highlight,
+            M.CodeBlockLowlight.configure({
+                lowlight: M.lowlight
+            }),
+            M.Image.configure({
+                inline: true,
+                allowBase64: true
+            }),
+            M.TaskList,
+            M.TaskItem.configure({
+                nested: true
+            }),
+            M.ListItem
+        ];
+
+        window.TiptapEditor.instance = new M.Editor({
+            element: container,
+            extensions: extensions,
+            content: markdownContent || '',
+            editorProps: {
+                attributes: {
+                    class: 'tiptap-prose',
+                    spellcheck: 'true'
+                }
+            },
+            onUpdate: ({ editor }) => {
+                if (window.TiptapEditor.saveTimer) {
+                    clearTimeout(window.TiptapEditor.saveTimer);
+                }
+                window.TiptapEditor.saveTimer = setTimeout(() => {
+                    saveTiptapContent();
+                }, 1000);
+            },
+            onSelectionUpdate: () => {
+                updateTiptapToolbarState();
+            }
+        });
+
+        bindTiptapToolbarEventsOnce();
+        updateTiptapToolbarState();
+
+        console.log('[Tiptap] Editor created for:', filePath, 'content length:', (markdownContent || '').length);
+        return true;
+    } catch (e) {
+        console.error('[Tiptap] Failed to create editor:', e);
+        return false;
+    }
 }
 
 async function saveTiptapContent() {

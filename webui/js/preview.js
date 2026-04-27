@@ -70,8 +70,8 @@ async function loadFilePreview(path, fileName) {
     }
 
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
-        if (window.TiptapEditorModule && window.TiptapEditorModule.exitTiptapEditMode) {
-            window.TiptapEditorModule.exitTiptapEditMode();
+        if (window.TiptapEditorModule && window.TiptapEditorModule.hideTiptapEditor) {
+            window.TiptapEditorModule.hideTiptapEditor();
         }
     }
 
@@ -115,8 +115,24 @@ async function loadFilePreview(path, fileName) {
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
-            showEditButton(isMarkdown);
-            renderPreviewContent(currentPreviewData);
+            
+            if (isMarkdown) {
+                console.log('[Preview] Opening markdown in editor directly');
+                const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                    result.content,
+                    path
+                );
+                if (!editorReady) {
+                    console.warn('[Preview] Editor not ready, showing preview instead');
+                    showEditButton(false);
+                    renderPreviewContent(currentPreviewData);
+                } else {
+                    showEditButton(false);
+                }
+            } else {
+                showEditButton(false);
+                renderPreviewContent(currentPreviewData);
+            }
         } else {
             console.warn('[Preview] API returned failure:', result);
             showPreviewError('加载失败', result?.message || '无法读取文件');
@@ -207,6 +223,12 @@ function showPreviewError(title, message) {
 function closePreview() {
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
+
+    if (window.TiptapEditor && window.TiptapEditor.isActive) {
+        if (window.TiptapEditorModule && window.TiptapEditorModule.hideTiptapEditor) {
+            window.TiptapEditorModule.hideTiptapEditor();
+        }
+    }
 
     if (window.EditorModule && window.EditorModule.isActive) {
         window.EditorModule.exitEditMode();

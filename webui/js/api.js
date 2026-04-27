@@ -1,13 +1,24 @@
 var _isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
 
 async function pyCall(method, params) {
+    console.log('[API] pyCall called:', { method, params });
+    
     if (_isTauri) {
+        console.log('[API] Running in Tauri, invoking py_call');
         var invoke = window.__TAURI_INTERNALS__.invoke;
-        return await invoke('py_call', {
-            method: method,
-            params: params || {}
-        });
+        try {
+            var result = await invoke('py_call', {
+                method: method,
+                params: params || {}
+            });
+            console.log('[API] pyCall result:', result);
+            return result;
+        } catch (e) {
+            console.error('[API] pyCall error:', e);
+            throw e;
+        }
     }
+    console.error('[API] Not running in Tauri');
     throw new Error('Not running in Tauri');
 }
 

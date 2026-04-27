@@ -45,6 +45,9 @@ class SidecarServer:
         method = request.get("method", "")
         params = request.get("params", {})
         req_id = request.get("id", "")
+        
+        sys.stderr.write(f"[DEBUG] handle_request: method={method}, params={params}\n")
+        sys.stderr.flush()
 
         handler_map = {
             "get_api_config": self._get_api_config,
@@ -71,11 +74,21 @@ class SidecarServer:
         handler = handler_map.get(method)
         if handler:
             try:
+                sys.stderr.write(f"[DEBUG] Calling handler for method: {method}\n")
+                sys.stderr.flush()
                 result = handler(params)
+                sys.stderr.write(f"[DEBUG] Handler result: {result}\n")
+                sys.stderr.flush()
                 self._send_response({"id": req_id, "result": result})
             except Exception as e:
+                import traceback
+                sys.stderr.write(f"[ERROR] Handler exception: {e}\n")
+                sys.stderr.write(traceback.format_exc())
+                sys.stderr.flush()
                 self._send_response({"id": req_id, "error": str(e)})
         else:
+            sys.stderr.write(f"[ERROR] Unknown method: {method}\n")
+            sys.stderr.flush()
             self._send_response({"id": req_id, "error": f"Unknown method: {method}"})
 
     def _get_api_config(self, params):
@@ -269,8 +282,20 @@ class SidecarServer:
 
     def _get_file_preview(self, params):
         path = params.get("path", "")
+        sys.stderr.write(f"[DEBUG] _get_file_preview: path={path}\n")
+        sys.stderr.write(f"[DEBUG] file_previewer.workspace_path={self.file_previewer.workspace_path}\n")
+        sys.stderr.write(f"[DEBUG] config.workspace_path={config.workspace_path}\n")
+        sys.stderr.flush()
+        
         full_path = self._resolve_path(path)
-        return self.file_previewer.get_preview_data(full_path)
+        sys.stderr.write(f"[DEBUG] _get_file_preview: full_path={full_path}\n")
+        sys.stderr.flush()
+        
+        result = self.file_previewer.get_preview_data(full_path)
+        sys.stderr.write(f"[DEBUG] _get_file_preview result: success={result.get('success')}\n")
+        sys.stderr.flush()
+        
+        return result
 
     def _can_preview_file(self, params):
         path = params.get("path", "")
@@ -287,11 +312,19 @@ class SidecarServer:
             return {"success": False, "error": str(e)}
 
     def _resolve_path(self, path):
+        sys.stderr.write(f"[DEBUG] _resolve_path: input={path}, is_absolute={Path(path).is_absolute()}\n")
+        sys.stderr.flush()
+        
         if Path(path).is_absolute():
             return path
         workspace = config.workspace_path
         if workspace:
-            return str(Path(workspace) / path)
+            resolved = str(Path(workspace) / path)
+            sys.stderr.write(f"[DEBUG] _resolve_path: resolved={resolved}\n")
+            sys.stderr.flush()
+            return resolved
+        sys.stderr.write(f"[DEBUG] _resolve_path: no workspace, returning original path\n")
+        sys.stderr.flush()
         return path
 
     def _get_workspace_tree(self, params):

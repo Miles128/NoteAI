@@ -18,11 +18,16 @@ function showPreviewView() {
 }
 
 async function loadFilePreview(path, fileName) {
+    console.log('[Preview] loadFilePreview called:', { path, fileName });
+    
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
     const previewTitle = document.getElementById('preview-file-name');
 
-    if (!previewPanel || !previewContent) return;
+    if (!previewPanel || !previewContent) {
+        console.error('[Preview] Missing DOM elements:', { previewPanel: !!previewPanel, previewContent: !!previewContent });
+        return;
+    }
 
     isPreviewActive = true;
 
@@ -40,10 +45,14 @@ async function loadFilePreview(path, fileName) {
     previewPanel.classList.add('active');
     showPreviewView();
 
+    console.log('[Preview] About to call window.api.read_note_file with path:', path);
+    
     try {
         const result = await window.api.read_note_file(path);
+        console.log('[Preview] API call result:', result);
         
         if (result && result.success) {
+            console.log('[Preview] Success, rendering content');
             currentPreviewData = {
                 path: path,
                 name: fileName,
@@ -54,6 +63,7 @@ async function loadFilePreview(path, fileName) {
 
             renderPreviewContent(currentPreviewData);
         } else {
+            console.warn('[Preview] API returned failure:', result);
             showPreviewError('加载失败', result?.message || '无法读取文件');
         }
     } catch (e) {

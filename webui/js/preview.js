@@ -4,9 +4,14 @@ let isPreviewActive = false;
 function showContentView() {
     const contentPanel = document.getElementById('content-panel');
     const previewPanel = document.getElementById('preview-panel');
+    const titlebarFileName = document.getElementById('titlebar-file-name');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
+    if (titlebarFileName) {
+        titlebarFileName.style.display = 'none';
+        titlebarFileName.textContent = '';
+    }
 }
 
 function showPreviewView() {
@@ -15,6 +20,26 @@ function showPreviewView() {
 
     if (contentPanel) contentPanel.style.display = 'none';
     if (previewPanel) previewPanel.style.display = 'flex';
+}
+
+function updateTitlebarFileName(fileName, isMarkdown) {
+    const titlebarFileName = document.getElementById('titlebar-file-name');
+    if (titlebarFileName) {
+        if (fileName) {
+            titlebarFileName.textContent = fileName;
+            titlebarFileName.style.display = 'block';
+        } else {
+            titlebarFileName.style.display = 'none';
+            titlebarFileName.textContent = '';
+        }
+    }
+}
+
+function showEditButton(show) {
+    const splitBtn = document.getElementById('preview-split-btn');
+    if (splitBtn) {
+        splitBtn.style.display = show ? 'flex' : 'none';
+    }
 }
 
 async function loadFilePreview(path, fileName) {
@@ -53,14 +78,19 @@ async function loadFilePreview(path, fileName) {
         
         if (result && result.success) {
             console.log('[Preview] Success, rendering content');
+            const fileType = result.type || 'markdown';
+            const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
+            
             currentPreviewData = {
                 path: path,
                 name: fileName,
-                type: result.type || 'markdown',
+                type: fileType,
                 content: result.content,
                 metadata: result.metadata
             };
 
+            updateTitlebarFileName(fileName, isMarkdown);
+            showEditButton(isMarkdown);
             renderPreviewContent(currentPreviewData);
         } else {
             console.warn('[Preview] API returned failure:', result);
@@ -157,6 +187,8 @@ function closePreview() {
         window.EditorModule.exitEditMode();
     }
 
+    showEditButton(false);
+
     if (previewPanel) {
         previewPanel.classList.remove('active');
         previewPanel.classList.remove('editor-active');
@@ -180,6 +212,10 @@ function closePreview() {
     showContentView();
 }
 
+function closePreviewPanel() {
+    closePreview();
+}
+
 function backToContent() {
     if (window.EditorModule && window.EditorModule.isActive) {
         window.EditorModule.exitEditMode();
@@ -196,5 +232,7 @@ window.PreviewModule = {
     renderPreviewContent,
     showPreviewError,
     closePreview,
-    backToContent
+    backToContent,
+    updateTitlebarFileName,
+    showEditButton
 };

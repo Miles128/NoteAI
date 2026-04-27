@@ -133,7 +133,28 @@ body {
 
 .titlebar-controls {
     display: flex;
+    align-items: center;
     gap: 2px;
+}
+
+.titlebar-group-separator {
+    width: 0.5px;
+    height: 16px;
+    background: rgba(0, 0, 0, 0.12);
+    margin: 0 6px;
+}
+
+.titlebar-file-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 4px;
 }
 
 .titlebar-btn {

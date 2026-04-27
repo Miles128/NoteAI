@@ -36,21 +36,45 @@ function loadTiptapModules() {
                     { CodeBlockLowlight },
                     { default: lowlight },
                     { Image },
-                    { ListItem },
                     { TaskList },
-                    { TaskItem }
+                    { TaskItem },
+                    { Link }
                 ] = await Promise.all([
-                    import('https://esm.sh/@tiptap/core'),
-                    import('https://esm.sh/@tiptap/starter-kit'),
-                    import('https://esm.sh/tiptap-markdown'),
-                    import('https://esm.sh/@tiptap/extension-highlight'),
-                    import('https://esm.sh/@tiptap/extension-code-block-lowlight'),
-                    import('https://esm.sh/lowlight/lib/common.js'),
-                    import('https://esm.sh/@tiptap/extension-image'),
-                    import('https://esm.sh/@tiptap/extension-list-item'),
-                    import('https://esm.sh/@tiptap/extension-task-list'),
-                    import('https://esm.sh/@tiptap/extension-task-item')
+                    import('https://esm.sh/@tiptap/core@2.6.6'),
+                    import('https://esm.sh/@tiptap/starter-kit@2.6.6'),
+                    import('https://esm.sh/tiptap-markdown@0.8.0'),
+                    import('https://esm.sh/@tiptap/extension-highlight@2.6.6'),
+                    import('https://esm.sh/@tiptap/extension-code-block-lowlight@2.6.6'),
+                    import('https://esm.sh/lowlight@3.1.0'),
+                    import('https://esm.sh/@tiptap/extension-image@2.6.6'),
+                    import('https://esm.sh/@tiptap/extension-task-list@2.6.6'),
+                    import('https://esm.sh/@tiptap/extension-task-item@2.6.6'),
+                    import('https://esm.sh/@tiptap/extension-link@2.6.6')
                 ]);
+
+                const allLangs = {
+                    css: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/css.js')).default,
+                    js: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/javascript.js')).default,
+                    ts: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/typescript.js')).default,
+                    python: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/python.js')).default,
+                    json: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/json.js')).default,
+                    xml: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/xml.js')).default,
+                    markdown: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/markdown.js')).default,
+                    bash: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/bash.js')).default,
+                    sql: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/sql.js')).default,
+                    rust: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/rust.js')).default,
+                    java: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/java.js')).default,
+                    cpp: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/cpp.js')).default,
+                    go: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/go.js')).default,
+                    yaml: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/yaml.js')).default,
+                    ini: (await import('https://esm.sh/highlight.js@11.9.0/lib/languages/ini.js')).default
+                };
+
+                for (const [name, lang] of Object.entries(allLangs)) {
+                    try {
+                        lowlight.registerLanguage(name, lang);
+                    } catch (e) {}
+                }
 
                 window.TiptapModule.modules = {
                     Editor,
@@ -60,15 +84,15 @@ function loadTiptapModules() {
                     CodeBlockLowlight,
                     lowlight,
                     Image,
-                    ListItem,
                     TaskList,
-                    TaskItem
+                    TaskItem,
+                    Link
                 };
 
                 window.TiptapModule.isReady = true;
                 window.TiptapModule.resolveReady(true);
                 window.dispatchEvent(new CustomEvent('tiptap-ready'));
-                console.log('[Tiptap] Modules loaded successfully');
+                console.log('[Tiptap] All modules loaded successfully');
             } catch (e) {
                 console.error('[Tiptap] Failed to load modules:', e);
                 window.TiptapModule.resolveReady(false);
@@ -93,6 +117,7 @@ function bindTiptapToolbarEventsOnce() {
         if (!btn || btn.disabled) return;
 
         e.preventDefault();
+        e.stopPropagation();
         const action = btn.dataset.action;
         const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
         executeTiptapAction(action, level);
@@ -104,60 +129,63 @@ function bindTiptapToolbarEventsOnce() {
 
 function executeTiptapAction(action, level) {
     const editor = window.TiptapEditor.instance;
-    if (!editor) return;
+    if (!editor) {
+        console.warn('[Tiptap] No editor instance');
+        return;
+    }
 
-    switch (action) {
-        case 'bold':
-            editor.chain().focus().toggleBold().run();
-            break;
-        case 'italic':
-            editor.chain().focus().toggleItalic().run();
-            break;
-        case 'strike':
-            editor.chain().focus().toggleStrike().run();
-            break;
-        case 'code':
-            editor.chain().focus().toggleCode().run();
-            break;
-        case 'heading':
-            if (level) {
-                editor.chain().focus().toggleHeading({ level }).run();
-            }
-            break;
-        case 'bulletList':
-            editor.chain().focus().toggleBulletList().run();
-            break;
-        case 'orderedList':
-            editor.chain().focus().toggleOrderedList().run();
-            break;
-        case 'taskList':
-            editor.chain().focus().toggleTaskList().run();
-            break;
-        case 'blockquote':
-            editor.chain().focus().toggleBlockquote().run();
-            break;
-        case 'codeBlock':
-            editor.chain().focus().toggleCodeBlock().run();
-            break;
-        case 'link':
-            const url = prompt('输入链接 URL:', 'https://');
-            if (url) {
-                editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-            }
-            break;
-        case 'image':
-            insertTiptapImage();
-            break;
-        case 'undo':
-            if (editor.can().undo()) {
+    try {
+        switch (action) {
+            case 'bold':
+                editor.chain().focus().toggleBold().run();
+                break;
+            case 'italic':
+                editor.chain().focus().toggleItalic().run();
+                break;
+            case 'strike':
+                editor.chain().focus().toggleStrike().run();
+                break;
+            case 'code':
+                editor.chain().focus().toggleCode().run();
+                break;
+            case 'heading':
+                if (level) {
+                    editor.chain().focus().toggleHeading({ level }).run();
+                }
+                break;
+            case 'bulletList':
+                editor.chain().focus().toggleBulletList().run();
+                break;
+            case 'orderedList':
+                editor.chain().focus().toggleOrderedList().run();
+                break;
+            case 'taskList':
+                editor.chain().focus().toggleTaskList().run();
+                break;
+            case 'blockquote':
+                editor.chain().focus().toggleBlockquote().run();
+                break;
+            case 'codeBlock':
+                editor.chain().focus().toggleCodeBlock().run();
+                break;
+            case 'link':
+                const url = prompt('输入链接 URL:', 'https://');
+                if (url) {
+                    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+                }
+                break;
+            case 'image':
+                insertTiptapImage();
+                break;
+            case 'undo':
                 editor.chain().focus().undo().run();
-            }
-            break;
-        case 'redo':
-            if (editor.can().redo()) {
+                break;
+            case 'redo':
                 editor.chain().focus().redo().run();
-            }
-            break;
+                break;
+        }
+    } catch (e) {
+        console.error('[Tiptap] Action error:', action, e);
     }
 
     updateTiptapToolbarState();
@@ -191,32 +219,57 @@ function updateTiptapToolbarState() {
     const toolbar = document.getElementById('tiptap-toolbar');
     if (!toolbar) return;
 
-    const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
-    buttons.forEach(btn => {
-        const action = btn.dataset.action;
-        const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
+    try {
+        const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
+        buttons.forEach(btn => {
+            const action = btn.dataset.action;
+            const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
 
-        if (action === 'undo') {
-            btn.disabled = !editor.can().undo();
-        } else if (action === 'redo') {
-            btn.disabled = !editor.can().redo();
-        } else {
+            if (action === 'undo') {
+                btn.disabled = !editor.can().undo();
+                return;
+            }
+            if (action === 'redo') {
+                btn.disabled = !editor.can().redo();
+                return;
+            }
+
             btn.disabled = false;
-        }
 
-        let isActive = false;
-        if (action === 'heading' && level) {
-            isActive = editor.isActive('heading', { level });
-        } else if (action !== 'undo' && action !== 'redo') {
-            isActive = editor.isActive(action);
-        }
+            let isActive = false;
+            if (action === 'heading' && level) {
+                isActive = editor.isActive('heading', { level });
+            } else if (action === 'bulletList') {
+                isActive = editor.isActive('bulletList');
+            } else if (action === 'orderedList') {
+                isActive = editor.isActive('orderedList');
+            } else if (action === 'taskList') {
+                isActive = editor.isActive('taskList');
+            } else if (action === 'blockquote') {
+                isActive = editor.isActive('blockquote');
+            } else if (action === 'codeBlock') {
+                isActive = editor.isActive('codeBlock');
+            } else if (action === 'bold') {
+                isActive = editor.isActive('bold');
+            } else if (action === 'italic') {
+                isActive = editor.isActive('italic');
+            } else if (action === 'strike') {
+                isActive = editor.isActive('strike');
+            } else if (action === 'code') {
+                isActive = editor.isActive('code');
+            } else if (action === 'link') {
+                isActive = editor.isActive('link');
+            }
 
-        if (isActive) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
+            if (isActive) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+    } catch (e) {
+        console.error('[Tiptap] Toolbar state update error:', e);
+    }
 }
 
 function createTiptapEditor(markdownContent, filePath) {
@@ -246,7 +299,8 @@ function createTiptapEditor(markdownContent, filePath) {
             M.StarterKit.configure({
                 heading: {
                     levels: [1, 2, 3, 4, 5, 6]
-                }
+                },
+                codeBlock: false
             }),
             M.Markdown.configure({
                 html: true,
@@ -268,7 +322,13 @@ function createTiptapEditor(markdownContent, filePath) {
             M.TaskItem.configure({
                 nested: true
             }),
-            M.ListItem
+            M.Link.configure({
+                openOnClick: false,
+                HTMLAttributes: {
+                    rel: 'noopener noreferrer',
+                    target: '_blank'
+                }
+            })
         ];
 
         window.TiptapEditor.instance = new M.Editor({
@@ -301,6 +361,7 @@ function createTiptapEditor(markdownContent, filePath) {
         return true;
     } catch (e) {
         console.error('[Tiptap] Failed to create editor:', e);
+        window.TiptapEditor.isActive = false;
         return false;
     }
 }

@@ -20,7 +20,7 @@ function showPreviewView() {
 async function loadFilePreview(path, fileName) {
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
-    const previewTitle = document.getElementById('preview-title');
+    const previewTitle = document.getElementById('preview-file-name');
 
     if (!previewPanel || !previewContent) return;
 

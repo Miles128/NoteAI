@@ -58,8 +58,11 @@ function renderFileTree(treeData, container) {
             const expandedState = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
             const childrenHiddenClass = expandedState ? '' : 'hidden';
 
+            const escapedPath = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedName = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
             let html = `
-                <div class="tree-item ${isFolder ? 'folder' : 'file'}" data-path="${node.path}" style="padding-left: ${indent}px;" onclick="${isFolder ? `window.TreeModule.toggleTreeFolder(this)` : `window.TreeModule.selectFile('${node.path}', '${node.name}')`}">
+                <div class="tree-item ${isFolder ? 'folder' : 'file'}" data-path="${escapedPath}" data-name="${escapedName}" style="padding-left: ${indent}px;">
             `;
 
             if (isFolder) {
@@ -87,6 +90,18 @@ function renderFileTree(treeData, container) {
     }
 
     container.innerHTML = buildTreeHTML(treeData);
+
+    container.querySelectorAll('.tree-item').forEach(item => {
+        item.addEventListener('click', function(e) {
+            const path = this.getAttribute('data-path');
+            const name = this.getAttribute('data-name');
+            if (this.classList.contains('folder')) {
+                window.TreeModule.toggleTreeFolder(this);
+            } else {
+                window.TreeModule.selectFile(path, name);
+            }
+        });
+    });
 }
 
 async function loadFileTree() {

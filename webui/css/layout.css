@@ -19,12 +19,12 @@ body {
 
 .app-container {
     display: flex;
-    height: calc(100vh - 52px);
+    height: calc(100vh - 38px);
     overflow: hidden;
 }
 
 .custom-titlebar {
-    height: 48px;
+    height: 38px;
     background: var(--topbar-bg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -33,7 +33,7 @@ body {
     justify-content: space-between;
     user-select: none;
     flex-shrink: 0;
-    padding: 0 14px;
+    padding: 0 8px 0 84px;
     border-bottom: 0.5px solid var(--border);
 }
 
@@ -41,7 +41,7 @@ body {
     flex: 1;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     cursor: default;
     min-width: 0;
 }
@@ -63,16 +63,16 @@ body {
 .titlebar-btn.workspace-btn {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
+    gap: 4px;
+    padding: 2px 8px;
     width: auto;
-    min-width: 46px;
+    min-width: 36px;
     background: rgba(0, 0, 0, 0.05);
     color: var(--text);
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 400;
     transition: all 0.15s;
     pointer-events: auto;
@@ -84,24 +84,24 @@ body {
 }
 
 .titlebar-btn.workspace-btn svg {
-    width: 16px;
-    height: 16px;
-    color: #007AFF;
+    width: 14px;
+    height: 14px;
+    color: inherit;
 }
 
 .titlebar-btn.tab-btn {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 5px 10px;
+    gap: 4px;
+    padding: 3px 8px;
     width: auto;
     min-width: auto;
     background: transparent;
     color: var(--text-muted);
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
     transition: all 0.15s;
     white-space: nowrap;
@@ -113,14 +113,14 @@ body {
 }
 
 .titlebar-btn.tab-btn.active {
-    background: rgba(0, 122, 255, 0.1);
-    color: var(--primary);
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text);
 }
 
 .titlebar-btn.tab-btn svg {
-    width: 15px;
-    height: 15px;
-    color: #007AFF;
+    width: 13px;
+    height: 13px;
+    color: inherit;
 }
 
 #workspace-name-display {
@@ -133,26 +133,26 @@ body {
 
 .titlebar-controls {
     display: flex;
-    gap: 4px;
+    gap: 2px;
 }
 
 .titlebar-btn {
-    width: 30px;
-    height: 30px;
+    width: 26px;
+    height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: transparent;
     border: none;
     cursor: pointer;
-    color: #007AFF;
-    border-radius: 6px;
+    color: var(--text-muted);
+    border-radius: 4px;
     transition: all 0.15s;
 }
 
 .titlebar-btn:hover {
-    background: rgba(0, 122, 255, 0.1);
-    color: #0056CC;
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text);
 }
 
 .titlebar-btn:hover svg {
@@ -169,16 +169,16 @@ body {
 }
 
 .titlebar-btn svg {
-    width: 16px;
-    height: 16px;
-    color: #007AFF;
+    width: 14px;
+    height: 14px;
+    color: inherit;
 }
 
 .titlebar-separator {
     width: 0.5px;
-    height: 16px;
+    height: 14px;
     background: rgba(0, 0, 0, 0.12);
-    margin: 0 4px;
+    margin: 0 3px;
 }
 
 .sidebar {

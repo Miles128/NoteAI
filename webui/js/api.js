@@ -1,170 +1,167 @@
-var DEFAULT_TIMEOUT = 30000;
-var TREE_TIMEOUT = 5000;
+var _isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
 
-var _apiPort = null;
-
-function getApiPort() {
-    if (_apiPort) return _apiPort;
-    var params = new URLSearchParams(window.location.search);
-    _apiPort = params.get('port');
-    if (!_apiPort) {
-        _apiPort = window.location.port;
-    }
-    return _apiPort;
-}
-
-async function invokeApi(methodName, args, timeout) {
-    args = args || [];
-    timeout = timeout || DEFAULT_TIMEOUT;
-    var port = getApiPort();
-    if (!port) {
-        return Promise.reject(new Error('无法确定 API 端口'));
-    }
-
-    var url = 'http://localhost:' + port + '/api/' + methodName;
-
-    var controller = new AbortController();
-    var timeoutId = setTimeout(function() { controller.abort(); }, timeout);
-
-    try {
-        var response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(args),
-            signal: controller.signal
+async function pyCall(method, params) {
+    if (_isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        return await invoke('py_call', {
+            method: method,
+            params: params || {}
         });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            throw new Error('API 请求失败: ' + response.status);
-        }
-
-        var data = await response.json();
-        return data;
-    } catch (error) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error('请求超时');
-        }
-        console.error('[NoteAI] API 调用失败:', methodName, error);
-        throw error;
     }
+    throw new Error('Not running in Tauri');
 }
 
 async function openWorkspace() {
-    return invokeApi('open_workspace', []);
+    if (_isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var folder = await invoke('open_folder_dialog');
+        if (folder) {
+            await invoke('set_workspace_path', { path: folder });
+            await pyCall('set_workspace_path', { path: folder });
+            return { success: true, workspace_path: folder };
+        }
+        return { success: false, message: '未选择文件夹' };
+    }
+    return pyCall('open_workspace');
 }
 
 async function getWorkspaceStatus() {
-    return invokeApi('get_workspace_status', []);
+    var result = await pyCall('get_workspace_status');
+    if (result && result.is_set && _isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        await invoke('set_workspace_path', { path: result.workspace_path });
+    }
+    return result;
 }
 
 async function getWorkspaceTree() {
-    return invokeApi('get_workspace_tree', [], TREE_TIMEOUT);
+    return pyCall('get_workspace_tree');
 }
 
 async function getApiConfig() {
-    return invokeApi('get_api_config', []);
+    return pyCall('get_api_config');
 }
 
-async function saveApiConfig(config) {
-    return invokeApi('save_api_config', [config]);
+async function saveApiConfig(cfg) {
+    return pyCall('save_api_config', cfg);
 }
 
 async function getUiConfig() {
-    return invokeApi('get_ui_config', []);
+    return pyCall('get_ui_config');
 }
 
-async function saveUiConfig(config) {
-    return invokeApi('save_ui_config', [config]);
+async function saveUiConfig(cfg) {
+    return pyCall('save_ui_config', cfg);
 }
 
 async function getThemePreference() {
-    return invokeApi('get_theme_preference', []);
+    return pyCall('get_theme_preference');
 }
 
 async function saveThemePreference(theme) {
-    return invokeApi('save_theme_preference', [theme]);
+    return pyCall('save_theme_preference', { theme: theme });
 }
 
 async function addFiles() {
-    return invokeApi('add_files', []);
+    if (_isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var files = await invoke('open_file_dialog');
+        return files || [];
+    }
+    return pyCall('add_files');
 }
 
 async function browseFolder() {
-    return invokeApi('browse_folder', []);
+    if (_isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var folder = await invoke('open_folder_dialog');
+        return folder || '';
+    }
+    return pyCall('browse_folder');
 }
 
 async function startWebDownload(urls, aiAssist, includeImages) {
-    return invokeApi('start_web_download', [urls, aiAssist, includeImages]);
+    return pyCall('start_web_download', {
+        urls: urls,
+        ai_assist: aiAssist,
+        include_images: includeImages
+    });
 }
 
 async function startFileConversion(aiAssist) {
-    return invokeApi('start_file_conversion', [aiAssist]);
+    return pyCall('start_file_conversion', { ai_assist: aiAssist });
 }
 
 async function extractTopics(topicCount) {
-    return invokeApi('extract_topics', [topicCount]);
+    return pyCall('extract_topics', { topic_count: topicCount });
 }
 
 async function startNoteIntegration(autoTopic, topics) {
-    return invokeApi('start_note_integration', [autoTopic, topics]);
+    return pyCall('start_note_integration', {
+        auto_topic: autoTopic,
+        topics: topics
+    });
 }
 
 async function refreshLog() {
-    return invokeApi('refresh_log', []);
+    return pyCall('refresh_log');
 }
 
 async function onFileSelected(path) {
-    return invokeApi('on_file_selected', [path]);
+    return pyCall('on_file_selected', { path: path });
 }
 
 async function getFilePreview(path) {
-    return invokeApi('get_file_preview', [path]);
+    return pyCall('get_file_preview', { path: path });
 }
 
 async function canPreviewFile(path) {
-    return invokeApi('can_preview_file', [path]);
+    return pyCall('can_preview_file', { path: path });
 }
 
 async function saveFileContent(path, content) {
-    return invokeApi('save_file_content', [path, content]);
+    if (_isTauri) {
+        var invoke = window.__TAURI_INTERNALS__.invoke;
+        await invoke('write_file', { path: path, content: content });
+        return { success: true, message: '文件已保存' };
+    }
+    return pyCall('save_file_content', { path: path, content: content });
 }
 
-function moveWindow(dx, dy) {
-    invokeApi('move_window', [dx, dy]);
-}
+function moveWindow(dx, dy) {}
 
 function minimizeWindow() {
-    invokeApi('minimize_window', []);
+    if (_isTauri) {
+        var win = window.__TAURI_INTERNALS__.window.getCurrent();
+        win.minimize();
+    }
 }
 
 function maximizeWindow() {
-    invokeApi('maximize_window', []);
+    if (_isTauri) {
+        var win = window.__TAURI_INTERNALS__.window.getCurrent();
+        win.toggleMaximize();
+    }
 }
 
 function closeWindow() {
-    invokeApi('close_window', []);
+    if (_isTauri) {
+        var win = window.__TAURI_INTERNALS__.window.getCurrent();
+        win.close();
+    }
 }
 
-function apiUpdateStatus(text) {
-    invokeApi('update_status', [text]);
-}
+function apiUpdateStatus(text) {}
 
-function apiUpdateProgress(elementId, progress, message) {
-    invokeApi('update_progress', [elementId, progress, message]);
-}
+function apiUpdateProgress(elementId, progress, message) {}
 
-function showMessage(title, message, msgType) {
-    invokeApi('show_message', [title, message, msgType]);
-}
+function showMessage(title, message, msgType) {}
+
+function showAbout() {}
 
 window.api = {
-    invoke: invokeApi,
-    getApiPort: getApiPort,
+    invoke: pyCall,
+    getApiPort: function() { return 0; },
 
     openWorkspace: openWorkspace,
     getWorkspaceStatus: getWorkspaceStatus,
@@ -234,9 +231,9 @@ window.pywebview = {
         maximize_window: maximizeWindow,
         close_window: closeWindow,
         get_workspace_status: getWorkspaceStatus,
-        check_workspace_path_valid: function() { return invokeApi('check_workspace_path_valid', Array.prototype.slice.call(arguments)); },
-        clear_saved_workspace: function() { return invokeApi('clear_saved_workspace', []); },
-        update_window_title: function() { return invokeApi('update_window_title', []); },
+        check_workspace_path_valid: function() { return pyCall('check_workspace_path_valid'); },
+        clear_saved_workspace: function() { return pyCall('clear_saved_workspace'); },
+        update_window_title: function() {},
         open_workspace: openWorkspace,
         get_api_config: getApiConfig,
         browse_folder: browseFolder,
@@ -258,7 +255,7 @@ window.pywebview = {
         on_file_selected: onFileSelected,
         get_file_preview: getFilePreview,
         can_preview_file: canPreviewFile,
-        show_about: function() { return invokeApi('show_about', []); },
+        show_about: showAbout,
         save_file_content: saveFileContent
     }
 };

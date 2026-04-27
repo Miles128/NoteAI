@@ -19,9 +19,8 @@ class FilePreviewer:
         return ext in self.SUPPORTED_PREVIEW_TYPES
 
     def get_preview_data(self, file_path: str) -> Dict[str, Any]:
-        if not self.workspace_path:
-            full_path = file_path
-        else:
+        full_path = file_path
+        if not os.path.isabs(full_path) and self.workspace_path:
             full_path = os.path.join(self.workspace_path, file_path)
 
         if not os.path.exists(full_path):

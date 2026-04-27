@@ -191,10 +191,10 @@ class Api:
         masked_key = ""
         if config.api_key:
             key = config.api_key.strip()
-            if len(key) > 8:
-                masked_key = key[:4] + "****" + key[-4:]
-            else:
-                masked_key = "****"
+            if len(key) > 12:
+                masked_key = key[:4] + "■■■■" + key[-4:]
+            elif key:
+                masked_key = "■■■■"
         return {
             "api_key": masked_key,
             "api_key_configured": bool(config.api_key and config.api_key.strip()),
@@ -508,7 +508,7 @@ class Api:
         logger.info(f"[API配置保存] API Base: {api_base}")
         logger.info(f"[API配置保存] 模型名称: {model_name}")
 
-        if "****" in api_key or "..." in api_key or "***" in api_key:
+        if "■■■■" in api_key:
             logger.info(f"[API配置保存] 检测到掩码，使用已保存的 API Key")
             api_key = config.api_key
             logger.info(f"[API配置保存] 使用已保存的 API Key（前8后4）: {api_key[:8] + '...' + api_key[-4:] if len(api_key) > 12 else '***'}")

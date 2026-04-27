@@ -93,7 +93,12 @@ class SidecarServer:
 
     def _get_api_config(self, params):
         api_key = config.api_key or ""
-        masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+        if len(api_key) > 12:
+            masked = api_key[:4] + "■■■■" + api_key[-4:]
+        elif api_key:
+            masked = "■■■■"
+        else:
+            masked = ""
         return {
             "api_key": masked,
             "api_key_configured": bool(config.api_key),
@@ -109,7 +114,7 @@ class SidecarServer:
         api_base = params.get("api_base", "https://api.openai.com/v1")
         model_name = params.get("model_name", "gpt-4")
 
-        if "****" in api_key or "..." in api_key or "***" in api_key:
+        if "■■■■" in api_key:
             api_key = config.api_key
 
         if not api_key or not api_key.strip():
@@ -375,8 +380,16 @@ class SidecarServer:
 
     def _test_api_connection(self, params):
         try:
-            result = test_api_connection()
-            return {"success": True, "message": "连接成功"}
+            api_key = params.get("api_key", config.api_key or "")
+            api_base = params.get("api_base", config.api_base or "https://api.openai.com/v1")
+            model_name = params.get("model_name", config.model_name or "gpt-4")
+            if "■■■■" in api_key:
+                api_key = config.api_key
+            connected, conn_msg = test_api_connection(api_key, api_base, model_name)
+            if connected:
+                return {"success": True, "message": conn_msg}
+            else:
+                return {"success": False, "message": conn_msg}
         except Exception as e:
             return {"success": False, "message": str(e)}
 

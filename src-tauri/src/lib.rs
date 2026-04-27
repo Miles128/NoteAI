@@ -92,10 +92,14 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<Child, String> {
                 let state = app_clone.state::<AppState>();
                 let mut pending = state.pending_requests.lock().unwrap();
                 if let Some(tx) = pending.remove(&resp.id) {
-                    let _ = tx.send(
-                        resp.result
-                            .unwrap_or_else(|| serde_json::Value::Null),
-                    );
+                    let value = if let Some(result) = resp.result {
+                        result
+                    } else if let Some(error) = resp.error {
+                        serde_json::json!({"success": false, "message": error})
+                    } else {
+                        serde_json::Value::Null
+                    };
+                    let _ = tx.send(value);
                 }
             }
         }

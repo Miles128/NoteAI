@@ -35,6 +35,7 @@ body {
     flex-shrink: 0;
     padding: 0 8px 0 84px;
     border-bottom: 0.5px solid var(--border);
+    -webkit-app-region: drag;
 }
 
 .titlebar-drag {
@@ -178,6 +179,7 @@ body {
     background: rgba(0, 0, 0, 0.03);
     border-radius: 4px;
     text-align: center;
+    -webkit-app-region: no-drag;
 }
 
 .titlebar-btn {
@@ -192,6 +194,7 @@ body {
     color: var(--text-muted);
     border-radius: 4px;
     transition: all 0.15s;
+    -webkit-app-region: no-drag;
 }
 
 .titlebar-btn:hover {

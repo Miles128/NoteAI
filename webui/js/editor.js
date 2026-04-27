@@ -433,59 +433,6 @@ function initEditorInnerResizer() {
 }
 
 function initWindowDrag() {
-    const titlebar = document.querySelector('.titlebar-drag');
-    if (!titlebar || !window.api) return;
-
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartY = 0;
-    let accumDx = 0;
-    let accumDy = 0;
-    let rafId = null;
-
-    function flushMove() {
-        if (accumDx !== 0 || accumDy !== 0) {
-            window.api.move_window(accumDx, accumDy);
-            accumDx = 0;
-            accumDy = 0;
-        }
-        if (isDragging) {
-            rafId = requestAnimationFrame(flushMove);
-        }
-    }
-
-    titlebar.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.titlebar-btn')) return;
-        isDragging = true;
-        dragStartX = e.screenX;
-        dragStartY = e.screenY;
-        accumDx = 0;
-        accumDy = 0;
-        rafId = requestAnimationFrame(flushMove);
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        accumDx += e.screenX - dragStartX;
-        accumDy += e.screenY - dragStartY;
-        dragStartX = e.screenX;
-        dragStartY = e.screenY;
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (!isDragging) return;
-        isDragging = false;
-        if (rafId) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-        }
-        if (accumDx !== 0 || accumDy !== 0) {
-            window.api.move_window(accumDx, accumDy);
-            accumDx = 0;
-            accumDy = 0;
-        }
-    });
 }
 
 window.EditorModule = {

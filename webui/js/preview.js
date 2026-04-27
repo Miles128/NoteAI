@@ -1,5 +1,11 @@
 let currentPreviewData = null;
 let isPreviewActive = false;
+let currentLoadRequestId = 0;
+
+function generateLoadRequestId() {
+    currentLoadRequestId += 1;
+    return currentLoadRequestId;
+}
 
 function showContentView() {
     const contentPanel = document.getElementById('content-panel');
@@ -58,7 +64,8 @@ function showEditButton(show) {
 }
 
 async function loadFilePreview(path, fileName) {
-    console.log('[Preview] loadFilePreview called:', { path, fileName });
+    const requestId = generateLoadRequestId();
+    console.log('[Preview] loadFilePreview called:', { requestId, path, fileName });
     
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
@@ -99,7 +106,12 @@ async function loadFilePreview(path, fileName) {
     
     try {
         const result = await window.api.read_note_file(path);
-        console.log('[Preview] API call result:', result);
+        console.log('[Preview] API call result:', { requestId, result });
+        
+        if (requestId !== currentLoadRequestId) {
+            console.log('[Preview] Request obsolete, ignoring result:', { requestId, currentRequestId: currentLoadRequestId });
+            return;
+        }
         
         if (result && result.success) {
             console.log('[Preview] Success, rendering content');
@@ -118,10 +130,25 @@ async function loadFilePreview(path, fileName) {
             
             if (isMarkdown) {
                 console.log('[Preview] Opening markdown in editor directly');
+                
+                if (requestId !== currentLoadRequestId) {
+                    console.log('[Preview] Request obsolete before editor init');
+                    return;
+                }
+                
                 const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
                     result.content,
                     path
                 );
+                
+                if (requestId !== currentLoadRequestId) {
+                    console.log('[Preview] Request obsolete after editor init');
+                    if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                        window.TiptapEditorModule.hideEditorUI();
+                    }
+                    return;
+                }
+                
                 if (!editorReady) {
                     console.warn('[Preview] Editor not ready, showing preview instead');
                     showEditButton(false);
@@ -139,7 +166,9 @@ async function loadFilePreview(path, fileName) {
         }
     } catch (e) {
         console.error('[Preview] Load error:', e);
-        showPreviewError('加载失败', e.message);
+        if (requestId === currentLoadRequestId) {
+            showPreviewError('加载失败', e.message);
+        }
     }
 }
 
@@ -221,6 +250,8 @@ function showPreviewError(title, message) {
 }
 
 function closePreview() {
+    currentLoadRequestId += 1;
+    
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
 

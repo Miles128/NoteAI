@@ -1,3 +1,5 @@
+var _fileConversionUnlisten = null;
+
 async function startFileConversion() {
     const btn = document.querySelector('#tab-1 .btn-primary');
     const originalText = btn ? btn.textContent : '开始转换';
@@ -8,40 +10,68 @@ async function startFileConversion() {
     }
 
     try {
-        const fileListEl = document.getElementById('file-list');
-        const formatSelectEl = document.getElementById('conv-target-format');
         const aiToggleEl = document.getElementById('conv-ai-toggle');
-
-        const files = [];
-        if (fileListEl && fileListEl.options) {
-            for (let i = 0; i < fileListEl.options.length; i++) {
-                files.push(fileListEl.options[i].value);
-            }
-        }
-        
-        const targetFormat = formatSelectEl ? formatSelectEl.value : 'markdown';
         const aiAssist = aiToggleEl ? aiToggleEl.checked : false;
 
-        if (files.length === 0) {
-            alert('请选择要转换的文件');
-            return;
+        updateStatus('正在转换...');
+        updateProgress('conv-progress', 0, '正在准备转换...');
+
+        if (window.__TAURI_INTERNALS__) {
+            var listen = window.__TAURI_INTERNALS__.event?.listen;
+            if (listen) {
+                if (_fileConversionUnlisten) {
+                    _fileConversionUnlisten();
+                }
+                _fileConversionUnlisten = await listen('python-event', function(event) {
+                    var data = event.payload;
+                    if (!data) return;
+
+                    if (data.type === 'file_conversion_complete') {
+                        updateProgress('conv-progress', 1, '转换完成');
+                        updateStatus('转换完成');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                        if (window.TreeModule && window.TreeModule.loadFileTree) {
+                            window.TreeModule.loadFileTree();
+                        }
+                        if (_fileConversionUnlisten) {
+                            _fileConversionUnlisten();
+                            _fileConversionUnlisten = null;
+                        }
+                    } else if (data.type === 'file_conversion_error') {
+                        updateProgress('conv-progress', 0, '转换失败：' + (data.error || '未知错误'));
+                        updateStatus('转换失败：' + (data.error || '未知错误'));
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                        if (_fileConversionUnlisten) {
+                            _fileConversionUnlisten();
+                            _fileConversionUnlisten = null;
+                        }
+                    }
+                });
+            }
         }
 
-        const result = await window.api.start_file_conversion(files, targetFormat, aiAssist);
+        const result = await window.api.start_file_conversion(aiAssist);
         
         if (result && result.success) {
-            updateStatus('转换完成');
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                window.TreeModule.loadFileTree();
-            }
+            updateStatus('正在转换，请稍候...');
         } else {
             updateStatus('转换失败: ' + (result?.message || '未知错误'));
+            updateProgress('conv-progress', 0, '转换失败: ' + (result?.message || '未知错误'));
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         }
     } catch (e) {
         console.error('[Converter] Conversion error:', e);
-        alert('转换失败: ' + e.message);
         updateStatus('转换失败: ' + e.message);
-    } finally {
+        updateProgress('conv-progress', 0, '转换失败: ' + e.message);
         if (btn) {
             btn.disabled = false;
             btn.textContent = originalText;

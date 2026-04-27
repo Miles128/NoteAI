@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
@@ -89,17 +89,23 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<Child, String> {
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if let Ok(resp) = serde_json::from_str::<PyResponse>(&line) {
-                let state = app_clone.state::<AppState>();
-                let mut pending = state.pending_requests.lock().unwrap();
-                if let Some(tx) = pending.remove(&resp.id) {
-                    let value = if let Some(result) = resp.result {
-                        result
-                    } else if let Some(error) = resp.error {
-                        serde_json::json!({"success": false, "message": error})
-                    } else {
-                        serde_json::Value::Null
-                    };
-                    let _ = tx.send(value);
+                if resp.id == "event" {
+                    if let Some(result) = resp.result {
+                        let _ = app_clone.emit("python-event", &result);
+                    }
+                } else {
+                    let state = app_clone.state::<AppState>();
+                    let mut pending = state.pending_requests.lock().unwrap();
+                    if let Some(tx) = pending.remove(&resp.id) {
+                        let value = if let Some(result) = resp.result {
+                            result
+                        } else if let Some(error) = resp.error {
+                            serde_json::json!({"success": false, "message": error})
+                        } else {
+                            serde_json::Value::Null
+                        };
+                        let _ = tx.send(value);
+                    }
                 }
             }
         }

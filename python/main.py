@@ -210,7 +210,9 @@ class SidecarServer:
         include_images = params.get("include_images", True)
         save_path = config.workspace_path
         if not save_path:
-            return {"error": "请先设置工作区"}
+            return {"success": False, "message": "请先设置工作区"}
+        if not urls:
+            return {"success": False, "message": "请输入至少一个URL"}
 
         def _run():
             try:
@@ -219,24 +221,28 @@ class SidecarServer:
                     ai_assist=ai_assist,
                     include_images=include_images
                 )
+                success_count = sum(1 for r in result if r.get("success"))
                 self._send_response({
                     "id": "event",
-                    "result": {"type": "web_download_complete", "data": result}
+                    "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
                 })
             except Exception as e:
+                import traceback
+                sys.stderr.write(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
+                sys.stderr.flush()
                 self._send_response({
                     "id": "event",
                     "result": {"type": "web_download_error", "error": str(e)}
                 })
 
         threading.Thread(target=_run, daemon=True).start()
-        return {"status": "started"}
+        return {"success": True, "message": "下载已开始"}
 
     def _start_file_conversion(self, params):
         ai_assist = params.get("ai_assist", False)
         workspace = config.workspace_path
         if not workspace:
-            return {"error": "请先设置工作区"}
+            return {"success": False, "message": "请先设置工作区"}
 
         def _run():
             try:
@@ -248,13 +254,16 @@ class SidecarServer:
                     "result": {"type": "file_conversion_complete", "data": result}
                 })
             except Exception as e:
+                import traceback
+                sys.stderr.write(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
+                sys.stderr.flush()
                 self._send_response({
                     "id": "event",
                     "result": {"type": "file_conversion_error", "error": str(e)}
                 })
 
         threading.Thread(target=_run, daemon=True).start()
-        return {"status": "started"}
+        return {"success": True, "message": "转换已开始"}
 
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
@@ -272,7 +281,7 @@ class SidecarServer:
         topics = params.get("topics", [])
         workspace = config.workspace_path
         if not workspace:
-            return {"error": "请先设置工作区"}
+            return {"success": False, "message": "请先设置工作区"}
 
         self.note_integration = NoteIntegration(workspace)
 
@@ -287,13 +296,16 @@ class SidecarServer:
                     "result": {"type": "note_integration_complete", "data": result}
                 })
             except Exception as e:
+                import traceback
+                sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
+                sys.stderr.flush()
                 self._send_response({
                     "id": "event",
                     "result": {"type": "note_integration_error", "error": str(e)}
                 })
 
         threading.Thread(target=_run, daemon=True).start()
-        return {"status": "started"}
+        return {"success": True, "message": "整合已开始"}
 
     def _get_file_preview(self, params):
         path = params.get("path", "")

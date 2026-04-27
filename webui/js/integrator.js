@@ -1,4 +1,5 @@
 let topicsReady = false;
+var _noteIntegrationUnlisten = null;
 
 function updateIntegrateBtnState() {
     const btn = document.getElementById('integrate-btn');
@@ -107,22 +108,65 @@ async function startNoteIntegration() {
         const topicList = document.getElementById('topic-list');
         const topics = topicList ? topicList.value.split('\n').map(t => t.trim()).filter(t => t) : [];
         
+        updateStatus('正在整合...');
+        updateProgress('integration-progress', 0, '正在准备整合...');
+
+        if (window.__TAURI_INTERNALS__) {
+            var listen = window.__TAURI_INTERNALS__.event?.listen;
+            if (listen) {
+                if (_noteIntegrationUnlisten) {
+                    _noteIntegrationUnlisten();
+                }
+                _noteIntegrationUnlisten = await listen('python-event', function(event) {
+                    var data = event.payload;
+                    if (!data) return;
+
+                    if (data.type === 'note_integration_complete') {
+                        updateProgress('integration-progress', 1, '整合完成');
+                        updateStatus('整合完成');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = '开始整合';
+                        }
+                        if (window.TreeModule && window.TreeModule.loadFileTree) {
+                            window.TreeModule.loadFileTree();
+                        }
+                        if (_noteIntegrationUnlisten) {
+                            _noteIntegrationUnlisten();
+                            _noteIntegrationUnlisten = null;
+                        }
+                    } else if (data.type === 'note_integration_error') {
+                        updateProgress('integration-progress', 0, '整合失败：' + (data.error || '未知错误'));
+                        updateStatus('整合失败：' + (data.error || '未知错误'));
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = '开始整合';
+                        }
+                        if (_noteIntegrationUnlisten) {
+                            _noteIntegrationUnlisten();
+                            _noteIntegrationUnlisten = null;
+                        }
+                    }
+                });
+            }
+        }
+
         const result = await window.api.start_note_integration(false, topics);
         
         if (result && result.success) {
-            updateStatus('整合完成');
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                window.TreeModule.loadFileTree();
-            }
+            updateStatus('正在整合，请稍候...');
         } else {
             updateStatus('整合失败: ' + (result?.message || '未知错误'));
-            alert('整合失败: ' + (result?.message || '未知错误'));
+            updateProgress('integration-progress', 0, '整合失败: ' + (result?.message || '未知错误'));
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '开始整合';
+            }
         }
     } catch (e) {
         console.error('[Integrator] Integration error:', e);
-        alert('整合失败: ' + e.message);
         updateStatus('整合失败: ' + e.message);
-    } finally {
+        updateProgress('integration-progress', 0, '整合失败: ' + e.message);
         if (btn) {
             btn.disabled = false;
             btn.textContent = '开始整合';

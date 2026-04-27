@@ -1,3 +1,5 @@
+var _webDownloadUnlisten = null;
+
 async function startWebDownload() {
     const btn = document.querySelector('#tab-0 .btn-primary');
     const originalText = btn ? btn.textContent : '开始下载';
@@ -21,21 +23,67 @@ async function startWebDownload() {
             return;
         }
 
+        updateStatus('正在下载...');
+        updateProgress('web-progress', 0, '正在准备下载...');
+
+        if (window.__TAURI_INTERNALS__) {
+            var listen = window.__TAURI_INTERNALS__.event?.listen;
+            if (listen) {
+                if (_webDownloadUnlisten) {
+                    _webDownloadUnlisten();
+                }
+                _webDownloadUnlisten = await listen('python-event', function(event) {
+                    var data = event.payload;
+                    if (!data) return;
+
+                    if (data.type === 'web_download_complete') {
+                        var successCount = data.success_count || 0;
+                        var total = data.total || 0;
+                        updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');
+                        updateStatus('下载完成：' + successCount + '/' + total + ' 篇成功');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                        if (window.TreeModule && window.TreeModule.loadFileTree) {
+                            window.TreeModule.loadFileTree();
+                        }
+                        if (_webDownloadUnlisten) {
+                            _webDownloadUnlisten();
+                            _webDownloadUnlisten = null;
+                        }
+                    } else if (data.type === 'web_download_error') {
+                        updateProgress('web-progress', 0, '下载失败：' + (data.error || '未知错误'));
+                        updateStatus('下载失败：' + (data.error || '未知错误'));
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                        if (_webDownloadUnlisten) {
+                            _webDownloadUnlisten();
+                            _webDownloadUnlisten = null;
+                        }
+                    }
+                });
+            }
+        }
+
         const result = await window.api.start_web_download(urls, aiAssist, includeImages);
         
         if (result && result.success) {
-            updateStatus('下载完成');
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                window.TreeModule.loadFileTree();
-            }
+            updateStatus('正在下载，请稍候...');
         } else {
             updateStatus('下载失败: ' + (result?.message || '未知错误'));
+            updateProgress('web-progress', 0, '下载失败: ' + (result?.message || '未知错误'));
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         }
     } catch (e) {
         console.error('[Downloader] Download error:', e);
-        alert('下载失败: ' + e.message);
         updateStatus('下载失败: ' + e.message);
-    } finally {
+        updateProgress('web-progress', 0, '下载失败: ' + e.message);
         if (btn) {
             btn.disabled = false;
             btn.textContent = originalText;

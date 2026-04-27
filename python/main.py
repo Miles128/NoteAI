@@ -144,6 +144,7 @@ class SidecarServer:
     def _get_workspace_status(self, params):
         path = config.workspace_path
         if path and Path(path).exists():
+            self.file_previewer.workspace_path = path
             return {
                 "is_set": True,
                 "workspace_path": path,

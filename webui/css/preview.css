@@ -1,9 +1,10 @@
 .preview-panel {
     display: flex;
     flex-direction: row;
-    width: 800px;
-    min-width: 500px;
-    max-width: 1600px;
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
     background: var(--surface);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -12,8 +13,8 @@
 }
 
 .preview-panel.active {
-    width: 800px;
-    min-width: 500px;
+    flex: 1;
+    width: 100%;
 }
 
 .preview-panel.editor-active {

@@ -69,6 +69,16 @@ async function loadFilePreview(path, fileName) {
         return;
     }
 
+    if (window.TiptapEditor && window.TiptapEditor.isActive) {
+        if (window.TiptapEditorModule && window.TiptapEditorModule.exitTiptapEditMode) {
+            window.TiptapEditorModule.exitTiptapEditMode();
+        }
+    }
+
+    if (window.EditorModule && window.EditorModule.exitEditMode) {
+        window.EditorModule.exitEditMode();
+    }
+
     isPreviewActive = true;
 
     if (previewTitle) {

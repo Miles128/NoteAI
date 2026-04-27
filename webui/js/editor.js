@@ -368,116 +368,73 @@ function syncScrollFromPreview(previewScroll) {
 
 function enterEditMode() {
     const previewContent = document.getElementById('preview-content');
-    const editorContainer = document.getElementById('editor-container');
-    const previewPanel = document.getElementById('preview-panel');
+    const tiptapContainer = document.getElementById('tiptap-editor-container');
+    const toolbar = document.getElementById('tiptap-toolbar');
+    const splitBtn = document.getElementById('titlebar-split-btn');
 
     if (previewContent) previewContent.style.display = 'none';
-    if (editorContainer) editorContainer.style.display = 'flex';
-    if (previewPanel) previewPanel.classList.add('editor-active');
-
-    initEditorInnerResizer();
-    updateHljsTheme();
+    if (tiptapContainer) tiptapContainer.style.display = 'flex';
+    if (toolbar) toolbar.style.display = 'flex';
+    if (splitBtn) splitBtn.classList.add('active');
 }
 
 function exitEditMode() {
     const previewContent = document.getElementById('preview-content');
-    const editorContainer = document.getElementById('editor-container');
-    const previewPanel = document.getElementById('preview-panel');
-    const splitBtn = document.getElementById('preview-split-btn');
+    const tiptapContainer = document.getElementById('tiptap-editor-container');
+    const toolbar = document.getElementById('tiptap-toolbar');
+    const splitBtn = document.getElementById('titlebar-split-btn');
 
-    destroyCodeMirrorEditor();
+    if (window.TiptapEditorModule && window.TiptapEditorModule.exitTiptapEditMode) {
+        window.TiptapEditorModule.exitTiptapEditMode();
+    }
 
     if (previewContent) previewContent.style.display = 'block';
-    if (editorContainer) editorContainer.style.display = 'none';
-    if (previewPanel) previewPanel.classList.remove('editor-active');
+    if (tiptapContainer) tiptapContainer.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'none';
     if (splitBtn) splitBtn.classList.remove('active');
 }
 
-function toggleEditMode() {
-    const splitBtn = document.getElementById('preview-split-btn');
-    if (window.mdEditor.isActive) {
+async function toggleEditMode() {
+    const splitBtn = document.getElementById('titlebar-split-btn');
+    
+    if (window.TiptapEditor && window.TiptapEditor.isActive) {
         exitEditMode();
         if (currentPreviewData && currentPreviewData.type === 'markdown') {
             const content = document.getElementById('preview-content');
-            if (content) content.innerHTML = renderMarkdownPreview(currentPreviewData.content);
+            if (content && window.TiptapEditorModule) {
+                const markdown = window.TiptapEditorModule.getTiptapMarkdown();
+                if (markdown) {
+                    content.innerHTML = renderMarkdownPreview(markdown);
+                }
+            }
         }
     } else {
         if (currentPreviewData && currentPreviewData.type === 'markdown') {
+            if (!window.TiptapLoader || !window.TiptapLoader.ready) {
+                const ready = await initTiptapEditor();
+                if (!ready) {
+                    console.error('[Editor] Tiptap not ready, falling back to CodeMirror');
+                    enterEditMode();
+                    initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+                    if (splitBtn) splitBtn.classList.add('active');
+                    return;
+                }
+            }
+
             enterEditMode();
-            initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
-            if (splitBtn) splitBtn.classList.add('active');
+            const success = window.TiptapEditorModule.createTiptapEditor(
+                currentPreviewData.content, 
+                selectedFilePath
+            );
+            if (!success) {
+                console.warn('[Editor] Tiptap init failed, using CodeMirror fallback');
+                initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+            }
         }
     }
 }
 
 function initEditorInnerResizer() {
-    const resizer = document.getElementById('editor-inner-resizer');
-    const leftPane = document.getElementById('editor-pane-left');
-    const rightPane = document.getElementById('editor-pane-right');
-
-    if (!resizer || !leftPane || !rightPane) {
-        console.log('[DEBUG] initEditorInnerResizer: elements not found');
-        return;
-    }
-
-    let isResizing = false;
-    let startX = 0;
-    let leftStartFlex = 1;
-    let rightStartFlex = 1;
-
-    const savedLeftFlex = localStorage.getItem('editor-left-flex');
-    const savedRightFlex = localStorage.getItem('editor-right-flex');
-    if (savedLeftFlex && savedRightFlex) {
-        leftPane.style.flex = savedLeftFlex;
-        rightPane.style.flex = savedRightFlex;
-    }
-
-    resizer.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        resizer.classList.add('resizing');
-        document.body.style.cursor = 'col-resize';
-        document.body.style.userSelect = 'none';
-        startX = e.clientX;
-        const leftStyle = window.getComputedStyle(leftPane);
-        const rightStyle = window.getComputedStyle(rightPane);
-        leftStartFlex = parseFloat(leftStyle.flexGrow) || 1;
-        rightStartFlex = parseFloat(rightStyle.flexGrow) || 1;
-        e.preventDefault();
-    });
-
-    document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
-        const dx = e.clientX - startX;
-        const totalFlex = leftStartFlex + rightStartFlex;
-        const containerWidth = leftPane.parentElement.clientWidth;
-        const flexPerPixel = totalFlex / containerWidth;
-        const flexDelta = dx * flexPerPixel;
-        let newLeftFlex = leftStartFlex + flexDelta;
-        let newRightFlex = rightStartFlex - flexDelta;
-        const minFlex = 0.3;
-        if (newLeftFlex < minFlex) {
-            newLeftFlex = minFlex;
-            newRightFlex = totalFlex - minFlex;
-        }
-        if (newRightFlex < minFlex) {
-            newRightFlex = minFlex;
-            newLeftFlex = totalFlex - minFlex;
-        }
-        leftPane.style.flex = newLeftFlex;
-        rightPane.style.flex = newRightFlex;
-    });
-
-    document.addEventListener('mouseup', () => {
-        if (!isResizing) return;
-        isResizing = false;
-        resizer.classList.remove('resizing');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        const leftStyle = window.getComputedStyle(leftPane);
-        const rightStyle = window.getComputedStyle(rightPane);
-        localStorage.setItem('editor-left-flex', leftStyle.flexGrow);
-        localStorage.setItem('editor-right-flex', rightStyle.flexGrow);
-    });
 }
 
 function initWindowDrag() {

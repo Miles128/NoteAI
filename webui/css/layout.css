@@ -13,7 +13,7 @@ body {
     overflow: hidden;
     padding: 0;
     margin: 0;
-    zoom: var(--font-scale, 1);
+    zoom: 1.375;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }

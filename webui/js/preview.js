@@ -70,8 +70,8 @@ async function loadFilePreview(path, fileName) {
     }
 
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
-        if (window.TiptapEditorModule && window.TiptapEditorModule.hideTiptapEditor) {
-            window.TiptapEditorModule.hideTiptapEditor();
+        if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+            window.TiptapEditorModule.hideEditorUI();
         }
     }
 
@@ -225,8 +225,8 @@ function closePreview() {
     const previewContent = document.getElementById('preview-content');
 
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
-        if (window.TiptapEditorModule && window.TiptapEditorModule.hideTiptapEditor) {
-            window.TiptapEditorModule.hideTiptapEditor();
+        if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+            window.TiptapEditorModule.hideEditorUI();
         }
     }
 

@@ -2,16 +2,9 @@
 
 ## 项目简介
 
-NoteAI 是一个功能完善的 AI 驱动 Markdown 笔记知识库管理桌面应用。使用 **PySide6 (QtWebEngine)** 或 **pywebview** 作为前端框架，结合 HTML/CSS/JS 构建现代化界面，集成 LangChain 实现 AI 相关功能。
 
-### 前端框架特性
+NoteAI是一个功能完善的AI驱动Markdown笔记知识库管理桌面应用，使用Python和Tauri开发，集成了Langchain实现AI相关功能。 核心功能-网络文章批量下载，多格式文件批量转换，智能笔记主题整合。
 
-| 框架 | 特点 |
-|------|------|
-| **PySide6** (推荐) | 使用 QtWebEngine (Chromium 内核)，功能完整，支持 ES Module 动态 import，CodeMirror 6 编辑器工作正常 |
-| **pywebview** | 使用系统 WebView，轻量但有功能限制 |
-
-应用启动时自动选择：优先使用 PySide6，如未安装则回退到 pywebview。
 
 ## 核心功能
 

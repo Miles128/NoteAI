@@ -21,11 +21,11 @@
     --btn-radius: 7px;
     --input-radius: 7px;
     --glass-blur: blur(40px) saturate(180%);
-    --article-bg: #F5F0E6;
+    --article-bg: #EDE8D5;
     --font-scale: 1.25;
-    --italic-bg: #FAF0D8;
-    --italic-color: #333333;
-    --bold-color: #58A6FF;
+    --italic-bg: #EDE8D5;
+    --italic-color: #000000;
+    --bold-color: #000000;
 }
 
 [data-theme="light"] {

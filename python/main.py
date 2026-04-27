@@ -105,20 +105,30 @@ class SidecarServer:
         }
 
     def _save_api_config(self, params):
-        if params.get("api_key"):
-            config.api_key = params["api_key"]
-        if params.get("api_base"):
-            config.api_base = params["api_base"]
-        if params.get("model_name"):
-            config.model_name = params["model_name"]
-        if "temperature" in params:
-            config.temperature = float(params["temperature"])
-        if "max_tokens" in params:
-            config.max_tokens = int(params["max_tokens"])
-        if "max_context_tokens" in params:
-            config.max_context_tokens = int(params["max_context_tokens"])
+        api_key = params.get("api_key", "")
+        api_base = params.get("api_base", "https://api.openai.com/v1")
+        model_name = params.get("model_name", "gpt-4")
+
+        if "****" in api_key:
+            api_key = config.api_key
+
+        if not api_key or not api_key.strip():
+            return {"success": False, "message": "API Key 不能为空"}
+
+        from utils.helpers import test_api_connection
+        connected, conn_msg = test_api_connection(api_key, api_base, model_name)
+        if not connected:
+            return {"success": False, "message": conn_msg}
+
+        config.api_key = api_key
+        config.api_base = api_base
+        config.model_name = model_name
+        config.temperature = params.get("temperature", 0.7)
+        config.max_tokens = params.get("max_tokens", 32000)
+        config.max_context_tokens = params.get("max_context_tokens", 128000)
+
         config.save()
-        return {"success": True, "message": "配置已保存"}
+        return {"success": True, "message": f"配置已保存，{conn_msg}"}
 
     def _get_ui_config(self, params):
         return {

@@ -23,6 +23,9 @@
     --glass-blur: blur(40px) saturate(180%);
     --article-bg: #F5F0E6;
     --font-scale: 1.25;
+    --italic-bg: #FAF0D8;
+    --italic-color: #333333;
+    --bold-color: #58A6FF;
 }
 
 [data-theme="light"] {

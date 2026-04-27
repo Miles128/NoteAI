@@ -263,11 +263,16 @@
 .preview-content strong,
 .preview-content b {
     font-weight: 600;
+    color: var(--bold-color);
 }
 
 .preview-content em,
 .preview-content i {
     font-style: italic;
+    color: var(--italic-color);
+    background-color: var(--italic-bg);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
 }
 
 .preview-content p {

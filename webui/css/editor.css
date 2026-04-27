@@ -349,11 +349,16 @@
 .tiptap-prose strong,
 .tiptap-prose b {
     font-weight: 600;
+    color: var(--bold-color);
 }
 
 .tiptap-prose em,
 .tiptap-prose i {
     font-style: italic;
+    color: var(--italic-color);
+    background-color: var(--italic-bg);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
 }
 
 .tiptap-prose s {

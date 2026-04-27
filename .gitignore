@@ -54,3 +54,9 @@ config.local.py
 
 # Trae IDE
 .trae/
+
+# Downloaded bundles
+codemirror-bundle.mjs
+
+# Tauri
+src-tauri/target/

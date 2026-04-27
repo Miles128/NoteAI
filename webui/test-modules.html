@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NoteAI - 模块测试</title>
+    
+    <link rel="stylesheet" href="./css/variables.css">
+    <link rel="stylesheet" href="./css/layout.css">
+    <link rel="stylesheet" href="./css/components.css">
+    <link rel="stylesheet" href="./css/tree.css">
+    <link rel="stylesheet" href="./css/preview.css">
+    <link rel="stylesheet" href="./css/editor.css">
+    
+    <style>
+        .test-section {
+            margin-bottom: 20px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        
+        .test-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+        
+        .test-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .test-item:last-child {
+            border-bottom: none;
+        }
+        
+        .test-status {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .test-status.passed {
+            background: rgba(52, 199, 89, 0.15);
+            color: #34C759;
+        }
+        
+        .test-status.failed {
+            background: rgba(255, 59, 48, 0.15);
+            color: #FF3B30;
+        }
+        
+        .test-status.pending {
+            background: rgba(255, 149, 0, 0.15);
+            color: #FF9500;
+        }
+        
+        .test-output {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 6px;
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        [data-theme="dark"] .test-output {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        body {
+            padding: 20px;
+            overflow-y: auto;
+            height: auto;
+            min-height: 100vh;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>NoteAI - 模块测试</h1>
+        <div>
+            <button class="btn btn-secondary" onclick="toggleTheme()">切换主题</button>
+            <button class="btn btn-primary" onclick="runAllTests()">运行所有测试</button>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">1. 工具函数测试 (utils.js)</div>
+        <div id="utils-tests">
+            <div class="test-item">
+                <span>escapeHtml() - HTML 转义</span>
+                <span class="test-status pending" id="test-escape">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>formatFileSize() - 文件大小格式化</span>
+                <span class="test-status pending" id="test-filesize">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>formatModifiedTime() - 时间格式化</span>
+                <span class="test-status pending" id="test-timeformat">待测试</span>
+            </div>
+        </div>
+        <div class="test-output" id="utils-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">2. 状态管理测试 (state.js)</div>
+        <div id="state-tests">
+            <div class="test-item">
+                <span>API 配置初始化</span>
+                <span class="test-status pending" id="test-api-config">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>UI 配置初始化</span>
+                <span class="test-status pending" id="test-ui-config">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>主题偏好</span>
+                <span class="test-status pending" id="test-theme-preference">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>状态监听</span>
+                <span class="test-status pending" id="test-state-listener">待测试</span>
+            </div>
+        </div>
+        <div class="test-output" id="state-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">3. Tab 切换测试 (tabs.js)</div>
+        <div id="tabs-tests">
+            <div class="test-item">
+                <span>Tab 初始化</span>
+                <span class="test-status pending" id="test-tabs-init">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>Tab 切换</span>
+                <span class="test-status pending" id="test-tabs-switch">待测试</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="testTabsInit()">测试 Tab 初始化</button>
+            <button class="btn btn-secondary" onclick="testTabsSwitch()">测试 Tab 切换</button>
+        </div>
+        <div class="test-output" id="tabs-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">4. 通知系统测试 (toast.js)</div>
+        <div id="toast-tests">
+            <div class="test-item">
+                <span>updateStatus() - 状态更新</span>
+                <span class="test-status pending" id="test-update-status">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>updateProgress() - 进度更新</span>
+                <span class="test-status pending" id="test-update-progress">待测试</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="testUpdateStatus()">测试状态更新</button>
+            <button class="btn btn-secondary" onclick="testUpdateProgress()">测试进度更新</button>
+        </div>
+        <div class="test-output" id="toast-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">5. API 兼容层测试 (api.js)</div>
+        <div id="api-tests">
+            <div class="test-item">
+                <span>window.api 对象存在</span>
+                <span class="test-status pending" id="test-api-exists">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>window.pywebview.api 兼容层存在</span>
+                <span class="test-status pending" id="test-pywebview-compat">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>API 方法列表完整</span>
+                <span class="test-status pending" id="test-api-methods">待测试</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="testApiExists()">测试 API 存在</button>
+            <button class="btn btn-secondary" onclick="testPywebviewCompat()">测试 pywebview 兼容</button>
+        </div>
+        <div class="test-output" id="api-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">6. 业务模块测试</div>
+        <div id="module-tests">
+            <div class="test-item">
+                <span>EditorModule 存在</span>
+                <span class="test-status pending" id="test-editor-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>ThemeModule 存在</span>
+                <span class="test-status pending" id="test-theme-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>TreeModule 存在</span>
+                <span class="test-status pending" id="test-tree-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>PreviewModule 存在</span>
+                <span class="test-status pending" id="test-preview-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>WorkspaceModule 存在</span>
+                <span class="test-status pending" id="test-workspace-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>DownloaderModule 存在</span>
+                <span class="test-status pending" id="test-downloader-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>ConverterModule 存在</span>
+                <span class="test-status pending" id="test-converter-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>IntegratorModule 存在</span>
+                <span class="test-status pending" id="test-integrator-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>SettingsModule 存在</span>
+                <span class="test-status pending" id="test-settings-module">待测试</span>
+            </div>
+            <div class="test-item">
+                <span>App 入口存在</span>
+                <span class="test-status pending" id="test-app-entry">待测试</span>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="testModulesExist()">测试所有业务模块</button>
+        </div>
+        <div class="test-output" id="module-output"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试结果汇总</div>
+        <div id="summary">
+            <div class="test-item">
+                <span>通过</span>
+                <span id="summary-passed">0</span>
+            </div>
+            <div class="test-item">
+                <span>失败</span>
+                <span id="summary-failed">0</span>
+            </div>
+            <div class="test-item">
+                <span>待测试</span>
+                <span id="summary-pending">0</span>
+            </div>
+            <div class="test-item">
+                <span>总计</span>
+                <span id="summary-total">0</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="./js/utils.js"></script>
+    <script src="./js/state.js"></script>
+    <script src="./js/toast.js"></script>
+    <script src="./js/tabs.js"></script>
+    <script src="./js/api.js"></script>
+    <script src="./js/editor.js"></script>
+    <script src="./js/theme.js"></script>
+    <script src="./js/tree.js"></script>
+    <script src="./js/preview.js"></script>
+    <script src="./js/workspace.js"></script>
+    <script src="./js/downloader.js"></script>
+    <script src="./js/converter.js"></script>
+    <script src="./js/integrator.js"></script>
+    <script src="./js/settings.js"></script>
+    <script src="./js/app.js"></script>
+    
+    <script>
+        let testResults = { passed: 0, failed: 0, pending: 0 };
+        
+        function updateTestStatus(id, status, message) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.className = 'test-status ' + status;
+                el.textContent = message || (status === 'passed' ? '通过' : status === 'failed' ? '失败' : '待测试');
+            }
+            
+            if (status === 'passed') testResults.passed++;
+            else if (status === 'failed') testResults.failed++;
+            else testResults.pending++;
+            
+            updateSummary();
+        }
+        
+        function updateSummary() {
+            document.getElementById('summary-passed').textContent = testResults.passed;
+            document.getElementById('summary-failed').textContent = testResults.failed;
+            document.getElementById('summary-pending').textContent = testResults.pending;
+            document.getElementById('summary-total').textContent = 
+                testResults.passed + testResults.failed + testResults.pending;
+        }
+        
+        function appendOutput(id, message) {
+            const el = document.getElementById(id);
+            if (el) {
+                const timestamp = new Date().toLocaleTimeString();
+                el.textContent += `[${timestamp}] ${message}\n`;
+            }
+        }
+        
+        function testUtils() {
+            appendOutput('utils-output', '开始测试工具函数...');
+            
+            if (!window.utils) {
+                updateTestStatus('test-escape', 'failed');
+                updateTestStatus('test-filesize', 'failed');
+                updateTestStatus('test-timeformat', 'failed');
+                appendOutput('utils-output', '✗ window.utils 不存在');
+                return;
+            }
+            
+            const testStr = '<div class="test">Test & "quote"</div>';
+            const escaped = window.utils.escapeHtml(testStr);
+            const expected = '&lt;div class="test"&gt;Test &amp; "quote"&lt;/div&gt;';
+            
+            if (escaped === expected) {
+                updateTestStatus('test-escape', 'passed');
+                appendOutput('utils-output', `✓ escapeHtml() 测试通过: "${escaped}"`);
+            } else {
+                updateTestStatus('test-escape', 'failed');
+                appendOutput('utils-output', `✗ escapeHtml() 测试失败: 期望 "${expected}", 实际 "${escaped}"`);
+            }
+            
+            const testBytes = [0, 512, 1024, 2048, 1024 * 1024, 2 * 1024 * 1024];
+            const expectedSizes = ['0 Byte', '512 Byte', '1.0 K', '2.0 K', '1.0 M', '2.0 M'];
+            let allPassed = true;
+            
+            for (let i = 0; i < testBytes.length; i++) {
+                const result = window.utils.formatFileSize(testBytes[i]);
+                if (result === expectedSizes[i]) {
+                    appendOutput('utils-output', `✓ formatFileSize(${testBytes[i]}) = "${result}"`);
+                } else {
+                    allPassed = false;
+                    appendOutput('utils-output', `✗ formatFileSize(${testBytes[i]}) 期望 "${expectedSizes[i]}", 实际 "${result}"`);
+                }
+            }
+            
+            updateTestStatus('test-filesize', allPassed ? 'passed' : 'failed');
+            
+            const testTimestamp = 1700000000;
+            const timeResult = window.utils.formatModifiedTime(testTimestamp);
+            if (timeResult && timeResult.length > 0) {
+                updateTestStatus('test-timeformat', 'passed');
+                appendOutput('utils-output', `✓ formatModifiedTime(${testTimestamp}) = "${timeResult}"`);
+            } else {
+                updateTestStatus('test-timeformat', 'failed');
+                appendOutput('utils-output', `✗ formatModifiedTime() 返回空值`);
+            }
+            
+            appendOutput('utils-output', '工具函数测试完成');
+        }
+        
+        function testState() {
+            appendOutput('state-output', '开始测试状态管理...');
+            
+            if (window.apiConfig !== undefined) {
+                updateTestStatus('test-api-config', 'passed');
+                appendOutput('state-output', `✓ window.apiConfig 存在: ${JSON.stringify(window.apiConfig)}`);
+            } else {
+                updateTestStatus('test-api-config', 'failed');
+                appendOutput('state-output', '✗ window.apiConfig 不存在');
+            }
+            
+            if (window.uiConfig !== undefined) {
+                updateTestStatus('test-ui-config', 'passed');
+                appendOutput('state-output', `✓ window.uiConfig 存在: ${JSON.stringify(window.uiConfig)}`);
+            } else {
+                updateTestStatus('test-ui-config', 'failed');
+                appendOutput('state-output', '✗ window.uiConfig 不存在');
+            }
+            
+            if (window.themePreference !== undefined) {
+                updateTestStatus('test-theme-preference', 'passed');
+                appendOutput('state-output', `✓ window.themePreference 存在: "${window.themePreference}"`);
+            } else {
+                updateTestStatus('test-theme-preference', 'failed');
+                appendOutput('state-output', '✗ window.themePreference 不存在');
+            }
+            
+            if (window.subscribeToState && window.notifyStateChange) {
+                updateTestStatus('test-state-listener', 'passed');
+                appendOutput('state-output', `✓ 状态监听函数存在: subscribeToState, notifyStateChange`);
+            } else {
+                updateTestStatus('test-state-listener', 'failed');
+                appendOutput('state-output', '✗ 状态监听函数不存在');
+            }
+            
+            appendOutput('state-output', '状态管理测试完成');
+        }
+        
+        function testTabsInit() {
+            appendOutput('tabs-output', '测试 Tab 初始化...');
+            
+            if (window.TabsModule) {
+                updateTestStatus('test-tabs-init', 'passed');
+                appendOutput('tabs-output', '✓ TabsModule 存在');
+            } else {
+                updateTestStatus('test-tabs-init', 'failed');
+                appendOutput('tabs-output', '✗ TabsModule 不存在');
+            }
+        }
+        
+        function testTabsSwitch() {
+            appendOutput('tabs-output', '测试 Tab 切换...');
+            
+            if (window.TabsModule && window.TabsModule.switchTab) {
+                updateTestStatus('test-tabs-switch', 'passed');
+                appendOutput('tabs-output', '✓ switchTab 函数存在');
+            } else {
+                updateTestStatus('test-tabs-switch', 'failed');
+                appendOutput('tabs-output', '✗ switchTab 函数不存在');
+            }
+        }
+        
+        function testUpdateStatus() {
+            appendOutput('toast-output', '测试 updateStatus...');
+            
+            if (window.updateStatus) {
+                updateTestStatus('test-update-status', 'passed');
+                appendOutput('toast-output', '✓ updateStatus 函数存在');
+            } else {
+                updateTestStatus('test-update-status', 'failed');
+                appendOutput('toast-output', '✗ updateStatus 函数不存在');
+            }
+        }
+        
+        function testUpdateProgress() {
+            appendOutput('toast-output', '测试 updateProgress...');
+            
+            if (window.updateProgress) {
+                updateTestStatus('test-update-progress', 'passed');
+                appendOutput('toast-output', '✓ updateProgress 函数存在');
+            } else {
+                updateTestStatus('test-update-progress', 'failed');
+                appendOutput('toast-output', '✗ updateProgress 函数不存在');
+            }
+        }
+        
+        function testApiExists() {
+            appendOutput('api-output', '测试 API 对象存在...');
+            
+            if (window.api) {
+                updateTestStatus('test-api-exists', 'passed');
+                appendOutput('api-output', '✓ window.api 存在');
+            } else {
+                updateTestStatus('test-api-exists', 'failed');
+                appendOutput('api-output', '✗ window.api 不存在');
+            }
+        }
+        
+        function testPywebviewCompat() {
+            appendOutput('api-output', '测试 pywebview 兼容层...');
+            
+            if (window.pywebview && window.pywebview.api) {
+                updateTestStatus('test-pywebview-compat', 'passed');
+                appendOutput('api-output', '✓ window.pywebview.api 兼容层存在');
+            } else {
+                updateTestStatus('test-pywebview-compat', 'failed');
+                appendOutput('api-output', '✗ window.pywebview.api 兼容层不存在');
+            }
+        }
+        
+        function testModulesExist() {
+            appendOutput('module-output', '测试业务模块存在...');
+            
+            const modules = [
+                { name: 'EditorModule', id: 'test-editor-module' },
+                { name: 'ThemeModule', id: 'test-theme-module' },
+                { name: 'TreeModule', id: 'test-tree-module' },
+                { name: 'PreviewModule', id: 'test-preview-module' },
+                { name: 'WorkspaceModule', id: 'test-workspace-module' },
+                { name: 'DownloaderModule', id: 'test-downloader-module' },
+                { name: 'ConverterModule', id: 'test-converter-module' },
+                { name: 'IntegratorModule', id: 'test-integrator-module' },
+                { name: 'SettingsModule', id: 'test-settings-module' }
+            ];
+            
+            modules.forEach(m => {
+                if (window[m.name]) {
+                    updateTestStatus(m.id, 'passed');
+                    appendOutput('module-output', `✓ ${m.name} 存在`);
+                } else {
+                    updateTestStatus(m.id, 'failed');
+                    appendOutput('module-output', `✗ ${m.name} 不存在`);
+                }
+            });
+            
+            if (window.App) {
+                updateTestStatus('test-app-entry', 'passed');
+                appendOutput('module-output', '✓ App 入口存在');
+            } else {
+                updateTestStatus('test-app-entry', 'failed');
+                appendOutput('module-output', '✗ App 入口不存在');
+            }
+            
+            appendOutput('module-output', '业务模块测试完成');
+        }
+        
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            
+            if (currentTheme === 'dark') {
+                html.removeAttribute('data-theme');
+            } else {
+                html.setAttribute('data-theme', 'dark');
+            }
+        }
+        
+        function runAllTests() {
+            testResults = { passed: 0, failed: 0, pending: 0 };
+            
+            document.querySelectorAll('.test-output').forEach(el => {
+                el.textContent = '';
+            });
+            
+            testUtils();
+            testState();
+            testTabsInit();
+            testTabsSwitch();
+            testUpdateStatus();
+            testUpdateProgress();
+            testApiExists();
+            testPywebviewCompat();
+            testModulesExist();
+            
+            appendOutput('utils-output', '\n=== 所有测试完成 ===');
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('[Test] DOM Content Loaded');
+            appendOutput('utils-output', '测试页面已加载，点击 "运行所有测试" 开始测试');
+        });
+    </script>
+</body>
+</html>

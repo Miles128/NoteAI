@@ -9,10 +9,6 @@ from bs4 import BeautifulSoup
 from readability import Document
 import validators
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
@@ -22,9 +18,9 @@ from utils.helpers import (
     clean_markdown_content, optimize_markdown_format
 )
 from utils.tag_extractor import (
-    extract_tags_from_text,
-    generate_yaml_frontmatter,
-    add_yaml_frontmatter_to_content
+    extract_tags_from_filename,
+    add_yaml_frontmatter_to_content,
+    add_yaml_frontmatter_to_file
 )
 
 
@@ -38,7 +34,7 @@ class WebDownloader:
         Args:
             progress_callback: 进度回调函数
             ai_assist: 是否使用AI进行额外优化（默认False）
-            include_images: 是否在Markdown中保留图片URL链接（默认False）
+            include_images: 是否在Markdown中保留图片的外部 URL 链接（默认False，不下载图片到本地）
         """
         self.progress_callback = progress_callback
         self.ai_assist = ai_assist
@@ -182,7 +178,7 @@ class WebDownloader:
                         title = last_part.replace('-', ' ').replace('_', ' ').replace('.html', '').replace('.htm', '')
                         if title:
                             return title[:100]
-            except:
+            except Exception:
                 pass
         
         return "未命名文章"
@@ -464,16 +460,20 @@ class WebDownloader:
                 file_path = save_dir / filename
 
                 try:
-                    tags = extract_tags_from_text(result['content'])
                     content_with_frontmatter = add_yaml_frontmatter_to_content(
                         result['content'],
                         title=result['title'],
-                        tags=tags,
+                        tags=[],
                         source=url
                     )
                     
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(content_with_frontmatter)
+
+                    tags = extract_tags_from_filename(str(file_path))
+                    if tags:
+                        add_yaml_frontmatter_to_file(str(file_path), tags=tags, source=url)
+
                     result['file_path'] = str(file_path)
                     result['tags'] = tags
                     logger.info(f"已保存: {file_path}")

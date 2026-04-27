@@ -1,27 +1,60 @@
 """
-Webview 应用 - 使用 HTML/CSS/JS 做 UI，Python 做后端
+NoteAI WebView 应用 - 使用 PySide6 QtWebEngine
+
+通信机制：
+- JS -> Python: 使用 HTTP API (fetch POST /api/method)
+- Python -> JS: 使用 QWebEnginePage.runJavaScript() + JSBridge 信号槽
 """
 
 import sys
-import re
+import json
 import shutil
+import re
 from pathlib import Path
-import threading
-import webview
-from webview import FileDialog
+from urllib.parse import unquote, parse_qs, urlparse
+
+from PySide6.QtCore import Qt, QUrl, Slot, QObject, Signal, QTimer
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QFileDialog
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtGui import QShortcut, QKeySequence
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from config.settings import config, workspace_manager
 from utils.logger import logger
-from utils.helpers import APIConfigError, NetworkError, is_network_error, test_api_connection, check_api_config
+from utils.helpers import APIConfigError, NetworkError
 from modules.web_downloader import WebDownloader
 from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
 from modules.topic_extractor import TopicExtractor
 from modules.file_preview import FilePreviewer
-from utils.tag_extractor import tag_markdown_files
+from utils.tag_extractor import tag_files_by_filename
+
+
+class JSBridge(QObject):
+    """线程安全的 JavaScript 桥接
+    
+    确保所有 JS 执行都在主线程中进行。
+    注意：必须在主线程中创建此对象（在 MainWindow._setup_ui() 中创建）。
+    """
+    execute_js = Signal(str)  # 只传递 js_code 字符串
+
+    def __init__(self, web_view):
+        super().__init__()
+        self._web_view = web_view
+        self.execute_js.connect(self._do_execute_js)
+
+    @Slot(str)
+    def _do_execute_js(self, js_code):
+        """在主线程中执行 JavaScript"""
+        if self._web_view and self._web_view.page():
+            self._web_view.page().runJavaScript(js_code)
+
+    def run_js(self, js_code):
+        """从任何线程调用，自动切换到主线程执行"""
+        self.execute_js.emit(str(js_code))
 
 
 class Api:
@@ -34,7 +67,6 @@ class Api:
         self.window = window
 
     def move_window(self, dx, dy):
-        """根据增量移动窗口"""
         if self.window:
             try:
                 x = self.window.x + dx
@@ -44,30 +76,21 @@ class Api:
                 print(f"移动窗口失败: {e}")
 
     def minimize_window(self):
-        """最小化窗口"""
         if self.window:
             self.window.minimize()
 
     def maximize_window(self):
-        """最大化/还原窗口"""
         if self.window:
-            if self.window.attributes['fullscreen']:
-                self.window.set_fullscreen(False)
-            else:
-                self.window.set_fullscreen(True)
+            self.window._toggle_maximize()
 
     def close_window(self):
-        """关闭窗口并退出应用"""
-        import webview
         if self.window:
             self.window.destroy()
-        webview.quit()
-        sys.exit(0)
+        QApplication.quit()
 
     def get_workspace_status(self):
-        """获取工作文件夹状态"""
         workspace_info = workspace_manager.get_workspace_info()
-        
+
         return {
             "is_set": config.is_workspace_set(),
             "workspace_path": config.workspace_path,
@@ -83,19 +106,15 @@ class Api:
                 "state_file": workspace_info.get("state_file")
             }
         }
-    
+
     def check_workspace_path_valid(self):
-        """检查当前工作区路径是否仍然有效
-        
-        用于检测工作区路径是否被删除、移动等情况
-        """
         if not config.workspace_path:
             return {
                 "is_valid": False,
                 "message": "工作区路径未设置",
                 "path": None
             }
-        
+
         path = Path(config.workspace_path)
         if not path.exists():
             return {
@@ -103,18 +122,14 @@ class Api:
                 "message": "工作区路径已不存在",
                 "path": config.workspace_path
             }
-        
+
         return {
             "is_valid": True,
             "message": "工作区路径有效",
             "path": config.workspace_path
         }
-    
+
     def clear_saved_workspace(self):
-        """清除系统目录中保存的工作区状态
-        
-        当用户不想自动恢复工作区时使用
-        """
         success, message = workspace_manager.clear_workspace_state()
         return {
             "success": success,
@@ -122,24 +137,14 @@ class Api:
         }
 
     def update_window_title(self):
-        """更新窗口标题"""
         if self.window and config.is_workspace_set():
             workspace_name = Path(config.workspace_path).name
             self.window.set_title(f"NoteAI - {workspace_name}")
 
     def open_workspace(self):
-        """打开工作区对话框并设置工作文件夹
-        
-        此方法会：
-        1. 让用户选择文件夹
-        2. 设置工作区路径
-        3. 创建标准子文件夹
-        4. 同时保存到项目配置文件和系统应用数据目录（双重保存）
-        5. 无论之前是否有保存的工作区，都会覆盖更新系统目录
-        """
         try:
             result = self.window.create_file_dialog(
-                FileDialog.FOLDER,
+                'folder',
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -152,9 +157,9 @@ class Api:
 
                 config.workspace_path = workspace_path
                 setup_success, setup_message = config.setup_workspace_folders()
-                
+
                 config.save_to_file()
-                
+
                 ws_save_success, ws_save_message = workspace_manager.save_workspace(workspace_path)
                 if not ws_save_success:
                     print(f"[WARNING] 保存工作区到系统目录失败: {ws_save_message}")
@@ -183,21 +188,27 @@ class Api:
             return {"success": False, "message": str(e), "workspace_path": "", "notes_folder": "", "organized_folder": ""}
 
     def get_api_config(self):
-        """获取 API 配置"""
+        masked_key = ""
+        if config.api_key:
+            key = config.api_key.strip()
+            if len(key) > 8:
+                masked_key = key[:4] + "****" + key[-4:]
+            else:
+                masked_key = "****"
         return {
-            "api_key": config.api_key,
+            "api_key": masked_key,
+            "api_key_configured": bool(config.api_key and config.api_key.strip()),
             "api_base": config.api_base,
             "model_name": config.model_name,
             "temperature": config.temperature,
             "max_tokens": config.max_tokens,
             "max_context_tokens": config.max_context_tokens
         }
-    
+
     def browse_folder(self):
-        """打开文件夹选择对话框"""
         try:
             result = self.window.create_file_dialog(
-                FileDialog.FOLDER,
+                'folder',
                 directory=str(Path.home()),
                 allow_multiple=False
             )
@@ -212,12 +223,11 @@ class Api:
             import traceback
             traceback.print_exc()
             return None
-    
+
     def add_files(self):
-        """添加文件"""
         try:
             result = self.window.create_file_dialog(
-                FileDialog.OPEN_FILES,
+                'open_files',
                 directory=str(Path.home()),
                 allow_multiple=True,
                 file_types=[
@@ -236,31 +246,29 @@ class Api:
             import traceback
             traceback.print_exc()
             return []
-    
+
     def update_status(self, text):
-        """更新状态栏"""
         self.window.evaluate_js(f'updateStatus({repr(text)})')
-    
+
     def update_progress(self, element_id, progress, message):
-        """更新进度条"""
         self.window.evaluate_js(f'updateProgress({repr(element_id)}, {progress}, {repr(message)})')
-    
+
     def show_message(self, title, message, msg_type="info"):
-        """静默消息：统一显示在状态栏"""
         self.window.evaluate_js(f'updateStatus({repr(str(message))})')
-    
+
     def _tag_new_files(self, file_paths: list):
-        """后台为新建的 Markdown 文件打标签"""
         def bg_task():
             try:
-                tagged = tag_markdown_files(file_paths)
+                tagged = tag_files_by_filename(file_paths)
                 logger.info(f"标签提取完成: {len(tagged)} 个文件")
             except Exception as e:
                 logger.warning(f"标签提取失败: {e}")
+
+        import threading
         threading.Thread(target=bg_task, daemon=True).start()
 
     def start_web_download(self, urls, ai_assist=False, include_images=False):
-        """开始网页下载"""
+        import threading
         if not config.is_workspace_set():
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
             return
@@ -308,9 +316,9 @@ class Api:
                 self.show_message("错误", str(e), "error")
 
         threading.Thread(target=task, daemon=True).start()
-    
+
     def start_file_conversion(self, ai_assist=False):
-        """开始文件转换"""
+        import threading
         if not config.is_workspace_set():
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
             return
@@ -358,22 +366,11 @@ class Api:
                 self.show_message("错误", str(e), "error")
 
         threading.Thread(target=task, daemon=True).start()
-    
+
     def extract_topics(self, topic_count=None):
-        """从 Notes 和 Organized 目录提取主题
-        
-        扫描 Notes 和 Organized 目录下所有 MD 文件名，调用 LLM 提取主题列表
-        
-        Args:
-            topic_count: 用户指定的主题个数，如果为 None 则让大模型从范围中选择
-        
-        Returns:
-            包含 success、topics、error 等信息的字典
-        """
         if not config.is_workspace_set():
             return {"success": False, "error": "请先设置工作文件夹"}
-        
-        # 解析主题个数参数
+
         specified_topic_count = None
         if topic_count is not None and topic_count != "":
             try:
@@ -382,9 +379,8 @@ class Api:
                     specified_topic_count = None
             except ValueError:
                 specified_topic_count = None
-        
+
         def progress_callback(current, total, message):
-            """进度回调函数"""
             try:
                 progress = current / total if total > 0 else 0
                 self.window.evaluate_js(
@@ -393,19 +389,15 @@ class Api:
                 self.update_status(message)
             except Exception as e:
                 print(f"[WARNING] 更新进度失败: {e}")
-        
+
         try:
-            # 创建主题提取器
             extractor = TopicExtractor(progress_callback=progress_callback)
-            
-            # 提取主题
             result = extractor.extract_topics(specified_topic_count=specified_topic_count)
-            
+
             if result.get("success"):
                 topics = result.get("topics", [])
                 logger.info(f"提取了 {len(topics)} 个主题: {topics}")
-                
-                # 额外返回一些统计信息
+
                 return {
                     "success": True,
                     "topics": topics,
@@ -418,15 +410,15 @@ class Api:
                 }
             else:
                 return result
-                
+
         except Exception as e:
             logger.error(f"提取主题失败: {e}")
             import traceback
             traceback.print_exc()
             return {"success": False, "error": f"提取主题失败: {str(e)}"}
-    
+
     def start_note_integration(self, auto_topic, topics):
-        """开始笔记整合"""
+        import threading
         if not config.is_workspace_set():
             self.show_message("警告", "请先设置工作文件夹\n\n点击顶部「打开工作区」按钮选择工作文件夹", "warning")
             return
@@ -486,7 +478,6 @@ class Api:
         threading.Thread(target=task, daemon=True).start()
 
     def _move_docs_to_used(self, doc_paths, used_path):
-        """将已处理的文档移动到 Used 文件夹"""
         used_dir = Path(used_path)
         if not used_dir.exists():
             return
@@ -508,11 +499,17 @@ class Api:
                 logger.warning(f"移动文件到Used失败 {src}: {e}")
 
     def save_api_config(self, config_data):
-        """保存 API 配置"""
         api_key = config_data.get("api_key", "")
         api_base = config_data.get("api_base", "https://api.openai.com/v1")
         model_name = config_data.get("model_name", "gpt-4")
 
+        if "****" in api_key:
+            api_key = config.api_key
+
+        if not api_key or not api_key.strip():
+            return {"success": False, "message": "API Key 不能为空"}
+
+        from utils.helpers import test_api_connection
         connected, conn_msg = test_api_connection(api_key, api_base, model_name)
         if not connected:
             return {"success": False, "message": conn_msg}
@@ -528,9 +525,8 @@ class Api:
             return {"success": True, "message": f"{conn_msg}\n\n{message}"}
         else:
             return {"success": False, "message": message}
-    
+
     def get_ui_config(self):
-        """获取用户界面配置"""
         return {
             "web_ai_assist": config.web_ai_assist,
             "web_include_images": config.web_include_images,
@@ -541,7 +537,6 @@ class Api:
         }
 
     def save_ui_config(self, ui_config):
-        """保存用户界面配置"""
         config.web_ai_assist = ui_config.get("web_ai_assist", False)
         config.web_include_images = ui_config.get("web_include_images", False)
         config.conv_ai_assist = ui_config.get("conv_ai_assist", False)
@@ -550,30 +545,25 @@ class Api:
         config.topic_list = ui_config.get("topic_list", "")
         success, message = config.save_to_file()
         return success, message
-    
+
     def refresh_log(self):
-        """刷新日志"""
         logs = logger.get_logs(200)
         log_text = "".join(logs)
         self.window.evaluate_js(f'document.getElementById("log-text").value = {repr(log_text)}')
 
     def get_theme_preference(self):
-        """获取主题偏好"""
         return getattr(config, 'theme_preference', 'system')
 
     def save_theme_preference(self, theme):
-        """保存主题偏好"""
         config.theme_preference = theme
         config.save_to_file()
 
     def get_workspace_tree(self):
-        """获取工作区目录树"""
         workspace_path = config.workspace_path
         if not workspace_path or not Path(workspace_path).exists():
             return []
 
         def build_tree(path, relative_base=None):
-            """递归构建目录树"""
             if relative_base is None:
                 relative_base = path
 
@@ -616,12 +606,10 @@ class Api:
         return build_tree(workspace_path)
 
     def on_file_selected(self, path):
-        """文件被选中时的回调"""
         print(f"[DEBUG] 文件选中: {path}")
         self.update_status(f"选中文件: {path}")
 
     def get_file_preview(self, path):
-        """获取文件预览内容"""
         try:
             workspace_path = config.workspace_path
             previewer = FilePreviewer(workspace_path)
@@ -645,12 +633,10 @@ class Api:
             }
 
     def can_preview_file(self, path):
-        """检查文件是否可预览"""
         previewer = FilePreviewer()
         return previewer.can_preview(path)
 
     def show_about(self):
-        """显示关于"""
         self.show_message(
             "关于 NoteAI",
             "NoteAI - AI驱动的Markdown笔记知识库管理\n\n"
@@ -659,54 +645,238 @@ class Api:
             "- 网络文章批量下载与转换\n"
             "- 多格式文件转换\n"
             "- 智能笔记主题整合\n\n"
-            "使用Webview + HTML/CSS/JS开发"
+            "使用PySide6 + HTML/CSS/JS开发"
         )
+
+    def save_file_content(self, path, content):
+        try:
+            workspace_path = config.workspace_path
+
+            if workspace_path and not Path(path).is_absolute():
+                full_path = Path(workspace_path) / path
+            else:
+                full_path = Path(path)
+
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(full_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+
+            logger.info(f"文件已保存: {full_path}")
+
+            return {
+                'success': True,
+                'message': f'已保存: {full_path.name}'
+            }
+
+        except Exception as e:
+            logger.error(f"保存文件失败 {path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+
+class MainWindow(QMainWindow):
+    """主窗口 - 无边框设计"""
+
+    def __init__(self):
+        super().__init__()
+        self._is_maximized = False
+        self._normal_geometry = None
+        self._web_view = None
+        self._api = None
+        self._js_bridge = None  # JSBridge 实例（在主线程创建）
+
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """设置 UI"""
+        self.setWindowTitle("NoteAI")
+        self.setMinimumSize(1000, 700)
+        self.resize(1400, 900)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        layout = QVBoxLayout(central_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self._web_view = QWebEngineView()
+        
+        # 在主线程中创建 JSBridge（确保线程亲和性正确）
+        self._js_bridge = JSBridge(self._web_view)
+        
+        layout.addWidget(self._web_view)
+
+        self._setup_shortcuts()
+
+    def set_api(self, api):
+        """设置 API 对象"""
+        self._api = api
+
+    def load_url(self, url):
+        """加载 URL 或 HTML 文件"""
+        if isinstance(url, Path):
+            url = QUrl.fromLocalFile(str(url))
+        elif isinstance(url, str):
+            if url.startswith("http://") or url.startswith("https://"):
+                url = QUrl(url)
+            else:
+                url = QUrl.fromLocalFile(url)
+        self._web_view.setUrl(url)
+
+    def load_html(self, html_content, base_url=None):
+        """直接加载 HTML 内容"""
+        if base_url:
+            self._web_view.setHtml(html_content, QUrl(base_url))
+        else:
+            self._web_view.setHtml(html_content)
+
+    def evaluate_js(self, js_code):
+        """在 WebView 中执行 JavaScript（线程安全）
+        
+        可以从任何线程调用，自动切换到主线程执行。
+        """
+        if self._js_bridge:
+            self._js_bridge.run_js(js_code)
+
+    def set_title(self, title):
+        """设置窗口标题"""
+        self.setWindowTitle(title)
+
+    def minimize(self):
+        """最小化窗口"""
+        self.showMinimized()
+
+    def maximize(self):
+        """最大化/还原窗口"""
+        self._toggle_maximize()
+
+    def destroy(self):
+        """关闭窗口"""
+        self.close()
+
+    @property
+    def x(self):
+        return self.geometry().x()
+
+    @property
+    def y(self):
+        return self.geometry().y()
+
+    def move(self, x, y):
+        """移动窗口"""
+        geo = self.geometry()
+        geo.moveTo(int(x), int(y))
+        self.setGeometry(geo)
+
+    def _toggle_maximize(self):
+        """切换最大化/还原"""
+        if self._is_maximized:
+            self.setGeometry(self._normal_geometry)
+            self._is_maximized = False
+        else:
+            self._normal_geometry = self.geometry()
+            self.showMaximized()
+            self._is_maximized = True
+
+    def _setup_shortcuts(self):
+        """设置快捷键"""
+        close_shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
+        close_shortcut.activated.connect(self.close)
+
+        fullscreen_shortcut = QShortcut(QKeySequence("F11"), self)
+        fullscreen_shortcut.activated.connect(self._toggle_maximize)
+
+    def create_file_dialog(self, dialog_type, directory=None, allow_multiple=False, file_types=None):
+        """
+        文件对话框
+
+        dialog_type:
+        - 'folder': 文件夹选择
+        - 'open_file': 单个文件
+        - 'open_files': 多个文件
+        """
+        if directory is None:
+            directory = str(Path.home())
+
+        if dialog_type == 'folder':
+            folder = QFileDialog.getExistingDirectory(self, "选择文件夹", directory)
+            if folder:
+                return [folder] if allow_multiple else folder
+            return None
+
+        elif dialog_type == 'open_file':
+            file_filter = self._build_file_filter(file_types)
+            file_path, _ = QFileDialog.getOpenFileName(self, "选择文件", directory, file_filter)
+            if file_path:
+                return [file_path] if allow_multiple else file_path
+            return None
+
+        elif dialog_type == 'open_files':
+            file_filter = self._build_file_filter(file_types)
+            files, _ = QFileDialog.getOpenFileNames(self, "选择文件", directory, file_filter)
+            return files if files else None
+
+        return None
+
+    def _build_file_filter(self, file_types):
+        """构建文件过滤器字符串"""
+        if not file_types:
+            return "所有文件 (*.*)"
+
+        if isinstance(file_types, (list, tuple)):
+            filters = []
+            for ft in file_types:
+                if isinstance(ft, str) and '(' in ft:
+                    filters.append(ft)
+                else:
+                    filters.append(str(ft))
+            return ";;".join(filters)
+
+        return "所有文件 (*.*)"
 
 
 def try_restore_workspace_config():
-    """尝试从系统目录恢复工作区配置（不操作窗口）
-    
-    此函数在 webview.start() 之前调用，只设置配置，
-    不操作窗口（因为窗口尚未初始化）。
-    
-    Returns:
-        (workspace_name: str 或 None, message: str)
-        - workspace_name: 如果成功恢复，返回工作区名称
-        - message: 描述信息
-    """
+    """尝试从系统目录恢复工作区配置"""
     try:
         workspace_info = workspace_manager.get_workspace_info()
-        
+
         is_saved = workspace_info.get("is_saved", False)
         is_valid = workspace_info.get("is_valid", False)
         saved_path = workspace_info.get("saved_path")
         workspace_path = workspace_info.get("workspace_path")
-        
+
         if not is_saved:
             print(f"[INFO] 没有保存的工作区状态")
             return None, "没有保存的工作区"
-        
+
         if not is_valid:
             print(f"[INFO] 已保存的工作区路径不存在: {saved_path}")
             return None, f"工作区路径已不存在: {saved_path}"
-        
+
         if not workspace_path:
             print(f"[WARNING] 工作区信息不一致: is_valid=True 但 workspace_path=None")
             return None, "工作区状态不一致"
-        
+
         workspace = Path(workspace_path)
-        
+
         config.workspace_path = workspace_path
-        
+
         success, message = config.setup_workspace_folders()
         if not success:
             print(f"[WARNING] 设置工作区文件夹失败: {message}")
-        
+
         workspace_name = workspace.name
-        
+
         print(f"[INFO] 已自动恢复工作区配置: {workspace_path}")
         return workspace_name, f"已恢复工作区: {workspace_name}"
-        
+
     except Exception as e:
         print(f"[ERROR] 恢复工作区配置时发生错误: {e}")
         import traceback
@@ -714,39 +884,190 @@ def try_restore_workspace_config():
         return None, f"恢复工作区失败: {str(e)}"
 
 
+def _download_codemirror_bundle(webui_dir):
+    """下载 CodeMirror bundle（用于 MD 编辑器）"""
+    import urllib.request
+    bundle_path = Path(webui_dir) / 'codemirror-bundle.mjs'
+    if bundle_path.exists():
+        print(f"[INFO] CodeMirror bundle already exists: {bundle_path}")
+        return True
+    print("[INFO] Downloading CodeMirror bundle...")
+    try:
+        entry_url = 'https://esm.sh/codemirror@6.0.1?bundle&deps=@codemirror/lang-markdown@6.2.5,@codemirror/theme-one-dark@6.1.2,@codemirror/theme-one-light@6.1.2,@codemirror/commands@6.6.0,@codemirror/autocomplete@6.16.0,@codemirror/lint@6.8.0'
+        req = urllib.request.Request(entry_url, headers={'User-Agent': 'Mozilla/5.0'})
+        resp = urllib.request.urlopen(req)
+        entry_content = resp.read().decode('utf-8')
+
+        match = re.search(r'export \* from "(/[^"]+\.bundle\.mjs)"', entry_content)
+        if not match:
+            print("[WARNING] Could not find bundle URL in esm.sh entry")
+            return False
+
+        bundle_url = 'https://esm.sh' + match.group(1)
+        print(f"[INFO] Downloading bundle from: {bundle_url}")
+        urllib.request.urlretrieve(bundle_url, str(bundle_path))
+        print(f"[INFO] CodeMirror bundle downloaded: {bundle_path} ({bundle_path.stat().st_size} bytes)")
+        return True
+    except Exception as e:
+        print(f"[WARNING] Failed to download CodeMirror bundle: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _start_http_server_with_api(directory, api):
+    """启动本地 HTTP 服务器，支持静态文件和 API 调用"""
+    import threading
+    import socket
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+    class APIRequestHandler(SimpleHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            self._api = api
+            super().__init__(*args, directory=directory, **kwargs)
+
+        def end_headers(self):
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            super().end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def do_GET(self):
+            parsed_path = urlparse(self.path)
+            path = parsed_path.path
+
+            if path.startswith('/api/'):
+                self._handle_api_get(path, parsed_path.query)
+                return
+
+            super().do_GET()
+
+        def do_POST(self):
+            parsed_path = urlparse(self.path)
+            path = parsed_path.path
+
+            if path.startswith('/api/'):
+                self._handle_api_post(path)
+                return
+
+            self.send_response(404)
+            self.end_headers()
+
+        def _handle_api_get(self, path, query):
+            """处理 GET API 请求（用于简单调用）"""
+            try:
+                method_name = path[5:]
+                params = parse_qs(query)
+                args_json = params.get('args', ['[]'])[0]
+                args = json.loads(args_json)
+
+                result = self._call_api_method(method_name, args)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+
+            except Exception as e:
+                print(f"[ERROR] API GET 调用失败: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        def _handle_api_post(self, path):
+            """处理 POST API 请求"""
+            try:
+                method_name = path[5:]
+
+                content_length = int(self.headers.get('Content-Length', 0))
+                body = self.rfile.read(content_length).decode('utf-8')
+                args = json.loads(body) if body else []
+
+                result = self._call_api_method(method_name, args)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+
+            except Exception as e:
+                print(f"[ERROR] API POST 调用失败: {e}")
+                import traceback
+                traceback.print_exc()
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+
+        def _call_api_method(self, method_name, args):
+            """调用 API 方法"""
+            if method_name.startswith('_'):
+                raise ValueError(f"私有方法不可调用: {method_name}")
+
+            if not hasattr(self._api, method_name):
+                raise ValueError(f"API 方法不存在: {method_name}")
+
+            method = getattr(self._api, method_name)
+
+            if isinstance(args, list):
+                return method(*args)
+            elif isinstance(args, dict):
+                return method(**args)
+            else:
+                return method(args)
+
+        def log_message(self, format, *args):
+            pass
+
+    def find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            return s.getsockname()[1]
+
+    port = find_free_port()
+
+    server = HTTPServer(('localhost', port), APIRequestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"[INFO] HTTP server with API started on http://localhost:{port}")
+    return port
+
+
 def main():
-    """启动应用"""
-    api = Api()
+    """启动 PySide6 版本应用"""
+    app = QApplication(sys.argv)
+    app.setApplicationName("NoteAI")
+    app.setOrganizationName("NoteAI")
 
     html_path = Path(__file__).parent / "index.html"
-    window = webview.create_window(
-        "NoteAI",
-        url=str(html_path),
-        width=1400,
-        height=900,
-        min_size=(1000, 700),
-        js_api=api,
-        frameless=True,
-        easy_drag=False
-    )
+    _download_codemirror_bundle(str(html_path.parent))
 
+    window = MainWindow()
+    api = Api()
     api.set_window(window)
-    
+
+    http_port = _start_http_server_with_api(str(html_path.parent), api)
+
     workspace_name, message = try_restore_workspace_config()
-    
-    def after_window_start():
-        """窗口启动后的回调函数
-        
-        在此函数中可以安全地调用 window.set_title() 等窗口操作
-        """
-        if workspace_name:
-            try:
-                window.set_title(f"NoteAI - {workspace_name}")
-                print(f"[INFO] 已设置窗口标题: NoteAI - {workspace_name}")
-            except Exception as e:
-                print(f"[WARNING] 设置窗口标题失败: {e}")
-    
-    webview.start(func=after_window_start)
+    if workspace_name:
+        try:
+            window.set_title(f"NoteAI - {workspace_name}")
+            print(f"[INFO] 已设置窗口标题: NoteAI - {workspace_name}")
+        except Exception as e:
+            print(f"[WARNING] 设置窗口标题失败: {e}")
+
+    index_url = f"http://localhost:{http_port}/index.html?port={http_port}"
+    window.load_url(index_url)
+    window.show()
+
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

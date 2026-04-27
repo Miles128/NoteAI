@@ -236,10 +236,15 @@
     margin-bottom: 16px;
     font-weight: 600;
     line-height: 1.25;
+    color: var(--heading-color);
+    background-color: var(--heading-bg);
+    padding: 0.3em 0.6em;
+    border-radius: 4px;
 }
 
 .preview-content h1 {
     font-size: 28px;
+    color: var(--h1-color);
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border);
 }
@@ -256,6 +261,20 @@
 
 .preview-content h4 {
     font-size: 16px;
+}
+
+.preview-content strong,
+.preview-content b {
+    color: var(--bold-color);
+    font-weight: 600;
+}
+
+.preview-content em,
+.preview-content i {
+    font-style: italic;
+    background-color: var(--italic-bg);
+    padding: 0.1em 0.2em;
+    border-radius: 2px;
 }
 
 .preview-content p {

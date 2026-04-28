@@ -1,5 +1,4 @@
 var _webDownloadUnlisten = null;
-var _urlList = [];
 
 function openDownloadModal() {
     const modal = document.getElementById('download-modal');
@@ -29,11 +28,10 @@ function openDownloadModal() {
         }
     }
     
-    renderUrlList();
     modal.classList.add('active');
     
     setTimeout(() => {
-        const urlInput = document.getElementById('url-input');
+        const urlInput = document.getElementById('modal-urls');
         if (urlInput) urlInput.focus();
     }, 100);
 }
@@ -43,104 +41,12 @@ function closeDownloadModal() {
     modal.classList.remove('active');
 }
 
-function handleUrlInputKeydown(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        addUrlFromInput();
+function clearModalUrls() {
+    const urlsEl = document.getElementById('modal-urls');
+    if (urlsEl) {
+        urlsEl.value = '';
+        urlsEl.focus();
     }
-}
-
-function addUrlFromInput() {
-    const urlInput = document.getElementById('url-input');
-    const url = urlInput ? urlInput.value.trim() : '';
-    
-    if (!url) {
-        return;
-    }
-    
-    const urls = url.split(/[\n,;\s]+/).filter(u => u.trim());
-    
-    urls.forEach(u => {
-        const trimmedUrl = u.trim();
-        if (trimmedUrl && isValidUrl(trimmedUrl)) {
-            if (!_urlList.includes(trimmedUrl)) {
-                _urlList.push(trimmedUrl);
-            }
-        }
-    });
-    
-    if (urlInput) {
-        urlInput.value = '';
-    }
-    
-    renderUrlList();
-}
-
-function isValidUrl(string) {
-    try {
-        const url = new URL(string);
-        return url.protocol === 'http:' || url.protocol === 'https:';
-    } catch (_) {
-        return false;
-    }
-}
-
-function getHostFromUrl(url) {
-    try {
-        const urlObj = new URL(url);
-        return urlObj.hostname;
-    } catch (_) {
-        return url;
-    }
-}
-
-function renderUrlList() {
-    const listContainer = document.getElementById('url-list');
-    const emptyState = document.getElementById('url-list-empty');
-    
-    if (!listContainer || !emptyState) return;
-    
-    if (_urlList.length === 0) {
-        emptyState.style.display = 'flex';
-        listContainer.classList.remove('has-items');
-        listContainer.innerHTML = '';
-        return;
-    }
-    
-    emptyState.style.display = 'none';
-    listContainer.classList.add('has-items');
-    
-    listContainer.innerHTML = _urlList.map((url, index) => `
-        <div class="url-item" data-index="${index}">
-            <div class="url-item-number">${index + 1}</div>
-            <div class="url-item-content">
-                <div class="url-item-url">${escapeHtml(url)}</div>
-                <div class="url-item-host">${getHostFromUrl(url)}</div>
-            </div>
-            <button class="url-item-remove" onclick="removeUrl(${index})" title="移除">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-        </div>
-    `).join('');
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function removeUrl(index) {
-    _urlList.splice(index, 1);
-    renderUrlList();
-}
-
-function clearAllUrls() {
-    _urlList = [];
-    renderUrlList();
 }
 
 function updateModalWebAIStatus() {
@@ -160,8 +66,11 @@ function autoSaveModalConfig() {
 }
 
 async function startDownloadFromModal() {
-    if (_urlList.length === 0) {
-        alert('请添加至少一个 URL');
+    const urlsEl = document.getElementById('modal-urls');
+    const urls = urlsEl ? urlsEl.value.split('\n').map(u => u.trim()).filter(u => u) : [];
+    
+    if (urls.length === 0) {
+        alert('请输入至少一个 URL');
         return;
     }
     
@@ -173,7 +82,7 @@ async function startDownloadFromModal() {
     
     const oldTextarea = document.getElementById('web-urls');
     if (oldTextarea) {
-        oldTextarea.value = _urlList.join('\n');
+        oldTextarea.value = urls.join('\n');
     }
     
     const oldAiToggle = document.getElementById('web-ai-toggle');
@@ -336,10 +245,7 @@ window.DownloaderModule = {
     clearUrls,
     openDownloadModal,
     closeDownloadModal,
-    handleUrlInputKeydown,
-    addUrlFromInput,
-    removeUrl,
-    clearAllUrls,
+    clearModalUrls,
     updateModalWebAIStatus,
     autoSaveModalConfig,
     startDownloadFromModal

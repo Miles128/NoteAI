@@ -124,39 +124,14 @@
                 <div class="content-area">
                     <div class="tab-content active" id="tab-0">
                         <div class="card">
-                            <div class="card-title">URL 列表</div>
-                            <textarea id="web-urls" class="form-input form-textarea" placeholder="输入网址，每行一个&#10;https://example.com/article1&#10;https://example.com/article2"></textarea>
-                        </div>
-
-                        <div class="card ai-toggle-card" id="web-ai-card">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label class="switch-container">
-                                    <input type="checkbox" id="web-ai-toggle" class="switch-input" onchange="updateWebAIStatus()">
-                                    <span class="switch-slider"></span>
-                                </label>
-                                <span class="switch-label" id="web-ai-label">使用AI辅助下载</span>
-                            </div>
-                            <div class="ai-status-box" id="web-ai-status">
+                            <div class="card-title">下载设置</div>
+                            <div class="ai-status-box" style="margin-bottom: 12px;">
                                 <span class="status-dot"></span>
-                                <span class="status-text">基础模式 - 使用标准算法提取内容</span>
+                                <span class="status-text">点击下方按钮打开下载窗口，添加 URL 并开始下载</span>
                             </div>
-                        </div>
-
-                        <div class="card">
-                            <div class="card-title">下载选项</div>
-                            <label class="checkbox-item">
-                                <input type="checkbox" id="web-include-images" onchange="updateWebImageStatus()">
-                                <span>保留图片的外部 URL 链接</span>
-                            </label>
-                            <div class="settings-hint" style="margin-top: 8px;">
-                                勾选此项将保留图片的外部 URL 链接（http/https 格式），图片不会下载到本地。
-                                未勾选时，图片将被移除，只保留纯文本内容。
+                            <div class="btn-group">
+                                <button class="btn btn-primary" onclick="openDownloadModal()">打开下载窗口</button>
                             </div>
-                        </div>
-
-                        <div class="btn-group">
-                            <button class="btn btn-primary" onclick="startWebDownload()">开始下载</button>
-                            <button class="btn btn-secondary" onclick="document.getElementById('web-urls').value=''">清空</button>
                         </div>
 
                         <div class="progress-container">
@@ -456,6 +431,65 @@
                 <div class="card">
                     <textarea id="log-text" class="form-input form-textarea" style="min-height: 400px; font-family: 'Consolas', monospace; font-size: 12px;" readonly></textarea>
                     <button class="btn btn-secondary" style="margin-top: 12px;" onclick="refreshLog()">刷新日志</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="download-modal-overlay" id="download-modal">
+            <div class="download-modal" id="download-modal-content">
+                <div class="download-modal-header">
+                    <div class="download-modal-title">下载设置</div>
+                    <button class="download-modal-close" onclick="closeDownloadModal()">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 6 6 18"></path>
+                            <path d="m6 6 12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="download-modal-body">
+                    <div class="download-section">
+                        <div class="download-section-title">URL 列表</div>
+                        <div class="url-input-area">
+                            <input type="text" id="url-input" class="form-input" placeholder="输入网址，按 Enter 添加" onkeydown="handleUrlInputKeydown(event)">
+                            <button class="btn btn-secondary" onclick="addUrlFromInput()">添加</button>
+                        </div>
+                        <div class="url-list-container" id="url-list-container">
+                            <div class="url-list-empty" id="url-list-empty">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                </svg>
+                                <div>暂无 URL，请在上方输入框添加</div>
+                            </div>
+                            <div class="url-list" id="url-list"></div>
+                        </div>
+                    </div>
+
+                    <div class="download-section">
+                        <div class="download-section-title">下载选项</div>
+                        <div class="download-options">
+                            <div class="download-option-item">
+                                <label class="switch-container">
+                                    <input type="checkbox" id="modal-web-ai-toggle" class="switch-input" onchange="updateModalWebAIStatus()">
+                                    <span class="switch-slider"></span>
+                                </label>
+                                <span class="switch-label">使用 AI 辅助下载</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="download-modal-footer">
+                    <div class="download-footer-left">
+                        <button class="btn btn-secondary" onclick="clearAllUrls()">清空列表</button>
+                        <label class="switch-container" title="保留图片的外部 URL 链接">
+                            <input type="checkbox" id="modal-web-include-images" class="switch-input">
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="download-footer-right">
+                        <button class="btn btn-secondary" onclick="closeDownloadModal()">取消</button>
+                        <button class="btn btn-primary" id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>
+                    </div>
                 </div>
             </div>
         </div>

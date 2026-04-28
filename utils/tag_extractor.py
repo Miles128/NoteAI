@@ -24,12 +24,61 @@ STOPWORDS: Set[str] = {
     'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
     'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
     'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
-    'it', 'its', 'not', 'no', 'so', 'if', 'then', 'than'
+    'it', 'its', 'not', 'no', 'so', 'if', 'then', 'than',
+    '步骤', '功能', '方法', '使用', '介绍', '说明', '指南', '教程',
+    '文档', '文件', '笔记', '记录', '总结', '概述', '简介', '说明',
+    '实现', '开发', '测试', '运行', '启动', '停止', '结束', '开始',
+    '配置', '设置', '参数', '选项', '模式', '状态', '结果', '输出',
+    '输入', '处理', '分析', '计算', '生成', '创建', '删除', '修改',
+    '更新', '保存', '加载', '读取', '写入', '导入', '导出', '转换',
+    '比较', '判断', '条件', '循环', '遍历', '搜索', '查找', '过滤',
+    '排序', '分组', '合并', '拆分', '复制', '移动', '链接', '引用',
+    '问题', '错误', '异常', '警告', '提示', '信息', '调试', '日志',
+    '成功', '失败', '完成', '未完成', '待办', '进行中', '已完成',
+    '简单', '复杂', '基础', '高级', '进阶', '入门', '精通', '实战',
+    '完整', '部分', '全部', '部分', '详细', '简要', '详细说明',
+    '快速', '慢速', '自动', '手动', '智能', '简单', '方便', '实用',
+    '重要', '主要', '次要', '关键', '核心', '基本', '常见', '特殊',
+    '普通', '一般', '标准', '自定义', '默认', '可选', '必需',
+    '第一', '第二', '第三', '最后', '最终', '初始', '临时', '永久',
+    '本地', '远程', '线上', '线下', '内部', '外部', '公开', '私有',
+    '项目', '模块', '组件', '类', '函数', '方法', '属性', '变量',
+    '常量', '接口', '协议', '服务', '客户端', '服务端', '数据库',
+    '缓存', '队列', '线程', '进程', '任务', '作业', '计划', '定时',
+    '实时', '延迟', '同步', '异步', '并行', '串行', '批量', '单个',
+    '多个', '单个', '全部', '部分', '整体', '局部', '全局',
+    '什么', '怎么', '如何', '为什么', '何时', '何地', '哪些', '哪个',
+    '关于', '对于', '至于', '由于', '因此', '所以', '因为', '所以',
+    '但是', '然而', '不过', '虽然', '尽管', '即使', '如果', '除非',
+    '只要', '只有', '除非', '否则', '此外', '另外', '同时', '并且',
+    '或者', '还是', '要么', '以及', '还有', '包括', '包含', '除了',
+    '之外', '之内', '之外', '之间', '之中', '之内', '之间',
+    'new', 'old', 'create', 'delete', 'update', 'read', 'write',
+    'get', 'set', 'add', 'remove', 'start', 'stop', 'run', 'test',
+    'build', 'deploy', 'config', 'setting', 'option', 'param', 'mode',
+    'status', 'result', 'error', 'warning', 'info', 'debug', 'log',
+    'success', 'fail', 'done', 'todo', 'doing', 'simple', 'complex',
+    'basic', 'advanced', 'quick', 'slow', 'auto', 'manual', 'smart',
+    'easy', 'hard', 'important', 'main', 'key', 'core', 'common',
+    'special', 'normal', 'standard', 'custom', 'default', 'optional',
+    'required', 'first', 'second', 'third', 'last', 'final', 'init',
+    'temp', 'perm', 'local', 'remote', 'online', 'offline', 'internal',
+    'external', 'public', 'private', 'project', 'module', 'component',
+    'class', 'function', 'method', 'attribute', 'var', 'variable', 'const',
+    'constant', 'interface', 'protocol', 'service', 'client', 'server',
+    'db', 'database', 'cache', 'queue', 'thread', 'process', 'task',
+    'job', 'schedule', 'cron', 'real', 'time', 'delay', 'sync', 'async',
+    'parallel', 'serial', 'batch', 'single', 'multi', 'all', 'part',
+    'whole', 'global', 'intro', 'guide', 'tutorial', 'doc', 'document',
+    'note', 'record', 'summary', 'overview', 'implement', 'develop'
 }
 
 MIN_WORD_LEN = 2
 MAX_TAGS = 5
+MIN_TAGS = 0
 MIN_TF_IDF_SCORE = 0.01
+MIN_DOC_FREQ_PERCENT = 0.05
+MIN_DOC_FREQ_COUNT = 3
 
 
 def _parse_yaml_value_simple(value: str) -> Any:
@@ -308,16 +357,189 @@ def append_tags_to_markdown(file_path: str, tags: List[str]):
     p.write_text(content, encoding='utf-8')
 
 
-def process_and_tag_file(file_path: str, idf: Dict[str, float] = None) -> List[str]:
-    """处理单个文件并打标签"""
+def get_workspace_md_files() -> List[Path]:
+    """获取工作区中所有 Markdown 文件
+    
+    Returns:
+        MD 文件路径列表，如果没有设置工作区则返回空列表
+    """
+    try:
+        from config.settings import config
+        workspace_path = config.workspace_path
+        if not workspace_path:
+            return []
+        workspace = Path(workspace_path)
+        if not workspace.exists():
+            return []
+        return list(workspace.rglob("*.md"))
+    except Exception:
+        return []
+
+
+def get_notes_folder_md_files() -> List[Path]:
+    """获取工作区中 Notes 目录下的所有 Markdown 文件
+    
+    Returns:
+        Notes 目录下的 MD 文件路径列表
+    """
+    try:
+        from config.settings import config, NOTES_FOLDER
+        workspace_path = config.workspace_path
+        if not workspace_path:
+            return []
+        workspace = Path(workspace_path)
+        if not workspace.exists():
+            return []
+        notes_folder = workspace / NOTES_FOLDER
+        if not notes_folder.exists():
+            return []
+        return list(notes_folder.rglob("*.md"))
+    except Exception:
+        return []
+
+
+def extract_keywords_from_filename(filename: str) -> List[str]:
+    """从文件名中提取关键词
+    
+    Args:
+        filename: 文件名（可以是完整路径或仅文件名）
+    
+    Returns:
+        关键词列表
+    """
+    if not filename:
+        return []
+    
+    stem = Path(filename).stem
+    tokens = tokenize(stem)
+    
+    result = []
+    for t in tokens:
+        if t in STOPWORDS:
+            continue
+        if re.match(r'[\u4e00-\u9fff]+', t):
+            if len(t) >= 2:
+                result.append(t)
+        else:
+            if len(t) >= MIN_WORD_LEN:
+                result.append(t)
+    
+    return result
+
+
+def compute_doc_frequency_from_filenames() -> Tuple[Dict[str, int], int]:
+    """基于文件名计算工作区中关键词的文档频率
+    
+    只使用 Notes 目录下的文件名，不打开文件读取标题。
+    
+    文档频率：关键词在多少个不同的文件中出现过
+    
+    Returns:
+        (关键词到出现文档数的映射, 总文档数)
+    """
+    md_files = get_notes_folder_md_files()
+    total_docs = len(md_files)
+    
+    if total_docs == 0:
+        return {}, 0
+    
+    doc_freq = defaultdict(int)
+    
+    for md_file in md_files:
+        try:
+            keywords = extract_keywords_from_filename(md_file.name)
+            unique_keywords = set(keywords)
+            for kw in unique_keywords:
+                doc_freq[kw] += 1
+        except Exception:
+            continue
+    
+    return dict(doc_freq), total_docs
+
+
+def extract_tags_by_doc_frequency(
+    doc_freq: Dict[str, int],
+    total_docs: int,
+    current_file_keywords: List[str] = None
+) -> List[str]:
+    """基于文档频率提取标签
+    
+    规则：
+    1. 排除出现次数不大于 2 的关键词（即出现次数 >= 3）
+    2. 按出现次数从高到低排序
+    3. 提取最多 5 个标签，最少可以是 0 个
+    4. 如果当前有关键词，优先选择当前文件包含的关键词
+    
+    Args:
+        doc_freq: 关键词到出现文档数的映射
+        total_docs: 总文档数
+        current_file_keywords: 当前文件的关键词列表（可选）
+    
+    Returns:
+        标签列表（0-5 个）
+    """
+    if not doc_freq or total_docs == 0:
+        return []
+    
+    min_count = MIN_DOC_FREQ_COUNT
+    
+    candidates = []
+    for kw, count in doc_freq.items():
+        if count >= min_count:
+            in_current = current_file_keywords and kw in current_file_keywords
+            candidates.append((kw, count, in_current))
+    
+    candidates.sort(key=lambda x: (x[2], x[1]), reverse=True)
+    
+    keywords = [kw for kw, count, in_current in candidates]
+    
+    return keywords[:MAX_TAGS]
+
+
+def process_and_tag_file_by_doc_freq(file_path: str) -> List[str]:
+    """基于文档频率处理单个文件并打标签
+    
+    算法规则：
+    1. 只使用 Notes 目录下的文件名，不打开文件读取标题
+    2. 统计每个关键词的文档频率（出现的文件数）
+    3. 备选标签必须在其他 md 文件的文件名中出现过 3 次及以上
+    4. 如果不符合第 3 点，就不要加为标签
+    5. 标签数量：最多 5 个，最少可以是 0 个、1 个、2 个等
+    6. 优先选择当前文件包含的关键词
+    7. 排除常用词汇和非专有名词（步骤、功能、方法等）
+    
+    Args:
+        file_path: Markdown 文件路径
+    
+    Returns:
+        标签列表（0-5 个）
+    """
     p = Path(file_path)
     if not p.exists() or not p.suffix.lower() == '.md':
         return []
-    content = p.read_text(encoding='utf-8')
-    tags = extract_tags_from_text(content, idf)
+    
+    doc_freq, total_docs = compute_doc_frequency_from_filenames()
+    
+    if total_docs == 0:
+        return []
+    
+    current_file_keywords = extract_keywords_from_filename(p.name)
+    
+    tags = extract_tags_by_doc_frequency(doc_freq, total_docs, current_file_keywords)
+    
     if tags:
         append_tags_to_markdown(str(p), tags)
+    
     return tags
+
+
+def process_and_tag_file(file_path: str, idf: Dict[str, float] = None) -> List[str]:
+    """处理单个文件并打标签（使用新的文档频率算法）
+    
+    这是 process_and_tag_file_by_doc_freq 的别名，
+    保持原有接口兼容。
+    """
+    return process_and_tag_file_by_doc_freq(file_path)
 
 
 def tag_markdown_files(

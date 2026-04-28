@@ -66,11 +66,11 @@
 }
 
 .tree-icon.folder-icon {
-    color: #007AFF;
+    color: #6b6b6b;
 }
 
 .tree-icon.file-icon {
-    color: #5AC8FA;
+    color: #8a8a8a;
 }
 
 .tree-name {

@@ -1,7 +1,6 @@
 # AI/LLM框架
-langchain>=0.1.0
-langchain-community>=0.0.10
 langchain-openai>=0.0.5
+langchain-core>=0.1.0
 tiktoken>=0.5.0
 
 # HTTP请求
@@ -21,12 +20,8 @@ PyMuPDF>=1.23.0
 mammoth>=1.0.0
 python-docx>=1.0.0
 
-# GUI
-pywebview>=4.0
-
 # 工具库
 Pillow>=10.0.0
 markdown>=3.5.0
-tqdm>=4.66.0
 PyYAML>=6.0
 jieba>=0.42.1

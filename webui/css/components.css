@@ -89,17 +89,17 @@
 .btn-primary {
     background: var(--primary);
     color: #ffffff;
-    box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 122, 255, 0.2);
+    box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(26, 86, 219, 0.2);
 }
 
 .btn-primary:hover {
-    background: #0A84FF;
-    box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 122, 255, 0.3);
+    background: var(--primary-dark);
+    box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(26, 86, 219, 0.3);
     transform: translateY(-0.5px);
 }
 
 .btn-primary:disabled {
-    background: rgba(0, 122, 255, 0.35);
+    background: rgba(26, 86, 219, 0.35);
     color: rgba(255, 255, 255, 0.6);
     box-shadow: none;
     cursor: not-allowed;
@@ -116,12 +116,12 @@
 
 .btn-primary:active {
     transform: translateY(0);
-    background: #0066D6;
+    background: var(--primary-dark);
     box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.15);
 }
 
 .btn-primary:disabled {
-    background: rgba(0, 122, 255, 0.4);
+    background: rgba(26, 86, 219, 0.4);
     cursor: not-allowed;
     opacity: 0.7;
     transform: none;
@@ -240,9 +240,9 @@
 }
 
 .ai-toggle-card.active {
-    border-color: rgba(0, 122, 255, 0.3);
-    background: linear-gradient(135deg, rgba(0, 122, 255, 0.06) 0%, var(--surface) 100%);
-    box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.1);
+    border-color: rgba(26, 86, 219, 0.3);
+    background: linear-gradient(135deg, rgba(26, 86, 219, 0.06) 0%, var(--surface) 100%);
+    box-shadow: 0 0 0 1px rgba(26, 86, 219, 0.1);
 }
 
 .switch-container {
@@ -307,7 +307,7 @@
 }
 
 .ai-toggle-card.active .ai-status-box {
-    background: rgba(0, 122, 255, 0.08);
+    background: rgba(26, 86, 219, 0.08);
     color: var(--primary);
 }
 
@@ -342,14 +342,14 @@
 }
 
 .theme-option:hover {
-    border-color: rgba(0, 122, 255, 0.3);
-    background: rgba(0, 122, 255, 0.03);
+    border-color: rgba(26, 86, 219, 0.3);
+    background: rgba(26, 86, 219, 0.03);
 }
 
 .theme-option.active {
     border-color: var(--primary);
-    background: rgba(0, 122, 255, 0.08);
-    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.15);
+    background: rgba(26, 86, 219, 0.08);
+    box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.15);
 }
 
 .theme-dot {

@@ -276,13 +276,10 @@
     max-width: 900px;
     margin: 0 auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 16px;
+    font-size: 12px;
     line-height: 1.8;
     color: var(--text);
     outline: none;
-    background-color: var(--article-bg);
-    padding: 24px 32px;
-    border-radius: 6px;
 }
 
 .tiptap-prose > *:first-child {
@@ -314,11 +311,15 @@
     margin: 1.5em 0 0.5em 0;
     font-weight: 600;
     line-height: 1.3;
-    color: var(--text);
+    color: var(--heading-color);
+    background-color: var(--heading-bg);
+    padding: 0.3em 0.6em;
+    border-radius: 4px;
 }
 
 .tiptap-prose h1 {
     font-size: 2em;
+    color: var(--h1-color);
     border-bottom: 1px solid var(--border);
     padding-bottom: 0.3em;
 }
@@ -355,7 +356,6 @@
 .tiptap-prose em,
 .tiptap-prose i {
     font-style: italic;
-    color: var(--italic-color);
     background-color: var(--italic-bg);
     padding: 0.1em 0.2em;
     border-radius: 2px;

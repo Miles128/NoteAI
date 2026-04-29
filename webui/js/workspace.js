@@ -15,6 +15,23 @@ function updateProgress(elementId, progress, text) {
     if (statusEl) {
         statusEl.textContent = text;
     }
+    
+    const modalFillEl = document.getElementById('modal-' + elementId + '-fill');
+    const modalStatusEl = document.getElementById('modal-' + elementId.replace('progress', 'status'));
+    const modalProgressContainer = document.getElementById('modal-progress-container');
+    
+    if (modalProgressContainer) {
+        if (progress > 0 || text) {
+            modalProgressContainer.style.display = 'block';
+        }
+    }
+    
+    if (modalFillEl) {
+        modalFillEl.style.width = (progress * 100) + '%';
+    }
+    if (modalStatusEl) {
+        modalStatusEl.textContent = text;
+    }
 }
 
 async function openWorkspace() {

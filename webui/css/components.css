@@ -519,11 +519,24 @@
 }
 
 .modal-url-textarea {
-    min-height: 360px;
-    max-height: 480px;
-    height: 360px;
+    min-height: 276px;
+    max-height: 414px;
+    height: 276px;
     resize: none;
-    line-height: 1.6;
+    line-height: 24px;
+    padding: 12px 14px;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    color: var(--text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 0.5px solid var(--border);
+}
+
+.url-hint-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    padding-left: 2px;
 }
 
 .url-list-container {
@@ -655,6 +668,15 @@
     border-top: 0.5px solid var(--border);
     flex-shrink: 0;
     gap: 12px;
+}
+
+.download-modal-footer .switch-container {
+    margin: 0;
+}
+
+.download-modal-footer .switch-label {
+    margin: 0;
+    margin-right: 8px;
 }
 
 .download-footer-right {

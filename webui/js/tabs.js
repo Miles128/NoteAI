@@ -16,6 +16,14 @@
             contentPanel.style.display = 'flex';
             previewPanel.style.display = 'none';
         }
+
+        if (tabIndex === 0) {
+            setTimeout(() => {
+                if (window.DownloaderModule && window.DownloaderModule.openDownloadModal) {
+                    window.DownloaderModule.openDownloadModal();
+                }
+            }, 50);
+        }
     }
 
     function showContentView() {

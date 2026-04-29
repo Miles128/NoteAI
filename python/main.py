@@ -245,11 +245,9 @@ class SidecarServer:
                 self._send_progress("web-progress", current / total if total > 0 else 0, message)
 
             self.web_downloader.progress_callback = progress_cb
-            result = self.web_downloader.download_batch(
-                urls, save_path,
-                ai_assist=ai_assist,
-                include_images=include_images
-            )
+            self.web_downloader.ai_assist = ai_assist
+            self.web_downloader.include_images = include_images
+            result = self.web_downloader.download_batch(urls, save_path)
             success_count = sum(1 for r in result if r.get("success"))
             self._send_response({
                 "id": "event",

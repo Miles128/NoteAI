@@ -65,13 +65,13 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 2px 8px;
+    padding: 4px 10px;
     width: auto;
-    min-width: 36px;
+    min-width: 40px;
     background: rgba(0, 0, 0, 0.05);
     color: var(--text);
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 11px;
     font-weight: 400;
@@ -94,13 +94,13 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 8px;
+    padding: 5px 10px;
     width: auto;
     min-width: auto;
     background: transparent;
     color: var(--text-muted);
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
     font-size: 11px;
     font-weight: 500;
@@ -119,8 +119,8 @@ body {
 }
 
 .titlebar-btn.tab-btn svg {
-    width: 13px;
-    height: 13px;
+    width: 14.5px;
+    height: 14.5px;
     color: inherit;
 }
 
@@ -183,8 +183,8 @@ body {
 }
 
 .titlebar-btn {
-    width: 26px;
-    height: 26px;
+    width: 29px;
+    height: 29px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -192,7 +192,7 @@ body {
     border: none;
     cursor: pointer;
     color: var(--text-muted);
-    border-radius: 4px;
+    border-radius: 5px;
     transition: all 0.15s;
     -webkit-app-region: no-drag;
 }
@@ -216,8 +216,8 @@ body {
 }
 
 .titlebar-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 15.5px;
+    height: 15.5px;
     color: inherit;
 }
 

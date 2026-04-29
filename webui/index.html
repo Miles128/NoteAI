@@ -44,7 +44,6 @@
                     <polyline points="8 10 12 14 16 10"></polyline>
                     <path d="M12 14V3"></path>
                 </svg>
-                下载
             </button>
             <button class="titlebar-btn tab-btn" onclick="switchTab(1)" data-tab="file" title="文件转换">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -53,13 +52,11 @@
                     <path d="M12 18v-6"></path>
                     <path d="M9 15h6"></path>
                 </svg>
-                转换
             </button>
             <button class="titlebar-btn tab-btn" onclick="switchTab(2)" data-tab="note" title="笔记整合">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
                 </svg>
-                整合
             </button>
             <button class="titlebar-btn workspace-btn" onclick="openWorkspace()" title="打开工作区">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -123,17 +120,6 @@
             <div class="content-panel" id="content-panel">
                 <div class="content-area">
                     <div class="tab-content active" id="tab-0">
-                        <div class="card">
-                            <div class="card-title">下载设置</div>
-                            <div class="ai-status-box" style="margin-bottom: 12px;">
-                                <span class="status-dot"></span>
-                                <span class="status-text">点击下方按钮打开下载窗口，添加 URL 并开始下载</span>
-                            </div>
-                            <div class="btn-group">
-                                <button class="btn btn-primary" onclick="openDownloadModal()">打开下载窗口</button>
-                            </div>
-                        </div>
-
                         <div class="progress-container">
                             <div class="progress-bar">
                                 <div class="progress-fill" id="web-progress-fill"></div>
@@ -437,8 +423,8 @@
 
         <div class="download-modal-overlay" id="download-modal">
             <div class="download-modal" id="download-modal-content">
-                <div class="download-modal-header">
-                    <div class="download-modal-title">下载设置</div>
+                <div class="download-modal-header" id="download-modal-header">
+                    <div class="download-modal-title">下载</div>
                     <button class="download-modal-close" onclick="closeDownloadModal()">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6 6 18"></path>
@@ -447,37 +433,22 @@
                     </button>
                 </div>
                 <div class="download-modal-body">
-                    <div class="download-section">
-                        <div class="download-section-title">URL 列表</div>
-                        <textarea id="modal-urls" class="form-input form-textarea modal-url-textarea" placeholder="输入网址，每行一个&#10;https://example.com/article1&#10;https://example.com/article2"></textarea>
-                    </div>
-
-                    <div class="download-section">
-                        <div class="download-section-title">下载选项</div>
-                        <div class="download-options">
-                            <div class="download-option-item">
-                                <label class="switch-container">
-                                    <input type="checkbox" id="modal-web-ai-toggle" class="switch-input" onchange="updateModalWebAIStatus()">
-                                    <span class="switch-slider"></span>
-                                </label>
-                                <span class="switch-label">使用 AI 辅助下载</span>
-                            </div>
-                            <div class="download-option-item">
-                                <label class="switch-container">
-                                    <input type="checkbox" id="modal-web-include-images" class="switch-input">
-                                    <span class="switch-slider"></span>
-                                </label>
-                                <span class="switch-label">包含图片的外部 URL 链接</span>
-                            </div>
+                    <textarea id="modal-urls" class="form-input form-textarea modal-url-textarea" placeholder=""></textarea>
+                    <div class="url-hint-text">输入网址，每行一个</div>
+                    <div class="modal-progress-container" id="modal-progress-container" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="modal-web-progress-fill"></div>
                         </div>
+                        <div class="progress-text" id="modal-web-status"></div>
                     </div>
                 </div>
                 <div class="download-modal-footer">
-                    <div class="download-footer-right">
-                        <button class="btn btn-secondary" onclick="closeDownloadModal()">取消</button>
-                        <button class="btn btn-secondary" onclick="clearModalUrls()">清空列表</button>
-                        <button class="btn btn-primary" id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>
-                    </div>
+                    <label class="switch-container">
+                        <input type="checkbox" id="modal-web-include-images" class="switch-input">
+                        <span class="switch-slider"></span>
+                    </label>
+                    <span class="switch-label">包含图片的外部 URL 链接</span>
+                    <button class="btn btn-primary" id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>
                 </div>
             </div>
         </div>

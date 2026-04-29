@@ -1,25 +1,90 @@
 var _webDownloadUnlisten = null;
+var _modalDragState = {
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    initialLeft: 0,
+    initialTop: 0
+};
+
+function initModalDrag() {
+    const header = document.getElementById('download-modal-header');
+    const modal = document.getElementById('download-modal-content');
+    
+    if (!header || !modal) return;
+    
+    header.style.cursor = 'move';
+    header.style.userSelect = 'none';
+    header.style.webkitUserSelect = 'none';
+    
+    function onMouseDown(e) {
+        if (e.target.closest('.download-modal-close')) return;
+        
+        _modalDragState.isDragging = true;
+        _modalDragState.startX = e.clientX;
+        _modalDragState.startY = e.clientY;
+        _modalDragState.initialLeft = modal.offsetLeft;
+        _modalDragState.initialTop = modal.offsetTop;
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('selectstart', onSelectStart);
+    }
+    
+    function onMouseMove(e) {
+        if (!_modalDragState.isDragging) return;
+        
+        e.preventDefault();
+        const deltaX = e.clientX - _modalDragState.startX;
+        const deltaY = e.clientY - _modalDragState.startY;
+        
+        modal.style.position = 'absolute';
+        modal.style.transform = 'none';
+        modal.style.margin = '0';
+        modal.style.left = (_modalDragState.initialLeft + deltaX) + 'px';
+        modal.style.top = (_modalDragState.initialTop + deltaY) + 'px';
+    }
+    
+    function onMouseUp() {
+        _modalDragState.isDragging = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('selectstart', onSelectStart);
+    }
+    
+    function onSelectStart(e) {
+        e.preventDefault();
+        return false;
+    }
+    
+    header.addEventListener('mousedown', onMouseDown);
+}
 
 function openDownloadModal() {
     const modal = document.getElementById('download-modal');
     const modalContent = document.getElementById('download-modal-content');
     
+    modalContent.style.position = '';
+    modalContent.style.transform = '';
+    modalContent.style.margin = '';
+    modalContent.style.left = '';
+    modalContent.style.top = '';
+    
     const mainWidth = window.innerWidth;
     const mainHeight = window.innerHeight;
     
-    modalContent.style.width = Math.max(500, mainWidth / 2) + 'px';
-    modalContent.style.height = Math.max(400, mainHeight * 2 / 3) + 'px';
+    const currentWidth = Math.max(500, mainWidth / 2);
+    const currentHeight = Math.max(400, mainHeight * 2 / 3);
+    
+    modalContent.style.width = (currentWidth * 0.75 * 0.8) + 'px';
+    modalContent.style.height = (currentHeight * 0.75 * 1.1) + 'px';
     
     const savedConfig = localStorage.getItem('downloader-config');
     if (savedConfig) {
         try {
             const config = JSON.parse(savedConfig);
-            const modalAiToggle = document.getElementById('modal-web-ai-toggle');
             const modalIncludeImages = document.getElementById('modal-web-include-images');
             
-            if (modalAiToggle && config.webAiAssist !== undefined) {
-                modalAiToggle.checked = config.webAiAssist;
-            }
             if (modalIncludeImages && config.webIncludeImages !== undefined) {
                 modalIncludeImages.checked = config.webIncludeImages;
             }
@@ -29,6 +94,8 @@ function openDownloadModal() {
     }
     
     modal.classList.add('active');
+    
+    initModalDrag();
     
     setTimeout(() => {
         const urlInput = document.getElementById('modal-urls');
@@ -41,24 +108,11 @@ function closeDownloadModal() {
     modal.classList.remove('active');
 }
 
-function clearModalUrls() {
-    const urlsEl = document.getElementById('modal-urls');
-    if (urlsEl) {
-        urlsEl.value = '';
-        urlsEl.focus();
-    }
-}
-
-function updateModalWebAIStatus() {
-    autoSaveModalConfig();
-}
-
 function autoSaveModalConfig() {
-    const aiToggle = document.getElementById('modal-web-ai-toggle');
     const includeImages = document.getElementById('modal-web-include-images');
     
     const config = {
-        webAiAssist: aiToggle ? aiToggle.checked : false,
+        webAiAssist: false,
         webIncludeImages: includeImages ? includeImages.checked : true
     };
     
@@ -74,24 +128,141 @@ async function startDownloadFromModal() {
         return;
     }
     
-    const aiToggle = document.getElementById('modal-web-ai-toggle');
     const includeImages = document.getElementById('modal-web-include-images');
-    
-    const aiAssist = aiToggle ? aiToggle.checked : false;
     const includeImagesVal = includeImages ? includeImages.checked : false;
     
-    const oldTextarea = document.getElementById('web-urls');
-    if (oldTextarea) {
-        oldTextarea.value = urls.join('\n');
+    const downloadBtn = document.getElementById('modal-download-btn');
+    const switchContainer = document.querySelector('.switch-container');
+    const switchLabel = document.querySelector('.switch-label');
+    
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.style.opacity = '0.5';
     }
+    if (switchContainer) switchContainer.style.opacity = '0.5';
+    if (switchLabel) switchLabel.style.opacity = '0.5';
     
-    const oldAiToggle = document.getElementById('web-ai-toggle');
-    const oldIncludeImages = document.getElementById('web-include-images');
-    if (oldAiToggle) oldAiToggle.checked = aiAssist;
-    if (oldIncludeImages) oldIncludeImages.checked = includeImagesVal;
+    autoSaveModalConfig();
     
-    closeDownloadModal();
-    await startWebDownload();
+    try {
+        updateStatus('正在下载...');
+        updateProgress('web-progress', 0, '正在准备下载...');
+        
+        if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event) {
+            const eventModule = window.__TAURI_INTERNALS__.event;
+            if (eventModule && eventModule.listen) {
+                if (_webDownloadUnlisten) {
+                    try {
+                        _webDownloadUnlisten();
+                    } catch (e) {
+                        console.warn('[Downloader] Failed to unlisten:', e);
+                    }
+                    _webDownloadUnlisten = null;
+                }
+                
+                try {
+                    _webDownloadUnlisten = await eventModule.listen('python-event', function(event) {
+                        var data = event.payload;
+                        if (!data) return;
+                        
+                        if (data.type === 'progress' && data.element_id === 'web-progress') {
+                            updateProgress('web-progress', data.progress || 0, data.message || '');
+                            updateStatus(data.message || '下载中...');
+                        } else if (data.type === 'web_download_complete') {
+                            var successCount = data.success_count || 0;
+                            var total = data.total || 0;
+                            updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');
+                            updateStatus('下载完成：' + successCount + '/' + total + ' 篇成功');
+                            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                                window.TreeModule.loadFileTree();
+                            }
+                            if (_webDownloadUnlisten) {
+                                try {
+                                    _webDownloadUnlisten();
+                                } catch (e) {}
+                                _webDownloadUnlisten = null;
+                            }
+                            
+                            if (downloadBtn) {
+                                downloadBtn.disabled = false;
+                                downloadBtn.style.opacity = '1';
+                            }
+                            if (switchContainer) switchContainer.style.opacity = '1';
+                            if (switchLabel) switchLabel.style.opacity = '1';
+                        } else if (data.type === 'web_download_error') {
+                            updateProgress('web-progress', 0, '下载失败：' + (data.error || '未知错误'));
+                            updateStatus('下载失败：' + (data.error || '未知错误'));
+                            if (_webDownloadUnlisten) {
+                                try {
+                                    _webDownloadUnlisten();
+                                } catch (e) {}
+                                _webDownloadUnlisten = null;
+                            }
+                            
+                            if (downloadBtn) {
+                                downloadBtn.disabled = false;
+                                downloadBtn.style.opacity = '1';
+                            }
+                            if (switchContainer) switchContainer.style.opacity = '1';
+                            if (switchLabel) switchLabel.style.opacity = '1';
+                        }
+                    });
+                } catch (listenError) {
+                    console.error('[Downloader] Failed to setup event listener:', listenError);
+                }
+            }
+        }
+        
+        const downloadTimeout = setTimeout(function() {
+            console.warn('[Downloader] Download call timed out after 10 seconds');
+            updateStatus('下载调用超时，请检查网络连接');
+            updateProgress('web-progress', 0, '下载调用超时');
+            
+            if (downloadBtn) {
+                downloadBtn.disabled = false;
+                downloadBtn.style.opacity = '1';
+            }
+            if (switchContainer) switchContainer.style.opacity = '1';
+            if (switchLabel) switchLabel.style.opacity = '1';
+        }, 10000);
+        
+        try {
+            const result = await window.api.start_web_download(urls, false, includeImagesVal);
+            
+            clearTimeout(downloadTimeout);
+            
+            if (result && result.success) {
+                updateStatus('正在下载，请稍候...');
+            } else {
+                const errMsg = result?.message || '未知错误';
+                updateStatus('下载失败: ' + errMsg);
+                updateProgress('web-progress', 0, '下载失败: ' + errMsg);
+                alert('下载失败: ' + errMsg);
+                
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                    downloadBtn.style.opacity = '1';
+                }
+                if (switchContainer) switchContainer.style.opacity = '1';
+                if (switchLabel) switchLabel.style.opacity = '1';
+            }
+        } catch (apiError) {
+            clearTimeout(downloadTimeout);
+            throw apiError;
+        }
+    } catch (e) {
+        console.error('[Downloader] Download error:', e);
+        updateStatus('下载失败: ' + e.message);
+        updateProgress('web-progress', 0, '下载失败: ' + e.message);
+        alert('下载出错: ' + e.message);
+        
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.style.opacity = '1';
+        }
+        if (switchContainer) switchContainer.style.opacity = '1';
+        if (switchLabel) switchLabel.style.opacity = '1';
+    }
 }
 
 async function startWebDownload() {
@@ -245,8 +416,6 @@ window.DownloaderModule = {
     clearUrls,
     openDownloadModal,
     closeDownloadModal,
-    clearModalUrls,
-    updateModalWebAIStatus,
     autoSaveModalConfig,
     startDownloadFromModal
 };

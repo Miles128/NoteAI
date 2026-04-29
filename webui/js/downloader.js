@@ -148,6 +148,48 @@ async function startDownloadFromModal() {
         updateStatus('正在下载...');
         updateProgress('web-progress', 0, '正在准备下载...');
         
+        function handleDownloadEvent(event) {
+            var data = event.payload;
+            if (!data) return;
+            
+            console.log('[Downloader] Received event:', data.type);
+            
+            if (data.type === 'progress' && data.element_id === 'web-progress') {
+                updateProgress('web-progress', data.progress || 0, data.message || '');
+                updateStatus(data.message || '下载中...');
+            } else if (data.type === 'web_download_complete') {
+                var successCount = data.success_count || 0;
+                var total = data.total || 0;
+                updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');
+                updateStatus('下载完成：' + successCount + '/' + total + ' 篇成功');
+                if (window.TreeModule && window.TreeModule.loadFileTree) {
+                    window.TreeModule.loadFileTree();
+                }
+                
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                    downloadBtn.style.opacity = '1';
+                }
+                if (switchContainer) switchContainer.style.opacity = '1';
+                if (switchLabel) switchLabel.style.opacity = '1';
+                
+                alert('下载完成：' + successCount + '/' + total + ' 篇成功');
+            } else if (data.type === 'web_download_error') {
+                const errorMsg = data.error || '未知错误';
+                updateProgress('web-progress', 0, '下载失败：' + errorMsg);
+                updateStatus('下载失败：' + errorMsg);
+                
+                if (downloadBtn) {
+                    downloadBtn.disabled = false;
+                    downloadBtn.style.opacity = '1';
+                }
+                if (switchContainer) switchContainer.style.opacity = '1';
+                if (switchLabel) switchLabel.style.opacity = '1';
+                
+                alert('下载失败：' + errorMsg);
+            }
+        }
+        
         if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event) {
             const eventModule = window.__TAURI_INTERNALS__.event;
             if (eventModule && eventModule.listen) {
@@ -161,60 +203,26 @@ async function startDownloadFromModal() {
                 }
                 
                 try {
-                    _webDownloadUnlisten = await eventModule.listen('python-event', function(event) {
-                        var data = event.payload;
-                        if (!data) return;
-                        
-                        if (data.type === 'progress' && data.element_id === 'web-progress') {
-                            updateProgress('web-progress', data.progress || 0, data.message || '');
-                            updateStatus(data.message || '下载中...');
-                        } else if (data.type === 'web_download_complete') {
-                            var successCount = data.success_count || 0;
-                            var total = data.total || 0;
-                            updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');
-                            updateStatus('下载完成：' + successCount + '/' + total + ' 篇成功');
-                            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                                window.TreeModule.loadFileTree();
-                            }
-                            if (_webDownloadUnlisten) {
-                                try {
-                                    _webDownloadUnlisten();
-                                } catch (e) {}
-                                _webDownloadUnlisten = null;
-                            }
-                            
-                            if (downloadBtn) {
-                                downloadBtn.disabled = false;
-                                downloadBtn.style.opacity = '1';
-                            }
-                            if (switchContainer) switchContainer.style.opacity = '1';
-                            if (switchLabel) switchLabel.style.opacity = '1';
-                        } else if (data.type === 'web_download_error') {
-                            updateProgress('web-progress', 0, '下载失败：' + (data.error || '未知错误'));
-                            updateStatus('下载失败：' + (data.error || '未知错误'));
-                            if (_webDownloadUnlisten) {
-                                try {
-                                    _webDownloadUnlisten();
-                                } catch (e) {}
-                                _webDownloadUnlisten = null;
-                            }
-                            
-                            if (downloadBtn) {
-                                downloadBtn.disabled = false;
-                                downloadBtn.style.opacity = '1';
-                            }
-                            if (switchContainer) switchContainer.style.opacity = '1';
-                            if (switchLabel) switchLabel.style.opacity = '1';
-                        }
-                    });
+                    console.log('[Downloader] Setting up event listener...');
+                    const unlisten = await Promise.race([
+                        eventModule.listen('python-event', handleDownloadEvent),
+                        new Promise(function(_, reject) {
+                            setTimeout(function() {
+                                reject(new Error('Event listen timeout (1s)'));
+                            }, 1000);
+                        })
+                    ]);
+                    _webDownloadUnlisten = unlisten;
+                    console.log('[Downloader] Event listener setup completed successfully');
                 } catch (listenError) {
-                    console.error('[Downloader] Failed to setup event listener:', listenError);
+                    console.warn('[Downloader] Event listen failed or timed out:', listenError.message);
+                    console.warn('[Downloader] Continuing without event listener - download will still work but progress may not update');
                 }
             }
         }
         
-        const downloadTimeout = setTimeout(function() {
-            console.warn('[Downloader] Download call timed out after 10 seconds');
+        const apiTimeout = setTimeout(function() {
+            console.warn('[Downloader] API call timed out after 15 seconds');
             updateStatus('下载调用超时，请检查网络连接');
             updateProgress('web-progress', 0, '下载调用超时');
             
@@ -224,15 +232,20 @@ async function startDownloadFromModal() {
             }
             if (switchContainer) switchContainer.style.opacity = '1';
             if (switchLabel) switchLabel.style.opacity = '1';
-        }, 10000);
+            
+            alert('下载调用超时，请检查网络连接后重试');
+        }, 15000);
         
         try {
+            console.log('[Downloader] Calling start_web_download with urls:', urls);
             const result = await window.api.start_web_download(urls, false, includeImagesVal);
+            console.log('[Downloader] API result:', result);
             
-            clearTimeout(downloadTimeout);
+            clearTimeout(apiTimeout);
             
             if (result && result.success) {
                 updateStatus('正在下载，请稍候...');
+                updateProgress('web-progress', 0, '正在下载第 1 篇...');
             } else {
                 const errMsg = result?.message || '未知错误';
                 updateStatus('下载失败: ' + errMsg);
@@ -247,7 +260,7 @@ async function startDownloadFromModal() {
                 if (switchLabel) switchLabel.style.opacity = '1';
             }
         } catch (apiError) {
-            clearTimeout(downloadTimeout);
+            clearTimeout(apiTimeout);
             throw apiError;
         }
     } catch (e) {

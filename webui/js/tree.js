@@ -473,49 +473,76 @@ function loadTopicPendingPanel(pending) {
         });
         html += '</div>';
         html += '<div class="topic-custom-row">';
-        html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '" onkeydown="if(event.key===\'Enter\')onCustomEnter(this)">';
-        html += '<button class="topic-custom-btn" onclick="onCustomBtnClick(this)">确定</button>';
+        html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '">';
+        html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">确定</button>';
         html += '</div>';
         html += '</div>';
     });
 
     html += '</div>';
     panel.innerHTML = html;
+
+    panel.querySelectorAll('.topic-custom-input').forEach(function(input) {
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                onInputEnter(this);
+            }
+        });
+        input.addEventListener('input', function() {
+            onInputChange(this);
+        });
+    });
 }
 
 function onCandidateClick(btnEl) {
     var card = btnEl.closest('.topic-pending-card');
     if (!card) return;
 
-    var file = btnEl.getAttribute('data-file');
-    var topic = btnEl.getAttribute('data-topic');
-    if (!file || !topic) return;
+    var btns = card.querySelectorAll('.topic-candidate-btn');
+    btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
+    btnEl.classList.add('topic-candidate-selected');
 
-    doResolveTopic(card, file, topic);
+    var input = card.querySelector('.topic-custom-input');
+    if (input) {
+        input.value = '';
+    }
 }
 
-function onCustomEnter(inputEl) {
-    var val = (inputEl.value || '').trim();
-    if (!val) return;
+function onInputChange(inputEl) {
     var card = inputEl.closest('.topic-pending-card');
-    var file = inputEl.getAttribute('data-file');
-    if (!card || !file) return;
-    doResolveTopic(card, file, val);
+    if (!card) return;
+    var btns = card.querySelectorAll('.topic-candidate-btn.topic-candidate-selected');
+    btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
 }
 
-function onCustomBtnClick(btnEl) {
-    var row = btnEl.closest('.topic-custom-row');
-    if (!row) return;
-    var input = row.querySelector('.topic-custom-input');
-    if (!input) return;
-    onCustomEnter(input);
+function onInputEnter(inputEl) {
+    var card = inputEl.closest('.topic-pending-card');
+    if (!card) return;
+    doConfirmTopic(card);
 }
 
-async function doResolveTopic(cardEl, filePath, topic) {
+function onConfirmBtnClick(btnEl) {
+    var card = btnEl.closest('.topic-pending-card');
+    if (!card) return;
+    doConfirmTopic(card);
+}
+
+function doConfirmTopic(cardEl) {
     if (cardEl.classList.contains('resolving')) return;
 
+    var file = cardEl.getAttribute('data-file');
+    if (!file) return;
+
+    var input = cardEl.querySelector('.topic-custom-input');
+    var custom = (input && input.value) ? input.value.trim() : '';
+
+    var selectedBtn = cardEl.querySelector('.topic-candidate-btn.topic-candidate-selected');
+    var selectedTopic = selectedBtn ? selectedBtn.getAttribute('data-topic') || '' : '';
+
+    var topic = custom || selectedTopic;
+    if (!topic) return;
+
     var btns = cardEl.querySelectorAll('.topic-candidate-btn');
-    var customInput = cardEl.querySelector('.topic-custom-input');
     var customBtn = cardEl.querySelector('.topic-custom-btn');
 
     btns.forEach(function(b) {
@@ -526,34 +553,28 @@ async function doResolveTopic(cardEl, filePath, topic) {
         }
     });
 
-    if (customInput) {
-        customInput.disabled = true;
-    }
-    if (customBtn) {
-        customBtn.disabled = true;
-    }
-
+    if (input) input.disabled = true;
+    if (customBtn) customBtn.disabled = true;
     cardEl.classList.add('resolving');
 
-    try {
-        var result = await window.api.resolve_topic(filePath, topic);
+    window.api.resolve_topic(file, topic).then(function(result) {
         if (result && result.success) {
             cardEl.classList.add('resolved');
             animateCardOut(cardEl);
         } else {
             cardEl.classList.remove('resolving');
             btns.forEach(function(b) { b.classList.remove('topic-candidate-disabled'); });
-            if (customInput) customInput.disabled = false;
+            if (input) input.disabled = false;
             if (customBtn) customBtn.disabled = false;
             console.error('[Topic] resolve failed:', result);
         }
-    } catch (e) {
+    }).catch(function(e) {
         console.error('[Topic] resolve error:', e);
         cardEl.classList.remove('resolving');
         btns.forEach(function(b) { b.classList.remove('topic-candidate-disabled'); });
-        if (customInput) customInput.disabled = false;
+        if (input) input.disabled = false;
         if (customBtn) customBtn.disabled = false;
-    }
+    });
 }
 
 function animateCardOut(cardEl) {

@@ -166,6 +166,65 @@ function updateTiptapToolbarState() {
     } catch (e) {}
 }
 
+function parseYamlFrontmatter(content) {
+    var trimmed = content.replace(/^\uFEFF/, '');
+    var match = trimmed.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
+    if (!match) return { frontmatter: null, body: content };
+    var yaml = match[1];
+    var body = trimmed.slice(match[0].length);
+    var props = {};
+    var currentKey = null;
+    var currentArr = null;
+    yaml.split('\n').forEach(function(line) {
+        if (line.match(/^\s+-\s+/)) {
+            if (currentKey && currentArr) {
+                currentArr.push(line.replace(/^\s+-\s+/, '').trim().replace(/^['"]|['"]$/g, ''));
+            }
+            return;
+        }
+        if (currentKey && currentArr) {
+            props[currentKey] = currentArr;
+            currentKey = null;
+            currentArr = null;
+        }
+        var idx = line.indexOf(':');
+        if (idx < 0) return;
+        var key = line.slice(0, idx).trim();
+        var val = line.slice(idx + 1).trim();
+        if (!val) {
+            currentKey = key;
+            currentArr = [];
+            return;
+        }
+        if (val.startsWith('[') && val.endsWith(']')) {
+            val = val.slice(1, -1).split(',').map(function(s) { return s.trim().replace(/^['"]|['"]$/g, ''); });
+        }
+        props[key] = val;
+    });
+    if (currentKey && currentArr) {
+        props[currentKey] = currentArr;
+    }
+    return { frontmatter: props, body: body };
+}
+
+function renderFrontmatterPanel(frontmatter) {
+    if (!frontmatter) return '';
+    var hideKeys = ['title'];
+    var keys = Object.keys(frontmatter).filter(function(k) { return hideKeys.indexOf(k) < 0; });
+    if (!keys.length) return '';
+    var html = '<div class="obsidian-properties">';
+    keys.forEach(function(key) {
+        var val = frontmatter[key];
+        var displayVal = Array.isArray(val) ? val.join(', ') : (val || '');
+        html += '<div class="obsidian-prop-row">';
+        html += '<span class="obsidian-prop-key">' + key + '</span>';
+        html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + key + '">' + displayVal + '</span>';
+        html += '</div>';
+    });
+    html += '</div>';
+    return html;
+}
+
 function createTiptapEditor(markdownContent, filePath) {
     const container = document.getElementById('tiptap-editor');
     if (!container) return false;
@@ -179,8 +238,39 @@ function createTiptapEditor(markdownContent, filePath) {
 
     container.innerHTML = '';
 
+    var parsed = parseYamlFrontmatter(markdownContent);
+    var fmHtml = renderFrontmatterPanel(parsed.frontmatter);
+
+    var fmContainer = document.getElementById('frontmatter-panel');
+    if (fmContainer) {
+        fmContainer.innerHTML = fmHtml;
+        fmContainer.style.display = fmHtml ? 'block' : 'none';
+        fmContainer.querySelectorAll('.obsidian-prop-val[contenteditable]').forEach(function(el) {
+            el.addEventListener('blur', function() {
+                var key = this.getAttribute('data-fm-key');
+                var newVal = this.textContent.trim();
+                if (key && window.TiptapEditor.frontmatterData) {
+                    var origVal = window.TiptapEditor.frontmatterData[key];
+                    if (Array.isArray(origVal)) {
+                        window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                    } else {
+                        window.TiptapEditor.frontmatterData[key] = newVal;
+                    }
+                    saveTiptapContent();
+                }
+            });
+            el.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+            });
+        });
+    }
+
     window.TiptapEditor.filePath = filePath;
     window.TiptapEditor.originalContent = markdownContent;
+    window.TiptapEditor.frontmatterData = parsed.frontmatter;
     window.TiptapEditor.isActive = true;
     window.TiptapEditor.destroying = false;
 
@@ -201,7 +291,7 @@ function createTiptapEditor(markdownContent, filePath) {
         window.TiptapEditor.instance = new M.Editor({
             element: container,
             extensions: extensions,
-            content: markdownContent || '',
+            content: parsed.body || '',
             editorProps: {
                 attributes: {
                     class: 'tiptap-prose',
@@ -242,7 +332,25 @@ async function saveTiptapContent() {
     }
 
     try {
-        const markdown = window.TiptapEditor.instance.storage.markdown.getMarkdown();
+        var markdown = window.TiptapEditor.instance.storage.markdown.getMarkdown();
+        var fmContainer = document.getElementById('frontmatter-panel');
+        if (fmContainer && fmContainer.style.display !== 'none') {
+            var fmData = window.TiptapEditor.frontmatterData;
+            if (fmData && Object.keys(fmData).length > 0) {
+                var yaml = '---\n';
+                Object.keys(fmData).forEach(function(key) {
+                    var val = fmData[key];
+                    if (Array.isArray(val)) {
+                        yaml += key + ':\n';
+                        val.forEach(function(item) { yaml += '  - ' + item + '\n'; });
+                    } else {
+                        yaml += key + ': ' + val + '\n';
+                    }
+                });
+                yaml += '---\n';
+                markdown = yaml + markdown;
+            }
+        }
         const result = await window.api.save_note_file(window.TiptapEditor.filePath, markdown);
 
         if (result && result.success) {

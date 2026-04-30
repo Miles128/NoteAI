@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 
+from config import is_ignored_dir
+
 try:
     import yaml
     PYYAML_AVAILABLE = True
@@ -667,3 +669,97 @@ def process_and_tag_file_with_yaml(
         return result
     except Exception:
         return result
+
+
+def save_tags_md(workspace_path: str) -> dict:
+    if not workspace_path:
+        return {"success": False, "message": "未设置工作区"}
+
+    workspace = Path(workspace_path)
+    if not workspace.exists():
+        return {"success": False, "message": "工作区不存在"}
+
+    tag_map = {}
+
+    def _scan(path):
+        try:
+            for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
+                if entry.name.startswith('.'):
+                    continue
+                if entry.is_dir():
+                    if is_ignored_dir(entry.name):
+                        continue
+                    _scan(str(entry))
+                elif entry.suffix.lower() == '.md' and entry.name.lower() != 'wiki.md' and entry.name.lower() != 'tags.md':
+                    try:
+                        text = entry.read_text(encoding='utf-8')
+                        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                        if not m:
+                            continue
+                        yaml_text = m.group(1)
+                        rel = str(entry.relative_to(workspace))
+                        current_tags_key = False
+                        current_tags_arr = []
+                        for line in yaml_text.split('\n'):
+                            stripped = line.strip()
+                            if current_tags_key and stripped.startswith('- '):
+                                current_tags_arr.append(stripped[2:].strip().strip("'\""))
+                                continue
+                            if current_tags_key and current_tags_arr:
+                                for tag in current_tags_arr:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                                current_tags_arr = []
+                            idx = line.find(':')
+                            if idx < 0:
+                                continue
+                            key = line[:idx].strip()
+                            val = line[idx + 1:].strip()
+                            if key != 'tags':
+                                current_tags_key = False
+                                continue
+                            if val.startswith('[') and val.endswith(']'):
+                                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                                for tag in tags:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                            elif not val:
+                                current_tags_key = True
+                                current_tags_arr = []
+                            else:
+                                tag = val.strip().strip("'\"")
+                                if tag:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                        if current_tags_key and current_tags_arr:
+                            for tag in current_tags_arr:
+                                if tag not in tag_map:
+                                    tag_map[tag] = []
+                                tag_map[tag].append(rel)
+                    except Exception:
+                        pass
+        except PermissionError:
+            pass
+
+    _scan(str(workspace))
+
+    lines = ['# Tags', '']
+    sorted_tags = sorted(tag_map.items(), key=lambda x: -len(x[1]))
+    for tag, files in sorted_tags:
+        lines.append('## ' + tag)
+        lines.append('')
+        for f in files:
+            fname = Path(f).stem
+            lines.append('- [[' + fname + ']]')
+        lines.append('')
+
+    tags_md_path = workspace / 'tags.md'
+    tags_md_path.write_text('\n'.join(lines), encoding='utf-8')
+
+    return {"success": True, "count": len(sorted_tags)}

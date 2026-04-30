@@ -170,6 +170,13 @@ class NoteIntegration:
 
             report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件", 1.0)
 
+            try:
+                from utils.tag_extractor import save_tags_md
+                if config.workspace_path:
+                    save_tags_md(config.workspace_path)
+            except Exception:
+                pass
+
             return {
                 'content': '\n\n---\n\n'.join([r['content'] for r in topic_results]),
                 'document_count': len(documents),

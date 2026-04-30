@@ -38,24 +38,18 @@
 <body>
     <div class="custom-titlebar" data-tauri-drag-region>
         <div class="titlebar-left" data-tauri-drag-region>
-            <button class="titlebar-btn tab-btn active" onclick="switchTab(0)" data-tab="web" title="网页下载">
+            <button class="titlebar-btn tab-btn" onclick="switchTab(0)" data-tab="web" title="网页下载">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="8 10 12 14 16 10"></polyline>
                     <path d="M12 14V3"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn" onclick="switchTab(1)" data-tab="file" title="文件转换">
+            <button class="titlebar-btn tab-btn" onclick="importFiles()" data-tab="file" title="导入文件">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <path d="M12 18v-6"></path>
-                    <path d="M9 15h6"></path>
-                </svg>
-            </button>
-            <button class="titlebar-btn tab-btn" onclick="switchTab(2)" data-tab="note" title="笔记整合">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <polyline points="9 14 12 17 15 14"></polyline>
                 </svg>
             </button>
             <button class="titlebar-btn workspace-btn" onclick="openWorkspace()" title="打开工作区">
@@ -65,6 +59,41 @@
                     <path d="M7 13h6"></path>
                 </svg>
                 <span id="workspace-name-display"></span>
+            </button>
+            <button class="titlebar-btn tab-btn sidebar-view-btn active" data-sidebar="tree" onclick="switchSidebarView('tree')" title="目录树">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 3h7v7H3z"></path>
+                    <path d="M14 3h7v7h-7z"></path>
+                    <path d="M14 14h7v7h-7z"></path>
+                    <path d="M3 14h7v7H3z"></path>
+                    <path d="M10 6.5h4"></path>
+                    <path d="M10 17.5h4"></path>
+                    <path d="M17.5 10v4"></path>
+                    <path d="M6.5 10v4"></path>
+                </svg>
+            </button>
+            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="topic" onclick="switchSidebarView('topic')" title="主题">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="tags" onclick="switchSidebarView('tags')" title="标签">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path>
+                    <path d="M7 7h.01"></path>
+                </svg>
+            </button>
+            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="graph" onclick="switchSidebarView('graph')" title="图谱">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="5" r="2.5"></circle>
+                    <circle cx="5" cy="19" r="2.5"></circle>
+                    <circle cx="19" cy="19" r="2.5"></circle>
+                    <line x1="12" y1="7.5" x2="5" y2="16.5"></line>
+                    <line x1="12" y1="7.5" x2="19" y2="16.5"></line>
+                    <line x1="7.5" y1="19" x2="16.5" y2="19"></line>
+                </svg>
             </button>
         </div>
         <div class="titlebar-center" data-tauri-drag-region>
@@ -112,6 +141,9 @@
             <div class="file-tree-container" id="file-tree">
                 <div class="tree-empty">暂无工作区</div>
             </div>
+            <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
+            <div class="sidebar-view-container" id="sidebar-topic" style="display: none;"></div>
+            <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
         </div>
 
         <div class="resizer" id="sidebar-resizer"></div>
@@ -120,50 +152,9 @@
             <div class="content-panel" id="content-panel">
                 <div class="content-area">
                     <div class="tab-content active" id="tab-0">
-                        <div class="progress-container">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="web-progress-fill"></div>
-                            </div>
-                            <div class="progress-text" id="web-status"></div>
-                        </div>
                     </div>
 
                     <div class="tab-content" id="tab-1">
-                        <div class="card">
-                            <div class="card-title">文件转换</div>
-                            <div class="ai-status-box" style="margin-bottom: 12px;">
-                                <span class="status-dot"></span>
-                                <span class="status-text">自动扫描工作区所有非markdown文件并转换</span>
-                            </div>
-                        </div>
-
-                        <div class="card ai-toggle-card" id="conv-ai-card">
-                            <div class="form-group" style="margin-bottom: 0;">
-                                <label class="switch-container">
-                                    <input type="checkbox" id="conv-ai-toggle" class="switch-input" onchange="updateConvAIStatus()">
-                                    <span class="switch-slider"></span>
-                                </label>
-                                <span class="switch-label" id="conv-ai-label">使用AI辅助转换</span>
-                            </div>
-                            <div class="ai-status-box" id="conv-ai-status">
-                                <span class="status-dot"></span>
-                                <span class="status-text">基础模式 - 使用标准算法转换</span>
-                            </div>
-                        </div>
-
-                        <div class="btn-group">
-                            <button class="btn btn-primary" onclick="startFileConversion()">开始转换</button>
-                        </div>
-
-                        <div class="progress-container">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="conv-progress-fill"></div>
-                            </div>
-                            <div class="progress-text" id="conv-status"></div>
-                        </div>
-                    </div>
-
-                    <div class="tab-content" id="tab-2">
                         <div class="card">
                             <div class="card-title">笔记整合</div>
                             <div class="ai-status-box">
@@ -201,6 +192,8 @@
                     </div>
                 </div>
             </div>
+
+            <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
 
             <div class="preview-panel" id="preview-panel" style="display: none;">
                 <div class="preview-resizer" id="preview-resizer"></div>
@@ -313,6 +306,7 @@
                             </button>
                         </div>
                         <div class="tiptap-editor-content" id="tiptap-editor"></div>
+                        <div id="frontmatter-panel" style="display: none;"></div>
                     </div>
 
                     <div class="preview-info" id="preview-info" style="display: none;">
@@ -322,7 +316,6 @@
                 </div>
             </div>
 
-            <div class="status-bar" id="status-bar">就绪</div>
         </div>
 
         <div class="about-panel-overlay" id="about-panel">

@@ -1056,3 +1056,48 @@ def optimize_markdown_format(content: str, title: str = "") -> str:
             result = f"# {title}\n\n{result}"
 
     return result
+
+
+def reformat_markdown_with_llm(content: str) -> str:
+    if not content or not content.strip():
+        return content
+
+    from config.settings import config
+    if not config.api_key:
+        return content
+
+    try:
+        from prompts import MARKDOWN_REFORMAT_PROMPT
+        result = call_llm(
+            MARKDOWN_REFORMAT_PROMPT,
+            temperature=0.2,
+            content=content
+        )
+        if result and result.strip():
+            return result
+        return content
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
+        sys.stderr.flush()
+        return content
+
+
+def smart_format_markdown(content: str, title: str = "") -> str:
+    if not content or not content.strip():
+        return content
+
+    content = clean_markdown_content(content)
+
+    h2_count = len(re.findall(r'^##\s+', content, re.MULTILINE))
+
+    if h2_count >= 2:
+        return content
+
+    from config.settings import config
+    if config.api_key:
+        result = reformat_markdown_with_llm(content)
+        if result != content:
+            return result
+
+    return optimize_markdown_format(content, title)

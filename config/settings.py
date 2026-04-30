@@ -292,6 +292,22 @@ ORGANIZED_FOLDER = "Organized"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
 
+IGNORED_DIRS = {
+    "ai",
+    "wki",
+    "wiki",
+    "ai wiki",
+    "ai-wiki",
+    "ai_wiki",
+    "aiwiki",
+}
+
+
+def is_ignored_dir(dir_name: str) -> bool:
+    if not dir_name:
+        return False
+    return dir_name.lower() in IGNORED_DIRS
+
 @dataclass
 class AppConfig:
     """应用配置类"""

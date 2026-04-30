@@ -3,7 +3,7 @@
     --sidebar-bg: #ffffff;
     --surface: #ffffff;
     --surface-hover: rgba(0, 0, 0, 0.04);
-    --text: #1d1d1f;
+    --text: #3a3a3c;
     --text-muted: #8a8a8a;
     --primary: #1a56db;
     --primary-dark: #1442a3;
@@ -24,12 +24,12 @@
     --article-bg: #faf8f2;
     --font-scale: 1.2;
     --italic-bg: rgba(123, 108, 217, 0.08);
-    --italic-color: #1d1d1f;
-    --bold-color: #1d1d1f;
+    --italic-color: #3a3a3c;
+    --bold-color: #3a3a3c;
     --heading-bg: transparent;
-    --heading-color: #1d1d1f;
-    --h1-color: #1d1d1f;
-    --sidebar-text: #1d1d1f;
+    --heading-color: #3a3a3c;
+    --h1-color: #3a3a3c;
+    --sidebar-text: #3a3a3c;
     --sidebar-text-muted: #8a8a8a;
     --sidebar-surface-hover: rgba(0, 0, 0, 0.04);
     --sidebar-border: rgba(0, 0, 0, 0.07);
@@ -45,7 +45,7 @@ body {
     --sidebar-bg: #ffffff;
     --surface: #ffffff;
     --surface-hover: rgba(0, 0, 0, 0.04);
-    --text: #1d1d1f;
+    --text: #3a3a3c;
     --text-muted: #8a8a8a;
     --primary: #1a56db;
     --primary-dark: #1442a3;
@@ -55,7 +55,7 @@ body {
     --scrollbar: rgba(0, 0, 0, 0.15);
     --topbar-bg: #ffffff;
     --statusbar-bg: #ffffff;
-    --sidebar-text: #1d1d1f;
+    --sidebar-text: #3a3a3c;
     --sidebar-text-muted: #8a8a8a;
     --sidebar-surface-hover: rgba(0, 0, 0, 0.04);
     --sidebar-border: rgba(0, 0, 0, 0.07);
@@ -101,7 +101,7 @@ body {
         --sidebar-bg: #ffffff;
         --surface: #ffffff;
         --surface-hover: rgba(0, 0, 0, 0.04);
-        --text: #1d1d1f;
+        --text: #3a3a3c;
         --text-muted: #8a8a8a;
         --primary: #1a56db;
         --primary-dark: #1442a3;
@@ -111,7 +111,7 @@ body {
         --scrollbar: rgba(0, 0, 0, 0.15);
         --topbar-bg: #ffffff;
         --statusbar-bg: #ffffff;
-        --sidebar-text: #1d1d1f;
+        --sidebar-text: #3a3a3c;
         --sidebar-text-muted: #8a8a8a;
         --sidebar-surface-hover: rgba(0, 0, 0, 0.04);
         --sidebar-border: rgba(0, 0, 0, 0.07);

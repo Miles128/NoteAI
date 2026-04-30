@@ -6,6 +6,47 @@
     overflow: hidden;
 }
 
+.obsidian-properties {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 6px 20px 8px;
+    border-top: 1px solid var(--border);
+}
+
+.obsidian-prop-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.obsidian-prop-key {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 60px;
+}
+
+.obsidian-prop-val {
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+    word-break: break-word;
+    outline: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.15s;
+    padding: 0 2px;
+}
+
+.obsidian-prop-val:focus {
+    border-bottom-color: var(--primary);
+}
+
+.obsidian-prop-val:hover {
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
 .editor-split-container {
     display: flex;
     flex: 1;

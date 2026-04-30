@@ -1,11 +1,21 @@
-var _isTauri = typeof window !== 'undefined' && window.__TAURI_INTERNALS__;
+var _isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+
+function getTauriInvoke() {
+    if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
+        return window.__TAURI__.core.invoke;
+    }
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
+        return window.__TAURI_INTERNALS__.invoke;
+    }
+    return null;
+}
 
 async function pyCall(method, params) {
     console.log('[API] pyCall called:', { method, params });
     
     if (_isTauri) {
-        console.log('[API] Running in Tauri, invoking py_call');
-        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var invoke = getTauriInvoke();
+        if (!invoke) throw new Error('Tauri invoke not available');
         try {
             var result = await invoke('py_call', {
                 method: method,
@@ -24,7 +34,7 @@ async function pyCall(method, params) {
 
 async function openWorkspace() {
     if (_isTauri) {
-        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var invoke = getTauriInvoke();
         var folder = await invoke('open_folder_dialog');
         if (folder) {
             await invoke('set_workspace_path', { path: folder });
@@ -39,7 +49,7 @@ async function openWorkspace() {
 async function getWorkspaceStatus() {
     var result = await pyCall('get_workspace_status');
     if (result && result.is_set && _isTauri) {
-        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
     }
     return result;
@@ -47,6 +57,34 @@ async function getWorkspaceStatus() {
 
 async function getWorkspaceTree() {
     return pyCall('get_workspace_tree');
+}
+
+async function getAllTags() {
+    return pyCall('get_all_tags');
+}
+
+async function getTopicTree() {
+    return pyCall('get_topic_tree');
+}
+
+async function autoTagFiles() {
+    return pyCall('auto_tag_files');
+}
+
+async function saveTagsMd() {
+    return pyCall('save_tags_md');
+}
+
+async function autoAssignTopic(filePath) {
+    return pyCall('auto_assign_topic', { file_path: filePath });
+}
+
+async function getPendingTopics() {
+    return pyCall('get_pending_topics');
+}
+
+async function resolveTopic(filePath, topic) {
+    return pyCall('resolve_topic', { file_path: filePath, topic: topic });
 }
 
 async function getApiConfig() {
@@ -75,16 +113,26 @@ async function saveThemePreference(theme) {
 
 async function addFiles() {
     if (_isTauri) {
-        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var invoke = getTauriInvoke();
         var files = await invoke('open_file_dialog');
         return files || [];
     }
     return pyCall('add_files');
 }
 
+async function importFilesToWorkspace() {
+    if (_isTauri) {
+        var invoke = getTauriInvoke();
+        var files = await invoke('open_file_dialog');
+        if (!files || files.length === 0) return { cancelled: true };
+        return pyCall('import_files', { files: files });
+    }
+    return pyCall('import_files');
+}
+
 async function browseFolder() {
     if (_isTauri) {
-        var invoke = window.__TAURI_INTERNALS__.invoke;
+        var invoke = getTauriInvoke();
         var folder = await invoke('open_folder_dialog');
         return folder || '';
     }
@@ -134,26 +182,36 @@ async function saveFileContent(path, content) {
     return pyCall('save_file_content', { path: path, content: content });
 }
 
+function getTauriWindow() {
+    if (window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrent) {
+        return window.__TAURI__.window.getCurrent();
+    }
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window && window.__TAURI_INTERNALS__.window.getCurrent) {
+        return window.__TAURI_INTERNALS__.window.getCurrent();
+    }
+    return null;
+}
+
 function moveWindow(dx, dy) {}
 
 function minimizeWindow() {
     if (_isTauri) {
-        var win = window.__TAURI_INTERNALS__.window.getCurrent();
-        win.minimize();
+        var win = getTauriWindow();
+        if (win) win.minimize();
     }
 }
 
 function maximizeWindow() {
     if (_isTauri) {
-        var win = window.__TAURI_INTERNALS__.window.getCurrent();
-        win.toggleMaximize();
+        var win = getTauriWindow();
+        if (win) win.toggleMaximize();
     }
 }
 
 function closeWindow() {
     if (_isTauri) {
-        var win = window.__TAURI_INTERNALS__.window.getCurrent();
-        win.close();
+        var win = getTauriWindow();
+        if (win) win.close();
     }
 }
 
@@ -172,6 +230,13 @@ window.api = {
     openWorkspace: openWorkspace,
     getWorkspaceStatus: getWorkspaceStatus,
     getWorkspaceTree: getWorkspaceTree,
+    getAllTags: getAllTags,
+    getTopicTree: getTopicTree,
+    autoTagFiles: autoTagFiles,
+    saveTagsMd: saveTagsMd,
+    autoAssignTopic: autoAssignTopic,
+    getPendingTopics: getPendingTopics,
+    resolveTopic: resolveTopic,
     getApiConfig: getApiConfig,
     saveApiConfig: saveApiConfig,
     getUiConfig: getUiConfig,
@@ -179,6 +244,7 @@ window.api = {
     getThemePreference: getThemePreference,
     saveThemePreference: saveThemePreference,
     addFiles: addFiles,
+    importFilesToWorkspace: importFilesToWorkspace,
     browseFolder: browseFolder,
     startWebDownload: startWebDownload,
     startFileConversion: startFileConversion,
@@ -201,6 +267,13 @@ window.api = {
     open_workspace: openWorkspace,
     get_workspace_status: getWorkspaceStatus,
     get_workspace_tree: getWorkspaceTree,
+    get_all_tags: getAllTags,
+    get_topic_tree: getTopicTree,
+    auto_tag_files: autoTagFiles,
+    save_tags_md: saveTagsMd,
+    auto_assign_topic: autoAssignTopic,
+    get_pending_topics: getPendingTopics,
+    resolve_topic: resolveTopic,
     get_api_config: getApiConfig,
     save_api_config: saveApiConfig,
     get_ui_config: getUiConfig,
@@ -228,40 +301,4 @@ window.api = {
     update_status: apiUpdateStatus,
     update_progress: apiUpdateProgress,
     show_message: showMessage
-};
-
-window.pywebview = {
-    api: {
-        move_window: moveWindow,
-        minimize_window: minimizeWindow,
-        maximize_window: maximizeWindow,
-        close_window: closeWindow,
-        get_workspace_status: getWorkspaceStatus,
-        check_workspace_path_valid: function() { return pyCall('check_workspace_path_valid'); },
-        clear_saved_workspace: function() { return pyCall('clear_saved_workspace'); },
-        update_window_title: function() {},
-        open_workspace: openWorkspace,
-        get_api_config: getApiConfig,
-        browse_folder: browseFolder,
-        add_files: addFiles,
-        update_status: apiUpdateStatus,
-        update_progress: apiUpdateProgress,
-        show_message: showMessage,
-        start_web_download: startWebDownload,
-        start_file_conversion: startFileConversion,
-        extract_topics: extractTopics,
-        start_note_integration: startNoteIntegration,
-        save_api_config: saveApiConfig,
-        get_ui_config: getUiConfig,
-        save_ui_config: saveUiConfig,
-        refresh_log: refreshLog,
-        get_theme_preference: getThemePreference,
-        save_theme_preference: saveThemePreference,
-        get_workspace_tree: getWorkspaceTree,
-        on_file_selected: onFileSelected,
-        get_file_preview: getFilePreview,
-        can_preview_file: canPreviewFile,
-        show_about: showAbout,
-        save_file_content: saveFileContent
-    }
 };

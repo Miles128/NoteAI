@@ -82,9 +82,9 @@ function updateWorkspaceDisplay(workspacePath) {
 }
 
 function showWorkspaceOptions() {
-    if (!window.pywebview) return;
+    if (!window.api) return;
 
-    window.pywebview.api.get_workspace_status().then(status => {
+    window.api.get_workspace_status().then(status => {
         if (status.is_set) {
             if (confirm('是否要更改工作区？\n\n当前工作区: ' + status.workspace_path)) {
                 openWorkspace();

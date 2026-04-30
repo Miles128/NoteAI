@@ -2,9 +2,6 @@
     'use strict';
 
     function switchTab(tabIndex) {
-        document.querySelectorAll('.tab-btn').forEach((item, i) => {
-            item.classList.toggle('active', i === tabIndex);
-        });
         document.querySelectorAll('.tab-content').forEach((content, i) => {
             content.classList.toggle('active', i === tabIndex);
         });

@@ -111,13 +111,13 @@ async function startNoteIntegration() {
         updateStatus('正在整合...');
         updateProgress('integration-progress', 0, '正在准备整合...');
 
-        if (window.__TAURI_INTERNALS__) {
-            var listen = window.__TAURI_INTERNALS__.event?.listen;
-            if (listen) {
+        if (typeof getTauriEventAPI === 'function') {
+            var eventAPI = getTauriEventAPI();
+            if (eventAPI) {
                 if (_noteIntegrationUnlisten) {
                     _noteIntegrationUnlisten();
                 }
-                _noteIntegrationUnlisten = await listen('python-event', function(event) {
+                _noteIntegrationUnlisten = await eventAPI.listen('python-event', function(event) {
                     var data = event.payload;
                     if (!data) return;
 

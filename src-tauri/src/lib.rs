@@ -93,7 +93,11 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
             if let Ok(resp) = serde_json::from_str::<PyResponse>(&line) {
                 if resp.id == "event" {
                     if let Some(result) = resp.result {
-                        let _ = app_clone.emit("python-event", &result);
+                        eprintln!("[Rust] Emitting python-event: {:?}", result);
+                        match app_clone.emit("python-event", &result) {
+                            Ok(_) => {}
+                            Err(e) => eprintln!("[Rust] Failed to emit event: {}", e),
+                        }
                     }
                 } else {
                     let state = app_clone.state::<AppState>();
@@ -109,6 +113,8 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
                         let _ = tx.send(value);
                     }
                 }
+            } else {
+                eprintln!("[Rust] Failed to parse Python stdout: {}", &line[..line.len().min(200)]);
             }
         }
     });
@@ -245,6 +251,7 @@ async fn open_file_dialog(
     let files = app
         .dialog()
         .file()
+        .add_filter("文档文件", &["pdf", "docx", "doc", "pptx", "ppt", "html", "htm", "txt"])
         .blocking_pick_files();
     Ok(files.map(|paths| paths.into_iter().map(|p| p.to_string()).collect()))
 }

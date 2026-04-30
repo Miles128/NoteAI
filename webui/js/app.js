@@ -135,6 +135,61 @@ function updateStatus(text) {
     }
 }
 
+var _fileImportUnlisten = null;
+
+async function importFiles() {
+    try {
+        var result = await window.api.importFilesToWorkspace();
+        if (!result || result.cancelled) return;
+
+        if (result && result.success) {
+            updateStatus('正在导入 ' + (result.file_count || '') + ' 个文件...');
+
+            if (typeof getTauriEventAPI === 'function') {
+                var eventAPI = getTauriEventAPI();
+                if (eventAPI) {
+                    if (_fileImportUnlisten) {
+                        _fileImportUnlisten();
+                    }
+                    _fileImportUnlisten = await eventAPI.listen('python-event', function(event) {
+                        var data = event.payload;
+                        if (!data) return;
+
+                        if (data.type === 'progress' && data.element_id === 'import-progress') {
+                            updateStatus(data.message || '导入中...');
+                        } else if (data.type === 'file_import_complete') {
+                            var d = data.data || {};
+                            var msg = '导入完成：' + (d.imported || 0) + ' 个文件';
+                            if (d.failed > 0) {
+                                msg += '，' + d.failed + ' 个失败';
+                            }
+                            updateStatus(msg);
+                            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                                window.TreeModule.loadFileTree();
+                            }
+                            if (_fileImportUnlisten) {
+                                _fileImportUnlisten();
+                                _fileImportUnlisten = null;
+                            }
+                        } else if (data.type === 'file_import_error') {
+                            updateStatus('导入失败：' + (data.error || '未知错误'));
+                            if (_fileImportUnlisten) {
+                                _fileImportUnlisten();
+                                _fileImportUnlisten = null;
+                            }
+                        }
+                    });
+                }
+            }
+        } else {
+            updateStatus('导入失败：' + (result?.message || '未知错误'));
+        }
+    } catch (e) {
+        console.error('[App] Import error:', e);
+        updateStatus('导入失败');
+    }
+}
+
 window.App = {
     initMarked,
     initSystemThemeListener,

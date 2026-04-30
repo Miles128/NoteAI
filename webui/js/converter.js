@@ -16,13 +16,13 @@ async function startFileConversion() {
         updateStatus('正在转换...');
         updateProgress('conv-progress', 0, '正在准备转换...');
 
-        if (window.__TAURI_INTERNALS__) {
-            var listen = window.__TAURI_INTERNALS__.event?.listen;
-            if (listen) {
+        if (typeof getTauriEventAPI === 'function') {
+            var eventAPI = getTauriEventAPI();
+            if (eventAPI) {
                 if (_fileConversionUnlisten) {
                     _fileConversionUnlisten();
                 }
-                _fileConversionUnlisten = await listen('python-event', function(event) {
+                _fileConversionUnlisten = await eventAPI.listen('python-event', function(event) {
                     var data = event.payload;
                     if (!data) return;
 

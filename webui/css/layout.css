@@ -113,11 +113,6 @@ body {
     color: var(--text);
 }
 
-.titlebar-btn.tab-btn.active {
-    background: rgba(0, 0, 0, 0.06);
-    color: var(--text);
-}
-
 .titlebar-btn.tab-btn svg {
     width: 14.5px;
     height: 14.5px;

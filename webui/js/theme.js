@@ -14,8 +14,8 @@ function toggleTheme() {
         darkIcon.style.display = 'none';
     }
 
-    if (window.pywebview) {
-        window.pywebview.api.save_theme_preference(html.getAttribute('data-theme') || 'system');
+    if (window.api) {
+        window.api.save_theme_preference(html.getAttribute('data-theme') || 'system');
     }
 }
 
@@ -33,8 +33,8 @@ function setTheme(theme) {
         radio.checked = radio.value === theme;
     });
 
-    if (window.pywebview) {
-        window.pywebview.api.save_theme_preference(theme);
+    if (window.api) {
+        window.api.save_theme_preference(theme);
     }
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {

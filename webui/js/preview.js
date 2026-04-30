@@ -324,3 +324,5 @@ window.PreviewModule = {
     updateTitlebarFileName,
     showEditButton
 };
+
+window.showTagsView = function() { window.switchSidebarView('tags'); };

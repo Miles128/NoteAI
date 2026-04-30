@@ -12,6 +12,13 @@ def _get_pending_path():
     return Path(workspace) / ".pending_topics.json"
 
 
+def _get_wiki_path():
+    workspace = config.workspace_path
+    if not workspace:
+        return None
+    return Path(workspace) / "WIKI.md"
+
+
 def load_pending():
     path = _get_pending_path()
     if not path or not path.exists():
@@ -77,6 +84,82 @@ def write_topic_to_file(file_path, topic):
     except Exception as e:
         sys.stderr.write(f"[write_topic] failed: {e}\n")
         sys.stderr.flush()
+
+
+def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
+    wiki_path = _get_wiki_path()
+    workspace = config.workspace_path
+    if not wiki_path or not workspace:
+        return False
+
+    display_title = file_title or Path(file_rel_path).stem
+    link = f'- [{display_title}]({file_rel_path})'
+
+    try:
+        if wiki_path.exists():
+            content = wiki_path.read_text(encoding='utf-8')
+        else:
+            content = '# 主题索引\n\n'
+    except Exception as e:
+        sys.stderr.write(f"[wiki] read failed: {e}\n")
+        sys.stderr.flush()
+        return False
+
+    lines = content.split('\n')
+    topic_heading = f'## {topic}'
+    topic_start_idx = None
+    topic_end_idx = None
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == topic_heading:
+            topic_start_idx = i
+        elif topic_start_idx is not None and stripped.startswith('## ') and not stripped.startswith('### '):
+            topic_end_idx = i
+            break
+
+    if topic_start_idx is None:
+        lines.append('')
+        lines.append(topic_heading)
+        lines.append('')
+        lines.append(link)
+    else:
+        if topic_end_idx is None:
+            topic_end_idx = len(lines)
+
+        insert_idx = topic_end_idx
+        for i in range(topic_start_idx + 1, topic_end_idx):
+            line = lines[i].strip()
+            if line.startswith('- [') and f']({file_rel_path})' in line:
+                return True
+            if line.startswith('- ') and not line.startswith('##'):
+                insert_idx = i + 1
+
+        if insert_idx == topic_end_idx:
+            for i in range(topic_start_idx + 1, topic_end_idx):
+                if lines[i].strip():
+                    insert_idx = i + 1
+                    break
+
+        if insert_idx == topic_end_idx:
+            if topic_start_idx + 1 < len(lines) and not lines[topic_start_idx + 1].strip():
+                lines.insert(topic_start_idx + 2, link)
+            else:
+                lines.insert(topic_start_idx + 1, '')
+                lines.insert(topic_start_idx + 2, link)
+        else:
+            lines.insert(insert_idx, link)
+
+    try:
+        new_content = '\n'.join(lines)
+        if not new_content.endswith('\n'):
+            new_content += '\n'
+        wiki_path.write_text(new_content, encoding='utf-8')
+        return True
+    except Exception as e:
+        sys.stderr.write(f"[wiki] write failed: {e}\n")
+        sys.stderr.flush()
+        return False
 
 
 def auto_assign_topic_for_file(file_path):

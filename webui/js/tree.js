@@ -390,7 +390,7 @@ async function doSaveTagsMd() {
     }
 }
 
-async function loadTopicView() {
+async function loadTopicTree() {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
     container.innerHTML = '<div class="sidebar-view-loading">加载主题...</div>';
@@ -444,6 +444,64 @@ async function loadTopicView() {
         html += '</div>';
 
         container.innerHTML = html;
+    } catch (e) {
+        console.error('[Topic] loadTopicTree error:', e);
+        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
+    }
+}
+
+async function loadTopicView() {
+    var container = document.getElementById('sidebar-topic');
+    if (!container) return;
+    container.innerHTML = '<div class="sidebar-view-loading">加载主题...</div>';
+
+    try {
+        var result = await window.api.get_topic_tree();
+        console.log('[Topic] API result:', result);
+
+        if (!result || typeof result !== 'object') {
+            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">API 返回异常</span></div>';
+            return;
+        }
+
+        if (result.success === false) {
+            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(result.message || '后端错误') + '</span></div>';
+            return;
+        }
+
+        var topics = result.topics || [];
+        var hasTopics = topics.length > 0;
+
+        if (!hasTopics) {
+            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题<br><span style="font-size:11px;color:var(--text-muted)">待确认的主题在右侧处理</span></div>';
+        } else {
+            var html = '<div class="sidebar-tags-list">';
+            result.topics.forEach(function(topic) {
+                html += '<div class="sidebar-tag-group">';
+                html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+                html += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                html += '<span class="sidebar-tag-name">' + escapeHtml(topic.name) + '</span>';
+                html += '<span class="sidebar-tag-count">' + topic.files.length + '</span>';
+                html += '</div>';
+                html += '<div class="sidebar-tag-files">';
+                topic.files.forEach(function(f) {
+                    var display = f.title || '未命名';
+                    var path = f.path || '';
+                    if (path) {
+                        html += '<div class="sidebar-tag-file tree-item" onclick="window.TreeModule.selectFile(\'' + escapeAttr(path) + '\', \'' + escapeAttr(display) + '\')">';
+                    } else {
+                        html += '<div class="sidebar-tag-file tree-item">';
+                    }
+                    html += '<span class="tree-indent-unit"></span>';
+                    html += '<span class="tree-name">' + escapeHtml(display) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                html += '</div>';
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        }
 
         loadTopicPendingPanel(result.pending || []);
     } catch (e) {
@@ -595,6 +653,8 @@ function animateCardOut(cardEl) {
             var remaining = list.querySelectorAll('.topic-pending-card:not(.resolved)').length;
             if (remaining === 0) {
                 loadTopicView();
+            } else {
+                loadTopicTree();
             }
         }
     }, 300);

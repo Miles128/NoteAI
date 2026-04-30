@@ -866,7 +866,7 @@ class SidecarServer:
         return {"pending": load_pending()}
 
     def _resolve_topic(self, params):
-        from utils.topic_assigner import write_topic_to_file, load_pending, save_pending
+        from utils.topic_assigner import write_topic_to_file, load_pending, save_pending, add_file_to_wiki_topic
         file_path = params.get("file_path", "")
         topic = params.get("topic", "")
         if not file_path or not topic:
@@ -880,8 +880,16 @@ class SidecarServer:
         write_topic_to_file(str(full_path), topic)
 
         pending = load_pending()
+        file_title = None
+        for p in pending:
+            if p.get("file") == file_path:
+                file_title = p.get("title")
+                break
+
         pending = [p for p in pending if p.get("file") != file_path]
         save_pending(pending)
+
+        add_file_to_wiki_topic(file_path, topic, file_title)
 
         return {"success": True, "topic": topic}
 

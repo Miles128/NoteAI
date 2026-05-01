@@ -129,6 +129,7 @@
     padding: 4px 0;
     font-size: 13px;
     animation: ctxMenuIn 0.12s ease;
+    transform-origin: top left;
 }
 
 @keyframes ctxMenuIn {
@@ -317,3 +318,10 @@
 
 .modal-body { padding: 20px; overflow-y: auto; max-height: 60vh; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 20px; border-top: 0.5px solid var(--border); }
+
+.tree-item.dragging { opacity: 0.4; }
+.tree-item.drag-over { background: rgba(0, 122, 255, 0.1) !important; outline: 1px solid var(--primary); outline-offset: -1px; }
+.tree-item.folder.drag-over { background: rgba(0, 122, 255, 0.08) !important; }
+
+.sidebar-tag-file.dragging { opacity: 0.4; }
+.sidebar-tag-row.drag-over { background: var(--background-modifier-hover); outline: 1px solid var(--text-accent); outline-offset: -1px; }

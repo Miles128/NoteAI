@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, LogicalPosition};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
@@ -318,6 +318,42 @@ fn list_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
     Ok(result)
 }
 
+#[tauri::command]
+async fn open_file_in_new_window(
+    app: tauri::AppHandle,
+    path: String,
+    name: Option<String>,
+) -> Result<(), String> {
+    use tauri::WebviewUrl;
+
+    let window_label = format!("preview_{}", uuid::Uuid::new_v4());
+    let window_title = name.unwrap_or_else(|| "NoteAI Preview".to_string());
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        window_label,
+        WebviewUrl::App("index.html".into())
+    )
+    .title(window_title)
+    .inner_size(1000.0, 700.0)
+    .min_inner_size(800.0, 600.0)
+    .decorations(true)
+    .title_bar_style(tauri::TitleBarStyle::Overlay)
+    .hidden_title(true)
+    .traffic_light_position(LogicalPosition::new(14.0, 22.0))
+    .initialization_script(&format!(
+        r#"
+        window.__PREVIEW_FILE_PATH__ = {:?};
+        window.__IS_PREVIEW_WINDOW__ = true;
+        "#,
+        path
+    ))
+    .build()
+    .map_err(|e| format!("Failed to create window: {}", e))?;
+
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -347,6 +383,7 @@ pub fn run() {
             read_file,
             write_file,
             list_dir,
+            open_file_in_new_window,
         ])
         .on_window_event(|_window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {

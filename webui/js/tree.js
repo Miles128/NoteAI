@@ -77,7 +77,7 @@ function renderFileTree(treeData, container) {
             var ep = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-            var html = '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" data-path="' + ep + '" data-name="' + en + '">';
+            var html = '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
 
             for (var i = 0; i < indentLevel; i++) {
                 html += '<span class="tree-indent-unit"></span>';
@@ -126,6 +126,8 @@ function renderFileTree(treeData, container) {
         });
     });
 
+    setupFileTreeDragDrop(container);
+
     if (selectedFilePath) {
         var prev = container.querySelector('.tree-item[data-path="' + selectedFilePath.replace(/"/g, '&quot;') + '"]');
         if (prev) setActiveTreeItem(prev);
@@ -145,32 +147,33 @@ function showTreeContextMenu(e, itemEl) {
 
     var items = [];
 
+    items.push({ 
+        label: '在访达中显示', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>', 
+        action: function() { revealInFinder(path); } 
+    });
+
     if (!isFolder) {
-        items.push({ label: '打开', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>', action: function() { itemEl.click(); } });
-        items.push({ label: '在 Finder 中显示', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>', action: function() { revealInFinder(path); } });
-        items.push('divider');
-        items.push({ label: '删除', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>', action: function() { deleteFile(path, name); } });
-    } else {
-        items.push({ label: '在 Finder 中显示', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>', action: function() { revealInFinder(path); } });
-        items.push('divider');
-        items.push({ label: '删除文件夹', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>', action: function() { deleteFile(path, name); } });
+        items.push({ 
+            label: '在新窗口打开', 
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>', 
+            action: function() { 
+                if (window.api && window.api.openFileInNewWindow) {
+                    window.api.openFileInNewWindow(path, name);
+                }
+            } 
+        });
     }
 
     items.forEach(function(item) {
-        if (item === 'divider') {
-            var d = document.createElement('div');
-            d.className = 'ctx-menu-divider';
-            menu.appendChild(d);
-        } else {
-            var el = document.createElement('div');
-            el.className = 'ctx-menu-item';
-            el.innerHTML = item.icon + '<span>' + item.label + '</span>';
-            el.addEventListener('click', function() {
-                hideTreeContextMenu();
-                item.action();
-            });
-            menu.appendChild(el);
-        }
+        var el = document.createElement('div');
+        el.className = 'ctx-menu-item';
+        el.innerHTML = item.icon + '<span>' + item.label + '</span>';
+        el.addEventListener('click', function() {
+            hideTreeContextMenu();
+            item.action();
+        });
+        menu.appendChild(el);
     });
 
     document.body.appendChild(menu);
@@ -181,6 +184,8 @@ function showTreeContextMenu(e, itemEl) {
     var mh = menu.offsetHeight;
     if (x + mw > window.innerWidth) x = window.innerWidth - mw - 4;
     if (y + mh > window.innerHeight) y = window.innerHeight - mh - 4;
+    if (x < 0) x = 4;
+    if (y < 0) y = 4;
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
 }
@@ -207,6 +212,85 @@ function deleteFile(path, name) {
             }
         });
     }
+}
+
+var _fileTreeDragData = { filePath: null, fileName: null, isFolder: false };
+
+function setupFileTreeDragDrop(container) {
+    container.addEventListener('dragstart', function(e) {
+        var itemEl = e.target.closest('.tree-item');
+        if (!itemEl) return;
+
+        var filePath = itemEl.getAttribute('data-path');
+        if (!filePath) return;
+
+        _fileTreeDragData.filePath = filePath;
+        _fileTreeDragData.fileName = itemEl.getAttribute('data-name') || '文件';
+        _fileTreeDragData.isFolder = itemEl.classList.contains('folder');
+        itemEl.classList.add('dragging');
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', filePath);
+        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(_fileTreeDragData.fileName) + '</span>');
+    });
+
+    container.addEventListener('dragend', function(e) {
+        var itemEl = e.target.closest('.tree-item');
+        if (itemEl) itemEl.classList.remove('dragging');
+
+        container.querySelectorAll('.tree-item').forEach(function(item) {
+            item.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        _fileTreeDragData.filePath = null;
+        _fileTreeDragData.fileName = null;
+        _fileTreeDragData.isFolder = false;
+    });
+
+    container.addEventListener('dragover', function(e) {
+        if (!_fileTreeDragData.filePath) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        var itemEl = e.target.closest('.tree-item');
+
+        container.querySelectorAll('.tree-item').forEach(function(item) {
+            item.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        if (itemEl && itemEl.classList.contains('folder')) {
+            var targetPath = itemEl.getAttribute('data-path');
+            if (targetPath !== _fileTreeDragData.filePath) {
+                itemEl.classList.add('drag-over');
+            }
+        }
+    });
+
+    container.addEventListener('dragleave', function(e) {
+        var itemEl = e.target.closest('.tree-item');
+        if (itemEl) itemEl.classList.remove('drag-over', 'drag-over-top');
+    });
+
+    container.addEventListener('drop', function(e) {
+        e.preventDefault();
+
+        if (!_fileTreeDragData.filePath) return;
+
+        var itemEl = e.target.closest('.tree-item');
+
+        if (itemEl && itemEl.classList.contains('folder')) {
+            var targetPath = itemEl.getAttribute('data-path');
+            var srcPath = _fileTreeDragData.filePath;
+
+            if (targetPath !== srcPath && !_fileTreeDragData.isFolder) {
+                console.log('[FileTree] Move file:', srcPath, 'to folder:', targetPath);
+            }
+        }
+
+        container.querySelectorAll('.tree-item').forEach(function(item) {
+            item.classList.remove('drag-over', 'drag-over-top');
+        });
+    });
 }
 
 document.addEventListener('click', function() { hideTreeContextMenu(); });
@@ -316,7 +400,7 @@ async function loadTagsView() {
         } else {
             var html = '<div class="sidebar-tags-list">';
             result.tags.forEach(function(tag) {
-                html += '<div class="sidebar-tag-group">';
+                html += '<div class="sidebar-tag-group" data-tag-name="' + escapeAttr(tag.name) + '">';
                 html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
                 html += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
                 html += '<span class="sidebar-tag-name">' + escapeHtml(tag.name) + '</span>';
@@ -325,7 +409,7 @@ async function loadTagsView() {
                 html += '<div class="sidebar-tag-files">';
                 tag.files.forEach(function(file) {
                     var fileName = file.split('/').pop();
-                    html += '<div class="sidebar-tag-file tree-item" onclick="window.TreeModule.selectFile(\'' + escapeAttr(file) + '\', \'' + escapeAttr(fileName) + '\')">';
+                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + escapeAttr(file) + '" data-file-name="' + escapeAttr(fileName) + '" onclick="window.TreeModule.selectFile(\'' + escapeAttr(file) + '\', \'' + escapeAttr(fileName) + '\')">';
                     html += '<span class="tree-indent-unit"></span>';
                     html += '<span class="tree-name">' + escapeHtml(fileName) + '</span>';
                     html += '</div>';
@@ -335,6 +419,9 @@ async function loadTagsView() {
             });
             html += '</div>';
             container.innerHTML = html;
+
+            setupTagsDragDrop(container);
+            setupTagsContextMenu(container);
         }
 
         var actionBar = document.createElement('div');
@@ -344,6 +431,159 @@ async function loadTagsView() {
     } catch (e) {
         container.innerHTML = '<div class="sidebar-view-empty">加载标签失败</div>';
     }
+}
+
+var _tagsDragData = { filePath: null, fileName: null };
+
+function setupTagsDragDrop(container) {
+    container.addEventListener('dragstart', function(e) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        if (!fileEl) return;
+
+        var filePath = fileEl.getAttribute('data-file-path');
+        if (!filePath) return;
+
+        _tagsDragData.filePath = filePath;
+        _tagsDragData.fileName = fileEl.getAttribute('data-file-name') || '文件';
+        fileEl.classList.add('dragging');
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', filePath);
+        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(_tagsDragData.fileName) + '</span>');
+    });
+
+    container.addEventListener('dragend', function(e) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        if (fileEl) fileEl.classList.remove('dragging');
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        _tagsDragData.filePath = null;
+        _tagsDragData.fileName = null;
+    });
+
+    container.addEventListener('dragover', function(e) {
+        if (!_tagsDragData.filePath) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        var groupEl = e.target.closest('.sidebar-tag-group');
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        if (rowEl) {
+            var targetTag = rowEl.closest('.sidebar-tag-group')?.getAttribute('data-tag-name');
+            if (targetTag) {
+                rowEl.classList.add('drag-over');
+            }
+        } else if (groupEl) {
+            var row = groupEl.querySelector('.sidebar-tag-row');
+            if (row) row.classList.add('drag-over');
+        }
+    });
+
+    container.addEventListener('dragleave', function(e) {
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
+    });
+
+    container.addEventListener('drop', function(e) {
+        e.preventDefault();
+
+        if (!_tagsDragData.filePath) return;
+
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        var groupEl = e.target.closest('.sidebar-tag-group');
+
+        var targetTag = null;
+        if (rowEl) {
+            targetTag = rowEl.closest('.sidebar-tag-group')?.getAttribute('data-tag-name');
+        } else if (groupEl) {
+            targetTag = groupEl.getAttribute('data-tag-name');
+        }
+
+        if (!targetTag) {
+            container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+                row.classList.remove('drag-over', 'drag-over-top');
+            });
+            return;
+        }
+
+        console.log('[Tags] Move file:', _tagsDragData.filePath, 'to tag:', targetTag);
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+    });
+}
+
+function setupTagsContextMenu(container) {
+    container.addEventListener('contextmenu', function(e) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        if (fileEl) {
+            e.preventDefault();
+            e.stopPropagation();
+            showTagsContextMenu(e, fileEl);
+        }
+    });
+}
+
+function showTagsContextMenu(e, fileEl) {
+    hideTreeContextMenu();
+
+    var path = fileEl.getAttribute('data-file-path');
+    var name = fileEl.getAttribute('data-file-name');
+
+    var menu = document.createElement('div');
+    menu.className = 'tree-context-menu';
+    menu.id = 'tree-ctx-menu';
+
+    var items = [];
+
+    items.push({ 
+        label: '在访达中显示', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>', 
+        action: function() { revealInFinder(path); } 
+    });
+
+    items.push({ 
+        label: '在新窗口打开', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>', 
+        action: function() { 
+            if (window.api && window.api.openFileInNewWindow) {
+                window.api.openFileInNewWindow(path, name);
+            }
+        } 
+    });
+
+    items.forEach(function(item) {
+        var el = document.createElement('div');
+        el.className = 'ctx-menu-item';
+        el.innerHTML = item.icon + '<span>' + item.label + '</span>';
+        el.addEventListener('click', function() {
+            hideTreeContextMenu();
+            item.action();
+        });
+        menu.appendChild(el);
+    });
+
+    document.body.appendChild(menu);
+
+    var x = e.clientX;
+    var y = e.clientY;
+    var mw = menu.offsetWidth;
+    var mh = menu.offsetHeight;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 4;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 4;
+    if (x < 0) x = 4;
+    if (y < 0) y = 4;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
 }
 
 async function doAutoTag() {
@@ -580,53 +820,121 @@ function setupTopicDragDrop(container) {
 }
 
 function setupTopicContextMenu(container) {
-    var menu = document.getElementById('topic-context-menu');
-    var currentTopicName = null;
-    var currentTagNameEl = null;
-
-    function hideMenu() {
-        if (menu) menu.style.display = 'none';
-    }
-
-    document.addEventListener('click', function(e) {
-        if (!menu || !menu.contains(e.target)) {
-            hideMenu();
-        }
-    });
-
     container.addEventListener('contextmenu', function(e) {
-        var tagNameEl = e.target.closest('.sidebar-tag-name');
-        var tagRowEl = e.target.closest('.sidebar-tag-row');
-
-        if (tagNameEl || (tagRowEl && !e.target.closest('.sidebar-tag-file'))) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        
+        if (fileEl) {
             e.preventDefault();
-            var topicName = (tagNameEl?.getAttribute('data-topic-name')) || (tagRowEl?.getAttribute('data-topic-name'));
-            if (!topicName) return;
-
-            currentTopicName = topicName;
-            currentTagNameEl = tagNameEl || tagRowEl?.querySelector('.sidebar-tag-name');
-
-            if (menu) {
-                menu.style.left = e.pageX + 'px';
-                menu.style.top = e.pageY + 'px';
-                menu.style.display = 'block';
-            }
+            e.stopPropagation();
+            showTopicFileContextMenu(e, fileEl);
+        } else if (rowEl) {
+            e.preventDefault();
+            e.stopPropagation();
+            showTopicContextMenu(e, rowEl);
         }
     });
+}
 
-    if (menu) {
-        menu.addEventListener('click', function(e) {
-            var item = e.target.closest('.topic-menu-item');
-            if (!item) return;
+function showTopicContextMenu(e, rowEl) {
+    hideTreeContextMenu();
 
-            var action = item.getAttribute('data-action');
-            hideMenu();
+    var topicName = rowEl.getAttribute('data-topic-name');
+    var tagNameEl = rowEl.querySelector('.sidebar-tag-name');
+    if (!topicName) return;
 
-            if (action === 'rename' && currentTopicName && currentTagNameEl) {
-                startTopicRename(currentTagNameEl, currentTopicName);
+    var menu = document.createElement('div');
+    menu.className = 'tree-context-menu';
+    menu.id = 'tree-ctx-menu';
+
+    var items = [];
+
+    items.push({ 
+        label: '更改名称', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>', 
+        action: function() { 
+            if (tagNameEl) {
+                startTopicRename(tagNameEl, topicName);
             }
+        } 
+    });
+
+    items.forEach(function(item) {
+        var el = document.createElement('div');
+        el.className = 'ctx-menu-item';
+        el.innerHTML = item.icon + '<span>' + item.label + '</span>';
+        el.addEventListener('click', function() {
+            hideTreeContextMenu();
+            item.action();
         });
-    }
+        menu.appendChild(el);
+    });
+
+    document.body.appendChild(menu);
+
+    var x = e.clientX;
+    var y = e.clientY;
+    var mw = menu.offsetWidth;
+    var mh = menu.offsetHeight;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 4;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 4;
+    if (x < 0) x = 4;
+    if (y < 0) y = 4;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+}
+
+function showTopicFileContextMenu(e, fileEl) {
+    hideTreeContextMenu();
+
+    var path = fileEl.getAttribute('data-file-path');
+    var name = fileEl.querySelector('.tree-name')?.textContent || '文件';
+
+    var menu = document.createElement('div');
+    menu.className = 'tree-context-menu';
+    menu.id = 'tree-ctx-menu';
+
+    var items = [];
+
+    items.push({ 
+        label: '在访达中显示', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>', 
+        action: function() { revealInFinder(path); } 
+    });
+
+    items.push({ 
+        label: '在新窗口打开', 
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>', 
+        action: function() { 
+            if (window.api && window.api.openFileInNewWindow) {
+                window.api.openFileInNewWindow(path, name);
+            }
+        } 
+    });
+
+    items.forEach(function(item) {
+        var el = document.createElement('div');
+        el.className = 'ctx-menu-item';
+        el.innerHTML = item.icon + '<span>' + item.label + '</span>';
+        el.addEventListener('click', function() {
+            hideTreeContextMenu();
+            item.action();
+        });
+        menu.appendChild(el);
+    });
+
+    document.body.appendChild(menu);
+
+    var x = e.clientX;
+    var y = e.clientY;
+    var mw = menu.offsetWidth;
+    var mh = menu.offsetHeight;
+    if (x + mw > window.innerWidth) x = window.innerWidth - mw - 4;
+    if (y + mh > window.innerHeight) y = window.innerHeight - mh - 4;
+    if (x < 0) x = 4;
+    if (y < 0) y = 4;
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
 }
 
 function startTopicRename(tagNameEl, oldTopicName) {

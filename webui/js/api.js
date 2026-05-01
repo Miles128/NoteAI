@@ -223,6 +223,17 @@ function closeWindow() {
     }
 }
 
+async function openFileInNewWindow(path, name) {
+    if (_isTauri) {
+        var invoke = getTauriInvoke();
+        if (invoke) {
+            return invoke('open_file_in_new_window', { path: path, name: name || null });
+        }
+    }
+    console.error('[API] Not running in Tauri');
+    throw new Error('Not running in Tauri');
+}
+
 function apiUpdateStatus(text) {}
 
 function apiUpdateProgress(elementId, progress, message) {}
@@ -270,6 +281,7 @@ window.api = {
     minimizeWindow: minimizeWindow,
     maximizeWindow: maximizeWindow,
     closeWindow: closeWindow,
+    openFileInNewWindow: openFileInNewWindow,
     updateStatus: apiUpdateStatus,
     updateProgress: apiUpdateProgress,
     showMessage: showMessage,
@@ -310,6 +322,7 @@ window.api = {
     minimize_window: minimizeWindow,
     maximize_window: maximizeWindow,
     close_window: closeWindow,
+    open_file_in_new_window: openFileInNewWindow,
     update_status: apiUpdateStatus,
     update_progress: apiUpdateProgress,
     show_message: showMessage

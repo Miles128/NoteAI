@@ -139,6 +139,97 @@ def check_api_config() -> Tuple[bool, str]:
     except Exception as e:
         return False, f"检查API配置时出错: {str(e)}"
 
+def _classify_api_error(error_msg: str, api_base: str, model_name: str) -> str:
+    """
+    分类 API 错误，返回更具体的错误信息
+
+    参数:
+        error_msg: 原始错误消息
+        api_base: API 基础 URL
+        model_name: 模型名称
+
+    返回:
+        分类后的错误信息
+    """
+    error_str = error_msg.lower()
+
+    if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
+        if "api key" in error_str or "invalid" in error_str:
+            return "API 认证失败：密钥无效或已过期"
+        return "API 认证失败，请检查 API Key 是否正确"
+
+    if "403" in error_str or "forbidden" in error_str:
+        return "API 访问被拒绝：可能是账户余额不足或权限受限"
+
+    if "404" in error_str or "not found" in error_str:
+        if "model" in error_str:
+            return f"模型不存在或不可用：{model_name}"
+        return f"API 端点不存在，请检查 API Base URL：{api_base}"
+
+    if "429" in error_str or "rate limit" in error_str or "too many" in error_str:
+        return "API 请求频率超限，请稍后重试"
+
+    if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
+        return "API 服务器错误，请稍后重试或检查 API 状态"
+
+    if "connection" in error_str or "connect" in error_str:
+        if "refused" in error_str:
+            return f"无法连接到 API 服务器，连接被拒绝，请检查 API Base URL：{api_base}"
+        if "reset" in error_str:
+            return "API 连接被重置，请检查网络连接"
+        return f"无法连接到 API 服务器，请检查网络和 API 地址：{api_base}"
+
+    if "timeout" in error_str or "timed out" in error_str:
+        return f"API 连接超时，请检查网络和 API 地址：{api_base}"
+
+    if "dns" in error_str or "name or service not known" in error_str or "nodename nor servname" in error_str:
+        return f"DNS 解析失败，无法解析 API 地址：{api_base}"
+
+    if "ssl" in error_str or "certificate" in error_str:
+        return "SSL 证书验证失败，请检查 API 地址是否正确或网络环境"
+
+    if "proxy" in error_str:
+        return "代理连接失败，请检查代理配置"
+
+    if "invalid url" in error_str or "malformed" in error_str:
+        return f"API Base URL 格式无效：{api_base}"
+
+    if "insufficient_quota" in error_str or "quota" in error_str or "balance" in error_str:
+        return "API 配额不足或账户余额不足，请检查账户状态"
+
+    if "context_length" in error_str or "maximum context" in error_str:
+        return "请求内容超出模型上下文长度限制"
+
+    return f"API 连接失败：{error_msg}"
+
+
+def _normalize_api_base(api_base: str) -> str:
+    """
+    规范化 API Base URL，确保格式正确
+
+    参数:
+        api_base: 原始 API Base URL
+
+    返回:
+        规范化后的 URL
+    """
+    if not api_base:
+        return "https://api.openai.com/v1"
+
+    api_base = api_base.strip()
+
+    if not api_base.startswith("http://") and not api_base.startswith("https://"):
+        api_base = "https://" + api_base
+
+    if not api_base.endswith("/v1") and not api_base.endswith("/v1/"):
+        if api_base.endswith("/"):
+            api_base = api_base + "v1"
+        else:
+            api_base = api_base + "/v1"
+
+    return api_base
+
+
 def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[bool, str]:
     """
     测试 API 连接是否可用
@@ -152,16 +243,47 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
         (is_connected, message)
     """
     import threading
+    import re
+    from utils.logger import logger
+
+    logger.info(f"[API连接测试] 开始测试连接...")
+    logger.info(f"[API连接测试] API Base: {api_base}")
+    logger.info(f"[API连接测试] 模型名称: {model_name}")
+    logger.info(f"[API连接测试] API Key（前8后4）: {api_key[:8] + '...' + api_key[-4:] if len(api_key) > 12 else '***'}")
 
     if not api_key or not api_key.strip():
+        logger.error("[API连接测试] API Key 为空")
         return False, "API Key 为空，请先配置 API Key"
     if len(api_key.strip()) < 10:
+        logger.error("[API连接测试] API Key 格式无效")
         return False, "API Key 格式无效，请检查配置"
+
+    api_key = api_key.strip()
+    api_base = api_base.strip() if api_base else "https://api.openai.com/v1"
+    model_name = model_name.strip() if model_name else "gpt-4"
+    
+    logger.info(f"[API连接测试] 规范化后: API Base={api_base}, 模型={model_name}")
+
+    url_pattern = re.compile(
+        r'^https?://'
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+        r'localhost|'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'(?::\d+)?'
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE
+    )
+
+    if not url_pattern.match(api_base):
+        logger.error(f"[API连接测试] URL 格式无效: {api_base}")
+        return False, f"API Base URL 格式无效：{api_base}"
+    
+    logger.info("[API连接测试] URL 格式验证通过")
 
     result = [None, None]
 
     def _test():
         try:
+            logger.info("[API连接测试] 创建 ChatOpenAI 实例...")
             from langchain_openai import ChatOpenAI
             llm = ChatOpenAI(
                 api_key=api_key,
@@ -170,38 +292,40 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
                 temperature=0,
                 max_tokens=10
             )
+            logger.info("[API连接测试] 发送测试请求...")
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
+                logger.info(f"[API连接测试] 响应成功: {response.content[:50] if response.content else '空'}...")
                 result[0] = (True, "API 连接成功")
             else:
+                logger.error("[API连接测试] 响应格式异常")
                 result[0] = (False, "API 响应格式异常")
         except Exception as e:
+            import traceback
+            logger.error(f"[API连接测试] 异常: {str(e)}")
+            logger.error(f"[API连接测试] 异常堆栈: {traceback.format_exc()}")
             result[0] = (False, str(e))
 
+    logger.info("[API连接测试] 启动测试线程（超时15秒）...")
     thread = threading.Thread(target=_test)
     thread.daemon = True
     thread.start()
-    thread.join(timeout=10)
+    thread.join(timeout=15)
 
     if thread.is_alive():
-        return False, "API 连接超时，请检查 API 地址是否正确"
+        logger.error(f"[API连接测试] 超时（15秒）")
+        return False, f"API 连接超时（15秒），请检查 API 地址：{api_base}"
 
     if result[0]:
         is_connected, msg = result[0]
+        logger.info(f"[API连接测试] 测试完成: 成功={is_connected}, 消息={msg}")
         if not is_connected:
-            error_str = msg.lower()
-            if "authentication" in error_str or "api key" in error_str or "unauthorized" in error_str:
-                return False, f"API 认证失败：密钥无效或已过期"
-            elif "connection" in error_str or "connect" in error_str or "network" in error_str:
-                return False, f"无法连接到 API 服务器，请检查网络和 API 地址"
-            elif "timeout" in error_str or "timed out" in error_str:
-                return False, f"API 连接超时，请检查 API 地址是否正确"
-            elif "model" in error_str or "not found" in error_str:
-                return False, f"模型不存在或不可用：{model_name}"
-            else:
-                return False, f"API 连接失败：{msg}"
+            detailed_msg = _classify_api_error(msg, api_base, model_name)
+            logger.error(f"[API连接测试] 分类后的错误: {detailed_msg}")
+            return False, detailed_msg
         return is_connected, msg
 
+    logger.error("[API连接测试] 未知错误")
     return False, "未知错误"
 
 def sanitize_filename(filename: str, max_length: int = 100) -> str:
@@ -508,7 +632,7 @@ def read_file_with_encoding(file_path: str, encodings: List[str] = None) -> str:
         except UnicodeDecodeError:
             continue
     
-    raise UnicodeDecodeError(f"无法使用任何编码读取文件: {file_path}")
+    raise RuntimeError(f"无法使用任何编码读取文件: {file_path}")
 
 def validate_api_key(api_key: str) -> bool:
     """验证 API Key 是否有效"""
@@ -765,6 +889,14 @@ def _truncate_at_sentence_boundary(text: str, max_length: int) -> str:
     
     return text[:best_pos]
 
+def _estimate_tokens(text: str, model_name: str = "gpt-4") -> int:
+    try:
+        import tiktoken
+        encoding = tiktoken.encoding_for_model(model_name)
+        return len(encoding.encode(text))
+    except Exception:
+        return len(text) // 4
+
 def process_content_with_llm(content: str, max_tokens: int = 131072, model_name: str = "gpt-4") -> tuple:
     """
     使用LLM智能处理内容，当超出上下文限制时：
@@ -779,12 +911,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     Returns:
         (processed_content, was_summarized, was_truncated, estimated_tokens)
     """
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        estimated_tokens = len(encoding.encode(content))
-    except Exception:
-        estimated_tokens = len(content) // 4
+    estimated_tokens = _estimate_tokens(content, model_name)
     
     if estimated_tokens <= max_tokens:
         return (content, False, False, estimated_tokens)
@@ -796,12 +923,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     
     summarized_content = summarize_with_llm(content, target_ratio)
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        summarized_tokens = len(encoding.encode(summarized_content))
-    except Exception:
-        summarized_tokens = len(summarized_content) // 4
+    summarized_tokens = _estimate_tokens(summarized_content, model_name)
     
     if summarized_tokens <= max_tokens:
         logger.info(f"LLM摘要成功，压缩至{summarized_tokens} tokens")
@@ -811,12 +933,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     
     compressed_content = compress_with_llm(summarized_content, "heavy")
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        compressed_tokens = len(encoding.encode(compressed_content))
-    except Exception:
-        compressed_tokens = len(compressed_content) // 4
+    compressed_tokens = _estimate_tokens(compressed_content, model_name)
     
     if compressed_tokens <= max_tokens:
         logger.info(f"LLM压缩成功，压缩至{compressed_tokens} tokens")
@@ -831,12 +948,7 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
         suffix="\n\n---\n\n[内容已截断，超出上下文限制。已优先保留核心信息和关键逻辑。]"
     )
     
-    try:
-        import tiktoken
-        encoding = tiktoken.encoding_for_model(model_name)
-        truncated_tokens = len(encoding.encode(truncated_content))
-    except Exception:
-        truncated_tokens = len(truncated_content) // 4
+    truncated_tokens = _estimate_tokens(truncated_content, model_name)
     
     logger.info(f"策略性截断完成，最终{truncated_tokens} tokens")
     return (truncated_content, True, True, truncated_tokens)
@@ -944,3 +1056,48 @@ def optimize_markdown_format(content: str, title: str = "") -> str:
             result = f"# {title}\n\n{result}"
 
     return result
+
+
+def reformat_markdown_with_llm(content: str) -> str:
+    if not content or not content.strip():
+        return content
+
+    from config.settings import config
+    if not config.api_key:
+        return content
+
+    try:
+        from prompts import MARKDOWN_REFORMAT_PROMPT
+        result = call_llm(
+            MARKDOWN_REFORMAT_PROMPT,
+            temperature=0.2,
+            content=content
+        )
+        if result and result.strip():
+            return result
+        return content
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
+        sys.stderr.flush()
+        return content
+
+
+def smart_format_markdown(content: str, title: str = "") -> str:
+    if not content or not content.strip():
+        return content
+
+    content = clean_markdown_content(content)
+
+    h2_count = len(re.findall(r'^##\s+', content, re.MULTILINE))
+
+    if h2_count >= 2:
+        return content
+
+    from config.settings import config
+    if config.api_key:
+        result = reformat_markdown_with_llm(content)
+        if result != content:
+            return result
+
+    return optimize_markdown_format(content, title)

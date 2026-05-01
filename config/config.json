@@ -14,7 +14,7 @@
   "window_width": 1400,
   "window_height": 900,
   "web_ai_assist": false,
-  "web_include_images": false,
+  "web_include_images": true,
   "conv_ai_assist": false,
   "web_save_path": "",
   "download_mode": "standard",

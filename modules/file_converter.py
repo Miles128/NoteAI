@@ -4,22 +4,19 @@ from typing import Optional, Callable, Dict, List
 from pathlib import Path
 from abc import ABC, abstractmethod
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from config.settings import config, RAW_FOLDER
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
     ensure_dir, get_file_extension, read_file_with_encoding,
     check_api_config, APIConfigError, NetworkError, is_network_error,
-    clean_markdown_content, optimize_markdown_format,
-    extract_pdf_text, extract_pdf_pages
+    extract_pdf_text, extract_pdf_pages,
+    smart_format_markdown
 )
 from utils.tag_extractor import (
-    extract_tags_from_text,
-    add_yaml_frontmatter_to_content
+    extract_tags_from_filename,
+    add_yaml_frontmatter_to_content,
+    add_yaml_frontmatter_to_file
 )
 
 class BaseConverter(ABC):
@@ -53,10 +50,7 @@ class PDFConverter(BaseConverter):
             markdown_content = clean_text(markdown_content)
             markdown_content = self._remove_repeated_signatures(markdown_content, file_path)
 
-            if ai_assist:
-                logger.info("使用Python进行PDF内容优化...")
-                markdown_content = clean_markdown_content(markdown_content)
-                markdown_content = optimize_markdown_format(markdown_content)
+            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -149,10 +143,7 @@ class TXTConverter(BaseConverter):
 
             markdown_content = clean_text(raw_content)
 
-            if ai_assist:
-                logger.info("使用Python进行额外优化...")
-                markdown_content = clean_markdown_content(markdown_content)
-                markdown_content = optimize_markdown_format(markdown_content)
+            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -167,20 +158,21 @@ class TXTConverter(BaseConverter):
 class DOCXConverter(BaseConverter):
     """Word文档转Markdown转换器（使用mammoth）"""
 
-    SUPPORTED_FORMATS = ['.docx']
+    SUPPORTED_FORMATS = ['.docx', '.doc']
 
     def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
         """将Word文档转换为Markdown（默认启用Python优化）"""
+        ext = Path(file_path).suffix.lower()
+        if ext == '.doc':
+            raise ValueError("暂不支持 .doc 格式，请将文件另存为 .docx 后重试")
+
         logger.info(f"开始转换Word文档: {file_path} (Python优化: {ai_assist})")
 
         try:
             markdown_content = self._extract_docx_text(file_path)
             markdown_content = clean_text(markdown_content)
 
-            if ai_assist:
-                logger.info("使用Python进行Word文档内容优化...")
-                markdown_content = clean_markdown_content(markdown_content)
-                markdown_content = optimize_markdown_format(markdown_content)
+            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -199,11 +191,101 @@ class DOCXConverter(BaseConverter):
             return result.value
 
 
+class PPTConverter(BaseConverter):
+    """PPT转Markdown转换器（使用python-pptx）"""
+
+    SUPPORTED_FORMATS = ['.pptx', '.ppt']
+
+    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
+        ext = Path(file_path).suffix.lower()
+        if ext == '.ppt':
+            raise ValueError("暂不支持 .ppt 格式，请将文件另存为 .pptx 后重试")
+
+        logger.info(f"开始转换PPT: {file_path} (Python优化: {ai_assist})")
+
+        try:
+            markdown_content = self._extract_pptx_text(file_path)
+            markdown_content = clean_text(markdown_content)
+
+            markdown_content = smart_format_markdown(markdown_content)
+
+            markdown_content = remove_images_from_markdown(markdown_content)
+
+            logger.info(f"PPT转换完成: {file_path}")
+            return markdown_content
+
+        except Exception as e:
+            logger.error(f"PPT转换失败 {file_path}: {e}")
+            raise
+
+    def _extract_pptx_text(self, file_path: str) -> str:
+        from pptx import Presentation
+        prs = Presentation(file_path)
+        slides = []
+        for i, slide in enumerate(prs.slides, 1):
+            parts = [f"## 幻灯片 {i}"]
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    text = shape.text_frame.text.strip()
+                    if text:
+                        parts.append(text)
+                if shape.has_table:
+                    table = shape.table
+                    rows = []
+                    for row in table.rows:
+                        cells = [cell.text.strip() for cell in row.cells]
+                        rows.append("| " + " | ".join(cells) + " |")
+                    if rows:
+                        header = rows[0]
+                        sep = "| " + " | ".join(["---"] * len(table.columns)) + " |"
+                        parts.append(header)
+                        parts.append(sep)
+                        parts.extend(rows[1:])
+            if len(parts) > 1:
+                slides.append("\n\n".join(parts))
+        return "\n\n---\n\n".join(slides)
+
+
+class HTMLConverter(BaseConverter):
+    """HTML转Markdown转换器（使用html2text）"""
+
+    SUPPORTED_FORMATS = ['.html', '.htm']
+
+    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
+        logger.info(f"开始转换HTML: {file_path} (Python优化: {ai_assist})")
+
+        try:
+            markdown_content = self._extract_html_text(file_path)
+            markdown_content = clean_text(markdown_content)
+
+            markdown_content = smart_format_markdown(markdown_content)
+
+            markdown_content = remove_images_from_markdown(markdown_content)
+
+            logger.info(f"HTML转换完成: {file_path}")
+            return markdown_content
+
+        except Exception as e:
+            logger.error(f"HTML转换失败 {file_path}: {e}")
+            raise
+
+    def _extract_html_text(self, file_path: str) -> str:
+        import html2text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = False
+        h.body_width = 0
+        html_content = read_file_with_encoding(file_path)
+        return h.handle(html_content)
+
+
 class FileConverterManager:
     """文件转换管理器"""
 
     PDF_FORMATS = ['.pdf']
-    DOCX_FORMATS = ['.docx']
+    DOCX_FORMATS = ['.docx', '.doc']
+    PPT_FORMATS = ['.pptx', '.ppt']
+    HTML_FORMATS = ['.html', '.htm']
     TXT_FORMATS = ['.txt']
 
     def __init__(self, progress_callback: Optional[Callable] = None):
@@ -211,6 +293,8 @@ class FileConverterManager:
         self._pdf_converter = None
         self._docx_converter = None
         self._txt_converter = None
+        self._ppt_converter = None
+        self._html_converter = None
 
     @property
     def pdf_converter(self):
@@ -233,6 +317,18 @@ class FileConverterManager:
             self._txt_converter = TXTConverter(self.progress_callback)
         return self._txt_converter
 
+    @property
+    def ppt_converter(self):
+        if self._ppt_converter is None:
+            self._ppt_converter = PPTConverter(self.progress_callback)
+        return self._ppt_converter
+
+    @property
+    def html_converter(self):
+        if self._html_converter is None:
+            self._html_converter = HTMLConverter(self.progress_callback)
+        return self._html_converter
+
     def _get_converter(self, ext: str):
         """根据扩展名获取合适的转换器"""
         ext = ext.lower()
@@ -240,6 +336,10 @@ class FileConverterManager:
             return self.pdf_converter
         elif ext in self.DOCX_FORMATS:
             return self.docx_converter
+        elif ext in self.PPT_FORMATS:
+            return self.ppt_converter
+        elif ext in self.HTML_FORMATS:
+            return self.html_converter
         elif ext in self.TXT_FORMATS:
             return self.txt_converter
         else:
@@ -285,11 +385,10 @@ class FileConverterManager:
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path), ai_assist=ai_assist)
             
-            # 提取标签并添加YAML front matter
-            tags = extract_tags_from_text(markdown_content)
+            # 添加YAML front matter
             markdown_content = add_yaml_frontmatter_to_content(
                 markdown_content,
-                tags=tags,
+                tags=[],
                 source=file_path
             )
             
@@ -307,6 +406,16 @@ class FileConverterManager:
 
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(markdown_content)
+
+            tags = extract_tags_from_filename(str(output_file))
+            if tags:
+                add_yaml_frontmatter_to_file(str(output_file), tags=tags, source=file_path)
+
+            try:
+                from utils.topic_assigner import auto_assign_topic_for_file
+                auto_assign_topic_for_file(str(output_file))
+            except Exception:
+                pass
 
             result['success'] = True
             result['output_path'] = str(output_file)
@@ -346,6 +455,14 @@ class FileConverterManager:
         if self.progress_callback:
             success_count = sum(1 for r in results if r['success'])
             self.progress_callback(total, total, f"转换完成: {success_count}/{total} 成功")
+
+        try:
+            from config import config
+            from utils.tag_extractor import save_tags_md
+            if config.workspace_path:
+                save_tags_md(config.workspace_path)
+        except Exception:
+            pass
 
         return results
 
@@ -419,4 +536,4 @@ class FileConverterManager:
     @classmethod
     def get_supported_formats(cls) -> List[str]:
         """获取支持的格式列表"""
-        return cls.PDF_FORMATS + cls.DOCX_FORMATS + cls.TXT_FORMATS
+        return cls.PDF_FORMATS + cls.DOCX_FORMATS + cls.PPT_FORMATS + cls.HTML_FORMATS + cls.TXT_FORMATS

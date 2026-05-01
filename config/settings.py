@@ -86,7 +86,11 @@ class WorkspaceStateManager:
                 with open(temp_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 
-                os.fsync(os.open(temp_path, os.O_RDONLY))
+                fsync_fd = os.open(temp_path, os.O_RDONLY)
+                try:
+                    os.fsync(fsync_fd)
+                finally:
+                    os.close(fsync_fd)
                 
                 if self.state_file.exists():
                     old_path = self.state_file.with_suffix(".json.bak")
@@ -101,7 +105,7 @@ class WorkspaceStateManager:
                 if Path(temp_path).exists():
                     try:
                         Path(temp_path).unlink()
-                    except:
+                    except Exception:
                         pass
         except PermissionError:
             raise WorkspaceStateError("保存工作区状态失败：没有写入权限")
@@ -288,6 +292,22 @@ ORGANIZED_FOLDER = "Organized"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
 
+IGNORED_DIRS = {
+    "ai",
+    "wki",
+    "wiki",
+    "ai wiki",
+    "ai-wiki",
+    "ai_wiki",
+    "aiwiki",
+}
+
+
+def is_ignored_dir(dir_name: str) -> bool:
+    if not dir_name:
+        return False
+    return dir_name.lower() in IGNORED_DIRS
+
 @dataclass
 class AppConfig:
     """应用配置类"""
@@ -324,11 +344,10 @@ class AppConfig:
     window_width: int = 1400
     window_height: int = 900
     
-    # 用户界面状态配置
     # 网页下载 AI 辅助开关（独立）
     web_ai_assist: bool = False
     
-    # 网页下载图片开关
+    # 网页下载图片开关（保留外部 URL 链接，不下载到本地）
     web_include_images: bool = False
     
     # 文件转换 AI 辅助开关（独立）
@@ -440,12 +459,8 @@ class AppConfig:
         Returns:
             (is_within_limit, estimated_tokens, processed_content)
         """
-        try:
-            import tiktoken
-            encoding = tiktoken.encoding_for_model(self.model_name)
-            estimated_tokens = len(encoding.encode(content))
-        except Exception:
-            estimated_tokens = len(content) // 4
+        from utils.helpers import _estimate_tokens
+        estimated_tokens = _estimate_tokens(content, self.model_name)
         
         if estimated_tokens <= self.max_context_tokens:
             return (True, estimated_tokens, content)
@@ -576,6 +591,10 @@ class AppConfig:
             print(f"保存API配置到系统目录失败：{e}")
 
         return True, "配置保存成功"
+    
+    def save(self, config_path: str = None):
+        """保存配置到文件（save_to_file 的别名，用于向后兼容）"""
+        return self.save_to_file(config_path)
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

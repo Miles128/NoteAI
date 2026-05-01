@@ -9,22 +9,18 @@ from bs4 import BeautifulSoup
 from readability import Document
 import validators
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
     extract_title_from_markdown, ensure_dir, is_valid_url, retry_on_failure,
     check_api_config, APIConfigError, NetworkError, is_network_error,
-    clean_markdown_content, optimize_markdown_format
+    smart_format_markdown
 )
 from utils.tag_extractor import (
-    extract_tags_from_text,
-    generate_yaml_frontmatter,
-    add_yaml_frontmatter_to_content
+    extract_tags_from_filename,
+    add_yaml_frontmatter_to_content,
+    add_yaml_frontmatter_to_file
 )
 
 
@@ -38,7 +34,7 @@ class WebDownloader:
         Args:
             progress_callback: 进度回调函数
             ai_assist: 是否使用AI进行额外优化（默认False）
-            include_images: 是否在Markdown中保留图片URL链接（默认False）
+            include_images: 是否在Markdown中保留图片的外部 URL 链接（默认False，不下载图片到本地）
         """
         self.progress_callback = progress_callback
         self.ai_assist = ai_assist
@@ -182,7 +178,7 @@ class WebDownloader:
                         title = last_part.replace('-', ' ').replace('_', ' ').replace('.html', '').replace('.htm', '')
                         if title:
                             return title[:100]
-            except:
+            except Exception:
                 pass
         
         return "未命名文章"
@@ -387,13 +383,10 @@ class WebDownloader:
             img_count_after_clean = self._count_images_in_markdown(markdown_content)
             logger.info(f"clean_text后: {img_count_after_clean} 个图片链接")
 
-            if self.ai_assist:
-                logger.info("使用Python进行额外优化...")
-                markdown_content = clean_markdown_content(markdown_content)
-                markdown_content = optimize_markdown_format(markdown_content, title)
-                
-                img_count_after_optimize = self._count_images_in_markdown(markdown_content)
-                logger.info(f"AI优化后: {img_count_after_optimize} 个图片链接")
+            markdown_content = smart_format_markdown(markdown_content, title)
+
+            img_count_after_optimize = self._count_images_in_markdown(markdown_content)
+            logger.info(f"格式化后: {img_count_after_optimize} 个图片链接")
 
             if self.include_images:
                 logger.info("保留图片URL链接...")
@@ -446,7 +439,8 @@ class WebDownloader:
     ) -> List[Dict]:
         """批量下载文章"""
         results = []
-        save_dir = ensure_dir(save_path)
+        notes_dir = Path(save_path) / "Notes"
+        save_dir = ensure_dir(str(notes_dir))
         
         total = len(urls)
         for i, url in enumerate(urls):
@@ -455,31 +449,48 @@ class WebDownloader:
                 continue
             
             if self.progress_callback:
-                self.progress_callback(i + 1, total, f"正在下载: {url}")
+                self.progress_callback(i, total, f"正在下载第 {i + 1}/{total} 篇...")
             
             result = self.download_article(url)
             
             if result['success']:
-                filename = sanitize_filename(result['title']) + '.md'
+                article_title = result.get('title', '未命名文章')
+                if self.progress_callback:
+                    self.progress_callback(i + 1, total, f"正在保存: {article_title}")
+                
+                filename = sanitize_filename(article_title) + '.md'
                 file_path = save_dir / filename
 
                 try:
-                    tags = extract_tags_from_text(result['content'])
                     content_with_frontmatter = add_yaml_frontmatter_to_content(
                         result['content'],
-                        title=result['title'],
-                        tags=tags,
+                        title=article_title,
+                        tags=[],
                         source=url
                     )
                     
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(content_with_frontmatter)
+
+                    tags = extract_tags_from_filename(str(file_path))
+                    if tags:
+                        add_yaml_frontmatter_to_file(str(file_path), tags=tags, source=url)
+
+                    try:
+                        from utils.topic_assigner import auto_assign_topic_for_file
+                        auto_assign_topic_for_file(str(file_path))
+                    except Exception:
+                        pass
+
                     result['file_path'] = str(file_path)
                     result['tags'] = tags
                     logger.info(f"已保存: {file_path}")
                 except Exception as e:
                     result['error'] = f"保存失败: {str(e)}"
                     logger.error(f"保存失败: {e}")
+            else:
+                if self.progress_callback:
+                    self.progress_callback(i + 1, total, f"下载失败: {url}")
             
             results.append(result)
             
@@ -488,8 +499,16 @@ class WebDownloader:
         
         if self.progress_callback:
             success_count = sum(1 for r in results if r['success'])
-            self.progress_callback(total, total, f"下载完成: {success_count}/{total} 成功")
-        
+            self.progress_callback(total, total, f"下载完成: {success_count}/{total} 篇成功")
+
+        try:
+            from config import config
+            from utils.tag_extractor import save_tags_md
+            if config.workspace_path:
+                save_tags_md(config.workspace_path)
+        except Exception:
+            pass
+
         return results
 
     def _convert_with_markdownify(self, html_content: str) -> str:

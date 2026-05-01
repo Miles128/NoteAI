@@ -819,7 +819,7 @@ class SidecarServer:
         return {"success": True, "topic": None, "message": "主题已分配或无法自动分配"}
 
     def _batch_auto_assign_topics(self, params):
-        from utils.topic_assigner import auto_assign_topic_for_file, load_pending, _check_topic_needs_processing
+        from utils.topic_assigner import auto_assign_topic_for_file, load_pending, save_pending, _check_topic_needs_processing
         import re
 
         workspace = config.workspace_path
@@ -844,8 +844,9 @@ class SidecarServer:
                     continue
                 md_files.append(md_file)
 
-        auto_assigned = 0
-        need_confirm = 0
+        save_pending([])
+
+        files_to_process = 0
         skipped = 0
 
         for md_file in md_files:
@@ -865,10 +866,11 @@ class SidecarServer:
                 continue
 
             auto_assign_topic_for_file(str(md_file))
-            auto_assigned += 1
+            files_to_process += 1
 
         pending = load_pending()
         need_confirm = len(pending)
+        auto_assigned = files_to_process - need_confirm
 
         return {
             "success": True,

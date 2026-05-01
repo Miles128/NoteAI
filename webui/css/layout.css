@@ -242,6 +242,40 @@ body {
     height: 100%;
 }
 
+.sidebar-footer {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--sidebar-bg);
+}
+
+.sidebar-footer-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.sidebar-footer-btn:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+    border-color: var(--border);
+}
+
+.sidebar-footer-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .sidebar-right {
     display: flex;
     flex-direction: column;

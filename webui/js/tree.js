@@ -657,12 +657,7 @@ async function loadTopicTree() {
             return;
         }
 
-        var html = '<div class="topic-action-bar">';
-        html += '<button class="topic-action-btn" onclick="onBatchAutoAssignTopics()" title="扫描所有未分配主题的文件，自动匹配或加入待确认列表">';
-        html += '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-        html += ' 确认主题</button>';
-        html += '</div>';
-        html += '<div class="sidebar-tags-list">';
+        var html = '<div class="sidebar-tags-list">';
         result.topics.forEach(function(topic) {
             html += '<div class="sidebar-tag-group" data-topic-name="' + escapeAttr(topic.name) + '">';
             html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-topic-name="' + escapeAttr(topic.name) + '">';
@@ -1014,10 +1009,10 @@ function startTopicRename(tagNameEl, oldTopicName) {
 }
 
 async function onBatchAutoAssignTopics() {
-    var btn = document.querySelector('.topic-action-btn');
+    var btn = document.getElementById('btn-auto-topic');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '处理中...';
+        btn.style.opacity = '0.5';
     }
 
     try {
@@ -1044,7 +1039,7 @@ async function onBatchAutoAssignTopics() {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 确认主题';
+            btn.style.opacity = '1';
         }
     }
 }

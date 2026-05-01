@@ -2,7 +2,11 @@
 
 ## 项目简介
 
+<<<<<<< tr35
 NoteAI 是一个功能完善的 AI 驱动 Markdown 笔记知识库管理桌面应用。使用**Tauri**作为前端框架，结合 HTML/CSS/JS 构建现代化界面，集成 LangChain 实现 AI 相关功能。
+=======
+NoteAI是一个功能完善的AI驱动Markdown笔记知识库管理桌面应用，使用Python和Tauri开发，集成了Langchain实现AI相关功能。 核心功能-网络文章批量下载，多格式文件批量转换，智能笔记主题整合。
+>>>>>>> main
 
 ## 核心功能
 

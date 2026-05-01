@@ -4,6 +4,39 @@ import sys
 from pathlib import Path
 from config.settings import config
 
+try:
+    import jieba
+    JIEBA_AVAILABLE = True
+except ImportError:
+    jieba = None
+    JIEBA_AVAILABLE = False
+
+MIN_TAG_LENGTH = 2
+
+
+def is_chinese_word(word: str) -> bool:
+    return bool(re.search(r'[\u4e00-\u9fff]', word))
+
+
+def is_english_word(word: str) -> bool:
+    return bool(re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', word))
+
+
+def tokenize_text(text: str) -> list:
+    if not text:
+        return []
+    
+    if JIEBA_AVAILABLE and jieba:
+        try:
+            tokens = jieba.lcut(text)
+            return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
+        except Exception:
+            pass
+    
+    text = re.sub(r'[（(].*?[）)]', '', text)
+    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', text)
+    return [p.strip() for p in parts if p.strip() and len(p.strip()) >= MIN_TAG_LENGTH]
+
 
 def _get_pending_path():
     workspace = config.workspace_path
@@ -313,6 +346,97 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         return False
 
 
+def _check_topic_needs_processing(yaml_text: str) -> bool:
+    """
+    检查文件的 topic 状态是否需要处理
+    返回 True 如果：
+    - 没有 topic 标签
+    - 或 topic 标签为空
+    - 或 topic 标签不唯一（列表形式有多个值）
+    """
+    has_topic = False
+    topic_value = None
+    
+    for line in yaml_text.split('\n'):
+        idx = line.find(':')
+        if idx < 0:
+            continue
+        key = line[:idx].strip()
+        val = line[idx + 1:].strip()
+        if key == 'topic':
+            has_topic = True
+            topic_value = val
+            break
+    
+    if not has_topic:
+        return True
+    
+    if not topic_value or topic_value.strip() == '':
+        return True
+    
+    if topic_value.startswith('[') and topic_value.endswith(']'):
+        items = [t.strip().strip("'\"") for t in topic_value[1:-1].split(',') if t.strip()]
+        if len(items) > 1:
+            return True
+        if len(items) == 0:
+            return True
+    
+    return False
+
+
+def _has_consecutive_two_words_match(topic_tokens: list, filename: str) -> bool:
+    """
+    第一优先级匹配：主题分词后是否有连续的两个词在文件名中出现
+    例如：主题["机器", "学习", "基础"] -> 检查"机器学习"、"学习基础"是否在文件名中
+    """
+    filename_lower = filename.lower()
+    
+    for i in range(len(topic_tokens) - 1):
+        word1 = topic_tokens[i]
+        word2 = topic_tokens[i + 1]
+        
+        combined_no_space = (word1 + word2).lower()
+        combined_with_space = (word1 + " " + word2).lower()
+        
+        if combined_no_space in filename_lower:
+            return True
+        if combined_with_space in filename_lower:
+            return True
+    
+    return False
+
+
+def _is_meaningful_tag(tag: str) -> bool:
+    """
+    检查 tag 是否足够"有意义"：
+    - 英文：>4个字母
+    - 中文：>2个汉字
+    - 中英混合：满足其中之一即可
+    """
+    if not tag or len(tag) < 2:
+        return False
+    
+    chinese_chars = re.findall(r'[\u4e00-\u9fff]', tag)
+    if len(chinese_chars) > 2:
+        return True
+    
+    english_letters = re.findall(r'[a-zA-Z]', tag)
+    if len(english_letters) > 4:
+        return True
+    
+    return False
+
+
+def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
+    """
+    检查单词是否足够有意义且在主题名中出现
+    """
+    if not _is_meaningful_tag(word):
+        return False
+    
+    return word.lower() in topic_name.lower()
+
+
 def auto_assign_topic_for_file(file_path):
     workspace = config.workspace_path
     if not workspace:
@@ -341,37 +465,47 @@ def auto_assign_topic_for_file(file_path):
             continue
         key = line[:idx].strip()
         val = line[idx + 1:].strip()
-        if key == 'topic':
-            return
         if key == 'tags' and val.startswith('[') and val.endswith(']'):
             tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
         elif key == 'title':
             title = val.strip().strip("'\"")
 
+    if not _check_topic_needs_processing(yaml_text):
+        return
+
     headings = parse_wiki_headings()
-    matched = []
+    if not headings:
+        return
+
+    filename = full_path.stem
+
+    high_priority_candidates = []
+    low_priority_candidates = []
 
     for h in headings:
         h_name = h["name"]
-        tag_match = False
-        for tag in tags:
-            if tag.lower() in h_name.lower() or h_name.lower() in tag.lower():
-                tag_match = True
-                break
-        if tag_match:
-            matched.append(h)
+        topic_tokens = tokenize_text(h_name)
+
+        if _has_consecutive_two_words_match(topic_tokens, filename):
+            high_priority_candidates.append(h)
             continue
-        for i in range(len(h_name) - 2):
-            if h_name[i:i + 3] in title:
-                matched.append(h)
+
+        for tag in tags:
+            if _has_meaningful_word_match(tag, h_name):
+                if h not in low_priority_candidates:
+                    low_priority_candidates.append(h)
                 break
 
-    if len(matched) == 1:
-        write_topic_to_file(str(full_path), matched[0]["name"])
-        return
+        for token in topic_tokens:
+            if _is_meaningful_tag(token) and token.lower() in filename.lower():
+                if h not in low_priority_candidates and h not in high_priority_candidates:
+                    low_priority_candidates.append(h)
+                break
 
-    if len(matched) >= 2:
-        candidates = [h["name"] for h in matched]
+    if high_priority_candidates:
+        candidates = [h["name"] for h in high_priority_candidates]
+    elif low_priority_candidates:
+        candidates = [h["name"] for h in low_priority_candidates]
     elif config.api_key:
         try:
             from utils.helpers import call_llm
@@ -387,6 +521,12 @@ def auto_assign_topic_for_file(file_path):
     if not candidates:
         return
 
+    if len(candidates) == 1:
+        write_topic_to_file(str(full_path), candidates[0])
+        rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
+        add_file_to_wiki_topic(rel, candidates[0], title)
+        return
+
     pending = load_pending()
     rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
     pending.append({
@@ -394,7 +534,7 @@ def auto_assign_topic_for_file(file_path):
         "title": title,
         "tags": tags,
         "candidates": candidates,
-        "source": "wiki" if matched else "llm"
+        "source": "wiki"
     })
     save_pending(pending)
 

@@ -657,7 +657,12 @@ async function loadTopicTree() {
             return;
         }
 
-        var html = '<div class="sidebar-tags-list">';
+        var html = '<div class="topic-action-bar">';
+        html += '<button class="topic-action-btn" onclick="onBatchAutoAssignTopics()" title="扫描所有未分配主题的文件，自动匹配或加入待确认列表">';
+        html += '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+        html += ' 确认主题</button>';
+        html += '</div>';
+        html += '<div class="sidebar-tags-list">';
         result.topics.forEach(function(topic) {
             html += '<div class="sidebar-tag-group" data-topic-name="' + escapeAttr(topic.name) + '">';
             html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-topic-name="' + escapeAttr(topic.name) + '">';
@@ -1006,6 +1011,42 @@ function startTopicRename(tagNameEl, oldTopicName) {
         }
     };
     parentRow.addEventListener('click', rowClickHandler);
+}
+
+async function onBatchAutoAssignTopics() {
+    var btn = document.querySelector('.topic-action-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '处理中...';
+    }
+
+    try {
+        var result = await window.api.batch_auto_assign_topics();
+        if (result && result.success) {
+            await loadTopicTree();
+
+            if (result.pending && result.pending.length > 0) {
+                loadTopicPendingPanel(result.pending);
+                var pendingPanel = document.getElementById('topic-pending-panel');
+                if (pendingPanel) pendingPanel.style.display = '';
+            }
+
+            var msg = '扫描完成：共 ' + result.total + ' 个文件';
+            msg += '，自动分配 ' + result.auto_assigned + ' 个';
+            msg += '，待确认 ' + result.need_confirm + ' 个';
+            msg += '，跳过 ' + result.skipped + ' 个';
+            console.log('[Topic] ' + msg);
+        } else {
+            console.error('[Topic] batch failed:', result);
+        }
+    } catch (e) {
+        console.error('[Topic] batch error:', e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 确认主题';
+        }
+    }
 }
 
 async function loadTopicView() {

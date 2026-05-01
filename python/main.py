@@ -90,6 +90,7 @@ class SidecarServer:
             "auto_tag_files": self._auto_tag_files,
             "save_tags_md": self._save_tags_md,
             "auto_assign_topic": self._auto_assign_topic,
+            "batch_auto_assign_topics": self._batch_auto_assign_topics,
             "get_pending_topics": self._get_pending_topics,
             "resolve_topic": self._resolve_topic,
             "rename_topic": self._rename_topic,
@@ -816,6 +817,67 @@ class SidecarServer:
                 return {"success": True, "pending": True, "candidates": p.get("candidates", []), "source": p.get("source", "")}
 
         return {"success": True, "topic": None, "message": "主题已分配或无法自动分配"}
+
+    def _batch_auto_assign_topics(self, params):
+        from utils.topic_assigner import auto_assign_topic_for_file, load_pending, _check_topic_needs_processing
+        import re
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        wiki_path = Path(workspace) / "WIKI.md"
+        if not wiki_path.exists():
+            return {"success": False, "message": "WIKI.md 不存在，请先提取主题"}
+
+        excluded_dirs = {'AI Wiki', '.git', '.obsidian', '.trash'}
+        md_files = []
+        for folder in Path(workspace).iterdir():
+            if not folder.is_dir():
+                continue
+            if folder.name in excluded_dirs or folder.name.startswith('.'):
+                continue
+            for md_file in folder.rglob('*.md'):
+                if md_file.name.startswith('.'):
+                    continue
+                if is_ignored_dir(str(md_file)):
+                    continue
+                md_files.append(md_file)
+
+        auto_assigned = 0
+        need_confirm = 0
+        skipped = 0
+
+        for md_file in md_files:
+            try:
+                text = md_file.read_text(encoding='utf-8')
+            except Exception:
+                skipped += 1
+                continue
+
+            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+            if not m:
+                skipped += 1
+                continue
+
+            if not _check_topic_needs_processing(m.group(1)):
+                skipped += 1
+                continue
+
+            auto_assign_topic_for_file(str(md_file))
+            auto_assigned += 1
+
+        pending = load_pending()
+        need_confirm = len(pending)
+
+        return {
+            "success": True,
+            "total": len(md_files),
+            "auto_assigned": auto_assigned,
+            "need_confirm": need_confirm,
+            "skipped": skipped,
+            "pending": pending
+        }
 
     def _get_pending_topics(self, params):
         from utils.topic_assigner import load_pending

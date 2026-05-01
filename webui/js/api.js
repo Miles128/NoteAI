@@ -79,6 +79,10 @@ async function autoAssignTopic(filePath) {
     return pyCall('auto_assign_topic', { file_path: filePath });
 }
 
+async function batchAutoAssignTopics() {
+    return pyCall('batch_auto_assign_topics', {});
+}
+
 async function getPendingTopics() {
     return pyCall('get_pending_topics');
 }
@@ -294,6 +298,7 @@ window.api = {
     auto_tag_files: autoTagFiles,
     save_tags_md: saveTagsMd,
     auto_assign_topic: autoAssignTopic,
+    batch_auto_assign_topics: batchAutoAssignTopics,
     get_pending_topics: getPendingTopics,
     resolve_topic: resolveTopic,
     rename_topic: renameTopic,

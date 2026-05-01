@@ -625,60 +625,14 @@ class SidecarServer:
         return {"tags": [{"name": t, "count": len(f), "files": f} for t, f in sorted_tags]}
 
     def _get_topic_tree(self, params):
-        import re
-        workspace = config.workspace_path
-        if not workspace:
-            return {"topics": [], "pending": []}
-
-        topic_map = {}
-
-        def _scan(path):
-            try:
-                entries = list(Path(path).iterdir())
-            except (PermissionError, OSError):
-                return
-            for entry in sorted(entries, key=lambda p: p.name.lower()):
-                if entry.name.startswith('.'):
-                    continue
-                if entry.is_dir():
-                    if is_ignored_dir(entry.name):
-                        continue
-                    _scan(str(entry))
-                elif entry.suffix.lower() == '.md':
-                    try:
-                        text = entry.read_text(encoding='utf-8')
-                        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                        if not m:
-                            continue
-                        yaml_text = m.group(1)
-                        try:
-                            rel = str(entry.relative_to(workspace))
-                        except ValueError:
-                            continue
-                        title = entry.stem
-                        for line in yaml_text.split('\n'):
-                            idx = line.find(':')
-                            if idx < 0:
-                                continue
-                            key = line[:idx].strip()
-                            val = line[idx + 1:].strip().strip("'\"")
-                            if key == 'topic' and val:
-                                if val not in topic_map:
-                                    topic_map[val] = []
-                                topic_map[val].append({"title": title, "path": rel})
-                            elif key == 'title' and val:
-                                title = val
-                    except Exception:
-                        pass
+        from utils.topic_assigner import parse_wiki_structure
 
         try:
-            _scan(workspace)
-        except Exception:
-            pass
-
-        topics = []
-        for name in sorted(topic_map.keys()):
-            topics.append({"name": name, "files": topic_map[name]})
+            topics = parse_wiki_structure()
+        except Exception as e:
+            sys.stderr.write(f"[topic_tree] parse_wiki_structure failed: {e}\n")
+            sys.stderr.flush()
+            topics = []
 
         try:
             pending = self._load_pending_topics()
@@ -892,6 +846,24 @@ class SidecarServer:
         add_file_to_wiki_topic(file_path, topic, file_title)
 
         return {"success": True, "topic": topic}
+
+    def _rename_topic(self, params):
+        from utils.topic_assigner import rename_topic
+        old_topic = params.get("old_topic", "")
+        new_topic = params.get("new_topic", "")
+        if not old_topic or not new_topic:
+            return {"success": False, "message": "参数不完整"}
+
+        return rename_topic(old_topic, new_topic)
+
+    def _move_file_to_topic(self, params):
+        from utils.topic_assigner import move_file_to_topic
+        file_path = params.get("file_path", "")
+        new_topic = params.get("new_topic", "")
+        if not file_path or not new_topic:
+            return {"success": False, "message": "参数不完整"}
+
+        return move_file_to_topic(file_path, new_topic)
 
     def _test_api_connection(self, params):
         try:

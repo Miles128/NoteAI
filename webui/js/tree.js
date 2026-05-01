@@ -419,10 +419,10 @@ async function loadTopicTree() {
 
         var html = '<div class="sidebar-tags-list">';
         result.topics.forEach(function(topic) {
-            html += '<div class="sidebar-tag-group">';
-            html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+            html += '<div class="sidebar-tag-group" data-topic-name="' + escapeAttr(topic.name) + '">';
+            html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-topic-name="' + escapeAttr(topic.name) + '">';
             html += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-            html += '<span class="sidebar-tag-name">' + escapeHtml(topic.name) + '</span>';
+            html += '<span class="sidebar-tag-name" data-topic-name="' + escapeAttr(topic.name) + '">' + escapeHtml(topic.name) + '</span>';
             html += '<span class="sidebar-tag-count">' + topic.files.length + '</span>';
             html += '</div>';
             html += '<div class="sidebar-tag-files">';
@@ -430,7 +430,7 @@ async function loadTopicTree() {
                 var display = f.title || '未命名';
                 var path = f.path || '';
                 if (path) {
-                    html += '<div class="sidebar-tag-file tree-item" onclick="window.TreeModule.selectFile(\'' + escapeAttr(path) + '\', \'' + escapeAttr(display) + '\')">';
+                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + escapeAttr(path) + '" onclick="window.TreeModule.selectFile(\'' + escapeAttr(path) + '\', \'' + escapeAttr(display) + '\')">';
                 } else {
                     html += '<div class="sidebar-tag-file tree-item">';
                 }
@@ -443,11 +443,257 @@ async function loadTopicTree() {
         });
         html += '</div>';
 
+        html += '<div class="topic-context-menu" id="topic-context-menu" style="display:none;">';
+        html += '<div class="topic-menu-item" data-action="rename">重命名</div>';
+        html += '</div>';
+
+        html += '<style>';
+        html += '.topic-context-menu { position: fixed; z-index: 10000; background: var(--background-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 4px 0; min-width: 120px; }';
+        html += '.topic-menu-item { padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text-normal); }';
+        html += '.topic-menu-item:hover { background: var(--interactive-hover); }';
+        html += '.sidebar-tag-row { position: relative; }';
+        html += '.sidebar-tag-row.drag-over { background: var(--background-modifier-hover); outline: 1px solid var(--text-accent); outline-offset: -1px; }';
+        html += '.sidebar-tag-row.drag-over-top { border-top: 2px solid var(--text-accent); }';
+        html += '.sidebar-tag-file.dragging { opacity: 0.4; }';
+        html += '.topic-rename-input { background: var(--background-modifier-hover); border: 1px solid var(--text-accent); border-radius: 4px; padding: 2px 6px; color: var(--text-normal); font-size: 13px; outline: none; min-width: 80px; }';
+        html += '</style>';
+
         container.innerHTML = html;
+
+        setupTopicDragDrop(container);
+        setupTopicContextMenu(container);
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
         container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
     }
+}
+
+function setupTopicDragDrop(container) {
+    var dragData = { filePath: null, fileName: null };
+
+    container.addEventListener('dragstart', function(e) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        if (!fileEl) return;
+
+        var filePath = fileEl.getAttribute('data-file-path');
+        if (!filePath) return;
+
+        dragData.filePath = filePath;
+        dragData.fileName = fileEl.querySelector('.tree-name')?.textContent || '文件';
+        fileEl.classList.add('dragging');
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', filePath);
+        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(dragData.fileName) + '</span>');
+    });
+
+    container.addEventListener('dragend', function(e) {
+        var fileEl = e.target.closest('.sidebar-tag-file');
+        if (fileEl) fileEl.classList.remove('dragging');
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        dragData.filePath = null;
+        dragData.fileName = null;
+    });
+
+    container.addEventListener('dragover', function(e) {
+        if (!dragData.filePath) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        var groupEl = e.target.closest('.sidebar-tag-group');
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+
+        if (rowEl) {
+            var srcGroup = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
+            var srcTopic = srcGroup?.getAttribute('data-topic-name');
+            var targetTopic = rowEl.getAttribute('data-topic-name');
+
+            if (srcTopic !== targetTopic) {
+                rowEl.classList.add('drag-over');
+            }
+        } else if (groupEl) {
+            var srcGroup2 = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
+            var srcTopic2 = srcGroup2?.getAttribute('data-topic-name');
+            var targetTopic2 = groupEl.getAttribute('data-topic-name');
+
+            if (srcTopic2 !== targetTopic2) {
+                var row = groupEl.querySelector('.sidebar-tag-row');
+                if (row) row.classList.add('drag-over');
+            }
+        }
+    });
+
+    container.addEventListener('dragleave', function(e) {
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
+    });
+
+    container.addEventListener('drop', function(e) {
+        e.preventDefault();
+
+        if (!dragData.filePath) return;
+
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        var groupEl = e.target.closest('.sidebar-tag-group');
+
+        var targetTopic = null;
+        if (rowEl) {
+            targetTopic = rowEl.getAttribute('data-topic-name');
+        } else if (groupEl) {
+            targetTopic = groupEl.getAttribute('data-topic-name');
+        }
+
+        if (!targetTopic) return;
+
+        var srcGroup = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
+        var srcTopic = srcGroup?.getAttribute('data-topic-name');
+
+        if (srcTopic === targetTopic) {
+            return;
+        }
+
+        console.log('[Topic] Move file:', dragData.filePath, 'from:', srcTopic, 'to:', targetTopic);
+
+        window.api.move_file_to_topic(dragData.filePath, targetTopic).then(function(result) {
+            console.log('[Topic] move result:', result);
+            if (result && result.success) {
+                loadTopicTree();
+            } else {
+                console.error('[Topic] move failed:', result);
+            }
+        }).catch(function(e) {
+            console.error('[Topic] move error:', e);
+        });
+
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            row.classList.remove('drag-over', 'drag-over-top');
+        });
+    });
+}
+
+function setupTopicContextMenu(container) {
+    var menu = document.getElementById('topic-context-menu');
+    var currentTopicName = null;
+    var currentTagNameEl = null;
+
+    function hideMenu() {
+        if (menu) menu.style.display = 'none';
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!menu || !menu.contains(e.target)) {
+            hideMenu();
+        }
+    });
+
+    container.addEventListener('contextmenu', function(e) {
+        var tagNameEl = e.target.closest('.sidebar-tag-name');
+        var tagRowEl = e.target.closest('.sidebar-tag-row');
+
+        if (tagNameEl || (tagRowEl && !e.target.closest('.sidebar-tag-file'))) {
+            e.preventDefault();
+            var topicName = (tagNameEl?.getAttribute('data-topic-name')) || (tagRowEl?.getAttribute('data-topic-name'));
+            if (!topicName) return;
+
+            currentTopicName = topicName;
+            currentTagNameEl = tagNameEl || tagRowEl?.querySelector('.sidebar-tag-name');
+
+            if (menu) {
+                menu.style.left = e.pageX + 'px';
+                menu.style.top = e.pageY + 'px';
+                menu.style.display = 'block';
+            }
+        }
+    });
+
+    if (menu) {
+        menu.addEventListener('click', function(e) {
+            var item = e.target.closest('.topic-menu-item');
+            if (!item) return;
+
+            var action = item.getAttribute('data-action');
+            hideMenu();
+
+            if (action === 'rename' && currentTopicName && currentTagNameEl) {
+                startTopicRename(currentTagNameEl, currentTopicName);
+            }
+        });
+    }
+}
+
+function startTopicRename(tagNameEl, oldTopicName) {
+    var parentRow = tagNameEl.closest('.sidebar-tag-row');
+    if (!parentRow) return;
+
+    var originalHtml = tagNameEl.innerHTML;
+    var originalDisplay = tagNameEl.style.display;
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'topic-rename-input';
+    input.value = oldTopicName;
+    input.style.minWidth = (tagNameEl.offsetWidth + 20) + 'px';
+
+    tagNameEl.style.display = 'none';
+    parentRow.insertBefore(input, tagNameEl.nextSibling);
+    input.focus();
+    input.select();
+
+    function finishRename(cancel) {
+        var newName = input.value.trim();
+        input.remove();
+        tagNameEl.style.display = originalDisplay;
+
+        if (cancel || !newName || newName === oldTopicName) {
+            return;
+        }
+
+        console.log('[Topic] Rename:', oldTopicName, '->', newName);
+
+        window.api.rename_topic(oldTopicName, newName).then(function(result) {
+            console.log('[Topic] rename result:', result);
+            if (result && result.success) {
+                loadTopicTree();
+            } else {
+                console.error('[Topic] rename failed:', result);
+            }
+        }).catch(function(e) {
+            console.error('[Topic] rename error:', e);
+        });
+    }
+
+    input.addEventListener('blur', function() {
+        finishRename(false);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            input.blur();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            finishRename(true);
+        }
+    });
+
+    input.addEventListener('click', function(e) {
+        e.stopPropagation();
+    });
+
+    var rowClickHandler = function(e) {
+        if (e.target === input || e.target.closest('.topic-rename-input')) {
+            e.stopPropagation();
+        }
+    };
+    parentRow.addEventListener('click', rowClickHandler);
 }
 
 async function loadTopicView() {

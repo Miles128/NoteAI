@@ -87,6 +87,14 @@ async function resolveTopic(filePath, topic) {
     return pyCall('resolve_topic', { file_path: filePath, topic: topic });
 }
 
+async function renameTopic(oldTopic, newTopic) {
+    return pyCall('rename_topic', { old_topic: oldTopic, new_topic: newTopic });
+}
+
+async function moveFileToTopic(filePath, newTopic) {
+    return pyCall('move_file_to_topic', { file_path: filePath, new_topic: newTopic });
+}
+
 async function getApiConfig() {
     return pyCall('get_api_config');
 }
@@ -237,6 +245,8 @@ window.api = {
     autoAssignTopic: autoAssignTopic,
     getPendingTopics: getPendingTopics,
     resolveTopic: resolveTopic,
+    renameTopic: renameTopic,
+    moveFileToTopic: moveFileToTopic,
     getApiConfig: getApiConfig,
     saveApiConfig: saveApiConfig,
     getUiConfig: getUiConfig,
@@ -274,6 +284,8 @@ window.api = {
     auto_assign_topic: autoAssignTopic,
     get_pending_topics: getPendingTopics,
     resolve_topic: resolveTopic,
+    rename_topic: renameTopic,
+    move_file_to_topic: moveFileToTopic,
     get_api_config: getApiConfig,
     save_api_config: saveApiConfig,
     get_ui_config: getUiConfig,

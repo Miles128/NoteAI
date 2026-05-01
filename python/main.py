@@ -92,6 +92,8 @@ class SidecarServer:
             "auto_assign_topic": self._auto_assign_topic,
             "get_pending_topics": self._get_pending_topics,
             "resolve_topic": self._resolve_topic,
+            "rename_topic": self._rename_topic,
+            "move_file_to_topic": self._move_file_to_topic,
             "test_api_connection": self._test_api_connection,
             "on_file_selected": self._on_file_selected,
             "refresh_log": self._refresh_log,

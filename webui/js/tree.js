@@ -955,10 +955,14 @@ function startTopicRename(tagNameEl, oldTopicName) {
     input.focus();
     input.select();
 
+    var finished = false;
     function finishRename(cancel) {
+        if (finished) return;
+        finished = true;
+
         var newName = input.value.trim();
         input.remove();
-        tagNameEl.style.display = originalDisplay;
+        tagNameEl.style.display = originalDisplay || '';
 
         if (cancel || !newName || newName === oldTopicName) {
             return;

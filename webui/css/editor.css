@@ -125,12 +125,12 @@
 
 .cm-editor {
     height: 100%;
-    font-size: 13px;
+    font-size: 18px;
     line-height: 1.6;
 }
 
 .cm-scroller {
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+    font-family: 'Iosevka Web', 'iA Writer Mono S', 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Monaco', monospace;
     line-height: 1.6;
 }
 

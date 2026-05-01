@@ -144,12 +144,21 @@
             <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
             <div class="sidebar-view-container" id="sidebar-topic" style="display: none;"></div>
             <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
-            <div class="sidebar-footer">
-                <button class="sidebar-footer-btn" id="btn-add-topic" onclick="onAddTopic()" title="添加主题：创建新的主题分类">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <div class="sidebar-topic-input" id="sidebar-topic-input" style="display: none;">
+                <input type="text" class="topic-input" id="topic-input-field" placeholder="输入主题名称...">
+                <button class="topic-input-btn topic-input-cancel" id="topic-input-cancel" title="取消">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
+                <button class="topic-input-btn topic-input-confirm" id="topic-input-confirm" title="确认创建主题">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+            </div>
+            <div class="sidebar-footer">
                 <button class="sidebar-footer-btn" id="btn-auto-topic" onclick="onBatchAutoAssignTopics()" title="确认主题：扫描所有未分配主题的文件">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </button>
+                <button class="sidebar-footer-btn" id="btn-add-topic" onclick="onShowTopicInput()" title="添加主题：创建新的主题分类">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
             </div>
         </div>

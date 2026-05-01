@@ -1044,30 +1044,85 @@ async function onBatchAutoAssignTopics() {
     }
 }
 
-async function onAddTopic() {
-    var btn = document.getElementById('btn-add-topic');
-    if (btn) {
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
+function onShowTopicInput() {
+    var inputPanel = document.getElementById('sidebar-topic-input');
+    var inputField = document.getElementById('topic-input-field');
+    var confirmBtn = document.getElementById('topic-input-confirm');
+    
+    if (!inputPanel || !inputField) return;
+    
+    inputPanel.style.display = '';
+    inputField.value = '';
+    inputField.focus();
+    
+    if (confirmBtn) {
+        confirmBtn.classList.remove('has-text');
+        confirmBtn.disabled = true;
     }
+}
 
+function onHideTopicInput() {
+    var inputPanel = document.getElementById('sidebar-topic-input');
+    var inputField = document.getElementById('topic-input-field');
+    
+    if (inputPanel) {
+        inputPanel.style.display = 'none';
+    }
+    if (inputField) {
+        inputField.value = '';
+    }
+}
+
+function onTopicInputChange() {
+    var inputField = document.getElementById('topic-input-field');
+    var confirmBtn = document.getElementById('topic-input-confirm');
+    
+    if (!inputField || !confirmBtn) return;
+    
+    var hasText = inputField.value.trim().length > 0;
+    
+    if (hasText) {
+        confirmBtn.classList.add('has-text');
+        confirmBtn.disabled = false;
+    } else {
+        confirmBtn.classList.remove('has-text');
+        confirmBtn.disabled = true;
+    }
+}
+
+async function onConfirmTopic() {
+    var inputField = document.getElementById('topic-input-field');
+    var confirmBtn = document.getElementById('topic-input-confirm');
+    var addBtn = document.getElementById('btn-add-topic');
+    
+    var topicName = inputField ? inputField.value.trim() : '';
+    if (!topicName) {
+        onHideTopicInput();
+        return;
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+    }
+    if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+    }
+    
     try {
-        var topicName = prompt('请输入主题名称：');
-        if (!topicName || !topicName.trim()) {
-            return;
-        }
-        topicName = topicName.trim();
-
         var createResult = await window.api.create_topic(topicName);
         if (!createResult || !createResult.success) {
             alert(createResult ? createResult.message : '创建主题失败');
+            if (inputField) inputField.focus();
             return;
         }
-
+        
         console.log('[Topic] 主题创建成功:', topicName);
-
+        
+        onHideTopicInput();
+        
         await loadTopicTree();
-
+        
         var batchResult = await window.api.batch_auto_assign_topics();
         if (batchResult && batchResult.success) {
             if (batchResult.pending && batchResult.pending.length > 0) {
@@ -1075,7 +1130,7 @@ async function onAddTopic() {
                 var pendingPanel = document.getElementById('topic-pending-panel');
                 if (pendingPanel) pendingPanel.style.display = '';
             }
-
+            
             var msg = '主题「' + topicName + '」创建成功。扫描完成：';
             msg += '自动分配 ' + batchResult.auto_assigned + ' 个';
             msg += '，待确认 ' + batchResult.need_confirm + ' 个';
@@ -1084,11 +1139,55 @@ async function onAddTopic() {
     } catch (e) {
         console.error('[Topic] add topic error:', e);
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.style.opacity = '1';
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+        }
+        if (addBtn) {
+            addBtn.disabled = false;
+            addBtn.style.opacity = '1';
         }
     }
+}
+
+function setupTopicInputEvents() {
+    var inputField = document.getElementById('topic-input-field');
+    var cancelBtn = document.getElementById('topic-input-cancel');
+    var confirmBtn = document.getElementById('topic-input-confirm');
+    
+    if (inputField) {
+        inputField.addEventListener('input', onTopicInputChange);
+        inputField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onConfirmTopic();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                onHideTopicInput();
+            }
+        });
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onHideTopicInput();
+        });
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onConfirmTopic();
+        });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupTopicInputEvents);
+} else {
+    setupTopicInputEvents();
 }
 
 async function loadTopicView() {

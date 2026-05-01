@@ -276,6 +276,77 @@ body {
     cursor: not-allowed;
 }
 
+.sidebar-topic-input {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--sidebar-bg);
+    gap: 8px;
+}
+
+.topic-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    font-size: 13px;
+    background: var(--background-modifier-hover);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-normal);
+    outline: none;
+}
+
+.topic-input:focus {
+    border-color: var(--text-accent);
+}
+
+.topic-input-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.topic-input-cancel {
+    color: var(--text-muted);
+}
+
+.topic-input-cancel:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+    border-color: var(--border);
+}
+
+.topic-input-confirm {
+    color: var(--text-muted);
+}
+
+.topic-input-confirm:not(:disabled):hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--border);
+}
+
+.topic-input-confirm:not(:disabled):hover {
+    color: var(--text-accent);
+}
+
+.topic-input-confirm.has-text {
+    color: var(--text-accent);
+}
+
+.topic-input-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .sidebar-right {
     display: flex;
     flex-direction: column;

@@ -83,6 +83,10 @@ async function batchAutoAssignTopics() {
     return pyCall('batch_auto_assign_topics', {});
 }
 
+async function createTopic(name) {
+    return pyCall('create_topic', { name: name });
+}
+
 async function getPendingTopics() {
     return pyCall('get_pending_topics');
 }
@@ -299,6 +303,7 @@ window.api = {
     save_tags_md: saveTagsMd,
     auto_assign_topic: autoAssignTopic,
     batch_auto_assign_topics: batchAutoAssignTopics,
+    create_topic: createTopic,
     get_pending_topics: getPendingTopics,
     resolve_topic: resolveTopic,
     rename_topic: renameTopic,

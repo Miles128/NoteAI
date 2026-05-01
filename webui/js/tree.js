@@ -1044,6 +1044,53 @@ async function onBatchAutoAssignTopics() {
     }
 }
 
+async function onAddTopic() {
+    var btn = document.getElementById('btn-add-topic');
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+    }
+
+    try {
+        var topicName = prompt('请输入主题名称：');
+        if (!topicName || !topicName.trim()) {
+            return;
+        }
+        topicName = topicName.trim();
+
+        var createResult = await window.api.create_topic(topicName);
+        if (!createResult || !createResult.success) {
+            alert(createResult ? createResult.message : '创建主题失败');
+            return;
+        }
+
+        console.log('[Topic] 主题创建成功:', topicName);
+
+        await loadTopicTree();
+
+        var batchResult = await window.api.batch_auto_assign_topics();
+        if (batchResult && batchResult.success) {
+            if (batchResult.pending && batchResult.pending.length > 0) {
+                loadTopicPendingPanel(batchResult.pending);
+                var pendingPanel = document.getElementById('topic-pending-panel');
+                if (pendingPanel) pendingPanel.style.display = '';
+            }
+
+            var msg = '主题「' + topicName + '」创建成功。扫描完成：';
+            msg += '自动分配 ' + batchResult.auto_assigned + ' 个';
+            msg += '，待确认 ' + batchResult.need_confirm + ' 个';
+            console.log('[Topic] ' + msg);
+        }
+    } catch (e) {
+        console.error('[Topic] add topic error:', e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+}
+
 async function loadTopicView() {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;

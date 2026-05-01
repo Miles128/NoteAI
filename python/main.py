@@ -91,6 +91,7 @@ class SidecarServer:
             "save_tags_md": self._save_tags_md,
             "auto_assign_topic": self._auto_assign_topic,
             "batch_auto_assign_topics": self._batch_auto_assign_topics,
+            "create_topic": self._create_topic,
             "get_pending_topics": self._get_pending_topics,
             "resolve_topic": self._resolve_topic,
             "rename_topic": self._rename_topic,
@@ -880,6 +881,13 @@ class SidecarServer:
             "skipped": skipped,
             "pending": pending
         }
+
+    def _create_topic(self, params):
+        from utils.topic_assigner import create_topic
+        topic_name = params.get("name", "")
+        if not topic_name:
+            return {"success": False, "message": "主题名不能为空"}
+        return create_topic(topic_name)
 
     def _get_pending_topics(self, params):
         from utils.topic_assigner import load_pending

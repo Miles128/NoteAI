@@ -892,3 +892,72 @@ def move_file_to_topic(file_rel_path, new_topic, file_title=None):
             return {"success": True, "message": f"已添加到「{new_topic}」"}
     else:
         return {"success": False, "message": "移动失败"}
+
+
+def create_topic(topic_name):
+    """
+    在 WIKI.md 中创建新的主题条目
+    
+    格式:
+    ## 主题名
+    
+    ### 来源文件
+    
+    """
+    wiki_path = _get_wiki_path()
+    workspace = config.workspace_path
+    
+    if not wiki_path or not workspace:
+        return {"success": False, "message": "未设置工作区"}
+    
+    if not topic_name or not topic_name.strip():
+        return {"success": False, "message": "主题名不能为空"}
+    
+    topic_name = topic_name.strip()
+    
+    try:
+        if wiki_path.exists():
+            content = wiki_path.read_text(encoding='utf-8')
+        else:
+            from datetime import datetime
+            content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
+        
+        headings = parse_wiki_headings()
+        for h in headings:
+            if h["name"].lower() == topic_name.lower():
+                return {"success": False, "message": f"主题「{topic_name}」已存在"}
+        
+        new_topic_lines = [
+            "",
+            f"## {topic_name}",
+            "",
+            "### 来源文件",
+            "",
+        ]
+        
+        lines = content.split('\n')
+        
+        insert_idx = len(lines)
+        for i in range(len(lines) - 1, -1, -1):
+            stripped = lines[i].strip()
+            if stripped.startswith('## ') and not stripped.startswith('### '):
+                if stripped[3:].strip() != '目录':
+                    insert_idx = i + 1
+                    while insert_idx < len(lines):
+                        next_stripped = lines[insert_idx].strip()
+                        if next_stripped.startswith('## ') and not next_stripped.startswith('### '):
+                            break
+                        insert_idx += 1
+                    break
+        
+        new_lines = lines[:insert_idx] + new_topic_lines + lines[insert_idx:]
+        new_content = '\n'.join(new_lines)
+        
+        wiki_path.write_text(new_content, encoding='utf-8')
+        
+        return {"success": True, "message": f"主题「{topic_name}」创建成功"}
+        
+    except Exception as e:
+        sys.stderr.write(f"[create_topic] failed: {e}\n")
+        sys.stderr.flush()
+        return {"success": False, "message": f"创建失败: {e}"}

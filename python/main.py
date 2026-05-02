@@ -84,6 +84,7 @@ class SidecarServer:
             "get_file_preview": self._get_file_preview,
             "can_preview_file": self._can_preview_file,
             "save_file_content": self._save_file_content,
+            "read_file_raw": self._read_file_raw,
             "get_workspace_tree": self._get_workspace_tree,
             "get_all_tags": self._get_all_tags,
             "get_topic_tree": self._get_topic_tree,
@@ -96,6 +97,8 @@ class SidecarServer:
             "resolve_topic": self._resolve_topic,
             "rename_topic": self._rename_topic,
             "move_file_to_topic": self._move_file_to_topic,
+            "move_file": self._move_file,
+            "add_tag_to_file": self._add_tag_to_file,
             "test_api_connection": self._test_api_connection,
             "on_file_selected": self._on_file_selected,
             "refresh_log": self._refresh_log,
@@ -491,6 +494,21 @@ class SidecarServer:
         try:
             Path(full_path).write_text(params.get("content", ""), encoding="utf-8")
             return {"success": True, "message": "文件已保存"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def _read_file_raw(self, params):
+        import base64 as b64
+        path = params.get("path", "")
+        full_path = self._resolve_path(path)
+        try:
+            raw_bytes = Path(full_path).read_bytes()
+            return {
+                "success": True,
+                "content": b64.b64encode(raw_bytes).decode("utf-8"),
+                "size": len(raw_bytes),
+                "file_name": Path(full_path).name
+            }
         except Exception as e:
             return {"success": False, "message": str(e)}
 
@@ -938,6 +956,125 @@ class SidecarServer:
             return {"success": False, "message": "参数不完整"}
 
         return move_file_to_topic(file_path, new_topic)
+
+    def _move_file(self, params):
+        import shutil
+        file_path = params.get("file_path", "")
+        target_folder = params.get("target_folder", "")
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        if not file_path or not target_folder:
+            return {"success": False, "message": "参数不完整"}
+
+        src = Path(workspace) / file_path
+        dst_dir = Path(workspace) / target_folder
+
+        if not src.exists():
+            return {"success": False, "message": f"源文件不存在: {file_path}"}
+
+        if not dst_dir.exists() or not dst_dir.is_dir():
+            return {"success": False, "message": f"目标文件夹不存在: {target_folder}"}
+
+        dst = dst_dir / src.name
+        if dst.exists():
+            return {"success": False, "message": f"目标已存在同名文件: {dst.name}"}
+
+        if src.is_dir():
+            try:
+                dst.resolve().relative_to(src.resolve())
+                return {"success": False, "message": "不能将文件夹移动到其自身或子文件夹中"}
+            except ValueError:
+                pass
+
+        try:
+            shutil.move(str(src), str(dst))
+            new_rel_path = str(dst.relative_to(workspace))
+            return {"success": True, "message": f"已移动到 {new_rel_path}", "new_path": new_rel_path}
+        except Exception as e:
+            return {"success": False, "message": f"移动失败: {e}"}
+
+    def _add_tag_to_file(self, params):
+        import re
+        file_path = params.get("file_path", "")
+        tag = params.get("tag", "")
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        if not file_path or not tag:
+            return {"success": False, "message": "参数不完整"}
+
+        full_path = Path(workspace) / file_path if not Path(file_path).is_absolute() else Path(file_path)
+
+        if not full_path.exists():
+            return {"success": False, "message": f"文件不存在: {file_path}"}
+
+        if not full_path.suffix.lower() == '.md':
+            return {"success": False, "message": "仅支持 Markdown 文件"}
+
+        try:
+            text = full_path.read_text(encoding='utf-8')
+            bom = '﻿' if text.startswith('﻿') else ''
+            clean_text = text.lstrip('﻿')
+
+            m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean_text)
+            if not m:
+                frontmatter = '---\ntags: [' + tag + ']\n---\n'
+                full_path.write_text(bom + frontmatter + clean_text, encoding='utf-8')
+                return {"success": True, "message": f"已添加标签「{tag}」"}
+
+            yaml_text = m.group(2)
+            lines = yaml_text.split('\n')
+            tags_line_idx = None
+            existing_tags = []
+            list_end_idx = None
+
+            for i, line in enumerate(lines):
+                idx = line.find(':')
+                if idx < 0:
+                    continue
+                key = line[:idx].strip()
+                val = line[idx + 1:].strip()
+                if key == 'tags':
+                    tags_line_idx = i
+                    if val.startswith('[') and val.endswith(']'):
+                        existing_tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                    elif val.startswith('- '):
+                        existing_tags.append(val[2:].strip().strip("'\""))
+                        j = i + 1
+                        while j < len(lines) and lines[j].strip().startswith('- '):
+                            existing_tags.append(lines[j].strip()[2:].strip().strip("'\""))
+                            j += 1
+                        list_end_idx = j
+                    elif val:
+                        existing_tags = [val.strip().strip("'\"")]
+                    break
+
+            if tag in existing_tags:
+                return {"success": True, "message": f"标签「{tag}」已存在，无需重复添加"}
+
+            all_tags = existing_tags + [tag]
+            new_tags_str = '[' + ', '.join(all_tags) + ']'
+
+            if tags_line_idx is not None:
+                if list_end_idx is not None:
+                    lines[tags_line_idx] = 'tags: ' + new_tags_str
+                    del lines[tags_line_idx + 1:list_end_idx]
+                else:
+                    lines[tags_line_idx] = 'tags: ' + new_tags_str
+            else:
+                lines.append('tags: ' + new_tags_str)
+
+            new_yaml = '\n'.join(lines)
+            new_text = bom + m.group(1) + new_yaml + m.group(3) + clean_text[m.end():]
+            full_path.write_text(new_text, encoding='utf-8')
+            return {"success": True, "message": f"已添加标签「{tag}」"}
+        except Exception as e:
+            return {"success": False, "message": f"添加标签失败: {e}"}
 
     def _test_api_connection(self, params):
         try:

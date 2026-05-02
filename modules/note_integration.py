@@ -30,11 +30,10 @@ class NoteIntegration:
             return documents
 
         md_files = list(folder.rglob("*.md"))
-        max_total = 0.5
 
         for i, md_file in enumerate(md_files):
             if self.progress_callback:
-                self.progress_callback(i + 1, len(md_files), f"读取 MD 文件中 - {md_file.name}", max_total)
+                self.progress_callback(i + 1, len(md_files), f"读取 MD 文件中 - {md_file.name}")
 
             try:
                 with open(md_file, 'r', encoding='utf-8') as f:
@@ -98,27 +97,27 @@ class NoteIntegration:
             raise APIConfigError("未提供主题列表，请先提取主题")
 
         try:
-            def report_progress(step_msg, overall):
+            def report_progress(step_msg):
                 if self.progress_callback:
-                    self.progress_callback(1, 1, step_msg, overall)
+                    self.progress_callback(1, 1, step_msg)
 
-            report_progress("阶段1/3: 分配文件到主题...", 0.1)
+            report_progress("阶段1/3: 分配文件到主题...")
 
             topic_doc_mapping = self._map_documents_to_topics(user_topics, documents)
 
             for topic_name, doc_indices in topic_doc_mapping.items():
                 logger.info(f"主题「{topic_name}」: {len(doc_indices)} 个文件")
 
-            report_progress(f"阶段1/3: 分配完成", 0.3)
+            report_progress("阶段1/3: 分配完成")
 
-            report_progress("阶段2/3: 生成主题笔记...", 0.4)
+            report_progress("阶段2/3: 生成主题笔记...")
             topic_results = []
 
             def process_one(topic_name, doc_indices):
                 return self._process_topic(topic_name, documents, doc_indices)
 
-            import multiprocessing
-            max_workers = min(len(user_topics), multiprocessing.cpu_count() * 2)
+            # 限制并发数避免 LLM API 限流（I/O 密集型，4 个并发足够）
+            max_workers = min(len(user_topics), 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_topic = {
                     executor.submit(process_one, name, indices): name
@@ -126,15 +125,15 @@ class NoteIntegration:
                 }
                 for future in as_completed(future_to_topic):
                     topic_name = future_to_topic[future]
-                    report_progress(f"阶段2/3: 处理主题「{topic_name}」", -1)
+                    report_progress(f"阶段2/3: 处理主题「{topic_name}」")
                     try:
                         topic_results.append(future.result())
                     except Exception as e:
                         logger.error(f"处理主题失败 {topic_name}: {e}")
 
-            report_progress("阶段2/3: 主题处理完成", 0.8)
+            report_progress("阶段2/3: 主题处理完成")
 
-            report_progress("阶段3/3: 保存文件...", 0.9)
+            report_progress("阶段3/3: 保存文件...")
 
             output_files = []
             save_dir = Path(save_path) if save_path else Path(config.get_organized_folder())
@@ -151,7 +150,7 @@ class NoteIntegration:
                 output_files.append(str(output_file))
 
             logger.info("开始生成 WIKI.md 索引...")
-            report_progress("阶段3/3: 生成 WIKI.md 索引...", 0.95)
+            report_progress("阶段3/3: 生成 WIKI.md 索引...")
 
             wiki_content = self._generate_wiki_md(topic_results)
             
@@ -168,14 +167,14 @@ class NoteIntegration:
             except Exception as e:
                 logger.error(f"写入 WIKI.md 失败: {e}")
 
-            report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件", 1.0)
+            report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件")
 
             try:
                 from utils.tag_extractor import save_tags_md
                 if config.workspace_path:
                     save_tags_md(config.workspace_path)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"保存 tags.md 失败: {e}")
 
             return {
                 'content': '\n\n---\n\n'.join([r['content'] for r in topic_results]),
@@ -196,17 +195,8 @@ class NoteIntegration:
             raise
 
     def _map_documents_to_topics(self, topics: List[str], documents: List[Dict]) -> Dict[str, List[int]]:
-        """使用 LLM 将整个文件分配到最匹配的主题
-
-        Args:
-            topics: 主题列表
-            documents: 文档列表
-
-        Returns:
-            {主题名称: [文档索引, ...], ...}
-        """
-        from langchain_openai import ChatOpenAI
-        from langchain_core.prompts import PromptTemplate
+        """使用 LLM 将整个文件分配到最匹配的主题"""
+        from utils.helpers import call_llm
 
         topic_doc_mapping = {t: [] for t in topics}
 
@@ -217,29 +207,16 @@ class NoteIntegration:
 
         topics_text = '\n'.join([f"{i+1}. {t}" for i, t in enumerate(topics)])
 
-        mapping_prompt = DOC_TOPIC_MAPPING_PROMPT
-
-        prompt = PromptTemplate(
-            template=mapping_prompt,
-            input_variables=["topics", "docs_info"]
-        )
-        llm = ChatOpenAI(
-            api_key=config.api_key,
-            base_url=config.api_base,
-            model=config.model_name,
-            temperature=0.3,
-            max_tokens=config.max_tokens
-        )
-        chain = prompt | llm
-
         try:
             if self.progress_callback:
-                self.progress_callback(1, 1, "大模型思考中 - 分配文件到主题", -1)
-            response = chain.invoke({
-                "topics": topics_text,
-                "docs_info": docs_info
-            })
-            result = json.loads(response.content)
+                self.progress_callback(1, 1, "大模型思考中 - 分配文件到主题")
+            response_text = call_llm(
+                DOC_TOPIC_MAPPING_PROMPT,
+                temperature=0.3,
+                topics=topics_text,
+                docs_info=docs_info,
+            )
+            result = json.loads(response_text)
             mapping = result.get('mapping', {})
 
             for topic_name, doc_indices in mapping.items():
@@ -445,41 +422,20 @@ class NoteIntegration:
         return chinese_chars + english_words
 
     def _generate_topic_note(self, topic_name: str, content: str, target_word_count: int) -> str:
-        """LLM 生成主题笔记
-
-        Args:
-            topic_name: 主题名称
-            content: 合并后的内容
-            target_word_count: 目标字数（用于指示LLM保持相近篇幅）
-
-        Returns:
-            生成的主题笔记内容
-        """
-        from langchain_openai import ChatOpenAI
-        from langchain_core.prompts import PromptTemplate
-
-        prompt = PromptTemplate(
-            template=TOPIC_NOTE_GENERATION_PROMPT,
-            input_variables=["topic_name", "content", "target_word_count"]
-        )
-        llm = ChatOpenAI(
-            api_key=config.api_key,
-            base_url=config.api_base,
-            model=config.model_name,
-            temperature=0.4,
-            max_tokens=config.max_tokens
-        )
-        chain = prompt | llm
+        """LLM 生成主题笔记"""
+        from utils.helpers import call_llm
 
         try:
             if self.progress_callback:
-                self.progress_callback(1, 1, f"大模型思考中 - 生成主题「{topic_name}」笔记", -1)
-            response = chain.invoke({
-                "topic_name": topic_name,
-                "content": content,
-                "target_word_count": target_word_count
-            })
-            return clean_text(response.content)
+                self.progress_callback(1, 1, f"大模型思考中 - 生成主题「{topic_name}」笔记")
+            response_text = call_llm(
+                TOPIC_NOTE_GENERATION_PROMPT,
+                temperature=0.4,
+                topic_name=topic_name,
+                content=content,
+                target_word_count=target_word_count,
+            )
+            return clean_text(response_text)
         except Exception as e:
             logger.error(f"生成主题笔记失败 {topic_name}: {e}")
             return f"# {topic_name}\n\n内容生成失败，请参考源文档。"

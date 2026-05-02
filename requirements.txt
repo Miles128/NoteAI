@@ -20,6 +20,9 @@ PyMuPDF>=1.23.0
 mammoth>=1.0.0
 python-docx>=1.0.0
 
+# HTML转换
+html2text>=2024.2.26
+
 # 工具库
 Pillow>=10.0.0
 markdown>=3.5.0

@@ -248,7 +248,8 @@ function setupFileTreeDragDrop(container) {
     });
 
     container.addEventListener('dragover', function(e) {
-        if (!_fileTreeDragData.filePath) return;
+        var dragFilePath = _fileTreeDragData.filePath || e.dataTransfer.getData('text/plain');
+        if (!dragFilePath) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
 
@@ -260,7 +261,7 @@ function setupFileTreeDragDrop(container) {
 
         if (itemEl && itemEl.classList.contains('folder')) {
             var targetPath = itemEl.getAttribute('data-path');
-            if (targetPath !== _fileTreeDragData.filePath) {
+            if (targetPath !== dragFilePath) {
                 itemEl.classList.add('drag-over');
             }
         }
@@ -271,19 +272,35 @@ function setupFileTreeDragDrop(container) {
         if (itemEl) itemEl.classList.remove('drag-over', 'drag-over-top');
     });
 
-    container.addEventListener('drop', function(e) {
+    container.addEventListener('drop', async function(e) {
         e.preventDefault();
 
-        if (!_fileTreeDragData.filePath) return;
+        var srcPath = _fileTreeDragData.filePath || e.dataTransfer.getData('text/plain');
+        if (!srcPath) return;
 
         var itemEl = e.target.closest('.tree-item');
 
         if (itemEl && itemEl.classList.contains('folder')) {
             var targetPath = itemEl.getAttribute('data-path');
-            var srcPath = _fileTreeDragData.filePath;
 
-            if (targetPath !== srcPath && !_fileTreeDragData.isFolder) {
-                console.log('[FileTree] Move file:', srcPath, 'to folder:', targetPath);
+            if (targetPath === srcPath) return;
+
+            if (_fileTreeDragData.isFolder && targetPath.startsWith(srcPath + '/')) return;
+
+            try {
+                var result = await window.api.move_file(srcPath, targetPath);
+                if (result && result.success) {
+                    await window.TreeModule.loadFileTree();
+                    var topicContainer = document.getElementById('sidebar-topic');
+                    if (topicContainer && topicContainer.style.display !== 'none') {
+                        loadTopicView();
+                    }
+                } else {
+                    alert('移动失败：' + (result ? result.message : '未知错误'));
+                }
+            } catch (err) {
+                console.error('[FileTree] move error:', err);
+                alert('移动失败：' + (err.message || '发生错误'));
             }
         }
 
@@ -492,7 +509,7 @@ function setupTagsDragDrop(container) {
         if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
     });
 
-    container.addEventListener('drop', function(e) {
+    container.addEventListener('drop', async function(e) {
         e.preventDefault();
 
         if (!_tagsDragData.filePath) return;
@@ -514,7 +531,17 @@ function setupTagsDragDrop(container) {
             return;
         }
 
-        console.log('[Tags] Move file:', _tagsDragData.filePath, 'to tag:', targetTag);
+        try {
+            var result = await window.api.add_tag_to_file(_tagsDragData.filePath, targetTag);
+            if (result && result.success) {
+                await loadTagsView();
+            } else {
+                alert('添加标签失败：' + (result ? result.message : '未知错误'));
+            }
+        } catch (err) {
+            console.error('[Tags] add tag error:', err);
+            alert('添加标签失败：' + (err.message || '发生错误'));
+        }
 
         container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
             row.classList.remove('drag-over', 'drag-over-top');
@@ -709,7 +736,7 @@ async function loadTopicTree() {
 }
 
 function setupTopicDragDrop(container) {
-    var dragData = { filePath: null, fileName: null };
+    var dragData = { filePath: null, fileName: null, srcTopic: null };
 
     container.addEventListener('dragstart', function(e) {
         var fileEl = e.target.closest('.sidebar-tag-file');
@@ -718,29 +745,34 @@ function setupTopicDragDrop(container) {
         var filePath = fileEl.getAttribute('data-file-path');
         if (!filePath) return;
 
+        var srcGroup = fileEl.closest('.sidebar-tag-group');
+        var srcTopic = srcGroup ? srcGroup.getAttribute('data-topic-name') : null;
+
         dragData.filePath = filePath;
         dragData.fileName = fileEl.querySelector('.tree-name')?.textContent || '文件';
+        dragData.srcTopic = srcTopic;
         fileEl.classList.add('dragging');
 
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', filePath);
-        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(dragData.fileName) + '</span>');
+        e.dataTransfer.setData('application/x-topic-src', srcTopic || '');
     });
 
     container.addEventListener('dragend', function(e) {
-        var fileEl = e.target.closest('.sidebar-tag-file');
-        if (fileEl) fileEl.classList.remove('dragging');
-
+        container.querySelectorAll('.sidebar-tag-file.dragging').forEach(function(el) {
+            el.classList.remove('dragging');
+        });
         container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
-
         dragData.filePath = null;
         dragData.fileName = null;
+        dragData.srcTopic = null;
     });
 
     container.addEventListener('dragover', function(e) {
-        if (!dragData.filePath) return;
+        var pendingCard = document.querySelector('.topic-pending-card.dragging');
+        if (!dragData.filePath && !pendingCard) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
 
@@ -751,39 +783,6 @@ function setupTopicDragDrop(container) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
 
-        if (rowEl) {
-            var srcGroup = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
-            var srcTopic = srcGroup?.getAttribute('data-topic-name');
-            var targetTopic = rowEl.getAttribute('data-topic-name');
-
-            if (srcTopic !== targetTopic) {
-                rowEl.classList.add('drag-over');
-            }
-        } else if (groupEl) {
-            var srcGroup2 = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
-            var srcTopic2 = srcGroup2?.getAttribute('data-topic-name');
-            var targetTopic2 = groupEl.getAttribute('data-topic-name');
-
-            if (srcTopic2 !== targetTopic2) {
-                var row = groupEl.querySelector('.sidebar-tag-row');
-                if (row) row.classList.add('drag-over');
-            }
-        }
-    });
-
-    container.addEventListener('dragleave', function(e) {
-        var rowEl = e.target.closest('.sidebar-tag-row');
-        if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
-    });
-
-    container.addEventListener('drop', function(e) {
-        e.preventDefault();
-
-        if (!dragData.filePath) return;
-
-        var rowEl = e.target.closest('.sidebar-tag-row');
-        var groupEl = e.target.closest('.sidebar-tag-group');
-
         var targetTopic = null;
         if (rowEl) {
             targetTopic = rowEl.getAttribute('data-topic-name');
@@ -793,30 +792,109 @@ function setupTopicDragDrop(container) {
 
         if (!targetTopic) return;
 
-        var srcGroup = document.querySelector('.sidebar-tag-file.dragging')?.closest('.sidebar-tag-group');
-        var srcTopic = srcGroup?.getAttribute('data-topic-name');
-
-        if (srcTopic === targetTopic) {
+        // For pending cards: always allow drop on any topic
+        if (pendingCard) {
+            if (rowEl) {
+                rowEl.classList.add('drag-over');
+            } else if (groupEl) {
+                var row = groupEl.querySelector('.sidebar-tag-row');
+                if (row) row.classList.add('drag-over');
+            }
             return;
         }
 
-        console.log('[Topic] Move file:', dragData.filePath, 'from:', srcTopic, 'to:', targetTopic);
+        // For topic-internal drags: don't highlight same topic
+        if (dragData.srcTopic === targetTopic) return;
 
-        window.api.move_file_to_topic(dragData.filePath, targetTopic).then(function(result) {
-            console.log('[Topic] move result:', result);
-            if (result && result.success) {
-                loadTopicTree();
-            } else {
-                console.error('[Topic] move failed:', result);
+        if (rowEl) {
+            rowEl.classList.add('drag-over');
+        } else if (groupEl) {
+            var row = groupEl.querySelector('.sidebar-tag-row');
+            if (row) row.classList.add('drag-over');
+        }
+    });
+
+    container.addEventListener('dragleave', function(e) {
+        var rowEl = e.target.closest('.sidebar-tag-row');
+        if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
+    });
+
+    container.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // --- Pending card drop branch ---
+        var pendingCard = document.querySelector('.topic-pending-card.dragging');
+        if (pendingCard) {
+            var pendingFile = pendingCard.getAttribute('data-file');
+            var targetEl = e.target.closest('.sidebar-tag-row') || e.target.closest('.sidebar-tag-group');
+            var targetTopic = targetEl ? targetEl.getAttribute('data-topic-name') : null;
+
+            if (!targetTopic || !pendingFile) {
+                cleanupDragState(container);
+                return;
             }
-        }).catch(function(e) {
-            console.error('[Topic] move error:', e);
-        });
 
-        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            try {
+                var result = await window.api.resolve_topic(pendingFile, targetTopic);
+                if (result && result.success) {
+                    pendingCard.classList.add('resolved');
+                    animateCardOut(pendingCard);
+                } else {
+                    alert('确认主题失败：' + (result ? result.message : '未知错误'));
+                }
+            } catch (err) {
+                console.error('[Topic] resolve via drag error:', err);
+                alert('确认主题失败：' + (err.message || '发生错误'));
+            }
+
+            cleanupDragState(container);
+            return;
+        }
+        // --- End pending card drop branch ---
+
+        var filePath = dragData.filePath;
+        if (!filePath) {
+            cleanupDragState(container);
+            return;
+        }
+
+        var targetEl2 = e.target.closest('.sidebar-tag-row') || e.target.closest('.sidebar-tag-group');
+        var targetTopic2 = targetEl2 ? targetEl2.getAttribute('data-topic-name') : null;
+
+        if (!targetTopic2) {
+            cleanupDragState(container);
+            return;
+        }
+
+        if (dragData.srcTopic === targetTopic2) {
+            cleanupDragState(container);
+            return;
+        }
+
+        console.log('[Topic] Move file:', filePath, 'from:', dragData.srcTopic, 'to:', targetTopic2);
+
+        try {
+            var result2 = await window.api.move_file_to_topic(filePath, targetTopic2);
+            if (result2 && result2.success) {
+                await loadTopicTree();
+            } else {
+                console.error('[Topic] move failed:', result2);
+                alert('移动失败：' + (result2 ? result2.message : '未知错误'));
+            }
+        } catch (err) {
+            console.error('[Topic] move error:', err);
+            alert('移动失败：' + (err.message || '发生错误'));
+        }
+
+        cleanupDragState(container);
+    });
+
+    function cleanupDragState(cont) {
+        cont.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
-    });
+    }
 }
 
 function setupTopicContextMenu(container) {
@@ -1032,7 +1110,9 @@ async function onBatchAutoAssignTopics() {
             msg += '，跳过 ' + result.skipped + ' 个';
             console.log('[Topic] ' + msg);
         } else {
+            var errMsg = result && result.message ? result.message : '未知错误';
             console.error('[Topic] batch failed:', result);
+            alert('自动分配主题失败：' + errMsg);
         }
     } catch (e) {
         console.error('[Topic] batch error:', e);
@@ -1130,11 +1210,13 @@ async function onConfirmTopic() {
                 var pendingPanel = document.getElementById('topic-pending-panel');
                 if (pendingPanel) pendingPanel.style.display = '';
             }
-            
+
             var msg = '主题「' + topicName + '」创建成功。扫描完成：';
             msg += '自动分配 ' + batchResult.auto_assigned + ' 个';
             msg += '，待确认 ' + batchResult.need_confirm + ' 个';
             console.log('[Topic] ' + msg);
+        } else {
+            console.error('[Topic] batch after create failed:', batchResult);
         }
     } catch (e) {
         console.error('[Topic] add topic error:', e);
@@ -1207,11 +1289,13 @@ async function loadTopicView() {
     await loadTopicTree();
 
     if (result && result.pending) {
-        loadTopicPendingPanel(result.pending);
+        var topicNames = (result.topics || []).map(function(t) { return t.name; });
+        loadTopicPendingPanel(result.pending, topicNames);
     }
 }
 
-function loadTopicPendingPanel(pending) {
+function loadTopicPendingPanel(pending, topicNames) {
+    topicNames = topicNames || [];
     var panel = document.getElementById('topic-pending-panel');
     if (!panel) return;
 
@@ -1224,13 +1308,23 @@ function loadTopicPendingPanel(pending) {
     html += '<div class="topic-pending-list">';
 
     pending.forEach(function(p, i) {
-        html += '<div class="topic-pending-card" data-file="' + escapeAttr(p.file) + '" data-index="' + i + '">';
+        html += '<div class="topic-pending-card" draggable="true" data-file="' + escapeAttr(p.file) + '" data-index="' + i + '">';
         html += '<div class="topic-pending-filename">' + escapeHtml(p.title || p.file) + '</div>';
         html += '<div class="topic-pending-candidates">';
         (p.candidates || []).forEach(function(c) {
             html += '<button class="topic-candidate-btn" data-topic="' + escapeAttr(c) + '" data-file="' + escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + escapeHtml(c) + '</button>';
         });
         html += '</div>';
+        if (topicNames.length > 0) {
+            html += '<div class="topic-select-row">';
+            html += '<select class="topic-select" data-file="' + escapeAttr(p.file) + '" onchange="onTopicSelectChange(this)">';
+            html += '<option value="">-- 选择已有主题 --</option>';
+            topicNames.forEach(function(name) {
+                html += '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
+            });
+            html += '</select>';
+            html += '</div>';
+        }
         html += '<div class="topic-custom-row">';
         html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '">';
         html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">确定</button>';
@@ -1250,6 +1344,35 @@ function loadTopicPendingPanel(pending) {
         input.addEventListener('input', function() {
             onInputChange(this);
         });
+    });
+
+    setupPendingCardDragDrop(panel);
+}
+
+var _pendingDragData = { filePath: null, cardEl: null };
+
+function setupPendingCardDragDrop(panel) {
+    panel.addEventListener('dragstart', function(e) {
+        var card = e.target.closest('.topic-pending-card');
+        if (!card) return;
+        if (card.classList.contains('resolving') || card.classList.contains('resolved')) return;
+
+        var filePath = card.getAttribute('data-file');
+        if (!filePath) return;
+
+        _pendingDragData.filePath = filePath;
+        _pendingDragData.cardEl = card;
+        card.classList.add('dragging');
+
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', filePath);
+    });
+
+    panel.addEventListener('dragend', function(e) {
+        var card = e.target.closest('.topic-pending-card');
+        if (card) card.classList.remove('dragging');
+        _pendingDragData.filePath = null;
+        _pendingDragData.cardEl = null;
     });
 }
 
@@ -1272,6 +1395,38 @@ function onInputChange(inputEl) {
     if (!card) return;
     var btns = card.querySelectorAll('.topic-candidate-btn.topic-candidate-selected');
     btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
+}
+
+async function onTopicSelectChange(selectEl) {
+    var topicName = selectEl.value;
+    if (!topicName) return;
+
+    var card = selectEl.closest('.topic-pending-card');
+    var filePath = card ? card.getAttribute('data-file') : null;
+    if (!filePath) return;
+
+    selectEl.disabled = true;
+    card.classList.add('resolving');
+
+    try {
+        var result = await window.api.resolve_topic(filePath, topicName);
+        if (result && result.success) {
+            card.classList.remove('resolving');
+            card.classList.add('resolved');
+            animateCardOut(card);
+        } else {
+            card.classList.remove('resolving');
+            selectEl.disabled = false;
+            selectEl.value = '';
+            alert('确认主题失败：' + (result ? result.message : '未知错误'));
+        }
+    } catch (err) {
+        card.classList.remove('resolving');
+        selectEl.disabled = false;
+        selectEl.value = '';
+        console.error('[Topic] select resolve error:', err);
+        alert('确认主题失败：' + (err.message || '发生错误'));
+    }
 }
 
 function onInputEnter(inputEl) {

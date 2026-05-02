@@ -349,6 +349,9 @@ function selectFile(path, fileName) {
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(path, fileName);
     }
+    if (_currentSidebarView === 'graph') {
+        loadLinksData();
+    }
 }
 
 var _currentSidebarView = 'tree';
@@ -374,6 +377,12 @@ function switchSidebarView(view) {
     document.querySelectorAll('.sidebar-view-btn').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.sidebar === view);
     });
+
+    // Toggle sidebar footers
+    var footerTopic = document.getElementById('sidebar-footer-topic');
+    var footerGraph = document.getElementById('sidebar-footer-graph');
+    if (footerTopic) footerTopic.style.display = view === 'topic' ? '' : 'none';
+    if (footerGraph) footerGraph.style.display = view === 'graph' ? '' : 'none';
 
     if (view === 'topic') {
         var contentPanel = document.getElementById('content-panel');
@@ -401,6 +410,254 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+var _linkFilter = 'all';
+
+function loadGraphView() {
+    var container = document.getElementById('sidebar-graph');
+    if (!container) return;
+
+    var html = '<div class="link-view">';
+    html += '<div class="link-view-header">';
+    html += '<span class="link-view-title">双向链接</span>';
+    html += '</div>';
+
+    html += '<div class="link-progress" id="link-progress" style="display:none;">';
+    html += '<div class="link-progress-bar"><div class="link-progress-fill" id="link-progress-fill"></div></div>';
+    html += '<div class="link-progress-text" id="link-progress-text"></div>';
+    html += '</div>';
+
+    html += '<div class="link-filter-bar" id="link-filter-bar" style="display:none;">';
+    html += '<button class="link-filter-btn active" data-filter="all" onclick="onLinkFilter(\'all\')">全部</button>';
+    html += '<button class="link-filter-btn" data-filter="pending" onclick="onLinkFilter(\'pending\')">待确认</button>';
+    html += '<button class="link-filter-btn" data-filter="confirmed" onclick="onLinkFilter(\'confirmed\')">已确认</button>';
+    html += '<button class="link-confirm-all-btn" onclick="onConfirmAllLinks()" title="一键确认所有待确认链接">全部确认</button>';
+    html += '</div>';
+
+    html += '<div class="link-list" id="link-list"></div>';
+    html += '<div class="link-empty" id="link-empty">点击「发现链接」让 AI 分析文章关联</div>';
+    html += '</div>';
+
+    container.innerHTML = html;
+    loadLinksData();
+}
+
+async function loadLinksData() {
+    var listEl = document.getElementById('link-list');
+    var emptyEl = document.getElementById('link-empty');
+    var filterBar = document.getElementById('link-filter-bar');
+    if (!listEl) return;
+
+    var result = await window.api.get_backlinks(selectedFilePath || '');
+    if (!result || !result.success) {
+        if (emptyEl) emptyEl.textContent = '无法加载链接数据';
+        return;
+    }
+
+    var allLinks = result.links || [];
+    if (allLinks.length === 0) {
+        if (emptyEl) emptyEl.style.display = '';
+        if (filterBar) filterBar.style.display = 'none';
+        listEl.innerHTML = '';
+        return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (filterBar) filterBar.style.display = '';
+
+    // filter
+    var filtered = allLinks;
+    if (_linkFilter === 'pending') filtered = allLinks.filter(function(l) { return l.status === 'pending'; });
+    else if (_linkFilter === 'confirmed') filtered = allLinks.filter(function(l) { return l.status === 'confirmed'; });
+
+    if (filtered.length === 0 && allLinks.length > 0) {
+        listEl.innerHTML = '<div class="link-empty-sub">没有匹配的链接</div>';
+        return;
+    }
+
+    var html = '';
+    for (var i = 0; i < filtered.length; i++) {
+        var link = filtered[i];
+        var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
+        var dirLabel = link.direction === 'incoming' ? '被引用' : '引用';
+        var statusClass = link.status === 'confirmed' ? 'link-confirmed' : 'link-pending';
+        var statusLabel = link.status === 'confirmed' ? '已确认' : '待确认';
+        var fromPath = link.from || link.file || '';
+        var toPath = link.to || link.other || '';
+        var displayFile = link.file || '';
+        var confirmCall = 'onConfirmLink(\'' + escapeHtml(fromPath) + '\',\'' + escapeHtml(toPath) + '\')';
+        var rejectCall = 'onRejectLink(\'' + escapeHtml(fromPath) + '\',\'' + escapeHtml(toPath) + '\')';
+
+        html += '<div class="link-card ' + dirClass + ' ' + statusClass + '">';
+        html += '<div class="link-card-header">';
+        html += '<span class="link-direction-badge ' + dirClass + '">' + dirLabel + '</span>';
+        html += '<span class="link-status-badge ' + statusClass + '">' + statusLabel + '</span>';
+        if (link.status === 'pending') {
+            html += '<div class="link-card-actions">';
+            html += '<button class="link-action-btn link-confirm-btn" onclick="event.stopPropagation();' + confirmCall + '" title="确认">✓</button>';
+            html += '<button class="link-action-btn link-reject-btn" onclick="event.stopPropagation();' + rejectCall + '" title="删除">✕</button>';
+            html += '</div>';
+        }
+        html += '</div>';
+        html += '<div class="link-card-file" onclick="openLinkedFile(\'' + escapeHtml(displayFile) + '\')">' + escapeHtml(displayFile) + '</div>';
+        if (link.reason) {
+            html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
+        }
+        html += '</div>';
+    }
+
+    listEl.innerHTML = html;
+}
+
+var _linkDiscoveryUnlisten = null;
+
+async function onDiscoverLinks() {
+    var btn = document.getElementById('btn-discover-links');
+    var btnSpan = btn ? btn.querySelector('span') : null;
+    var progressEl = document.getElementById('link-progress');
+    var progressFill = document.getElementById('link-progress-fill');
+    var progressText = document.getElementById('link-progress-text');
+    var emptyEl = document.getElementById('link-empty');
+
+    // Check API config first
+    try {
+        var apiCfg = await window.api.get_api_config();
+        if (!apiCfg || !apiCfg.api_key) {
+            alert('请先在设置中配置 API Key');
+            return;
+        }
+    } catch (e) {
+        alert('无法获取 API 配置: ' + (e.message || e));
+        return;
+    }
+
+    if (btn) { btn.disabled = true; if (btnSpan) btnSpan.textContent = '检查中...'; }
+    if (progressEl) progressEl.style.display = '';
+    if (progressFill) progressFill.style.width = '5%';
+    if (progressText) progressText.textContent = '正在测试 API 连接...';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Test connection
+    try {
+        var connResult = await window.api.invoke('test_api_connection', {});
+        if (!connResult || !connResult.success) {
+            if (progressText) progressText.textContent = 'API 连接失败: ' + ((connResult && connResult.message) || '未知错误');
+            if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+            return;
+        }
+    } catch (e) {
+        if (progressText) progressText.textContent = 'API 连接测试出错: ' + (e.message || e);
+        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+        return;
+    }
+
+    if (btnSpan) btnSpan.textContent = '分析中...';
+    if (progressFill) progressFill.style.width = '10%';
+    if (progressText) progressText.textContent = '正在读取文件并构建候选对...';
+
+    // Listen for progress and completion events
+    if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
+    if (_isTauri) {
+        var eventAPI = window.__TAURI__ && (window.__TAURI__.event || (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event));
+        if (eventAPI) {
+            try {
+                _linkDiscoveryUnlisten = await eventAPI.listen('python-event', function(event) {
+                    var data = event.payload;
+                    if (!data) return;
+
+                    if (data.type === 'progress' && data.element_id === 'link-discovery-progress') {
+                        if (progressText) progressText.textContent = data.message || '';
+                        if (progressFill && data.progress !== undefined) {
+                            var p = Math.min(10 + data.progress * 0.85, 95);
+                            progressFill.style.width = p + '%';
+                        }
+                    }
+
+                    if (data.type === 'link_discovery_complete') {
+                        if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
+                        var result = data.data || {};
+                        if (progressFill) progressFill.style.width = '100%';
+                        if (progressText) {
+                            if (result.success) {
+                                var msg = '完成：扫描 ' + (result.files_scanned || '?') + ' 个文件';
+                                if (result.new_links > 0) {
+                                    msg += '，发现 ' + result.new_links + ' 个新关联';
+                                } else {
+                                    msg += '，未发现新关联';
+                                }
+                                progressText.textContent = msg;
+                            } else {
+                                progressText.textContent = result.message || '发现失败';
+                            }
+                        }
+                        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+                        setTimeout(function() {
+                            if (progressEl) progressEl.style.display = 'none';
+                            loadGraphView();
+                        }, 2000);
+                    }
+                });
+            } catch (e) {
+                console.error('[Link] Failed to listen for events:', e);
+            }
+        }
+    }
+
+    // Start discovery (returns immediately, events handle progress)
+    try {
+        var startResult = await window.api.discover_links();
+        if (!startResult || !startResult.success) {
+            if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
+            if (progressText) progressText.textContent = (startResult && startResult.message) || '启动失败';
+            if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+        }
+    } catch (e) {
+        if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
+        if (progressText) progressText.textContent = '错误: ' + (e.message || e);
+        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+    }
+}
+
+async function onConfirmLink(fromPath, toPath) {
+    var result = await window.api.confirm_link(fromPath, toPath);
+    if (result.success) {
+        loadLinksData();
+    } else {
+        alert('确认失败: ' + (result.message || ''));
+    }
+}
+
+async function onRejectLink(fromPath, toPath) {
+    var result = await window.api.reject_link(fromPath, toPath);
+    if (result.success) {
+        loadLinksData();
+    } else {
+        alert('删除失败: ' + (result.message || ''));
+    }
+}
+
+async function onConfirmAllLinks() {
+    var result = await window.api.confirm_all_links();
+    if (result.success) {
+        loadLinksData();
+    } else {
+        alert('操作失败: ' + (result.message || ''));
+    }
+}
+
+function onLinkFilter(filter) {
+    _linkFilter = filter;
+    document.querySelectorAll('.link-filter-btn').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.filter === filter);
+    });
+    loadLinksData();
+}
+
+function openLinkedFile(filePath) {
+    if (window.TreeModule && window.TreeModule.selectFile) {
+        window.TreeModule.selectFile(filePath);
+    }
+}
+
 function escapeAttr(str) {
     return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
@@ -411,6 +668,7 @@ async function loadTagsView() {
     container.innerHTML = '<div class="sidebar-view-loading">加载标签...</div>';
 
     try {
+        await window.api.ensure_tags_md();
         var result = await window.api.get_all_tags();
         if (!result || !result.tags || result.tags.length === 0) {
             container.innerHTML = '<div class="sidebar-view-empty">暂无标签<br><span style="font-size:11px;color:var(--text-muted)">点击下方按钮自动匹配标签</span></div>';
@@ -1516,12 +1774,6 @@ function animateCardOut(cardEl) {
     }, 300);
 }
 
-function loadGraphView() {
-    var container = document.getElementById('sidebar-graph');
-    if (!container) return;
-    container.innerHTML = '<div class="sidebar-view-empty"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg><div>图谱视图</div><span style="font-size:11px;color:var(--text-muted)">开发中...</span></div>';
-}
-
 window.TreeModule = {
     loadTreeState: loadTreeState,
     saveTreeState: saveTreeState,
@@ -1535,3 +1787,9 @@ window.TreeModule = {
 };
 
 window.switchSidebarView = switchSidebarView;
+window.onDiscoverLinks = onDiscoverLinks;
+window.onConfirmLink = onConfirmLink;
+window.onRejectLink = onRejectLink;
+window.onConfirmAllLinks = onConfirmAllLinks;
+window.onLinkFilter = onLinkFilter;
+window.openLinkedFile = openLinkedFile;

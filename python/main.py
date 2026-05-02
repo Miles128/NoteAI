@@ -15,6 +15,7 @@ from modules.note_integration import NoteIntegration
 from modules.topic_extractor import TopicExtractor
 from utils.helpers import call_llm, check_api_config, test_api_connection
 from utils.tag_extractor import extract_tags_from_filename, add_yaml_frontmatter_to_file
+from utils.link_indexer import discover_links, get_backlinks, confirm_link, reject_link, confirm_all_links
 
 
 class SidecarServer:
@@ -90,6 +91,7 @@ class SidecarServer:
             "get_topic_tree": self._get_topic_tree,
             "auto_tag_files": self._auto_tag_files,
             "save_tags_md": self._save_tags_md,
+            "ensure_tags_md": self._ensure_tags_md,
             "auto_assign_topic": self._auto_assign_topic,
             "batch_auto_assign_topics": self._batch_auto_assign_topics,
             "create_topic": self._create_topic,
@@ -102,6 +104,11 @@ class SidecarServer:
             "test_api_connection": self._test_api_connection,
             "on_file_selected": self._on_file_selected,
             "refresh_log": self._refresh_log,
+            "discover_links": self._discover_links,
+            "get_backlinks": self._get_backlinks,
+            "confirm_link": self._confirm_link,
+            "reject_link": self._reject_link,
+            "confirm_all_links": self._confirm_all_links,
         }
 
         handler = handler_map.get(method)
@@ -772,6 +779,16 @@ class SidecarServer:
         from utils.tag_extractor import save_tags_md
         return save_tags_md(config.workspace_path)
 
+    def _ensure_tags_md(self, params):
+        from utils.tag_extractor import save_tags_md
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        tags_md_path = Path(workspace) / 'tags.md'
+        if not tags_md_path.exists():
+            return save_tags_md(workspace)
+        return save_tags_md(workspace)
+
     def _get_pending_topics_path(self):
         workspace = config.workspace_path
         if not workspace:
@@ -1025,7 +1042,8 @@ class SidecarServer:
             if not m:
                 frontmatter = '---\ntags: [' + tag + ']\n---\n'
                 full_path.write_text(bom + frontmatter + clean_text, encoding='utf-8')
-                return {"success": True, "message": f"已添加标签「{tag}」"}
+            self._save_tags_md({})
+            return {"success": True, "message": f"已添加标签「{tag}」"}
 
             yaml_text = m.group(2)
             lines = yaml_text.split('\n')
@@ -1072,9 +1090,60 @@ class SidecarServer:
             new_yaml = '\n'.join(lines)
             new_text = bom + m.group(1) + new_yaml + m.group(3) + clean_text[m.end():]
             full_path.write_text(new_text, encoding='utf-8')
+            self._save_tags_md({})
             return {"success": True, "message": f"已添加标签「{tag}」"}
         except Exception as e:
             return {"success": False, "message": f"添加标签失败: {e}"}
+
+    def _discover_links(self, params):
+        if getattr(self, '_link_discovery_running', False):
+            return {"success": False, "message": "链接发现正在进行中，请等待完成"}
+
+        self._link_discovery_running = True
+
+        def run():
+            def progress_callback(stage, total, message):
+                self._send_progress("link-discovery-progress", int(stage / total * 100), message)
+
+            try:
+                result = discover_links(progress_callback=progress_callback)
+            except Exception as e:
+                result = {"success": False, "message": f"链接发现失败: {e}"}
+
+            self._link_discovery_running = False
+            self._send_response({
+                "id": "event",
+                "result": {
+                    "type": "link_discovery_complete",
+                    "data": result,
+                }
+            })
+
+        import threading
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        return {"success": True, "status": "started", "message": "链接发现已启动"}
+
+    def _get_backlinks(self, params):
+        file_path = params.get("file_path", "") or ""
+        return get_backlinks(file_path)
+
+    def _confirm_link(self, params):
+        from_path = params.get("from", "")
+        to_path = params.get("to", "")
+        if not from_path or not to_path:
+            return {"success": False, "message": "参数不完整"}
+        return confirm_link(from_path, to_path)
+
+    def _reject_link(self, params):
+        from_path = params.get("from", "")
+        to_path = params.get("to", "")
+        if not from_path or not to_path:
+            return {"success": False, "message": "参数不完整"}
+        return reject_link(from_path, to_path)
+
+    def _confirm_all_links(self, params):
+        return confirm_all_links()
 
     def _test_api_connection(self, params):
         try:

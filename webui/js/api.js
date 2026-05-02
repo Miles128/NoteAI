@@ -111,6 +111,10 @@ async function addTagToFile(filePath, tag) {
     return pyCall('add_tag_to_file', { file_path: filePath, tag: tag });
 }
 
+async function ensureTagsMd() {
+    return pyCall('ensure_tags_md');
+}
+
 async function getApiConfig() {
     return pyCall('get_api_config');
 }
@@ -210,6 +214,26 @@ async function readFileRaw(path) {
     return pyCall('read_file_raw', { path: path });
 }
 
+async function discoverLinks() {
+    return pyCall('discover_links', {});
+}
+
+async function getBacklinks(filePath) {
+    return pyCall('get_backlinks', { file_path: filePath });
+}
+
+async function confirmLink(fromPath, toPath) {
+    return pyCall('confirm_link', { from: fromPath, to: toPath });
+}
+
+async function rejectLink(fromPath, toPath) {
+    return pyCall('reject_link', { from: fromPath, to: toPath });
+}
+
+async function confirmAllLinks() {
+    return pyCall('confirm_all_links', {});
+}
+
 function getTauriWindow() {
     if (window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrent) {
         return window.__TAURI__.window.getCurrent();
@@ -273,6 +297,7 @@ window.api = {
     getTopicTree: getTopicTree,
     autoTagFiles: autoTagFiles,
     saveTagsMd: saveTagsMd,
+    ensureTagsMd: ensureTagsMd,
     autoAssignTopic: autoAssignTopic,
     getPendingTopics: getPendingTopics,
     resolveTopic: resolveTopic,
@@ -315,6 +340,7 @@ window.api = {
     get_topic_tree: getTopicTree,
     auto_tag_files: autoTagFiles,
     save_tags_md: saveTagsMd,
+    ensure_tags_md: ensureTagsMd,
     auto_assign_topic: autoAssignTopic,
     batch_auto_assign_topics: batchAutoAssignTopics,
     create_topic: createTopic,
@@ -352,5 +378,11 @@ window.api = {
     open_file_in_new_window: openFileInNewWindow,
     update_status: apiUpdateStatus,
     update_progress: apiUpdateProgress,
-    show_message: showMessage
+    show_message: showMessage,
+
+    discover_links: discoverLinks,
+    get_backlinks: getBacklinks,
+    confirm_link: confirmLink,
+    reject_link: rejectLink,
+    confirm_all_links: confirmAllLinks
 };

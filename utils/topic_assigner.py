@@ -233,7 +233,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
 
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped == topic_heading:
+        if stripped.lower() == topic_heading.lower():
             topic_start_idx = i
             source_files_idx = None
         elif topic_start_idx is not None and stripped == '### 来源文件':
@@ -246,7 +246,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         topic_end_idx = len(lines)
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
     if topic_start_idx is not None and source_files_idx is not None:
         max_index = 0
@@ -289,6 +289,18 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
 
         for i, line in enumerate(new_lines):
             lines.insert(insert_idx + i, line)
+
+    elif topic_start_idx is not None:
+        insert_lines = [
+            '',
+            '### 来源文件',
+            '',
+            f"1. **{display_title}**",
+            f"   - 文件名：{file_name}",
+            f"   - 原始路径：{file_rel_path}"
+        ]
+        for i, line in enumerate(insert_lines):
+            lines.insert(topic_end_idx + i, line)
 
     else:
         new_lines = [

@@ -105,7 +105,7 @@ class Api:
                 tagged = tag_files_by_filename(file_paths)
                 logger.info(f"标签提取完成: {len(tagged)} 个文件")
             except Exception as e:
-                logger.warning(f"标签提取失败: {e}")
+                logger.warning(f"标签提取失败: {e}", exc_info=True)
 
         import threading
         threading.Thread(target=bg_task, daemon=True).start()
@@ -130,14 +130,14 @@ class Api:
                 def progress_callback(current, total, message):
                     pass
 
-                downloader = WebDownloader(progress_callback, ai_assist=ai_assist, include_images=include_images)
+                downloader = WebDownloader(progress_callback, include_images=include_images)
                 results = downloader.download_batch(urls, save_path)
 
                 new_md_files = [r["file_path"] for r in results if r.get("success") and r.get("file_path", "")]
                 if new_md_files:
                     self._tag_new_files(new_md_files)
             except Exception as e:
-                logger.error(f"下载失败: {e}")
+                logger.error(f"下载失败: {e}", exc_info=True)
 
         threading.Thread(target=task, daemon=True).start()
         return {"success": True, "message": "下载已开始"}
@@ -162,13 +162,13 @@ class Api:
                     pass
 
                 converter = FileConverterManager(progress_callback)
-                results = converter.convert_folder(workspace_path, save_path, raw_path, recursive=True, ai_assist=ai_assist)
+                results = converter.convert_folder(workspace_path, save_path, raw_path, recursive=True)
 
                 new_md_files = [r.get("output_path") or r.get("file_path") for r in results if r.get("success") and (r.get("output_path") or r.get("file_path"))]
                 if new_md_files:
                     self._tag_new_files(new_md_files)
             except Exception as e:
-                logger.error(f"转换失败: {e}")
+                logger.error(f"转换失败: {e}", exc_info=True)
 
         threading.Thread(target=task, daemon=True).start()
         return {"success": True, "message": "转换已开始"}
@@ -230,7 +230,7 @@ class Api:
         def task():
             doc_paths = []
             try:
-                def progress_callback(current, total, message, max_total=1.0):
+                def progress_callback(current, total, message):
                     pass
 
                 Path(output_path).mkdir(parents=True, exist_ok=True)
@@ -275,7 +275,7 @@ class Api:
             try:
                 shutil.move(str(src), str(dst))
             except Exception as e:
-                logger.warning(f"移动文件到Used失败 {src}: {e}")
+                logger.warning(f"移动文件到Used失败 {src}: {e}", exc_info=True)
 
     def save_api_config(self, config_data):
         api_key = config_data.get("api_key", "")
@@ -422,6 +422,70 @@ class Api:
         previewer = FilePreviewer()
         return previewer.can_preview(path)
 
+    def search_files(self, query):
+        """搜索工作区中所有 .md 文件的内容"""
+        if not config.workspace_path:
+            return {"success": False, "results": [], "message": "未设置工作区"}
+
+        if not query or not query.strip():
+            return {"success": False, "results": [], "message": "请输入搜索关键词"}
+
+        query = query.strip()
+        query_lower = query.lower()
+        workspace = Path(config.workspace_path)
+        results = []
+
+        for md_file in workspace.rglob("*.md"):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+            try:
+                content = md_file.read_text(encoding='utf-8')
+            except Exception:
+                continue
+
+            if query_lower not in content.lower():
+                continue
+
+            # 提取关键词上下文片段
+            idx = content.lower().find(query_lower)
+            start = max(0, idx - 40)
+            end = min(len(content), idx + len(query) + 80)
+            snippet = content[start:end].replace('\n', ' ').strip()
+            if start > 0:
+                snippet = '...' + snippet
+            if end < len(content):
+                snippet += '...'
+
+            rel_path = str(md_file.relative_to(workspace))
+            title = md_file.stem
+            try:
+                from utils.helpers import extract_title_from_markdown
+                extracted = extract_title_from_markdown(content)
+                if extracted:
+                    title = extracted
+            except Exception:
+                pass
+
+            # 统计命中次数
+            match_count = content.lower().count(query_lower)
+
+            results.append({
+                "path": rel_path,
+                "title": title,
+                "snippet": snippet,
+                "name": md_file.name,
+                "matches": match_count,
+            })
+
+        results.sort(key=lambda r: -r['matches'])
+
+        return {
+            "success": True,
+            "results": results[:50],
+            "query": query,
+            "count": len(results),
+        }
+
     def save_file_content(self, path, content):
         try:
             workspace_path = config.workspace_path
@@ -529,6 +593,18 @@ def _start_http_server_with_api(directory, api):
     import socket
     from http.server import HTTPServer, SimpleHTTPRequestHandler
 
+    _ALLOWED_API_METHODS = {
+        'get_workspace_status', 'check_workspace_path_valid', 'clear_saved_workspace',
+        'get_api_config', 'save_api_config',
+        'get_ui_config', 'save_ui_config',
+        'get_theme_preference', 'save_theme_preference',
+        'get_workspace_tree', 'on_file_selected',
+        'get_file_preview', 'can_preview_file', 'save_file_content',
+        'start_web_download', 'start_file_conversion',
+        'extract_topics', 'start_note_integration', 'search_files',
+    }
+    _MAX_BODY_SIZE = 2 * 1024 * 1024  # 2MB
+
     class APIRequestHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             self._api = api
@@ -565,57 +641,66 @@ def _start_http_server_with_api(directory, api):
             self.send_response(404)
             self.end_headers()
 
+        def _send_json(self, status, data):
+            body = json.dumps(data, ensure_ascii=False).encode('utf-8')
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def _handle_api_get(self, path, query):
+            method_name = path[5:]
             try:
-                method_name = path[5:]
+                if method_name not in _ALLOWED_API_METHODS:
+                    self._send_json(404, {"success": False, "error": f"未知的 API 方法: {method_name}"})
+                    return
+
                 params = parse_qs(query)
                 args_json = params.get('args', ['[]'])[0]
+                if len(args_json) > _MAX_BODY_SIZE:
+                    self._send_json(400, {"success": False, "error": "请求参数过大"})
+                    return
                 args = json.loads(args_json)
 
                 result = self._call_api_method(method_name, args)
+                self._send_json(200, result)
 
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode('utf-8'))
-
+            except json.JSONDecodeError:
+                self._send_json(400, {"success": False, "error": "参数格式无效"})
             except Exception as e:
                 print(f"[ERROR] API GET 调用失败: {e}")
                 import traceback
                 traceback.print_exc()
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+                self._send_json(500, {"success": False, "error": str(e)})
 
         def _handle_api_post(self, path):
+            method_name = path[5:]
             try:
-                method_name = path[5:]
+                if method_name not in _ALLOWED_API_METHODS:
+                    self._send_json(404, {"success": False, "error": f"未知的 API 方法: {method_name}"})
+                    return
 
                 content_length = int(self.headers.get('Content-Length', 0))
+                if content_length > _MAX_BODY_SIZE:
+                    self._send_json(413, {"success": False, "error": "请求体过大"})
+                    return
+
                 body = self.rfile.read(content_length).decode('utf-8')
                 args = json.loads(body) if body else []
 
                 result = self._call_api_method(method_name, args)
+                self._send_json(200, result)
 
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode('utf-8'))
-
+            except json.JSONDecodeError:
+                self._send_json(400, {"success": False, "error": "请求体 JSON 格式无效"})
             except Exception as e:
                 print(f"[ERROR] API POST 调用失败: {e}")
                 import traceback
                 traceback.print_exc()
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"success": False, "error": str(e)}).encode('utf-8'))
+                self._send_json(500, {"success": False, "error": str(e)})
 
         def _call_api_method(self, method_name, args):
-            if method_name.startswith('_'):
-                raise ValueError(f"私有方法不可调用: {method_name}")
-
             if not hasattr(self._api, method_name):
                 raise ValueError(f"API 方法不存在: {method_name}")
 

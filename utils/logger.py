@@ -1,30 +1,38 @@
 import logging
 import os
 import glob
+import threading
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from config.settings import config
 
 class AppLogger:
-    """应用日志管理器"""
-    
+    """应用日志管理器（线程安全单例）"""
+
     _instance = None
-    
+    _lock = threading.Lock()
+
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialized = False
         return cls._instance
-    
+
     def __init__(self):
         if self._initialized:
             return
-        
-        self._initialized = True
+
+        with self._lock:
+            if self._initialized:
+                return
+            self._initialized = True
+
         self.logger = logging.getLogger('NoteAI')
         self.logger.setLevel(logging.DEBUG)
-        
+
         self.logger.handlers.clear()
         
         log_dir = Path(config.log_path)

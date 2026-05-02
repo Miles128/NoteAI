@@ -1,6 +1,7 @@
 let currentPreviewData = null;
 let isPreviewActive = false;
 let currentLoadRequestId = 0;
+var pdfViewerState = null;
 
 function generateLoadRequestId() {
     currentLoadRequestId += 1;
@@ -125,18 +126,24 @@ async function loadFilePreview(path, fileName) {
             console.log('[Preview] Success, rendering content');
             const fileType = result.type || 'markdown';
             const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
+            const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
             
             currentPreviewData = {
                 path: path,
                 name: fileName,
                 type: fileType,
                 content: result.content,
-                metadata: result.metadata
+                metadata: result.metadata,
+                pdfData: result
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
             
-            if (isMarkdown) {
+            if (isPdf) {
+                console.log('[Preview] PDF file detected, loading with pdf.js');
+                showEditButton(false);
+                await loadPdfViewer(path, fileName, requestId);
+            } else if (isMarkdown) {
                 console.log('[Preview] Opening markdown in editor directly');
                 
                 if (requestId !== currentLoadRequestId) {
@@ -178,6 +185,188 @@ async function loadFilePreview(path, fileName) {
             showPreviewError('加载失败', e.message);
         }
     }
+}
+
+async function loadPdfViewer(path, fileName, requestId) {
+    var previewContent = document.getElementById('preview-content');
+    if (!previewContent) return;
+
+    previewContent.innerHTML = `
+        <div class="pdf-viewer-container">
+            <div class="pdf-toolbar">
+                <div class="pdf-toolbar-left">
+                    <span class="pdf-file-name">${escapeHtml(fileName)}</span>
+                </div>
+                <div class="pdf-toolbar-center">
+                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="上一页">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                    </button>
+                    <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
+                    <button class="pdf-nav-btn" id="pdf-next-btn" title="下一页">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
+                <div class="pdf-toolbar-right">
+                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="缩小">−</button>
+                    <span class="pdf-zoom-level" id="pdf-zoom-level">100%</span>
+                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="放大">+</button>
+                </div>
+            </div>
+            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
+                <canvas id="pdf-render-canvas"></canvas>
+            </div>
+        </div>
+    `;
+
+    previewContent.style.display = 'flex';
+    previewContent.style.flexDirection = 'column';
+    previewContent.style.padding = '0';
+    previewContent.style.overflow = 'hidden';
+
+    try {
+        var rawResult = await window.api.read_file_raw(path);
+        if (requestId !== currentLoadRequestId) return;
+
+        if (!rawResult || !rawResult.success) {
+            showPdfError('加载失败', rawResult ? rawResult.message : '无法读取文件');
+            return;
+        }
+
+        var binaryStr = atob(rawResult.content);
+        var len = binaryStr.length;
+        var bytes = new Uint8Array(len);
+        for (var i = 0; i < len; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+        }
+
+        if (typeof pdfjsLib === 'undefined') {
+            showPdfError('PDF 查看器未加载', 'pdf.js 库不可用，请检查网络连接');
+            return;
+        }
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-legacy.worker.min.js';
+
+        var loadingTask = pdfjsLib.getDocument({ data: bytes });
+        var pdfDoc = await loadingTask.promise;
+
+        if (requestId !== currentLoadRequestId) {
+            pdfDoc.destroy();
+            return;
+        }
+
+        pdfViewerState = {
+            pdfDoc: pdfDoc,
+            pageNum: 1,
+            pageCount: pdfDoc.numPages,
+            scale: 1.0
+        };
+
+        document.getElementById('pdf-page-count').textContent = pdfDoc.numPages;
+        document.getElementById('pdf-page-num').textContent = '1';
+        document.getElementById('pdf-zoom-level').textContent = '100%';
+
+        renderPdfPage(pdfViewerState.pageNum);
+
+        document.getElementById('pdf-prev-btn').addEventListener('click', function() {
+            if (pdfViewerState.pageNum <= 1) return;
+            pdfViewerState.pageNum--;
+            renderPdfPage(pdfViewerState.pageNum);
+        });
+
+        document.getElementById('pdf-next-btn').addEventListener('click', function() {
+            if (pdfViewerState.pageNum >= pdfViewerState.pageCount) return;
+            pdfViewerState.pageNum++;
+            renderPdfPage(pdfViewerState.pageNum);
+        });
+
+        document.getElementById('pdf-zoom-in-btn').addEventListener('click', function() {
+            pdfViewerState.scale = Math.min(pdfViewerState.scale + 0.25, 3.0);
+            document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+            renderPdfPage(pdfViewerState.pageNum);
+        });
+
+        document.getElementById('pdf-zoom-out-btn').addEventListener('click', function() {
+            pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.25, 0.5);
+            document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+            renderPdfPage(pdfViewerState.pageNum);
+        });
+
+        var canvasWrapper = document.getElementById('pdf-canvas-wrapper');
+        canvasWrapper.addEventListener('wheel', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) {
+                    pdfViewerState.scale = Math.min(pdfViewerState.scale + 0.1, 3.0);
+                } else {
+                    pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.1, 0.5);
+                }
+                document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+                renderPdfPage(pdfViewerState.pageNum);
+            }
+        }, { passive: false });
+
+        document.addEventListener('keydown', function pdfKeyHandler(e) {
+            if (!pdfViewerState) {
+                document.removeEventListener('keydown', pdfKeyHandler);
+                return;
+            }
+            if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                if (pdfViewerState.pageNum < pdfViewerState.pageCount) {
+                    pdfViewerState.pageNum++;
+                    renderPdfPage(pdfViewerState.pageNum);
+                }
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                if (pdfViewerState.pageNum > 1) {
+                    pdfViewerState.pageNum--;
+                    renderPdfPage(pdfViewerState.pageNum);
+                }
+            }
+        });
+
+    } catch (e) {
+        console.error('[Preview] PDF load error:', e);
+        if (requestId === currentLoadRequestId) {
+            showPdfError('PDF 加载失败', e.message || '未知错误');
+        }
+    }
+}
+
+async function renderPdfPage(pageNum) {
+    if (!pdfViewerState || !pdfViewerState.pdfDoc) return;
+
+    var canvas = document.getElementById('pdf-render-canvas');
+    if (!canvas) return;
+
+    document.getElementById('pdf-page-num').textContent = pageNum;
+
+    try {
+        var page = await pdfViewerState.pdfDoc.getPage(pageNum);
+        var viewport = page.getViewport({ scale: pdfViewerState.scale });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = viewport.width + 'px';
+        canvas.style.height = viewport.height + 'px';
+
+        var ctx = canvas.getContext('2d');
+        var renderContext = {
+            canvasContext: ctx,
+            viewport: viewport
+        };
+
+        await page.render(renderContext).promise;
+        page.cleanup();
+    } catch (e) {
+        console.error('[Preview] PDF render error:', e);
+    }
+}
+
+function showPdfError(title, message) {
+    var previewContent = document.getElementById('preview-content');
+    if (!previewContent) return;
+    previewContent.style.display = '';
+    previewContent.style.padding = '16px';
+    showPreviewError(title, message);
 }
 
 function renderPreviewContent(previewData) {
@@ -259,6 +448,13 @@ function showPreviewError(title, message) {
 
 function closePreview() {
     currentLoadRequestId += 1;
+    
+    if (pdfViewerState && pdfViewerState.pdfDoc) {
+        try {
+            pdfViewerState.pdfDoc.destroy();
+        } catch(e) {}
+        pdfViewerState = null;
+    }
     
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');

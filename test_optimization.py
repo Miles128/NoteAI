@@ -38,7 +38,7 @@ def test_optimization():
             test_file.write_text(content, encoding='utf-8')
     
     # 初始化整合器
-    def progress_callback(current, total, message, overall):
+    def progress_callback(current, total, message):
         print(f"进度: {current}/{total} - {message}")
     
     integrator = NoteIntegration(progress_callback=progress_callback)

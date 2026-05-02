@@ -103,6 +103,14 @@ async function moveFileToTopic(filePath, newTopic) {
     return pyCall('move_file_to_topic', { file_path: filePath, new_topic: newTopic });
 }
 
+async function moveFile(filePath, targetFolder) {
+    return pyCall('move_file', { file_path: filePath, target_folder: targetFolder });
+}
+
+async function addTagToFile(filePath, tag) {
+    return pyCall('add_tag_to_file', { file_path: filePath, tag: tag });
+}
+
 async function getApiConfig() {
     return pyCall('get_api_config');
 }
@@ -198,6 +206,10 @@ async function saveFileContent(path, content) {
     return pyCall('save_file_content', { path: path, content: content });
 }
 
+async function readFileRaw(path) {
+    return pyCall('read_file_raw', { path: path });
+}
+
 function getTauriWindow() {
     if (window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrent) {
         return window.__TAURI__.window.getCurrent();
@@ -266,6 +278,8 @@ window.api = {
     resolveTopic: resolveTopic,
     renameTopic: renameTopic,
     moveFileToTopic: moveFileToTopic,
+    moveFile: moveFile,
+    addTagToFile: addTagToFile,
     getApiConfig: getApiConfig,
     saveApiConfig: saveApiConfig,
     getUiConfig: getUiConfig,
@@ -308,6 +322,8 @@ window.api = {
     resolve_topic: resolveTopic,
     rename_topic: renameTopic,
     move_file_to_topic: moveFileToTopic,
+    move_file: moveFile,
+    add_tag_to_file: addTagToFile,
     get_api_config: getApiConfig,
     save_api_config: saveApiConfig,
     get_ui_config: getUiConfig,
@@ -325,6 +341,7 @@ window.api = {
     get_file_preview: getFilePreview,
     can_preview_file: canPreviewFile,
     save_file_content: saveFileContent,
+    read_file_raw: readFileRaw,
     read_note_file: getFilePreview,
     save_note_file: saveFileContent,
 

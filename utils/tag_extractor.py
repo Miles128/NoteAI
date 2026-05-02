@@ -5,6 +5,16 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 
 from config import is_ignored_dir
+from utils.text_utils import (
+    is_chinese_word,
+    is_english_word,
+    tokenize_filename,
+    CHINESE_STOPWORDS,
+    OCCURRENCE_THRESHOLD,
+    _count_tag_occurrence,
+    _normalize_for_match,
+    _is_generic_word,
+)
 
 try:
     import yaml
@@ -12,112 +22,6 @@ try:
 except ImportError:
     yaml = None
     PYYAML_AVAILABLE = False
-
-try:
-    import jieba
-    JIEBA_AVAILABLE = True
-except ImportError:
-    jieba = None
-    JIEBA_AVAILABLE = False
-
-CHINESE_STOPWORDS = {
-    "的", "了", "是", "在", "我", "有", "和", "就",
-    "不", "人", "都", "一", "一个", "上", "也", "很",
-    "到", "说", "要", "去", "你", "会", "着", "没有",
-    "看", "好", "自己", "这", "那", "她", "他", "它",
-    "们", "这个", "那个", "什么", "怎么", "为什么",
-    "哪", "哪里", "谁", "多少", "几", "啊", "吧",
-    "呢", "吗", "呀", "哦", "嗯", "哈", "哎", "唉",
-    "但是", "如果", "因为", "所以", "虽然", "而且",
-    "然而", "不过", "于是", "因此", "并且", "或者",
-    "还是", "以及", "及其", "关于", "对于", "为了",
-    "由于", "根据", "通过", "随着", "按照", "除了",
-    "包括", "进行", "可以", "能够", "需要", "可能",
-    "应该", "必须", "一定", "已经", "正在", "将",
-    "曾", "让", "给", "把", "被", "使", "从", "向",
-    "往", "对", "与", "跟", "同", "及", "等", "等等",
-    "之类", "之", "以", "而", "于", "其", "此",
-    "该", "本", "每", "各", "某", "另", "其他", "另外",
-    "任何", "所有", "全部", "部分", "一些", "许多",
-    "很多", "更多", "最", "更", "还", "又", "再",
-    "仍", "才", "就", "都", "全", "只", "仅", "单",
-    "光", "便", "即", "则", "已", "其实", "实际上",
-    "事实上", "当然", "显然", "确实", "的确", "真的",
-    "实在", "总之", "总而言之", "简言之", "综上所述",
-    "由此可见", "因而", "故而", "从而", "结果", "导致",
-    "造成", "引起", "使得", "涉及", "有关", "相关",
-    "相应", "相应的", "的话", "来说", "而言", "来看",
-    "看来", "这样", "那样", "这么", "那么", "怎么",
-    "如何", "怎样", "为何", "因", "既然", "假如", "假设",
-    "要是", "倘若", "即使", "纵然", "纵使", "尽管", "虽说",
-    "固然", "可是", "却", "而", "但", "只是", "只有",
-    "只要", "除非", "否则", "不然", "要不然", "无论",
-    "不管", "不论", "任凭", "哪怕", "就算", "就是", "还有",
-    "此外", "再者", "同时", "同样", "或是", "抑或",
-    "要么", "不是", "与其", "不如", "宁可", "也不",
-    "毋宁", "什么的", "即将", "曾经", "过去", "现在",
-    "未来", "今天", "明天", "昨天", "前天", "后天",
-    "今年", "去年", "明年", "前年", "后年", "每天",
-    "每周", "每月", "每年", "每次", "第一", "第二",
-    "第三", "首先", "其次", "再次", "最后", "最终",
-    "终于", "开始", "结束", "停止", "继续", "开展",
-    "实施", "执行", "落实", "完成", "达到", "实现",
-    "获得", "取得", "得到", "获取", "接收", "接受",
-    "同意", "反对", "支持", "帮助", "协助", "配合",
-    "参与", "参加", "加入", "退出", "离开", "进入",
-    "出来", "上去", "下来", "过来", "回去", "起来",
-    "坐下", "站起", "躺下", "睡觉", "醒来", "吃饭",
-    "喝水", "说话", "聊天", "讨论", "商量", "研究",
-    "思考", "考虑", "分析", "判断", "决定", "选择",
-    "挑选", "比较", "对比", "区别", "不同", "相同",
-    "类似", "相似", "一样", "同样", "大概", "大约",
-    "也许", "大致", "大体", "基本上", "差不多", "几乎",
-    "将近", "接近", "左右", "上下", "前后", "以上", "以下",
-    "以内", "以外", "之间", "中间", "之内", "之外",
-    "旁边", "附近", "周围", "四周", "到处", "处处", "各处",
-    "哪里", "这里", "那里", "这边", "那边", "对面",
-    "前面", "后面", "左边", "右边", "上面", "下面",
-    "里面", "外面", "里头", "外头", "少数", "整个",
-    "整体", "各类", "各项", "每一个", "每一种", "每一类",
-    "某一个", "某一种", "某一类", "另一个", "另一种",
-    "另一类", "其它", "其余", "剩下",
-}
-
-MIN_TAG_LENGTH = 2
-OCCURRENCE_THRESHOLD = 3
-
-
-def is_chinese_word(word: str) -> bool:
-    """判断是否为中文词汇"""
-    return bool(re.search(r'[\u4e00-\u9fff]', word))
-
-
-def is_english_word(word: str) -> bool:
-    """判断是否为英文词汇"""
-    return bool(re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', word))
-
-
-def tokenize_filename(filename: str) -> List[str]:
-    """使用 jieba 对文件名进行分词（支持中英文混合）
-    
-    Args:
-        filename: 文件名（可带或不带扩展名）
-    
-    Returns:
-        分词后的词汇列表，过滤掉空格和单个字符
-    """
-    stem = Path(filename).stem
-    
-    if JIEBA_AVAILABLE and jieba:
-        try:
-            tokens = jieba.lcut(stem)
-            return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
-        except Exception:
-            pass
-    
-    stem = re.sub(r'[（(].*?[）)]', '', stem)
-    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', stem)
-    return [p.strip() for p in parts if p.strip() and len(p.strip()) >= MIN_TAG_LENGTH]
 
 
 def _collect_workspace_md_filenames(workspace_path: str) -> List[str]:
@@ -143,24 +47,6 @@ def _collect_workspace_md_filenames(workspace_path: str) -> List[str]:
     return filenames
 
 
-def _count_tag_occurrence(tag: str, filenames: List[str], case_insensitive: bool = True) -> int:
-    """统计 tag 在文件名列表中的出现次数
-    
-    Args:
-        tag: 待搜索的标签
-        filenames: 文件名列表
-        case_insensitive: 是否忽略大小写（仅对英文生效）
-    
-    Returns:
-        出现次数
-    """
-    if case_insensitive and is_english_word(tag):
-        tag_lower = tag.lower()
-        return sum(1 for fn in filenames if tag_lower in fn.lower())
-    else:
-        return sum(1 for fn in filenames if tag in fn)
-
-
 def _generate_english_pairs(english_words: List[str]) -> List[str]:
     """生成相邻英文单词的组合
     
@@ -178,19 +64,14 @@ def _generate_english_pairs(english_words: List[str]) -> List[str]:
 
 
 def _is_word_in_accepted_pair(word: str, accepted_pairs: List[str], case_insensitive: bool = True) -> bool:
-    """检查单词是否已被包含在已接受的双词组合中
-    
-    例如: "Machine" 在 "MachineLearning" 中则返回 True
+    """检查单词是否已被包含在已接受的双词组合中（忽略空格）
+
+    例如: "Machine" 在 "MachineLearning" 或 "Machine Learning" 中则返回 True
     """
-    if case_insensitive:
-        word_lower = word.lower()
-        for pair in accepted_pairs:
-            if word_lower in pair.lower():
-                return True
-    else:
-        for pair in accepted_pairs:
-            if word in pair:
-                return True
+    word_norm = _normalize_for_match(word)
+    for pair in accepted_pairs:
+        if word_norm in _normalize_for_match(pair):
+            return True
     return False
 
 
@@ -270,10 +151,10 @@ def extract_tags_from_filename(file_path: str) -> List[str]:
     unique_tags = []
     for tag in tags:
         tag_lower = tag.lower()
-        if tag_lower not in seen:
+        if tag_lower not in seen and not _is_generic_word(tag):
             seen.add(tag_lower)
             unique_tags.append(tag)
-    
+
     return unique_tags
 
 
@@ -296,8 +177,9 @@ def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
             if tags:
                 add_yaml_frontmatter_to_file(fp, tags=tags)
                 results[fp] = tags
-        except Exception:
-            continue
+        except Exception as e:
+            sys.stderr.write(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
+            sys.stderr.flush()
     
     return results
 
@@ -743,6 +625,7 @@ def save_tags_md(workspace_path: str) -> dict:
                                     tag_map[tag] = []
                                 tag_map[tag].append(rel)
                     except Exception:
+                        # YAML front matter parse failure on individual file, non-critical
                         pass
         except PermissionError:
             pass

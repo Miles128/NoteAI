@@ -26,7 +26,7 @@ class BaseConverter(ABC):
         self.progress_callback = progress_callback
 
     @abstractmethod
-    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
+    def to_markdown(self, file_path: str) -> str:
         """转换为Markdown"""
         pass
 
@@ -41,9 +41,9 @@ class PDFConverter(BaseConverter):
     SIGNATURE_MAX_LENGTH = 200
     SIGNATURE_MAX_LINES = 5
 
-    def to_markdown(self, file_path: str, ai_assist: bool = True) -> str:
-        """使用快速路径将PDF转换为Markdown（默认启用Python优化）"""
-        logger.info(f"开始转换PDF: {file_path} (Python优化: {ai_assist})")
+    def to_markdown(self, file_path: str) -> str:
+        """使用 PyMuPDF 将 PDF 转换为 Markdown"""
+        logger.info(f"开始转换PDF: {file_path}")
 
         try:
             markdown_content = self._extract_pdf_text(file_path)
@@ -134,9 +134,9 @@ class PDFConverter(BaseConverter):
 
 class TXTConverter(BaseConverter):
 
-    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
+    def to_markdown(self, file_path: str) -> str:
         """TXT转Markdown"""
-        logger.info(f"开始转换TXT: {file_path} (Python优化: {ai_assist})")
+        logger.info(f"开始转换TXT: {file_path}")
 
         try:
             raw_content = read_file_with_encoding(file_path)
@@ -160,13 +160,13 @@ class DOCXConverter(BaseConverter):
 
     SUPPORTED_FORMATS = ['.docx', '.doc']
 
-    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
-        """将Word文档转换为Markdown（默认启用Python优化）"""
+    def to_markdown(self, file_path: str) -> str:
+        """将Word文档转换为Markdown"""
         ext = Path(file_path).suffix.lower()
         if ext == '.doc':
             raise ValueError("暂不支持 .doc 格式，请将文件另存为 .docx 后重试")
 
-        logger.info(f"开始转换Word文档: {file_path} (Python优化: {ai_assist})")
+        logger.info(f"开始转换Word文档: {file_path}")
 
         try:
             markdown_content = self._extract_docx_text(file_path)
@@ -196,12 +196,12 @@ class PPTConverter(BaseConverter):
 
     SUPPORTED_FORMATS = ['.pptx', '.ppt']
 
-    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
+    def to_markdown(self, file_path: str) -> str:
         ext = Path(file_path).suffix.lower()
         if ext == '.ppt':
             raise ValueError("暂不支持 .ppt 格式，请将文件另存为 .pptx 后重试")
 
-        logger.info(f"开始转换PPT: {file_path} (Python优化: {ai_assist})")
+        logger.info(f"开始转换PPT: {file_path}")
 
         try:
             markdown_content = self._extract_pptx_text(file_path)
@@ -251,8 +251,8 @@ class HTMLConverter(BaseConverter):
 
     SUPPORTED_FORMATS = ['.html', '.htm']
 
-    def to_markdown(self, file_path: str, ai_assist: bool = False) -> str:
-        logger.info(f"开始转换HTML: {file_path} (Python优化: {ai_assist})")
+    def to_markdown(self, file_path: str) -> str:
+        logger.info(f"开始转换HTML: {file_path}")
 
         try:
             markdown_content = self._extract_html_text(file_path)
@@ -346,20 +346,18 @@ class FileConverterManager:
             return None
     
     def convert_file(
-        self, 
-        file_path: str, 
+        self,
+        file_path: str,
         output_path: str,
         output_format: str = 'markdown',
-        ai_assist: bool = False
     ) -> Dict:
         """
         转换单个文件
-        
+
         Args:
             file_path: 输入文件路径
             output_path: 输出目录路径
             output_format: 输出格式（目前仅支持 markdown）
-            ai_assist: 是否使用AI进行额外优化（默认False）
         """
         result = {
             'file_path': file_path,
@@ -383,7 +381,7 @@ class FileConverterManager:
                 return result
             
             # 转换为Markdown
-            markdown_content = converter.to_markdown(str(file_path), ai_assist=ai_assist)
+            markdown_content = converter.to_markdown(str(file_path))
             
             # 添加YAML front matter
             markdown_content = add_yaml_frontmatter_to_content(
@@ -414,8 +412,8 @@ class FileConverterManager:
             try:
                 from utils.topic_assigner import auto_assign_topic_for_file
                 auto_assign_topic_for_file(str(output_file))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"自动分配主题失败: {e}")
 
             result['success'] = True
             result['output_path'] = str(output_file)
@@ -435,7 +433,6 @@ class FileConverterManager:
         output_path: str,
         raw_path: str = None,
         output_format: str = 'markdown',
-        ai_assist: bool = False
     ) -> List[Dict]:
         """批量转换文件"""
         results = []
@@ -445,7 +442,7 @@ class FileConverterManager:
             if self.progress_callback:
                 self.progress_callback(i + 1, total, f"正在转换: {Path(file_path).name}")
 
-            result = self.convert_file(file_path, output_path, output_format, ai_assist=ai_assist)
+            result = self.convert_file(file_path, output_path, output_format)
 
             if result['success'] and raw_path:
                 self._move_to_raw(file_path, raw_path)
@@ -461,8 +458,8 @@ class FileConverterManager:
             from utils.tag_extractor import save_tags_md
             if config.workspace_path:
                 save_tags_md(config.workspace_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"保存 tags.md 失败: {e}")
 
         return results
 
@@ -501,7 +498,6 @@ class FileConverterManager:
         raw_path: str = None,
         output_format: str = 'markdown',
         recursive: bool = True,
-        ai_assist: bool = False
     ) -> List[Dict]:
         """转换整个文件夹"""
         folder = Path(folder_path)
@@ -531,7 +527,7 @@ class FileConverterManager:
 
         logger.info(f"找到 {len(file_paths)} 个可转换文件")
 
-        return self.convert_batch(file_paths, output_path, raw_path, output_format, ai_assist=ai_assist)
+        return self.convert_batch(file_paths, output_path, raw_path, output_format)
     
     @classmethod
     def get_supported_formats(cls) -> List[str]:

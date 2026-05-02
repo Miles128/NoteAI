@@ -325,3 +325,7 @@
 
 .sidebar-tag-file.dragging { opacity: 0.4; }
 .sidebar-tag-row.drag-over { background: var(--background-modifier-hover); outline: 1px solid var(--text-accent); outline-offset: -1px; }
+
+.topic-pending-card.dragging { opacity: 0.4; cursor: grabbing; }
+.topic-pending-card[draggable="true"] { cursor: grab; }
+.topic-pending-card[draggable="true"]:active { cursor: grabbing; }

@@ -4,38 +4,7 @@ import sys
 from pathlib import Path
 from config.settings import config
 
-try:
-    import jieba
-    JIEBA_AVAILABLE = True
-except ImportError:
-    jieba = None
-    JIEBA_AVAILABLE = False
-
-MIN_TAG_LENGTH = 2
-
-
-def is_chinese_word(word: str) -> bool:
-    return bool(re.search(r'[\u4e00-\u9fff]', word))
-
-
-def is_english_word(word: str) -> bool:
-    return bool(re.match(r'^[a-zA-Z][a-zA-Z0-9]*$', word))
-
-
-def tokenize_text(text: str) -> list:
-    if not text:
-        return []
-    
-    if JIEBA_AVAILABLE and jieba:
-        try:
-            tokens = jieba.lcut(text)
-            return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
-        except Exception:
-            pass
-    
-    text = re.sub(r'[（(].*?[）)]', '', text)
-    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', text)
-    return [p.strip() for p in parts if p.strip() and len(p.strip()) >= MIN_TAG_LENGTH]
+from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
 
 
 def _get_pending_path():
@@ -386,55 +355,72 @@ def _check_topic_needs_processing(yaml_text: str) -> bool:
 
 def _has_consecutive_two_words_match(topic_tokens: list, filename: str) -> bool:
     """
-    第一优先级匹配：主题分词后是否有连续的两个词在文件名中出现
-    例如：主题["机器", "学习", "基础"] -> 检查"机器学习"、"学习基础"是否在文件名中
+    第一优先级匹配：主题分词后是否有连续的两个词在文件名中出现（忽略空格）
+    例如：主题["机器", "学习", "基础"] → 检查"机器学习"、"学习基础"是否在文件名中
     """
-    filename_lower = filename.lower()
-    
+    filename_norm = _normalize_for_match(filename)
+
     for i in range(len(topic_tokens) - 1):
         word1 = topic_tokens[i]
         word2 = topic_tokens[i + 1]
-        
-        combined_no_space = (word1 + word2).lower()
-        combined_with_space = (word1 + " " + word2).lower()
-        
-        if combined_no_space in filename_lower:
+        combined = _normalize_for_match(word1 + word2)
+        if combined in filename_norm:
             return True
-        if combined_with_space in filename_lower:
-            return True
-    
+
     return False
 
 
-def _is_meaningful_tag(tag: str) -> bool:
-    """
-    检查 tag 是否足够"有意义"：
-    - 英文：>4个字母
-    - 中文：>2个汉字
-    - 中英混合：满足其中之一即可
-    """
-    if not tag or len(tag) < 2:
-        return False
-    
-    chinese_chars = re.findall(r'[\u4e00-\u9fff]', tag)
-    if len(chinese_chars) > 2:
-        return True
-    
-    english_letters = re.findall(r'[a-zA-Z]', tag)
-    if len(english_letters) > 4:
-        return True
-    
-    return False
 
 
 def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
     """
-    检查单词是否足够有意义且在主题名中出现
+    检查单词是否足够有意义且在主题名中出现（忽略空格）
     """
     if not _is_meaningful_tag(word):
         return False
-    
-    return word.lower() in topic_name.lower()
+
+    return _normalize_for_match(word) in _normalize_for_match(topic_name)
+
+
+def _extract_topic_from_filename(filename: str, tags: list) -> str | None:
+    """从文件名中提取主题名，不依赖 LLM。
+
+    算法：从左到右取连续 meaningful token，跳过泛词，
+    累积到 4+ 汉字或 2+ 英文词时停止，拼接作为主题名。
+    文件名不足以构成主题时，回退到第一个 meaningful tag。
+    """
+    tokens = tokenize_text(filename)
+    if not tokens:
+        return None
+
+    kept = []
+    chinese_char_count = 0
+    english_word_count = 0
+
+    for t in tokens:
+        if not _is_meaningful_tag(t) or _is_generic_word(t):
+            continue
+        kept.append(t)
+        cn = len(re.findall(r'[一-鿿]', t))
+        if cn > 0:
+            chinese_char_count += cn
+        else:
+            english_word_count += 1
+        if chinese_char_count >= 4 or english_word_count >= 2:
+            return ''.join(kept)
+
+    if kept:
+        partial = ''.join(kept)
+        for tag in tags:
+            if _is_meaningful_tag(tag) and not _is_generic_word(tag) and tag.lower() != partial.lower():
+                return partial + tag
+        return partial
+
+    for tag in tags:
+        if _is_meaningful_tag(tag) and not _is_generic_word(tag):
+            return tag
+
+    return None
 
 
 def auto_assign_topic_for_file(file_path):
@@ -497,7 +483,7 @@ def auto_assign_topic_for_file(file_path):
                 break
 
         for token in topic_tokens:
-            if _is_meaningful_tag(token) and token.lower() in filename.lower():
+            if _is_meaningful_tag(token) and _normalize_for_match(token) in _normalize_for_match(filename):
                 if h not in low_priority_candidates and h not in high_priority_candidates:
                     low_priority_candidates.append(h)
                 break
@@ -506,17 +492,12 @@ def auto_assign_topic_for_file(file_path):
         candidates = [h["name"] for h in high_priority_candidates]
     elif low_priority_candidates:
         candidates = [h["name"] for h in low_priority_candidates]
-    elif config.api_key:
-        try:
-            from utils.helpers import call_llm
-            from prompts import TOPIC_SUGGESTION_PROMPT
-            tags_str = ', '.join(tags) if tags else '无'
-            result = call_llm(TOPIC_SUGGESTION_PROMPT, temperature=0.3, title=title, tags=tags_str)
-            candidates = [c.strip() for c in result.strip().split('\n') if c.strip()][:4]
-        except Exception:
-            return
     else:
-        return
+        topic_name = _extract_topic_from_filename(filename, tags)
+        if topic_name:
+            candidates = [topic_name]
+        else:
+            return
 
     if not candidates:
         return

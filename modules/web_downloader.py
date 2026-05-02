@@ -27,17 +27,15 @@ from utils.tag_extractor import (
 class WebDownloader:
     """网页下载器"""
     
-    def __init__(self, progress_callback: Optional[Callable] = None, ai_assist: bool = False, include_images: bool = False):
+    def __init__(self, progress_callback: Optional[Callable] = None, include_images: bool = False):
         """
         初始化网页下载器
-        
+
         Args:
             progress_callback: 进度回调函数
-            ai_assist: 是否使用AI进行额外优化（默认False）
             include_images: 是否在Markdown中保留图片的外部 URL 链接（默认False，不下载图片到本地）
         """
         self.progress_callback = progress_callback
-        self.ai_assist = ai_assist
         self.include_images = include_images
         self.session = requests.Session()
         self.session.headers.update({
@@ -479,8 +477,8 @@ class WebDownloader:
                     try:
                         from utils.topic_assigner import auto_assign_topic_for_file
                         auto_assign_topic_for_file(str(file_path))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"自动分配主题失败: {e}")
 
                     result['file_path'] = str(file_path)
                     result['tags'] = tags
@@ -506,8 +504,8 @@ class WebDownloader:
             from utils.tag_extractor import save_tags_md
             if config.workspace_path:
                 save_tags_md(config.workspace_path)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"保存 tags.md 失败: {e}")
 
         return results
 

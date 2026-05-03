@@ -741,11 +741,43 @@ function initGraphSimulation() {
         filteredEdges = filteredEdges.filter(function(e) { return e.type === _graphFilter; });
     }
 
-    var usedNodeIds = new Set();
-    filteredEdges.forEach(function(e) { usedNodeIds.add(e.source); usedNodeIds.add(e.target); });
+    var relevantNodeIds = new Set();
+    if (_graphFilter === 'all') {
+        _graphData.nodes.forEach(function(n) { relevantNodeIds.add(n.id); });
+    } else {
+        filteredEdges.forEach(function(e) {
+            relevantNodeIds.add(e.source);
+            relevantNodeIds.add(e.target);
+        });
+        _graphData.nodes.forEach(function(n) {
+            if (n.nodeType === 'file') {
+                if (_graphData.edges.some(function(e) {
+                    if (e.type === _graphFilter) {
+                        return e.source === n.id || e.target === n.id;
+                    }
+                    return false;
+                })) {
+                    relevantNodeIds.add(n.id);
+                }
+            }
+        });
+    }
 
     _graphData.nodes.forEach(function(n) {
-        if (usedNodeIds.has(n.id)) {
+        var isRelevant = _graphFilter === 'all' || relevantNodeIds.has(n.id);
+        if (_graphFilter !== 'all') {
+            if (n.nodeType === 'file') {
+                isRelevant = _graphData.edges.some(function(e) {
+                    return e.type === _graphFilter && (e.source === n.id || e.target === n.id);
+                });
+            } else if (_graphFilter === 'topic' && n.nodeType === 'topic') {
+                isRelevant = true;
+            } else if (_graphFilter === 'tag' && n.nodeType === 'tag') {
+                isRelevant = true;
+            }
+        }
+        
+        if (isRelevant) {
             var node = {
                 id: n.id, label: n.label, nodeType: n.nodeType,
                 x: w / 2 + (Math.random() - 0.5) * w * 0.6,
@@ -766,71 +798,96 @@ function initGraphSimulation() {
     var alpha = 1;
     var alphaDecay = 0.02;
     var alphaMin = 0.001;
+    var centerPull = 0.003;
+    var friction = 0.85;
+    var linkDistance = 80;
+    var linkStrength = 0.008;
+    var repulseStrength = 120;
 
     function tick() {
         if (alpha < alphaMin) { alpha = alphaMin; }
-        var k = alpha * 0.3;
+        
         for (var i = 0; i < edges.length; i++) {
             var e = edges[i];
             var dx = e.target.x - e.source.x;
             var dy = e.target.y - e.source.y;
             var dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            var force = (dist - 60) * k * 0.05;
+            var diff = dist - linkDistance;
+            var force = diff * linkStrength * alpha;
             var fx = dx / dist * force;
             var fy = dy / dist * force;
             e.source.vx += fx; e.source.vy += fy;
             e.target.vx -= fx; e.target.vy -= fy;
         }
-        var repulse = alpha * 80;
+        
         for (var i = 0; i < nodes.length; i++) {
             for (var j = i + 1; j < nodes.length; j++) {
                 var dx = nodes[j].x - nodes[i].x;
                 var dy = nodes[j].y - nodes[i].y;
                 var dist2 = dx * dx + dy * dy || 1;
-                var f = repulse / dist2;
                 var dist = Math.sqrt(dist2);
+                var f = repulseStrength * alpha / dist2;
                 nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
                 nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
             }
         }
+        
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
-            n.vx += (w / 2 - n.x) * 0.001;
-            n.vy += (h / 2 - n.y) * 0.001;
-            n.vx *= 0.6; n.vy *= 0.6;
+            n.vx += (w / 2 - n.x) * centerPull * alpha;
+            n.vy += (h / 2 - n.y) * centerPull * alpha;
+            n.vx *= friction; n.vy *= friction;
             n.x += n.vx; n.y += n.vy;
-            if (n.x < 20) n.x = 20; if (n.x > w - 20) n.x = w - 20;
-            if (n.y < 20) n.y = 20; if (n.y > h - 20) n.y = h - 20;
+            var r = n.nodeType === 'file' ? 4 : 6;
+            if (n.x < r + 5) n.x = r + 5;
+            if (n.x > w - r - 5) n.x = w - r - 5;
+            if (n.y < r + 5) n.y = r + 5;
+            if (n.y > h - r - 5) n.y = h - r - 5;
         }
         alpha *= (1 - alphaDecay);
     }
 
-    var edgeColors = { topic: 'rgba(232,145,58,0.4)', tag: 'rgba(80,184,127,0.4)', link: 'rgba(74,144,217,0.4)' };
+    var edgeColors = { 
+        topic: 'rgba(232,145,58,0.35)', 
+        tag: 'rgba(80,184,127,0.35)', 
+        link: 'rgba(74,144,217,0.5)' 
+    };
     var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
 
     function draw() {
         ctx.clearRect(0, 0, w, h);
+        
         for (var i = 0; i < edges.length; i++) {
             var e = edges[i];
             ctx.beginPath();
             ctx.moveTo(e.source.x, e.source.y);
             ctx.lineTo(e.target.x, e.target.y);
             ctx.strokeStyle = edgeColors[e.type] || 'rgba(150,150,150,0.3)';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = e.type === 'link' ? 1.5 : 0.8;
+            ctx.setLineDash(e.type === 'link' ? [] : [3, 3]);
             ctx.stroke();
+            ctx.setLineDash([]);
         }
+        
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
             var r = n.nodeType === 'file' ? 4 : 6;
+            
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, r + 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fill();
+            
             ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
             ctx.fillStyle = nodeColors[n.nodeType] || '#999';
             ctx.fill();
-            if (n.nodeType !== 'file' || nodes.length < 40) {
-                ctx.fillStyle = '#888';
-                ctx.font = '9px sans-serif';
+            
+            if (nodes.length <= 60) {
+                ctx.fillStyle = '#666';
+                ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(n.label, n.x, n.y + r + 10);
+                ctx.fillText(n.label, n.x, n.y + r + 12);
             }
         }
     }
@@ -845,9 +902,13 @@ function initGraphSimulation() {
         _hoveredNode = null;
         for (var i = nodes.length - 1; i >= 0; i--) {
             var n = nodes[i];
+            var r = n.nodeType === 'file' ? 4 : 6;
             var dx = mx - n.x;
             var dy = my - n.y;
-            if (dx * dx + dy * dy < 100) { _hoveredNode = n; break; }
+            if (dx * dx + dy * dy < (r + 4) * (r + 4)) { 
+                _hoveredNode = n; 
+                break; 
+            }
         }
         if (_hoveredNode && tooltip) {
             tooltip.style.display = 'block';
@@ -872,15 +933,18 @@ function initGraphSimulation() {
     };
 
     function loop() {
-        tick();
+        for (var i = 0; i < 3; i++) { tick(); }
         draw();
-        if (alpha > alphaMin * 1.1) {
+        if (alpha > alphaMin * 1.5) {
             _graphAnimId = requestAnimationFrame(loop);
         } else {
             _graphAnimId = null;
         }
     }
-    loop();
+    
+    if (nodes.length > 0) {
+        loop();
+    }
 }
 
 function escapeAttr(str) {

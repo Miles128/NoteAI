@@ -681,7 +681,11 @@ function loadRelationGraphView() {
     html += '<button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter(\'tag\')">标签</button>';
     html += '<button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter(\'link\')">链接</button>';
     html += '</div>';
-    html += '<div class="graph-canvas-wrap"><canvas id="graph-canvas"></canvas></div>';
+    html += '<div class="graph-canvas-wrap" id="graph-canvas-wrap">';
+    html += '<div class="graph-loading" id="graph-loading">加载中...</div>';
+    html += '<div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>';
+    html += '<canvas id="graph-canvas" style="display:none;"></canvas>';
+    html += '</div>';
     html += '<div class="graph-legend">';
     html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#4A90D9"></span>文件</span>';
     html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#E8913A"></span>主题</span>';
@@ -695,12 +699,45 @@ function loadRelationGraphView() {
 }
 
 async function loadRelationGraphData() {
-    var result = await window.api.get_relation_graph();
-    if (!result || !result.success) return;
-    _graphData = result;
-    requestAnimationFrame(function() {
-        setTimeout(initGraphSimulation, 50);
-    });
+    var loadingEl = document.getElementById('graph-loading');
+    var emptyEl = document.getElementById('graph-empty');
+    var canvas = document.getElementById('graph-canvas');
+    
+    if (loadingEl) loadingEl.style.display = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (canvas) canvas.style.display = 'none';
+
+    try {
+        var result = await window.api.get_relation_graph();
+        
+        if (loadingEl) loadingEl.style.display = 'none';
+        
+        if (!result || !result.success) {
+            if (emptyEl) {
+                emptyEl.textContent = result?.message || '加载失败';
+                emptyEl.style.display = '';
+            }
+            return;
+        }
+        
+        _graphData = result;
+        
+        if (!_graphData.nodes || _graphData.nodes.length === 0) {
+            if (emptyEl) {
+                emptyEl.textContent = '暂无关系数据';
+                emptyEl.style.display = '';
+            }
+            return;
+        }
+        
+        setTimeout(initGraphSimulation, 100);
+    } catch (e) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (emptyEl) {
+            emptyEl.textContent = '加载失败: ' + (e.message || e);
+            emptyEl.style.display = '';
+        }
+    }
 }
 
 function onGraphFilter(filter) {
@@ -708,101 +745,217 @@ function onGraphFilter(filter) {
     document.querySelectorAll('.graph-filter-btn').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.gfilter === filter);
     });
-    if (_graphData) initGraphSimulation();
+    if (_graphData && _graphData.nodes && _graphData.nodes.length > 0) {
+        initGraphSimulation();
+    }
 }
 
 function initGraphSimulation() {
-    if (_graphAnimId) { cancelAnimationFrame(_graphAnimId); _graphAnimId = null; }
+    if (_graphAnimId) { 
+        cancelAnimationFrame(_graphAnimId); 
+        _graphAnimId = null; 
+    }
 
     var canvas = document.getElementById('graph-canvas');
+    var emptyEl = document.getElementById('graph-empty');
     if (!canvas) return;
+    
     var wrap = canvas.parentElement;
     if (!wrap) return;
+    
     var dpr = window.devicePixelRatio || 1;
     var w = wrap.clientWidth;
     var h = wrap.clientHeight;
-    if (w < 10 || h < 10) {
+    
+    if (w < 20 || h < 20) {
         setTimeout(initGraphSimulation, 100);
         return;
     }
+    
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
+    
     var ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
+
+    var allNodes = _graphData.nodes || [];
+    var allEdges = _graphData.edges || [];
+    
+    if (allNodes.length === 0) {
+        canvas.style.display = 'none';
+        if (emptyEl) {
+            emptyEl.textContent = '暂无关系数据';
+            emptyEl.style.display = '';
+        }
+        return;
+    }
 
     var nodes = [];
     var edges = [];
     var nodeMap = {};
 
-    var filteredEdges = _graphData.edges;
-    if (_graphFilter !== 'all') {
-        filteredEdges = filteredEdges.filter(function(e) { return e.type === _graphFilter; });
-    }
-
-    var relevantNodeIds = new Set();
     if (_graphFilter === 'all') {
-        _graphData.nodes.forEach(function(n) { relevantNodeIds.add(n.id); });
-    } else {
-        filteredEdges.forEach(function(e) {
-            relevantNodeIds.add(e.source);
-            relevantNodeIds.add(e.target);
-        });
-        _graphData.nodes.forEach(function(n) {
-            if (n.nodeType === 'file') {
-                if (_graphData.edges.some(function(e) {
-                    if (e.type === _graphFilter) {
-                        return e.source === n.id || e.target === n.id;
-                    }
-                    return false;
-                })) {
-                    relevantNodeIds.add(n.id);
-                }
-            }
-        });
-    }
-
-    _graphData.nodes.forEach(function(n) {
-        var isRelevant = _graphFilter === 'all' || relevantNodeIds.has(n.id);
-        if (_graphFilter !== 'all') {
-            if (n.nodeType === 'file') {
-                isRelevant = _graphData.edges.some(function(e) {
-                    return e.type === _graphFilter && (e.source === n.id || e.target === n.id);
-                });
-            } else if (_graphFilter === 'topic' && n.nodeType === 'topic') {
-                isRelevant = true;
-            } else if (_graphFilter === 'tag' && n.nodeType === 'tag') {
-                isRelevant = true;
-            }
-        }
-        
-        if (isRelevant) {
+        allNodes.forEach(function(n) {
             var node = {
-                id: n.id, label: n.label, nodeType: n.nodeType,
-                x: w / 2 + (Math.random() - 0.5) * w * 0.6,
-                y: h / 2 + (Math.random() - 0.5) * h * 0.6,
-                vx: 0, vy: 0
+                id: n.id, 
+                label: n.label, 
+                nodeType: n.nodeType,
+                x: w / 2 + (Math.random() - 0.5) * w * 0.5,
+                y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                vx: 0, 
+                vy: 0
             };
             nodes.push(node);
             nodeMap[n.id] = node;
-        }
-    });
+        });
+        
+        allEdges.forEach(function(e) {
+            if (nodeMap[e.source] && nodeMap[e.target]) {
+                edges.push({ 
+                    source: nodeMap[e.source], 
+                    target: nodeMap[e.target], 
+                    type: e.type 
+                });
+            }
+        });
+    } else if (_graphFilter === 'topic') {
+        var topicIds = new Set();
+        allNodes.forEach(function(n) {
+            if (n.nodeType === 'topic') {
+                topicIds.add(n.id);
+            }
+        });
+        
+        var fileIds = new Set();
+        allEdges.forEach(function(e) {
+            if (e.type === 'topic') {
+                fileIds.add(e.source);
+            }
+        });
+        
+        allNodes.forEach(function(n) {
+            if (topicIds.has(n.id) || fileIds.has(n.id)) {
+                var node = {
+                    id: n.id, 
+                    label: n.label, 
+                    nodeType: n.nodeType,
+                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
+                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                    vx: 0, 
+                    vy: 0
+                };
+                nodes.push(node);
+                nodeMap[n.id] = node;
+            }
+        });
+        
+        allEdges.forEach(function(e) {
+            if (e.type === 'topic' && nodeMap[e.source] && nodeMap[e.target]) {
+                edges.push({ 
+                    source: nodeMap[e.source], 
+                    target: nodeMap[e.target], 
+                    type: e.type 
+                });
+            }
+        });
+    } else if (_graphFilter === 'tag') {
+        var tagIds = new Set();
+        allNodes.forEach(function(n) {
+            if (n.nodeType === 'tag') {
+                tagIds.add(n.id);
+            }
+        });
+        
+        var fileIds = new Set();
+        allEdges.forEach(function(e) {
+            if (e.type === 'tag') {
+                fileIds.add(e.source);
+            }
+        });
+        
+        allNodes.forEach(function(n) {
+            if (tagIds.has(n.id) || fileIds.has(n.id)) {
+                var node = {
+                    id: n.id, 
+                    label: n.label, 
+                    nodeType: n.nodeType,
+                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
+                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                    vx: 0, 
+                    vy: 0
+                };
+                nodes.push(node);
+                nodeMap[n.id] = node;
+            }
+        });
+        
+        allEdges.forEach(function(e) {
+            if (e.type === 'tag' && nodeMap[e.source] && nodeMap[e.target]) {
+                edges.push({ 
+                    source: nodeMap[e.source], 
+                    target: nodeMap[e.target], 
+                    type: e.type 
+                });
+            }
+        });
+    } else if (_graphFilter === 'link') {
+        var fileIds = new Set();
+        allEdges.forEach(function(e) {
+            if (e.type === 'link') {
+                fileIds.add(e.source);
+                fileIds.add(e.target);
+            }
+        });
+        
+        allNodes.forEach(function(n) {
+            if (n.nodeType === 'file' && fileIds.has(n.id)) {
+                var node = {
+                    id: n.id, 
+                    label: n.label, 
+                    nodeType: n.nodeType,
+                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
+                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                    vx: 0, 
+                    vy: 0
+                };
+                nodes.push(node);
+                nodeMap[n.id] = node;
+            }
+        });
+        
+        allEdges.forEach(function(e) {
+            if (e.type === 'link' && nodeMap[e.source] && nodeMap[e.target]) {
+                edges.push({ 
+                    source: nodeMap[e.source], 
+                    target: nodeMap[e.target], 
+                    type: e.type 
+                });
+            }
+        });
+    }
 
-    filteredEdges.forEach(function(e) {
-        if (nodeMap[e.source] && nodeMap[e.target]) {
-            edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
+    if (nodes.length === 0) {
+        canvas.style.display = 'none';
+        if (emptyEl) {
+            emptyEl.textContent = '该过滤条件下无数据';
+            emptyEl.style.display = '';
         }
-    });
+        return;
+    }
+
+    canvas.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
 
     var alpha = 1;
     var alphaDecay = 0.02;
     var alphaMin = 0.001;
-    var centerPull = 0.003;
-    var friction = 0.85;
-    var linkDistance = 80;
-    var linkStrength = 0.008;
-    var repulseStrength = 120;
+    var centerPull = 0.005;
+    var friction = 0.9;
+    var linkDistance = 70;
+    var linkStrength = 0.01;
+    var repulseStrength = 100;
 
     function tick() {
         if (alpha < alphaMin) { alpha = alphaMin; }
@@ -839,18 +992,18 @@ function initGraphSimulation() {
             n.vx *= friction; n.vy *= friction;
             n.x += n.vx; n.y += n.vy;
             var r = n.nodeType === 'file' ? 4 : 6;
-            if (n.x < r + 5) n.x = r + 5;
-            if (n.x > w - r - 5) n.x = w - r - 5;
-            if (n.y < r + 5) n.y = r + 5;
-            if (n.y > h - r - 5) n.y = h - r - 5;
+            if (n.x < r + 10) n.x = r + 10;
+            if (n.x > w - r - 10) n.x = w - r - 10;
+            if (n.y < r + 10) n.y = r + 10;
+            if (n.y > h - r - 10) n.y = h - r - 10;
         }
         alpha *= (1 - alphaDecay);
     }
 
     var edgeColors = { 
-        topic: 'rgba(232,145,58,0.35)', 
-        tag: 'rgba(80,184,127,0.35)', 
-        link: 'rgba(74,144,217,0.5)' 
+        topic: 'rgba(232,145,58,0.3)', 
+        tag: 'rgba(80,184,127,0.3)', 
+        link: 'rgba(74,144,217,0.4)' 
     };
     var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
 
@@ -864,7 +1017,7 @@ function initGraphSimulation() {
             ctx.lineTo(e.target.x, e.target.y);
             ctx.strokeStyle = edgeColors[e.type] || 'rgba(150,150,150,0.3)';
             ctx.lineWidth = e.type === 'link' ? 1.5 : 0.8;
-            ctx.setLineDash(e.type === 'link' ? [] : [3, 3]);
+            ctx.setLineDash(e.type === 'link' ? [] : [2, 2]);
             ctx.stroke();
             ctx.setLineDash([]);
         }
@@ -874,16 +1027,11 @@ function initGraphSimulation() {
             var r = n.nodeType === 'file' ? 4 : 6;
             
             ctx.beginPath();
-            ctx.arc(n.x, n.y, r + 2, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.fill();
-            
-            ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
             ctx.fillStyle = nodeColors[n.nodeType] || '#999';
             ctx.fill();
             
-            if (nodes.length <= 60) {
+            if (nodes.length <= 50) {
                 ctx.fillStyle = '#666';
                 ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
                 ctx.textAlign = 'center';
@@ -905,7 +1053,7 @@ function initGraphSimulation() {
             var r = n.nodeType === 'file' ? 4 : 6;
             var dx = mx - n.x;
             var dy = my - n.y;
-            if (dx * dx + dy * dy < (r + 4) * (r + 4)) { 
+            if (dx * dx + dy * dy < (r + 5) * (r + 5)) { 
                 _hoveredNode = n; 
                 break; 
             }
@@ -935,16 +1083,14 @@ function initGraphSimulation() {
     function loop() {
         for (var i = 0; i < 3; i++) { tick(); }
         draw();
-        if (alpha > alphaMin * 1.5) {
+        if (alpha > alphaMin * 2) {
             _graphAnimId = requestAnimationFrame(loop);
         } else {
             _graphAnimId = null;
         }
     }
     
-    if (nodes.length > 0) {
-        loop();
-    }
+    loop();
 }
 
 function escapeAttr(str) {

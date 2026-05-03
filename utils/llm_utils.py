@@ -58,6 +58,7 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
         model=config.model_name,
         temperature=temperature,
         max_tokens=max_tokens or config.max_tokens,
+        request_timeout=60,
     )
 
 
@@ -91,8 +92,18 @@ def call_llm_raw(
     max_tokens: Optional[int] = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式）。"""
-    llm = _create_llm(temperature, max_tokens)
-    response = llm.invoke(prompt_text)
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+
+    def _invoke():
+        llm = _create_llm(temperature, max_tokens)
+        return llm.invoke(prompt_text)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_invoke)
+        try:
+            response = future.result(timeout=90)
+        except FutureTimeout:
+            raise RuntimeError("LLM 调用超时（90秒）")
 
     if hasattr(response, "content"):
         return response.content.strip()

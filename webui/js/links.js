@@ -34,7 +34,7 @@ window.LinksModule = (function() {
         html += '</div>';
 
         html += '<div class="link-list" id="link-list"></div>';
-        html += '<div class="link-empty" id="link-empty">点击「发现链接」让 AI 分析文章关联</div>';
+        html += '<div class="link-empty" id="link-empty"></div>';
         html += '</div>';
 
         container.innerHTML = html;

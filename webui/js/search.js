@@ -18,8 +18,7 @@ function openSearchModal() {
     _searchVisible = true;
 
     input.value = '';
-    document.getElementById('search-results').innerHTML =
-        '<div class="search-empty">输入关键词搜索工作区中的所有笔记</div>';
+    document.getElementById('search-results').innerHTML = '';
 
     setTimeout(function () {
         input.focus();
@@ -41,13 +40,14 @@ function doSearch(query) {
     var resultsEl = document.getElementById('search-results');
     if (!resultsEl) return;
 
+    console.log('[Search] doSearch called, query:', query);
+
     if (!query || query.trim().length === 0) {
-        resultsEl.innerHTML =
-            '<div class="search-empty">输入关键词搜索工作区中的所有笔记</div>';
+        resultsEl.innerHTML = '';
         return;
     }
 
-    if (!window.api || !window.api.pyCall) {
+    if (!window.api || !window.api.invoke) {
         resultsEl.innerHTML =
             '<div class="search-empty">搜索不可用</div>';
         return;
@@ -56,8 +56,9 @@ function doSearch(query) {
     resultsEl.innerHTML =
         '<div class="search-loading">搜索中...</div>';
 
-    window.api.pyCall('search_files', { query: query.trim() })
+    window.api.invoke('search_files', { query: query.trim() })
         .then(function (result) {
+            console.log('[Search] result:', JSON.stringify(result).substring(0, 500));
             if (result && result.success) {
                 renderSearchResults(result);
             } else {
@@ -68,8 +69,9 @@ function doSearch(query) {
             }
         })
         .catch(function (e) {
+            console.error('[Search] error:', e);
             resultsEl.innerHTML =
-                '<div class="search-empty">搜索出错: ' + escapeHtml(e.message || '') + '</div>';
+                '<div class="search-empty">搜索出错: ' + escapeHtml(e.message || e || '未知错误') + '</div>';
         });
 }
 
@@ -162,7 +164,7 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-(function () {
+document.addEventListener('DOMContentLoaded', function() {
     var input = document.getElementById('search-input');
     if (input) {
         input.addEventListener('input', function () {
@@ -172,7 +174,6 @@ document.addEventListener('keydown', function (e) {
             }, 200);
         });
 
-        // Prevent input blur from closing
         input.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 e.stopPropagation();
@@ -180,7 +181,6 @@ document.addEventListener('keydown', function (e) {
         });
     }
 
-    // Click overlay background to close
     var overlay = document.getElementById('search-modal');
     if (overlay) {
         overlay.addEventListener('click', function (e) {
@@ -189,4 +189,4 @@ document.addEventListener('keydown', function (e) {
             }
         });
     }
-})();
+});

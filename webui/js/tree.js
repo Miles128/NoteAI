@@ -681,7 +681,7 @@ function loadGraphView() {
     html += '</div>';
 
     html += '<div class="link-list" id="link-list"></div>';
-    html += '<div class="link-empty" id="link-empty">点击「发现链接」让 AI 分析文章关联</div>';
+    html += '<div class="link-empty" id="link-empty"></div>';
     html += '</div>';
 
     container.innerHTML = html;
@@ -1544,7 +1544,7 @@ async function loadTagsView(silent) {
         _lastTagsData = dataStr;
 
         if (!result || !result.tags || result.tags.length === 0) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无标签<br><span style="font-size: 12px;color:var(--text-muted)">点击下方按钮自动匹配标签</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">暂无标签</div>';
         } else {
             var expandedTags = {};
             container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el) {
@@ -1935,7 +1935,7 @@ async function loadTopicTree(silent) {
         var hasTopics = topics.length > 0;
 
         if (!hasTopics) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题<br><span style="font-size: 12px;color:var(--text-muted)">待确认的主题在右侧处理</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题</div>';
             return;
         }
 

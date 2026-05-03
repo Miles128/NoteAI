@@ -632,11 +632,28 @@ def save_tags_md(workspace_path: str) -> dict:
 
     _scan(str(workspace))
 
+    existing_tags = set()
+    tags_md_path = workspace / 'tags.md'
+    if tags_md_path.exists():
+        try:
+            text = tags_md_path.read_text(encoding='utf-8')
+            for line in text.split('\n'):
+                if line.startswith('## '):
+                    tag = line[3:].strip()
+                    if tag:
+                        existing_tags.add(tag)
+        except Exception:
+            pass
+
+    for tag in tag_map.keys():
+        existing_tags.add(tag)
+
     lines = ['# Tags', '']
-    sorted_tags = sorted(tag_map.items(), key=lambda x: -len(x[1]))
-    for tag, files in sorted_tags:
+    sorted_tags = sorted(existing_tags, key=lambda t: -len(tag_map.get(t, [])))
+    for tag in sorted_tags:
         lines.append('## ' + tag)
         lines.append('')
+        files = tag_map.get(tag, [])
         for f in files:
             fname = Path(f).stem
             lines.append('- [[' + fname + ']]')

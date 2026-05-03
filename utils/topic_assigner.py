@@ -394,47 +394,6 @@ def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
     return _normalize_for_match(word) in _normalize_for_match(topic_name)
 
 
-def _extract_topic_from_filename(filename: str, tags: list) -> str | None:
-    """从文件名中提取主题名，不依赖 LLM。
-
-    算法：从左到右取连续 meaningful token，跳过泛词，
-    累积到 4+ 汉字或 2+ 英文词时停止，拼接作为主题名。
-    文件名不足以构成主题时，回退到第一个 meaningful tag。
-    """
-    tokens = tokenize_text(filename)
-    if not tokens:
-        return None
-
-    kept = []
-    chinese_char_count = 0
-    english_word_count = 0
-
-    for t in tokens:
-        if not _is_meaningful_tag(t) or _is_generic_word(t):
-            continue
-        kept.append(t)
-        cn = len(re.findall(r'[一-鿿]', t))
-        if cn > 0:
-            chinese_char_count += cn
-        else:
-            english_word_count += 1
-        if chinese_char_count >= 4 or english_word_count >= 2:
-            return ''.join(kept)
-
-    if kept:
-        partial = ''.join(kept)
-        for tag in tags:
-            if _is_meaningful_tag(tag) and not _is_generic_word(tag) and tag.lower() != partial.lower():
-                return partial + tag
-        return partial
-
-    for tag in tags:
-        if _is_meaningful_tag(tag) and not _is_generic_word(tag):
-            return tag
-
-    return None
-
-
 def auto_assign_topic_for_file(file_path):
     workspace = config.workspace_path
     if not workspace:
@@ -472,10 +431,20 @@ def auto_assign_topic_for_file(file_path):
         return
 
     headings = parse_wiki_headings()
-    if not headings:
-        return
-
     filename = full_path.stem
+
+    if not headings:
+        pending = load_pending()
+        rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
+        pending.append({
+            "file": rel,
+            "title": title,
+            "tags": tags,
+            "candidates": [],
+            "source": "none"
+        })
+        save_pending(pending)
+        return
 
     high_priority_candidates = []
     low_priority_candidates = []
@@ -502,23 +471,32 @@ def auto_assign_topic_for_file(file_path):
 
     if high_priority_candidates:
         candidates = [h["name"] for h in high_priority_candidates]
-    elif low_priority_candidates:
-        candidates = [h["name"] for h in low_priority_candidates]
     else:
-        topic_name = _extract_topic_from_filename(filename, tags)
-        if topic_name:
-            candidates = [topic_name]
-        else:
-            return
+        candidates = []
 
-    if not candidates:
-        return
+    extra_candidates = []
+    for h in low_priority_candidates:
+        if h["name"] not in candidates:
+            extra_candidates.append(h["name"])
 
-    if len(candidates) == 1:
+    for tag in tags:
+        if _is_meaningful_tag(tag) and not _is_generic_word(tag):
+            if tag not in candidates and tag not in extra_candidates:
+                extra_candidates.append(tag)
+
+    filename_tokens = tokenize_text(filename)
+    for token in filename_tokens:
+        if _is_meaningful_tag(token) and not _is_generic_word(token):
+            if token not in candidates and token not in extra_candidates:
+                extra_candidates.append(token)
+
+    if high_priority_candidates and len(candidates) == 1 and not extra_candidates:
         write_topic_to_file(str(full_path), candidates[0])
         rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
         add_file_to_wiki_topic(rel, candidates[0], title)
         return
+
+    all_candidates = candidates + extra_candidates
 
     pending = load_pending()
     rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
@@ -526,8 +504,8 @@ def auto_assign_topic_for_file(file_path):
         "file": rel,
         "title": title,
         "tags": tags,
-        "candidates": candidates,
-        "source": "wiki"
+        "candidates": all_candidates,
+        "source": "wiki" if high_priority_candidates else "low_priority"
     })
     save_pending(pending)
 
@@ -627,21 +605,498 @@ def rename_wiki_topic(old_topic, new_topic):
         return False, []
 
 
+def _remove_empty_topic_sections(topic_name_lower):
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
+        return
+    try:
+        content = wiki_path.read_text(encoding='utf-8')
+    except Exception:
+        return
+    lines = content.split('\n')
+    result_lines = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped.startswith('## ') and not stripped.startswith('### '):
+            heading_name = stripped[3:].strip()
+            if heading_name.lower() == topic_name_lower:
+                section_lines = [lines[i]]
+                has_files = False
+                j = i + 1
+                while j < len(lines):
+                    s = lines[j].strip()
+                    if s.startswith('## ') and not s.startswith('### '):
+                        break
+                    section_lines.append(lines[j])
+                    if s.startswith('- 原始路径') or s.startswith('- 原始路径：') or s.startswith('- 原始路径:'):
+                        has_files = True
+                    j += 1
+                if has_files:
+                    result_lines.extend(section_lines)
+                i = j
+                continue
+        result_lines.append(lines[i])
+        i += 1
+    try:
+        new_content = '\n'.join(result_lines)
+        if not new_content.endswith('\n'):
+            new_content += '\n'
+        wiki_path.write_text(new_content, encoding='utf-8')
+    except Exception:
+        pass
+
+
+def _merge_duplicate_topics_in_wiki():
+    """
+    直接操作 WIKI.md 文本，将所有同名（小写匹配）的主题段合并为第一个段。
+    合并逻辑：
+    1. 扫描 WIKI.md，按小写名称分组所有主题段
+    2. 对有多个段的同名主题，将后续段的文件追加到第一个段，然后移除后续段
+    3. 去重：同一文件路径只保留一次
+    返回: 合并的重复主题数量
+    """
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
+        return 0
+
+    try:
+        content = wiki_path.read_text(encoding='utf-8')
+    except Exception:
+        return 0
+
+    lines = content.split('\n')
+
+    sections = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped.startswith('## ') and not stripped.startswith('### '):
+            heading_name = stripped[3:].strip()
+            if heading_name == '目录':
+                i += 1
+                continue
+            section_start = i
+            section_lines = [lines[i]]
+            j = i + 1
+            while j < len(lines):
+                s = lines[j].strip()
+                if s.startswith('## ') and not s.startswith('### '):
+                    break
+                section_lines.append(lines[j])
+                j += 1
+            sections.append({
+                "name": heading_name,
+                "start": section_start,
+                "end": j,
+                "lines": section_lines
+            })
+            i = j
+        else:
+            i += 1
+
+    name_groups = {}
+    for sec in sections:
+        key = sec["name"].lower()
+        if key not in name_groups:
+            name_groups[key] = []
+        name_groups[key].append(sec)
+
+    merged_count = 0
+    sections_to_remove = []
+
+    for key, group in name_groups.items():
+        if len(group) <= 1:
+            continue
+
+        keeper = group[0]
+        source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
+        file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+
+        existing_paths = set()
+        for line in keeper["lines"]:
+            m = source_path_pattern.match(line.strip())
+            if m:
+                existing_paths.add(m.group(1).strip())
+
+        new_file_entries = []
+        for dup in group[1:]:
+            current_title = None
+            current_path = None
+            for line in dup["lines"]:
+                s = line.strip()
+                fm = file_item_pattern.match(s)
+                if fm:
+                    current_title = fm.group(2).strip()
+                    current_path = None
+                pm = source_path_pattern.match(s)
+                if pm:
+                    current_path = pm.group(1).strip()
+                    if current_path and current_path not in existing_paths:
+                        existing_paths.add(current_path)
+                        new_file_entries.append({
+                            "title": current_title or Path(current_path).stem,
+                            "path": current_path
+                        })
+            sections_to_remove.append(dup)
+
+        if new_file_entries:
+            max_index = 0
+            for line in keeper["lines"]:
+                fm = file_item_pattern.match(line.strip())
+                if fm:
+                    idx = int(fm.group(1))
+                    if idx > max_index:
+                        max_index = idx
+
+            insert_pos = len(keeper["lines"])
+            for k in range(len(keeper["lines"]) - 1, -1, -1):
+                s = keeper["lines"][k].strip()
+                pm = source_path_pattern.match(s)
+                if pm:
+                    insert_pos = k + 1
+                    break
+
+            new_lines = []
+            for entry in new_file_entries:
+                max_index += 1
+                new_lines.append(f"{max_index}. **{entry['title']}**")
+                new_lines.append(f"   - 文件名：{Path(entry['path']).name}")
+                new_lines.append(f"   - 原始路径：{entry['path']}")
+
+            keeper["lines"] = keeper["lines"][:insert_pos] + new_lines + keeper["lines"][insert_pos:]
+
+        merged_count += len(group) - 1
+
+    if merged_count == 0:
+        return 0
+
+    remove_ranges = set()
+    for sec in sections_to_remove:
+        for idx in range(sec["start"], sec["end"]):
+            remove_ranges.add(idx)
+    for key, group in name_groups.items():
+        if len(group) > 1:
+            keeper = group[0]
+            for idx in range(keeper["start"], keeper["end"]):
+                remove_ranges.add(idx)
+
+    keeper_replacements = {}
+    for key, group in name_groups.items():
+        if len(group) > 1:
+            keeper = group[0]
+            keeper_replacements[keeper["start"]] = keeper["lines"]
+
+    new_lines = []
+    for i, line in enumerate(lines):
+        if i in remove_ranges:
+            if i in keeper_replacements:
+                for sl in keeper_replacements[i]:
+                    new_lines.append(sl)
+            continue
+        new_lines.append(line)
+
+    try:
+        new_content = '\n'.join(new_lines)
+        if not new_content.endswith('\n'):
+            new_content += '\n'
+        wiki_path.write_text(new_content, encoding='utf-8')
+    except Exception:
+        pass
+
+    return merged_count
+
+
+def _deduplicate_files_in_wiki():
+    """
+    去除 WIKI.md 中每个主题段内的重复文件（按原始路径去重）
+    返回: 去除的重复文件数量
+    """
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
+        return 0
+
+    try:
+        content = wiki_path.read_text(encoding='utf-8')
+    except Exception:
+        return 0
+
+    lines = content.split('\n')
+    result_lines = []
+    i = 0
+    removed_count = 0
+
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
+
+    while i < len(lines):
+        stripped = lines[i].strip()
+
+        if stripped.startswith('## ') and not stripped.startswith('### '):
+            section_start = i
+            section_lines = [lines[i]]
+            seen_paths = set()
+            j = i + 1
+            current_file_lines = []
+            current_path = None
+
+            while j < len(lines):
+                s = lines[j].strip()
+                if s.startswith('## ') and not s.startswith('### '):
+                    break
+
+                fm = file_item_pattern.match(s)
+                if fm:
+                    if current_file_lines:
+                        if current_path is None or current_path not in seen_paths:
+                            if current_path:
+                                seen_paths.add(current_path)
+                            section_lines.extend(current_file_lines)
+                        else:
+                            removed_count += 1
+                    current_file_lines = [lines[j]]
+                    current_path = None
+                elif current_file_lines:
+                    current_file_lines.append(lines[j])
+                    pm = source_path_pattern.match(s)
+                    if pm:
+                        current_path = pm.group(1).strip()
+                else:
+                    section_lines.append(lines[j])
+
+                j += 1
+
+            if current_file_lines:
+                if current_path is None or current_path not in seen_paths:
+                    if current_path:
+                        seen_paths.add(current_path)
+                    section_lines.extend(current_file_lines)
+                else:
+                    removed_count += 1
+
+            idx = 1
+            final_section = []
+            for line in section_lines:
+                fm = file_item_pattern.match(line.strip())
+                if fm:
+                    final_section.append(f"{idx}. **{fm.group(2)}**")
+                    idx += 1
+                else:
+                    final_section.append(line)
+
+            result_lines.extend(final_section)
+            i = j
+            continue
+
+        result_lines.append(lines[i])
+        i += 1
+
+    if removed_count > 0:
+        try:
+            new_content = '\n'.join(result_lines)
+            if not new_content.endswith('\n'):
+                new_content += '\n'
+            wiki_path.write_text(new_content, encoding='utf-8')
+        except Exception:
+            pass
+
+    return removed_count
+
+
+def _remove_topic_from_wiki(topic_name):
+    """
+    从 WIKI.md 中移除整个主题（包括标题和所有文件）
+    返回: (success, removed_file_paths)
+    """
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
+        return False, []
+
+    try:
+        content = wiki_path.read_text(encoding='utf-8')
+    except Exception as e:
+        sys.stderr.write(f"[_remove_topic] read failed: {e}\n")
+        sys.stderr.flush()
+        return False, []
+
+    lines = content.split('\n')
+    new_lines = []
+    in_target_topic = False
+    target_ended = False
+    removed_file_paths = []
+
+    target_heading = f'## {topic_name}'
+
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped == target_heading:
+            in_target_topic = True
+            target_ended = False
+            continue
+
+        if in_target_topic and not target_ended:
+            if stripped.startswith('## ') and not stripped.startswith('### '):
+                target_ended = True
+                new_lines.append(line)
+                continue
+
+            path_match = source_path_pattern.match(stripped)
+            if path_match:
+                removed_file_paths.append(path_match.group(1).strip())
+            continue
+
+        new_lines.append(line)
+
+    toc_start_idx = -1
+    toc_end_idx = -1
+
+    for i, line in enumerate(new_lines):
+        stripped = line.strip()
+        if stripped == '## 目录':
+            toc_start_idx = i
+            toc_end_idx = len(new_lines)
+            for j in range(i + 1, len(new_lines)):
+                if new_lines[j].strip().startswith('## ') and not new_lines[j].strip().startswith('### '):
+                    toc_end_idx = j
+                    break
+            break
+
+    if toc_start_idx >= 0:
+        final_toc_lines = []
+        for i in range(toc_start_idx, toc_end_idx):
+            stripped = new_lines[i].strip()
+            if stripped.startswith('- [') and f'](#' in stripped:
+                if f'](#{topic_name}' in stripped:
+                    link_name = stripped[3:stripped.find(']')]
+                    if link_name == topic_name:
+                        continue
+            final_toc_lines.append(new_lines[i])
+
+        new_lines = new_lines[:toc_start_idx] + final_toc_lines + new_lines[toc_end_idx:]
+
+    try:
+        new_content = '\n'.join(new_lines)
+        if not new_content.endswith('\n'):
+            new_content += '\n'
+        wiki_path.write_text(new_content, encoding='utf-8')
+        return True, removed_file_paths
+    except Exception as e:
+        sys.stderr.write(f"[_remove_topic] write failed: {e}\n")
+        sys.stderr.flush()
+        return False, removed_file_paths
+
+
+def delete_topic(topic_name):
+    """
+    删除主题：
+    1. 从 WIKI.md 中移除整个主题（标题+文件列表+目录链接）
+    2. 清除该主题下所有文件的 YAML topic 字段
+    3. 对每个文件重新尝试自动匹配主题
+    4. 匹配不到的放入待确认列表
+
+    返回: {"success": bool, "message": str, "reassigned": int, "pending": int}
+    """
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区"}
+
+    wiki_structure = parse_wiki_structure()
+    topic_data = None
+    for t in wiki_structure:
+        if t["name"] == topic_name:
+            topic_data = t
+            break
+
+    if not topic_data:
+        return {"success": False, "message": f"主题「{topic_name}」不存在"}
+
+    file_paths = [f.get("path", "") for f in topic_data.get("files", []) if f.get("path")]
+
+    wiki_ok, _ = _remove_topic_from_wiki(topic_name)
+    if not wiki_ok:
+        return {"success": False, "message": "从 WIKI.md 删除主题失败"}
+
+    workspace_path = Path(workspace)
+
+    for rel_path in file_paths:
+        full_path = workspace_path / rel_path
+        if full_path.exists():
+            try:
+                _clear_topic_in_file(str(full_path))
+            except Exception as e:
+                sys.stderr.write(f"[delete_topic] clear topic failed: {rel_path} - {e}\n")
+                sys.stderr.flush()
+
+    reassigned_count = 0
+    pending_count = 0
+
+    for rel_path in file_paths:
+        full_path = workspace_path / rel_path
+        if not full_path.exists():
+            continue
+
+        try:
+            result = auto_assign_topic_for_file(str(full_path))
+            if result:
+                reassigned_count += 1
+            else:
+                pending_count += 1
+        except Exception as e:
+            sys.stderr.write(f"[delete_topic] reassign failed: {rel_path} - {e}\n")
+            sys.stderr.flush()
+            pending_count += 1
+
+    return {
+        "success": True,
+        "message": f"已删除主题「{topic_name}」，重新分配 {reassigned_count} 个文件，{pending_count} 个待确认",
+        "reassigned": reassigned_count,
+        "pending": pending_count
+    }
+
+
+def _clear_topic_in_file(file_path):
+    """清除文件 YAML 中的 topic 字段"""
+    text = Path(file_path).read_text(encoding='utf-8')
+    bom = '\ufeff' if text.startswith('\ufeff') else ''
+    clean = text.lstrip('\ufeff')
+    m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+    if not m:
+        return
+
+    yaml_text = m.group(2)
+    lines = yaml_text.split('\n')
+    new_lines = []
+    for line in lines:
+        idx = line.find(':')
+        if idx >= 0:
+            key = line[:idx].strip()
+            if key == 'topic':
+                continue
+        new_lines.append(line)
+
+    new_yaml = '\n'.join(new_lines)
+    new_content = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+    Path(file_path).write_text(new_content, encoding='utf-8')
+
+
 def rename_topic(old_topic, new_topic):
     """
     重命名主题：
-    1. 重命名 WIKI.md 中的主题标题和目录链接
-    2. 更新该主题下所有文件的 YAML topic 字段
+    1. 检查新主题名是否已存在
+    2. 如果存在：合并文件（旧主题文件移到新主题，更新 YAML，删除旧主题）
+    3. 如果不存在：按原来的方案（重命名 WIKI.md 标题 + 更新 YAML）
     
-    返回: {"success": bool, "message": str, "updated": int}
+    返回: {"success": bool, "message": str, "updated": int, "merged": bool}
     """
     if not old_topic or not new_topic:
         return {"success": False, "message": "主题名不能为空"}
 
     if old_topic == new_topic:
-        return {"success": True, "message": "主题名相同，无需修改", "updated": 0}
-
-    wiki_success, file_paths = rename_wiki_topic(old_topic, new_topic)
+        return {"success": True, "message": "主题名相同，无需修改", "updated": 0, "merged": False}
 
     workspace = config.workspace_path
     if not workspace:
@@ -649,8 +1104,51 @@ def rename_topic(old_topic, new_topic):
 
     workspace_path = Path(workspace)
 
+    headings = parse_wiki_headings()
+    new_topic_exists = False
+    for h in headings:
+        if h["name"].lower() == new_topic.lower():
+            new_topic_exists = True
+            new_topic = h["name"]
+            break
+
+    if new_topic_exists:
+        wiki_structure = parse_wiki_structure()
+        old_topic_data = None
+        for t in wiki_structure:
+            if t["name"] == old_topic:
+                old_topic_data = t
+                break
+
+        if not old_topic_data:
+            return {"success": False, "message": f"主题「{old_topic}」不存在", "updated": 0, "merged": False}
+
+        old_file_paths = [f.get("path", "") for f in old_topic_data.get("files", []) if f.get("path")]
+
+        for rel_path in old_file_paths:
+            write_topic_to_file(str(workspace_path / rel_path), new_topic)
+
+        for f in old_topic_data.get("files", []):
+            file_path = f.get("path", "")
+            file_title = f.get("title", "")
+            if file_path:
+                add_file_to_wiki_topic(file_path, new_topic, file_title)
+
+        _remove_topic_from_wiki(old_topic)
+        _merge_duplicate_topics_in_wiki()
+        _deduplicate_files_in_wiki()
+
+        return {
+            "success": True,
+            "message": f"已合并到「{new_topic}」，移动 {len(old_file_paths)} 个文件",
+            "updated": len(old_file_paths),
+            "merged": True
+        }
+
+    wiki_success, old_file_paths = rename_wiki_topic(old_topic, new_topic)
+
     updated_count = 0
-    for rel_path in file_paths:
+    for rel_path in old_file_paths:
         full_path = workspace_path / rel_path
         if full_path.exists():
             try:
@@ -661,12 +1159,13 @@ def rename_topic(old_topic, new_topic):
                 sys.stderr.flush()
 
     if not wiki_success and updated_count == 0:
-        return {"success": False, "message": "重命名失败"}
+        return {"success": False, "message": "重命名失败", "merged": False}
 
     return {
         "success": True,
         "message": f"已重命名主题，更新 {updated_count} 个文件",
-        "updated": updated_count
+        "updated": updated_count,
+        "merged": False
     }
 
 
@@ -954,3 +1453,168 @@ def create_topic(topic_name):
         sys.stderr.write(f"[create_topic] failed: {e}\n")
         sys.stderr.flush()
         return {"success": False, "message": f"创建失败: {e}"}
+
+
+def _read_topic_from_file(file_path):
+    """
+    从文件的 YAML frontmatter 中读取 topic 字段
+    返回: topic 字符串（如果没有则返回 None）
+    """
+    try:
+        text = Path(file_path).read_text(encoding='utf-8')
+        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', text.lstrip('\ufeff'))
+        if not m:
+            return None
+        yaml_text = m.group(2)
+        for line in yaml_text.split('\n'):
+            idx = line.find(':')
+            if idx < 0:
+                continue
+            key = line[:idx].strip()
+            val = line[idx + 1:].strip()
+            if key == 'topic':
+                if val and val.strip():
+                    return val.strip()
+                return None
+        return None
+    except Exception as e:
+        sys.stderr.write(f"[_read_topic] failed: {e}\n")
+        sys.stderr.flush()
+        return None
+
+
+def _read_title_from_file(file_path):
+    """
+    从文件的 YAML frontmatter 中读取 title 字段
+    返回: title 字符串（如果没有则返回文件名）
+    """
+    try:
+        text = Path(file_path).read_text(encoding='utf-8')
+        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', text.lstrip('\ufeff'))
+        if m:
+            yaml_text = m.group(2)
+            for line in yaml_text.split('\n'):
+                idx = line.find(':')
+                if idx < 0:
+                    continue
+                key = line[:idx].strip()
+                val = line[idx + 1:].strip()
+                if key == 'title':
+                    if val and val.strip():
+                        return val.strip().strip("'\"")
+        return Path(file_path).stem
+    except Exception:
+        return Path(file_path).stem
+
+
+def sync_wiki_with_files():
+    """
+    同步 WIKI.md 与文件的 YAML topic 标签：
+    1. 扫描工作区所有 .md 文件，读取每个文件的 YAML topic
+    2. 解析当前 WIKI.md 的结构
+    3. 对比：以文件 YAML 中的 topic 为准
+       - 如果文件在 WIKI 中位置与 YAML 不匹配 → 移动
+       - 如果 YAML 中有 topic 但 WIKI 中没有该文件 → 添加
+       - 如果文件在 WIKI 中但 YAML 没有 topic → 从 WIKI 移除
+    4. 清理空主题（没有任何文件的主题）
+    
+    返回: {
+        "success": bool,
+        "message": str,
+        "moved": int,    // 移动的文件数
+        "added": int,    // 新增的文件数
+        "removed": int,  // 从 WIKI 移除的文件数
+        "deleted_topics": int  // 删除的空主题数
+    }
+    """
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区", "moved": 0, "added": 0, "removed": 0, "deleted_topics": 0}
+
+    workspace_path = Path(workspace)
+
+    md_files = list(workspace_path.rglob('*.md'))
+    wiki_path = workspace_path / "WIKI.md"
+
+    file_topics = {}
+    for md_file in md_files:
+        if md_file.name == 'WIKI.md':
+            continue
+        try:
+            rel_path = str(md_file.relative_to(workspace_path))
+            topic = _read_topic_from_file(str(md_file))
+            file_topics[rel_path] = topic
+        except Exception:
+            continue
+
+    wiki_structure = parse_wiki_structure()
+
+    wiki_file_to_topic = {}
+    for topic in wiki_structure:
+        topic_name = topic["name"]
+        for f in topic["files"]:
+            file_path = f.get("path", "")
+            if file_path:
+                wiki_file_to_topic[file_path] = topic_name
+
+    moved_count = 0
+    added_count = 0
+    removed_count = 0
+
+    for rel_path, yaml_topic in file_topics.items():
+        wiki_topic = wiki_file_to_topic.get(rel_path)
+
+        if yaml_topic is None:
+            if wiki_topic is not None:
+                remove_file_from_wiki_topic(rel_path)
+                removed_count += 1
+            continue
+
+        if wiki_topic is None:
+            file_title = _read_title_from_file(str(workspace_path / rel_path))
+            headings = parse_wiki_headings()
+            topic_exists = False
+            for h in headings:
+                if h["name"].lower() == yaml_topic.lower():
+                    yaml_topic = h["name"]
+                    topic_exists = True
+                    break
+            if not topic_exists:
+                create_topic(yaml_topic)
+            add_file_to_wiki_topic(rel_path, yaml_topic, file_title)
+            added_count += 1
+        elif wiki_topic.lower() != yaml_topic.lower():
+            move_file_to_topic(rel_path, yaml_topic)
+            moved_count += 1
+
+    for rel_path in wiki_file_to_topic:
+        if rel_path not in file_topics:
+            remove_file_from_wiki_topic(rel_path)
+            removed_count += 1
+
+    merged_topic_count = _merge_duplicate_topics_in_wiki()
+
+    dedup_count = _deduplicate_files_in_wiki()
+
+    deleted_topic_count = 0
+    while True:
+        current_structure = parse_wiki_structure()
+        deleted_any = False
+        for topic in current_structure:
+            if not topic["files"]:
+                _remove_topic_from_wiki(topic["name"])
+                deleted_topic_count += 1
+                deleted_any = True
+                break
+        if not deleted_any:
+            break
+
+    return {
+        "success": True,
+        "message": f"同步完成：移动 {moved_count}，新增 {added_count}，移除 {removed_count}，合并重复主题 {merged_topic_count}，删除空主题 {deleted_topic_count}",
+        "moved": moved_count,
+        "added": added_count,
+        "removed": removed_count,
+        "merged_topics": merged_topic_count,
+        "deleted_topics": deleted_topic_count
+    }

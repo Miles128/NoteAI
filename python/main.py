@@ -28,6 +28,10 @@ class SidecarServer:
         self._progress_callback = None
         self._running_tasks = set()
         self._stdout_lock = threading.Lock()
+        self._watcher_observer = None
+        self._watcher_debounce_timer = None
+        self._watcher_debounce_lock = threading.Lock()
+        self._start_workspace_watcher()
 
     def _send_response(self, resp):
         with self._stdout_lock:
@@ -58,6 +62,88 @@ class SidecarServer:
 
         threading.Thread(target=_wrapped, daemon=True).start()
         return True
+
+    def _start_workspace_watcher(self):
+        workspace = config.workspace_path
+        if workspace and Path(workspace).exists():
+            self._setup_watcher(workspace)
+
+    def _setup_watcher(self, workspace_path):
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+        except ImportError:
+            return
+
+        self._stop_watcher()
+
+        server = self
+
+        class WorkspaceHandler(FileSystemEventHandler):
+            def on_created(self, event):
+                if not event.is_directory:
+                    server._on_workspace_file_changed("created", event.src_path)
+
+            def on_deleted(self, event):
+                if not event.is_directory:
+                    server._on_workspace_file_changed("deleted", event.src_path)
+
+            def on_moved(self, event):
+                if not event.is_directory:
+                    server._on_workspace_file_changed("moved", event.dest_path, src_path=event.src_path)
+
+            def on_modified(self, event):
+                if not event.is_directory:
+                    server._on_workspace_file_changed("modified", event.src_path)
+
+        try:
+            observer = Observer()
+            observer.schedule(WorkspaceHandler(), workspace_path, recursive=True)
+            observer.daemon = True
+            observer.start()
+            self._watcher_observer = observer
+        except Exception as e:
+            sys.stderr.write(f"[watcher] start failed: {e}\n")
+            sys.stderr.flush()
+
+    def _stop_watcher(self):
+        if self._watcher_observer:
+            try:
+                self._watcher_observer.stop()
+                self._watcher_observer.join(timeout=2)
+            except Exception:
+                pass
+            self._watcher_observer = None
+
+    def _on_workspace_file_changed(self, change_type, file_path, src_path=None):
+        path = Path(file_path)
+        if path.name.startswith('.'):
+            return
+        suffix = path.suffix.lower()
+        if suffix not in ('.md', '.txt', '.pdf', '.docx', '.pptx', '.html', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'):
+            return
+
+        with self._watcher_debounce_lock:
+            if self._watcher_debounce_timer:
+                self._watcher_debounce_timer.cancel()
+            self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
+            self._watcher_debounce_timer.start()
+
+    def _emit_workspace_change(self):
+        self._send_response({
+            "id": "event",
+            "result": {
+                "type": "workspace_files_changed"
+            }
+        })
+
+    _ASYNC_METHODS = {
+        "sync_wiki_with_files",
+        "batch_auto_assign_topics",
+        "start_note_integration",
+        "start_file_conversion",
+        "extract_topics",
+    }
 
     def handle_request(self, request):
         method = request.get("method", "")
@@ -92,6 +178,8 @@ class SidecarServer:
             "auto_tag_files": self._auto_tag_files,
             "save_tags_md": self._save_tags_md,
             "ensure_tags_md": self._ensure_tags_md,
+            "rename_tag": self._rename_tag,
+            "delete_tag": self._delete_tag,
             "auto_assign_topic": self._auto_assign_topic,
             "batch_auto_assign_topics": self._batch_auto_assign_topics,
             "create_topic": self._create_topic,
@@ -106,25 +194,35 @@ class SidecarServer:
             "refresh_log": self._refresh_log,
             "discover_links": self._discover_links,
             "get_backlinks": self._get_backlinks,
+            "get_relation_graph": self._get_relation_graph,
             "confirm_link": self._confirm_link,
             "reject_link": self._reject_link,
             "confirm_all_links": self._confirm_all_links,
+            "sync_wiki_with_files": self._sync_wiki_with_files,
+            "delete_topic": self._delete_topic,
         }
 
         handler = handler_map.get(method)
         if handler:
-            try:
-                result = handler(params)
-                self._send_response({"id": req_id, "result": result})
-            except Exception as e:
-                import traceback
-                sys.stderr.write(f"[ERROR] Handler exception: {e}\n")
-                sys.stderr.write(traceback.format_exc())
-                sys.stderr.flush()
-                self._send_response({"id": req_id, "error": str(e)})
+            if method in self._ASYNC_METHODS:
+                def _run_async():
+                    try:
+                        result = handler(params)
+                        self._send_response({"id": req_id, "result": result})
+                    except Exception as e:
+                        self._send_response({"id": req_id, "error": str(e)})
+                threading.Thread(target=_run_async, daemon=True).start()
+            else:
+                try:
+                    result = handler(params)
+                    self._send_response({"id": req_id, "result": result})
+                except Exception as e:
+                    import traceback
+                    sys.stderr.write(f"[ERROR] Handler exception: {e}\n")
+                    sys.stderr.write(traceback.format_exc())
+                    sys.stderr.flush()
+                    self._send_response({"id": req_id, "error": str(e)})
         else:
-            sys.stderr.write(f"[ERROR] Unknown method: {method}\n")
-            sys.stderr.flush()
             self._send_response({"id": req_id, "error": f"Unknown method: {method}"})
 
     def _get_api_config(self, params):
@@ -247,6 +345,7 @@ class SidecarServer:
             if not save_ok:
                 return {"success": False, "message": save_msg}
             self.file_previewer.workspace_path = path
+            self._setup_watcher(path)
             return {"success": True, "message": "工作区已设置", "workspace_path": path}
         return {"success": False, "message": "路径无效"}
 
@@ -668,6 +767,8 @@ class SidecarServer:
         except Exception:
             pending = []
 
+        topics.sort(key=lambda t: t.get("name", "").lower())
+
         return {"topics": topics, "pending": pending}
 
     def _auto_tag_files(self, params):
@@ -788,6 +889,216 @@ class SidecarServer:
         if not tags_md_path.exists():
             return save_tags_md(workspace)
         return save_tags_md(workspace)
+
+    def _rename_tag(self, params):
+        old_tag = params.get("old_tag", "")
+        new_tag = params.get("new_tag", "")
+        if not old_tag or not new_tag:
+            return {"success": False, "message": "标签名不能为空"}
+        if old_tag == new_tag:
+            return {"success": True, "message": "标签名相同", "updated": 0}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+
+        existing_tags = set()
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                if not m:
+                    continue
+                yaml_text = m.group(1)
+                for line in yaml_text.split('\n'):
+                    idx = line.find(':')
+                    if idx < 0:
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'tags':
+                        if val.startswith('[') and val.endswith(']'):
+                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                            for t in tags:
+                                existing_tags.add(t)
+                        elif val:
+                            existing_tags.add(val.strip().strip("'\""))
+            except Exception:
+                pass
+
+        new_tag_exists = False
+        for t in existing_tags:
+            if t.lower() == new_tag.lower() and t != new_tag:
+                new_tag = t
+                new_tag_exists = True
+                break
+            elif t == new_tag:
+                new_tag_exists = True
+                break
+
+        updated_count = 0
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                bom = '\ufeff' if text.startswith('\ufeff') else ''
+                clean = text.lstrip('\ufeff')
+                m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+                if not m:
+                    continue
+
+                yaml_text = m.group(2)
+                lines = yaml_text.split('\n')
+                new_lines = []
+                changed = False
+
+                for line in lines:
+                    idx = line.find(':')
+                    if idx < 0:
+                        new_lines.append(line)
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'tags':
+                        if val.startswith('[') and val.endswith(']'):
+                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                            new_tags = []
+                            for t in tags:
+                                if t == old_tag:
+                                    if new_tag not in new_tags:
+                                        new_tags.append(new_tag)
+                                    changed = True
+                                else:
+                                    if t not in new_tags:
+                                        new_tags.append(t)
+                            if changed:
+                                new_val = '[' + ', '.join(f"'{t}'" for t in new_tags) + ']'
+                                new_lines.append(f"tags: {new_val}")
+                            else:
+                                new_lines.append(line)
+                        else:
+                            tag_val = val.strip().strip("'\"")
+                            if tag_val == old_tag:
+                                changed = True
+                                new_lines.append(f"tags: ['{new_tag}']")
+                            else:
+                                new_lines.append(line)
+                    else:
+                        new_lines.append(line)
+
+                if changed:
+                    new_yaml = '\n'.join(new_lines)
+                    new_content = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+                    md_file.write_text(new_content, encoding='utf-8')
+                    updated_count += 1
+            except Exception:
+                pass
+
+        from utils.tag_extractor import save_tags_md
+        save_tags_md(workspace)
+
+        from utils.topic_assigner import sync_wiki_with_files
+        sync_wiki_with_files()
+
+        merged = new_tag_exists
+        if merged:
+            return {
+                "success": True,
+                "message": f"已合并标签到「{new_tag}」，更新 {updated_count} 个文件",
+                "updated": updated_count,
+                "merged": True
+            }
+
+        return {
+            "success": True,
+            "message": f"已重命名标签，更新 {updated_count} 个文件",
+            "updated": updated_count,
+            "merged": False
+        }
+
+    def _delete_tag(self, params):
+        tag_name = params.get("tag_name", "")
+        if not tag_name:
+            return {"success": False, "message": "标签名不能为空"}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+        updated_count = 0
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                bom = '\ufeff' if text.startswith('\ufeff') else ''
+                clean = text.lstrip('\ufeff')
+                m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+                if not m:
+                    continue
+
+                yaml_text = m.group(2)
+                lines = yaml_text.split('\n')
+                new_lines = []
+                changed = False
+
+                for line in lines:
+                    idx = line.find(':')
+                    if idx < 0:
+                        new_lines.append(line)
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'tags':
+                        if val.startswith('[') and val.endswith(']'):
+                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                            filtered = [t for t in tags if t != tag_name]
+                            if len(filtered) != len(tags):
+                                changed = True
+                                if filtered:
+                                    new_val = '[' + ', '.join(f"'{t}'" for t in filtered) + ']'
+                                    new_lines.append(f"tags: {new_val}")
+                                else:
+                                    continue
+                            else:
+                                new_lines.append(line)
+                        else:
+                            tag_val = val.strip().strip("'\"")
+                            if tag_val == tag_name:
+                                changed = True
+                                continue
+                            else:
+                                new_lines.append(line)
+                    else:
+                        new_lines.append(line)
+
+                if changed:
+                    new_yaml = '\n'.join(new_lines)
+                    new_content = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+                    md_file.write_text(new_content, encoding='utf-8')
+                    updated_count += 1
+            except Exception:
+                pass
+
+        from utils.tag_extractor import save_tags_md
+        save_tags_md(workspace)
+
+        from utils.topic_assigner import sync_wiki_with_files
+        sync_wiki_with_files()
+
+        return {
+            "success": True,
+            "message": f"已删除标签「{tag_name}」，更新 {updated_count} 个文件",
+            "updated": updated_count
+        }
 
     def _get_pending_topics_path(self):
         workspace = config.workspace_path
@@ -965,6 +1276,17 @@ class SidecarServer:
 
         return rename_topic(old_topic, new_topic)
 
+    def _sync_wiki_with_files(self, params):
+        from utils.topic_assigner import sync_wiki_with_files
+        return sync_wiki_with_files()
+
+    def _delete_topic(self, params):
+        from utils.topic_assigner import delete_topic
+        topic_name = params.get("topic_name", "")
+        if not topic_name:
+            return {"success": False, "message": "主题名不能为空"}
+        return delete_topic(topic_name)
+
     def _move_file_to_topic(self, params):
         from utils.topic_assigner import move_file_to_topic
         file_path = params.get("file_path", "")
@@ -1127,6 +1449,116 @@ class SidecarServer:
     def _get_backlinks(self, params):
         file_path = params.get("file_path", "") or ""
         return get_backlinks(file_path)
+
+    def _get_relation_graph(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+        nodes = {}
+        edges = []
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                if not m:
+                    continue
+                yaml_text = m.group(1)
+                rel_path = str(md_file.relative_to(workspace_path))
+                file_name = md_file.stem
+                topic = None
+                tags = []
+
+                for line in yaml_text.split('\n'):
+                    idx = line.find(':')
+                    if idx < 0:
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'topic':
+                        topic = val.strip().strip("'\"")
+                    elif key == 'tags':
+                        if val.startswith('[') and val.endswith(']'):
+                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                        elif val:
+                            tags.append(val.strip().strip("'\""))
+
+                nodes[rel_path] = {
+                    "id": rel_path,
+                    "label": file_name,
+                    "topic": topic,
+                    "tags": tags
+                }
+
+                if topic:
+                    edges.append({
+                        "source": rel_path,
+                        "target": "topic:" + topic,
+                        "type": "topic"
+                    })
+
+                for tag in tags:
+                    edges.append({
+                        "source": rel_path,
+                        "target": "tag:" + tag,
+                        "type": "tag"
+                    })
+
+                body_start = m.end()
+                body = text.lstrip('\ufeff')[body_start:]
+                link_pattern = re.compile(r'\[\[([^\]]+)\]\]')
+                for match in link_pattern.finditer(body):
+                    target_name = match.group(1).strip()
+                    target_name = target_name.split('|')[0].strip()
+                    target_name = target_name.split('#')[0].strip()
+                    if not target_name:
+                        continue
+                    for other_rel, other_node in nodes.items():
+                        if Path(other_rel).stem == target_name:
+                            edges.append({
+                                "source": rel_path,
+                                "target": other_rel,
+                                "type": "link"
+                            })
+                            break
+            except Exception:
+                pass
+
+        topic_nodes = {}
+        tag_nodes = {}
+        for edge in edges:
+            if edge["type"] == "topic":
+                t = edge["target"].replace("topic:", "", 1)
+                if t not in topic_nodes:
+                    topic_nodes[t] = {"id": "topic:" + t, "label": t, "nodeType": "topic"}
+            elif edge["type"] == "tag":
+                t = edge["target"].replace("tag:", "", 1)
+                if t not in tag_nodes:
+                    tag_nodes[t] = {"id": "tag:" + t, "label": t, "nodeType": "tag"}
+
+        all_nodes = []
+        for rel, n in nodes.items():
+            all_nodes.append({
+                "id": n["id"],
+                "label": n["label"],
+                "nodeType": "file",
+                "topic": n.get("topic"),
+                "tags": n.get("tags", [])
+            })
+        for n in topic_nodes.values():
+            all_nodes.append(n)
+        for n in tag_nodes.values():
+            all_nodes.append(n)
+
+        return {
+            "success": True,
+            "nodes": all_nodes,
+            "edges": edges
+        }
 
     def _confirm_link(self, params):
         from_path = params.get("from", "")

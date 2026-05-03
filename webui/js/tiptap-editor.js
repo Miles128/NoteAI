@@ -215,10 +215,18 @@ function renderFrontmatterPanel(frontmatter) {
     var html = '<div class="obsidian-properties">';
     keys.forEach(function(key) {
         var val = frontmatter[key];
-        var displayVal = Array.isArray(val) ? val.join(', ') : (val || '');
         html += '<div class="obsidian-prop-row">';
         html += '<span class="obsidian-prop-key">' + key + '</span>';
-        html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + key + '">' + displayVal + '</span>';
+        if (Array.isArray(val) && val.length > 0) {
+            html += '<span class="obsidian-prop-val obsidian-prop-tags">';
+            val.forEach(function(item) {
+                html += '<span class="obsidian-tag-chip">' + String(item).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</span>';
+            });
+            html += '</span>';
+        } else {
+            var displayVal = val || '';
+            html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + key + '">' + displayVal + '</span>';
+        }
         html += '</div>';
     });
     html += '</div>';
@@ -263,6 +271,45 @@ function createTiptapEditor(markdownContent, filePath) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     this.blur();
+                }
+            });
+        });
+
+        fmContainer.querySelectorAll('.obsidian-prop-tags').forEach(function(el) {
+            el.addEventListener('dblclick', function() {
+                var key = el.previousElementSibling;
+                var keyName = key ? key.textContent.trim() : '';
+                if (!keyName || !window.TiptapEditor.frontmatterData) return;
+                var origVal = window.TiptapEditor.frontmatterData[keyName];
+                if (!Array.isArray(origVal)) return;
+                el.innerHTML = '';
+                el.textContent = origVal.join(', ');
+                el.classList.remove('obsidian-prop-tags');
+                el.setAttribute('contenteditable', 'true');
+                el.setAttribute('data-fm-key', keyName);
+                el.focus();
+                var range = document.createRange();
+                range.selectNodeContents(el);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            });
+            el.addEventListener('blur', function() {
+                var key = this.getAttribute('data-fm-key');
+                var newVal = this.textContent.trim();
+                if (key && window.TiptapEditor.frontmatterData) {
+                    var origVal = window.TiptapEditor.frontmatterData[key];
+                    if (Array.isArray(origVal)) {
+                        window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                    } else {
+                        window.TiptapEditor.frontmatterData[key] = newVal;
+                    }
+                    saveTiptapContent();
+                    var fmContainer = document.getElementById('frontmatter-panel');
+                    if (fmContainer) {
+                        fmContainer.innerHTML = renderFrontmatterPanel(window.TiptapEditor.frontmatterData);
+                        fmContainer.style.display = fmContainer.innerHTML ? 'block' : 'none';
+                    }
                 }
             });
         });
@@ -432,6 +479,9 @@ window.TiptapEditorModule = {
     openMarkdownInEditor,
     showEditorUI,
     hideEditorUI,
+    preloadModules: function() {
+        initTiptapModules();
+    },
     getTiptapMarkdown: function() {
         if (!window.TiptapEditor.instance) return null;
         try {

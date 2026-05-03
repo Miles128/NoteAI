@@ -300,7 +300,8 @@ body {
     border-color: var(--border);
 }
 
-.sidebar-topic-input {
+.sidebar-topic-input,
+.sidebar-tag-input {
     display: flex;
     align-items: center;
     padding: 8px 12px;

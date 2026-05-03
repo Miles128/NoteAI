@@ -390,9 +390,11 @@ function switchSidebarView(view) {
     });
 
     var footerTopic = document.getElementById('sidebar-footer-topic');
+    var footerTags = document.getElementById('sidebar-footer-tags');
     var footerGraph = document.getElementById('sidebar-footer-graph');
     var footerRelation = document.getElementById('sidebar-footer-relation');
     if (footerTopic) footerTopic.style.display = view === 'topic' ? '' : 'none';
+    if (footerTags) footerTags.style.display = view === 'tags' ? '' : 'none';
     if (footerGraph) footerGraph.style.display = view === 'graph' ? '' : 'none';
     if (footerRelation) footerRelation.style.display = view === 'relation' ? '' : 'none';
 
@@ -937,11 +939,6 @@ async function loadTagsView(silent) {
             setupTagsDragDrop(container);
             setupTagsContextMenu(container);
         }
-
-        var actionBar = document.createElement('div');
-        actionBar.className = 'sidebar-tags-action';
-        actionBar.innerHTML = '<button class="sidebar-tags-action-btn" onclick="doAutoTag()">自动匹配标签</button><button class="sidebar-tags-action-btn" onclick="doSaveTagsMd()">保存 tags.md</button>';
-        container.appendChild(actionBar);
     } catch (e) {
         container.innerHTML = '<div class="sidebar-view-empty">加载标签失败</div>';
     }
@@ -1249,46 +1246,23 @@ function showTagsContextMenu(e, fileEl) {
 }
 
 async function doAutoTag() {
-    var btns = document.querySelectorAll('.sidebar-tags-action-btn');
-    var btn = btns[0];
+    var btn = document.getElementById('btn-auto-tag');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '匹配中...';
+        btn.style.opacity = '0.5';
     }
     try {
         var result = await window.api.auto_tag_files();
         if (result && result.success) {
-            if (btn) btn.textContent = '已更新 ' + result.updated + ' 个文件';
-            setTimeout(function() { loadTagsView(); }, 1500);
-        } else {
-            if (btn) btn.textContent = result.message || '匹配失败';
-            setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '自动匹配标签'; } }, 2000);
+            setTimeout(function() { loadTagsView(); }, 1000);
         }
     } catch (e) {
-        if (btn) btn.textContent = '匹配失败';
-        setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '自动匹配标签'; } }, 2000);
-    }
-}
-
-async function doSaveTagsMd() {
-    var btns = document.querySelectorAll('.sidebar-tags-action-btn');
-    var btn = btns[1];
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = '保存中...';
-    }
-    try {
-        var result = await window.api.save_tags_md();
-        if (result && result.success) {
-            if (btn) btn.textContent = '已保存 ' + result.count + ' 个标签';
-            setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '保存 tags.md'; } }, 2000);
-        } else {
-            if (btn) btn.textContent = result.message || '保存失败';
-            setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '保存 tags.md'; } }, 2000);
+        console.error('[Tags] auto tag error:', e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
         }
-    } catch (e) {
-        if (btn) btn.textContent = '保存失败';
-        setTimeout(function() { if (btn) { btn.disabled = false; btn.textContent = '保存 tags.md'; } }, 2000);
     }
 }
 
@@ -1976,6 +1950,170 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', setupTopicInputEvents);
 } else {
     setupTopicInputEvents();
+}
+
+function onShowAddTagInput() {
+    var inputPanel = document.getElementById('sidebar-tag-input');
+    var inputField = document.getElementById('tag-input-field');
+    var confirmBtn = document.getElementById('tag-input-confirm');
+    
+    if (!inputPanel || !inputField) return;
+    
+    inputPanel.style.display = '';
+    inputField.value = '';
+    inputField.focus();
+    
+    if (confirmBtn) {
+        confirmBtn.classList.remove('has-text');
+        confirmBtn.disabled = true;
+    }
+}
+
+function onHideTagInput() {
+    var inputPanel = document.getElementById('sidebar-tag-input');
+    var inputField = document.getElementById('tag-input-field');
+    
+    if (inputPanel) {
+        inputPanel.style.display = 'none';
+    }
+    if (inputField) {
+        inputField.value = '';
+    }
+}
+
+function onTagInputChange() {
+    var inputField = document.getElementById('tag-input-field');
+    var confirmBtn = document.getElementById('tag-input-confirm');
+    
+    if (!inputField || !confirmBtn) return;
+    
+    var hasText = inputField.value.trim().length > 0;
+    
+    if (hasText) {
+        confirmBtn.classList.add('has-text');
+        confirmBtn.disabled = false;
+    } else {
+        confirmBtn.classList.remove('has-text');
+        confirmBtn.disabled = true;
+    }
+}
+
+async function onConfirmTag() {
+    var inputField = document.getElementById('tag-input-field');
+    var confirmBtn = document.getElementById('tag-input-confirm');
+    var addBtn = document.getElementById('btn-add-tag');
+    
+    var tagName = inputField ? inputField.value.trim() : '';
+    if (!tagName) {
+        onHideTagInput();
+        return;
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+    }
+    if (addBtn) {
+        addBtn.disabled = true;
+        addBtn.style.opacity = '0.5';
+    }
+    
+    try {
+        var result = await window.api.get_all_tags();
+        var existingTags = (result && result.tags) ? result.tags.map(function(t) { return t.name; }) : [];
+        
+        if (existingTags.indexOf(tagName) >= 0) {
+            alert('标签「' + tagName + '」已存在');
+            if (inputField) inputField.focus();
+            return;
+        }
+        
+        var container = document.getElementById('sidebar-tags');
+        if (container) {
+            var tagsList = container.querySelector('.sidebar-tags-list');
+            if (!tagsList) {
+                container.innerHTML = '<div class="sidebar-tags-list"></div>';
+                tagsList = container.querySelector('.sidebar-tags-list');
+            }
+            
+            var emptyEl = container.querySelector('.sidebar-view-empty');
+            if (emptyEl) emptyEl.remove();
+            
+            var newTagHtml = '<div class="sidebar-tag-group expanded" data-tag-name="' + escapeAttr(tagName) + '" data-temporary="true">';
+            newTagHtml += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+            newTagHtml += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+            newTagHtml += '<span class="sidebar-tag-name">' + escapeHtml(tagName) + '</span>';
+            newTagHtml += '<span class="sidebar-tag-count" style="color:var(--accent)">新</span>';
+            newTagHtml += '</div>';
+            newTagHtml += '<div class="sidebar-tag-files">';
+            newTagHtml += '<div class="sidebar-view-empty" style="padding:8px 12px;margin:0;font-size:11px;color:var(--text-muted);border:none;">将文件拖拽到此处添加标签</div>';
+            newTagHtml += '</div>';
+            newTagHtml += '</div>';
+            
+            tagsList.insertAdjacentHTML('afterbegin', newTagHtml);
+            
+            var newGroup = tagsList.querySelector('.sidebar-tag-group[data-temporary="true"]');
+            if (newGroup) {
+                newGroup.removeAttribute('data-temporary');
+                setupTagsDragDrop(container);
+            }
+        }
+        
+        console.log('[Tags] 标签「' + tagName + '」已创建，请拖拽文件到此标签下');
+        
+        onHideTagInput();
+        
+    } catch (e) {
+        console.error('[Tags] add tag error:', e);
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+        }
+        if (addBtn) {
+            addBtn.disabled = false;
+            addBtn.style.opacity = '1';
+        }
+    }
+}
+
+function setupTagInputEvents() {
+    var inputField = document.getElementById('tag-input-field');
+    var cancelBtn = document.getElementById('tag-input-cancel');
+    var confirmBtn = document.getElementById('tag-input-confirm');
+    
+    if (inputField) {
+        inputField.addEventListener('input', onTagInputChange);
+        inputField.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                onConfirmTag();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                onHideTagInput();
+            }
+        });
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onHideTagInput();
+        });
+    }
+    
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onConfirmTag();
+        });
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupTagInputEvents);
+} else {
+    setupTagInputEvents();
 }
 
 async function loadTopicView() {

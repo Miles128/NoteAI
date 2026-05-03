@@ -39,6 +39,10 @@ from .unified import (
     MARKDOWN_REFORMAT_PROMPT
 )
 
+from .llm_rewrite import (
+    LLM_REWRITE_PROMPT
+)
+
 __all__ = [
     # web
     'WEB_TO_MARKDOWN_PROMPT',
@@ -69,4 +73,6 @@ __all__ = [
     'CLEAN_MARKDOWN_PROMPT',
     'FORMAT_OPTIMIZATION_PROMPT',
     'MARKDOWN_REFORMAT_PROMPT',
+    # llm rewrite
+    'LLM_REWRITE_PROMPT',
 ]

@@ -9,7 +9,7 @@
 .tree-empty {
     padding: 32px 16px;
     text-align: center;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text-muted);
 }
 
@@ -19,7 +19,7 @@
     height: 22px;
     padding: 0 8px 0 0;
     margin: 0;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text);
     cursor: pointer;
     white-space: nowrap;
@@ -103,7 +103,7 @@
 }
 
 .tree-modified {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     flex-shrink: 0;
     margin-left: 8px;
@@ -127,7 +127,7 @@
     border-radius: 6px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.04);
     padding: 4px 0;
-    font-size: 13px;
+    font-size: 14px;
     animation: ctxMenuIn 0.12s ease;
     transform-origin: top left;
 }
@@ -169,7 +169,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text);
     cursor: pointer;
     transition: all 0.15s;
@@ -248,8 +248,8 @@
 .toast-icon.info { color: var(--primary); }
 
 .toast-content { flex: 1; min-width: 0; }
-.toast-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
-.toast-message { font-size: 12px; color: var(--text-muted); }
+.toast-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.toast-message { font-size: 13px; color: var(--text-muted); }
 
 .toast-close {
     width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
@@ -263,7 +263,7 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 16px; background: var(--topbar-bg);
     backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-    border-top: 0.5px solid var(--border); font-size: 11px; color: var(--text-muted); flex-shrink: 0;
+    border-top: 0.5px solid var(--border); font-size: 12px; color: var(--text-muted); flex-shrink: 0;
 }
 
 .status-left, .status-right { display: flex; align-items: center; gap: 16px; }
@@ -280,8 +280,8 @@
 }
 .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: rgba(0, 122, 255, 0.05); }
 .drop-zone-icon { width: 48px; height: 48px; color: var(--primary); opacity: 0.6; margin-bottom: 12px; }
-.drop-zone-text { font-size: 13px; color: var(--text); margin-bottom: 4px; }
-.drop-zone-hint { font-size: 12px; color: var(--text-muted); }
+.drop-zone-text { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+.drop-zone-hint { font-size: 13px; color: var(--text-muted); }
 
 .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -306,7 +306,7 @@
 }
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 0.5px solid var(--border); }
-.modal-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.modal-title { font-size: 17px; font-weight: 600; color: var(--text); }
 
 .modal-close {
     width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
@@ -329,3 +329,52 @@
 .topic-pending-card.dragging { opacity: 0.4; cursor: grabbing; }
 .topic-pending-card[draggable="true"] { cursor: grab; }
 .topic-pending-card[draggable="true"]:active { cursor: grabbing; }
+
+.delete-confirm-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    white-space: nowrap;
+    font-size: 12px;
+}
+.delete-confirm-text {
+    color: var(--text);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.delete-confirm-yes, .delete-confirm-no {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+.delete-confirm-yes {
+    background: #e74c3c;
+    color: #fff;
+}
+.delete-confirm-yes:hover {
+    background: #c0392b;
+}
+.delete-confirm-no {
+    background: var(--surface-hover);
+    color: var(--text-muted);
+}
+.delete-confirm-no:hover {
+    background: var(--border);
+    color: var(--text);
+}

@@ -3,7 +3,8 @@
 import re, sys
 from pathlib import Path
 
-NOTES_DIR = Path("/Users/sihai/Documents/My Projects/NoteAI/src-tauri/Notes")
+PROJECT_ROOT = Path(__file__).parent.parent
+NOTES_DIR = PROJECT_ROOT / "src-tauri" / "Notes"
 
 def reorganize(content):
     lines = content.split('\n')

@@ -8,7 +8,8 @@ window.TiptapEditor = {
     modulesReady: false,
     initPromise: null,
     toolbarBound: false,
-    destroying: false
+    destroying: false,
+    allTags: []
 };
 
 window.TiptapEditor.initPromise = new Promise((resolve) => {
@@ -293,6 +294,7 @@ function createTiptapEditor(markdownContent, filePath) {
                 var sel = window.getSelection();
                 sel.removeAllRanges();
                 sel.addRange(range);
+                setupTagAutocomplete(el, keyName);
             });
             el.addEventListener('blur', function() {
                 var key = this.getAttribute('data-fm-key');
@@ -309,6 +311,7 @@ function createTiptapEditor(markdownContent, filePath) {
                     if (fmContainer) {
                         fmContainer.innerHTML = renderFrontmatterPanel(window.TiptapEditor.frontmatterData);
                         fmContainer.style.display = fmContainer.innerHTML ? 'block' : 'none';
+                        bindFrontmatterEvents(fmContainer);
                     }
                 }
             });
@@ -469,6 +472,155 @@ async function openMarkdownInEditor(content, filePath) {
 
     showEditorUI();
     return createTiptapEditor(content, filePath);
+}
+
+function setupTagAutocomplete(el, keyName) {
+    if (keyName !== 'tags') return;
+
+    loadAllTags();
+
+    var dropdown = document.createElement('div');
+    dropdown.className = 'tag-autocomplete-dropdown';
+    dropdown.style.display = 'none';
+    el.parentNode.style.position = 'relative';
+    el.parentNode.appendChild(dropdown);
+
+    function updateDropdown() {
+        var text = el.textContent.trim();
+        var parts = text.split(',').map(function(s) { return s.trim(); });
+        var currentPart = parts[parts.length - 1].toLowerCase();
+
+        if (!currentPart) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        var existing = parts.slice(0, -1).map(function(s) { return s.toLowerCase(); });
+        var matches = window.TiptapEditor.allTags.filter(function(tag) {
+            return tag.toLowerCase().indexOf(currentPart) >= 0 &&
+                existing.indexOf(tag.toLowerCase()) < 0;
+        }).slice(0, 8);
+
+        if (matches.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        dropdown.innerHTML = matches.map(function(tag) {
+            return '<div class="tag-autocomplete-item" data-tag="' + tag.replace(/"/g, '&quot;') + '">' + tag.replace(/</g, '&lt;') + '</div>';
+        }).join('');
+        dropdown.style.display = 'block';
+
+        dropdown.querySelectorAll('.tag-autocomplete-item').forEach(function(item) {
+            item.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var selectedTag = this.getAttribute('data-tag');
+                parts[parts.length - 1] = selectedTag;
+                el.textContent = parts.join(', ') + ', ';
+                dropdown.style.display = 'none';
+                var range = document.createRange();
+                range.selectNodeContents(el);
+                range.collapse(false);
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            });
+        });
+    }
+
+    el.addEventListener('input', updateDropdown);
+
+    el.addEventListener('keydown', function(e) {
+        if (e.key === 'Tab' && dropdown.style.display !== 'none') {
+            e.preventDefault();
+            var first = dropdown.querySelector('.tag-autocomplete-item');
+            if (first) {
+                first.dispatchEvent(new MouseEvent('mousedown'));
+            }
+        }
+    });
+
+    el.addEventListener('blur', function() {
+        setTimeout(function() { dropdown.remove(); }, 200);
+    });
+}
+
+async function loadAllTags() {
+    if (window.TiptapEditor.allTags.length > 0) return;
+    try {
+        var result = await window.api.get_all_tags();
+        if (result && result.tags) {
+            window.TiptapEditor.allTags = result.tags.map(function(t) { return t.name; });
+        }
+    } catch (e) {
+        console.error('[Tiptap] load tags error:', e);
+    }
+}
+
+function bindFrontmatterEvents(fmContainer) {
+    fmContainer.querySelectorAll('.obsidian-prop-val[contenteditable]').forEach(function(el) {
+        el.addEventListener('blur', function() {
+            var key = this.getAttribute('data-fm-key');
+            var newVal = this.textContent.trim();
+            if (key && window.TiptapEditor.frontmatterData) {
+                var origVal = window.TiptapEditor.frontmatterData[key];
+                if (Array.isArray(origVal)) {
+                    window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                } else {
+                    window.TiptapEditor.frontmatterData[key] = newVal;
+                }
+                saveTiptapContent();
+            }
+        });
+        el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+            }
+        });
+    });
+
+    fmContainer.querySelectorAll('.obsidian-prop-tags').forEach(function(el) {
+        el.addEventListener('dblclick', function() {
+            var key = el.previousElementSibling;
+            var keyName = key ? key.textContent.trim() : '';
+            if (!keyName || !window.TiptapEditor.frontmatterData) return;
+            var origVal = window.TiptapEditor.frontmatterData[keyName];
+            if (!Array.isArray(origVal)) return;
+            el.innerHTML = '';
+            el.textContent = origVal.join(', ');
+            el.classList.remove('obsidian-prop-tags');
+            el.setAttribute('contenteditable', 'true');
+            el.setAttribute('data-fm-key', keyName);
+            el.focus();
+            var range = document.createRange();
+            range.selectNodeContents(el);
+            var sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            setupTagAutocomplete(el, keyName);
+        });
+        el.addEventListener('blur', function() {
+            var key = this.getAttribute('data-fm-key');
+            var newVal = this.textContent.trim();
+            if (key && window.TiptapEditor.frontmatterData) {
+                var origVal = window.TiptapEditor.frontmatterData[key];
+                if (Array.isArray(origVal)) {
+                    window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                } else {
+                    window.TiptapEditor.frontmatterData[key] = newVal;
+                }
+                saveTiptapContent();
+                var fmC = document.getElementById('frontmatter-panel');
+                if (fmC) {
+                    fmC.innerHTML = renderFrontmatterPanel(window.TiptapEditor.frontmatterData);
+                    fmC.style.display = fmC.innerHTML ? 'block' : 'none';
+                    bindFrontmatterEvents(fmC);
+                }
+            }
+        });
+    });
 }
 
 window.TiptapEditorModule = {

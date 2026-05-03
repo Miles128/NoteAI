@@ -3,6 +3,7 @@ import json
 import sys
 from pathlib import Path
 from config.settings import config
+from utils.logger import logger
 
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
 
@@ -397,20 +398,20 @@ def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
 def auto_assign_topic_for_file(file_path):
     workspace = config.workspace_path
     if not workspace:
-        return
+        return None
 
     full_path = Path(file_path)
     if not full_path.exists():
-        return
+        return None
 
     try:
         text = full_path.read_text(encoding='utf-8')
     except Exception:
-        return
+        return None
 
     m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
     if not m:
-        return
+        return None
 
     yaml_text = m.group(1)
     tags = []
@@ -428,7 +429,7 @@ def auto_assign_topic_for_file(file_path):
             title = val.strip().strip("'\"")
 
     if not _check_topic_needs_processing(yaml_text):
-        return
+        return None
 
     headings = parse_wiki_headings()
     filename = full_path.stem
@@ -444,7 +445,7 @@ def auto_assign_topic_for_file(file_path):
             "source": "none"
         })
         save_pending(pending)
-        return
+        return {"status": "pending", "source": "none"}
 
     high_priority_candidates = []
     low_priority_candidates = []
@@ -494,7 +495,7 @@ def auto_assign_topic_for_file(file_path):
         write_topic_to_file(str(full_path), candidates[0])
         rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
         add_file_to_wiki_topic(rel, candidates[0], title)
-        return
+        return {"status": "auto_assigned", "topic": candidates[0]}
 
     all_candidates = candidates + extra_candidates
 
@@ -508,6 +509,7 @@ def auto_assign_topic_for_file(file_path):
         "source": "wiki" if high_priority_candidates else "low_priority"
     })
     save_pending(pending)
+    return {"status": "pending", "source": "wiki" if high_priority_candidates else "low_priority"}
 
 
 def rename_wiki_topic(old_topic, new_topic):
@@ -643,8 +645,8 @@ def _remove_empty_topic_sections(topic_name_lower):
         if not new_content.endswith('\n'):
             new_content += '\n'
         wiki_path.write_text(new_content, encoding='utf-8')
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[topic_assigner] 写入 WIKI.md 失败: {e}")
 
 
 def _merge_duplicate_topics_in_wiki():

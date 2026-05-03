@@ -16,6 +16,7 @@ from typing import List, Dict, Optional, Tuple, Any
 
 from config import config, is_ignored_dir
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _is_generic_word, _normalize_for_match
+from utils.logger import logger
 
 
 def _get_links_path() -> Optional[Path]:
@@ -31,7 +32,8 @@ def load_links() -> Dict[str, Any]:
         return {"links": [], "last_scan": None}
     try:
         return json.loads(path.read_text(encoding='utf-8'))
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[link_indexer] 读取 .links.json 失败: {e}")
         return {"links": [], "last_scan": None}
 
 
@@ -42,7 +44,8 @@ def save_links(data: Dict[str, Any]) -> bool:
     try:
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
         return True
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[link_indexer] 保存 .links.json 失败: {e}")
         return False
 
 
@@ -68,7 +71,8 @@ def _parse_file_meta(md_file: Path) -> Dict[str, Any]:
     """提取文件的标题、标签、topic、前 500 字摘要"""
     try:
         text = md_file.read_text(encoding='utf-8')
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[link_indexer] 无法读取文件 {md_file.name}: {e}")
         return None
 
     m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('﻿'))
@@ -163,9 +167,7 @@ def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
 
     ok, msg = check_api_config()
     if not ok:
-        import sys
-        sys.stderr.write(f"[link_indexer] API not configured: {msg}\n")
-        sys.stderr.flush()
+        logger.warning(f"[link_indexer] API not configured: {msg}")
         return []
 
     all_links = []
@@ -221,9 +223,7 @@ def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
                                 "status": "pending",
                             })
         except Exception as e:
-            import sys
-            sys.stderr.write(f"[link_indexer] LLM batch error: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[link_indexer] LLM batch error: {e}")
             continue
 
         if progress_callback:

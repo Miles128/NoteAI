@@ -11,9 +11,14 @@ window.mdEditor = {
 
 function initMarked() {
     if (typeof marked !== 'undefined') {
+        var renderer = new marked.Renderer();
+        renderer.html = function(html) {
+            return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+        };
         marked.setOptions({
             gfm: true,
             breaks: true,
+            renderer: renderer,
             highlight: function(code, lang) {
                 if (typeof hljs !== 'undefined') {
                     try {
@@ -149,7 +154,7 @@ function createTextareaFallback(content, filePath, container) {
     window.mdEditor.usingFallback = true;
     const textarea = document.createElement('textarea');
     textarea.value = content;
-    textarea.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:none;background:var(--surface);color:var(--text);';
+    textarea.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:12px;font-family:monospace;font-size: 14px;line-height:1.6;resize:none;background:var(--surface);color:var(--text);';
     textarea.addEventListener('input', () => {
         updateMarkdownPreview(textarea.value);
         scheduleAutoSave(textarea.value);
@@ -333,7 +338,8 @@ function syncScrollFromEditor(view) {
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
     
-    const scrollRatio = editorScrollTop / (editorScrollHeight - editorClientHeight);
+    const editorMaxScroll = editorScrollHeight - editorClientHeight;
+    const scrollRatio = editorMaxScroll > 0 ? editorScrollTop / editorMaxScroll : 0;
     const previewScrollTop = scrollRatio * (previewScrollHeight - previewClientHeight);
     
     previewScroll.scrollTop = previewScrollTop;
@@ -356,7 +362,8 @@ function syncScrollFromPreview(previewScroll) {
     const editorScrollHeight = editorScrollDOM.scrollHeight;
     const editorClientHeight = editorScrollDOM.clientHeight;
     
-    const scrollRatio = previewScrollTop / (previewScrollHeight - previewClientHeight);
+    const previewMaxScroll = previewScrollHeight - previewClientHeight;
+    const scrollRatio = previewMaxScroll > 0 ? previewScrollTop / previewMaxScroll : 0;
     const editorScrollTop = scrollRatio * (editorScrollHeight - editorClientHeight);
     
     editorScrollDOM.scrollTop = editorScrollTop;

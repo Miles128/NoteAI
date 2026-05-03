@@ -27,6 +27,8 @@
     <script src="js/tabs.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/tree.js"></script>
+    <script src="js/links.js"></script>
+    <script src="js/graph.js"></script>
     <script src="js/preview.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/tiptap-editor.js"></script>
@@ -98,19 +100,6 @@
                     <polyline points="8.5 20 13.5 18 8.5 16"></polyline>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="relation" onclick="switchSidebarView('relation')" title="关系图谱">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="2"></circle>
-                    <circle cx="4" cy="6" r="2"></circle>
-                    <circle cx="20" cy="6" r="2"></circle>
-                    <circle cx="4" cy="18" r="2"></circle>
-                    <circle cx="20" cy="18" r="2"></circle>
-                    <line x1="12" y1="10" x2="5.5" y2="7.5"></line>
-                    <line x1="12" y1="10" x2="18.5" y2="7.5"></line>
-                    <line x1="12" y1="14" x2="5.5" y2="16.5"></line>
-                    <line x1="12" y1="14" x2="18.5" y2="16.5"></line>
-                </svg>
-            </button>
         </div>
         <div class="titlebar-center" data-tauri-drag-region>
             <div class="titlebar-file-name" id="titlebar-file-name"></div>
@@ -129,6 +118,19 @@
                 </svg>
             </button>
             <div class="titlebar-group-separator" id="titlebar-preview-separator" style="display: none;"></div>
+            <button class="titlebar-btn" id="titlebar-graph-btn" onclick="toggleGraphPanel()" title="关系图谱">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="2"></circle>
+                    <circle cx="4" cy="6" r="2"></circle>
+                    <circle cx="20" cy="6" r="2"></circle>
+                    <circle cx="4" cy="18" r="2"></circle>
+                    <circle cx="20" cy="18" r="2"></circle>
+                    <line x1="12" y1="10" x2="5.5" y2="7.5"></line>
+                    <line x1="12" y1="10" x2="18.5" y2="7.5"></line>
+                    <line x1="12" y1="14" x2="5.5" y2="16.5"></line>
+                    <line x1="12" y1="14" x2="18.5" y2="16.5"></line>
+                </svg>
+            </button>
             <button class="titlebar-btn" id="titlebar-search-btn" onclick="toggleSearchModal()" title="搜索 (Cmd+K)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
@@ -141,19 +143,10 @@
                     <circle cx="12" cy="12" r="3"></circle>
                 </svg>
             </button>
-            <button class="titlebar-btn" onclick="showLog()" title="日志">
+            <button class="titlebar-btn" id="titlebar-rewrite-btn" onclick="onLLMRewrite()" title="LLM 改写：用中立客观风格重写文档">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="8" y1="13" x2="16" y2="13"></line>
-                    <line x1="8" y1="17" x2="16" y2="17"></line>
-                </svg>
-            </button>
-            <button class="titlebar-btn" onclick="showAbout()" title="关于">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M12 16v-4"></path>
-                    <path d="M12 8h.01"></path>
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
                 </svg>
             </button>
         </div>
@@ -166,7 +159,6 @@
             <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
             <div class="sidebar-view-container" id="sidebar-topic" style="display: none;"></div>
             <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
-            <div class="sidebar-view-container" id="sidebar-relation" style="display: none;"></div>
             <div class="sidebar-topic-input" id="sidebar-topic-input" style="display: none;">
                 <input type="text" class="topic-input" id="topic-input-field" placeholder="输入主题名称...">
                 <button class="topic-input-btn topic-input-cancel" id="topic-input-cancel" title="取消">
@@ -195,22 +187,15 @@
             </div>
             <div class="sidebar-footer" id="sidebar-footer-tags" style="display: none;">
                 <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" title="自动匹配标签：扫描文件标题匹配已有标签">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
                 </button>
                 <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" title="新加标签：创建新的标签分类">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
             </div>
             <div class="sidebar-footer" id="sidebar-footer-graph" style="display: none;">
-                <button class="sidebar-footer-btn link-discover-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" title="发现链接：AI 分析文章关联">
+                <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" title="发现链接：AI 分析文章关联">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                    <span>发现链接</span>
-                </button>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-relation" style="display: none;">
-                <button class="sidebar-footer-btn" onclick="loadRelationGraphData()" title="刷新图谱">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                    <span>刷新</span>
                 </button>
             </div>
         </div>
@@ -245,8 +230,8 @@
                                 <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3" oninput="updateIntegrateBtnState()"></textarea>
                             </div>
                             <div class="btn-group" style="margin-top: 8px;">
-                                <button class="btn btn-secondary" id="extract-topics-btn" onclick="extractTopics()" style="flex: 1;">提取主题</button>
-                                <button class="btn btn-primary" id="integrate-btn" onclick="startNoteIntegration()" style="flex: 1;" disabled>开始整合</button>
+                                <button class="btn btn-secondary" id="extract-topics-btn" onclick="extractTopics()" style="flex: 1;" title="提取主题：从网页内容中提取关键主题">提取主题</button>
+                                <button class="btn btn-primary" id="integrate-btn" onclick="startNoteIntegration()" style="flex: 1;" disabled title="开始整合：将内容整合到笔记中">开始整合</button>
                             </div>
                         </div>
 
@@ -263,6 +248,61 @@
             </div>
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
+
+            <div class="graph-panel" id="graph-panel" style="display: none;">
+                <div class="graph-panel-header">
+                    <div class="graph-filter-bar">
+                        <button class="graph-filter-btn active" data-gfilter="all" onclick="onGraphFilter('all')" title="显示全部关系">全部</button>
+                        <button class="graph-filter-btn" data-gfilter="topic" onclick="onGraphFilter('topic')" title="只显示主题关系">主题</button>
+                        <button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter('tag')" title="只显示标签关系">标签</button>
+                        <button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter('link')" title="只显示双向链接关系">链接</button>
+                    </div>
+                    <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="graph-panel-body" id="graph-panel-body">
+                    <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
+                    <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
+                    <canvas id="graph-canvas" style="display:none;"></canvas>
+                </div>
+                <div class="graph-panel-footer">
+                    <div class="graph-legend">
+                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#4A90D9"></span>文件</span>
+                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#E8913A"></span>主题</span>
+                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#50B87F"></span>标签</span>
+                    </div>
+                    <div class="graph-toolbar">
+                        <button class="graph-toolbar-btn" onclick="graphZoomIn()" title="放大">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                        </button>
+                        <button class="graph-toolbar-btn" onclick="graphZoomOut()" title="缩小">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                        </button>
+                        <button class="graph-toolbar-btn" id="graph-evolve-btn" onclick="graphToggleEvolve()" title="演变：重新启动力模拟动画">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        </button>
+                        <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" title="刷新图谱">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
+            </div>
+
+            <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
+                <div class="pending-links-header">
+                    <span class="pending-links-title">待确认链接</span>
+                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" title="一键确认所有待确认链接">全部确认</button>
+                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" title="关闭">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div class="pending-links-body" id="pending-links-body">
+                    <div class="pending-links-empty" id="pending-links-empty">暂无待确认链接</div>
+                    <div class="pending-links-list" id="pending-links-list"></div>
+                </div>
+            </div>
 
             <div class="preview-panel" id="preview-panel" style="display: none;">
                 <div class="preview-resizer" id="preview-resizer"></div>
@@ -387,18 +427,8 @@
 
         </div>
 
-        <div class="about-panel-overlay" id="about-panel">
-            <button class="about-panel-close" onclick="closeAboutPanel()">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-            <div class="about-panel" id="about-panel-content"></div>
-        </div>
-
         <div class="about-panel-overlay" id="settings-panel">
-            <button class="about-panel-close" onclick="closeSettingsPanel()">
+            <button class="about-panel-close" onclick="closeSettingsPanel()" title="关闭">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 6 6 18"></path>
                     <path d="m6 6 12 12"></path>
@@ -467,22 +497,6 @@
             </div>
         </div>
 
-        <div class="about-panel-overlay" id="log-panel">
-            <button class="about-panel-close" onclick="closeLogPanel()">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-            <div class="about-panel" id="log-panel-content">
-                <h2>日志</h2>
-                <div class="card">
-                    <textarea id="log-text" class="form-input form-textarea" style="min-height: 400px; font-family: 'Consolas', monospace; font-size: 12px;" readonly></textarea>
-                    <button class="btn btn-secondary" style="margin-top: 12px;" onclick="refreshLog()">刷新日志</button>
-                </div>
-            </div>
-        </div>
-
         <div class="search-modal-overlay" id="search-modal" style="display: none;">
             <div class="search-modal">
                 <div class="search-input-row">
@@ -503,7 +517,7 @@
             <div class="download-modal" id="download-modal-content">
                 <div class="download-modal-header" id="download-modal-header">
                     <div class="download-modal-title">下载</div>
-                    <button class="download-modal-close" onclick="closeDownloadModal()">
+                    <button class="download-modal-close" onclick="closeDownloadModal()" title="关闭">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6 6 18"></path>
                             <path d="m6 6 12 12"></path>

@@ -1,7 +1,9 @@
 import sys
 import json
+import re
 import asyncio
 import threading
+import yaml
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent
@@ -27,6 +29,7 @@ class SidecarServer:
         self.topic_extractor = TopicExtractor()
         self._progress_callback = None
         self._running_tasks = set()
+        self._running_tasks_lock = threading.Lock()
         self._stdout_lock = threading.Lock()
         self._watcher_observer = None
         self._watcher_debounce_timer = None
@@ -50,15 +53,17 @@ class SidecarServer:
         })
 
     def _start_task(self, task_name, target, args=(), kwargs=None):
-        if task_name in self._running_tasks:
-            return False
-        self._running_tasks.add(task_name)
+        with self._running_tasks_lock:
+            if task_name in self._running_tasks:
+                return False
+            self._running_tasks.add(task_name)
 
         def _wrapped():
             try:
                 target(*args, **(kwargs or {}))
             finally:
-                self._running_tasks.discard(task_name)
+                with self._running_tasks_lock:
+                    self._running_tasks.discard(task_name)
 
         threading.Thread(target=_wrapped, daemon=True).start()
         return True
@@ -125,7 +130,10 @@ class SidecarServer:
 
         with self._watcher_debounce_lock:
             if self._watcher_debounce_timer:
-                self._watcher_debounce_timer.cancel()
+                try:
+                    self._watcher_debounce_timer.cancel()
+                except RuntimeError:
+                    pass
             self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
 
@@ -191,6 +199,8 @@ class SidecarServer:
             "move_file": self._move_file,
             "add_tag_to_file": self._add_tag_to_file,
             "test_api_connection": self._test_api_connection,
+            "llm_rewrite": self._llm_rewrite,
+            "search_files": self._search_files,
             "on_file_selected": self._on_file_selected,
             "refresh_log": self._refresh_log,
             "discover_links": self._discover_links,
@@ -330,8 +340,10 @@ class SidecarServer:
         return {"is_valid": False, "message": "工作区路径无效", "path": path}
 
     def _clear_saved_workspace(self, params):
-        from config.settings import WorkspaceStateManager
-        WorkspaceStateManager.clear()
+        from config.settings import workspace_manager
+        success, message = workspace_manager.clear_workspace_state()
+        if not success:
+            return {"success": False, "message": message}
         config.workspace_path = ""
         save_ok, save_msg = config.save()
         if not save_ok:
@@ -477,6 +489,12 @@ class SidecarServer:
         path = params.get("path", "")
         if not path or not Path(path).exists():
             return {"success": False, "message": "路径不存在"}
+        resolved = self._resolve_path(path)
+        if resolved is None:
+            return {"success": False, "message": "路径不允许在工作区外"}
+        if not Path(resolved).exists():
+            return {"success": False, "message": "解析后的路径不存在"}
+        path = resolved
         try:
             if platform.system() == "Darwin":
                 subprocess.Popen(["open", "-R", path])
@@ -491,18 +509,25 @@ class SidecarServer:
     def _delete_file(self, params):
         import send2trash
         path = params.get("path", "")
-        if not path or not Path(path).exists():
-            return {"success": False, "message": "路径不存在"}
+        if not path:
+            return {"success": False, "message": "路径不能为空"}
+
+        workspace = config.workspace_path
+        full_path = Path(workspace) / path if not Path(path).is_absolute() else Path(path)
+
+        if not full_path.exists():
+            return {"success": False, "message": "文件不存在"}
+
         try:
-            send2trash.send2trash(path)
+            send2trash.send2trash(str(full_path))
             return {"success": True}
         except ImportError:
             try:
-                if Path(path).is_dir():
+                if full_path.is_dir():
                     import shutil
-                    shutil.rmtree(path)
+                    shutil.rmtree(str(full_path))
                 else:
-                    Path(path).unlink()
+                    full_path.unlink()
                 return {"success": True}
             except Exception as e:
                 return {"success": False, "message": str(e)}
@@ -627,6 +652,19 @@ class SidecarServer:
     def _refresh_log(self, params):
         return {"success": True, "message": "日志已刷新"}
 
+    @staticmethod
+    def _parse_frontmatter(text):
+        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+        if not m:
+            return None, text
+        try:
+            meta = yaml.safe_load(m.group(1)) or {}
+        except yaml.YAMLError:
+            meta = {}
+        body_start = m.end()
+        body = text.lstrip('\ufeff')[body_start:]
+        return meta, body
+
     def _resolve_path(self, path):
         if not path:
             return path
@@ -634,7 +672,14 @@ class SidecarServer:
             return path
         workspace = config.workspace_path
         if workspace:
-            return str(Path(workspace) / path)
+            resolved = str(Path(workspace) / path)
+            try:
+                workspace_abs = Path(workspace).resolve()
+                target_abs = Path(resolved).resolve()
+                target_abs.relative_to(workspace_abs)
+            except (ValueError, Exception):
+                return None
+            return resolved
         return path
 
     def _get_workspace_tree(self, params):
@@ -791,35 +836,24 @@ class SidecarServer:
             return {"success": False, "message": "未设置工作区"}
 
         tag_map = {}
-        for entry in Path(workspace).iterdir():
-            if not entry.is_dir() or entry.name.startswith('.'):
+        for md_file in Path(workspace).rglob('*.md'):
+            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
                 continue
-            if is_ignored_dir(entry.name):
-                continue
-            for md_file in entry.glob('*.md'):
-                try:
-                    text = md_file.read_text(encoding='utf-8')
-                    m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                    if not m:
-                        continue
-                    yaml_text = m.group(1)
-                    for line in yaml_text.split('\n'):
-                        idx = line.find(':')
-                        if idx < 0:
-                            continue
-                        key = line[:idx].strip()
-                        val = line[idx + 1:].strip()
-                        if key != 'tags':
-                            continue
-                        if val.startswith('[') and val.endswith(']'):
-                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                        else:
-                            continue
-                        for tag in tags:
-                            if tag not in tag_map:
-                                tag_map[tag] = []
-                except Exception:
-                    pass
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                meta, _ = self._parse_frontmatter(text)
+                if meta is None:
+                    continue
+                tags = meta.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [t.strip().strip("'\"") for t in tags.split(',') if t.strip()]
+                elif not isinstance(tags, list):
+                    continue
+                for tag in tags:
+                    if tag not in tag_map:
+                        tag_map[tag] = []
+            except Exception:
+                pass
 
         if not tag_map:
             return {"success": True, "updated": 0, "message": "未找到已有标签"}
@@ -898,9 +932,6 @@ class SidecarServer:
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        tags_md_path = Path(workspace) / 'tags.md'
-        if not tags_md_path.exists():
-            return save_tags_md(workspace)
         return save_tags_md(workspace)
 
     def _create_tag(self, params):
@@ -1259,6 +1290,7 @@ class SidecarServer:
         save_pending([])
 
         files_to_process = 0
+        auto_assigned_count = 0
         skipped = 0
 
         for md_file in md_files:
@@ -1277,12 +1309,14 @@ class SidecarServer:
                 skipped += 1
                 continue
 
-            auto_assign_topic_for_file(str(md_file))
+            result = auto_assign_topic_for_file(str(md_file))
             files_to_process += 1
+            if result and result.get("status") == "auto_assigned":
+                auto_assigned_count += 1
 
         pending = load_pending()
         need_confirm = len(pending)
-        auto_assigned = files_to_process - need_confirm
+        auto_assigned = auto_assigned_count
 
         return {
             "success": True,
@@ -1429,8 +1463,8 @@ class SidecarServer:
             if not m:
                 frontmatter = '---\ntags: [' + tag + ']\n---\n'
                 full_path.write_text(bom + frontmatter + clean_text, encoding='utf-8')
-            self._save_tags_md({})
-            return {"success": True, "message": f"已添加标签「{tag}」"}
+                self._save_tags_md({})
+                return {"success": True, "message": f"已添加标签「{tag}」"}
 
             yaml_text = m.group(2)
             lines = yaml_text.split('\n')
@@ -1483,10 +1517,12 @@ class SidecarServer:
             return {"success": False, "message": f"添加标签失败: {e}"}
 
     def _discover_links(self, params):
-        if getattr(self, '_link_discovery_running', False):
+        if not getattr(self, '_link_discovery_event', None):
+            self._link_discovery_event = threading.Event()
+        if self._link_discovery_event.is_set():
             return {"success": False, "message": "链接发现正在进行中，请等待完成"}
 
-        self._link_discovery_running = True
+        self._link_discovery_event.set()
 
         def run():
             def progress_callback(stage, total, message):
@@ -1497,7 +1533,7 @@ class SidecarServer:
             except Exception as e:
                 result = {"success": False, "message": f"链接发现失败: {e}"}
 
-            self._link_discovery_running = False
+            self._link_discovery_event.clear()
             self._send_response({
                 "id": "event",
                 "result": {
@@ -1523,34 +1559,43 @@ class SidecarServer:
         workspace_path = Path(workspace)
         nodes = {}
         edges = []
+        skipped_no_yaml = 0
+        skipped_name = 0
+        total_md = 0
+        first_file_debug = ""
+        error_count = 0
+        first_error = ""
 
         for md_file in workspace_path.rglob('*.md'):
+            total_md += 1
             if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+                skipped_name += 1
                 continue
             try:
                 text = md_file.read_text(encoding='utf-8')
-                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                if not m:
-                    continue
-                yaml_text = m.group(1)
+                if not first_file_debug:
+                    first_file_debug = f"read_ok={md_file.name}, len={len(text)}"
+                meta, body = self._parse_frontmatter(text)
                 rel_path = str(md_file.relative_to(workspace_path))
                 file_name = md_file.stem
                 topic = None
                 tags = []
 
-                for line in yaml_text.split('\n'):
-                    idx = line.find(':')
-                    if idx < 0:
-                        continue
-                    key = line[:idx].strip()
-                    val = line[idx + 1:].strip()
-                    if key == 'topic':
-                        topic = val.strip().strip("'\"")
-                    elif key == 'tags':
-                        if val.startswith('[') and val.endswith(']'):
-                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                        elif val:
-                            tags.append(val.strip().strip("'\""))
+                if meta is not None:
+                    topic = meta.get('topic')
+                    if isinstance(topic, str):
+                        topic = topic.strip().strip("'\"")
+                    tags = meta.get('tags', [])
+                    if isinstance(tags, str):
+                        tags = [t.strip().strip("'\"") for t in tags.split(',') if t.strip()]
+                    elif not isinstance(tags, list):
+                        tags = []
+                else:
+                    body = text
+                    skipped_no_yaml += 1
+
+                if not first_file_debug:
+                    first_file_debug = f"file={md_file.name}, rel={rel_path}, topic={topic}"
 
                 nodes[rel_path] = {
                     "id": rel_path,
@@ -1573,8 +1618,6 @@ class SidecarServer:
                         "type": "tag"
                     })
 
-                body_start = m.end()
-                body = text.lstrip('\ufeff')[body_start:]
                 link_pattern = re.compile(r'\[\[([^\]]+)\]\]')
                 for match in link_pattern.finditer(body):
                     target_name = match.group(1).strip()
@@ -1590,8 +1633,10 @@ class SidecarServer:
                                 "type": "link"
                             })
                             break
-            except Exception:
-                pass
+            except Exception as e:
+                error_count += 1
+                if not first_error:
+                    first_error = f"{md_file.name}: {type(e).__name__}: {e}"
 
         topic_nodes = {}
         tag_nodes = {}
@@ -1622,7 +1667,21 @@ class SidecarServer:
         return {
             "success": True,
             "nodes": all_nodes,
-            "edges": edges
+            "edges": edges,
+            "debug": {
+                "workspace": workspace,
+                "workspace_exists": workspace_path.exists(),
+                "total_md": total_md,
+                "skipped_name": skipped_name,
+                "skipped_no_yaml": skipped_no_yaml,
+                "nodes_with_yaml": len(nodes),
+                "topic_nodes": len(topic_nodes),
+                "tag_nodes": len(tag_nodes),
+                "total_edges": len(edges),
+                "first_file": first_file_debug,
+                "error_count": error_count,
+                "first_error": first_error
+            }
         }
 
     def _confirm_link(self, params):
@@ -1641,6 +1700,101 @@ class SidecarServer:
 
     def _confirm_all_links(self, params):
         return confirm_all_links()
+
+    def _llm_rewrite(self, params):
+        from utils.llm_utils import rewrite_with_llm, APIConfigError
+
+        file_path = params.get("file_path", "")
+        if not file_path:
+            return {"success": False, "message": "未指定文件"}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        full_path = Path(workspace) / file_path if not Path(file_path).is_absolute() else Path(file_path)
+        if not full_path.exists():
+            return {"success": False, "message": "文件不存在"}
+
+        try:
+            content = full_path.read_text(encoding='utf-8')
+            rewritten = rewrite_with_llm(content)
+            full_path.write_text(rewritten, encoding='utf-8')
+            return {"success": True, "message": "改写完成"}
+        except APIConfigError as e:
+            return {"success": False, "message": str(e)}
+        except Exception as e:
+            return {"success": False, "message": f"改写失败: {str(e)}"}
+
+    def _search_files(self, params):
+        query = params.get("query", "").strip()
+        if not query:
+            return {"success": True, "results": [], "query": "", "count": 0}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+        if not workspace_path.exists():
+            return {"success": False, "message": "工作区不存在"}
+
+        results = []
+        query_lower = query.lower()
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.'):
+                continue
+            if md_file.name.lower() in ('wiki.md', 'tags.md'):
+                continue
+
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                text_lower = text.lower()
+
+                if query_lower not in text_lower:
+                    continue
+
+                matches = text_lower.count(query_lower)
+                rel_path = str(md_file.relative_to(workspace_path))
+
+                title = md_file.stem
+                for line in text.split('\n'):
+                    stripped = line.strip()
+                    if stripped.startswith('# ') and not stripped.startswith('## '):
+                        title = stripped[2:].strip()
+                        break
+
+                snippet = ""
+                idx = text_lower.find(query_lower)
+                if idx >= 0:
+                    start = max(0, idx - 40)
+                    end = min(len(text), idx + len(query) + 80)
+                    snippet = text[start:end].replace('\n', ' ')
+                    if start > 0:
+                        snippet = '...' + snippet
+                    if end < len(text):
+                        snippet = snippet + '...'
+
+                results.append({
+                    "path": rel_path,
+                    "title": title,
+                    "snippet": snippet,
+                    "name": md_file.name,
+                    "matches": matches
+                })
+            except Exception:
+                continue
+
+        results.sort(key=lambda r: -r["matches"])
+        results = results[:50]
+
+        return {
+            "success": True,
+            "results": results,
+            "query": query,
+            "count": len(results)
+        }
 
     def _test_api_connection(self, params):
         try:

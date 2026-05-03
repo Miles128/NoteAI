@@ -52,6 +52,9 @@ config.local.py
 .env
 .env.local
 
+# Project config (contains local paths)
+config/config.json
+
 # Trae IDE
 .trae/
 

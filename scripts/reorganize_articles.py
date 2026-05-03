@@ -3,7 +3,8 @@ import sys, re, json, time
 from pathlib import Path
 from openai import OpenAI
 
-NOTES_DIR = Path("/Users/sihai/Documents/My Projects/NoteAI/src-tauri/Notes")
+PROJECT_ROOT = Path(__file__).parent.parent
+NOTES_DIR = PROJECT_ROOT / "src-tauri" / "Notes"
 CONFIG_PATH = Path.home() / "Library" / "Application Support" / "NoteAI" / "api_config.json"
 
 PROMPT = """你是一位专业的文档编辑。请将以下文章重新整理为规范的 Markdown 格式。

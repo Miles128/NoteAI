@@ -368,6 +368,23 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
     return (truncated_content, True, True, truncated_tokens)
 
 
+def rewrite_with_llm(content: str) -> str:
+    if not content or not content.strip():
+        return content
+
+    is_valid, error_msg = check_api_config()
+    if not is_valid:
+        raise APIConfigError(error_msg)
+
+    from prompts.llm_rewrite import LLM_REWRITE_PROMPT
+
+    return call_llm(
+        LLM_REWRITE_PROMPT,
+        temperature=0.3,
+        content=content
+    )
+
+
 def reformat_markdown_with_llm(content: str) -> str:
     """使用 LLM 重新格式化 Markdown 内容"""
     if not content or not content.strip():

@@ -1,13 +1,53 @@
-var treeExpandedState = {};
+window.AppState = {
+    selectedFilePath: null,
+    selectedFileName: null,
+    activeTreeItem: null,
+    treeExpandedState: {},
+    currentSidebarView: 'tree',
+    linkFilter: 'all',
+    graphFilter: 'all',
+    graphData: null,
+    graphAnimId: null,
+    graphScale: 1,
+    graphOffsetX: 0,
+    graphOffsetY: 0,
+    graphNodes: null,
+    graphEdges: null,
+    graphCanvasW: 0,
+    graphCanvasH: 0,
+    graphEvolving: false,
+    graphAlpha: 1,
+    graphDrawFrame: null,
+    graphLoopFn: null,
+    graphTickFn: null,
+    pendingLinksData: [],
+    lastFileTreeData: null,
+    lastTagsData: null,
+    lastTopicData: null,
+    fileTreeDragData: { filePath: null, fileName: null, isFolder: false },
+    tagsDragData: { filePath: null, fileName: null },
+    pendingDragData: { filePath: null, cardEl: null },
+    linkDiscoveryUnlisten: null
+};
+
+var treeExpandedState = window.AppState.treeExpandedState;
 var selectedFilePath = null;
 var selectedFileName = null;
 var _activeTreeItem = null;
+
+function setSelectedFile(path, name) {
+    selectedFilePath = path;
+    selectedFileName = name;
+    window.AppState.selectedFilePath = path;
+    window.AppState.selectedFileName = name;
+}
 
 function loadTreeState() {
     try {
         var saved = localStorage.getItem('tree-expanded-state');
         if (saved) treeExpandedState = JSON.parse(saved);
     } catch (e) {
+        console.warn('[Tree] loadTreeState failed:', e);
         treeExpandedState = {};
     }
 }
@@ -15,7 +55,9 @@ function loadTreeState() {
 function saveTreeState() {
     try {
         localStorage.setItem('tree-expanded-state', JSON.stringify(treeExpandedState));
-    } catch (e) {}
+    } catch (e) {
+        console.warn('[Tree] saveTreeState failed:', e);
+    }
 }
 
 function toggleTreeFolder(element) {
@@ -165,6 +207,12 @@ function showTreeContextMenu(e, itemEl) {
         });
     }
 
+    items.push({
+        label: '删除',
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>',
+        action: function() { showDeleteConfirm(itemEl, path, name); }
+    });
+
     items.forEach(function(item) {
         var el = document.createElement('div');
         el.className = 'ctx-menu-item';
@@ -193,6 +241,55 @@ function showTreeContextMenu(e, itemEl) {
 function hideTreeContextMenu() {
     var existing = document.getElementById('tree-ctx-menu');
     if (existing) existing.remove();
+}
+
+function showDeleteConfirm(itemEl, path, name) {
+    var existingConfirm = itemEl.querySelector('.delete-confirm-bar');
+    if (existingConfirm) return;
+
+    var bar = document.createElement('div');
+    bar.className = 'delete-confirm-bar';
+    bar.innerHTML = '<span class="delete-confirm-text">删除 ' + escapeHtml(name) + '？</span>' +
+        '<button class="delete-confirm-yes" title="确认删除"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>' +
+        '<button class="delete-confirm-no" title="取消"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+
+    itemEl.style.position = 'relative';
+    itemEl.appendChild(bar);
+
+    bar.querySelector('.delete-confirm-yes').addEventListener('click', function(e) {
+        e.stopPropagation();
+        doDeleteFile(path, name, bar);
+    });
+
+    bar.querySelector('.delete-confirm-no').addEventListener('click', function(e) {
+        e.stopPropagation();
+        bar.remove();
+    });
+
+    var outsideClick = function(e) {
+        if (!bar.contains(e.target) && e.target !== itemEl) {
+            bar.remove();
+            document.removeEventListener('click', outsideClick);
+        }
+    };
+    setTimeout(function() { document.addEventListener('click', outsideClick); }, 10);
+}
+
+async function doDeleteFile(path, name, confirmBar) {
+    if (confirmBar) confirmBar.remove();
+    try {
+        var result = await window.api.pyCall('delete_file', { path: path });
+        if (result && result.success) {
+            if (selectedFilePath === path) {
+                setSelectedFile(null, null);
+            }
+            window.TreeModule.loadFileTree();
+        } else {
+            alert('删除失败：' + (result ? result.message || '未知错误' : '未知错误'));
+        }
+    } catch (e) {
+        alert('删除出错：' + (e.message || e));
+    }
 }
 
 function revealInFinder(path) {
@@ -347,19 +444,28 @@ async function loadFileTree() {
 }
 
 function selectFile(path, fileName) {
-    selectedFilePath = path;
-    selectedFileName = fileName;
+    setSelectedFile(path, fileName);
     if (window.api) {
         window.api.on_file_selected(path);
     }
+
+    var graphPanel = document.getElementById('graph-panel');
+    if (graphPanel && graphPanel.style.display !== 'none') {
+        graphPanel.style.display = 'none';
+        var graphBtn = document.getElementById('titlebar-graph-btn');
+        if (graphBtn) graphBtn.classList.remove('active');
+    }
+
+    var pendingLinksPanel = document.getElementById('pending-links-panel');
+    if (pendingLinksPanel && pendingLinksPanel.style.display !== 'none') {
+        pendingLinksPanel.style.display = 'none';
+    }
+
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(path, fileName);
     }
     if (_currentSidebarView === 'graph') {
         loadLinksData();
-    }
-    if (_currentSidebarView === 'relation') {
-        loadRelationGraphData();
     }
 }
 
@@ -372,9 +478,20 @@ function switchSidebarView(view) {
     var sidebarTags = document.getElementById('sidebar-tags');
     var sidebarTopic = document.getElementById('sidebar-topic');
     var sidebarGraph = document.getElementById('sidebar-graph');
-    var sidebarRelation = document.getElementById('sidebar-relation');
     var sidebar = document.querySelector('.sidebar-left');
     var resizer = document.getElementById('sidebar-resizer');
+    var graphPanel = document.getElementById('graph-panel');
+    var pendingLinksPanel = document.getElementById('pending-links-panel');
+
+    if (graphPanel && graphPanel.style.display !== 'none') {
+        graphPanel.style.display = 'none';
+        var graphBtn = document.getElementById('titlebar-graph-btn');
+        if (graphBtn) graphBtn.classList.remove('active');
+    }
+
+    if (pendingLinksPanel && pendingLinksPanel.style.display !== 'none') {
+        pendingLinksPanel.style.display = 'none';
+    }
 
     if (sidebar) sidebar.style.display = 'flex';
     if (resizer) resizer.style.display = '';
@@ -383,7 +500,6 @@ function switchSidebarView(view) {
     if (sidebarTags) sidebarTags.style.display = view === 'tags' ? '' : 'none';
     if (sidebarTopic) sidebarTopic.style.display = view === 'topic' ? '' : 'none';
     if (sidebarGraph) sidebarGraph.style.display = view === 'graph' ? '' : 'none';
-    if (sidebarRelation) sidebarRelation.style.display = view === 'relation' ? '' : 'none';
 
     document.querySelectorAll('.sidebar-view-btn').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.sidebar === view);
@@ -392,37 +508,38 @@ function switchSidebarView(view) {
     var footerTopic = document.getElementById('sidebar-footer-topic');
     var footerTags = document.getElementById('sidebar-footer-tags');
     var footerGraph = document.getElementById('sidebar-footer-graph');
-    var footerRelation = document.getElementById('sidebar-footer-relation');
     if (footerTopic) footerTopic.style.display = view === 'topic' ? '' : 'none';
     if (footerTags) footerTags.style.display = view === 'tags' ? '' : 'none';
     if (footerGraph) footerGraph.style.display = view === 'graph' ? '' : 'none';
-    if (footerRelation) footerRelation.style.display = view === 'relation' ? '' : 'none';
+
+    var contentPanel = document.getElementById('content-panel');
+    var previewPanel = document.getElementById('preview-panel');
+    var pendingPanel = document.getElementById('topic-pending-panel');
 
     if (view === 'topic') {
-        var contentPanel = document.getElementById('content-panel');
-        var previewPanel = document.getElementById('preview-panel');
-        var pendingPanel = document.getElementById('topic-pending-panel');
         if (contentPanel) contentPanel.style.display = 'none';
         if (previewPanel) previewPanel.style.display = 'none';
         if (pendingPanel) pendingPanel.style.display = '';
+    } else if (view === 'graph') {
+        if (contentPanel) contentPanel.style.display = 'none';
+        if (previewPanel) previewPanel.style.display = 'none';
+        if (pendingPanel) pendingPanel.style.display = 'none';
+        if (pendingLinksPanel && window.LinksModule && window.LinksModule.pendingLinksData && window.LinksModule.pendingLinksData.length > 0) {
+            pendingLinksPanel.style.display = 'flex';
+        }
     } else {
-        var contentPanel = document.getElementById('content-panel');
-        var previewPanel = document.getElementById('preview-panel');
-        var pendingPanel = document.getElementById('topic-pending-panel');
         if (contentPanel) contentPanel.style.display = '';
         if (pendingPanel) pendingPanel.style.display = 'none';
     }
 
     if (view === 'tags') loadTagsView();
     if (view === 'topic') loadTopicView();
-    if (view === 'graph') loadGraphView();
-    if (view === 'relation') loadRelationGraphView();
+    if (view === 'graph' && window.LinksModule) window.LinksModule.loadGraphView();
 }
 
 function escapeHtml(str) {
-    var div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function Path_stem(p) {
@@ -438,6 +555,117 @@ var _graphFilter = 'all';
 var _graphData = null;
 var _graphAnimId = null;
 
+function toggleGraphPanel() {
+    var graphPanel = document.getElementById('graph-panel');
+    var graphBtn = document.getElementById('titlebar-graph-btn');
+    var previewPanel = document.getElementById('preview-panel');
+    var contentPanel = document.getElementById('content-panel');
+    var pendingPanel = document.getElementById('topic-pending-panel');
+    var pendingLinksPanel = document.getElementById('pending-links-panel');
+
+    if (!graphPanel) return;
+
+    if (graphPanel.style.display === 'none' || !graphPanel.style.display) {
+        graphPanel.style.display = 'flex';
+        if (graphBtn) graphBtn.classList.add('active');
+        if (previewPanel) previewPanel.style.display = 'none';
+        if (contentPanel) contentPanel.style.display = 'none';
+        if (pendingPanel) pendingPanel.style.display = 'none';
+        if (pendingLinksPanel) pendingLinksPanel.style.display = 'none';
+        if (window.GraphModule) window.GraphModule.loadData();
+    } else {
+        graphPanel.style.display = 'none';
+        if (graphBtn) graphBtn.classList.remove('active');
+        if (previewPanel) previewPanel.style.display = '';
+        if (contentPanel) contentPanel.style.display = '';
+        if (_currentSidebarView === 'topic') {
+            if (pendingPanel) pendingPanel.style.display = '';
+            if (contentPanel) contentPanel.style.display = 'none';
+        }
+    }
+}
+
+var _pendingLinksData = [];
+
+function togglePendingLinksPanel() {
+    var panel = document.getElementById('pending-links-panel');
+    if (!panel) return;
+
+    if (panel.style.display === 'none' || !panel.style.display) {
+        panel.style.display = 'flex';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function loadPendingLinksPanel(pendingLinks) {
+    _pendingLinksData = pendingLinks || [];
+    var listEl = document.getElementById('pending-links-list');
+    var emptyEl = document.getElementById('pending-links-empty');
+    if (!listEl) return;
+
+    if (_pendingLinksData.length === 0) {
+        if (emptyEl) emptyEl.style.display = '';
+        listEl.innerHTML = '';
+        return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    var html = '';
+    for (var i = 0; i < _pendingLinksData.length; i++) {
+        var link = _pendingLinksData[i];
+        var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
+        var fromPath = link.from || link.file || '';
+        var toPath = link.to || link.other || '';
+        var fromName = fromPath ? Path_stem(fromPath) : fromPath;
+        var toName = toPath ? Path_stem(toPath) : toPath;
+
+        html += '<div class="link-card ' + dirClass + ' link-pending" data-from="' + escapeAttr(fromPath) + '" data-to="' + escapeAttr(toPath) + '">';
+        html += '<div class="link-card-header">';
+        html += '<span class="link-status-badge link-pending">待确认</span>';
+        html += '<div class="link-card-actions">';
+        html += '<button class="link-action-btn link-confirm-btn" data-action="confirm" title="确认">✓</button>';
+        html += '<button class="link-action-btn link-reject-btn" data-action="reject" title="删除">✕</button>';
+        html += '</div>';
+        html += '</div>';
+        html += '<div class="link-card-relation">';
+        html += '<span class="link-node link-from" data-file-path="' + escapeAttr(fromPath) + '">' + escapeHtml(fromName) + '</span>';
+        html += '<span class="link-arrow ' + dirClass + '">→</span>';
+        html += '<span class="link-node link-to" data-file-path="' + escapeAttr(toPath) + '">' + escapeHtml(toName) + '</span>';
+        html += '</div>';
+        if (link.reason) {
+            html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
+        }
+        html += '</div>';
+    }
+
+    listEl.innerHTML = html;
+
+    listEl.onclick = function(ev) {
+        var target = ev.target;
+        var card = target.closest('.link-card');
+        if (!card) {
+            var node = target.closest('.link-node');
+            if (node && node.dataset.filePath) {
+                openLinkedFile(node.dataset.filePath);
+            }
+            return;
+        }
+        var from = card.dataset.from || '';
+        var to = card.dataset.to || '';
+        if (target.dataset.action === 'confirm') {
+            ev.stopPropagation();
+            onConfirmLink(from, to);
+        } else if (target.dataset.action === 'reject') {
+            ev.stopPropagation();
+            onRejectLink(from, to);
+        } else if (target.classList.contains('link-node') && target.dataset.filePath) {
+            openLinkedFile(target.dataset.filePath);
+        }
+    };
+}
+
 function loadGraphView() {
     var container = document.getElementById('sidebar-graph');
     if (!container) return;
@@ -452,13 +680,6 @@ function loadGraphView() {
     html += '<div class="link-progress-text" id="link-progress-text"></div>';
     html += '</div>';
 
-    html += '<div class="link-filter-bar" id="link-filter-bar" style="display:none;">';
-    html += '<button class="link-filter-btn active" data-filter="all" onclick="onLinkFilter(\'all\')">全部</button>';
-    html += '<button class="link-filter-btn" data-filter="pending" onclick="onLinkFilter(\'pending\')">待确认</button>';
-    html += '<button class="link-filter-btn" data-filter="confirmed" onclick="onLinkFilter(\'confirmed\')">已确认</button>';
-    html += '<button class="link-confirm-all-btn" onclick="onConfirmAllLinks()" title="一键确认所有待确认链接">全部确认</button>';
-    html += '</div>';
-
     html += '<div class="link-list" id="link-list"></div>';
     html += '<div class="link-empty" id="link-empty">点击「发现链接」让 AI 分析文章关联</div>';
     html += '</div>';
@@ -470,7 +691,6 @@ function loadGraphView() {
 async function loadLinksData() {
     var listEl = document.getElementById('link-list');
     var emptyEl = document.getElementById('link-empty');
-    var filterBar = document.getElementById('link-filter-bar');
     if (!listEl) return;
 
     var result = await window.api.get_backlinks(selectedFilePath || '');
@@ -480,67 +700,58 @@ async function loadLinksData() {
     }
 
     var allLinks = result.links || [];
-    if (allLinks.length === 0) {
+    var confirmedLinks = allLinks.filter(function(l) { return l.status === 'confirmed'; });
+    var pendingLinks = allLinks.filter(function(l) { return l.status === 'pending'; });
+
+    if (confirmedLinks.length === 0) {
         if (emptyEl) emptyEl.style.display = '';
-        if (filterBar) filterBar.style.display = 'none';
         listEl.innerHTML = '';
-        return;
-    }
+    } else {
+        if (emptyEl) emptyEl.style.display = 'none';
 
-    if (emptyEl) emptyEl.style.display = 'none';
-    if (filterBar) filterBar.style.display = '';
+        var html = '';
+        for (var i = 0; i < confirmedLinks.length; i++) {
+            var link = confirmedLinks[i];
+            var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
+            var fromPath = link.from || link.file || '';
+            var toPath = link.to || link.other || '';
+            var fromName = fromPath ? Path_stem(fromPath) : fromPath;
+            var toName = toPath ? Path_stem(toPath) : toPath;
 
-    var filtered = allLinks;
-    if (_linkFilter === 'pending') filtered = allLinks.filter(function(l) { return l.status === 'pending'; });
-    else if (_linkFilter === 'confirmed') filtered = allLinks.filter(function(l) { return l.status === 'confirmed'; });
-
-    if (filtered.length === 0 && allLinks.length > 0) {
-        listEl.innerHTML = '<div class="link-empty-sub">没有匹配的链接</div>';
-        return;
-    }
-
-    var html = '';
-    for (var i = 0; i < filtered.length; i++) {
-        var link = filtered[i];
-        var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
-        var statusClass = link.status === 'confirmed' ? 'link-confirmed' : 'link-pending';
-        var statusLabel = link.status === 'confirmed' ? '已确认' : '待确认';
-        var fromPath = link.from || link.file || '';
-        var toPath = link.to || link.other || '';
-        var fromName = fromPath ? Path_stem(fromPath) : fromPath;
-        var toName = toPath ? Path_stem(toPath) : toPath;
-        var confirmCall = 'onConfirmLink(\'' + escapeHtml(fromPath) + '\',\'' + escapeHtml(toPath) + '\')';
-        var rejectCall = 'onRejectLink(\'' + escapeHtml(fromPath) + '\',\'' + escapeHtml(toPath) + '\')';
-
-        html += '<div class="link-card ' + dirClass + ' ' + statusClass + '">';
-        html += '<div class="link-card-header">';
-        html += '<span class="link-status-badge ' + statusClass + '">' + statusLabel + '</span>';
-        if (link.status === 'pending') {
-            html += '<div class="link-card-actions">';
-            html += '<button class="link-action-btn link-confirm-btn" onclick="event.stopPropagation();' + confirmCall + '" title="确认">✓</button>';
-            html += '<button class="link-action-btn link-reject-btn" onclick="event.stopPropagation();' + rejectCall + '" title="删除">✕</button>';
+            html += '<div class="link-card ' + dirClass + ' link-confirmed">';
+            html += '<div class="link-card-relation">';
+            html += '<span class="link-node link-from" data-file-path="' + escapeAttr(fromPath) + '">' + escapeHtml(fromName) + '</span>';
+            html += '<span class="link-arrow ' + dirClass + '">→</span>';
+            html += '<span class="link-node link-to" data-file-path="' + escapeAttr(toPath) + '">' + escapeHtml(toName) + '</span>';
+            html += '</div>';
+            if (link.reason) {
+                html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
+            }
             html += '</div>';
         }
-        html += '</div>';
-        html += '<div class="link-card-relation">';
-        html += '<span class="link-node link-from" onclick="openLinkedFile(\'' + escapeHtml(fromPath) + '\')">' + escapeHtml(fromName) + '</span>';
-        html += '<span class="link-arrow ' + dirClass + '">→</span>';
-        html += '<span class="link-node link-to" onclick="openLinkedFile(\'' + escapeHtml(toPath) + '\')">' + escapeHtml(toName) + '</span>';
-        html += '</div>';
-        if (link.reason) {
-            html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
-        }
-        html += '</div>';
+
+        listEl.innerHTML = html;
+
+        listEl.onclick = function(ev) {
+            var node = ev.target.closest('.link-node');
+            if (node && node.dataset.filePath) {
+                openLinkedFile(node.dataset.filePath);
+            }
+        };
     }
 
-    listEl.innerHTML = html;
+    loadPendingLinksPanel(pendingLinks);
+
+    if (_currentSidebarView === 'graph' && pendingLinks.length > 0) {
+        var pendingLinksPanel = document.getElementById('pending-links-panel');
+        if (pendingLinksPanel) pendingLinksPanel.style.display = 'flex';
+    }
 }
 
 var _linkDiscoveryUnlisten = null;
 
 async function onDiscoverLinks() {
     var btn = document.getElementById('btn-discover-links');
-    var btnSpan = btn ? btn.querySelector('span') : null;
     var progressEl = document.getElementById('link-progress');
     var progressFill = document.getElementById('link-progress-fill');
     var progressText = document.getElementById('link-progress-text');
@@ -557,7 +768,7 @@ async function onDiscoverLinks() {
         return;
     }
 
-    if (btn) { btn.disabled = true; if (btnSpan) btnSpan.textContent = '检查中...'; }
+    if (btn) { btn.disabled = true; btn.title = '检查中...'; }
     if (progressEl) progressEl.style.display = '';
     if (progressFill) progressFill.style.width = '5%';
     if (progressText) progressText.textContent = '正在测试 API 连接...';
@@ -567,16 +778,16 @@ async function onDiscoverLinks() {
         var connResult = await window.api.invoke('test_api_connection', {});
         if (!connResult || !connResult.success) {
             if (progressText) progressText.textContent = 'API 连接失败: ' + ((connResult && connResult.message) || '未知错误');
-            if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+            if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
             return;
         }
     } catch (e) {
         if (progressText) progressText.textContent = 'API 连接测试出错: ' + (e.message || e);
-        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+        if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
         return;
     }
 
-    if (btnSpan) btnSpan.textContent = '分析中...';
+    if (btn) btn.title = '分析中...';
     if (progressFill) progressFill.style.width = '10%';
     if (progressText) progressText.textContent = '正在读取文件并构建候选对...';
 
@@ -614,7 +825,7 @@ async function onDiscoverLinks() {
                                 progressText.textContent = result.message || '发现失败';
                             }
                         }
-                        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+                        if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
                         setTimeout(function() {
                             if (progressEl) progressEl.style.display = 'none';
                             loadGraphView();
@@ -632,12 +843,12 @@ async function onDiscoverLinks() {
         if (!startResult || !startResult.success) {
             if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
             if (progressText) progressText.textContent = (startResult && startResult.message) || '启动失败';
-            if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+            if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
         }
     } catch (e) {
         if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
         if (progressText) progressText.textContent = '错误: ' + (e.message || e);
-        if (btn) { btn.disabled = false; if (btnSpan) btnSpan.textContent = '发现链接'; }
+        if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
     }
 }
 
@@ -710,6 +921,12 @@ async function loadRelationGraphData() {
     try {
         var result = await window.api.get_relation_graph();
         
+        console.log('[Graph] API result:', JSON.stringify(result).substring(0, 500));
+        console.log('[Graph] result type:', typeof result);
+        console.log('[Graph] result.success:', result?.success);
+        console.log('[Graph] result.nodes length:', result?.nodes?.length);
+        console.log('[Graph] result.edges length:', result?.edges?.length);
+        
         if (loadingEl) loadingEl.style.display = 'none';
         
         if (!result || !result.success) {
@@ -724,13 +941,30 @@ async function loadRelationGraphData() {
         
         if (!_graphData.nodes || _graphData.nodes.length === 0) {
             if (emptyEl) {
-                emptyEl.textContent = '暂无关系数据';
+                var debugInfo = result.debug ? JSON.stringify(result.debug) : 'no debug';
+                emptyEl.textContent = '暂无关系数据\n' + debugInfo;
+                emptyEl.style.whiteSpace = 'pre-wrap';
                 emptyEl.style.display = '';
             }
             return;
         }
         
-        setTimeout(initGraphSimulation, 100);
+        var retryCount = 0;
+        function tryInit() {
+            var wrap = document.getElementById('graph-panel-body');
+            if (wrap && wrap.clientHeight > 20) {
+                initGraphSimulation();
+            } else if (retryCount < 20) {
+                retryCount++;
+                setTimeout(tryInit, 50);
+            } else {
+                if (emptyEl) {
+                    emptyEl.textContent = '图谱容器尺寸异常，请尝试调整窗口大小';
+                    emptyEl.style.display = '';
+                }
+            }
+        }
+        setTimeout(tryInit, 100);
     } catch (e) {
         if (loadingEl) loadingEl.style.display = 'none';
         if (emptyEl) {
@@ -750,6 +984,162 @@ function onGraphFilter(filter) {
     }
 }
 
+var _graphScale = 1;
+var _graphOffsetX = 0;
+var _graphOffsetY = 0;
+var _graphNodes = null;
+var _graphEdges = null;
+var _graphCanvasW = 0;
+var _graphCanvasH = 0;
+var _graphEvolving = false;
+
+function graphZoomIn() {
+    _graphScale = Math.min(_graphScale * 1.3, 5);
+    _graphDrawFrame();
+}
+
+function graphZoomOut() {
+    _graphScale = Math.max(_graphScale / 1.3, 0.2);
+    _graphDrawFrame();
+}
+
+function graphToggleEvolve() {
+    var btn = document.getElementById('graph-evolve-btn');
+    if (!_graphNodes || _graphNodes.length === 0) return;
+
+    if (_graphEvolving) {
+        _graphEvolving = false;
+        if (btn) btn.classList.remove('active');
+        return;
+    }
+
+    _graphEvolving = true;
+    if (btn) btn.classList.add('active');
+
+    var nodes = _graphNodes;
+    var edges = _graphEdges;
+
+    var degreeMap = {};
+    nodes.forEach(function(n) { degreeMap[n.id] = 0; });
+    edges.forEach(function(e) {
+        if (degreeMap[e.source.id] !== undefined) degreeMap[e.source.id]++;
+        if (degreeMap[e.target.id] !== undefined) degreeMap[e.target.id]++;
+    });
+
+    var sorted = nodes.slice().sort(function(a, b) {
+        return (degreeMap[b.id] || 0) - (degreeMap[a.id] || 0);
+    });
+
+    var visited = {};
+    var revealOrder = [];
+    var queue = [sorted[0].id];
+    visited[sorted[0].id] = true;
+
+    while (queue.length > 0) {
+        var current = queue.shift();
+        var node = null;
+        for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].id === current) { node = nodes[i]; break; }
+        }
+        if (!node) continue;
+        revealOrder.push(node);
+
+        var neighbors = [];
+        edges.forEach(function(e) {
+            if (e.source.id === current && !visited[e.target.id]) {
+                neighbors.push(e.target.id);
+                visited[e.target.id] = true;
+            }
+            if (e.target.id === current && !visited[e.source.id]) {
+                neighbors.push(e.source.id);
+                visited[e.source.id] = true;
+            }
+        });
+        neighbors.sort(function(a, b) { return (degreeMap[b] || 0) - (degreeMap[a] || 0); });
+        queue = queue.concat(neighbors);
+    }
+
+    sorted.forEach(function(n) {
+        if (!visited[n.id]) {
+            revealOrder.push(n);
+            visited[n.id] = true;
+        }
+    });
+
+    nodes.forEach(function(n) { n._visible = false; });
+    edges.forEach(function(e) { e._visible = false; });
+
+    var revealIndex = 0;
+    var batchSize = Math.max(1, Math.ceil(nodes.length / 60));
+    var lastRevealTime = 0;
+    var revealInterval = 200;
+
+    function revealBatch() {
+        if (!_graphEvolving || revealIndex >= revealOrder.length) {
+            nodes.forEach(function(n) { n._visible = true; });
+            edges.forEach(function(e) { e._visible = true; });
+            _graphEvolving = false;
+            if (btn) btn.classList.remove('active');
+            _graphAlpha = 0.3;
+            if (_graphLoopFn) _graphLoopFn();
+            return;
+        }
+
+        for (var b = 0; b < batchSize && revealIndex < revealOrder.length; b++, revealIndex++) {
+            var node = revealOrder[revealIndex];
+            node._visible = true;
+
+            node.vx += (Math.random() - 0.5) * 4;
+            node.vy += (Math.random() - 0.5) * 4;
+
+            edges.forEach(function(e) {
+                if (e.source._visible && e.target._visible) {
+                    e._visible = true;
+                }
+                if (e._visible) {
+                    var other = null;
+                    if (e.source.id === node.id) other = e.target;
+                    else if (e.target.id === node.id) other = e.source;
+                    if (other && other._visible) {
+                        var dx = other.x - node.x;
+                        var dy = other.y - node.y;
+                        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                        var pushForce = 3;
+                        other.vx += dx / dist * pushForce + (Math.random() - 0.5) * 1.5;
+                        other.vy += dy / dist * pushForce + (Math.random() - 0.5) * 1.5;
+                    }
+                }
+            });
+        }
+
+        _graphAlpha = 0.4;
+    }
+
+    function evolveLoop(timestamp) {
+        if (!_graphEvolving) { _graphAnimId = null; return; }
+
+        if (!lastRevealTime) lastRevealTime = timestamp;
+        if (timestamp - lastRevealTime >= revealInterval) {
+            revealBatch();
+            lastRevealTime = timestamp;
+        }
+
+        if (_graphTickFn) { for (var i = 0; i < 3; i++) { _graphTickFn(); } }
+        if (_graphDrawFrame) _graphDrawFrame();
+
+        _graphAnimId = requestAnimationFrame(evolveLoop);
+    }
+
+    _graphAlpha = 0.5;
+    if (_graphAnimId) { cancelAnimationFrame(_graphAnimId); _graphAnimId = null; }
+    _graphAnimId = requestAnimationFrame(evolveLoop);
+}
+
+var _graphAlpha = 1;
+var _graphDrawFrame = null;
+var _graphLoopFn = null;
+var _graphTickFn = null;
+
 function initGraphSimulation() {
     if (_graphAnimId) { 
         cancelAnimationFrame(_graphAnimId); 
@@ -760,7 +1150,7 @@ function initGraphSimulation() {
     var emptyEl = document.getElementById('graph-empty');
     if (!canvas) return;
     
-    var wrap = canvas.parentElement;
+    var wrap = document.getElementById('graph-panel-body');
     if (!wrap) return;
     
     var dpr = window.devicePixelRatio || 1;
@@ -768,9 +1158,16 @@ function initGraphSimulation() {
     var h = wrap.clientHeight;
     
     if (w < 20 || h < 20) {
-        setTimeout(initGraphSimulation, 100);
+        if (emptyEl) {
+            emptyEl.textContent = '图谱容器尺寸异常 (' + w + 'x' + h + ')，请尝试调整窗口大小';
+            emptyEl.style.display = '';
+        }
+        canvas.style.display = 'none';
         return;
     }
+    
+    canvas.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
     
     canvas.width = w * dpr;
     canvas.height = h * dpr;
@@ -779,6 +1176,15 @@ function initGraphSimulation() {
     
     var ctx = canvas.getContext('2d');
     ctx.scale(dpr, dpr);
+
+    _graphCanvasW = w;
+    _graphCanvasH = h;
+    _graphScale = 1;
+    _graphOffsetX = 0;
+    _graphOffsetY = 0;
+    _graphEvolving = false;
+    var evolveBtn = document.getElementById('graph-evolve-btn');
+    if (evolveBtn) evolveBtn.classList.remove('active');
 
     var allNodes = _graphData.nodes || [];
     var allEdges = _graphData.edges || [];
@@ -792,6 +1198,13 @@ function initGraphSimulation() {
         return;
     }
 
+    if (allNodes.length > 300) {
+        var sampled = allNodes.slice(0, 300);
+        var sampledIds = new Set(sampled.map(function(n) { return n.id; }));
+        allEdges = allEdges.filter(function(e) { return sampledIds.has(e.source) && sampledIds.has(e.target); });
+        allNodes = sampled;
+    }
+
     var nodes = [];
     var edges = [];
     var nodeMap = {};
@@ -799,166 +1212,92 @@ function initGraphSimulation() {
     if (_graphFilter === 'all') {
         allNodes.forEach(function(n) {
             var node = {
-                id: n.id, 
-                label: n.label, 
-                nodeType: n.nodeType,
+                id: n.id, label: n.label, nodeType: n.nodeType,
                 x: w / 2 + (Math.random() - 0.5) * w * 0.5,
                 y: h / 2 + (Math.random() - 0.5) * h * 0.5,
-                vx: 0, 
-                vy: 0
+                vx: 0, vy: 0
             };
             nodes.push(node);
             nodeMap[n.id] = node;
         });
-        
         allEdges.forEach(function(e) {
             if (nodeMap[e.source] && nodeMap[e.target]) {
-                edges.push({ 
-                    source: nodeMap[e.source], 
-                    target: nodeMap[e.target], 
-                    type: e.type 
-                });
+                edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
             }
         });
     } else if (_graphFilter === 'topic') {
         var topicIds = new Set();
-        allNodes.forEach(function(n) {
-            if (n.nodeType === 'topic') {
-                topicIds.add(n.id);
-            }
-        });
-        
+        allNodes.forEach(function(n) { if (n.nodeType === 'topic') topicIds.add(n.id); });
         var fileIds = new Set();
-        allEdges.forEach(function(e) {
-            if (e.type === 'topic') {
-                fileIds.add(e.source);
-            }
-        });
-        
+        allEdges.forEach(function(e) { if (e.type === 'topic') fileIds.add(e.source); });
         allNodes.forEach(function(n) {
             if (topicIds.has(n.id) || fileIds.has(n.id)) {
-                var node = {
-                    id: n.id, 
-                    label: n.label, 
-                    nodeType: n.nodeType,
-                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
-                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
-                    vx: 0, 
-                    vy: 0
-                };
-                nodes.push(node);
-                nodeMap[n.id] = node;
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                nodes.push(node); nodeMap[n.id] = node;
             }
         });
-        
         allEdges.forEach(function(e) {
             if (e.type === 'topic' && nodeMap[e.source] && nodeMap[e.target]) {
-                edges.push({ 
-                    source: nodeMap[e.source], 
-                    target: nodeMap[e.target], 
-                    type: e.type 
-                });
+                edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
             }
         });
     } else if (_graphFilter === 'tag') {
         var tagIds = new Set();
-        allNodes.forEach(function(n) {
-            if (n.nodeType === 'tag') {
-                tagIds.add(n.id);
-            }
-        });
-        
+        allNodes.forEach(function(n) { if (n.nodeType === 'tag') tagIds.add(n.id); });
         var fileIds = new Set();
-        allEdges.forEach(function(e) {
-            if (e.type === 'tag') {
-                fileIds.add(e.source);
-            }
-        });
-        
+        allEdges.forEach(function(e) { if (e.type === 'tag') fileIds.add(e.source); });
         allNodes.forEach(function(n) {
             if (tagIds.has(n.id) || fileIds.has(n.id)) {
-                var node = {
-                    id: n.id, 
-                    label: n.label, 
-                    nodeType: n.nodeType,
-                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
-                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
-                    vx: 0, 
-                    vy: 0
-                };
-                nodes.push(node);
-                nodeMap[n.id] = node;
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                nodes.push(node); nodeMap[n.id] = node;
             }
         });
-        
         allEdges.forEach(function(e) {
             if (e.type === 'tag' && nodeMap[e.source] && nodeMap[e.target]) {
-                edges.push({ 
-                    source: nodeMap[e.source], 
-                    target: nodeMap[e.target], 
-                    type: e.type 
-                });
+                edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
             }
         });
     } else if (_graphFilter === 'link') {
         var fileIds = new Set();
-        allEdges.forEach(function(e) {
-            if (e.type === 'link') {
-                fileIds.add(e.source);
-                fileIds.add(e.target);
-            }
-        });
-        
+        allEdges.forEach(function(e) { if (e.type === 'link') { fileIds.add(e.source); fileIds.add(e.target); } });
         allNodes.forEach(function(n) {
             if (n.nodeType === 'file' && fileIds.has(n.id)) {
-                var node = {
-                    id: n.id, 
-                    label: n.label, 
-                    nodeType: n.nodeType,
-                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
-                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
-                    vx: 0, 
-                    vy: 0
-                };
-                nodes.push(node);
-                nodeMap[n.id] = node;
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                nodes.push(node); nodeMap[n.id] = node;
             }
         });
-        
         allEdges.forEach(function(e) {
             if (e.type === 'link' && nodeMap[e.source] && nodeMap[e.target]) {
-                edges.push({ 
-                    source: nodeMap[e.source], 
-                    target: nodeMap[e.target], 
-                    type: e.type 
-                });
+                edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
             }
         });
     }
 
     if (nodes.length === 0) {
         canvas.style.display = 'none';
-        if (emptyEl) {
-            emptyEl.textContent = '该过滤条件下无数据';
-            emptyEl.style.display = '';
-        }
+        if (emptyEl) { emptyEl.textContent = '该过滤条件下无数据'; emptyEl.style.display = ''; }
         return;
     }
 
     canvas.style.display = 'block';
     if (emptyEl) emptyEl.style.display = 'none';
 
-    var alpha = 1;
+    _graphNodes = nodes;
+    _graphEdges = edges;
+
+    nodes.forEach(function(n) { n._visible = true; });
+    edges.forEach(function(e) { e._visible = true; });
+
     var alphaDecay = 0.02;
     var alphaMin = 0.001;
-    var centerPull = 0.005;
+    var centerPull = 0.002;
     var friction = 0.9;
-    var linkDistance = 70;
-    var linkStrength = 0.01;
-    var repulseStrength = 100;
+    var linkDistance = 120;
+    var linkStrength = 0.008;
+    var repulseStrength = 300;
 
     function tick() {
-        if (alpha < alphaMin) { alpha = alphaMin; }
+        if (_graphAlpha < alphaMin) { _graphAlpha = alphaMin; }
         
         for (var i = 0; i < edges.length; i++) {
             var e = edges[i];
@@ -966,7 +1305,7 @@ function initGraphSimulation() {
             var dy = e.target.y - e.source.y;
             var dist = Math.sqrt(dx * dx + dy * dy) || 1;
             var diff = dist - linkDistance;
-            var force = diff * linkStrength * alpha;
+            var force = diff * linkStrength * _graphAlpha;
             var fx = dx / dist * force;
             var fy = dy / dist * force;
             e.source.vx += fx; e.source.vy += fy;
@@ -979,7 +1318,7 @@ function initGraphSimulation() {
                 var dy = nodes[j].y - nodes[i].y;
                 var dist2 = dx * dx + dy * dy || 1;
                 var dist = Math.sqrt(dist2);
-                var f = repulseStrength * alpha / dist2;
+                var f = repulseStrength * _graphAlpha / dist2;
                 nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
                 nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
             }
@@ -987,31 +1326,32 @@ function initGraphSimulation() {
         
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
-            n.vx += (w / 2 - n.x) * centerPull * alpha;
-            n.vy += (h / 2 - n.y) * centerPull * alpha;
+            n.vx += (w / 2 - n.x) * centerPull * _graphAlpha;
+            n.vy += (h / 2 - n.y) * centerPull * _graphAlpha;
             n.vx *= friction; n.vy *= friction;
             n.x += n.vx; n.y += n.vy;
-            var r = n.nodeType === 'file' ? 4 : 6;
-            if (n.x < r + 10) n.x = r + 10;
-            if (n.x > w - r - 10) n.x = w - r - 10;
-            if (n.y < r + 10) n.y = r + 10;
-            if (n.y > h - r - 10) n.y = h - r - 10;
+            var r = n.nodeType === 'file' ? 5 : 8;
+            if (n.x < r + 4) n.x = r + 4;
+            if (n.x > w - r - 4) n.x = w - r - 4;
+            if (n.y < r + 4) n.y = r + 4;
+            if (n.y > h - r - 4) n.y = h - r - 4;
         }
-        alpha *= (1 - alphaDecay);
+        _graphAlpha *= (1 - alphaDecay);
     }
 
-    var edgeColors = { 
-        topic: 'rgba(232,145,58,0.3)', 
-        tag: 'rgba(80,184,127,0.3)', 
-        link: 'rgba(74,144,217,0.4)' 
-    };
+    var edgeColors = { topic: 'rgba(232,145,58,0.3)', tag: 'rgba(80,184,127,0.3)', link: 'rgba(74,144,217,0.4)' };
     var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
 
     function draw() {
         ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.scale(_graphScale, _graphScale);
+        ctx.translate(-w / 2 + _graphOffsetX, -h / 2 + _graphOffsetY);
         
         for (var i = 0; i < edges.length; i++) {
             var e = edges[i];
+            if (!e._visible) continue;
             ctx.beginPath();
             ctx.moveTo(e.source.x, e.source.y);
             ctx.lineTo(e.target.x, e.target.y);
@@ -1024,54 +1364,130 @@ function initGraphSimulation() {
         
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
-            var r = n.nodeType === 'file' ? 4 : 6;
+            if (!n._visible) continue;
+            var r = n.nodeType === 'file' ? 5 : 8;
             
             ctx.beginPath();
             ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
             ctx.fillStyle = nodeColors[n.nodeType] || '#999';
             ctx.fill();
             
-            if (nodes.length <= 50) {
-                ctx.fillStyle = '#666';
-                ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+            if (nodes.length <= 80) {
+                ctx.fillStyle = '#555';
+                ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(n.label, n.x, n.y + r + 12);
+                ctx.fillText(n.label, n.x, n.y + r + 13);
             }
         }
+        ctx.restore();
+    }
+
+    _graphDrawFrame = draw;
+    _graphTickFn = tick;
+
+    var _hoveredNode = null;
+    var tooltip = document.getElementById('graph-tooltip');
+
+    function screenToGraph(sx, sy) {
+        var gx = (sx - w / 2) / _graphScale + w / 2 - _graphOffsetX;
+        var gy = (sy - h / 2) / _graphScale + h / 2 - _graphOffsetY;
+        return { x: gx, y: gy };
     }
 
     var _hoveredNode = null;
     var tooltip = document.getElementById('graph-tooltip');
 
+    var _dragNode = null;
+    var _dragStartX = 0, _dragStartY = 0;
+    var _isPanning = false;
+
+    canvas.onmousedown = function(ev) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = ev.clientX - rect.left;
+        var my = ev.clientY - rect.top;
+        var gp = screenToGraph(mx, my);
+        for (var i = nodes.length - 1; i >= 0; i--) {
+            var n = nodes[i];
+            var r = n.nodeType === 'file' ? 5 : 8;
+            var dx = gp.x - n.x;
+            var dy = gp.y - n.y;
+            if (dx * dx + dy * dy < (r + 8) * (r + 8)) {
+                _dragNode = n;
+                _dragStartX = mx; _dragStartY = my;
+                return;
+            }
+        }
+        _isPanning = true;
+        _dragStartX = mx; _dragStartY = my;
+    };
+
     canvas.onmousemove = function(ev) {
         var rect = canvas.getBoundingClientRect();
         var mx = ev.clientX - rect.left;
         var my = ev.clientY - rect.top;
+
+        if (_dragNode) {
+            var gp = screenToGraph(mx, my);
+            _dragNode.x = gp.x;
+            _dragNode.y = gp.y;
+            _dragNode.vx = 0; _dragNode.vy = 0;
+            draw();
+            return;
+        }
+
+        if (_isPanning) {
+            var dx = mx - _dragStartX;
+            var dy = my - _dragStartY;
+            _graphOffsetX += dx / _graphScale;
+            _graphOffsetY += dy / _graphScale;
+            _dragStartX = mx; _dragStartY = my;
+            draw();
+            return;
+        }
+
+        var gp = screenToGraph(mx, my);
         _hoveredNode = null;
         for (var i = nodes.length - 1; i >= 0; i--) {
             var n = nodes[i];
-            var r = n.nodeType === 'file' ? 4 : 6;
-            var dx = mx - n.x;
-            var dy = my - n.y;
-            if (dx * dx + dy * dy < (r + 5) * (r + 5)) { 
-                _hoveredNode = n; 
-                break; 
+            var r = n.nodeType === 'file' ? 5 : 8;
+            var ddx = gp.x - n.x;
+            var ddy = gp.y - n.y;
+            if (ddx * ddx + ddy * ddy < (r + 8) * (r + 8)) { 
+                _hoveredNode = n; break; 
             }
         }
         if (_hoveredNode && tooltip) {
             tooltip.style.display = 'block';
-            tooltip.style.left = (_hoveredNode.x + 12) + 'px';
-            tooltip.style.top = (_hoveredNode.y - 8) + 'px';
+            var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
+            var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
             var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
             tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
+            tooltip.style.left = tipX + 'px';
+            tooltip.style.top = tipY + 'px';
         } else if (tooltip) {
             tooltip.style.display = 'none';
         }
     };
 
+    canvas.onmouseup = function() {
+        _dragNode = null;
+        _isPanning = false;
+    };
+
     canvas.onclick = function() {
-        if (_hoveredNode && _hoveredNode.nodeType === 'file') {
-            selectFile(_hoveredNode.id, _hoveredNode.label + '.md');
+        if (_hoveredNode) {
+            if (_hoveredNode.nodeType === 'file') {
+                selectFile(_hoveredNode.id, _hoveredNode.label + '.md');
+            } else if (tooltip) {
+                tooltip.style.display = 'block';
+                var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
+                tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
+                var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
+                var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
+                tooltip.style.left = tipX + 'px';
+                tooltip.style.top = tipY + 'px';
+                setTimeout(function() { if (tooltip) tooltip.style.display = 'none'; }, 3000);
+            }
         }
     };
 
@@ -1080,21 +1496,34 @@ function initGraphSimulation() {
         _hoveredNode = null;
     };
 
+    canvas.onwheel = function(ev) {
+        ev.preventDefault();
+        if (ev.deltaY < 0) {
+            _graphScale = Math.min(_graphScale * 1.1, 5);
+        } else {
+            _graphScale = Math.max(_graphScale / 1.1, 0.2);
+        }
+        draw();
+    };
+
     function loop() {
         for (var i = 0; i < 3; i++) { tick(); }
         draw();
-        if (alpha > alphaMin * 2) {
+        if (_graphAlpha > alphaMin * 2 || _graphEvolving) {
             _graphAnimId = requestAnimationFrame(loop);
         } else {
             _graphAnimId = null;
         }
     }
+
+    _graphLoopFn = loop;
     
     loop();
 }
 
 function escapeAttr(str) {
-    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    if (!str) return '';
+    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&/g, '&amp;');
 }
 
 var _lastTagsData = null;
@@ -1115,7 +1544,7 @@ async function loadTagsView(silent) {
         _lastTagsData = dataStr;
 
         if (!result || !result.tags || result.tags.length === 0) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无标签<br><span style="font-size:11px;color:var(--text-muted)">点击下方按钮自动匹配标签</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">暂无标签<br><span style="font-size: 12px;color:var(--text-muted)">点击下方按钮自动匹配标签</span></div>';
         } else {
             var expandedTags = {};
             container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el) {
@@ -1489,7 +1918,7 @@ async function loadTopicTree(silent) {
         var result = await window.api.get_topic_tree();
 
         if (!result || typeof result !== 'object') {
-            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">API 返回异常</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">API 返回异常</span></div>';
             return;
         }
 
@@ -1498,7 +1927,7 @@ async function loadTopicTree(silent) {
         _lastTopicData = dataStr;
 
         if (result.success === false) {
-            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(result.message || '后端错误') + '</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(result.message || '后端错误') + '</span></div>';
             return;
         }
 
@@ -1506,7 +1935,7 @@ async function loadTopicTree(silent) {
         var hasTopics = topics.length > 0;
 
         if (!hasTopics) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题<br><span style="font-size:11px;color:var(--text-muted)">待确认的主题在右侧处理</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题<br><span style="font-size: 12px;color:var(--text-muted)">待确认的主题在右侧处理</span></div>';
             return;
         }
 
@@ -1547,24 +1976,13 @@ async function loadTopicTree(silent) {
         html += '<div class="topic-menu-item" data-action="rename">重命名</div>';
         html += '</div>';
 
-        html += '<style>';
-        html += '.topic-context-menu { position: fixed; z-index: 10000; background: var(--background-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); padding: 4px 0; min-width: 120px; }';
-        html += '.topic-menu-item { padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text-normal); }';
-        html += '.topic-menu-item:hover { background: var(--interactive-hover); }';
-        html += '.sidebar-tag-row { position: relative; }';
-        html += '.sidebar-tag-row.drag-over { background: var(--background-modifier-hover); outline: 1px solid var(--text-accent); outline-offset: -1px; }';
-        html += '.sidebar-tag-row.drag-over-top { border-top: 2px solid var(--text-accent); }';
-        html += '.sidebar-tag-file.dragging { opacity: 0.4; }';
-        html += '.topic-rename-input { background: var(--background-modifier-hover); border: 1px solid var(--text-accent); border-radius: 4px; padding: 2px 6px; color: var(--text-normal); font-size: 13px; outline: none; min-width: 80px; }';
-        html += '</style>';
-
         container.innerHTML = html;
 
         setupTopicDragDrop(container);
         setupTopicContextMenu(container);
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
-        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
+        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
     }
 }
 
@@ -2312,7 +2730,7 @@ async function loadTopicView() {
         console.log('[Topic] API result:', result);
     } catch (e) {
         console.error('[Topic] loadTopicView error:', e);
-        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size:11px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
+        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
         return;
     }
 
@@ -2553,15 +2971,23 @@ window.TreeModule = {
     renderFileTree: renderFileTree,
     loadFileTree: loadFileTree,
     selectFile: selectFile,
+    setSelectedFile: setSelectedFile,
     switchSidebarView: switchSidebarView,
     updateWebAIStatus: function() {},
     updateConvAIStatus: function() {}
 };
 
 window.switchSidebarView = switchSidebarView;
-window.onDiscoverLinks = onDiscoverLinks;
-window.onConfirmLink = onConfirmLink;
-window.onRejectLink = onRejectLink;
-window.onConfirmAllLinks = onConfirmAllLinks;
-window.onLinkFilter = onLinkFilter;
-window.openLinkedFile = openLinkedFile;
+window.toggleGraphPanel = toggleGraphPanel;
+window.togglePendingLinksPanel = function() { window.LinksModule && window.LinksModule.togglePendingLinksPanel(); };
+window.onGraphFilter = function(f) { window.GraphModule && window.GraphModule.onFilter(f); };
+window.loadRelationGraphData = function() { window.GraphModule && window.GraphModule.loadData(); };
+window.graphZoomIn = function() { window.GraphModule && window.GraphModule.zoomIn(); };
+window.graphZoomOut = function() { window.GraphModule && window.GraphModule.zoomOut(); };
+window.graphToggleEvolve = function() { window.GraphModule && window.GraphModule.toggleEvolve(); };
+window.onDiscoverLinks = function() { window.LinksModule && window.LinksModule.onDiscoverLinks(); };
+window.onConfirmLink = function(f, t) { window.LinksModule && window.LinksModule.onConfirmLink(f, t); };
+window.onRejectLink = function(f, t) { window.LinksModule && window.LinksModule.onRejectLink(f, t); };
+window.onConfirmAllLinks = function() { window.LinksModule && window.LinksModule.onConfirmAllLinks(); };
+window.onLinkFilter = function(f) { window.LinksModule && window.LinksModule.onLinkFilter(f); };
+window.openLinkedFile = function(f) { window.LinksModule && window.LinksModule.openLinkedFile(f); };

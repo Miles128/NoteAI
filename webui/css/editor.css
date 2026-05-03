@@ -18,7 +18,7 @@
     display: flex;
     align-items: flex-start;
     gap: 6px;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.5;
 }
 
@@ -54,6 +54,8 @@
     align-items: center;
     gap: 4px;
     border-bottom: none;
+    flex: 1;
+    min-width: 0;
 }
 
 .obsidian-tag-chip {
@@ -62,7 +64,7 @@
     color: var(--text);
     border-radius: 4px;
     padding: 1px 8px;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 20px;
     white-space: nowrap;
     cursor: default;
@@ -91,7 +93,7 @@
     padding: 6px 12px;
     background: rgba(0, 0, 0, 0.02);
     border-bottom: 0.5px solid var(--border);
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     flex-shrink: 0;
 }
@@ -105,7 +107,7 @@
 }
 
 .editor-save-status {
-    font-size: 10px;
+    font-size: 11px;
     opacity: 0.8;
 }
 
@@ -146,7 +148,7 @@
 
 .cm-editor {
     height: 100%;
-    font-size: 22px;
+    font-size: 23px;
     line-height: 1.6;
 }
 
@@ -229,7 +231,7 @@
 
 .editor-mode-btn {
     padding: 4px 8px;
-    font-size: 11px;
+    font-size: 12px;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.15s;
@@ -294,7 +296,7 @@
     background: transparent;
     border: none;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
 }
@@ -338,7 +340,7 @@
     max-width: 900px;
     margin: 0 auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.8;
     color: var(--text);
     outline: none;
@@ -614,4 +616,28 @@
 
 .tiptap-editor-content::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+.tag-autocomplete-dropdown {
+    position: absolute;
+    left: 0;
+    top: 100%;
+    z-index: 200;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 160px;
+}
+.tag-autocomplete-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text);
+    transition: background 0.1s;
+}
+.tag-autocomplete-item:hover {
+    background: var(--surface-hover);
 }

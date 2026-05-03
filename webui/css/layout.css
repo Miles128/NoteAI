@@ -48,7 +48,7 @@ body {
 }
 
 .titlebar-title {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.2px;
@@ -73,7 +73,7 @@ body {
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 400;
     transition: all 0.15s;
     pointer-events: auto;
@@ -102,7 +102,7 @@ body {
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     transition: all 0.15s;
     white-space: nowrap;
@@ -166,7 +166,7 @@ body {
 }
 
 .titlebar-file-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text);
     white-space: nowrap;
@@ -250,6 +250,7 @@ body {
 .sidebar-footer {
     display: flex;
     align-items: center;
+    gap: 6px;
     padding: 8px 12px;
     border-top: 1px solid var(--border);
     background: var(--sidebar-bg);
@@ -285,7 +286,7 @@ body {
     width: auto;
     gap: 6px;
     padding: 0 12px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--accent);
     border-color: var(--accent);
 }
@@ -314,7 +315,7 @@ body {
     flex: 1;
     min-width: 0;
     padding: 6px 10px;
-    font-size: 13px;
+    font-size: 14px;
     background: var(--background-modifier-hover);
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -385,6 +386,7 @@ body {
     flex: 1;
     overflow: hidden;
     background: var(--bg);
+    position: relative;
 }
 
 .right-area.hidden {
@@ -501,7 +503,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text);
     flex: 1;
     min-width: 0;
@@ -534,7 +536,7 @@ body {
     border: none;
     border-radius: 7px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     transition: all 0.15s;
     box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 122, 255, 0.2);
@@ -560,7 +562,7 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
+    font-size: 14px;
     color: var(--text);
     flex: 1;
     min-width: 0;
@@ -696,7 +698,7 @@ body {
 }
 
 .about-panel h2 {
-    font-size: 22px;
+    font-size: 23px;
     font-weight: 600;
     margin-bottom: 8px;
     letter-spacing: -0.3px;
@@ -708,7 +710,7 @@ body {
 }
 
 .about-panel .about-desc {
-    font-size: 16px;
+    font-size: 17px;
     margin-bottom: 20px;
 }
 
@@ -721,7 +723,7 @@ body {
 }
 
 .about-panel .about-features h3 {
-    font-size: 14px;
+    font-size: 15px;
     margin-bottom: 12px;
 }
 

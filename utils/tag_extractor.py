@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 
 from config import is_ignored_dir
+from utils.logger import logger
 from utils.text_utils import (
     is_chinese_word,
     is_english_word,
@@ -73,6 +74,20 @@ def _is_word_in_accepted_pair(word: str, accepted_pairs: List[str], case_insensi
         if word_norm in _normalize_for_match(pair):
             return True
     return False
+
+
+def split_filename_fields(filename: str) -> List[str]:
+    """将文件名字段按分隔符拆分为独立的字段列表
+
+    示例：
+        "机器学习-神经网络-反向传播.md" → ["机器学习", "神经网络", "反向传播"]
+        "Python_基础教程.md" → ["Python", "基础教程"]
+        "React Hooks 详解.md" → ["React", "Hooks", "详解"]
+        "设计模式——观察者模式.md" → ["设计模式", "观察者模式"]
+    """
+    stem = Path(filename).stem
+    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', stem)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def extract_tags_from_filename(file_path: str) -> List[str]:
@@ -624,11 +639,11 @@ def save_tags_md(workspace_path: str) -> dict:
                                 if tag not in tag_map:
                                     tag_map[tag] = []
                                 tag_map[tag].append(rel)
-                    except Exception:
-                        # YAML front matter parse failure on individual file, non-critical
-                        pass
-        except PermissionError:
-            pass
+                    except Exception as e:
+                        logger.warning(f"[save_tags_md] 跳过解析失败的文件 {entry.name}: {e}")
+                        continue
+        except PermissionError as e:
+            logger.warning(f"[save_tags_md] 无权限访问目录: {e}")
 
     _scan(str(workspace))
 
@@ -642,8 +657,8 @@ def save_tags_md(workspace_path: str) -> dict:
                     tag = line[3:].strip()
                     if tag:
                         existing_tags.add(tag)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[save_tags_md] 读取现有 tags.md 失败: {e}")
 
     for tag in tag_map.keys():
         existing_tags.add(tag)

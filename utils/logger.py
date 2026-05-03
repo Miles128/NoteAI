@@ -66,7 +66,7 @@ class AppLogger:
         """清理超过30天的日志文件"""
         try:
             current_time = datetime.now().timestamp()
-            for log_file in log_dir.glob("noteai_*.log"):
+            for log_file in log_dir.glob("noteai.log*"):
                 file_age = current_time - log_file.stat().st_mtime
                 if file_age > 30 * 24 * 3600:
                     log_file.unlink()

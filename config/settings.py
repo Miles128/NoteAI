@@ -1,12 +1,12 @@
 import os
 import sys
 import tempfile
+import base64
 from pathlib import Path
 from dataclasses import dataclass, field, fields
 from typing import Optional, Dict, Any, Tuple
 import json
 import shutil
-from pydantic import BaseModel, Field, validator
 
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -303,6 +303,27 @@ IGNORED_DIRS = {
 }
 
 
+def _obfuscate(text: str) -> str:
+    """对敏感文本做 base64 混淆（非加密，仅防止无意查看）"""
+    return base64.b64encode(text.encode('utf-8')).decode('utf-8')
+
+
+def _deobfuscate(text: str) -> str:
+    """解混淆 base64 编码的文本"""
+    try:
+        return base64.b64decode(text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return text  # 兼容旧版本的明文存储
+
+
+def _restrict_file_permissions(filepath: Path):
+    """将文件权限设置为仅 owner 可读写 (600)"""
+    try:
+        os.chmod(filepath, 0o600)
+    except Exception:
+        pass
+
+
 def is_ignored_dir(dir_name: str) -> bool:
     if not dir_name:
         return False
@@ -505,6 +526,8 @@ class AppConfig:
             try:
                 with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
                     api_data = json.load(f)
+                if 'api_key' in api_data and api_data['api_key']:
+                    api_data['api_key'] = _deobfuscate(api_data['api_key'])
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 print(f"加载API配置失败: {e}")
             except Exception as e:
@@ -580,10 +603,13 @@ class AppConfig:
             SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
             api_config = {k: v for k, v in self.__dict__.items() if k in api_fields}
+            if 'api_key' in api_config and api_config['api_key']:
+                api_config['api_key'] = _obfuscate(api_config['api_key'])
 
             with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(api_config, f, ensure_ascii=False, indent=2)
 
+            _restrict_file_permissions(API_CONFIG_FILE)
             print(f"API配置已保存到: {API_CONFIG_FILE}")
         except PermissionError:
             print(f"保存API配置到系统目录失败：没有写入权限")

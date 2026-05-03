@@ -212,8 +212,7 @@ CHINESE_STOPWORDS = {
 
 
 def is_chinese_word(word: str) -> bool:
-    """判断是否为中文词汇"""
-    return bool(re.search(r'[一-鿿]', word))
+    return bool(re.search(r'[\u4e00-\u9fff]', word))
 
 
 def is_english_word(word: str) -> bool:
@@ -269,10 +268,9 @@ def _normalize_for_match(s: str) -> str:
 
 
 def _count_tag_occurrence(tag: str, filenames: list, case_insensitive: bool = True) -> int:
-    """统计 tag 在文件名列表中的出现次数（忽略空格和大小写）"""
     tag_norm = _normalize_for_match(tag)
     if case_insensitive and is_english_word(tag):
-        return sum(1 for fn in filenames if tag_norm in _normalize_for_match(fn))
+        return sum(1 for fn in filenames if tag_norm in _normalize_for_match(fn.lower()))
     else:
         return sum(1 for fn in filenames if tag_norm in _normalize_for_match(fn))
 

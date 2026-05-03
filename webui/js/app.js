@@ -194,6 +194,45 @@ async function importFiles() {
     }
 }
 
+async function onLLMRewrite() {
+    if (!selectedFilePath) {
+        alert('请先选择一个文件');
+        return;
+    }
+
+    var btn = document.getElementById('titlebar-rewrite-btn');
+    if (!confirm('确定要用 LLM 改写此文档吗？\n\n改写后将用中立客观的笔记风格重写，并直接覆盖原文件。')) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+    }
+    updateStatus('正在改写文档...');
+
+    try {
+        var result = await window.api.llm_rewrite(selectedFilePath);
+        if (result && result.success) {
+            updateStatus('改写完成');
+            if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
+                window.PreviewModule.loadFilePreview(selectedFilePath, selectedFileName);
+            }
+        } else {
+            alert('改写失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            updateStatus('改写失败');
+        }
+    } catch (e) {
+        alert('改写出错：' + (e.message || e));
+        updateStatus('改写出错');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+}
+
+window.onLLMRewrite = onLLMRewrite;
+
 window.App = {
     initMarked,
     initSystemThemeListener,

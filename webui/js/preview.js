@@ -299,9 +299,14 @@ async function loadPdfViewer(path, fileName, requestId) {
             }
         }, { passive: false });
 
-        document.addEventListener('keydown', function pdfKeyHandler(e) {
+        if (window._pdfKeyHandler) {
+            document.removeEventListener('keydown', window._pdfKeyHandler);
+            window._pdfKeyHandler = null;
+        }
+        window._pdfKeyHandler = function pdfKeyHandler(e) {
             if (!pdfViewerState) {
-                document.removeEventListener('keydown', pdfKeyHandler);
+                document.removeEventListener('keydown', window._pdfKeyHandler);
+                window._pdfKeyHandler = null;
                 return;
             }
             if (e.key === 'ArrowRight' || e.key === 'PageDown') {
@@ -315,7 +320,8 @@ async function loadPdfViewer(path, fileName, requestId) {
                     renderPdfPage(pdfViewerState.pageNum);
                 }
             }
-        });
+        };
+        document.addEventListener('keydown', window._pdfKeyHandler);
 
     } catch (e) {
         console.error('[Preview] PDF load error:', e);
@@ -502,8 +508,8 @@ function backToContent() {
 }
 
 window.PreviewModule = {
-    currentPreviewData,
-    isPreviewActive,
+    get currentPreviewData() { return currentPreviewData; },
+    get isPreviewActive() { return isPreviewActive; },
     showContentView,
     showPreviewView,
     loadFilePreview,

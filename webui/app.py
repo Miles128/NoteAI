@@ -336,7 +336,7 @@ class Api:
         config.auto_topic = ui_config.get("auto_topic", True)
         config.topic_list = ui_config.get("topic_list", "")
         success, message = config.save_to_file()
-        return success, message
+        return {"success": success, "message": message}
 
     def get_theme_preference(self):
         return getattr(config, 'theme_preference', 'system')
@@ -344,6 +344,7 @@ class Api:
     def save_theme_preference(self, theme):
         config.theme_preference = theme
         config.save_to_file()
+        return {"success": True, "message": f"主题已设置为 {theme}"}
 
     def get_workspace_tree(self):
         workspace_path = config.workspace_path
@@ -492,6 +493,13 @@ class Api:
 
             if workspace_path and not Path(path).is_absolute():
                 full_path = Path(workspace_path) / path
+                try:
+                    workspace_abs = Path(workspace_path).resolve()
+                    target_abs = full_path.resolve()
+                    if not str(target_abs).startswith(str(workspace_abs)):
+                        return {'success': False, 'error': '路径不允许在工作区外'}
+                except Exception:
+                    return {'success': False, 'error': '无效路径'}
             else:
                 full_path = Path(path)
 
@@ -749,7 +757,7 @@ def main():
     try:
         import signal
         signal.pause()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, AttributeError):
         print("\n[INFO] 服务器已停止")
 
 

@@ -255,6 +255,10 @@ async function syncWikiWithFiles() {
     return pyCall('sync_wiki_with_files', {});
 }
 
+async function llmRewrite(filePath) {
+    return pyCall('llm_rewrite', { file_path: filePath });
+}
+
 function getTauriWindow() {
     if (window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrent) {
         return window.__TAURI__.window.getCurrent();
@@ -415,5 +419,6 @@ window.api = {
     confirm_link: confirmLink,
     reject_link: rejectLink,
     confirm_all_links: confirmAllLinks,
-    sync_wiki_with_files: syncWikiWithFiles
+    sync_wiki_with_files: syncWikiWithFiles,
+    llm_rewrite: llmRewrite
 };

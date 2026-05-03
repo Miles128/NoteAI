@@ -2018,49 +2018,25 @@ async function onConfirmTag() {
     }
     
     try {
-        var result = await window.api.get_all_tags();
-        var existingTags = (result && result.tags) ? result.tags.map(function(t) { return t.name; }) : [];
+        var result = await window.api.create_tag(tagName);
         
-        if (existingTags.indexOf(tagName) >= 0) {
+        if (!result || !result.success) {
+            alert(result ? result.message : '创建标签失败');
+            if (inputField) inputField.focus();
+            return;
+        }
+        
+        if (result.created === false) {
             alert('标签「' + tagName + '」已存在');
             if (inputField) inputField.focus();
             return;
         }
         
-        var container = document.getElementById('sidebar-tags');
-        if (container) {
-            var tagsList = container.querySelector('.sidebar-tags-list');
-            if (!tagsList) {
-                container.innerHTML = '<div class="sidebar-tags-list"></div>';
-                tagsList = container.querySelector('.sidebar-tags-list');
-            }
-            
-            var emptyEl = container.querySelector('.sidebar-view-empty');
-            if (emptyEl) emptyEl.remove();
-            
-            var newTagHtml = '<div class="sidebar-tag-group expanded" data-tag-name="' + escapeAttr(tagName) + '" data-temporary="true">';
-            newTagHtml += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
-            newTagHtml += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-            newTagHtml += '<span class="sidebar-tag-name">' + escapeHtml(tagName) + '</span>';
-            newTagHtml += '<span class="sidebar-tag-count" style="color:var(--accent)">新</span>';
-            newTagHtml += '</div>';
-            newTagHtml += '<div class="sidebar-tag-files">';
-            newTagHtml += '<div class="sidebar-view-empty" style="padding:8px 12px;margin:0;font-size:11px;color:var(--text-muted);border:none;">将文件拖拽到此处添加标签</div>';
-            newTagHtml += '</div>';
-            newTagHtml += '</div>';
-            
-            tagsList.insertAdjacentHTML('afterbegin', newTagHtml);
-            
-            var newGroup = tagsList.querySelector('.sidebar-tag-group[data-temporary="true"]');
-            if (newGroup) {
-                newGroup.removeAttribute('data-temporary');
-                setupTagsDragDrop(container);
-            }
-        }
-        
-        console.log('[Tags] 标签「' + tagName + '」已创建，请拖拽文件到此标签下');
+        console.log('[Tags] 标签「' + tagName + '」已创建');
         
         onHideTagInput();
+        
+        await loadTagsView();
         
     } catch (e) {
         console.error('[Tags] add tag error:', e);

@@ -178,6 +178,7 @@ class SidecarServer:
             "auto_tag_files": self._auto_tag_files,
             "save_tags_md": self._save_tags_md,
             "ensure_tags_md": self._ensure_tags_md,
+            "create_tag": self._create_tag,
             "rename_tag": self._rename_tag,
             "delete_tag": self._delete_tag,
             "auto_assign_topic": self._auto_assign_topic,
@@ -889,6 +890,122 @@ class SidecarServer:
         if not tags_md_path.exists():
             return save_tags_md(workspace)
         return save_tags_md(workspace)
+
+    def _create_tag(self, params):
+        from utils.tag_extractor import save_tags_md
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        
+        tag_name = params.get("name", "")
+        if not tag_name or not tag_name.strip():
+            return {"success": False, "message": "标签名不能为空"}
+        
+        tag_name = tag_name.strip()
+        workspace_path = Path(workspace)
+        tags_md_path = workspace_path / 'tags.md'
+        
+        existing_tags = set()
+        if tags_md_path.exists():
+            try:
+                text = tags_md_path.read_text(encoding='utf-8')
+                for line in text.split('\n'):
+                    if line.startswith('## '):
+                        t = line[3:].strip()
+                        if t:
+                            existing_tags.add(t)
+            except Exception:
+                pass
+        
+        if tag_name in existing_tags:
+            return {"success": True, "message": "标签已存在", "created": False}
+        
+        existing_tags.add(tag_name)
+        
+        tag_map = {}
+        def _scan(path):
+            try:
+                for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
+                    if entry.name.startswith('.'):
+                        continue
+                    if entry.is_dir():
+                        from config import is_ignored_dir
+                        if is_ignored_dir(entry.name):
+                            continue
+                        _scan(str(entry))
+                    elif entry.suffix.lower() == '.md' and entry.name.lower() != 'wiki.md' and entry.name.lower() != 'tags.md':
+                        try:
+                            import re
+                            text = entry.read_text(encoding='utf-8')
+                            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                            if not m:
+                                continue
+                            yaml_text = m.group(1)
+                            rel = str(entry.relative_to(workspace_path))
+                            current_tags_key = False
+                            current_tags_arr = []
+                            for line in yaml_text.split('\n'):
+                                stripped = line.strip()
+                                if current_tags_key and stripped.startswith('- '):
+                                    current_tags_arr.append(stripped[2:].strip().strip("'\""))
+                                    continue
+                                if current_tags_key and current_tags_arr:
+                                    for tag in current_tags_arr:
+                                        if tag not in tag_map:
+                                            tag_map[tag] = []
+                                        tag_map[tag].append(rel)
+                                    current_tags_key = False
+                                    current_tags_arr = []
+                                idx = line.find(':')
+                                if idx < 0:
+                                    continue
+                                key = line[:idx].strip()
+                                val = line[idx + 1:].strip()
+                                if key != 'tags':
+                                    current_tags_key = False
+                                    continue
+                                if val.startswith('[') and val.endswith(']'):
+                                    tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                                    for tag in tags:
+                                        if tag not in tag_map:
+                                            tag_map[tag] = []
+                                        tag_map[tag].append(rel)
+                                    current_tags_key = False
+                                elif not val:
+                                    current_tags_key = True
+                                    current_tags_arr = []
+                                else:
+                                    tag = val.strip().strip("'\"")
+                                    if tag:
+                                        if tag not in tag_map:
+                                            tag_map[tag] = []
+                                        tag_map[tag].append(rel)
+                                    current_tags_key = False
+                            if current_tags_key and current_tags_arr:
+                                for tag in current_tags_arr:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                        except Exception:
+                            pass
+            except PermissionError:
+                pass
+        
+        _scan(str(workspace_path))
+        
+        lines = ['# Tags', '']
+        sorted_tags = sorted(existing_tags, key=lambda t: -len(tag_map.get(t, [])))
+        for tag in sorted_tags:
+            lines.append('## ' + tag)
+            lines.append('')
+            files = tag_map.get(tag, [])
+            for f in files:
+                fname = Path(f).stem
+                lines.append('- [[' + fname + ']]')
+            lines.append('')
+        
+        tags_md_path.write_text('\n'.join(lines), encoding='utf-8')
+        return {"success": True, "message": f"已创建标签「{tag_name}」", "created": True}
 
     def _rename_tag(self, params):
         old_tag = params.get("old_tag", "")

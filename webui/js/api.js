@@ -11,8 +11,6 @@ function getTauriInvoke() {
 }
 
 async function pyCall(method, params) {
-    console.log('[API] pyCall called:', { method, params });
-    
     if (_isTauri) {
         var invoke = getTauriInvoke();
         if (!invoke) throw new Error('Tauri invoke not available');
@@ -21,10 +19,9 @@ async function pyCall(method, params) {
                 method: method,
                 params: params || {}
             });
-            console.log('[API] pyCall result:', result);
             return result;
         } catch (e) {
-            console.error('[API] pyCall error:', e);
+            console.error('[API] pyCall error:', method, e);
             throw e;
         }
     }
@@ -97,6 +94,18 @@ async function resolveTopic(filePath, topic) {
 
 async function renameTopic(oldTopic, newTopic) {
     return pyCall('rename_topic', { old_topic: oldTopic, new_topic: newTopic });
+}
+
+async function deleteTopic(topicName) {
+    return pyCall('delete_topic', { topic_name: topicName });
+}
+
+async function renameTag(oldTag, newTag) {
+    return pyCall('rename_tag', { old_tag: oldTag, new_tag: newTag });
+}
+
+async function deleteTag(tagName) {
+    return pyCall('delete_tag', { tag_name: tagName });
 }
 
 async function moveFileToTopic(filePath, newTopic) {
@@ -222,6 +231,10 @@ async function getBacklinks(filePath) {
     return pyCall('get_backlinks', { file_path: filePath });
 }
 
+async function getRelationGraph() {
+    return pyCall('get_relation_graph', {});
+}
+
 async function confirmLink(fromPath, toPath) {
     return pyCall('confirm_link', { from: fromPath, to: toPath });
 }
@@ -232,6 +245,10 @@ async function rejectLink(fromPath, toPath) {
 
 async function confirmAllLinks() {
     return pyCall('confirm_all_links', {});
+}
+
+async function syncWikiWithFiles() {
+    return pyCall('sync_wiki_with_files', {});
 }
 
 function getTauriWindow() {
@@ -302,6 +319,9 @@ window.api = {
     getPendingTopics: getPendingTopics,
     resolveTopic: resolveTopic,
     renameTopic: renameTopic,
+    deleteTopic: deleteTopic,
+    renameTag: renameTag,
+    deleteTag: deleteTag,
     moveFileToTopic: moveFileToTopic,
     moveFile: moveFile,
     addTagToFile: addTagToFile,
@@ -323,6 +343,7 @@ window.api = {
     getFilePreview: getFilePreview,
     canPreviewFile: canPreviewFile,
     saveFileContent: saveFileContent,
+    syncWikiWithFiles: syncWikiWithFiles,
 
     moveWindow: moveWindow,
     minimizeWindow: minimizeWindow,
@@ -347,6 +368,9 @@ window.api = {
     get_pending_topics: getPendingTopics,
     resolve_topic: resolveTopic,
     rename_topic: renameTopic,
+    delete_topic: deleteTopic,
+    rename_tag: renameTag,
+    delete_tag: deleteTag,
     move_file_to_topic: moveFileToTopic,
     move_file: moveFile,
     add_tag_to_file: addTagToFile,
@@ -382,7 +406,9 @@ window.api = {
 
     discover_links: discoverLinks,
     get_backlinks: getBacklinks,
+    get_relation_graph: getRelationGraph,
     confirm_link: confirmLink,
     reject_link: rejectLink,
-    confirm_all_links: confirmAllLinks
+    confirm_all_links: confirmAllLinks,
+    sync_wiki_with_files: syncWikiWithFiles
 };

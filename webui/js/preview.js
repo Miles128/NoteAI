@@ -66,7 +66,6 @@ function showEditButton(show) {
 
 async function loadFilePreview(path, fileName) {
     const requestId = generateLoadRequestId();
-    console.log('[Preview] loadFilePreview called:', { requestId, path, fileName });
     
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
@@ -111,19 +110,14 @@ async function loadFilePreview(path, fileName) {
     previewPanel.classList.add('active');
     showPreviewView();
 
-    console.log('[Preview] About to call window.api.read_note_file with path:', path);
-    
     try {
         const result = await window.api.read_note_file(path);
-        console.log('[Preview] API call result:', { requestId, result });
         
         if (requestId !== currentLoadRequestId) {
-            console.log('[Preview] Request obsolete, ignoring result:', { requestId, currentRequestId: currentLoadRequestId });
             return;
         }
         
         if (result && result.success) {
-            console.log('[Preview] Success, rendering content');
             const fileType = result.type || 'markdown';
             const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
             const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
@@ -140,43 +134,43 @@ async function loadFilePreview(path, fileName) {
             updateTitlebarFileName(fileName, isMarkdown);
             
             if (isPdf) {
-                console.log('[Preview] PDF file detected, loading with pdf.js');
                 showEditButton(false);
                 await loadPdfViewer(path, fileName, requestId);
             } else if (isMarkdown) {
-                console.log('[Preview] Opening markdown in editor directly');
-                
-                if (requestId !== currentLoadRequestId) {
-                    console.log('[Preview] Request obsolete before editor init');
-                    return;
-                }
-                
-                const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
-                    result.content,
-                    path
-                );
-                
-                if (requestId !== currentLoadRequestId) {
-                    console.log('[Preview] Request obsolete after editor init');
-                    if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-                        window.TiptapEditorModule.hideEditorUI();
+                if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
+                    try {
+                        const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                            result.content,
+                            path
+                        );
+                        
+                        if (requestId !== currentLoadRequestId) {
+                            if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                                window.TiptapEditorModule.hideEditorUI();
+                            }
+                            return;
+                        }
+                        
+                        if (!editorReady) {
+                            showEditButton(false);
+                            renderPreviewContent(currentPreviewData);
+                        } else {
+                            showEditButton(false);
+                        }
+                    } catch (tiptapErr) {
+                        console.error('[Preview] Tiptap error:', tiptapErr);
+                        showEditButton(false);
+                        renderPreviewContent(currentPreviewData);
                     }
-                    return;
-                }
-                
-                if (!editorReady) {
-                    console.warn('[Preview] Editor not ready, showing preview instead');
-                    showEditButton(false);
-                    renderPreviewContent(currentPreviewData);
                 } else {
                     showEditButton(false);
+                    renderPreviewContent(currentPreviewData);
                 }
             } else {
                 showEditButton(false);
                 renderPreviewContent(currentPreviewData);
             }
         } else {
-            console.warn('[Preview] API returned failure:', result);
             showPreviewError('加载失败', result?.message || '无法读取文件');
         }
     } catch (e) {

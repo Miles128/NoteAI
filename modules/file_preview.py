@@ -19,22 +19,11 @@ class FilePreviewer:
         return ext in self.SUPPORTED_PREVIEW_TYPES
 
     def get_preview_data(self, file_path: str) -> Dict[str, Any]:
-        import sys
-        sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: file_path={file_path}\n")
-        sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: self.workspace_path={self.workspace_path}\n")
-        sys.stderr.flush()
-        
         full_path = file_path
         if not os.path.isabs(full_path) and self.workspace_path:
             full_path = os.path.join(self.workspace_path, file_path)
-        
-        sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: full_path={full_path}\n")
-        sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: exists={os.path.exists(full_path)}\n")
-        sys.stderr.flush()
 
         if not os.path.exists(full_path):
-            sys.stderr.write(f"[ERROR] File not found: {full_path}\n")
-            sys.stderr.flush()
             return {
                 'success': False,
                 'error': '文件不存在'
@@ -42,14 +31,9 @@ class FilePreviewer:
 
         ext = get_file_extension(full_path).lower()
         file_size = os.path.getsize(full_path)
-        
-        sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: ext={ext}, file_size={file_size}\n")
-        sys.stderr.flush()
 
         try:
             if ext == '.md' or ext == '.markdown':
-                sys.stderr.write(f"[DEBUG] FilePreviewer.get_preview_data: calling _preview_markdown\n")
-                sys.stderr.flush()
                 return self._preview_markdown(full_path, file_size)
             elif ext == '.txt':
                 return self._preview_text(full_path, file_size)
@@ -63,10 +47,6 @@ class FilePreviewer:
                     'error': f'不支持预览此文件类型: {ext}'
                 }
         except Exception as e:
-            import traceback
-            sys.stderr.write(f"[ERROR] FilePreviewer.get_preview_data exception: {e}\n")
-            sys.stderr.write(traceback.format_exc())
-            sys.stderr.flush()
             logger.error(f"预览失败 {full_path}: {e}")
             return {
                 'success': False,

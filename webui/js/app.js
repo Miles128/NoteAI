@@ -1,6 +1,4 @@
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('[App] DOM Content Loaded');
-    
     initMarked();
     
     initSystemThemeListener();
@@ -13,6 +11,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     initWindowDrag();
     
     initTabSwitching();
+    
+    if (window.TiptapEditorModule && window.TiptapEditorModule.preloadModules) {
+        window.TiptapEditorModule.preloadModules();
+    }
     
     updateStatus('正在加载...');
     
@@ -36,6 +38,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.error('[App] Initialization error:', e);
         updateStatus('初始化完成');
     }
+
+    initWorkspaceFileWatcher();
     
     const tabInputs = document.querySelectorAll('input[name="theme"], input[name="theme-popup"]');
     tabInputs.forEach(radio => {
@@ -200,5 +204,70 @@ window.App = {
     initWindowDrag,
     initTabSwitching,
     checkWorkspaceStatus,
-    updateStatus
+    updateStatus,
+    initWorkspaceFileWatcher
 };
+
+var _workspaceWatcherUnlisten = null;
+var _workspaceWatcherDebounce = null;
+
+function initWorkspaceFileWatcher() {
+    var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
+        ? window.__TAURI__.event
+        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
+            ? window.__TAURI_INTERNALS__.event
+            : null);
+    if (!eventAPI) return;
+
+    if (_workspaceWatcherUnlisten) {
+        _workspaceWatcherUnlisten();
+    }
+
+    eventAPI.listen('python-event', function(event) {
+        var data = event.payload;
+        if (!data || data.type !== 'workspace_files_changed') return;
+
+        if (_workspaceWatcherDebounce) {
+            clearTimeout(_workspaceWatcherDebounce);
+        }
+        _workspaceWatcherDebounce = setTimeout(function() {
+            _workspaceWatcherDebounce = null;
+            refreshCurrentSidebarView();
+        }, 3000);
+    }).then(function(unlisten) {
+        _workspaceWatcherUnlisten = unlisten;
+    });
+}
+
+function refreshCurrentSidebarView() {
+    var activeView = document.querySelector('.sidebar-view-btn.active');
+    if (!activeView) {
+        if (window.TreeModule && window.TreeModule.loadFileTree) {
+            window.TreeModule.loadFileTree();
+        }
+        return;
+    }
+
+    var view = activeView.getAttribute('data-sidebar');
+    if (view === 'tree') {
+        if (window.TreeModule && window.TreeModule.loadFileTree) {
+            window.TreeModule.loadFileTree();
+        }
+    } else if (view === 'topic') {
+        if (typeof loadTopicTree === 'function') {
+            loadTopicTree(true);
+        }
+    } else if (view === 'tags') {
+        if (typeof loadTagsView === 'function') {
+            loadTagsView(true);
+        }
+    } else if (view === 'graph') {
+        if (typeof loadLinksData === 'function') {
+            loadLinksData();
+        }
+    } else if (view === 'relation') {
+        if (typeof loadRelationGraphData === 'function') {
+            loadRelationGraphData();
+        }
+    }
+}

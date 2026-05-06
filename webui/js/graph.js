@@ -14,6 +14,9 @@ window.GraphModule = (function() {
     var _graphLoopFn = null;
     var _graphTickFn = null;
     var _graphFilter = 'all';
+    var _graphCanvasAbortController = null;
+    var _graphNodePositions = {};
+    var _showFileLabels = false;
 
     function loadRelationGraphView() {
         var container = document.getElementById('sidebar-relation');
@@ -25,6 +28,7 @@ window.GraphModule = (function() {
         html += '<button class="graph-filter-btn" data-gfilter="topic" onclick="window.GraphModule.onFilter(\'topic\')">主题</button>';
         html += '<button class="graph-filter-btn" data-gfilter="tag" onclick="window.GraphModule.onFilter(\'tag\')">标签</button>';
         html += '<button class="graph-filter-btn" data-gfilter="link" onclick="window.GraphModule.onFilter(\'link\')">链接</button>';
+        html += '<button class="graph-filter-btn graph-label-toggle" id="graph-label-toggle" onclick="window.GraphModule.toggleFileLabels()" title="显示/隐藏文件名称">Aa</button>';
         html += '</div>';
         html += '<div class="graph-canvas-wrap" id="graph-canvas-wrap">';
         html += '<div class="graph-loading" id="graph-loading">加载中...</div>';
@@ -290,9 +294,11 @@ window.GraphModule = (function() {
 
         _graphCanvasW = w;
         _graphCanvasH = h;
-        _graphScale = 1;
-        _graphOffsetX = 0;
-        _graphOffsetY = 0;
+        if (Object.keys(_graphNodePositions).length === 0) {
+            _graphScale = 2.6;
+            _graphOffsetX = 0;
+            _graphOffsetY = 0;
+        }
         _graphEvolving = false;
         var evolveBtn = document.getElementById('graph-evolve-btn');
         if (evolveBtn) evolveBtn.classList.remove('active');
@@ -306,23 +312,17 @@ window.GraphModule = (function() {
             return;
         }
 
-        if (allNodes.length > 300) {
-            var sampled = allNodes.slice(0, 300);
-            var sampledIds = new Set(sampled.map(function(n) { return n.id; }));
-            allEdges = allEdges.filter(function(e) { return sampledIds.has(e.source) && sampledIds.has(e.target); });
-            allNodes = sampled;
-        }
-
         var nodes = [];
         var edges = [];
         var nodeMap = {};
 
         if (_graphFilter === 'all') {
             allNodes.forEach(function(n) {
+                var pos = _graphNodePositions[n.id];
                 var node = {
                     id: n.id, label: n.label, nodeType: n.nodeType,
-                    x: w / 2 + (Math.random() - 0.5) * w * 0.5,
-                    y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                    x: pos ? pos.x : w / 2 + (Math.random() - 0.5) * w * 0.5,
+                    y: pos ? pos.y : h / 2 + (Math.random() - 0.5) * h * 0.5,
                     vx: 0, vy: 0
                 };
                 nodes.push(node);
@@ -340,7 +340,8 @@ window.GraphModule = (function() {
             allEdges.forEach(function(e) { if (e.type === 'topic') fileIds.add(e.source); });
             allNodes.forEach(function(n) {
                 if (topicIds.has(n.id) || fileIds.has(n.id)) {
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                    var pos = _graphNodePositions[n.id];
+                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                     nodes.push(node); nodeMap[n.id] = node;
                 }
             });
@@ -356,7 +357,8 @@ window.GraphModule = (function() {
             allEdges.forEach(function(e) { if (e.type === 'tag') fileIds2.add(e.source); });
             allNodes.forEach(function(n) {
                 if (tagIds.has(n.id) || fileIds2.has(n.id)) {
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                    var pos = _graphNodePositions[n.id];
+                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                     nodes.push(node); nodeMap[n.id] = node;
                 }
             });
@@ -370,7 +372,8 @@ window.GraphModule = (function() {
             allEdges.forEach(function(e) { if (e.type === 'link') { fileIds3.add(e.source); fileIds3.add(e.target); } });
             allNodes.forEach(function(n) {
                 if (n.nodeType === 'file' && fileIds3.has(n.id)) {
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                    var pos = _graphNodePositions[n.id];
+                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                     nodes.push(node); nodeMap[n.id] = node;
                 }
             });
@@ -396,13 +399,26 @@ window.GraphModule = (function() {
         nodes.forEach(function(n) { n._visible = true; });
         edges.forEach(function(e) { e._visible = true; });
 
-        var alphaDecay = 0.02;
+        var reusedCount = 0;
+        for (var ri = 0; ri < nodes.length; ri++) {
+            if (_graphNodePositions[nodes[ri].id]) reusedCount++;
+        }
+        var reuseRatio = nodes.length > 0 ? reusedCount / nodes.length : 0;
+
+        var nodeCount = nodes.length;
+        var alphaDecay = nodeCount > 200 ? 0.03 : 0.02;
         var alphaMin = 0.001;
-        var centerPull = 0.002;
-        var friction = 0.9;
-        var linkDistance = 120;
-        var linkStrength = 0.008;
-        var repulseStrength = 300;
+        if (reuseRatio > 0.5) {
+            _graphAlpha = 0.05;
+        } else {
+            _graphAlpha = 1;
+        }
+        var centerPull = nodeCount > 200 ? 0.025 : 0.018;
+        var friction = nodeCount > 200 ? 0.85 : 0.88;
+        var linkDistance = nodeCount > 200 ? 35 : nodeCount > 100 ? 45 : 55;
+        var linkStrength = nodeCount > 200 ? 0.008 : 0.012;
+        var repulseStrength = nodeCount > 200 ? 150 : 250;
+        var sphereRadius = Math.min(w, h) * 0.48;
 
         function tick() {
             if (_graphAlpha < alphaMin) { _graphAlpha = alphaMin; }
@@ -420,15 +436,54 @@ window.GraphModule = (function() {
                 e.target.vx -= fx; e.target.vy -= fy;
             }
 
-            for (var i = 0; i < nodes.length; i++) {
-                for (var j = i + 1; j < nodes.length; j++) {
-                    var dx = nodes[j].x - nodes[i].x;
-                    var dy = nodes[j].y - nodes[i].y;
-                    var dist2 = dx * dx + dy * dy || 1;
-                    var dist = Math.sqrt(dist2);
-                    var f = repulseStrength * _graphAlpha / dist2;
-                    nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
-                    nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
+            if (nodeCount > 50) {
+                var cellSize = linkDistance * 2;
+                var grid = {};
+                for (var i = 0; i < nodes.length; i++) {
+                    var cx = Math.floor(nodes[i].x / cellSize);
+                    var cy = Math.floor(nodes[i].y / cellSize);
+                    var key = cx + ',' + cy;
+                    if (!grid[key]) grid[key] = [];
+                    grid[key].push(i);
+                }
+                for (var key in grid) {
+                    var cell = grid[key];
+                    var parts = key.split(',');
+                    var cx = parseInt(parts[0]);
+                    var cy = parseInt(parts[1]);
+                    for (var dx = -1; dx <= 1; dx++) {
+                        for (var dy = -1; dy <= 1; dy++) {
+                            var nkey = (cx + dx) + ',' + (cy + dy);
+                            var ncell = grid[nkey];
+                            if (!ncell) continue;
+                            for (var a = 0; a < cell.length; a++) {
+                                var startB = (nkey === key) ? a + 1 : 0;
+                                for (var b = startB; b < ncell.length; b++) {
+                                    var ni = cell[a];
+                                    var nj = ncell[b];
+                                    var ddx = nodes[nj].x - nodes[ni].x;
+                                    var ddy = nodes[nj].y - nodes[ni].y;
+                                    var dist2 = ddx * ddx + ddy * ddy || 1;
+                                    var dist = Math.sqrt(dist2);
+                                    var f = repulseStrength * _graphAlpha / dist2;
+                                    nodes[ni].vx -= ddx / dist * f; nodes[ni].vy -= ddy / dist * f;
+                                    nodes[nj].vx += ddx / dist * f; nodes[nj].vy += ddy / dist * f;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for (var i = 0; i < nodes.length; i++) {
+                    for (var j = i + 1; j < nodes.length; j++) {
+                        var dx = nodes[j].x - nodes[i].x;
+                        var dy = nodes[j].y - nodes[i].y;
+                        var dist2 = dx * dx + dy * dy || 1;
+                        var dist = Math.sqrt(dist2);
+                        var f = repulseStrength * _graphAlpha / dist2;
+                        nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
+                        nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
+                    }
                 }
             }
 
@@ -438,54 +493,80 @@ window.GraphModule = (function() {
                 n.vy += (h / 2 - n.y) * centerPull * _graphAlpha;
                 n.vx *= friction; n.vy *= friction;
                 n.x += n.vx; n.y += n.vy;
-                var r = n.nodeType === 'file' ? 5 : 8;
-                if (n.x < r + 4) n.x = r + 4;
-                if (n.x > w - r - 4) n.x = w - r - 4;
-                if (n.y < r + 4) n.y = r + 4;
-                if (n.y > h - r - 4) n.y = h - r - 4;
+                var dx = n.x - w / 2;
+                var dy = n.y - h / 2;
+                var distFromCenter = Math.sqrt(dx * dx + dy * dy);
+                if (distFromCenter > sphereRadius) {
+                    var scale = sphereRadius / distFromCenter;
+                    n.x = w / 2 + dx * scale;
+                    n.y = h / 2 + dy * scale;
+                    var nx = dx / distFromCenter;
+                    var ny = dy / distFromCenter;
+                    var dot = n.vx * nx + n.vy * ny;
+                    if (dot > 0) {
+                        n.vx -= dot * nx * 1.8;
+                        n.vy -= dot * ny * 1.8;
+                    }
+                }
             }
             _graphAlpha *= (1 - alphaDecay);
         }
 
-        var edgeColors = { topic: 'rgba(232,145,58,0.3)', tag: 'rgba(80,184,127,0.3)', link: 'rgba(74,144,217,0.4)' };
+        var edgeColors = { topic: 'rgba(232,145,58,0.25)', tag: 'rgba(80,184,127,0.25)', link: 'rgba(74,144,217,0.3)' };
         var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
 
         function draw() {
-            ctx.clearRect(0, 0, w, h);
+            var dw = _graphCanvasW || w;
+            var dh = _graphCanvasH || h;
+            ctx.clearRect(0, 0, dw, dh);
             ctx.save();
-            ctx.translate(w / 2, h / 2);
+            ctx.translate(dw / 2, dh / 2);
             ctx.scale(_graphScale, _graphScale);
-            ctx.translate(-w / 2 + _graphOffsetX, -h / 2 + _graphOffsetY);
+            ctx.translate(-dw / 2 + _graphOffsetX, -dh / 2 + _graphOffsetY);
 
-            for (var i = 0; i < edges.length; i++) {
-                var e = edges[i];
-                if (!e._visible) continue;
+            var edgeTypeOrder = ['topic', 'tag', 'link'];
+            for (var t = 0; t < edgeTypeOrder.length; t++) {
+                var etype = edgeTypeOrder[t];
+                ctx.strokeStyle = edgeColors[etype] || 'rgba(150,150,150,0.3)';
+                ctx.lineWidth = etype === 'link' ? 0.8 : 0.6;
+                ctx.setLineDash([]);
                 ctx.beginPath();
-                ctx.moveTo(e.source.x, e.source.y);
-                ctx.lineTo(e.target.x, e.target.y);
-                ctx.strokeStyle = edgeColors[e.type] || 'rgba(150,150,150,0.3)';
-                ctx.lineWidth = e.type === 'link' ? 1.5 : 0.8;
-                ctx.setLineDash(e.type === 'link' ? [] : [2, 2]);
+                for (var i = 0; i < edges.length; i++) {
+                    var e = edges[i];
+                    if (!e._visible || e.type !== etype) continue;
+                    ctx.moveTo(e.source.x, e.source.y);
+                    ctx.lineTo(e.target.x, e.target.y);
+                }
                 ctx.stroke();
                 ctx.setLineDash([]);
             }
 
+            var nodeTypeOrder = ['file', 'topic', 'tag'];
+            for (var t = 0; t < nodeTypeOrder.length; t++) {
+                var ntype = nodeTypeOrder[t];
+                ctx.fillStyle = nodeColors[ntype] || '#999';
+                ctx.beginPath();
+                for (var i = 0; i < nodes.length; i++) {
+                    var n = nodes[i];
+                    if (!n._visible || n.nodeType !== ntype) continue;
+                    var r = ntype === 'file' ? 2.2 : 3.5;
+                    ctx.moveTo(n.x + r, n.y);
+                    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+                }
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#555';
+            ctx.font = '4px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
             for (var i = 0; i < nodes.length; i++) {
                 var n = nodes[i];
                 if (!n._visible) continue;
-                var r = n.nodeType === 'file' ? 5 : 8;
-
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-                ctx.fillStyle = nodeColors[n.nodeType] || '#999';
-                ctx.fill();
-
-                if (nodes.length <= 80) {
-                    ctx.fillStyle = '#555';
-                    ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(n.label, n.x, n.y + r + 13);
+                if (n.nodeType === 'file') {
+                    if (!_showFileLabels && n !== _hoveredNode) continue;
                 }
+                var r = n.nodeType === 'file' ? 2.2 : 3.5;
+                ctx.fillText(n.label, n.x, n.y + r + 5);
             }
             ctx.restore();
         }
@@ -493,12 +574,20 @@ window.GraphModule = (function() {
         _graphDrawFrame = draw;
         _graphTickFn = tick;
 
+        if (_graphCanvasAbortController) {
+            _graphCanvasAbortController.abort();
+        }
+        _graphCanvasAbortController = new AbortController();
+        var acOpts = { signal: _graphCanvasAbortController.signal };
+
         var _hoveredNode = null;
         var tooltip = document.getElementById('graph-tooltip');
 
         function screenToGraph(sx, sy) {
-            var gx = (sx - w / 2) / _graphScale + w / 2 - _graphOffsetX;
-            var gy = (sy - h / 2) / _graphScale + h / 2 - _graphOffsetY;
+            var dw = _graphCanvasW || w;
+            var dh = _graphCanvasH || h;
+            var gx = (sx - dw / 2) / _graphScale + dw / 2 - _graphOffsetX;
+            var gy = (sy - dh / 2) / _graphScale + dh / 2 - _graphOffsetY;
             return { x: gx, y: gy };
         }
 
@@ -506,17 +595,17 @@ window.GraphModule = (function() {
         var _dragStartX = 0, _dragStartY = 0;
         var _isPanning = false;
 
-        canvas.onmousedown = function(ev) {
+        canvas.addEventListener('mousedown', function(ev) {
             var rect = canvas.getBoundingClientRect();
             var mx = ev.clientX - rect.left;
             var my = ev.clientY - rect.top;
             var gp = screenToGraph(mx, my);
             for (var i = nodes.length - 1; i >= 0; i--) {
                 var n = nodes[i];
-                var r = n.nodeType === 'file' ? 5 : 8;
+                var r = n.nodeType === 'file' ? 2.2 : 3.5;
                 var dx = gp.x - n.x;
                 var dy = gp.y - n.y;
-                if (dx * dx + dy * dy < (r + 8) * (r + 8)) {
+                if (dx * dx + dy * dy < (r + 12) * (r + 12)) {
                     _dragNode = n;
                     _dragStartX = mx; _dragStartY = my;
                     return;
@@ -524,9 +613,9 @@ window.GraphModule = (function() {
             }
             _isPanning = true;
             _dragStartX = mx; _dragStartY = my;
-        };
+        }, acOpts);
 
-        canvas.onmousemove = function(ev) {
+        canvas.addEventListener('mousemove', function(ev) {
             var rect = canvas.getBoundingClientRect();
             var mx = ev.clientX - rect.left;
             var my = ev.clientY - rect.top;
@@ -551,59 +640,104 @@ window.GraphModule = (function() {
             }
 
             var gp = screenToGraph(mx, my);
+            var prevHovered = _hoveredNode;
             _hoveredNode = null;
             for (var i = nodes.length - 1; i >= 0; i--) {
                 var n = nodes[i];
-                var r = n.nodeType === 'file' ? 5 : 8;
+                var r = n.nodeType === 'file' ? 2.2 : 3.5;
                 var ddx = gp.x - n.x;
                 var ddy = gp.y - n.y;
                 if (ddx * ddx + ddy * ddy < (r + 8) * (r + 8)) {
                     _hoveredNode = n; break;
                 }
             }
-            if (_hoveredNode && tooltip) {
-                tooltip.style.display = 'block';
-                var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
-                var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
-                var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
-                tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
-                tooltip.style.left = tipX + 'px';
-                tooltip.style.top = tipY + 'px';
-            } else if (tooltip) {
-                tooltip.style.display = 'none';
-            }
-        };
+            if (_hoveredNode !== prevHovered) draw();
+        }, acOpts);
 
-        canvas.onmouseup = function() {
+        canvas.addEventListener('mouseup', function() {
+            if (_dragNode) {
+                _graphNodePositions[_dragNode.id] = { x: _dragNode.x, y: _dragNode.y };
+            }
             _dragNode = null;
             _isPanning = false;
-        };
+        }, acOpts);
 
-        canvas.onclick = function() {
+        canvas.addEventListener('click', function() {
             if (_hoveredNode) {
                 if (_hoveredNode.nodeType === 'file') {
                     if (window.TreeModule && window.TreeModule.selectFile) {
                         window.TreeModule.selectFile(_hoveredNode.id, _hoveredNode.label + '.md');
                     }
-                } else if (tooltip) {
-                    tooltip.style.display = 'block';
-                    var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
-                    tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
-                    var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
-                    var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
-                    tooltip.style.left = tipX + 'px';
-                    tooltip.style.top = tipY + 'px';
-                    setTimeout(function() { if (tooltip) tooltip.style.display = 'none'; }, 3000);
                 }
             }
-        };
+        }, acOpts);
 
-        canvas.onmouseleave = function() {
-            if (tooltip) tooltip.style.display = 'none';
+        canvas.addEventListener('mouseleave', function() {
             _hoveredNode = null;
-        };
+            draw();
+        }, acOpts);
 
-        canvas.onwheel = function(ev) {
+        canvas.addEventListener('touchstart', function(ev) {
+            ev.preventDefault();
+            if (ev.touches.length !== 1) return;
+            var touch = ev.touches[0];
+            var rect = canvas.getBoundingClientRect();
+            var mx = touch.clientX - rect.left;
+            var my = touch.clientY - rect.top;
+            var gp = screenToGraph(mx, my);
+            for (var i = nodes.length - 1; i >= 0; i--) {
+                var n = nodes[i];
+                var r = n.nodeType === 'file' ? 2.2 : 3.5;
+                var dx = gp.x - n.x;
+                var dy = gp.y - n.y;
+                if (dx * dx + dy * dy < (r + 12) * (r + 12)) {
+                    _dragNode = n;
+                    _dragStartX = mx; _dragStartY = my;
+                    return;
+                }
+            }
+            _isPanning = true;
+            _dragStartX = mx; _dragStartY = my;
+        }, { passive: false, signal: acOpts.signal });
+
+        canvas.addEventListener('touchmove', function(ev) {
+            ev.preventDefault();
+            if (ev.touches.length !== 1) return;
+            var touch = ev.touches[0];
+            var rect = canvas.getBoundingClientRect();
+            var mx = touch.clientX - rect.left;
+            var my = touch.clientY - rect.top;
+
+            if (_dragNode) {
+                var gp = screenToGraph(mx, my);
+                _dragNode.x = gp.x;
+                _dragNode.y = gp.y;
+                _dragNode.vx = 0; _dragNode.vy = 0;
+                draw();
+                return;
+            }
+
+            if (_isPanning) {
+                var dx = mx - _dragStartX;
+                var dy = my - _dragStartY;
+                _graphOffsetX += dx / _graphScale;
+                _graphOffsetY += dy / _graphScale;
+                _dragStartX = mx; _dragStartY = my;
+                draw();
+            }
+        }, { passive: false, signal: acOpts.signal });
+
+        canvas.addEventListener('touchend', function(ev) {
+            if (_dragNode && _dragNode.nodeType === 'file') {
+                if (window.TreeModule && window.TreeModule.selectFile) {
+                    window.TreeModule.selectFile(_dragNode.id, _dragNode.label + '.md');
+                }
+            }
+            _dragNode = null;
+            _isPanning = false;
+        }, acOpts);
+
+        canvas.addEventListener('wheel', function(ev) {
             ev.preventDefault();
             if (ev.deltaY < 0) {
                 _graphScale = Math.min(_graphScale * 1.1, 5);
@@ -611,7 +745,7 @@ window.GraphModule = (function() {
                 _graphScale = Math.max(_graphScale / 1.1, 0.2);
             }
             draw();
-        };
+        }, acOpts);
 
         function loop() {
             for (var i = 0; i < 3; i++) { tick(); }
@@ -620,11 +754,53 @@ window.GraphModule = (function() {
                 _graphAnimId = requestAnimationFrame(loop);
             } else {
                 _graphAnimId = null;
+                for (var i = 0; i < nodes.length; i++) {
+                    _graphNodePositions[nodes[i].id] = { x: nodes[i].x, y: nodes[i].y };
+                }
             }
         }
 
         _graphLoopFn = loop;
         loop();
+
+        if (window._graphResizeObserver) {
+            window._graphResizeObserver.disconnect();
+        }
+        window._graphResizeObserver = new ResizeObserver(function() {
+            var wrapEl = document.getElementById('graph-panel-body');
+            var canvasEl = document.getElementById('graph-canvas');
+            if (!wrapEl || !canvasEl) return;
+            var dpr = window.devicePixelRatio || 1;
+            var nw = wrapEl.clientWidth;
+            var nh = wrapEl.clientHeight;
+            if (nw < 20 || nh < 20) return;
+            var oldW = _graphCanvasW || nw;
+            var oldH = _graphCanvasH || nh;
+            canvasEl.width = nw * dpr;
+            canvasEl.height = nh * dpr;
+            canvasEl.style.width = nw + 'px';
+            canvasEl.style.height = nh + 'px';
+            var nctx = canvasEl.getContext('2d');
+            nctx.scale(dpr, dpr);
+            var scaleRatio = Math.sqrt((nw * nh) / (oldW * oldH));
+            if (scaleRatio > 0.05 && scaleRatio < 20 && oldW > 20 && oldH > 20) {
+                _graphScale *= scaleRatio;
+                _graphScale = Math.max(0.2, Math.min(5, _graphScale));
+            }
+            _graphOffsetX = 0;
+            _graphOffsetY = 0;
+            _graphCanvasW = nw;
+            _graphCanvasH = nh;
+            if (_graphDrawFrame) _graphDrawFrame();
+        });
+        window._graphResizeObserver.observe(wrap);
+    }
+
+    function toggleFileLabels() {
+        _showFileLabels = !_showFileLabels;
+        var btn = document.getElementById('graph-label-toggle');
+        if (btn) btn.classList.toggle('active', _showFileLabels);
+        if (_graphDrawFrame) _graphDrawFrame();
     }
 
     return {
@@ -634,6 +810,7 @@ window.GraphModule = (function() {
         zoomIn: zoomIn,
         zoomOut: zoomOut,
         toggleEvolve: toggleEvolve,
+        toggleFileLabels: toggleFileLabels,
         initSimulation: initSimulation
     };
 })();

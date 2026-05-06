@@ -42,7 +42,9 @@ def save_links(data: Dict[str, Any]) -> bool:
     if not path:
         return False
     try:
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp_path = path.with_suffix('.tmp')
+        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp_path.replace(path)
         return True
     except Exception as e:
         logger.warning(f"[link_indexer] 保存 .links.json 失败: {e}")

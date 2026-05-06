@@ -40,11 +40,11 @@ if %errorlevel% neq 0 (
     goto exit
 )
 
-echo 安装 Python 依赖...
-pip install -r requirements.txt
+echo 安装 Python 依赖 ^(从 pyproject.toml^) ...
+pip install -e .
 
 if %errorlevel% neq 0 (
-    echo 错误: 安装依赖失败
+    echo 错误: 安装依赖失败（可改用: uv sync）
     pause
     goto exit
 )
@@ -79,11 +79,11 @@ if %errorlevel% neq 0 (
     goto exit
 )
 
-echo 安装 Python 依赖...
-pip install -r requirements.txt
+echo 安装 Python 依赖 ^(从 pyproject.toml^) ...
+pip install -e .
 
 if %errorlevel% neq 0 (
-    echo 错误: 安装依赖失败
+    echo 错误: 安装依赖失败（可改用: uv sync）
     pause
     goto exit
 )

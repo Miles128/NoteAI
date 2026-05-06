@@ -216,8 +216,9 @@ function renderFrontmatterPanel(frontmatter) {
     var html = '<div class="obsidian-properties">';
     keys.forEach(function(key) {
         var val = frontmatter[key];
+        var safeKey = key.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         html += '<div class="obsidian-prop-row">';
-        html += '<span class="obsidian-prop-key">' + key + '</span>';
+        html += '<span class="obsidian-prop-key">' + safeKey + '</span>';
         if (Array.isArray(val) && val.length > 0) {
             html += '<span class="obsidian-prop-val obsidian-prop-tags">';
             val.forEach(function(item) {
@@ -225,8 +226,8 @@ function renderFrontmatterPanel(frontmatter) {
             });
             html += '</span>';
         } else {
-            var displayVal = val || '';
-            html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + key + '">' + displayVal + '</span>';
+            var displayVal = (val != null) ? String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+            html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + safeKey + '">' + displayVal + '</span>';
         }
         html += '</div>';
     });
@@ -411,13 +412,21 @@ async function saveTiptapContent() {
     }
 }
 
-function destroyTiptapEditor() {
+async function destroyTiptapEditor() {
     if (window.TiptapEditor.destroying) return;
     window.TiptapEditor.destroying = true;
 
     if (window.TiptapEditor.saveTimer) {
         clearTimeout(window.TiptapEditor.saveTimer);
         window.TiptapEditor.saveTimer = null;
+    }
+
+    if (window.TiptapEditor.instance && window.TiptapEditor.filePath) {
+        try {
+            await saveTiptapContent();
+        } catch (e) {
+            console.error('[Tiptap] Final save error:', e);
+        }
     }
 
     if (window.TiptapEditor.instance) {

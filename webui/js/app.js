@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     initTabSwitching();
     
+    initCustomTooltip();
+    
     if (window.TiptapEditorModule && window.TiptapEditorModule.preloadModules) {
         window.TiptapEditorModule.preloadModules();
     }
@@ -40,6 +42,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     initWorkspaceFileWatcher();
+    initSidecarErrorListener();
     
     const tabInputs = document.querySelectorAll('input[name="theme"], input[name="theme-popup"]');
     tabInputs.forEach(radio => {
@@ -194,35 +197,271 @@ async function importFiles() {
     }
 }
 
+window._rewritingFilePath = null;
+window._rewriteStreamText = '';
+window._rewriteStreamUnlisten = null;
+window._rewriteBuffer = '';
+window._rewriteDisplayText = '';
+window._rewriteFlushTimer = null;
+
+function setEditorRewriting(filePath, isRewriting) {
+    var container = document.getElementById('tiptap-editor-container');
+    var statusBar = document.getElementById('editor-status-bar');
+    if (!container || !statusBar) return;
+
+    if (isRewriting) {
+        window._rewritingFilePath = filePath;
+        container.classList.add('rewriting');
+        statusBar.classList.add('rewriting');
+        statusBar.textContent = 'LLM 正在改写文档...';
+        if (window.TiptapEditor && window.TiptapEditor.instance) {
+            window.TiptapEditor.instance.setEditable(false);
+        }
+    } else {
+        window._rewritingFilePath = null;
+        container.classList.remove('rewriting');
+        statusBar.classList.remove('rewriting');
+        statusBar.textContent = '';
+        if (window.TiptapEditor && window.TiptapEditor.instance) {
+            window.TiptapEditor.instance.setEditable(true);
+        }
+    }
+}
+
+function _flushRewriteBuffer() {
+    if (!window._rewriteBuffer || window._rewriteBuffer.length === 0) {
+        if (window._rewriteFlushTimer) {
+            clearInterval(window._rewriteFlushTimer);
+            window._rewriteFlushTimer = null;
+        }
+        if (window._rewriteLLMDone) {
+            _finishRewriteStream(window._rewriteDoneData);
+        }
+        return;
+    }
+    var chunkSize = 1;
+    var take = window._rewriteBuffer.substring(0, chunkSize);
+    window._rewriteBuffer = window._rewriteBuffer.substring(chunkSize);
+    window._rewriteDisplayText += take;
+    var statusBar = document.getElementById('editor-status-bar');
+    if (statusBar) {
+        statusBar.textContent = 'LLM 正在改写... (' + window._rewriteDisplayText.length + ' 字)';
+    }
+    if (window.TiptapEditor && window.TiptapEditor.instance) {
+        if (window.marked) {
+            var html = window.marked.parse(window._rewriteDisplayText);
+            window.TiptapEditor.instance.commands.setContent(html, false);
+        }
+    }
+    var editorEl = document.getElementById('tiptap-editor');
+    if (editorEl) {
+        editorEl.scrollTop = editorEl.scrollHeight;
+    }
+    if (window._rewriteBuffer.length === 0 && window._rewriteFlushTimer) {
+        clearInterval(window._rewriteFlushTimer);
+        window._rewriteFlushTimer = null;
+        if (window._rewriteLLMDone) {
+            _finishRewriteStream(window._rewriteDoneData);
+        }
+    }
+}
+
+function _cleanupRewriteState() {
+    if (window._rewriteFlushTimer) {
+        clearInterval(window._rewriteFlushTimer);
+        window._rewriteFlushTimer = null;
+    }
+    setEditorRewriting(null, false);
+    if (window._rewriteStreamUnlisten) {
+        window._rewriteStreamUnlisten();
+        window._rewriteStreamUnlisten = null;
+    }
+    var diffPanel = document.getElementById('rewrite-diff-panel');
+    if (diffPanel) diffPanel.remove();
+    var container = document.getElementById('tiptap-editor-container');
+    if (container) container.style.display = '';
+    var previewPanel = document.getElementById('preview-panel');
+    if (previewPanel) previewPanel.style.display = '';
+}
+
+function _finishRewriteStream(data) {
+    if (window._rewriteFinished) return;
+    window._rewriteFinished = true;
+    window._rewriteDisplayText = window._rewriteStreamText;
+    window._rewriteBuffer = '';
+    if (window._rewriteFlushTimer) {
+        clearInterval(window._rewriteFlushTimer);
+        window._rewriteFlushTimer = null;
+    }
+    if (window._rewriteStreamUnlisten) {
+        window._rewriteStreamUnlisten();
+        window._rewriteStreamUnlisten = null;
+    }
+    if (data && data.success) {
+        window._rewritePendingFilePath = data.file_path;
+        window._rewritePendingText = data.rewritten_text || window._rewriteStreamText;
+        _showRewriteDiffView();
+    } else if (data) {
+        alert('改写失败：' + (data.message || '未知错误'));
+        updateStatus('改写失败');
+        _cleanupRewriteState();
+    }
+}
+
+function _showRewriteDiffView() {
+    var oldText = window._rewriteOriginalText || '';
+    var newText = window._rewritePendingText || '';
+
+    var container = document.getElementById('tiptap-editor-container');
+    var previewPanel = document.getElementById('preview-panel');
+    if (container) container.style.display = 'none';
+    if (previewPanel) previewPanel.style.display = 'none';
+
+    var diffPanel = document.getElementById('rewrite-diff-panel');
+    if (!diffPanel) {
+        diffPanel = document.createElement('div');
+        diffPanel.id = 'rewrite-diff-panel';
+        var mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.appendChild(diffPanel);
+    }
+
+    var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + oldText + '</pre>';
+    var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + newText + '</pre>';
+
+    diffPanel.innerHTML = '<div class="rewrite-diff-header">' +
+        '<span class="rewrite-diff-title">改写对比</span>' +
+        '<button class="rewrite-diff-btn rewrite-confirm-btn" onclick="onRewriteConfirm()">✓ 采用新版本</button>' +
+        '<button class="rewrite-diff-btn rewrite-cancel-btn" onclick="onRewriteCancel()">✕ 保留原版本</button>' +
+        '</div>' +
+        '<div class="rewrite-diff-body">' +
+        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">原文</div><div class="rewrite-diff-pane-content prose-preview">' + oldHtml + '</div></div>' +
+        '<div class="rewrite-diff-divider"></div>' +
+        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">改写后</div><div class="rewrite-diff-pane-content prose-preview">' + newHtml + '</div></div>' +
+        '</div>';
+
+    diffPanel.style.display = 'flex';
+    updateStatus('改写完成，请确认是否采用新版本');
+}
+
+async function onRewriteConfirm() {
+    var filePath = window._rewritePendingFilePath;
+    var rewrittenText = window._rewritePendingText;
+    if (!filePath || !rewrittenText) return;
+
+    updateStatus('正在保存...');
+    try {
+        var result = await window.api.llm_rewrite_apply(filePath, rewrittenText);
+        if (result && result.success) {
+            updateStatus('已保存');
+            var statusBar = document.getElementById('editor-status-bar');
+            if (statusBar) {
+                statusBar.textContent = '已保存';
+                setTimeout(function() { statusBar.textContent = ''; }, 3000);
+            }
+        } else {
+            alert('保存失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            updateStatus('保存失败');
+        }
+    } catch (e) {
+        alert('保存出错：' + (e.message || e));
+        updateStatus('保存出错');
+    } finally {
+        window._rewritePendingFilePath = null;
+        window._rewritePendingText = null;
+        _cleanupRewriteState();
+        if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
+            window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
+        }
+    }
+}
+
+function onRewriteCancel() {
+    window._rewritePendingFilePath = null;
+    window._rewritePendingText = null;
+    var statusBar = document.getElementById('editor-status-bar');
+    if (statusBar) {
+        statusBar.textContent = '已放弃改写';
+        setTimeout(function() { statusBar.textContent = ''; }, 3000);
+    }
+    updateStatus('已放弃改写');
+    _cleanupRewriteState();
+    if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
+        window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
+    }
+}
+
+window.onRewriteConfirm = onRewriteConfirm;
+window.onRewriteCancel = onRewriteCancel;
+
+function _updateRewriteStreamEditor(token) {
+    window._rewriteStreamText += token;
+    window._rewriteBuffer += token;
+    if (!window._rewriteFlushTimer) {
+        window._rewriteFlushTimer = setInterval(_flushRewriteBuffer, 40);
+    }
+}
+
 async function onLLMRewrite() {
-    if (!selectedFilePath) {
+    var curPath = window.AppState.selectedFilePath;
+    if (!curPath) {
         alert('请先选择一个文件');
         return;
     }
 
     var btn = document.getElementById('titlebar-rewrite-btn');
-    if (!confirm('确定要用 LLM 改写此文档吗？\n\n改写后将用中立客观的笔记风格重写，并直接覆盖原文件。')) return;
+    if (!confirm('确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。')) return;
+
+    var rewritePath = curPath;
+
+    try {
+        var rawResult = await window.api.read_file_raw(rewritePath);
+        window._rewriteOriginalText = (rawResult && rawResult.content) ? rawResult.content : '';
+    } catch (e) {
+        window._rewriteOriginalText = '';
+    }
 
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
     }
     updateStatus('正在改写文档...');
+    setEditorRewriting(rewritePath, true);
+    window._rewriteStreamText = '';
+    window._rewriteBuffer = '';
+    window._rewriteDisplayText = '';
+    window._rewriteLLMDone = false;
+    window._rewriteDoneData = null;
+    window._rewriteFinished = false;
+
+    var eventAPI = window.__TAURI__ && window.__TAURI__.event;
+    if (eventAPI) {
+        window._rewriteStreamUnlisten = await eventAPI.listen('python-event', function(event) {
+            var data = event.payload;
+            if (!data) return;
+            if (data.type === 'rewrite_chunk' && data.file_path === rewritePath) {
+                _updateRewriteStreamEditor(data.token || '');
+            } else if (data.type === 'rewrite_done' && data.file_path === rewritePath) {
+                window._rewriteLLMDone = true;
+                window._rewriteDoneData = data;
+                if (!window._rewriteFlushTimer && window._rewriteBuffer.length === 0) {
+                    _finishRewriteStream(data);
+                }
+            }
+        });
+    }
 
     try {
-        var result = await window.api.llm_rewrite(selectedFilePath);
-        if (result && result.success) {
-            updateStatus('改写完成');
-            if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
-                window.PreviewModule.loadFilePreview(selectedFilePath, selectedFileName);
-            }
-        } else {
-            alert('改写失败：' + (result ? result.message || '未知错误' : '未知错误'));
-            updateStatus('改写失败');
-        }
+        await window.api.llm_rewrite_stream(rewritePath);
     } catch (e) {
         alert('改写出错：' + (e.message || e));
         updateStatus('改写出错');
+        var statusBar3 = document.getElementById('editor-status-bar');
+        if (statusBar3) {
+            statusBar3.textContent = '改写出错';
+            statusBar3.classList.remove('rewriting');
+            setTimeout(function() { statusBar3.textContent = ''; }, 3000);
+        }
+        _cleanupRewriteState();
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -309,4 +548,67 @@ function refreshCurrentSidebarView() {
             loadRelationGraphData();
         }
     }
+}
+
+var _tooltipTimer = null;
+
+function initSidecarErrorListener() {
+    var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
+        ? window.__TAURI__.event
+        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
+            ? window.__TAURI_INTERNALS__.event
+            : null);
+    if (!eventAPI) return;
+
+    eventAPI.listen('python-event', function(event) {
+        var data = event.payload;
+        if (!data || data.type !== 'sidecar_error') return;
+        var msg = data.message || 'Python 后端启动失败';
+        console.error('[App] Sidecar error:', msg);
+        updateStatus('错误: ' + msg);
+        alert('NoteAI 启动失败\n\n' + msg + '\n\n请检查 Python 环境和依赖是否正确安装。');
+    });
+}
+
+function initCustomTooltip() {
+    var tip = document.getElementById('custom-tooltip');
+    if (!tip) return;
+
+    document.addEventListener('mouseover', function(e) {
+        var el = e.target.closest('[title]');
+        if (!el) return;
+        var title = el.getAttribute('title');
+        if (!title) return;
+
+        clearTimeout(_tooltipTimer);
+        _tooltipTimer = setTimeout(function() {
+            tip.textContent = title;
+            tip.classList.add('visible');
+
+            var rect = el.getBoundingClientRect();
+            var tipW = tip.offsetWidth;
+            var tipH = tip.offsetHeight;
+            var left = rect.left + rect.width / 2 - tipW / 2;
+            var top = rect.bottom + 6;
+
+            if (left < 4) left = 4;
+            if (left + tipW > window.innerWidth - 4) left = window.innerWidth - tipW - 4;
+            if (top + tipH > window.innerHeight - 4) top = rect.top - tipH - 6;
+
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        }, 400);
+    });
+
+    document.addEventListener('mouseout', function(e) {
+        var el = e.target.closest('[title]');
+        if (!el) return;
+        clearTimeout(_tooltipTimer);
+        tip.classList.remove('visible');
+    });
+
+    document.addEventListener('mousedown', function() {
+        clearTimeout(_tooltipTimer);
+        tip.classList.remove('visible');
+    });
 }

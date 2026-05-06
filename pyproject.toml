@@ -25,10 +25,29 @@ dependencies = [
     "PyYAML>=6.0",
     "jieba>=0.42.1",
     "html2text>=2024.2.26",
+    "watchdog>=4.0.0",
+    "send2trash>=1.8.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["config*", "modules*", "prompts*", "utils*", "tests*"]
+
+# Maps import name `sidecar` → directory python/sidecar (Tauri sidecar package).
+[tool.setuptools.package-dir]
+"sidecar" = "python/sidecar"
+
 [project.scripts]
-noteai = "main:main"
+noteai = "run:main"
 
 [tool.ruff]
 target-version = "py310"
@@ -52,6 +71,10 @@ ignore = [
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "python"]
+testpaths = ["tests"]
 
 [tool.mypy]
 python_version = "3.10"

@@ -17,16 +17,6 @@ var _downloadState = {
     currentMessage: ''
 };
 
-function getTauriEventAPI() {
-    if (window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen) {
-        return window.__TAURI__.event;
-    }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen) {
-        return window.__TAURI_INTERNALS__.event;
-    }
-    return null;
-}
-
 function initDownloadEventListener() {
     console.log('[Downloader] Initializing event listener...');
     

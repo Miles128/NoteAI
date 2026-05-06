@@ -54,14 +54,16 @@ NoteAI 是一个基于 PySide6 QtWebEngine 的桌面应用，采用 HTML/CSS/JS 
 
 ### 2.2 通信机制
 
-重构后，JS 与 Python 的通信方式：
+**当前（以仓库为准）**：Tauri `invoke('py_call')` → Python sidecar（`python/main.py`，stdin/stdout JSON）。  
+**已废弃**：`webui/app.py` 提供的本地 HTTP + `/api/`（仅供历史脚本，勿再扩展）。
+
+历史文档曾描述 Qt/pywebview 下的：
 
 ```
 JS (fetch POST) → Python (HTTP API) → JS (QWebEnginePage.runJavaScript)
 ```
 
-- **JS → Python**：通过 `fetch` POST 到 `http://localhost:{port}/api/{method}`
-- **Python → JS**：通过 `QWebEnginePage.runJavaScript()` 执行回调
+该路径已不再作为正式架构。
 
 ---
 

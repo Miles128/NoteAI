@@ -25,6 +25,12 @@ function showContentView() {
     if (titlebarSplitBtn) titlebarSplitBtn.style.display = 'none';
     if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
     if (titlebarSeparator) titlebarSeparator.style.display = 'none';
+
+    if (typeof _currentSidebarView !== 'undefined' && _currentSidebarView === 'topic') {
+        if (contentPanel) contentPanel.style.display = 'none';
+        var pendingPanel = document.getElementById('topic-pending-panel');
+        if (pendingPanel) pendingPanel.style.display = '';
+    }
 }
 
 function showPreviewView() {
@@ -171,7 +177,7 @@ async function loadFilePreview(path, fileName) {
                 renderPreviewContent(currentPreviewData);
             }
         } else {
-            showPreviewError('加载失败', result?.message || '无法读取文件');
+            showPreviewError('加载失败', result?.error || result?.message || '无法读取文件');
         }
     } catch (e) {
         console.error('[Preview] Load error:', e);

@@ -119,11 +119,21 @@ function renderSearchResults(result) {
 
 function highlightMatch(text, query) {
     if (!query) return escapeHtml(text);
-    var escaped = escapeHtml(text);
-    var queryEscaped = escapeHtml(query);
-    // case-insensitive highlight
-    var regex = new RegExp('(' + queryEscaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
-    return escaped.replace(regex, '<mark class="search-highlight">$1</mark>');
+    var regex = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    var parts = [];
+    var lastIdx = 0;
+    var m;
+    while ((m = regex.exec(text)) !== null) {
+        if (m.index > lastIdx) {
+            parts.push(escapeHtml(text.substring(lastIdx, m.index)));
+        }
+        parts.push('<mark class="search-highlight">' + escapeHtml(m[1]) + '</mark>');
+        lastIdx = regex.lastIndex;
+    }
+    if (lastIdx < text.length) {
+        parts.push(escapeHtml(text.substring(lastIdx)));
+    }
+    return parts.join('');
 }
 
 function onSearchResultClick(el) {

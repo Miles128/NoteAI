@@ -1,17 +1,38 @@
-var _isTauri = typeof window !== 'undefined' && (window.__TAURI_INTERNALS__ || window.__TAURI__);
+var _isTauri = null;
+var _isTauriChecked = false;
+
+function checkIsTauri() {
+    if (_isTauriChecked) return _isTauri;
+    _isTauriChecked = true;
+    _isTauri = typeof window !== 'undefined' && !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+    if (!_isTauri && typeof window !== 'undefined') {
+        // 延迟检测：Tauri 可能还没注入
+        var start = Date.now();
+        while (Date.now() - start < 2000) {
+            if (window.__TAURI_INTERNALS__ || window.__TAURI__) {
+                _isTauri = true;
+                break;
+            }
+        }
+    }
+    return _isTauri;
+}
 
 function getTauriInvoke() {
-    if (window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke) {
-        return window.__TAURI__.core.invoke;
+    if (window.__TAURI__) {
+        if (typeof window.__TAURI__.invoke === 'function') return window.__TAURI__.invoke;
+        if (window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') return window.__TAURI__.core.invoke;
+        if (window.__TAURI__.ipc && typeof window.__TAURI__.ipc.invoke === 'function') return window.__TAURI__.ipc.invoke;
     }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke) {
-        return window.__TAURI_INTERNALS__.invoke;
+    if (window.__TAURI_INTERNALS__) {
+        if (typeof window.__TAURI_INTERNALS__.invoke === 'function') return window.__TAURI_INTERNALS__.invoke;
+        if (window.__TAURI_INTERNALS__.ipc && typeof window.__TAURI_INTERNALS__.ipc.invoke === 'function') return window.__TAURI_INTERNALS__.ipc.invoke;
     }
     return null;
 }
 
 async function pyCall(method, params) {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         if (!invoke) throw new Error('Tauri invoke not available');
         try {
@@ -30,7 +51,7 @@ async function pyCall(method, params) {
 }
 
 async function openWorkspace() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         var folder = await invoke('open_folder_dialog');
         if (folder) {
@@ -45,7 +66,7 @@ async function openWorkspace() {
 
 async function getWorkspaceStatus() {
     var result = await pyCall('get_workspace_status');
-    if (result && result.is_set && _isTauri) {
+    if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
     }
@@ -64,8 +85,8 @@ async function getTopicTree() {
     return pyCall('get_topic_tree');
 }
 
-async function autoTagFiles() {
-    return pyCall('auto_tag_files');
+async function autoTagFiles(dryRun) {
+    return pyCall('auto_tag_files', { dry_run: !!dryRun });
 }
 
 async function saveTagsMd() {
@@ -153,7 +174,7 @@ async function saveThemePreference(theme) {
 }
 
 async function addFiles() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         var files = await invoke('open_file_dialog');
         return files || [];
@@ -162,7 +183,7 @@ async function addFiles() {
 }
 
 async function importFilesToWorkspace() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         var files = await invoke('open_file_dialog');
         if (!files || files.length === 0) return { cancelled: true };
@@ -172,7 +193,7 @@ async function importFilesToWorkspace() {
 }
 
 async function browseFolder() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         var folder = await invoke('open_folder_dialog');
         return folder || '';
@@ -259,41 +280,78 @@ async function llmRewrite(filePath) {
     return pyCall('llm_rewrite', { file_path: filePath });
 }
 
+async function llmRewriteStream(filePath) {
+    return pyCall('llm_rewrite_stream', { file_path: filePath });
+}
+
+async function llmRewriteApply(filePath, rewrittenText) {
+    return pyCall('llm_rewrite_apply', { file_path: filePath, rewritten_text: rewrittenText });
+}
+
+async function aiTopicAnalyze() {
+    return pyCall('ai_topic_analyze', {});
+}
+
+async function aiTopicSurvey(topic) {
+    return pyCall('ai_topic_survey', { topic: topic });
+}
+
+async function applyTopicSuggestion(suggestion) {
+    return pyCall('apply_topic_suggestion', { suggestion: suggestion });
+}
+
 function getTauriWindow() {
-    if (window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrent) {
-        return window.__TAURI__.window.getCurrent();
+    if (window.__TAURI__ && window.__TAURI__.window) {
+        if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
+            return window.__TAURI__.window.getCurrentWindow();
+        }
+        if (typeof window.__TAURI__.window.getCurrent === 'function') {
+            return window.__TAURI__.window.getCurrent();
+        }
     }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window && window.__TAURI_INTERNALS__.window.getCurrent) {
-        return window.__TAURI_INTERNALS__.window.getCurrent();
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window) {
+        if (typeof window.__TAURI_INTERNALS__.window.getCurrentWindow === 'function') {
+            return window.__TAURI_INTERNALS__.window.getCurrentWindow();
+        }
+        if (typeof window.__TAURI_INTERNALS__.window.getCurrent === 'function') {
+            return window.__TAURI_INTERNALS__.window.getCurrent();
+        }
     }
     return null;
 }
 
-function moveWindow(dx, dy) {}
+function moveWindow(dx, dy) {
+    if (checkIsTauri()) {
+        var win = getTauriWindow();
+        if (win && typeof win.startDragging === 'function') {
+            win.startDragging();
+        }
+    }
+}
 
 function minimizeWindow() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.minimize();
     }
 }
 
 function maximizeWindow() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.toggleMaximize();
     }
 }
 
 function closeWindow() {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.close();
     }
 }
 
 async function openFileInNewWindow(path, name) {
-    if (_isTauri) {
+    if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         if (invoke) {
             return invoke('open_file_in_new_window', { path: path, name: name || null });
@@ -303,13 +361,34 @@ async function openFileInNewWindow(path, name) {
     throw new Error('Not running in Tauri');
 }
 
-function apiUpdateStatus(text) {}
+function apiUpdateStatus(text) {
+    var statusEl = document.getElementById('status-bar');
+    if (statusEl) statusEl.textContent = text;
+}
 
-function apiUpdateProgress(elementId, progress, message) {}
+function apiUpdateProgress(elementId, progress, message) {
+    var fillEl = document.getElementById(elementId + '-fill');
+    var textEl = document.getElementById(elementId + '-text');
+    if (fillEl) fillEl.style.width = (progress * 100) + '%';
+    if (textEl) textEl.textContent = message;
+}
 
-function showMessage(title, message, msgType) {}
+function showMessage(title, message, msgType) {
+    var type = msgType || 'info';
+    if (typeof toast !== 'undefined' && toast.show) {
+        toast.show(message, type);
+    } else {
+        console.log('[' + type.toUpperCase() + '] ' + title + ': ' + message);
+    }
+}
 
-function showAbout() {}
+function showAbout() {
+    if (checkIsTauri() && window.__TAURI__ && window.__TAURI__.dialog) {
+        window.__TAURI__.dialog.message('NoteAI v0.1.0\nAI驱动的Markdown笔记知识库管理桌面应用', { title: '关于 NoteAI' });
+    } else {
+        alert('NoteAI v0.1.0\nAI驱动的Markdown笔记知识库管理桌面应用');
+    }
+}
 
 window.api = {
     invoke: pyCall,
@@ -420,5 +499,10 @@ window.api = {
     reject_link: rejectLink,
     confirm_all_links: confirmAllLinks,
     sync_wiki_with_files: syncWikiWithFiles,
-    llm_rewrite: llmRewrite
+    llm_rewrite: llmRewrite,
+    llm_rewrite_stream: llmRewriteStream,
+    llm_rewrite_apply: llmRewriteApply,
+    ai_topic_analyze: aiTopicAnalyze,
+    ai_topic_survey: aiTopicSurvey,
+    apply_topic_suggestion: applyTopicSuggestion
 };

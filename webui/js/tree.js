@@ -42,6 +42,14 @@ function setSelectedFile(path, name) {
     window.AppState.selectedFileName = name;
 }
 
+function getSelectedFilePath() {
+    return window.AppState.selectedFilePath;
+}
+
+function getSelectedFileName() {
+    return window.AppState.selectedFileName;
+}
+
 function loadTreeState() {
     try {
         var saved = localStorage.getItem('tree-expanded-state');
@@ -278,7 +286,7 @@ function showDeleteConfirm(itemEl, path, name) {
 async function doDeleteFile(path, name, confirmBar) {
     if (confirmBar) confirmBar.remove();
     try {
-        var result = await window.api.pyCall('delete_file', { path: path });
+        var result = await window.api.invoke('delete_file', { path: path });
         if (result && result.success) {
             if (selectedFilePath === path) {
                 setSelectedFile(null, null);
@@ -293,15 +301,15 @@ async function doDeleteFile(path, name, confirmBar) {
 }
 
 function revealInFinder(path) {
-    if (window.api && window.api.pyCall) {
-        window.api.pyCall('reveal_in_finder', { path: path });
+    if (window.api && window.api.invoke) {
+        window.api.invoke('reveal_in_finder', { path: path });
     }
 }
 
 function deleteFile(path, name) {
     if (!confirm('确定要删除 "' + name + '" 吗？')) return;
-    if (window.api && window.api.pyCall) {
-        window.api.pyCall('delete_file', { path: path }).then(function(result) {
+    if (window.api && window.api.invoke) {
+        window.api.invoke('delete_file', { path: path }).then(function(result) {
             if (result && result.success) {
                 window.TreeModule.loadFileTree();
             } else {
@@ -313,7 +321,12 @@ function deleteFile(path, name) {
 
 var _fileTreeDragData = { filePath: null, fileName: null, isFolder: false };
 
+var _dragDropInitialized = false;
+
 function setupFileTreeDragDrop(container) {
+    if (_dragDropInitialized) return;
+    _dragDropInitialized = true;
+
     container.addEventListener('dragstart', function(e) {
         var itemEl = e.target.closest('.tree-item');
         if (!itemEl) return;
@@ -412,7 +425,138 @@ document.addEventListener('contextmenu', function(e) {
     if (!e.target.closest('.tree-item') && !e.target.closest('.sidebar-tag-row') && !e.target.closest('.sidebar-tag-file')) hideTreeContextMenu();
 });
 
+var _virtualScrollRAF = null;
+document.addEventListener('DOMContentLoaded', function() {
+    var container = document.getElementById('file-tree');
+    if (container) {
+        container.addEventListener('scroll', function() {
+            if (_virtualScrollRAF) return;
+            _virtualScrollRAF = requestAnimationFrame(function() {
+                _virtualScrollRAF = null;
+                if (_flatVisibleNodes && _flatVisibleNodes.length > 50) {
+                    renderVirtualTree(container);
+                }
+            });
+        });
+    }
+});
+
 var _lastFileTreeData = null;
+var _flatVisibleNodes = null;
+var _virtualScrollItemHeight = 28;
+var _virtualScrollVisibleCount = 0;
+var _virtualScrollStartIdx = 0;
+
+function flattenVisibleNodes(treeData) {
+    var result = [];
+    function walk(nodes, depth) {
+        if (!nodes) return;
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            var isFolder = node.type === 'folder';
+            var expanded = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
+            result.push({ path: node.path, name: node.name, type: node.type, depth: depth, modified: node.modified, expanded: expanded });
+            if (isFolder && expanded && node.children) {
+                walk(node.children, depth + 1);
+            }
+        }
+    }
+    walk(treeData, 0);
+    return result;
+}
+
+function renderVirtualTree(container) {
+    if (!_flatVisibleNodes || _flatVisibleNodes.length === 0) {
+        container.innerHTML = '<div class="tree-empty">暂无工作区</div>';
+        return;
+    }
+
+    var totalHeight = _flatVisibleNodes.length * _virtualScrollItemHeight;
+    var scrollTop = container.scrollTop || 0;
+    var viewHeight = container.clientHeight || 600;
+
+    _virtualScrollStartIdx = Math.floor(scrollTop / _virtualScrollItemHeight);
+    _virtualScrollVisibleCount = Math.ceil(viewHeight / _virtualScrollItemHeight) + 5;
+
+    var startIdx = Math.max(0, _virtualScrollStartIdx - 2);
+    var endIdx = Math.min(_flatVisibleNodes.length, startIdx + _virtualScrollVisibleCount + 4);
+
+    var html = '<div class="tree-virtual-spacer" style="height:' + (startIdx * _virtualScrollItemHeight) + 'px"></div>';
+
+    for (var i = startIdx; i < endIdx; i++) {
+        var node = _flatVisibleNodes[i];
+        var isFolder = node.type === 'folder';
+        var ep = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        html += '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
+        for (var d = 0; d < node.depth; d++) {
+            html += '<span class="tree-indent-unit"></span>';
+        }
+        if (isFolder) {
+            html += '<span class="tree-toggle ' + (node.expanded ? '' : 'collapsed') + '"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></span>';
+        } else {
+            html += '<span class="tree-toggle" style="visibility:hidden"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg></span>';
+        }
+        html += '<span class="tree-name">' + en + '</span>';
+        if (!isFolder && node.modified) {
+            html += '<span class="tree-modified">' + formatModifiedTime(node.modified) + '</span>';
+        }
+        html += '</div>';
+    }
+
+    html += '<div class="tree-virtual-spacer" style="height:' + ((_flatVisibleNodes.length - endIdx) * _virtualScrollItemHeight) + 'px"></div>';
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('.tree-item').forEach(function(item) {
+        item.addEventListener('click', function(e) {
+            var path = this.getAttribute('data-path');
+            var name = this.getAttribute('data-name');
+            if (this.classList.contains('folder')) {
+                var currentExpanded = treeExpandedState.hasOwnProperty(path) ? treeExpandedState[path] : true;
+                treeExpandedState[path] = !currentExpanded;
+                saveTreeState();
+                _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
+                renderVirtualTree(container);
+            } else {
+                setActiveTreeItem(this);
+                window.TreeModule.selectFile(path, name);
+            }
+        });
+
+        item.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            showTreeContextMenu(e, this);
+        });
+    });
+
+    setupFileTreeDragDrop(container);
+
+    if (selectedFilePath) {
+        var prev = container.querySelector('.tree-item[data-path="' + selectedFilePath.replace(/"/g, '&quot;') + '"]');
+        if (prev) setActiveTreeItem(prev);
+    }
+}
+
+var _lastTreeData = null;
+
+function extractFileSet(treeData) {
+    var files = {};
+    function walk(nodes) {
+        if (!nodes) return;
+        for (var i = 0; i < nodes.length; i++) {
+            var n = nodes[i];
+            files[n.path] = n.type + ':' + n.name + ':' + (n.modified || 0);
+            if (n.children) walk(n.children);
+        }
+    }
+    walk(treeData);
+    return files;
+}
+
+var _lastFileSet = null;
 
 async function loadFileTree() {
     var container = document.getElementById('file-tree');
@@ -428,15 +572,22 @@ async function loadFileTree() {
             window.api.get_workspace_tree(),
             new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, 5000); })
         ]);
-        var dataStr = JSON.stringify(treeData);
-        if (dataStr === _lastFileTreeData) return;
-        _lastFileTreeData = dataStr;
+
+        var newFileSet = extractFileSet(treeData);
+        var newSetStr = JSON.stringify(newFileSet);
+
+        if (newSetStr === _lastFileSet) return;
+        _lastFileSet = newSetStr;
+        _lastTreeData = treeData;
 
         if (Array.isArray(treeData) && treeData.length === 0) {
             container.innerHTML = '<div class="tree-empty">工作区为空</div>';
         } else {
-            renderFileTree(treeData, container);
+            loadTreeState();
+            _flatVisibleNodes = flattenVisibleNodes(treeData);
+            renderVirtualTree(container);
         }
+        updateSidebarStats();
     } catch (e) {
         console.error('[Tree] Load failed:', e);
         container.innerHTML = '<div class="tree-empty">加载失败</div>';
@@ -449,6 +600,22 @@ function selectFile(path, fileName) {
         window.api.on_file_selected(path);
     }
 
+    var container = document.getElementById('tiptap-editor-container');
+    var statusBar = document.getElementById('editor-status-bar');
+    if (window._rewritingFilePath && path !== window._rewritingFilePath) {
+        if (container) container.classList.remove('rewriting');
+        if (statusBar) { statusBar.classList.remove('rewriting'); statusBar.textContent = ''; }
+        if (window.TiptapEditor && window.TiptapEditor.instance) {
+            window.TiptapEditor.instance.setEditable(true);
+        }
+    } else if (window._rewritingFilePath && path === window._rewritingFilePath) {
+        if (container) container.classList.add('rewriting');
+        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = 'LLM 正在改写文档...'; }
+        if (window.TiptapEditor && window.TiptapEditor.instance) {
+            window.TiptapEditor.instance.setEditable(false);
+        }
+    }
+
     var graphPanel = document.getElementById('graph-panel');
     if (graphPanel && graphPanel.style.display !== 'none') {
         graphPanel.style.display = 'none';
@@ -459,6 +626,11 @@ function selectFile(path, fileName) {
     var pendingLinksPanel = document.getElementById('pending-links-panel');
     if (pendingLinksPanel && pendingLinksPanel.style.display !== 'none') {
         pendingLinksPanel.style.display = 'none';
+    }
+
+    var pendingPanel = document.getElementById('topic-pending-panel');
+    if (pendingPanel && pendingPanel.style.display !== 'none') {
+        pendingPanel.style.display = 'none';
     }
 
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
@@ -508,6 +680,8 @@ function switchSidebarView(view) {
     var footerTopic = document.getElementById('sidebar-footer-topic');
     var footerTags = document.getElementById('sidebar-footer-tags');
     var footerGraph = document.getElementById('sidebar-footer-graph');
+    var footerTree = document.getElementById('sidebar-footer-tree');
+    if (footerTree) footerTree.style.display = view === 'tree' ? '' : 'none';
     if (footerTopic) footerTopic.style.display = view === 'topic' ? '' : 'none';
     if (footerTags) footerTags.style.display = view === 'tags' ? '' : 'none';
     if (footerGraph) footerGraph.style.display = view === 'graph' ? '' : 'none';
@@ -532,9 +706,55 @@ function switchSidebarView(view) {
         if (pendingPanel) pendingPanel.style.display = 'none';
     }
 
-    if (view === 'tags') loadTagsView();
-    if (view === 'topic') loadTopicView();
-    if (view === 'graph' && window.LinksModule) window.LinksModule.loadGraphView();
+    if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); });
+    if (view === 'topic') loadTopicView().then(function() { updateSidebarStats(); });
+    if (view === 'graph' && window.LinksModule) { window.LinksModule.loadGraphView(); setTimeout(updateSidebarStats, 500); }
+    updateSidebarStats();
+}
+
+function _countFiles(nodes) {
+    if (!nodes) return 0;
+    var count = 0;
+    for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].type === 'file') count++;
+        if (nodes[i].children) count += _countFiles(nodes[i].children);
+    }
+    return count;
+}
+
+function updateSidebarStats() {
+    var el = document.getElementById('sidebar-status-tree');
+    if (el) {
+        var fileCount = _lastTreeData ? _countFiles(_lastTreeData) : 0;
+        el.textContent = fileCount + ' 篇笔记';
+    }
+    var topicEl = document.getElementById('sidebar-status-topic');
+    if (topicEl) {
+        var topicCount = document.querySelectorAll('#sidebar-topic .sidebar-tag-group[data-topic-name]').length;
+        topicEl.textContent = topicCount + ' 个主题';
+    }
+    var tagsEl = document.getElementById('sidebar-status-tags');
+    if (tagsEl) {
+        var tagCount = document.querySelectorAll('#sidebar-tags .sidebar-tag-group[data-tag-name]').length;
+        tagsEl.textContent = tagCount + ' 个标签';
+    }
+    var graphEl = document.getElementById('sidebar-status-graph');
+    if (graphEl) {
+        var linkCount = document.querySelectorAll('#sidebar-graph .link-card.link-confirmed').length;
+        graphEl.textContent = linkCount + ' 个链接';
+    }
+}
+
+function setSidebarStatus(view, text, isActive) {
+    var el = document.getElementById('sidebar-status-' + view);
+    if (el) {
+        el.textContent = text;
+        if (isActive !== undefined) {
+            el.classList.toggle('active', !!isActive);
+        } else {
+            el.classList.remove('active');
+        }
+    }
 }
 
 function escapeHtml(str) {
@@ -738,6 +958,8 @@ async function loadLinksData() {
                 openLinkedFile(node.dataset.filePath);
             }
         };
+
+        updateSidebarStats();
     }
 
     loadPendingLinksPanel(pendingLinks);
@@ -891,6 +1113,7 @@ function loadRelationGraphView() {
     html += '<button class="graph-filter-btn" data-gfilter="topic" onclick="onGraphFilter(\'topic\')">主题</button>';
     html += '<button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter(\'tag\')">标签</button>';
     html += '<button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter(\'link\')">链接</button>';
+    html += '<button class="graph-filter-btn graph-label-toggle" id="tree-graph-label-toggle" onclick="toggleGraphFileLabels()" title="显示/隐藏文件名称">Aa</button>';
     html += '</div>';
     html += '<div class="graph-canvas-wrap" id="graph-canvas-wrap">';
     html += '<div class="graph-loading" id="graph-loading">加载中...</div>';
@@ -984,14 +1207,23 @@ function onGraphFilter(filter) {
     }
 }
 
+function toggleGraphFileLabels() {
+    _graphShowFileLabels = !_graphShowFileLabels;
+    var btn = document.getElementById('tree-graph-label-toggle');
+    if (btn) btn.classList.toggle('active', _graphShowFileLabels);
+    if (_graphDrawFrame) _graphDrawFrame();
+}
+
 var _graphScale = 1;
 var _graphOffsetX = 0;
 var _graphOffsetY = 0;
+var _graphShowFileLabels = false;
 var _graphNodes = null;
 var _graphEdges = null;
 var _graphCanvasW = 0;
 var _graphCanvasH = 0;
 var _graphEvolving = false;
+var _graphNodePositions = {};
 
 function graphZoomIn() {
     _graphScale = Math.min(_graphScale * 1.3, 5);
@@ -1179,9 +1411,11 @@ function initGraphSimulation() {
 
     _graphCanvasW = w;
     _graphCanvasH = h;
-    _graphScale = 1;
-    _graphOffsetX = 0;
-    _graphOffsetY = 0;
+    if (Object.keys(_graphNodePositions).length === 0) {
+        _graphScale = 1.5;
+        _graphOffsetX = 0;
+        _graphOffsetY = 0;
+    }
     _graphEvolving = false;
     var evolveBtn = document.getElementById('graph-evolve-btn');
     if (evolveBtn) evolveBtn.classList.remove('active');
@@ -1198,23 +1432,17 @@ function initGraphSimulation() {
         return;
     }
 
-    if (allNodes.length > 300) {
-        var sampled = allNodes.slice(0, 300);
-        var sampledIds = new Set(sampled.map(function(n) { return n.id; }));
-        allEdges = allEdges.filter(function(e) { return sampledIds.has(e.source) && sampledIds.has(e.target); });
-        allNodes = sampled;
-    }
-
     var nodes = [];
     var edges = [];
     var nodeMap = {};
 
     if (_graphFilter === 'all') {
         allNodes.forEach(function(n) {
+            var pos = _graphNodePositions[n.id];
             var node = {
                 id: n.id, label: n.label, nodeType: n.nodeType,
-                x: w / 2 + (Math.random() - 0.5) * w * 0.5,
-                y: h / 2 + (Math.random() - 0.5) * h * 0.5,
+                x: pos ? pos.x : w / 2 + (Math.random() - 0.5) * w * 0.5,
+                y: pos ? pos.y : h / 2 + (Math.random() - 0.5) * h * 0.5,
                 vx: 0, vy: 0
             };
             nodes.push(node);
@@ -1232,7 +1460,8 @@ function initGraphSimulation() {
         allEdges.forEach(function(e) { if (e.type === 'topic') fileIds.add(e.source); });
         allNodes.forEach(function(n) {
             if (topicIds.has(n.id) || fileIds.has(n.id)) {
-                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                var pos = _graphNodePositions[n.id];
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                 nodes.push(node); nodeMap[n.id] = node;
             }
         });
@@ -1248,7 +1477,8 @@ function initGraphSimulation() {
         allEdges.forEach(function(e) { if (e.type === 'tag') fileIds.add(e.source); });
         allNodes.forEach(function(n) {
             if (tagIds.has(n.id) || fileIds.has(n.id)) {
-                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                var pos = _graphNodePositions[n.id];
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                 nodes.push(node); nodeMap[n.id] = node;
             }
         });
@@ -1262,7 +1492,8 @@ function initGraphSimulation() {
         allEdges.forEach(function(e) { if (e.type === 'link') { fileIds.add(e.source); fileIds.add(e.target); } });
         allNodes.forEach(function(n) {
             if (n.nodeType === 'file' && fileIds.has(n.id)) {
-                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: w/2+(Math.random()-0.5)*w*0.5, y: h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                var pos = _graphNodePositions[n.id];
+                var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
                 nodes.push(node); nodeMap[n.id] = node;
             }
         });
@@ -1288,13 +1519,26 @@ function initGraphSimulation() {
     nodes.forEach(function(n) { n._visible = true; });
     edges.forEach(function(e) { e._visible = true; });
 
-    var alphaDecay = 0.02;
+    var reusedCount = 0;
+    for (var ri = 0; ri < nodes.length; ri++) {
+        if (_graphNodePositions[nodes[ri].id]) reusedCount++;
+    }
+    var reuseRatio = nodes.length > 0 ? reusedCount / nodes.length : 0;
+
+    var nodeCount = nodes.length;
+    var alphaDecay = nodeCount > 200 ? 0.03 : 0.02;
     var alphaMin = 0.001;
-    var centerPull = 0.002;
-    var friction = 0.9;
-    var linkDistance = 120;
-    var linkStrength = 0.008;
-    var repulseStrength = 300;
+    if (reuseRatio > 0.5) {
+        _graphAlpha = 0.05;
+    } else {
+        _graphAlpha = 1;
+    }
+    var centerPull = nodeCount > 200 ? 0.025 : 0.018;
+    var friction = nodeCount > 200 ? 0.85 : 0.88;
+    var linkDistance = nodeCount > 200 ? 35 : nodeCount > 100 ? 45 : 55;
+    var linkStrength = nodeCount > 200 ? 0.008 : 0.012;
+    var repulseStrength = nodeCount > 200 ? 150 : 250;
+    var sphereRadius = Math.min(w, h) * 0.48;
 
     function tick() {
         if (_graphAlpha < alphaMin) { _graphAlpha = alphaMin; }
@@ -1311,16 +1555,55 @@ function initGraphSimulation() {
             e.source.vx += fx; e.source.vy += fy;
             e.target.vx -= fx; e.target.vy -= fy;
         }
-        
-        for (var i = 0; i < nodes.length; i++) {
-            for (var j = i + 1; j < nodes.length; j++) {
-                var dx = nodes[j].x - nodes[i].x;
-                var dy = nodes[j].y - nodes[i].y;
-                var dist2 = dx * dx + dy * dy || 1;
-                var dist = Math.sqrt(dist2);
-                var f = repulseStrength * _graphAlpha / dist2;
-                nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
-                nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
+
+        if (nodeCount > 50) {
+            var cellSize = linkDistance * 2;
+            var grid = {};
+            for (var i = 0; i < nodes.length; i++) {
+                var cx = Math.floor(nodes[i].x / cellSize);
+                var cy = Math.floor(nodes[i].y / cellSize);
+                var key = cx + ',' + cy;
+                if (!grid[key]) grid[key] = [];
+                grid[key].push(i);
+            }
+            for (var key in grid) {
+                var cell = grid[key];
+                var parts = key.split(',');
+                var cx = parseInt(parts[0]);
+                var cy = parseInt(parts[1]);
+                for (var dx = -1; dx <= 1; dx++) {
+                    for (var dy = -1; dy <= 1; dy++) {
+                        var nkey = (cx + dx) + ',' + (cy + dy);
+                        var ncell = grid[nkey];
+                        if (!ncell) continue;
+                        for (var a = 0; a < cell.length; a++) {
+                            var startB = (nkey === key) ? a + 1 : 0;
+                            for (var b = startB; b < ncell.length; b++) {
+                                var ni = cell[a];
+                                var nj = ncell[b];
+                                var ddx = nodes[nj].x - nodes[ni].x;
+                                var ddy = nodes[nj].y - nodes[ni].y;
+                                var dist2 = ddx * ddx + ddy * ddy || 1;
+                                var dist = Math.sqrt(dist2);
+                                var f = repulseStrength * _graphAlpha / dist2;
+                                nodes[ni].vx -= ddx / dist * f; nodes[ni].vy -= ddy / dist * f;
+                                nodes[nj].vx += ddx / dist * f; nodes[nj].vy += ddy / dist * f;
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            for (var i = 0; i < nodes.length; i++) {
+                for (var j = i + 1; j < nodes.length; j++) {
+                    var dx = nodes[j].x - nodes[i].x;
+                    var dy = nodes[j].y - nodes[i].y;
+                    var dist2 = dx * dx + dy * dy || 1;
+                    var dist = Math.sqrt(dist2);
+                    var f = repulseStrength * _graphAlpha / dist2;
+                    nodes[i].vx -= dx / dist * f; nodes[i].vy -= dy / dist * f;
+                    nodes[j].vx += dx / dist * f; nodes[j].vy += dy / dist * f;
+                }
             }
         }
         
@@ -1330,54 +1613,80 @@ function initGraphSimulation() {
             n.vy += (h / 2 - n.y) * centerPull * _graphAlpha;
             n.vx *= friction; n.vy *= friction;
             n.x += n.vx; n.y += n.vy;
-            var r = n.nodeType === 'file' ? 5 : 8;
-            if (n.x < r + 4) n.x = r + 4;
-            if (n.x > w - r - 4) n.x = w - r - 4;
-            if (n.y < r + 4) n.y = r + 4;
-            if (n.y > h - r - 4) n.y = h - r - 4;
+            var dx = n.x - w / 2;
+            var dy = n.y - h / 2;
+            var distFromCenter = Math.sqrt(dx * dx + dy * dy);
+            if (distFromCenter > sphereRadius) {
+                var scale = sphereRadius / distFromCenter;
+                n.x = w / 2 + dx * scale;
+                n.y = h / 2 + dy * scale;
+                var nx = dx / distFromCenter;
+                var ny = dy / distFromCenter;
+                var dot = n.vx * nx + n.vy * ny;
+                if (dot > 0) {
+                    n.vx -= dot * nx * 1.8;
+                    n.vy -= dot * ny * 1.8;
+                }
+            }
         }
         _graphAlpha *= (1 - alphaDecay);
     }
 
-    var edgeColors = { topic: 'rgba(232,145,58,0.3)', tag: 'rgba(80,184,127,0.3)', link: 'rgba(74,144,217,0.4)' };
+    var edgeColors = { topic: 'rgba(232,145,58,0.25)', tag: 'rgba(80,184,127,0.25)', link: 'rgba(74,144,217,0.3)' };
     var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
 
     function draw() {
-        ctx.clearRect(0, 0, w, h);
+        var dw = _graphCanvasW || w;
+        var dh = _graphCanvasH || h;
+        ctx.clearRect(0, 0, dw, dh);
         ctx.save();
-        ctx.translate(w / 2, h / 2);
+        ctx.translate(dw / 2, dh / 2);
         ctx.scale(_graphScale, _graphScale);
-        ctx.translate(-w / 2 + _graphOffsetX, -h / 2 + _graphOffsetY);
-        
-        for (var i = 0; i < edges.length; i++) {
-            var e = edges[i];
-            if (!e._visible) continue;
+        ctx.translate(-dw / 2 + _graphOffsetX, -dh / 2 + _graphOffsetY);
+
+        var edgeTypeOrder = ['topic', 'tag', 'link'];
+        for (var t = 0; t < edgeTypeOrder.length; t++) {
+            var etype = edgeTypeOrder[t];
+            ctx.strokeStyle = edgeColors[etype] || 'rgba(150,150,150,0.3)';
+            ctx.lineWidth = etype === 'link' ? 0.8 : 0.6;
+            ctx.setLineDash([]);
             ctx.beginPath();
-            ctx.moveTo(e.source.x, e.source.y);
-            ctx.lineTo(e.target.x, e.target.y);
-            ctx.strokeStyle = edgeColors[e.type] || 'rgba(150,150,150,0.3)';
-            ctx.lineWidth = e.type === 'link' ? 1.5 : 0.8;
-            ctx.setLineDash(e.type === 'link' ? [] : [2, 2]);
+            for (var i = 0; i < edges.length; i++) {
+                var e = edges[i];
+                if (!e._visible || e.type !== etype) continue;
+                ctx.moveTo(e.source.x, e.source.y);
+                ctx.lineTo(e.target.x, e.target.y);
+            }
             ctx.stroke();
             ctx.setLineDash([]);
         }
-        
+
+        var nodeTypeOrder = ['file', 'topic', 'tag'];
+        for (var t = 0; t < nodeTypeOrder.length; t++) {
+            var ntype = nodeTypeOrder[t];
+            ctx.fillStyle = nodeColors[ntype] || '#999';
+            ctx.beginPath();
+            for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
+                if (!n._visible || n.nodeType !== ntype) continue;
+                var r = ntype === 'file' ? 2.2 : 3.5;
+                ctx.moveTo(n.x + r, n.y);
+                ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+            }
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#555';
+        ctx.font = '4px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
             if (!n._visible) continue;
-            var r = n.nodeType === 'file' ? 5 : 8;
-            
-            ctx.beginPath();
-            ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-            ctx.fillStyle = nodeColors[n.nodeType] || '#999';
-            ctx.fill();
-            
-            if (nodes.length <= 80) {
-                ctx.fillStyle = '#555';
-                ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(n.label, n.x, n.y + r + 13);
+            if (n.nodeType === 'file') {
+                if (!_graphShowFileLabels && n !== _hoveredNode) continue;
             }
+            var r = n.nodeType === 'file' ? 2.2 : 3.5;
+            ctx.fillText(n.label, n.x, n.y + r + 5);
         }
         ctx.restore();
     }
@@ -1389,8 +1698,10 @@ function initGraphSimulation() {
     var tooltip = document.getElementById('graph-tooltip');
 
     function screenToGraph(sx, sy) {
-        var gx = (sx - w / 2) / _graphScale + w / 2 - _graphOffsetX;
-        var gy = (sy - h / 2) / _graphScale + h / 2 - _graphOffsetY;
+        var dw = _graphCanvasW || w;
+        var dh = _graphCanvasH || h;
+        var gx = (sx - dw / 2) / _graphScale + dw / 2 - _graphOffsetX;
+        var gy = (sy - dh / 2) / _graphScale + dh / 2 - _graphOffsetY;
         return { x: gx, y: gy };
     }
 
@@ -1408,7 +1719,7 @@ function initGraphSimulation() {
         var gp = screenToGraph(mx, my);
         for (var i = nodes.length - 1; i >= 0; i--) {
             var n = nodes[i];
-            var r = n.nodeType === 'file' ? 5 : 8;
+            var r = n.nodeType === 'file' ? 2.2 : 3.5;
             var dx = gp.x - n.x;
             var dy = gp.y - n.y;
             if (dx * dx + dy * dy < (r + 8) * (r + 8)) {
@@ -1446,30 +1757,24 @@ function initGraphSimulation() {
         }
 
         var gp = screenToGraph(mx, my);
+        var prevHovered = _hoveredNode;
         _hoveredNode = null;
         for (var i = nodes.length - 1; i >= 0; i--) {
             var n = nodes[i];
-            var r = n.nodeType === 'file' ? 5 : 8;
+            var r = n.nodeType === 'file' ? 2.2 : 3.5;
             var ddx = gp.x - n.x;
             var ddy = gp.y - n.y;
             if (ddx * ddx + ddy * ddy < (r + 8) * (r + 8)) { 
                 _hoveredNode = n; break; 
             }
         }
-        if (_hoveredNode && tooltip) {
-            tooltip.style.display = 'block';
-            var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
-            var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
-            var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
-            tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
-            tooltip.style.left = tipX + 'px';
-            tooltip.style.top = tipY + 'px';
-        } else if (tooltip) {
-            tooltip.style.display = 'none';
-        }
+        if (_hoveredNode !== prevHovered) draw();
     };
 
     canvas.onmouseup = function() {
+        if (_dragNode) {
+            _graphNodePositions[_dragNode.id] = { x: _dragNode.x, y: _dragNode.y };
+        }
         _dragNode = null;
         _isPanning = false;
     };
@@ -1478,22 +1783,13 @@ function initGraphSimulation() {
         if (_hoveredNode) {
             if (_hoveredNode.nodeType === 'file') {
                 selectFile(_hoveredNode.id, _hoveredNode.label + '.md');
-            } else if (tooltip) {
-                tooltip.style.display = 'block';
-                var typeLabel = { file: '文件', topic: '主题', tag: '标签' }[_hoveredNode.nodeType] || '';
-                tooltip.textContent = typeLabel + ': ' + _hoveredNode.label;
-                var tipX = _hoveredNode.x * _graphScale + (1 - _graphScale) * w / 2 + _graphOffsetX * _graphScale + 14;
-                var tipY = _hoveredNode.y * _graphScale + (1 - _graphScale) * h / 2 + _graphOffsetY * _graphScale - 10;
-                tooltip.style.left = tipX + 'px';
-                tooltip.style.top = tipY + 'px';
-                setTimeout(function() { if (tooltip) tooltip.style.display = 'none'; }, 3000);
             }
         }
     };
 
     canvas.onmouseleave = function() {
-        if (tooltip) tooltip.style.display = 'none';
         _hoveredNode = null;
+        draw();
     };
 
     canvas.onwheel = function(ev) {
@@ -1513,17 +1809,52 @@ function initGraphSimulation() {
             _graphAnimId = requestAnimationFrame(loop);
         } else {
             _graphAnimId = null;
+            for (var i = 0; i < nodes.length; i++) {
+                _graphNodePositions[nodes[i].id] = { x: nodes[i].x, y: nodes[i].y };
+            }
         }
     }
 
     _graphLoopFn = loop;
     
     loop();
+
+    if (window._graphResizeObserver) {
+        window._graphResizeObserver.disconnect();
+    }
+    window._graphResizeObserver = new ResizeObserver(function() {
+        var wrapEl = document.getElementById('graph-panel-body');
+        var canvasEl = document.getElementById('graph-canvas');
+        if (!wrapEl || !canvasEl) return;
+        var dpr = window.devicePixelRatio || 1;
+        var nw = wrapEl.clientWidth;
+        var nh = wrapEl.clientHeight;
+        if (nw < 20 || nh < 20) return;
+        var oldW = _graphCanvasW || nw;
+        var oldH = _graphCanvasH || nh;
+        canvasEl.width = nw * dpr;
+        canvasEl.height = nh * dpr;
+        canvasEl.style.width = nw + 'px';
+        canvasEl.style.height = nh + 'px';
+        var nctx = canvasEl.getContext('2d');
+        nctx.scale(dpr, dpr);
+        var scaleRatio = Math.sqrt((nw * nh) / (oldW * oldH));
+        if (scaleRatio > 0.05 && scaleRatio < 20 && oldW > 20 && oldH > 20) {
+            _graphScale *= scaleRatio;
+            _graphScale = Math.max(0.2, Math.min(5, _graphScale));
+        }
+        _graphOffsetX = 0;
+        _graphOffsetY = 0;
+        _graphCanvasW = nw;
+        _graphCanvasH = nh;
+        if (_graphDrawFrame) _graphDrawFrame();
+    });
+    window._graphResizeObserver.observe(wrap);
 }
 
 function escapeAttr(str) {
     if (!str) return '';
-    return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/&/g, '&amp;');
+    return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 var _lastTagsData = null;
@@ -1556,7 +1887,7 @@ async function loadTagsView(silent) {
             result.tags.forEach(function(tag) {
                 var isExpanded = expandedTags[tag.name] ? ' expanded' : '';
                 html += '<div class="sidebar-tag-group' + isExpanded + '" data-tag-name="' + escapeAttr(tag.name) + '">';
-                html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+                html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-tag-name="' + escapeAttr(tag.name) + '">';
                 html += '<svg class="sidebar-tag-toggle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
                 html += '<span class="sidebar-tag-name">' + escapeHtml(tag.name) + '</span>';
                 html += '<span class="sidebar-tag-count">' + tag.count + '</span>';
@@ -1577,6 +1908,7 @@ async function loadTagsView(silent) {
 
             setupTagsDragDrop(container);
             setupTagsContextMenu(container);
+            updateSidebarStats();
         }
     } catch (e) {
         container.innerHTML = '<div class="sidebar-view-empty">加载标签失败</div>';
@@ -1980,6 +2312,7 @@ async function loadTopicTree(silent) {
 
         setupTopicDragDrop(container);
         setupTopicContextMenu(container);
+        updateSidebarStats();
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
         container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
@@ -2427,6 +2760,314 @@ async function onBatchAutoAssignTopics() {
     }
 }
 
+var _aiSuggestions = [];
+var _existingTopics = [];
+
+function showAISuggestionPanel() {
+    var panel = document.getElementById('ai-suggestion-panel');
+    if (!panel) return;
+
+    panel.style.display = 'flex';
+    panel.innerHTML = '';
+
+    var header = document.createElement('div');
+    header.className = 'ai-suggestion-header';
+    header.innerHTML = '<span class="ai-suggestion-title">AI 主题建议</span>' +
+        '<button class="ai-suggestion-close" onclick="closeAISuggestionPanel()" title="关闭">' +
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>';
+    panel.appendChild(header);
+
+    var list = document.createElement('div');
+    list.className = 'ai-suggestion-list';
+    list.id = 'ai-suggestion-list';
+
+    var existingSet = {};
+    for (var ei = 0; ei < _existingTopics.length; ei++) {
+        existingSet[_existingTopics[ei].toLowerCase()] = true;
+    }
+
+    for (var i = 0; i < _aiSuggestions.length; i++) {
+        var s = _aiSuggestions[i];
+        var card = document.createElement('div');
+        card.className = 'ai-suggestion-card';
+        card.dataset.index = i;
+
+        var typeLabel = { 'new_topic': '新建主题', 'assign_topic': '归档文件', 'merge_topic': '合并主题', 'change_topic': '变更主题' }[s.type] || s.type;
+
+        var body = '';
+        if (s.type === 'change_topic') {
+            var currentTopic = s.current_topic || '';
+            var suggestedTopic = s.suggested_topic || '';
+            var isExisting = existingSet[suggestedTopic.toLowerCase()] === true;
+            var topicTag = isExisting
+                ? '<span class="ai-sg-topic-tag existing">已有主题</span>'
+                : '<span class="ai-sg-topic-tag new">全新主题</span>';
+
+            body = '<div class="ai-sg-change-detail">' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">文件</span><span class="ai-sg-change-value">' + escapeHtml(s.file || '') + '</span></div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">原始主题</span>' +
+                (currentTopic ? '<span class="ai-sg-change-value">' + escapeHtml(currentTopic) + '</span>' : '<span class="ai-sg-change-value empty">当前没有主题</span>') +
+                '</div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">建议主题</span><span class="ai-sg-change-value">' + escapeHtml(suggestedTopic) + topicTag + '</span></div>' +
+                '</div>';
+        } else if (s.type === 'new_topic') {
+            body = '<div class="ai-sg-body">创建主题 <b>' + escapeHtml(s.topic) + '</b>' +
+                (s.files && s.files.length > 0 ? '，包含 ' + s.files.map(function(f) { return escapeHtml(f); }).join('、') : '') + '</div>';
+        } else if (s.type === 'assign_topic') {
+            body = '<div class="ai-sg-body">将 <b>' + escapeHtml(s.file) + '</b> 归入主题 <b>' + escapeHtml(s.topic) + '</b></div>';
+        } else if (s.type === 'merge_topic') {
+            body = '<div class="ai-sg-body">将 <b>' + escapeHtml(s.source_topic) + '</b> 合并到 <b>' + escapeHtml(s.target_topic) + '</b></div>';
+        }
+
+        card.innerHTML = '<div class="ai-sg-header">' +
+            '<span class="ai-sg-type ai-sg-type-' + s.type + '">' + typeLabel + '</span>' +
+            '<div class="ai-sg-actions">' +
+            '<button class="ai-sg-yes" data-action="accept" title="采纳"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>' +
+            '<button class="ai-sg-no" data-action="reject" title="忽略"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>' +
+            '</div></div>' +
+            body +
+            (s.reason ? '<div class="ai-sg-reason">' + escapeHtml(s.reason) + '</div>' : '');
+
+        list.appendChild(card);
+    }
+
+    panel.appendChild(list);
+
+    list.addEventListener('click', function(e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        var card = btn.closest('.ai-suggestion-card');
+        if (!card) return;
+        var idx = parseInt(card.dataset.index);
+        var action = btn.dataset.action;
+
+        if (action === 'accept') {
+            applyAISuggestion(idx, card);
+        } else if (action === 'reject') {
+            card.style.opacity = '0.3';
+            card.style.pointerEvents = 'none';
+            _aiSuggestions[idx] = null;
+            checkAllSuggestionsDone();
+        }
+    });
+}
+
+async function applyAISuggestion(idx, cardEl) {
+    var suggestion = _aiSuggestions[idx];
+    if (!suggestion) return;
+
+    cardEl.style.opacity = '0.5';
+    try {
+        var result = await window.api.apply_topic_suggestion({ suggestion: suggestion });
+        if (result && result.success) {
+            cardEl.style.opacity = '0.3';
+            cardEl.style.pointerEvents = 'none';
+            _aiSuggestions[idx] = null;
+            checkAllSuggestionsDone();
+            loadTopicView();
+        } else {
+            alert('应用失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            cardEl.style.opacity = '1';
+        }
+    } catch (e) {
+        alert('应用出错：' + (e.message || e));
+        cardEl.style.opacity = '1';
+    }
+}
+
+function checkAllSuggestionsDone() {
+    var remaining = _aiSuggestions.filter(function(s) { return s !== null; });
+    if (remaining.length === 0) {
+        closeAISuggestionPanel();
+        updateStatus('所有建议已处理');
+    }
+}
+
+function closeAISuggestionPanel() {
+    var panel = document.getElementById('ai-suggestion-panel');
+    if (panel) panel.style.display = 'none';
+}
+
+window.closeAISuggestionPanel = closeAISuggestionPanel;
+
+async function onAITopicAnalyze() {
+    var btn = document.getElementById('btn-ai-analyze');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+    setSidebarStatus('topic', '正在扫描文件...', true);
+    updateStatus('AI 正在扫描全量文件分析主题...');
+
+    try {
+        try {
+            var treeResult = await window.api.get_topic_tree();
+            if (treeResult && treeResult.topics) {
+                _existingTopics = treeResult.topics.map(function(t) { return t.name; });
+            }
+        } catch (e) {
+            _existingTopics = [];
+        }
+
+        setSidebarStatus('topic', '正在连接大模型...', true);
+        var result = await window.api.ai_topic_analyze();
+        if (result && result.success && result.suggestions && result.suggestions.length > 0) {
+            _aiSuggestions = result.suggestions;
+            showAISuggestionPanel();
+            setSidebarStatus('topic', result.suggestions.length + ' 条建议');
+            updateStatus('AI 分析完成，共 ' + result.suggestions.length + ' 条建议');
+        } else if (result && result.success) {
+            setSidebarStatus('topic', '主题分配合理');
+            updateStatus('AI 分析完成，所有文件主题分配合理');
+            _aiSuggestions = [];
+        } else {
+            setSidebarStatus('topic', result && result.message ? result.message : '分析失败');
+            updateStatus(result && result.message ? result.message : 'AI 分析未返回结果');
+            _aiSuggestions = [];
+        }
+    } catch (e) {
+        setSidebarStatus('topic', '分析出错');
+        updateStatus('AI 分析出错: ' + (e.message || e));
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+        setTimeout(updateSidebarStats, 2000);
+    }
+}
+
+window.onAITopicAnalyze = onAITopicAnalyze;
+
+window._surveyStreamText = '';
+window._surveyStreamUnlisten = null;
+window._surveyFlushTimer = null;
+window._surveyBuffer = '';
+window._surveyDisplayText = '';
+
+function _flushSurveyBuffer() {
+    if (!window._surveyBuffer || window._surveyBuffer.length === 0) {
+        if (window._surveyFlushTimer) {
+            clearInterval(window._surveyFlushTimer);
+            window._surveyFlushTimer = null;
+        }
+        return;
+    }
+    var chunkSize = 2;
+    var take = window._surveyBuffer.substring(0, chunkSize);
+    window._surveyBuffer = window._surveyBuffer.substring(chunkSize);
+    window._surveyDisplayText += take;
+    if (window.TiptapEditor && window.TiptapEditor.instance && window.marked) {
+        var html = window.marked.parse(window._surveyDisplayText);
+        window.TiptapEditor.instance.commands.setContent(html, false);
+    }
+    var editorEl = document.getElementById('tiptap-editor');
+    if (editorEl) {
+        editorEl.scrollTop = editorEl.scrollHeight;
+    }
+    if (window._surveyBuffer.length === 0 && window._surveyFlushTimer) {
+        clearInterval(window._surveyFlushTimer);
+        window._surveyFlushTimer = null;
+    }
+}
+
+async function onAITopicSurvey() {
+    var headings = [];
+    try {
+        var treeResult = await window.api.get_topic_tree();
+        if (treeResult && treeResult.topics) {
+            headings = treeResult.topics.map(function(t) { return t.name; });
+        }
+    } catch (e) {
+        console.error('[Survey] get topics failed:', e);
+    }
+    if (headings.length === 0) {
+        alert('当前没有主题，请先创建主题');
+        return;
+    }
+
+    var topic = prompt('请输入要撰写综述的主题：\n\n现有主题：' + headings.join('、'));
+    if (!topic || !topic.trim()) return;
+    topic = topic.trim();
+
+    var btn = document.getElementById('btn-ai-survey');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+    setSidebarStatus('topic', '正在连接大模型...', true);
+    updateStatus('AI 正在撰写「' + topic + '」综述...');
+
+    window._surveyStreamText = '';
+    window._surveyBuffer = '';
+    window._surveyDisplayText = '';
+
+    if (window.TiptapEditor && window.TiptapEditor.instance) {
+        window.TiptapEditor.instance.commands.setContent('<p>正在撰写综述...</p>', false);
+        window.TiptapEditor.instance.setEditable(false);
+    }
+
+    var editorContainer = document.getElementById('tiptap-editor-container');
+    if (editorContainer) editorContainer.style.display = '';
+    var previewPanel = document.getElementById('preview-panel');
+    if (previewPanel) previewPanel.style.display = 'none';
+
+    var eventAPI = window.__TAURI__ && window.__TAURI__.event;
+    if (eventAPI) {
+        window._surveyStreamUnlisten = await eventAPI.listen('python-event', function(event) {
+            var data = event.payload;
+            if (!data) return;
+            if (data.type === 'survey_chunk' && data.topic === topic) {
+                window._surveyStreamText += (data.token || '');
+                window._surveyBuffer += (data.token || '');
+                if (!window._surveyFlushTimer) {
+                    window._surveyFlushTimer = setInterval(_flushSurveyBuffer, 40);
+                }
+            } else if (data.type === 'survey_done' && data.topic === topic) {
+                if (window._surveyFlushTimer) {
+                    clearInterval(window._surveyFlushTimer);
+                    window._surveyFlushTimer = null;
+                }
+                window._surveyDisplayText = window._surveyStreamText;
+                window._surveyBuffer = '';
+                if (window.TiptapEditor && window.TiptapEditor.instance && window.marked) {
+                    var html = window.marked.parse(window._surveyDisplayText);
+                    window.TiptapEditor.instance.commands.setContent(html, false);
+                }
+                if (window._surveyStreamUnlisten) {
+                    window._surveyStreamUnlisten();
+                    window._surveyStreamUnlisten = null;
+                }
+                if (data.success) {
+                    updateStatus('综述撰写完成，已保存为 ' + data.file_path);
+                    setSidebarStatus('topic', '综述已保存');
+                } else {
+                    alert('撰写失败：' + (data.message || '未知错误'));
+                    updateStatus('综述撰写失败');
+                    setSidebarStatus('topic', '撰写失败');
+                }
+                if (window.TiptapEditor && window.TiptapEditor.instance) {
+                    window.TiptapEditor.instance.setEditable(true);
+                }
+                setTimeout(updateSidebarStats, 2000);
+            }
+        });
+    }
+
+    try {
+        await window.api.ai_topic_survey(topic);
+    } catch (e) {
+        alert('撰写出错：' + (e.message || e));
+        updateStatus('综述撰写出错');
+    } finally {
+        if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+        if (window._surveyFlushTimer) {
+            clearInterval(window._surveyFlushTimer);
+            window._surveyFlushTimer = null;
+        }
+        if (window._surveyStreamUnlisten) {
+            window._surveyStreamUnlisten();
+            window._surveyStreamUnlisten = null;
+        }
+        if (window.TiptapEditor && window.TiptapEditor.instance) {
+            window.TiptapEditor.instance.setEditable(true);
+        }
+    }
+}
+
+window.onAITopicSurvey = onAITopicSurvey;
+
 function onShowTopicInput() {
     var inputPanel = document.getElementById('sidebar-topic-input');
     var inputField = document.getElementById('topic-input-field');
@@ -2748,7 +3389,9 @@ function loadTopicPendingPanel(pending, topicNames) {
     if (!panel) return;
 
     if (!pending || pending.length === 0) {
-        panel.innerHTML = '<div class="topic-pending-empty"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg><div>全部主题已确认</div></div>';
+        panel.style.display = 'none';
+        var contentPanel = document.getElementById('content-panel');
+        if (contentPanel && _currentSidebarView === 'topic') contentPanel.style.display = '';
         return;
     }
 
@@ -2955,7 +3598,13 @@ function animateCardOut(cardEl) {
         if (list && list.classList && list.classList.contains('topic-pending-list')) {
             cardEl.remove();
             var remaining = list.querySelectorAll('.topic-pending-card:not(.resolved)').length;
+            var countEl = list.parentElement && list.parentElement.querySelector('.topic-pending-count');
+            if (countEl) countEl.textContent = remaining;
             if (remaining === 0) {
+                var pendingPanel = document.getElementById('topic-pending-panel');
+                if (pendingPanel) pendingPanel.style.display = 'none';
+                var contentPanel = document.getElementById('content-panel');
+                if (contentPanel && _currentSidebarView === 'topic') contentPanel.style.display = '';
                 loadTopicView();
             } else {
                 loadTopicTree();

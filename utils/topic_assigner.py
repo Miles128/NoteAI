@@ -36,7 +36,9 @@ def save_pending(pending):
     path = _get_pending_path()
     if not path:
         return
-    path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
+    tmp_path = path.with_suffix('.tmp')
+    tmp_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
+    tmp_path.replace(path)
 
 
 def parse_wiki_headings():
@@ -97,7 +99,7 @@ def parse_wiki_structure():
     current_file = None
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
     for line in lines:
         stripped = line.strip()
@@ -175,7 +177,8 @@ def write_topic_to_file(file_path, topic):
                 continue
             key = line[:idx].strip()
             if key == 'topic':
-                lines[i] = f'topic: {topic}'
+                import yaml
+                lines[i] = 'topic: ' + yaml.dump(topic, default_flow_style=True).strip()
                 found = True
                 break
         if not found:
@@ -540,7 +543,7 @@ def rename_wiki_topic(old_topic, new_topic):
     new_heading = f'## {new_topic}'
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
     current_file_has_path = False
 
@@ -930,7 +933,7 @@ def _remove_topic_from_wiki(topic_name):
     target_heading = f'## {topic_name}'
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
     for line in lines:
         stripped = line.strip()
@@ -1201,7 +1204,7 @@ def remove_file_from_wiki_topic(file_rel_path):
     old_topic = None
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*(.+?)\s*$')
+    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
     for line in lines:
         stripped = line.strip()

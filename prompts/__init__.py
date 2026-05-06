@@ -43,6 +43,14 @@ from .llm_rewrite import (
     LLM_REWRITE_PROMPT
 )
 
+from .ai_topic_consolidate import (
+    AI_TOPIC_ANALYZE_PROMPT
+)
+
+from .topic_survey import (
+    TOPIC_SURVEY_PROMPT
+)
+
 __all__ = [
     # web
     'WEB_TO_MARKDOWN_PROMPT',
@@ -75,4 +83,8 @@ __all__ = [
     'MARKDOWN_REFORMAT_PROMPT',
     # llm rewrite
     'LLM_REWRITE_PROMPT',
+    # ai topic analyze
+    'AI_TOPIC_ANALYZE_PROMPT',
+    # topic survey
+    'TOPIC_SURVEY_PROMPT',
 ]

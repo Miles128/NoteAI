@@ -190,18 +190,33 @@ function initPreviewResizer() {
 
 function showAboutPanel() {
     const aboutContent = `
-        <h2>关于 NoteAI</h2>
+        <h2>NoteAI</h2>
         <p class="about-version">版本 1.0.0</p>
-        <p class="about-desc">AI驱动的Markdown笔记知识库管理</p>
+        <p class="about-desc">AI 驱动的 Markdown 笔记知识库管理工具</p>
         <div class="about-features">
-            <h3>功能:</h3>
+            <h3>核心功能</h3>
             <ul>
+                <li>Markdown 笔记管理与编辑</li>
+                <li>AI 智能主题分析与归类</li>
+                <li>AI 主题综述自动撰写</li>
+                <li>标签管理与自动匹配</li>
+                <li>双向链接发现与可视化</li>
                 <li>网络文章批量下载与转换</li>
-                <li>多格式文件转换</li>
-                <li>智能笔记主题整合</li>
+                <li>多格式文件导入与整合</li>
+                <li>AI 改写与格式化</li>
             </ul>
         </div>
-        <p class="about-tech">使用Webview + HTML/CSS/JS开发</p>
+        <div class="about-features">
+            <h3>技术架构</h3>
+            <ul>
+                <li>前端：Tauri v2 + HTML / CSS / JS</li>
+                <li>后端：Python sidecar</li>
+                <li>编辑器：Tiptap</li>
+                <li>大模型：LangChain + ChatOpenAI</li>
+            </ul>
+        </div>
+        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">作者：四海</p>
+        <p class="about-tech" style="margin-top: 4px;">开源项目 · GitHub: Miles128/NoteAI</p>
     `;
 
     document.getElementById('about-panel-content').innerHTML = aboutContent;

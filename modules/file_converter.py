@@ -98,18 +98,18 @@ class PDFConverter(BaseConverter):
         return valid_signatures
 
     def _remove_repeated_signatures(self, markdown_content: str, file_path: str) -> str:
-        """从Markdown内容中移除重复出现的签名、页眉、页脚"""
+        """从Markdown内容中移除重复出现的签名、页眉、页脚（单次打开PDF）"""
         import fitz
 
         doc = fitz.open(file_path)
         page_count = len(doc)
+        page_texts = [page.get_text() for page in doc]
         doc.close()
 
         if page_count < self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION:
             logger.info(f"页数({page_count})少于{self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION}，跳过签名检测")
             return markdown_content
 
-        page_texts = self._extract_page_texts(file_path)
         signature_lines = self._find_signature_lines(page_texts)
 
         if not signature_lines:
@@ -156,16 +156,12 @@ class TXTConverter(BaseConverter):
 
 
 class DOCXConverter(BaseConverter):
-    """Word文档转Markdown转换器（使用mammoth）"""
+    """Word文档转Markdown转换器（使用mammoth，仅支持 .docx）"""
 
-    SUPPORTED_FORMATS = ['.docx', '.doc']
+    SUPPORTED_FORMATS = ['.docx']
 
     def to_markdown(self, file_path: str) -> str:
         """将Word文档转换为Markdown"""
-        ext = Path(file_path).suffix.lower()
-        if ext == '.doc':
-            raise ValueError("暂不支持 .doc 格式，请将文件另存为 .docx 后重试")
-
         logger.info(f"开始转换Word文档: {file_path}")
 
         try:
@@ -192,15 +188,11 @@ class DOCXConverter(BaseConverter):
 
 
 class PPTConverter(BaseConverter):
-    """PPT转Markdown转换器（使用python-pptx）"""
+    """PPT转Markdown转换器（使用python-pptx，仅支持 .pptx）"""
 
-    SUPPORTED_FORMATS = ['.pptx', '.ppt']
+    SUPPORTED_FORMATS = ['.pptx']
 
     def to_markdown(self, file_path: str) -> str:
-        ext = Path(file_path).suffix.lower()
-        if ext == '.ppt':
-            raise ValueError("暂不支持 .ppt 格式，请将文件另存为 .pptx 后重试")
-
         logger.info(f"开始转换PPT: {file_path}")
 
         try:
@@ -283,8 +275,8 @@ class FileConverterManager:
     """文件转换管理器"""
 
     PDF_FORMATS = ['.pdf']
-    DOCX_FORMATS = ['.docx', '.doc']
-    PPT_FORMATS = ['.pptx', '.ppt']
+    DOCX_FORMATS = ['.docx']
+    PPT_FORMATS = ['.pptx']
     HTML_FORMATS = ['.html', '.htm']
     TXT_FORMATS = ['.txt']
 

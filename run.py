@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NoteAI - AI驱动的Markdown笔记知识库管理桌面应用
+NoteAI — 开发者启动器（v2）
 
-功能模块：
-1. 网络文章批量下载与转换
-2. 多格式文件转换（PDF、PPT、DOCX、TXT）
-3. LLM驱动的笔记主题整合
+检查依赖后启动 `cargo tauri dev`。应用本身由 Tauri 壳加载 webui/，
+Python sidecar（`python/main.py`）通过 stdin/stdout JSON-RPC 提供后端服务。
 
-前端框架：Tauri + HTML/CSS/JS
-后端：Python sidecar (python/main.py)
+不要与 `python/main.py`（sidecar 进程入口）混淆。
 """
 
 import sys
@@ -34,6 +31,12 @@ def check_dependencies():
         ("pydantic", "pydantic"),
         ("tiktoken", "tiktoken"),
         ("markdownify", "markdownify"),
+        ("yaml", "PyYAML"),
+        ("markdown", "markdown"),
+        ("jieba", "jieba"),
+        ("PIL", "pillow"),
+        ("html2text", "html2text"),
+        ("watchdog", "watchdog"),
     ]
 
     missing = []
@@ -45,7 +48,8 @@ def check_dependencies():
 
     if missing:
         print("缺少以下依赖包，请先安装：")
-        print(f"uv pip install {' '.join(missing)}")
+        print(f"  uv sync")
+        print(f"  （或 pip install {' '.join(missing)}）")
         return False
 
     return True
@@ -87,12 +91,11 @@ def main():
         input("按Enter键退出...")
         return
 
-    src_tauri = project_root / "src-tauri"
     print("[INFO] 启动 Tauri 开发模式...")
     try:
         subprocess.run(
             ["cargo", "tauri", "dev"],
-            cwd=str(src_tauri),
+            cwd=str(project_root),
         )
     except KeyboardInterrupt:
         print("\n[INFO] 应用已关闭")
@@ -100,7 +103,7 @@ def main():
         try:
             subprocess.run(
                 ["npx", "tauri", "dev"],
-                cwd=str(src_tauri),
+                cwd=str(project_root),
             )
         except KeyboardInterrupt:
             print("\n[INFO] 应用已关闭")

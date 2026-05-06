@@ -1,30 +1,9 @@
-# AI/LLM框架
-langchain-openai>=0.0.5
-langchain-core>=0.1.0
-tiktoken>=0.5.0
-
-# HTTP请求
-requests>=2.31.0
-
-# 网页解析
-beautifulsoup4>=4.12.0
-markdownify>=0.11.6
-readability-lxml>=0.8.1
-validators>=0.22.0
-
-# 数据验证
-pydantic>=2.5.0
-
-# 文档转换
-PyMuPDF>=1.23.0
-mammoth>=1.0.0
-python-docx>=1.0.0
-
-# HTML转换
-html2text>=2024.2.26
-
-# 工具库
-Pillow>=10.0.0
-markdown>=3.5.0
-PyYAML>=6.0
-jieba>=0.42.1
+# Editable install: resolves dependencies from pyproject.toml (single source of truth).
+# Run from repository root:
+#   pip install -e .
+#   pip install -e ".[dev]"
+#
+# Recommended (uses uv.lock when present):
+#   uv sync
+#   uv sync --extra dev
+-e .

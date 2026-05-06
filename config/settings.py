@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import base64
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field, fields
 from typing import Optional, Dict, Any, Tuple
@@ -338,6 +339,7 @@ class AppConfig:
     model_name: str = "gpt-4"
     temperature: float = 0.7
     max_tokens: int = 32000  # 32k tokens
+    disable_thinking: bool = True
 
     # 全局上下文配置
     max_context_tokens: int = 128000  # 128k tokens，默认值
@@ -390,6 +392,15 @@ class AppConfig:
     
     def __post_init__(self):
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def _get_attr(self, name):
+        with self._lock:
+            return getattr(self, name, None)
+
+    def _set_attr(self, name, value):
+        with self._lock:
+            setattr(self, name, value)
 
     def is_workspace_set(self) -> bool:
         """检查工作文件夹是否已设置"""
@@ -572,19 +583,19 @@ class AppConfig:
             config_path = PROJECT_CONFIG_PATH
 
         os.environ['NOTEAI_WORKSPACE_PATH'] = self.workspace_path
-        os.environ['NOTEAI_API_KEY'] = self.api_key
         os.environ['NOTEAI_API_BASE'] = self.api_base
         os.environ['NOTEAI_MODEL_NAME'] = self.model_name
         os.environ['NOTEAI_TEMPERATURE'] = str(self.temperature)
         os.environ['NOTEAI_MAX_TOKENS'] = str(self.max_tokens)
         os.environ['NOTEAI_MAX_CONTEXT'] = str(self.max_context_tokens)
 
-        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens'}
+        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens', 'disable_thinking'}
+        _skip_keys = {'_lock'}
 
         try:
             Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
-            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields}
+            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields and k not in _skip_keys}
 
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)

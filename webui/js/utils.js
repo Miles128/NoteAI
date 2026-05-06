@@ -30,9 +30,23 @@ function formatFileSizeForTree(size) {
     }
 }
 
+function getTauriEventAPI() {
+    if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
+        return window.__TAURI__.event;
+    }
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && typeof window.__TAURI_INTERNALS__.event.listen === 'function') {
+        return window.__TAURI_INTERNALS__.event;
+    }
+    if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
+        return window.__TAURI__.event;
+    }
+    return null;
+}
+
 window.utils = {
     escapeHtml: escapeHtml,
     formatFileSize: formatFileSize,
     formatFileSizeForTree: formatFileSizeForTree,
-    formatModifiedTime: formatModifiedTime
+    formatModifiedTime: formatModifiedTime,
+    getTauriEventAPI: getTauriEventAPI
 };

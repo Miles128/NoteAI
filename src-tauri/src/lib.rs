@@ -141,8 +141,6 @@ fn find_python() -> Result<PathBuf, String> {
         .ok_or("No parent dir")?
         .to_path_buf();
 
-    eprintln!("[DEBUG] exe_dir: {:?}", exe_dir);
-
     let mut candidates: Vec<PathBuf> = vec![];
 
     let mut dir = exe_dir.clone();
@@ -161,11 +159,8 @@ fn find_python() -> Result<PathBuf, String> {
         }
     }
 
-    eprintln!("[DEBUG] Python candidates: {:?}", candidates);
-
     for candidate in candidates {
         if candidate.exists() {
-            eprintln!("[DEBUG] Found Python: {:?}", candidate);
             return Ok(candidate);
         }
     }
@@ -222,12 +217,37 @@ async fn call_python(
     }
 }
 
+static ALLOWED_PYTHON_METHODS: &[&str] = &[
+    "set_workspace_path", "get_workspace_status", "get_workspace_tree", "on_file_selected",
+    "read_file_raw", "delete_file", "move_file", "search_files", "auto_assign_topic",
+    "batch_auto_assign_topics", "add_tag_to_file",
+    "resolve_topic", "get_relation_graph", "discover_links", "llm_rewrite", "llm_rewrite_stream", "llm_rewrite_apply",
+    "start_note_integration",
+    "save_api_config", "test_api_connection",
+    "ai_topic_analyze", "ai_topic_survey", "apply_topic_suggestion",
+    "auto_tag_files",
+    "get_file_preview", "can_preview_file", "save_file_content",
+    "get_all_tags", "get_topic_tree", "save_tags_md", "ensure_tags_md",
+    "create_topic", "create_tag", "get_pending_topics", "rename_topic",
+    "delete_topic", "rename_tag", "delete_tag", "move_file_to_topic",
+    "get_api_config", "get_ui_config", "save_ui_config",
+    "get_theme_preference", "save_theme_preference",
+    "import_files",
+    "start_web_download", "start_file_conversion", "extract_topics",
+    "refresh_log", "get_backlinks", "confirm_link", "reject_link",
+    "confirm_all_links", "sync_wiki_with_files",
+    "check_workspace_path_valid", "clear_saved_workspace", "reveal_in_finder",
+];
+
 #[tauri::command]
 async fn py_call(
     state: tauri::State<'_, AppState>,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    if !ALLOWED_PYTHON_METHODS.contains(&method.as_str()) {
+        return Err(format!("Method not allowed: {}", method));
+    }
     call_python(&state, &method, params).await
 }
 
@@ -256,33 +276,58 @@ async fn open_file_dialog(
     Ok(files.map(|paths| paths.into_iter().map(|p| p.to_string()).collect()))
 }
 
+fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Result<String, String> {
+    let workspace = state.workspace_path.lock().unwrap();
+    let workspace = workspace.as_ref().ok_or("Workspace not set")?;
+    let workspace_abs = std::path::Path::new(workspace).canonicalize()
+        .map_err(|e| format!("Invalid workspace: {}", e))?;
+    let target = std::path::Path::new(path);
+    let target_abs = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        workspace_abs.join(path)
+    };
+    let resolved = target_abs.canonicalize()
+        .map_err(|e| format!("Failed to resolve path: {}", e))?;
+    resolved.strip_prefix(&workspace_abs)
+        .map_err(|_| "Path is outside workspace".to_string())?;
+    Ok(resolved.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 fn get_workspace_path(state: tauri::State<'_, AppState>) -> Option<String> {
     state.workspace_path.lock().unwrap().clone()
 }
 
 #[tauri::command]
-fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) {
-    *state.workspace_path.lock().unwrap() = Some(path);
+fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    let canonical = p.canonicalize()
+        .unwrap_or_else(|_| p.to_path_buf());
+    *state.workspace_path.lock().unwrap() = Some(canonical.to_string_lossy().to_string());
+    Ok(())
 }
 
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+fn read_file(state: tauri::State<'_, AppState>, path: String) -> Result<String, String> {
+    let validated = validate_workspace_path(&state, &path)?;
+    std::fs::read_to_string(&validated).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
-fn write_file(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = std::path::Path::new(&path).parent() {
+fn write_file(state: tauri::State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+    let validated = validate_workspace_path(&state, &path)?;
+    if let Some(parent) = std::path::Path::new(&validated).parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create directory: {}", e))?;
     }
-    std::fs::write(&path, &content).map_err(|e| format!("Failed to write file: {}", e))
+    std::fs::write(&validated, &content).map_err(|e| format!("Failed to write file: {}", e))
 }
 
 #[tauri::command]
-fn list_dir(path: String) -> Result<Vec<serde_json::Value>, String> {
-    let entries = std::fs::read_dir(&path)
+fn list_dir(state: tauri::State<'_, AppState>, path: String) -> Result<Vec<serde_json::Value>, String> {
+    let validated = validate_workspace_path(&state, &path)?;
+    let entries = std::fs::read_dir(&validated)
         .map_err(|e| format!("Failed to read directory: {}", e))?;
 
     let mut result = Vec::new();
@@ -329,6 +374,10 @@ async fn open_file_in_new_window(
     let window_label = format!("preview_{}", uuid::Uuid::new_v4());
     let window_title = name.unwrap_or_else(|| "NoteAI Preview".to_string());
 
+    // Validate path is within workspace when set
+    let state = app.state::<AppState>();
+    let safe_path = validate_workspace_path(&state, &path)?;
+
     tauri::WebviewWindowBuilder::new(
         &app,
         window_label,
@@ -342,11 +391,8 @@ async fn open_file_in_new_window(
     .hidden_title(true)
     .traffic_light_position(LogicalPosition::new(14.0, 22.0))
     .initialization_script(&format!(
-        r#"
-        window.__PREVIEW_FILE_PATH__ = {:?};
-        window.__IS_PREVIEW_WINDOW__ = true;
-        "#,
-        path
+        "window.__PREVIEW_FILE_PATH__ = {}; window.__IS_PREVIEW_WINDOW__ = true;",
+        serde_json::to_string(&safe_path).unwrap_or_else(|_| "\"\"".to_string())
     ))
     .build()
     .map_err(|e| format!("Failed to create window: {}", e))?;
@@ -361,6 +407,7 @@ pub fn run() {
         .manage(AppState::default())
         .setup(|app| {
             let app_handle = app.handle().clone();
+            let app_handle2 = app.handle().clone();
             tauri::async_runtime::block_on(async {
                 match start_python_sidecar(app_handle).await {
                     Ok(()) => {
@@ -368,6 +415,10 @@ pub fn run() {
                     }
                     Err(e) => {
                         eprintln!("[ERROR] Failed to start Python sidecar: {}", e);
+                        let _ = app_handle2.emit("python-event", serde_json::json!({
+                            "type": "sidecar_error",
+                            "message": format!("Python 后端启动失败: {}", e),
+                        }));
                     }
                 }
             });
@@ -385,8 +436,17 @@ pub fn run() {
             list_dir,
             open_file_in_new_window,
         ])
-        .on_window_event(|_window, event| {
+        .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let state = window.state::<AppState>();
+                let child_arc = state.python_child.clone();
+                let stdin_arc = state.python_stdin.clone();
+                tauri::async_runtime::block_on(async {
+                    if let Some(mut child) = child_arc.lock().await.take() {
+                        let _ = child.kill().await;
+                    }
+                    *stdin_arc.lock().await = None;
+                });
             }
         })
         .run(tauri::generate_context!())

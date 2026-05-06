@@ -244,7 +244,8 @@ function updateMarkdownPreview(content) {
     
     if (typeof marked !== 'undefined') {
         try {
-            previewEl.innerHTML = marked.parse(content);
+            var rawHtml = marked.parse(content);
+            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : rawHtml;
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             previewEl.innerHTML = '<p class="preview-error">解析失败</p>';
@@ -257,7 +258,8 @@ function updateMarkdownPreview(content) {
 function renderMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
-            return marked.parse(content);
+            var rawHtml = marked.parse(content);
+            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : rawHtml;
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             return '<p class="preview-error">解析失败</p>';
@@ -293,26 +295,36 @@ function performImmediateSave() {
     performSave(content);
 }
 
+var _savePromise = null;
+
 async function performSave(content) {
     if (!window.mdEditor.filePath) return;
     
-    updateSaveStatus('saving', '保存中...');
-    
-    try {
-        const result = await window.api.save_note_file(window.mdEditor.filePath, content);
-        
-        if (result && result.success) {
-            window.mdEditor.originalContent = content;
-            updateSaveStatus('saved', '已保存');
-            console.log('[Editor] Saved:', window.mdEditor.filePath);
-        } else {
-            updateSaveStatus('error', '保存失败');
-            console.error('[Editor] Save failed:', result);
-        }
-    } catch (e) {
-        updateSaveStatus('error', '保存失败');
-        console.error('[Editor] Save error:', e);
+    if (_savePromise) {
+        await _savePromise;
     }
+    
+    var saveId = Date.now();
+    _savePromise = (async () => {
+        updateSaveStatus('saving', '保存中...');
+        
+        try {
+            const result = await window.api.save_note_file(window.mdEditor.filePath, content);
+            
+            if (result && result.success) {
+                window.mdEditor.originalContent = content;
+                updateSaveStatus('saved', '已保存');
+            } else {
+                updateSaveStatus('error', '保存失败');
+            }
+        } catch (e) {
+            updateSaveStatus('error', '保存失败');
+        } finally {
+            _savePromise = null;
+        }
+    })();
+    
+    await _savePromise;
 }
 
 function initPreviewScrollListener() {

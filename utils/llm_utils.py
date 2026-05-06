@@ -1,8 +1,9 @@
 """LLM 调用相关的统一工具模块"""
 
 import re
+import time
 import threading
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Callable
 
 from utils.logger import logger
 
@@ -15,6 +16,44 @@ class APIConfigError(Exception):
 class NetworkError(Exception):
     """网络连接错误异常"""
     pass
+
+
+class LLMRateLimitError(Exception):
+    """LLM 限流错误"""
+    pass
+
+
+# 全局信号量，限制并发 LLM 调用数
+_LLM_SEMAPHORE = threading.BoundedSemaphore(4)
+
+
+def _retry_with_backoff(
+    fn: Callable,
+    max_retries: int = 3,
+    base_delay: float = 2.0,
+    max_delay: float = 30.0,
+) -> str:
+    """带指数退避的重试包装器"""
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            with _LLM_SEMAPHORE:
+                return fn()
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            # 判断是否可重试
+            retryable = any(kw in error_str for kw in (
+                '429', 'rate limit', 'too many', '503', '502', '504',
+                'timeout', 'timed out', 'connection', 'reset', 'overloaded'
+            ))
+            if not retryable or attempt >= max_retries:
+                break
+            delay = min(base_delay * (2 ** attempt), max_delay)
+            logger.warning(f"LLM 调用失败 (尝试 {attempt+1}/{max_retries+1})，"
+                           f"{delay:.1f}s 后重试: {e}")
+            time.sleep(delay)
+    raise last_error  # type: ignore[misc]
 
 
 def is_network_error(exception: Exception) -> bool:
@@ -52,14 +91,19 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
     from langchain_openai import ChatOpenAI
     from config.settings import config
 
-    return ChatOpenAI(
-        api_key=config.api_key,
-        base_url=config.api_base,
-        model=config.model_name,
-        temperature=temperature,
-        max_tokens=max_tokens or config.max_tokens,
-        request_timeout=60,
-    )
+    kwargs = {
+        "api_key": config.api_key,
+        "base_url": config.api_base,
+        "model": config.model_name,
+        "temperature": temperature,
+        "max_tokens": max_tokens or config.max_tokens,
+        "request_timeout": 60,
+    }
+
+    if getattr(config, 'disable_thinking', True):
+        kwargs["model_kwargs"] = {"extra_body": {"thinking": {"type": "disabled"}}}
+
+    return ChatOpenAI(**kwargs)
 
 
 def call_llm(
@@ -68,19 +112,22 @@ def call_llm(
     max_tokens: Optional[int] = None,
     **kwargs
 ) -> str:
-    """统一 LLM 调用入口（模板模式）。"""
+    """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
+    if not kwargs:
+        return call_llm_raw(prompt_template, temperature, max_tokens)
+
     from langchain_core.prompts import PromptTemplate
 
-    llm = _create_llm(temperature, max_tokens)
+    def _invoke():
+        llm = _create_llm(temperature, max_tokens)
+        prompt = PromptTemplate(
+            template=prompt_template,
+            input_variables=list(kwargs.keys())
+        )
+        chain = prompt | llm
+        return chain.invoke(kwargs)
 
-    prompt = PromptTemplate(
-        template=prompt_template,
-        input_variables=list(kwargs.keys())
-    )
-
-    chain = prompt | llm
-    response = chain.invoke(kwargs)
-
+    response = _retry_with_backoff(_invoke)
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -91,20 +138,22 @@ def call_llm_raw(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
 ) -> str:
-    """统一 LLM 调用入口（原始文本模式）。"""
+    """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
     def _invoke():
         llm = _create_llm(temperature, max_tokens)
         return llm.invoke(prompt_text)
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_invoke)
-        try:
-            response = future.result(timeout=90)
-        except FutureTimeout:
-            raise RuntimeError("LLM 调用超时（90秒）")
+    def _invoke_with_timeout():
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_invoke)
+            try:
+                return future.result(timeout=90)
+            except FutureTimeout:
+                raise RuntimeError("LLM 调用超时（90秒）")
 
+    response = _retry_with_backoff(_invoke_with_timeout)
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -383,6 +432,40 @@ def rewrite_with_llm(content: str) -> str:
         temperature=0.3,
         content=content
     )
+
+
+def rewrite_with_llm_stream(content: str, chunk_callback=None):
+    if not content or not content.strip():
+        if chunk_callback:
+            chunk_callback(content)
+        return content
+
+    is_valid, error_msg = check_api_config()
+    if not is_valid:
+        raise APIConfigError(error_msg)
+
+    from langchain_core.prompts import PromptTemplate
+    from prompts.llm_rewrite import LLM_REWRITE_PROMPT
+
+    llm = _create_llm(temperature=0.3)
+    prompt = PromptTemplate(
+        template=LLM_REWRITE_PROMPT,
+        input_variables=["content"]
+    )
+    chain = prompt | llm
+
+    full_text = ""
+    if chunk_callback:
+        for chunk in chain.stream({"content": content}):
+            token = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_text += token
+            chunk_callback(token)
+    else:
+        for chunk in chain.stream({"content": content}):
+            token = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_text += token
+
+    return full_text.strip()
 
 
 def reformat_markdown_with_llm(content: str) -> str:

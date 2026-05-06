@@ -249,8 +249,9 @@
 # 检查Python版本
 python --version  # 需要3.8+
 
-# 重新安装依赖
-pip install -r requirements.txt --upgrade
+# 重新安装依赖（以 pyproject.toml 为准）
+uv sync
+# 或: pip install -e .
 ```
 
 #### Q: AI功能返回错误

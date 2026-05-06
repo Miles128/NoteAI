@@ -12,7 +12,8 @@ async function saveApiConfig() {
         model_name: modelNameEl ? modelNameEl.value : 'gpt-4',
         temperature: temperatureEl ? parseFloat(temperatureEl.value) : 0.7,
         max_tokens: maxTokensEl ? parseInt(maxTokensEl.value) : 32000,
-        max_context_tokens: maxContextEl ? parseInt(maxContextEl.value) : 128000
+        max_context_tokens: maxContextEl ? parseInt(maxContextEl.value) : 128000,
+        disable_thinking: document.getElementById('disable-thinking') ? document.getElementById('disable-thinking').checked : true
     };
 
     const statusEl = document.getElementById('api-config-status');
@@ -66,6 +67,11 @@ async function loadApiConfigToForm() {
             if (tempEl) tempEl.value = apiConfig.temperature || 0.7;
             if (maxTokensEl) maxTokensEl.value = apiConfig.max_tokens || 32000;
             if (maxContextEl) maxContextEl.value = apiConfig.max_context_tokens || 128000;
+
+            var disableThinkingEl = document.getElementById('disable-thinking');
+            if (disableThinkingEl) {
+                disableThinkingEl.checked = apiConfig.disable_thinking !== false;
+            }
         }
     } catch (e) {
         console.error('[Settings] Load API config error:', e);

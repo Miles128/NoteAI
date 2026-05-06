@@ -1,4 +1,5 @@
 import re
+import sys
 import math
 from datetime import datetime
 from pathlib import Path
@@ -266,7 +267,7 @@ def _parse_yaml_value_simple(value: str) -> Any:
 
 
 def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
-    """简单的 YAML front matter 解析器（fallback）"""
+    """简单的 YAML front matter 解析器（fallback，PyYAML 不可用时使用）"""
     result = {}
     lines = content.strip().split('\n')
     
@@ -275,11 +276,12 @@ def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
         if not line or line.startswith('#'):
             continue
         
-        if ':' in line:
-            key, value = line.split(':', 1)
-            key = key.strip()
-            if key:
-                result[key] = _parse_yaml_value_simple(value)
+        # 只在 "key: value" 格式匹配（value 不能为空，确保不误匹配无冒号行或空值行）
+        m = re.match(r'^([\w_-]+)\s*:\s+(.+)', line)
+        if m:
+            key = m.group(1)
+            value = m.group(2)
+            result[key] = _parse_yaml_value_simple(value)
     
     return result
 

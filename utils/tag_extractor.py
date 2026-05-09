@@ -1,10 +1,22 @@
 import re
+import sys
 import math
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Any, Tuple
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Optional, Any, Tuple
+
+from config import is_ignored_dir
+from utils.logger import logger
+from utils.text_utils import (
+    is_chinese_word,
+    is_english_word,
+    tokenize_filename,
+    CHINESE_STOPWORDS,
+    OCCURRENCE_THRESHOLD,
+    _count_tag_occurrence,
+    _normalize_for_match,
+    _is_generic_word,
+)
 
 try:
     import yaml
@@ -14,29 +26,182 @@ except ImportError:
     PYYAML_AVAILABLE = False
 
 
-STOPWORDS: Set[str] = {
-    '的', '了', '是', '在', '和', '与', '或', '以及', '等', '之', '于',
-    '上', '下', '中', '为', '与', '其', '所', '以', '因', '对', '将',
-    '可', '能', '会', '有', '也', '都', '而', '着', '到', '这', '那',
-    '个', '一', '不', '就', '但', '又', '被', '从', '由', '向', '往',
-    '如', '把', '让', '给', '用', '通过', '根据', '按照', '为了',
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-    'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-    'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those',
-    'it', 'its', 'not', 'no', 'so', 'if', 'then', 'than'
-}
+def _collect_workspace_md_filenames(workspace_path: str) -> List[str]:
+    """收集 Notes、Organized、Used 文件夹中所有 MD 文件的文件名（只读文件名，不读内容）
+    
+    Args:
+        workspace_path: 工作区根路径
+    
+    Returns:
+        所有 md 文件的文件名列表（不含路径）
+    """
+    workspace = Path(workspace_path)
+    filenames = []
+    
+    for folder_name in ['Notes', 'Abstract', 'Used']:
+        folder = workspace / folder_name
+        if not folder.exists():
+            continue
+        md_files = [f for f in folder.rglob('*.md') if not f.name.startswith('.')]
+        for md_file in md_files:
+            filenames.append(md_file.name)
+    
+    return filenames
 
-MIN_WORD_LEN = 2
-MAX_TAGS = 5
-MIN_TF_IDF_SCORE = 0.01
+
+def _generate_english_pairs(english_words: List[str]) -> List[str]:
+    """生成相邻英文单词的组合
+    
+    例如: ["Machine", "Learning"] -> ["MachineLearning", "Machine Learning"]
+    """
+    pairs = []
+    for i in range(len(english_words) - 1):
+        word1 = english_words[i]
+        word2 = english_words[i + 1]
+        pairs.append(word1 + word2)
+        pairs.append(word1 + " " + word2)
+        pairs.append(word1 + "-" + word2)
+        pairs.append(word1 + "_" + word2)
+    return pairs
+
+
+def _is_word_in_accepted_pair(word: str, accepted_pairs: List[str], case_insensitive: bool = True) -> bool:
+    """检查单词是否已被包含在已接受的双词组合中（忽略空格）
+
+    例如: "Machine" 在 "MachineLearning" 或 "Machine Learning" 中则返回 True
+    """
+    word_norm = _normalize_for_match(word)
+    for pair in accepted_pairs:
+        if word_norm in _normalize_for_match(pair):
+            return True
+    return False
+
+
+def split_filename_fields(filename: str) -> List[str]:
+    """将文件名字段按分隔符拆分为独立的字段列表
+
+    示例：
+        "机器学习-神经网络-反向传播.md" → ["机器学习", "神经网络", "反向传播"]
+        "Python_基础教程.md" → ["Python", "基础教程"]
+        "React Hooks 详解.md" → ["React", "Hooks", "详解"]
+        "设计模式——观察者模式.md" → ["设计模式", "观察者模式"]
+    """
+    stem = Path(filename).stem
+    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', stem)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def extract_tags_from_filename(file_path: str) -> List[str]:
+    """基于文件名分词提取标签
+    
+    算法：
+    1. 使用 jieba 对当前文件的文件名进行分词
+    2. 按优先级处理：
+       a. 英文双词组合：相邻英文单词组合，在文件名中出现次数 > 3 则加入
+       b. 英文单词：单个英文单词，若未被包含在已接受的双词组合中，且出现次数 > 3 则加入
+       c. 中文单词：排除中文停用词，出现次数 > 3 则加入
+    3. 只对比文件名，不读取文件内容
+    
+    Args:
+        file_path: 待打标签的文件路径
+    
+    Returns:
+        标签字符串列表
+    """
+    from config.settings import config
+    
+    if not config.workspace_path:
+        return []
+    
+    file_path_obj = Path(file_path)
+    
+    tokens = tokenize_filename(file_path_obj.name)
+    
+    if not tokens:
+        return []
+    
+    workspace_filenames = _collect_workspace_md_filenames(config.workspace_path)
+    
+    if not workspace_filenames:
+        return []
+    
+    english_words = []
+    chinese_words = []
+    
+    for token in tokens:
+        if is_english_word(token):
+            english_words.append(token)
+        elif is_chinese_word(token):
+            chinese_words.append(token)
+    
+    tags = []
+    accepted_english_pairs = []
+    
+    if len(english_words) >= 2:
+        pairs = _generate_english_pairs(english_words)
+        seen_pairs = set()
+        for pair in pairs:
+            if pair.lower() in seen_pairs:
+                continue
+            seen_pairs.add(pair.lower())
+            count = _count_tag_occurrence(pair, workspace_filenames)
+            if count > OCCURRENCE_THRESHOLD:
+                tags.append(pair)
+                accepted_english_pairs.append(pair)
+    
+    for word in english_words:
+        if _is_word_in_accepted_pair(word, accepted_english_pairs):
+            continue
+        count = _count_tag_occurrence(word, workspace_filenames)
+        if count > OCCURRENCE_THRESHOLD:
+            tags.append(word)
+    
+    for word in chinese_words:
+        if word in CHINESE_STOPWORDS:
+            continue
+        count = _count_tag_occurrence(word, workspace_filenames)
+        if count > OCCURRENCE_THRESHOLD:
+            tags.append(word)
+    
+    seen = set()
+    unique_tags = []
+    for tag in tags:
+        tag_lower = tag.lower()
+        if tag_lower not in seen and not _is_generic_word(tag):
+            seen.add(tag_lower)
+            unique_tags.append(tag)
+
+    return unique_tags
+
+
+def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
+    """对一批 Markdown 文件基于文件名分词提取标签并添加 YAML front matter
+    
+    Args:
+        file_paths: Markdown 文件路径列表
+    
+    Returns:
+        {文件路径: 标签列表} 字典
+    """
+    if not file_paths:
+        return {}
+    
+    results = {}
+    for fp in file_paths:
+        try:
+            tags = extract_tags_from_filename(fp)
+            if tags:
+                add_yaml_frontmatter_to_file(fp, tags=tags)
+                results[fp] = tags
+        except Exception as e:
+            sys.stderr.write(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
+            sys.stderr.flush()
+    
+    return results
 
 
 def _parse_yaml_value_simple(value: str) -> Any:
-    """
-    简单的 YAML 值解析器（fallback，用于没有 PyYAML 时）。
-    支持基本类型：字符串、数字、布尔值、列表。
-    """
+    """简单的 YAML 值解析器（fallback，用于没有 PyYAML 时）"""
     value = value.strip()
     
     if not value:
@@ -102,10 +267,7 @@ def _parse_yaml_value_simple(value: str) -> Any:
 
 
 def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
-    """
-    简单的 YAML front matter 解析器（fallback）。
-    只支持基本的 key: value 格式，用于没有 PyYAML 时。
-    """
+    """简单的 YAML front matter 解析器（fallback，PyYAML 不可用时使用）"""
     result = {}
     lines = content.strip().split('\n')
     
@@ -114,275 +276,18 @@ def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
         if not line or line.startswith('#'):
             continue
         
-        if ':' in line:
-            key, value = line.split(':', 1)
-            key = key.strip()
-            if key:
-                result[key] = _parse_yaml_value_simple(value)
+        # 只在 "key: value" 格式匹配（value 不能为空，确保不误匹配无冒号行或空值行）
+        m = re.match(r'^([\w_-]+)\s*:\s+(.+)', line)
+        if m:
+            key = m.group(1)
+            value = m.group(2)
+            result[key] = _parse_yaml_value_simple(value)
     
     return result
-
-
-def tokenize(text: str) -> List[str]:
-    """中英文混合分词"""
-    text = text.lower()
-    words = []
-    chinese_pattern = re.compile(r'[\u4e00-\u9fff]+')
-    english_pattern = re.compile(r'[a-z]+')
-    other = re.compile(r'[^\w]')
-
-    pos = 0
-    while pos < len(text):
-        m = chinese_pattern.match(text, pos)
-        if m:
-            chinese_text = m.group()
-            if len(chinese_text) >= 2:
-                words.append(chinese_text)
-            else:
-                words.extend(list(chinese_text))
-            pos = m.end()
-            continue
-        m = english_pattern.match(text, pos)
-        if m:
-            words.append(m.group())
-            pos = m.end()
-            continue
-        m = other.match(text, pos)
-        if m:
-            pos = m.end()
-            continue
-        words.append(text[pos])
-        pos += 1
-
-    result = []
-    for w in words:
-        if w in STOPWORDS:
-            continue
-        if re.match(r'[\u4e00-\u9fff]+', w):
-            if len(w) >= 1:
-                result.append(w)
-        else:
-            if len(w) >= MIN_WORD_LEN:
-                result.append(w)
-    return result
-
-
-def compute_tf(tokens: List[str]) -> Dict[str, float]:
-    """计算词频 TF"""
-    if not tokens:
-        return {}
-    freq = defaultdict(int)
-    for t in tokens:
-        freq[t] += 1
-    total = len(tokens)
-    return {t: count / total for t, count in freq.items()}
-
-
-def compute_idf(documents: List[List[str]]) -> Dict[str, float]:
-    """计算逆文档频率 IDF"""
-    df = defaultdict(int)
-    for tokens in documents:
-        unique = set(tokens)
-        for t in unique:
-            df[t] += 1
-    n = len(documents)
-    return {t: math.log((n + 1) / (df[t] + 1)) for t in df}
-
-
-def compute_tfidf(tf: Dict[str, float], idf: Dict[str, float]) -> Dict[str, float]:
-    """计算 TF-IDF"""
-    return {t: tf_val * idf.get(t, 0) for t, tf_val in tf.items()}
-
-
-def extract_tags_from_text(text: str, idf: Dict[str, float] = None) -> List[str]:
-    """从单篇文本提取标签"""
-    tokens = tokenize(text)
-    if not tokens:
-        return []
-    tf = compute_tf(tokens)
-    
-    if idf is None:
-        sorted_terms = sorted(tf.items(), key=lambda x: x[1], reverse=True)
-        tags = [term for term, score in sorted_terms][:MAX_TAGS]
-    else:
-        tfidf = compute_tfidf(tf, idf)
-        sorted_terms = sorted(tfidf.items(), key=lambda x: x[1], reverse=True)
-        tags = [term for term, score in sorted_terms if score >= MIN_TF_IDF_SCORE][:MAX_TAGS]
-    
-    return tags
-
-
-def extract_tags_batch(
-    texts: List[str],
-    titles: List[str] = None,
-    filenames: List[str] = None,
-    n_workers: int = 4
-) -> List[List[str]]:
-    """
-    批量提取多篇文档的标签（并行）。
-
-    参数：
-        texts: 文档文本列表，每项对应一篇文档
-        titles: 文档标题列表（可选），与 texts 同索引
-        filenames: 文件名列表（可选），用于从文件名中提取标签
-        n_workers: 并行工作线程数，默认 4
-
-    返回：
-        二维列表，外层索引对应文档，内层为该文档的标签列表
-
-    实现说明：
-        - 基于 TF-IDF 算法，先对所有文档统一计算 IDF 值，再逐篇计算 TF-IDF
-        - 支持从标题和文件名中补充提取标签（权重叠加后去重）
-        - 使用 ThreadPoolExecutor 并行处理，提升大批量文档的处理速度
-
-    未使用说明：
-        当前项目中使用的是 process_and_tag_file（单文件串行），
-        本函数设计用于需要一次性处理大量文档并需要并行加速的场景。
-        保留以备未来批量处理需求。
-    """
-    if not texts:
-        return [[] for _ in texts]
-
-    all_tokens = [tokenize(t) for t in texts]
-    idf = compute_idf(all_tokens)
-
-    def process_one(idx: int) -> List[str]:
-        tokens = all_tokens[idx]
-        tf = compute_tf(tokens)
-        tfidf = compute_tfidf(tf, idf)
-        sorted_terms = sorted(tfidf.items(), key=lambda x: x[1], reverse=True)
-        tags = [term for term, score in sorted_terms if score >= MIN_TF_IDF_SCORE][:MAX_TAGS]
-
-        title_extra = []
-        if titles and idx < len(titles):
-            title_extra = extract_tags_from_text(titles[idx], idf)
-
-        filename_extra = []
-        if filenames and idx < len(filenames):
-            filename_extra = extract_tags_from_text(filenames[idx], idf)
-
-        all_tags = tags + title_extra + filename_extra
-        seen = set()
-        unique_tags = []
-        for tag in all_tags:
-            if tag not in seen and len(unique_tags) < MAX_TAGS:
-                seen.add(tag)
-                unique_tags.append(tag)
-        return unique_tags
-
-    with ThreadPoolExecutor(max_workers=n_workers) as executor:
-        results = list(executor.map(process_one, range(len(texts))))
-    return results
-
-
-def append_tags_to_markdown(file_path: str, tags: List[str]):
-    """
-    将标签追加到 Markdown 文件末尾。
-
-    参数：
-        file_path: Markdown 文件路径
-        tags: 标签列表
-
-    实现说明：
-        - 在文件末尾追加 `*标签: tag1, tag2, ...*` 格式行
-        - 若文件中已存在标签行，则替换旧标签而非追加
-        - 使用 `---` 分隔符与正文区分
-
-    未使用说明：
-        当前项目中 process_and_tag_file 函数直接修改文件内容添加标签，
-        未调用本函数。本函数适用于需要将标签追加到文件末尾的独立工具场景。
-        保留以备未来工具化使用。
-    """
-    if not tags:
-        return
-    p = Path(file_path)
-    if not p.exists():
-        return
-    content = p.read_text(encoding='utf-8')
-    tag_line = '\n\n---\n*标签: ' + ', '.join(tags) + '*\n'
-    if '*标签:' in content:
-        existing_tag_pattern = re.compile(r'\*标签:.*?\*\n?', re.DOTALL)
-        content = existing_tag_pattern.sub(tag_line.strip(), content)
-    else:
-        content += tag_line
-    p.write_text(content, encoding='utf-8')
-
-
-def process_and_tag_file(file_path: str, idf: Dict[str, float] = None) -> List[str]:
-    """处理单个文件并打标签"""
-    p = Path(file_path)
-    if not p.exists() or not p.suffix.lower() == '.md':
-        return []
-    content = p.read_text(encoding='utf-8')
-    tags = extract_tags_from_text(content, idf)
-    if tags:
-        append_tags_to_markdown(str(p), tags)
-    return tags
-
-
-def tag_markdown_files(
-    file_paths: List[str],
-    all_texts: List[str] = None,
-    titles: List[str] = None
-) -> Dict[str, List[str]]:
-    """对一批 Markdown 文件进行标签提取和追加"""
-    if not file_paths:
-        return {}
-
-    if all_texts and len(all_texts) == len(file_paths):
-        texts = all_texts
-    else:
-        texts = []
-        for fp in file_paths:
-            try:
-                texts.append(Path(fp).read_text(encoding='utf-8'))
-            except Exception:
-                texts.append('')
-
-    if titles is None:
-        titles = []
-        for fp in file_paths:
-            try:
-                from utils.helpers import extract_title_from_markdown
-                content = Path(fp).read_text(encoding='utf-8') if fp not in texts else texts[file_paths.index(fp)]
-                titles.append(extract_title_from_markdown(content) or Path(fp).stem)
-            except Exception:
-                titles.append(Path(fp).stem)
-
-    all_tokens = [tokenize(t) for t in texts]
-    idf = compute_idf(all_tokens)
-
-    results = {}
-    for i, fp in enumerate(file_paths):
-        try:
-            tf = compute_tf(all_tokens[i])
-            tfidf = compute_tfidf(tf, idf)
-            sorted_terms = sorted(tfidf.items(), key=lambda x: x[1], reverse=True)
-            tags = [term for term, score in sorted_terms if score >= MIN_TF_IDF_SCORE][:MAX_TAGS]
-
-            title_extra = extract_tags_from_text(titles[i], idf)
-            all_tags = tags + title_extra
-            seen = set()
-            unique_tags = []
-            for tag in all_tags:
-                if tag not in seen and len(unique_tags) < MAX_TAGS:
-                    seen.add(tag)
-                    unique_tags.append(tag)
-
-            if unique_tags:
-                append_tags_to_markdown(str(fp), unique_tags)
-                results[str(fp)] = unique_tags
-        except Exception:
-            pass
-
-    return results
 
 
 def _escape_yaml_string(value: str) -> str:
-    """
-    转义YAML字符串中的特殊字符。
-    处理：引号、反斜杠、换行符、冒号后跟空格等。
-    """
+    """转义YAML字符串中的特殊字符"""
     if not value:
         return '""'
     
@@ -410,9 +315,7 @@ def _escape_yaml_string(value: str) -> str:
 
 
 def _format_yaml_value(value: Any) -> str:
-    """
-    格式化YAML值，根据类型选择合适的表示方式。
-    """
+    """格式化YAML值，根据类型选择合适的表示方式"""
     if value is None:
         return 'null'
     elif isinstance(value, bool):
@@ -435,38 +338,19 @@ def generate_yaml_frontmatter(
     tags: List[str] = None,
     date: datetime = None,
     source: str = "",
-    word_count: int = None,
-    language: str = "",
     extra_fields: Dict[str, Any] = None
 ) -> str:
-    """
-    生成标准的 YAML front matter。
+    """生成标准的 YAML front matter（仅包含 tags 和 source）
     
     参数：
         title: 文档标题
         tags: 标签列表
         date: 创建/处理日期（默认当前日期）
         source: 来源（URL或文件路径）
-        word_count: 字数统计
-        language: 语言检测结果（chinese/english）
         extra_fields: 额外的自定义字段
     
     返回：
         完整的 YAML front matter 字符串（包含 --- 分隔符）
-    
-    格式说明：
-        ---
-        title: "文档标题"
-        tags: [tag1, tag2, tag3]
-        date: "2026-04-19"
-        source: "https://example.com"
-        word_count: 1234
-        language: "chinese"
-        ---
-    
-    兼容性：
-        - 与 Obsidian、Jekyll、Hugo、Hexo 等主流静态站点生成器兼容
-        - 与 VS Code、Typora 等 Markdown 编辑器兼容
     """
     fields = {}
     
@@ -485,18 +369,12 @@ def generate_yaml_frontmatter(
     if source:
         fields['source'] = source
     
-    if word_count is not None:
-        fields['word_count'] = word_count
-    
-    if language:
-        fields['language'] = language
-    
     if extra_fields:
         fields.update(extra_fields)
     
     lines = ['---']
     
-    ordered_keys = ['title', 'tags', 'date', 'source', 'word_count', 'language']
+    ordered_keys = ['title', 'tags', 'date', 'source']
     for key in ordered_keys:
         if key in fields:
             value = fields.pop(key)
@@ -512,32 +390,13 @@ def generate_yaml_frontmatter(
 
 
 def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
-    """
-    解析 Markdown 文件中的 YAML front matter。
+    """解析 Markdown 文件中的 YAML front matter
     
     参数：
         content: Markdown 文件完整内容
     
     返回：
         (frontmatter_dict, remaining_content)
-        - frontmatter_dict: 解析出的 YAML 字段字典
-        - remaining_content: 去除 front matter 后的正文内容
-    
-    示例：
-        content = '''---
-        title: "测试"
-        tags: [tag1, tag2]
-        ---
-        
-        正文内容
-        '''
-        frontmatter, body = parse_yaml_frontmatter(content)
-        # frontmatter = {'title': '测试', 'tags': ['tag1', 'tag2']}
-        # body = '正文内容'
-    
-    注意：
-        - 优先使用 PyYAML 解析（如果已安装）
-        - 如果 PyYAML 不可用，使用内置的简单解析器作为 fallback
     """
     frontmatter = {}
     body = content
@@ -581,11 +440,9 @@ def add_yaml_frontmatter_to_content(
     title: str = "",
     tags: List[str] = None,
     source: str = "",
-    language: str = "",
     extra_fields: Dict[str, Any] = None
 ) -> str:
-    """
-    为 Markdown 内容添加 YAML front matter。
+    """为 Markdown 内容添加 YAML front matter
     
     如果内容已存在 front matter，则更新它；否则添加新的。
     
@@ -594,7 +451,6 @@ def add_yaml_frontmatter_to_content(
         title: 文档标题（如未提供，尝试从内容中提取）
         tags: 标签列表
         source: 来源（URL或文件路径）
-        language: 语言
         extra_fields: 额外字段
     
     返回：
@@ -608,20 +464,12 @@ def add_yaml_frontmatter_to_content(
             title = title_match.group(1).strip()
     
     if tags is None:
-        tags = extract_tags_from_text(body)
-    
-    word_count = len(re.findall(r'[\u4e00-\u9fff]|[a-zA-Z]+', body))
-    
-    if not language:
-        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', body))
-        language = 'chinese' if chinese_chars > 10 else 'english'
+        tags = []
     
     new_frontmatter = generate_yaml_frontmatter(
         title=title,
         tags=tags,
         source=source,
-        word_count=word_count,
-        language=language,
         extra_fields=extra_fields
     )
     
@@ -633,18 +481,15 @@ def add_yaml_frontmatter_to_file(
     title: str = "",
     tags: List[str] = None,
     source: str = "",
-    language: str = "",
     extra_fields: Dict[str, Any] = None
 ) -> bool:
-    """
-    为 Markdown 文件添加 YAML front matter。
+    """为 Markdown 文件添加 YAML front matter
     
     参数：
         file_path: Markdown 文件路径
         title: 文档标题
         tags: 标签列表
         source: 来源
-        language: 语言
         extra_fields: 额外字段
     
     返回：
@@ -661,7 +506,6 @@ def add_yaml_frontmatter_to_file(
             title=title,
             tags=tags,
             source=source,
-            language=language,
             extra_fields=extra_fields
         )
         p.write_text(new_content, encoding='utf-8')
@@ -675,8 +519,7 @@ def process_and_tag_file_with_yaml(
     source: str = "",
     title: str = ""
 ) -> Dict[str, Any]:
-    """
-    处理单个文件，提取标签并添加 YAML front matter。
+    """处理单个文件，基于文件名分词提取标签并添加 YAML front matter
     
     参数：
         file_path: Markdown 文件路径
@@ -690,8 +533,6 @@ def process_and_tag_file_with_yaml(
         'success': False,
         'tags': [],
         'title': title,
-        'word_count': 0,
-        'language': ''
     }
     
     p = Path(file_path)
@@ -709,19 +550,12 @@ def process_and_tag_file_with_yaml(
                 from utils.helpers import extract_title_from_markdown
                 title = extract_title_from_markdown(body) or p.stem
         
-        tags = extract_tags_from_text(body)
-        
-        word_count = len(re.findall(r'[\u4e00-\u9fff]|[a-zA-Z]+', body))
-        
-        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', body))
-        language = 'chinese' if chinese_chars > 10 else 'english'
+        tags = extract_tags_from_filename(file_path)
         
         new_frontmatter = generate_yaml_frontmatter(
             title=title,
             tags=tags,
             source=source,
-            word_count=word_count,
-            language=language
         )
         
         new_content = new_frontmatter + body
@@ -730,9 +564,119 @@ def process_and_tag_file_with_yaml(
         result['success'] = True
         result['tags'] = tags
         result['title'] = title
-        result['word_count'] = word_count
-        result['language'] = language
         
         return result
-    except Exception as e:
+    except Exception:
         return result
+
+
+def save_tags_md(workspace_path: str) -> dict:
+    if not workspace_path:
+        return {"success": False, "message": "未设置工作区"}
+
+    workspace = Path(workspace_path)
+    if not workspace.exists():
+        return {"success": False, "message": "工作区不存在"}
+
+    tag_map = {}
+
+    def _scan(path):
+        try:
+            for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
+                if entry.name.startswith('.'):
+                    continue
+                if entry.is_dir():
+                    if is_ignored_dir(entry.name):
+                        continue
+                    _scan(str(entry))
+                elif entry.suffix.lower() == '.md' and entry.name.lower() != 'wiki.md' and entry.name.lower() != 'tags.md':
+                    try:
+                        text = entry.read_text(encoding='utf-8')
+                        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                        if not m:
+                            continue
+                        yaml_text = m.group(1)
+                        rel = str(entry.relative_to(workspace))
+                        current_tags_key = False
+                        current_tags_arr = []
+                        for line in yaml_text.split('\n'):
+                            stripped = line.strip()
+                            if current_tags_key and stripped.startswith('- '):
+                                current_tags_arr.append(stripped[2:].strip().strip("'\""))
+                                continue
+                            if current_tags_key and current_tags_arr:
+                                for tag in current_tags_arr:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                                current_tags_arr = []
+                            idx = line.find(':')
+                            if idx < 0:
+                                continue
+                            key = line[:idx].strip()
+                            val = line[idx + 1:].strip()
+                            if key != 'tags':
+                                current_tags_key = False
+                                continue
+                            if val.startswith('[') and val.endswith(']'):
+                                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                                for tag in tags:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                            elif not val:
+                                current_tags_key = True
+                                current_tags_arr = []
+                            else:
+                                tag = val.strip().strip("'\"")
+                                if tag:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                                current_tags_key = False
+                        if current_tags_key and current_tags_arr:
+                            for tag in current_tags_arr:
+                                if tag not in tag_map:
+                                    tag_map[tag] = []
+                                tag_map[tag].append(rel)
+                    except Exception as e:
+                        logger.warning(f"[save_tags_md] 跳过解析失败的文件 {entry.name}: {e}")
+                        continue
+        except PermissionError as e:
+            logger.warning(f"[save_tags_md] 无权限访问目录: {e}")
+
+    _scan(str(workspace))
+
+    existing_tags = set()
+    tags_md_path = workspace / 'tags.md'
+    if tags_md_path.exists():
+        try:
+            text = tags_md_path.read_text(encoding='utf-8')
+            for line in text.split('\n'):
+                if line.startswith('## '):
+                    tag = line[3:].strip()
+                    if tag:
+                        existing_tags.add(tag)
+        except Exception as e:
+            logger.warning(f"[save_tags_md] 读取现有 tags.md 失败: {e}")
+
+    for tag in tag_map.keys():
+        existing_tags.add(tag)
+
+    lines = ['# Tags', '']
+    sorted_tags = sorted(existing_tags, key=lambda t: -len(tag_map.get(t, [])))
+    for tag in sorted_tags:
+        lines.append('## ' + tag)
+        lines.append('')
+        files = tag_map.get(tag, [])
+        for f in files:
+            fname = Path(f).stem
+            lines.append('- [[' + fname + ']]')
+        lines.append('')
+
+    tags_md_path = workspace / 'tags.md'
+    tags_md_path.write_text('\n'.join(lines), encoding='utf-8')
+
+    return {"success": True, "count": len(sorted_tags)}

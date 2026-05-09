@@ -123,7 +123,7 @@ class TestMaxContextTokens(unittest.TestCase):
     def test_default_max_context_tokens(self):
         from config.settings import AppConfig
         config = AppConfig()
-        self.assertEqual(config.max_context_tokens, 131072)
+        self.assertEqual(config.max_context_tokens, 128000)
     
     def test_validate_context_config_valid(self):
         from config.settings import AppConfig

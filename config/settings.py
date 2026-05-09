@@ -1,12 +1,13 @@
 import os
 import sys
 import tempfile
+import base64
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field, fields
 from typing import Optional, Dict, Any, Tuple
 import json
 import shutil
-from pydantic import BaseModel, Field, validator
 
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -86,7 +87,11 @@ class WorkspaceStateManager:
                 with open(temp_path, 'w', encoding='utf-8') as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
                 
-                os.fsync(os.open(temp_path, os.O_RDONLY))
+                fsync_fd = os.open(temp_path, os.O_RDONLY)
+                try:
+                    os.fsync(fsync_fd)
+                finally:
+                    os.close(fsync_fd)
                 
                 if self.state_file.exists():
                     old_path = self.state_file.with_suffix(".json.bak")
@@ -101,7 +106,7 @@ class WorkspaceStateManager:
                 if Path(temp_path).exists():
                     try:
                         Path(temp_path).unlink()
-                    except:
+                    except Exception:
                         pass
         except PermissionError:
             raise WorkspaceStateError("保存工作区状态失败：没有写入权限")
@@ -284,9 +289,46 @@ class WorkspaceStateManager:
 workspace_manager = WorkspaceStateManager()
 
 NOTES_FOLDER = "Notes"
-ORGANIZED_FOLDER = "Organized"
+ORGANIZED_FOLDER = "Abstract"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
+
+IGNORED_DIRS = {
+    "ai",
+    "wki",
+    "wiki",
+    "ai wiki",
+    "ai-wiki",
+    "ai_wiki",
+    "aiwiki",
+}
+
+
+def _obfuscate(text: str) -> str:
+    """对敏感文本做 base64 混淆（非加密，仅防止无意查看）"""
+    return base64.b64encode(text.encode('utf-8')).decode('utf-8')
+
+
+def _deobfuscate(text: str) -> str:
+    """解混淆 base64 编码的文本"""
+    try:
+        return base64.b64decode(text.encode('utf-8')).decode('utf-8')
+    except Exception:
+        return text  # 兼容旧版本的明文存储
+
+
+def _restrict_file_permissions(filepath: Path):
+    """将文件权限设置为仅 owner 可读写 (600)"""
+    try:
+        os.chmod(filepath, 0o600)
+    except Exception:
+        pass
+
+
+def is_ignored_dir(dir_name: str) -> bool:
+    if not dir_name:
+        return False
+    return dir_name.lower() in IGNORED_DIRS
 
 @dataclass
 class AppConfig:
@@ -297,6 +339,7 @@ class AppConfig:
     model_name: str = "gpt-4"
     temperature: float = 0.7
     max_tokens: int = 32000  # 32k tokens
+    disable_thinking: bool = True
 
     # 全局上下文配置
     max_context_tokens: int = 128000  # 128k tokens，默认值
@@ -324,11 +367,10 @@ class AppConfig:
     window_width: int = 1400
     window_height: int = 900
     
-    # 用户界面状态配置
     # 网页下载 AI 辅助开关（独立）
     web_ai_assist: bool = False
     
-    # 网页下载图片开关
+    # 网页下载图片开关（保留外部 URL 链接，不下载到本地）
     web_include_images: bool = False
     
     # 文件转换 AI 辅助开关（独立）
@@ -350,6 +392,15 @@ class AppConfig:
     
     def __post_init__(self):
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+
+    def _get_attr(self, name):
+        with self._lock:
+            return getattr(self, name, None)
+
+    def _set_attr(self, name, value):
+        with self._lock:
+            setattr(self, name, value)
 
     def is_workspace_set(self) -> bool:
         """检查工作文件夹是否已设置"""
@@ -440,12 +491,8 @@ class AppConfig:
         Returns:
             (is_within_limit, estimated_tokens, processed_content)
         """
-        try:
-            import tiktoken
-            encoding = tiktoken.encoding_for_model(self.model_name)
-            estimated_tokens = len(encoding.encode(content))
-        except Exception:
-            estimated_tokens = len(content) // 4
+        from utils.helpers import _estimate_tokens
+        estimated_tokens = _estimate_tokens(content, self.model_name)
         
         if estimated_tokens <= self.max_context_tokens:
             return (True, estimated_tokens, content)
@@ -490,6 +537,8 @@ class AppConfig:
             try:
                 with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
                     api_data = json.load(f)
+                if 'api_key' in api_data and api_data['api_key']:
+                    api_data['api_key'] = _deobfuscate(api_data['api_key'])
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 print(f"加载API配置失败: {e}")
             except Exception as e:
@@ -534,19 +583,19 @@ class AppConfig:
             config_path = PROJECT_CONFIG_PATH
 
         os.environ['NOTEAI_WORKSPACE_PATH'] = self.workspace_path
-        os.environ['NOTEAI_API_KEY'] = self.api_key
         os.environ['NOTEAI_API_BASE'] = self.api_base
         os.environ['NOTEAI_MODEL_NAME'] = self.model_name
         os.environ['NOTEAI_TEMPERATURE'] = str(self.temperature)
         os.environ['NOTEAI_MAX_TOKENS'] = str(self.max_tokens)
         os.environ['NOTEAI_MAX_CONTEXT'] = str(self.max_context_tokens)
 
-        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens'}
+        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens', 'disable_thinking'}
+        _skip_keys = {'_lock'}
 
         try:
             Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
-            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields}
+            non_api_config = {k: v for k, v in self.__dict__.items() if k not in api_fields and k not in _skip_keys}
 
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)
@@ -565,10 +614,13 @@ class AppConfig:
             SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
             api_config = {k: v for k, v in self.__dict__.items() if k in api_fields}
+            if 'api_key' in api_config and api_config['api_key']:
+                api_config['api_key'] = _obfuscate(api_config['api_key'])
 
             with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(api_config, f, ensure_ascii=False, indent=2)
 
+            _restrict_file_permissions(API_CONFIG_FILE)
             print(f"API配置已保存到: {API_CONFIG_FILE}")
         except PermissionError:
             print(f"保存API配置到系统目录失败：没有写入权限")
@@ -576,6 +628,10 @@ class AppConfig:
             print(f"保存API配置到系统目录失败：{e}")
 
         return True, "配置保存成功"
+    
+    def save(self, config_path: str = None):
+        """保存配置到文件（save_to_file 的别名，用于向后兼容）"""
+        return self.save_to_file(config_path)
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""

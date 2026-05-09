@@ -12,21 +12,21 @@ from utils.tag_extractor import (
     generate_yaml_frontmatter,
     add_yaml_frontmatter_to_content,
     parse_yaml_frontmatter,
-    extract_tags_from_text
+    extract_tags_from_filename,
+    split_filename_fields
 )
+
 
 def test_generate_frontmatter():
     """测试生成YAML front matter"""
     print("=" * 60)
     print("测试1: 生成基本YAML front matter")
     print("=" * 60)
-    
+
     frontmatter = generate_yaml_frontmatter(
         title='测试文档标题',
         tags=['人工智能', '机器学习', '深度学习'],
-        source='https://example.com/article',
-        word_count=1234,
-        language='chinese'
+        source='https://example.com/article'
     )
     print(frontmatter)
     assert frontmatter.startswith('---')
@@ -41,7 +41,7 @@ def test_special_characters():
     print("=" * 60)
     print("测试2: 特殊字符处理")
     print("=" * 60)
-    
+
     frontmatter = generate_yaml_frontmatter(
         title='测试: 包含"引号"和: 冒号的标题',
         tags=['tag1', 'tag2'],
@@ -57,7 +57,7 @@ def test_add_frontmatter_to_content():
     print("=" * 60)
     print("测试3: 添加front matter到内容")
     print("=" * 60)
-    
+
     content = '''# 测试标题
 
 这是一段测试内容。包含中文和英文混合。
@@ -79,23 +79,22 @@ def test_add_frontmatter_to_content():
     print("✓ 通过\n")
 
 
-def test_tag_extraction():
-    """测试标签提取（TF-IDF算法）"""
+def test_split_filename_fields():
+    """测试文件名字段拆分"""
     print("=" * 60)
-    print("测试4: 标签提取（TF-IDF算法）")
+    print("测试4: 文件名字段拆分")
     print("=" * 60)
-    
-    text = '''
-    人工智能（Artificial Intelligence，简称AI）是计算机科学的一个分支，
-    它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式做出反应的智能机器。
-    机器学习（Machine Learning）是人工智能的一个子领域，
-    深度学习（Deep Learning）又是机器学习的一个子领域。
-    自然语言处理（NLP）、计算机视觉（CV）是人工智能的重要应用方向。
-    '''
-    
-    tags = extract_tags_from_text(text)
-    print(f"提取的标签: {tags}")
-    assert len(tags) > 0
+
+    cases = [
+        ("机器学习-神经网络-反向传播.md", ["机器学习", "神经网络", "反向传播"]),
+        ("Python_基础教程.md", ["Python", "基础教程"]),
+        ("React Hooks 详解.md", ["React", "Hooks", "详解"]),
+        ("设计模式——观察者模式.md", ["设计模式", "观察者模式"]),
+    ]
+    for filename, expected in cases:
+        fields = split_filename_fields(filename)
+        print(f"  {filename} → {fields}")
+        assert fields == expected, f"期望 {expected}, 得到 {fields}"
     print("✓ 通过\n")
 
 
@@ -104,14 +103,12 @@ def test_parse_frontmatter():
     print("=" * 60)
     print("测试5: 解析YAML front matter")
     print("=" * 60)
-    
+
     full_content = '''---
 title: "测试文档"
 tags: [tag1, tag2, tag3]
 date: "2026-04-19"
 source: "https://example.com"
-word_count: 100
-language: "chinese"
 ---
 
 # 正文标题
@@ -134,29 +131,10 @@ def test_empty_content():
     print("=" * 60)
     print("测试6: 边界情况 - 空内容")
     print("=" * 60)
-    
+
     frontmatter = generate_yaml_frontmatter()
     print(frontmatter)
     assert frontmatter.startswith('---')
-    print("✓ 通过\n")
-
-
-def test_english_content():
-    """测试英文内容"""
-    print("=" * 60)
-    print("测试7: 英文内容标签提取")
-    print("=" * 60)
-    
-    text = '''
-    Machine learning is a field of artificial intelligence that uses 
-    statistical techniques to enable computers to learn from data. 
-    Deep learning is a subset of machine learning based on neural networks.
-    Natural language processing and computer vision are important applications.
-    '''
-    
-    tags = extract_tags_from_text(text)
-    print(f"提取的标签: {tags}")
-    assert len(tags) > 0
     print("✓ 通过\n")
 
 
@@ -164,16 +142,15 @@ def main():
     print("\n" + "=" * 60)
     print("YAML Front Matter 功能测试")
     print("=" * 60 + "\n")
-    
+
     try:
         test_generate_frontmatter()
         test_special_characters()
         test_add_frontmatter_to_content()
-        test_tag_extraction()
+        test_split_filename_fields()
         test_parse_frontmatter()
         test_empty_content()
-        test_english_content()
-        
+
         print("=" * 60)
         print("所有测试通过！")
         print("=" * 60)

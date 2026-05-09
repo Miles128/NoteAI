@@ -1,14 +1,8 @@
 """Workspace path, file tree, selection (from python/main.py)."""
 
-import json
-import re
-import sys
-import shutil
-import threading
 from pathlib import Path
 
-import yaml
-from config import config, is_ignored_dir
+from config import config
 
 class WorkspaceMixin:
     def _get_workspace_status(self, params):
@@ -28,7 +22,7 @@ class WorkspaceMixin:
                 "is_set": True,
                 "workspace_path": path,
                 "notes_folder": str(Path(path) / "Notes"),
-                "organized_folder": str(Path(path) / "Organized"),
+                "organized_folder": str(Path(path) / "Abstract"),
                 "saved_workspace": True,
             }
         return {"is_set": False, "saved_workspace": False}

@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     initSystemThemeListener();
     
-    const savedTheme = localStorage.getItem('noteai_theme') || 'system';
+    const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
     applyTheme(savedTheme);
     
     initResizer();
@@ -24,7 +24,11 @@ document.addEventListener('DOMContentLoaded', async function() {
         await checkWorkspaceStatus();
         
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
+            await window.TreeModule.loadFileTree();
+        }
+        
+        if (typeof showGraphHomeView === 'function') {
+            showGraphHomeView();
         }
         
         if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {
@@ -35,6 +39,31 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.ConverterModule.loadSavedConvConfig();
         }
         
+        if (window.api && window.api.auto_convert_pending) {
+            window.api.auto_convert_pending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+        }
+
+        setTimeout(function() {
+            if (window.api && window.api.batch_auto_assign_topics) {
+                window.api.batch_auto_assign_topics().then(function(result) {
+                    if (result && result.success) {
+                        if (result.format_optimized > 0 || result.auto_assigned > 0 || result.need_confirm > 0) {
+                            var parts = [];
+                            if (result.auto_assigned > 0) parts.push('分配 ' + result.auto_assigned + ' 个主题');
+                            if (result.need_confirm > 0) parts.push(result.need_confirm + ' 个待确认');
+                            if (result.format_optimized > 0) parts.push('优化 ' + result.format_optimized + ' 个格式');
+                            updateStatus('主题处理完成 - ' + parts.join('，'));
+                        } else {
+                            updateStatus('所有文件主题已分配');
+                        }
+                    }
+                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
+                }).catch(function(e) { console.warn('[App] batch_auto_assign_topics failed:', e); });
+            }
+
+            if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
+        }, 5000);
+        
         updateStatus('就绪');
     } catch (e) {
         console.error('[App] Initialization error:', e);
@@ -43,6 +72,11 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     initWorkspaceFileWatcher();
     initSidecarErrorListener();
+    initRagEventListener();
+
+    if (window.AssistantModule && window.AssistantModule.init) {
+        window.AssistantModule.init();
+    }
     
     const tabInputs = document.querySelectorAll('input[name="theme"], input[name="theme-popup"]');
     tabInputs.forEach(radio => {
@@ -276,6 +310,10 @@ function _cleanupRewriteState() {
         window._rewriteStreamUnlisten();
         window._rewriteStreamUnlisten = null;
     }
+    window._rewriteStreamText = '';
+    window._rewriteBuffer = '';
+    window._rewriteDisplayText = '';
+    window._rewriteOriginalText = '';
     var diffPanel = document.getElementById('rewrite-diff-panel');
     if (diffPanel) diffPanel.remove();
     var container = document.getElementById('tiptap-editor-container');
@@ -325,8 +363,8 @@ function _showRewriteDiffView() {
         if (mainContent) mainContent.appendChild(diffPanel);
     }
 
-    var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + oldText + '</pre>';
-    var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + newText + '</pre>';
+    var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + escapeHtml(oldText) + '</pre>';
+    var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + escapeHtml(newText) + '</pre>';
 
     diffPanel.innerHTML = '<div class="rewrite-diff-header">' +
         '<span class="rewrite-diff-title">改写对比</span>' +
@@ -408,7 +446,7 @@ async function onLLMRewrite() {
         return;
     }
 
-    var btn = document.getElementById('titlebar-rewrite-btn');
+    var btn = document.getElementById('tiptap-rewrite-btn');
     if (!confirm('确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。')) return;
 
     var rewritePath = curPath;
@@ -511,6 +549,14 @@ function initWorkspaceFileWatcher() {
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
             refreshCurrentSidebarView();
+            if (window.api && window.api.batch_auto_assign_topics) {
+                window.api.batch_auto_assign_topics().then(function(result) {
+                    if (result && result.success && result.need_confirm > 0) {
+                        updateStatus('发现 ' + result.need_confirm + ' 个文件需要确认主题');
+                    }
+                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
+                }).catch(function(e) { console.warn('[App] watcher batch_auto_assign_topics failed:', e); });
+            }
         }, 3000);
     }).then(function(unlisten) {
         _workspaceWatcherUnlisten = unlisten;
@@ -540,8 +586,8 @@ function refreshCurrentSidebarView() {
             loadTagsView(true);
         }
     } else if (view === 'graph') {
-        if (typeof loadLinksData === 'function') {
-            loadLinksData();
+        if (window.LinksModule && typeof window.LinksModule.loadLinksData === 'function') {
+            window.LinksModule.loadLinksData();
         }
     } else if (view === 'relation') {
         if (typeof loadRelationGraphData === 'function') {
@@ -562,11 +608,75 @@ function initSidecarErrorListener() {
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
-        if (!data || data.type !== 'sidecar_error') return;
-        var msg = data.message || 'Python 后端启动失败';
-        console.error('[App] Sidecar error:', msg);
-        updateStatus('错误: ' + msg);
-        alert('NoteAI 启动失败\n\n' + msg + '\n\n请检查 Python 环境和依赖是否正确安装。');
+        if (!data) return;
+        if (data.type === 'sidecar_error') {
+            var msg = data.message || 'Python 后端启动失败';
+            console.error('[App] Sidecar error:', msg);
+            updateStatus('错误: ' + msg);
+            alert('NoteAI 启动失败\n\n' + msg + '\n\n请检查 Python 环境和依赖是否正确安装。');
+        } else if (data.type === 'auto_convert_complete') {
+            var info = data.data || {};
+            if (info.converted > 0) {
+                updateStatus('自动转换完成: ' + info.converted + '/' + info.total + ' 个文件');
+                if (window.TreeModule && window.TreeModule.loadFileTree) {
+                    window.TreeModule.loadFileTree();
+                }
+            }
+        } else if (data.type === 'auto_convert_error') {
+            console.error('[App] Auto convert error:', data.error);
+        }
+    });
+}
+
+function initRagEventListener() {
+    var eventAPI = window.__TAURI__ && window.__TAURI__.event
+        ? window.__TAURI__.event
+        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
+            ? window.__TAURI_INTERNALS__.event
+            : null);
+    if (!eventAPI) return;
+
+    eventAPI.listen('python-event', function(event) {
+        var data = event.payload;
+        if (!data) return;
+        if (data.type === 'progress' && data.element_id === 'rag-index') {
+            updateStatus(data.message || '索引构建中...');
+        } else if (data.type === 'progress' && data.element_id === 'survey_check') {
+            updateStatus(data.message || '检查综述中...');
+        } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done' || data.type === 'rag_index_built') {
+            if (window.AssistantModule && window.AssistantModule.handleEvent) {
+                window.AssistantModule.handleEvent(data);
+            }
+            if (data.type === 'rag_index_built') {
+                if (data.data && data.data.success) {
+                    updateStatus('RAG Ready');
+                } else {
+                    updateStatus('RAG 索引构建失败');
+                }
+            }
+        } else if (data.type === 'cascade_survey_chunk') {
+            updateStatus('正在更新综述: ' + (data.topic || ''));
+        } else if (data.type === 'cascade_done') {
+            var d = data.data || {};
+            if (d.success) {
+                var msg = d.is_new_topic ? '新主题已创建并生成综述' : '综述已更新';
+                updateStatus(msg + ': ' + (data.topic || ''));
+            } else {
+                updateStatus('级联更新失败: ' + (data.topic || ''));
+            }
+            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                window.TreeModule.loadFileTree();
+            }
+        } else if (data.type === 'batch_assign_progress') {
+            if (data.message) {
+                updateStatus(data.message);
+            }
+            if (data.message && data.message.startsWith('完成')) {
+                if (window.TreeModule && window.TreeModule.loadFileTree) {
+                    window.TreeModule.loadFileTree();
+                }
+            }
+        }
     });
 }
 

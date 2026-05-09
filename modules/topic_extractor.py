@@ -1,6 +1,6 @@
 """
 主题提取模块
-负责从 Notes 和 Organized 文件夹中提取主题
+负责从 Notes 和 Abstract 文件夹中提取主题
 """
 
 from pathlib import Path
@@ -10,10 +10,10 @@ from utils.logger import logger
 from utils.helpers import check_api_config
 from prompts.topic_extraction import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
-    TOPIC_COUNT_SPECIFIED_INSTRUCTIONS,
-    OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS,
-    TOPIC_COUNT_AUTO_INSTRUCTIONS,
-    OUTPUT_FORMAT_AUTO_INSTRUCTIONS
+    TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
+    OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT,
+    TOPIC_COUNT_AUTO_INSTRUCTIONS_PROMPT,
+    OUTPUT_FORMAT_AUTO_INSTRUCTIONS_PROMPT
 )
 
 
@@ -126,14 +126,14 @@ class TopicExtractor:
             notes_filenames = self.get_md_filenames(self.notes_folder)
             notes_count = len(notes_filenames)
 
-            # 获取 Organized 文件夹中的文件名
+            # 获取 Abstract 文件夹中的文件名
             organized_filenames = self.get_md_filenames(self.organized_folder)
             organized_count = len(organized_filenames)
 
             if notes_count == 0 and organized_count == 0:
-                return {"success": False, "error": "Notes 和 Organized 文件夹中都没有 Markdown 文件"}
+                return {"success": False, "error": "Notes 和 Abstract 文件夹中都没有 Markdown 文件"}
 
-            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 Organized 文件")
+            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 Abstract 文件")
 
             # 计算主题个数范围
             if specified_topic_count is None or specified_topic_count <= 0:
@@ -149,7 +149,7 @@ class TopicExtractor:
             # 构建文件名列表文本
             all_filenames = []
             if organized_filenames:
-                all_filenames.extend([f"[Organized] {name}" for name in organized_filenames])
+                all_filenames.extend([f"[Abstract] {name}" for name in organized_filenames])
             if notes_filenames:
                 all_filenames.extend([f"[Notes] {name}" for name in notes_filenames])
 
@@ -159,11 +159,11 @@ class TopicExtractor:
 
             # 根据是否指定主题个数生成不同的提示词
             if is_specified:
-                topic_count_instructions = TOPIC_COUNT_SPECIFIED_INSTRUCTIONS.format(topic_count=min_topics)
-                output_format_instructions = OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS.format(topic_count=min_topics)
+                topic_count_instructions = TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT.format(topic_count=min_topics)
+                output_format_instructions = OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT.format(topic_count=min_topics)
             else:
-                topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS.format(min_topics=min_topics, max_topics=max_topics)
-                output_format_instructions = OUTPUT_FORMAT_AUTO_INSTRUCTIONS
+                topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS_PROMPT.format(min_topics=min_topics, max_topics=max_topics)
+                output_format_instructions = OUTPUT_FORMAT_AUTO_INSTRUCTIONS_PROMPT
 
             # 构建最终提示词
             final_prompt = TOPIC_EXTRACTION_BY_FILENAMES_PROMPT.format(

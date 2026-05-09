@@ -27,6 +27,10 @@ dependencies = [
     "html2text>=2024.2.26",
     "watchdog>=4.0.0",
     "send2trash>=1.8.0",
+    "FlagEmbedding>=1.2.0",
+    "pymilvus>=2.4.0",
+    "fastembed>=0.4.0",
+    "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]

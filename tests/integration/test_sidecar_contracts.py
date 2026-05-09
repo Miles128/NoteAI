@@ -24,7 +24,7 @@ def workspace(tmp_path: Path) -> Path:
     d = tmp_path / "ws"
     d.mkdir()
     (d / "Notes").mkdir()
-    (d / "Organized").mkdir()
+    (d / "Abstract").mkdir()
     config.workspace_path = str(d)
     return d
 
@@ -55,8 +55,8 @@ class TestResolveWorkspacePath:
 
 class TestFindFileByName:
     def test_finds_first_match_in_workspace(self, workspace: Path) -> None:
-        (workspace / "Organized" / "dup.md").write_text("1", encoding="utf-8")
-        got = find_file_by_name_in_workspace("Organized/dup.md")
+        (workspace / "Abstract" / "dup.md").write_text("1", encoding="utf-8")
+        got = find_file_by_name_in_workspace("Abstract/dup.md")
         assert got is not None
         assert got.endswith("dup.md")
 

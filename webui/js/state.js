@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    const _state = {
+    var _state = {
         apiConfig: null,
         uiConfig: null,
         themePreference: null,
@@ -9,17 +9,30 @@
         _subscribers: []
     };
 
+    var _ui = {
+        selectedFilePath: null,
+        selectedFileName: null,
+        activeTreeItem: null,
+        treeExpandedState: {},
+        currentSidebarView: 'tree',
+        linkFilter: 'all',
+        graphFilter: 'all',
+        lastFileTreeData: null,
+        lastTagsData: null,
+        lastTopicData: null
+    };
+
     function subscribe(callback) {
         if (typeof callback === 'function') {
             _state._subscribers.push(callback);
         }
-        return () => {
-            _state._subscribers = _state._subscribers.filter(s => s !== callback);
+        return function() {
+            _state._subscribers = _state._subscribers.filter(function(s) { return s !== callback; });
         };
     }
 
     function notify() {
-        _state._subscribers.forEach(fn => {
+        _state._subscribers.forEach(function(fn) {
             try {
                 fn(_state);
             } catch (e) {
@@ -30,11 +43,22 @@
 
     function getState() {
         return {
-            apiConfig: _state.apiConfig ? { ..._state.apiConfig } : null,
-            uiConfig: _state.uiConfig ? { ..._state.uiConfig } : null,
+            apiConfig: _state.apiConfig ? Object.assign({}, _state.apiConfig) : null,
+            uiConfig: _state.uiConfig ? Object.assign({}, _state.uiConfig) : null,
             themePreference: _state.themePreference,
             workspacePath: _state.workspacePath
         };
+    }
+
+    function getUi(key) {
+        if (key === undefined) return Object.assign({}, _ui);
+        return _ui[key];
+    }
+
+    function setUi(key, value) {
+        if (_ui.hasOwnProperty(key)) {
+            _ui[key] = value;
+        }
     }
 
     async function loadApiConfig() {
@@ -71,7 +95,7 @@
     }
 
     async function loadAllConfig() {
-        const results = await Promise.allSettled([
+        var results = await Promise.allSettled([
             loadApiConfig(),
             loadUiConfig(),
             loadThemePreference()
@@ -85,8 +109,8 @@
 
     async function saveApiConfig(config) {
         try {
-            const result = await window.api.saveApiConfig(config);
-            _state.apiConfig = { ..._state.apiConfig, ...config };
+            var result = await window.api.saveApiConfig(config);
+            _state.apiConfig = Object.assign({}, _state.apiConfig, config);
             notify();
             return result;
         } catch (e) {
@@ -97,8 +121,8 @@
 
     async function saveUiConfig(config) {
         try {
-            const result = await window.api.saveUiConfig(config);
-            _state.uiConfig = { ..._state.uiConfig, ...config };
+            var result = await window.api.saveUiConfig(config);
+            _state.uiConfig = Object.assign({}, _state.uiConfig, config);
             notify();
             return result;
         } catch (e) {
@@ -125,34 +149,38 @@
 
     window.state = {
         get: getState,
-        subscribe,
-        loadAllConfig,
-        loadApiConfig,
-        loadUiConfig,
-        loadThemePreference,
-        saveApiConfig,
-        saveUiConfig,
-        saveThemePreference,
-        setWorkspacePath
+        subscribe: subscribe,
+        loadAllConfig: loadAllConfig,
+        loadApiConfig: loadApiConfig,
+        loadUiConfig: loadUiConfig,
+        loadThemePreference: loadThemePreference,
+        saveApiConfig: saveApiConfig,
+        saveUiConfig: saveUiConfig,
+        saveThemePreference: saveThemePreference,
+        setWorkspacePath: setWorkspacePath,
+        getUi: getUi,
+        setUi: setUi
     };
 
     Object.defineProperty(window, 'apiConfig', {
-        get: () => _state.apiConfig,
+        get: function() { return _state.apiConfig; },
         enumerable: true,
         configurable: true
     });
 
     Object.defineProperty(window, 'uiConfig', {
-        get: () => _state.uiConfig,
+        get: function() { return _state.uiConfig; },
         enumerable: true,
         configurable: true
     });
 
     Object.defineProperty(window, 'themePreference', {
-        get: () => _state.themePreference,
+        get: function() { return _state.themePreference; },
         enumerable: true,
         configurable: true
     });
+
+    window.AppState = _ui;
 
     window.subscribeToState = subscribe;
     window.notifyStateChange = notify;

@@ -2,9 +2,6 @@
 
 import json
 import re
-import sys
-import shutil
-import threading
 from pathlib import Path
 
 import yaml
@@ -35,7 +32,6 @@ class IntelMixin:
             fm, body = self._parse_frontmatter(content)
             rewritten_body = rewrite_with_llm(body)
             if fm is not None:
-                import yaml
                 fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
                 rewritten = '---\n' + fm_str + '\n---\n' + rewritten_body
             else:
@@ -79,7 +75,7 @@ class IntelMixin:
                     }
                 })
 
-            rewritten = rewrite_with_llm_stream(content, chunk_callback=on_chunk)
+            rewritten = rewrite_with_llm_stream(body, chunk_callback=on_chunk)
 
             self._send_response({
                 "id": "event",
@@ -134,7 +130,15 @@ class IntelMixin:
             return {"success": False, "message": "文件不存在"}
 
         try:
-            full_path.write_text(rewritten_text, encoding='utf-8')
+            original = full_path.read_text(encoding='utf-8')
+            from sidecar.textutils import parse_frontmatter
+            fm, _ = parse_frontmatter(original)
+            if fm is not None:
+                fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+                final_text = f"---\n{fm_str}\n---\n\n{rewritten_text}"
+            else:
+                final_text = rewritten_text
+            full_path.write_text(final_text, encoding='utf-8')
             return {"success": True, "message": "已保存"}
         except Exception as e:
             return {"success": False, "message": f"保存失败: {str(e)}"}
@@ -273,10 +277,17 @@ class IntelMixin:
 
         try:
             result_text = call_llm_raw(prompt, temperature=0.3)
-            json_match = re.search(r'\{[\s\S]*\}', result_text)
+            json_match = re.search(r'\{[\s\S]*?\}', result_text)
             if not json_match:
                 return {"success": False, "message": "LLM 返回格式异常"}
-            suggestions = json.loads(json_match.group())
+            json_str = json_match.group()
+            try:
+                suggestions = json.loads(json_str)
+            except json.JSONDecodeError:
+                json_match = re.search(r'\{[\s\S]*\}', result_text)
+                if not json_match:
+                    return {"success": False, "message": "LLM 返回格式异常"}
+                suggestions = json.loads(json_match.group())
             return {"success": True, "suggestions": suggestions.get("suggestions", [])}
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
@@ -343,9 +354,9 @@ class IntelMixin:
 
         try:
             from langchain_core.prompts import PromptTemplate
-            from utils.llm_utils import _create_llm
+            from utils.llm_utils import create_llm
 
-            llm = _create_llm(temperature=0.3)
+            llm = create_llm(temperature=0.3)
             pt = PromptTemplate(template=prompt, input_variables=[])
             chain = pt | llm
 
@@ -354,8 +365,15 @@ class IntelMixin:
                 full_text += token
                 on_chunk(token)
 
-            survey_filename = f"{topic_name}_综述.md"
+            safe_name = "".join(c for c in topic_name if c.isalnum() or c in ('_', '-', '.', ' ') or '\u4e00' <= c <= '\u9fff').strip()
+            if not safe_name or '..' in safe_name:
+                return {"success": False, "message": "主题名称包含非法字符"}
+            survey_filename = f"{safe_name}_综述.md"
             survey_path = workspace_path / survey_filename
+            try:
+                survey_path.resolve().relative_to(workspace_path.resolve())
+            except ValueError:
+                return {"success": False, "message": "主题名称路径非法"}
             survey_path.write_text(full_text.strip(), encoding='utf-8')
 
             self._send_response({
@@ -392,7 +410,7 @@ class IntelMixin:
             return {"success": False, "message": f"撰写失败: {str(e)}"}
 
     def _apply_topic_suggestion(self, params):
-        from utils.topic_assigner import write_topic_to_file
+        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
 
         workspace = config.workspace_path
         if not workspace:
@@ -452,6 +470,9 @@ class IntelMixin:
 
                 wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
 
+                notes_topic_dir = workspace_path / config.NOTES_FOLDER / topic_name
+                notes_topic_dir.mkdir(parents=True, exist_ok=True)
+
                 for fname in files:
                     fn = fname.strip()
                     if not fn:
@@ -459,6 +480,14 @@ class IntelMixin:
                     for md_file in workspace_path.rglob(fn):
                         if md_file.is_file():
                             write_topic_to_file(str(md_file), topic_name)
+                            move_file_to_notes_topic_folder(str(md_file), topic_name)
+
+                from sidecar.cascade import ensure_topic_folder, collect_topic_notes, generate_new_survey, append_changelog
+                ensure_topic_folder(topic_name)
+                notes = collect_topic_notes(topic_name)
+                if notes:
+                    generate_new_survey(topic_name, notes)
+                    append_changelog(f"AI创建主题并生成综述: {topic_name}")
 
             elif stype == "change_topic":
                 fname = suggestion.get("file", "").strip()
@@ -516,9 +545,27 @@ class IntelMixin:
 
                 wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
 
+                notes_topic_dir = workspace_path / config.NOTES_FOLDER / new_topic
+                notes_topic_dir.mkdir(parents=True, exist_ok=True)
+
                 for md_file in workspace_path.rglob(fname):
                     if md_file.is_file():
                         write_topic_to_file(str(md_file), new_topic)
+                        move_file_to_notes_topic_folder(str(md_file), new_topic)
+
+                from sidecar.cascade import ensure_topic_folder, collect_topic_notes, update_existing_survey, get_survey_path, generate_new_survey, append_changelog
+                ensure_topic_folder(new_topic)
+                notes = collect_topic_notes(new_topic)
+                if notes:
+                    survey_path = get_survey_path(new_topic)
+                    if survey_path and survey_path.exists():
+                        new_file_notes = [n for n in notes if n["file_name"] == fname]
+                        if not new_file_notes:
+                            new_file_notes = [notes[-1]]
+                        update_existing_survey(new_topic, new_file_notes)
+                    else:
+                        generate_new_survey(new_topic, notes)
+                    append_changelog(f"AI变更主题并更新综述: {fname} → {new_topic}")
 
             elif stype == "assign_topic":
                 fname = suggestion.get("file", "").strip()
@@ -561,9 +608,27 @@ class IntelMixin:
 
                 wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
 
+                notes_topic_dir = workspace_path / config.NOTES_FOLDER / topic_name
+                notes_topic_dir.mkdir(parents=True, exist_ok=True)
+
                 for md_file in workspace_path.rglob(fname):
                     if md_file.is_file():
                         write_topic_to_file(str(md_file), topic_name)
+                        move_file_to_notes_topic_folder(str(md_file), topic_name)
+
+                from sidecar.cascade import ensure_topic_folder, collect_topic_notes, update_existing_survey, get_survey_path, generate_new_survey, append_changelog
+                ensure_topic_folder(topic_name)
+                notes = collect_topic_notes(topic_name)
+                if notes:
+                    survey_path = get_survey_path(topic_name)
+                    if survey_path and survey_path.exists():
+                        new_file_notes = [n for n in notes if n["file_name"] == fname]
+                        if not new_file_notes:
+                            new_file_notes = [notes[-1]]
+                        update_existing_survey(topic_name, new_file_notes)
+                    else:
+                        generate_new_survey(topic_name, notes)
+                    append_changelog(f"AI分配主题并更新综述: {fname} → {topic_name}")
 
             elif stype == "merge_topic":
                 source = suggestion.get("source_topic", "").strip()
@@ -631,6 +696,9 @@ class IntelMixin:
 
                 wiki_path.write_text(wiki_text, encoding='utf-8')
 
+                notes_target_dir = workspace_path / config.NOTES_FOLDER / target
+                notes_target_dir.mkdir(parents=True, exist_ok=True)
+
                 for md_file in workspace_path.rglob('*.md'):
                     if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
                         continue
@@ -640,10 +708,10 @@ class IntelMixin:
                         if fm and isinstance(fm.get('topics'), list):
                             if source in fm['topics']:
                                 fm['topics'] = [target if t == source else t for t in fm['topics']]
-                                import yaml
                                 new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
                                 new_content = '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
                                 md_file.write_text(new_content, encoding='utf-8')
+                                move_file_to_notes_topic_folder(str(md_file), target)
                     except Exception:
                         continue
 

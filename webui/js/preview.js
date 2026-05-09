@@ -14,22 +14,27 @@ function showContentView() {
     const titlebarFileName = document.getElementById('titlebar-file-name');
     const titlebarSplitBtn = document.getElementById('titlebar-split-btn');
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
-    const titlebarSeparator = document.getElementById('titlebar-preview-separator');
+    const graphPanel = document.getElementById('graph-panel');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
+    if (graphPanel) graphPanel.style.display = 'none';
     if (titlebarFileName) {
         titlebarFileName.style.display = 'none';
         titlebarFileName.textContent = '';
     }
     if (titlebarSplitBtn) titlebarSplitBtn.style.display = 'none';
     if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
-    if (titlebarSeparator) titlebarSeparator.style.display = 'none';
 
-    if (typeof _currentSidebarView !== 'undefined' && _currentSidebarView === 'topic') {
-        if (contentPanel) contentPanel.style.display = 'none';
-        var pendingPanel = document.getElementById('topic-pending-panel');
-        if (pendingPanel) pendingPanel.style.display = '';
+    var graphHome = document.getElementById('graph-home-view');
+    var contentArea = document.getElementById('content-area');
+    if (window.AppState.selectedFilePath) {
+        if (graphHome) graphHome.style.display = 'none';
+        if (contentArea) contentArea.style.display = '';
+    } else {
+        if (graphHome) graphHome.style.display = '';
+        if (contentArea) contentArea.style.display = 'none';
+        if (typeof updateHomeStats === 'function') updateHomeStats();
     }
 }
 
@@ -44,7 +49,6 @@ function showPreviewView() {
 function updateTitlebarFileName(fileName, isMarkdown) {
     const titlebarFileName = document.getElementById('titlebar-file-name');
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
-    const titlebarSeparator = document.getElementById('titlebar-preview-separator');
     
     if (fileName) {
         if (titlebarFileName) {
@@ -52,14 +56,12 @@ function updateTitlebarFileName(fileName, isMarkdown) {
             titlebarFileName.style.display = 'block';
         }
         if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'flex';
-        if (titlebarSeparator) titlebarSeparator.style.display = 'block';
     } else {
         if (titlebarFileName) {
             titlebarFileName.style.display = 'none';
             titlebarFileName.textContent = '';
         }
         if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
-        if (titlebarSeparator) titlebarSeparator.style.display = 'none';
     }
 }
 
@@ -199,11 +201,11 @@ async function loadPdfViewer(path, fileName, requestId) {
                 </div>
                 <div class="pdf-toolbar-center">
                     <button class="pdf-nav-btn" id="pdf-prev-btn" title="上一页">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                        ${window.Icons.get('chevronLeft', 16)}
                     </button>
                     <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
                     <button class="pdf-nav-btn" id="pdf-next-btn" title="下一页">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                        ${window.Icons.get('chevronRight', 16)}
                     </button>
                 </div>
                 <div class="pdf-toolbar-right">
@@ -441,11 +443,7 @@ function showPreviewError(title, message) {
 
     previewContent.innerHTML = `
         <div class="preview-error">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
-            </svg>
+            ${window.Icons.get('close', 48)}
             <div class="preview-error-title">${escapeHtml(title)}</div>
             <div class="preview-error-message">${escapeHtml(message)}</div>
         </div>
@@ -460,6 +458,11 @@ function closePreview() {
             pdfViewerState.pdfDoc.destroy();
         } catch(e) {}
         pdfViewerState = null;
+    }
+
+    if (window._pdfKeyHandler) {
+        document.removeEventListener('keydown', window._pdfKeyHandler);
+        window._pdfKeyHandler = null;
     }
     
     const previewPanel = document.getElementById('preview-panel');
@@ -487,10 +490,7 @@ function closePreview() {
     if (previewContent) {
         previewContent.innerHTML = `
             <div class="preview-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
+                ${window.Icons.get('fileDoc', 48)}
                 <div>选择一个文件查看预览</div>
             </div>
         `;
@@ -498,6 +498,9 @@ function closePreview() {
 
     currentPreviewData = null;
     isPreviewActive = false;
+
+    window.AppState.selectedFilePath = null;
+    window.AppState.selectedFileName = null;
 
     showContentView();
 }

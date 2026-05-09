@@ -24,12 +24,18 @@
     <script src="js/utils.js"></script>
     <script src="js/api.js"></script>
     <script src="js/state.js"></script>
+    <script src="js/icons.js"></script>
     <script src="js/toast.js"></script>
     <script src="js/tabs.js"></script>
     <script src="js/theme.js"></script>
+    <script src="js/sidebar.js"></script>
+    <script src="js/pending.js"></script>
     <script src="js/tree.js"></script>
+    <script src="js/topic.js"></script>
+    <script src="js/tags.js"></script>
     <script src="js/links.js"></script>
     <script src="js/graph.js"></script>
+    <script src="js/assistant.js"></script>
     <script src="js/preview.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/tiptap-editor.js"></script>
@@ -78,13 +84,6 @@
                     <path d="M6.5 10v4"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="topic" onclick="switchSidebarView('topic')" title="主题">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
-            </button>
             <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="tags" onclick="switchSidebarView('tags')" title="标签">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path>
@@ -103,22 +102,45 @@
             </button>
         </div>
         <div class="titlebar-center" data-tauri-drag-region>
-            <div class="titlebar-file-name" id="titlebar-file-name"></div>
+            <div class="titlebar-file-name-wrapper">
+                <div class="titlebar-file-name" id="titlebar-file-name"></div>
+                <button class="titlebar-btn titlebar-close-preview" id="titlebar-close-preview-btn" onclick="closePreviewPanel()" title="关闭预览" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="titlebar-right">
+            <button class="titlebar-btn" id="titlebar-pending-btn" onclick="togglePendingView()" title="待办事项">
+                <svg class="pending-icon-normal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <svg class="pending-icon-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </button>
+            <button class="titlebar-btn" id="titlebar-ai-toggle-btn" onclick="toggleAIPanel()" title="AI 助手">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="8" width="14" height="10" rx="3"></rect>
+                    <circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle>
+                    <circle cx="14.5" cy="13" r="1.2" fill="currentColor"></circle>
+                    <line x1="12" y1="4" x2="12" y2="8"></line>
+                    <circle cx="12" cy="3.5" r="1.2" fill="currentColor"></circle>
+                    <line x1="8" y1="18" x2="8" y2="20"></line>
+                    <line x1="16" y1="18" x2="16" y2="20"></line>
+                </svg>
+            </button>
             <button class="titlebar-btn" id="titlebar-split-btn" onclick="toggleEditMode()" title="编辑" style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
                     <path d="m15 5 4 4"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn titlebar-btn-close" id="titlebar-close-preview-btn" onclick="closePreviewPanel()" title="关闭预览" style="display: none;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-            <div class="titlebar-group-separator" id="titlebar-preview-separator" style="display: none;"></div>
             <button class="titlebar-btn" id="titlebar-graph-btn" onclick="toggleGraphPanel()" title="关系图谱">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="2"></circle>
@@ -138,18 +160,6 @@
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
             </button>
-            <button class="titlebar-btn" onclick="showSettings()" title="设置">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43-.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-            </button>
-            <button class="titlebar-btn" id="titlebar-rewrite-btn" onclick="onLLMRewrite()" title="LLM 改写：用中立客观风格重写文档">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 20h9"></path>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                </svg>
-            </button>
             <button class="titlebar-btn" onclick="showAbout()" title="关于">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -157,10 +167,26 @@
                     <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
             </button>
+            <button class="titlebar-btn" onclick="showSettings()" title="设置">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43-.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            </button>
         </div>
     </div>
     <div class="app-container">
-        <div class="sidebar sidebar-left">
+        <button class="sidebar-expand-btn" id="sidebar-expand-btn" onclick="toggleSidebar()" title="展开侧边栏" style="display: none;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
+        <div class="sidebar sidebar-left" id="sidebar">
+            <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </div>
             <div class="file-tree-container" id="file-tree">
                 <div class="tree-empty">暂无工作区</div>
             </div>
@@ -168,17 +194,7 @@
                 <span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>
             </div>
             <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
-            <div class="sidebar-view-container" id="sidebar-topic" style="display: none;"></div>
             <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
-            <div class="sidebar-topic-input" id="sidebar-topic-input" style="display: none;">
-                <input type="text" class="topic-input" id="topic-input-field" placeholder="输入主题名称...">
-                <button class="topic-input-btn topic-input-cancel" id="topic-input-cancel" title="取消">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-                <button class="topic-input-btn topic-input-confirm" id="topic-input-confirm" title="确认创建主题">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-            </div>
             <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
                 <input type="text" class="topic-input" id="tag-input-field" placeholder="输入标签名称...">
                 <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" title="取消">
@@ -187,21 +203,6 @@
                 <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" title="确认创建标签">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 </button>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-topic" style="display: none;">
-                <button class="sidebar-footer-btn" id="btn-auto-topic" onclick="onBatchAutoAssignTopics()" title="确认主题：扫描所有未分配主题的文件">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-add-topic" onclick="onShowTopicInput()" title="添加主题：创建新的主题分类">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-ai-analyze" onclick="onAITopicAnalyze()" title="AI 主题分析：扫描全量文件，找出无主题或主题不匹配的文件">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-ai-survey" onclick="onAITopicSurvey()" title="AI 撰写综述：选取某个主题，AI 阅读该主题下所有文件并撰写综述">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-topic">0 个主题</span>
             </div>
             <div class="sidebar-footer" id="sidebar-footer-tags" style="display: none;">
                 <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" title="自动匹配标签：扫描文件标题匹配已有标签">
@@ -224,7 +225,37 @@
 
         <div class="right-area" id="right-area">
             <div class="content-panel" id="content-panel">
-                <div class="content-area">
+                <div class="pending-view" id="pending-view" style="display:none;">
+                    <div class="pending-view-header">
+                        <h2>待办事项</h2>
+                        <span class="pending-view-count" id="pending-view-count">0 项待处理</span>
+                    </div>
+                    <div class="pending-view-list" id="pending-view-list">
+                        <div class="pending-view-empty">没有待处理的事项</div>
+                    </div>
+                </div>
+                <div class="graph-home-view" id="graph-home-view">
+                    <canvas id="graph-home-canvas"></canvas>
+                    <div class="graph-home-overlay">
+                        <div class="graph-home-title">NoteAI</div>
+                        <div class="graph-home-subtitle">AI 驱动的知识库</div>
+                        <div class="graph-home-stats">
+                            <div class="graph-home-stat">
+                                <div class="graph-home-stat-value" id="home-stat-notes">0</div>
+                                <div class="graph-home-stat-label">笔记</div>
+                            </div>
+                            <div class="graph-home-stat">
+                                <div class="graph-home-stat-value" id="home-stat-topics">0</div>
+                                <div class="graph-home-stat-label">主题</div>
+                            </div>
+                            <div class="graph-home-stat">
+                                <div class="graph-home-stat-value" id="home-stat-links">0</div>
+                                <div class="graph-home-stat-label">链接</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="content-area" id="content-area">
                     <div class="tab-content active" id="tab-0">
                     </div>
 
@@ -233,25 +264,25 @@
                             <div class="card-title">笔记整合</div>
                             <div class="ai-status-box">
                                 <span class="status-dot"></span>
-                                <span class="status-text">从Notes文件夹读取markdown文件，整合输出到Organized文件夹</span>
+                                <span class="status-text">从Notes文件夹读取markdown文件，整合输出到Abstract文件夹</span>
                             </div>
                         </div>
 
                         <div class="card" id="topic-card">
                             <div class="card-title">主题设置</div>
-                            <div class="form-group" style="display: flex; gap: 12px; align-items: flex-end;">
-                                <div style="flex: 1;">
+                            <div class="form-group form-row">
+                                <div class="form-row-item">
                                     <div class="form-label">主题个数（留空则自动选择）</div>
-                                    <input type="number" id="topic-count" class="form-input" placeholder="例如：5" min="2" style="width: 100%;">
+                                    <input type="number" id="topic-count" class="form-input form-input-full" placeholder="例如：5" min="2">
                                 </div>
                             </div>
                             <div class="form-group">
                                 <div class="form-label">点击提取主题，或手动输入（每行一个）</div>
                                 <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3" oninput="updateIntegrateBtnState()"></textarea>
                             </div>
-                            <div class="btn-group" style="margin-top: 8px;">
-                                <button class="btn btn-secondary" id="extract-topics-btn" onclick="extractTopics()" style="flex: 1;" title="提取主题：从网页内容中提取关键主题">提取主题</button>
-                                <button class="btn btn-primary" id="integrate-btn" onclick="startNoteIntegration()" style="flex: 1;" disabled title="开始整合：将内容整合到笔记中">开始整合</button>
+                            <div class="btn-group btn-group-spacing">
+                                <button class="btn btn-secondary btn-flex" id="extract-topics-btn" onclick="extractTopics()" title="提取主题：从网页内容中提取关键主题">提取主题</button>
+                                <button class="btn btn-primary btn-flex" id="integrate-btn" onclick="startNoteIntegration()" disabled title="开始整合：将内容整合到笔记中">开始整合</button>
                             </div>
                         </div>
 
@@ -265,50 +296,55 @@
                         </div>
                     </div>
                 </div>
+                <div class="graph-panel" id="graph-panel" style="display: none;">
+                    <div class="graph-panel-header">
+                        <div class="graph-header-left">
+                            <div class="graph-filter-bar">
+                                <button class="graph-filter-btn active" data-gfilter="all" onclick="onGraphFilter('all')" title="显示全部关系">全部</button>
+                                <button class="graph-filter-btn" data-gfilter="topic" onclick="onGraphFilter('topic')" title="只显示主题关系">主题</button>
+                                <button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter('tag')" title="只显示标签关系">标签</button>
+                                <button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter('link')" title="只显示双向链接关系">链接</button>
+                            </div>
+                        </div>
+                        <div class="graph-header-center">
+                            <div class="graph-toolbar">
+                                <button class="graph-toolbar-btn" onclick="graphZoomIn()" title="放大">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" onclick="graphZoomOut()" title="缩小">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" id="graph-evolve-btn" onclick="graphToggleEvolve()" title="演变：重新启动力模拟动画">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" title="刷新图谱">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="graph-header-right">
+                            <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="graph-panel-body" id="graph-panel-body">
+                        <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
+                        <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
+                        <canvas id="graph-canvas" style="display:none;"></canvas>
+                    </div>
+                    <div class="graph-panel-footer">
+                        <div class="graph-legend">
+                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-file"></span>文件</span>
+                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-topic"></span>主题</span>
+                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-tag"></span>标签</span>
+                        </div>
+                    </div>
+                    <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
+                </div>
             </div>
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
-
-            <div class="graph-panel" id="graph-panel" style="display: none;">
-                <div class="graph-panel-header">
-                    <div class="graph-filter-bar">
-                        <button class="graph-filter-btn active" data-gfilter="all" onclick="onGraphFilter('all')" title="显示全部关系">全部</button>
-                        <button class="graph-filter-btn" data-gfilter="topic" onclick="onGraphFilter('topic')" title="只显示主题关系">主题</button>
-                        <button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter('tag')" title="只显示标签关系">标签</button>
-                        <button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter('link')" title="只显示双向链接关系">链接</button>
-                    </div>
-                    <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="graph-panel-body" id="graph-panel-body">
-                    <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
-                    <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
-                    <canvas id="graph-canvas" style="display:none;"></canvas>
-                </div>
-                <div class="graph-panel-footer">
-                    <div class="graph-legend">
-                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#4A90D9"></span>文件</span>
-                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#E8913A"></span>主题</span>
-                        <span class="graph-legend-item"><span class="graph-legend-dot" style="background:#50B87F"></span>标签</span>
-                    </div>
-                    <div class="graph-toolbar">
-                        <button class="graph-toolbar-btn" onclick="graphZoomIn()" title="放大">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                        </button>
-                        <button class="graph-toolbar-btn" onclick="graphZoomOut()" title="缩小">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                        </button>
-                        <button class="graph-toolbar-btn" id="graph-evolve-btn" onclick="graphToggleEvolve()" title="演变：重新启动力模拟动画">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                        </button>
-                        <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" title="刷新图谱">
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
-            </div>
 
             <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
                 <div class="pending-links-header">
@@ -435,6 +471,13 @@
                                     <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
                                 </svg>
                             </button>
+                            <div class="tiptap-spacer"></div>
+                            <button class="tiptap-btn tiptap-btn-rewrite" id="tiptap-rewrite-btn" onclick="onLLMRewrite()" title="LLM 改写：用中立客观风格重写文档">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 20h9"></path>
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                </svg>
+                            </button>
                         </div>
                         <div class="tiptap-editor-content" id="tiptap-editor"></div>
                         <div id="frontmatter-panel" style="display: none;"></div>
@@ -448,81 +491,132 @@
                 </div>
             </div>
 
+        <div class="ai-panel" id="ai-panel" style="display: none;">
+            <div class="ai-resizer ai-resizer-left" id="ai-resizer-left"></div>
+            <div class="ai-panel-inner">
+                <div class="ai-panel-header">
+                    <span class="ai-panel-header-dot"></span>
+                    <span class="ai-panel-header-title">AI ASSISTANT</span>
+                    <button class="ai-panel-close-btn" onclick="toggleAIPanel()" title="关闭">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <div class="ai-panel-body">
+                    <div class="ai-panel-messages" id="ai-panel-messages">
+                    </div>
+                </div>
+                <div class="ai-panel-input">
+                    <input type="text" id="ai-input" placeholder="问我关于知识库的任何事...">
+                    <button class="ai-panel-send" id="ai-send-btn" title="发送">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="ai-resizer ai-resizer-right" id="ai-resizer-right"></div>
+        </div>
+
+        </div>
+
         </div>
 
         <div class="about-panel-overlay" id="settings-panel">
-            <button class="about-panel-close" onclick="closeSettingsPanel()" title="关闭">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-            <div class="about-panel" id="settings-panel-content">
+            <div class="settings-layout" id="settings-panel-content">
+                <button class="about-panel-close" onclick="closeSettingsPanel()" title="关闭">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
                 <h2>设置</h2>
-                <div class="card theme-card">
-                    <div class="card-title">主题设置</div>
-                    <div class="theme-options">
-                        <label class="theme-option">
-                            <input type="radio" name="theme-popup" value="light" onchange="setTheme('light')">
-                            <div class="theme-preview light-preview">
-                                <div class="theme-preview-header"></div>
-                                <div class="theme-preview-content"></div>
+                <div class="settings-body">
+                    <div class="settings-left">
+                        <div class="card theme-card">
+                            <div class="card-title">主题</div>
+                            <div class="theme-options">
+                                <label class="theme-option">
+                                    <input type="radio" name="theme-popup" value="light" onchange="setTheme('light')">
+                                    <div class="theme-preview light-preview">
+                                        <div class="theme-preview-header"></div>
+                                        <div class="theme-preview-content"></div>
+                                    </div>
+                                    <span>浅色</span>
+                                </label>
+                                <label class="theme-option">
+                                    <input type="radio" name="theme-popup" value="dark" onchange="setTheme('dark')">
+                                    <div class="theme-preview dark-preview">
+                                        <div class="theme-preview-header"></div>
+                                        <div class="theme-preview-content"></div>
+                                    </div>
+                                    <span>深色</span>
+                                </label>
+                                <label class="theme-option">
+                                    <input type="radio" name="theme-popup" value="system" onchange="setTheme('system')">
+                                    <div class="theme-preview system-preview">
+                                        <div class="theme-preview-header"></div>
+                                        <div class="theme-preview-content"></div>
+                                    </div>
+                                    <span>跟随系统</span>
+                                </label>
                             </div>
-                            <span>浅色</span>
-                        </label>
-                        <label class="theme-option">
-                            <input type="radio" name="theme-popup" value="dark" onchange="setTheme('dark')">
-                            <div class="theme-preview dark-preview">
-                                <div class="theme-preview-header"></div>
-                                <div class="theme-preview-content"></div>
+                        </div>
+                        <div class="card">
+                            <div class="card-title">LLM API</div>
+                            <div class="form-group">
+                                <div class="form-field">
+                                    <div class="form-label">API Key</div>
+                                    <input type="password" id="api-key" class="form-input" placeholder="">
+                                </div>
                             </div>
-                            <span>深色</span>
-                        </label>
-                        <label class="theme-option">
-                            <input type="radio" name="theme-popup" value="system" onchange="setTheme('system')">
-                            <div class="theme-preview system-preview">
-                                <div class="theme-preview-header"></div>
-                                <div class="theme-preview-content"></div>
+                            <div class="form-group">
+                                <div class="form-field">
+                                    <div class="form-label">API Base</div>
+                                    <input type="text" id="api-base" class="form-input" placeholder="https://api.openai.com/v1">
+                                </div>
                             </div>
-                            <span>跟随系统</span>
-                        </label>
+                            <div class="form-group form-row">
+                                <div class="form-field flex-1">
+                                    <div class="form-label">模型</div>
+                                    <input type="text" id="model-name" class="form-input" placeholder="gpt-4">
+                                </div>
+                                <div class="form-field" style="width:100px">
+                                    <div class="form-label">Temperature</div>
+                                    <input type="number" id="temperature" class="form-input" step="0.1" min="0" max="2" value="0.7">
+                                </div>
+                                <div class="form-field" style="width:110px">
+                                    <div class="form-label">最大 Tokens</div>
+                                    <input type="number" id="max-tokens" class="form-input" min="100" max="128000" value="32000">
+                                </div>
+                            </div>
+                            <div class="form-group form-row">
+                                <div class="form-field" style="width:110px">
+                                    <div class="form-label">最大上下文</div>
+                                    <input type="number" id="max-context" class="form-input" min="1000" max="1000000" value="128000">
+                                </div>
+                                <div class="form-field">
+                                    <div class="form-label">思考链</div>
+                                    <label class="switch-container" style="margin-top:4px">
+                                        <input type="checkbox" id="disable-thinking" class="switch-input">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button>
+                            <div id="api-config-status-popup" class="settings-hint" style="display: none;"></div>
+                        </div>
                     </div>
-                </div>
-                <div class="card">
-                    <div class="card-title">LLM API 配置</div>
-                    <div class="form-group">
-                        <div class="form-label">API Key</div>
-                        <input type="password" id="api-key" class="form-input" placeholder="">
+                    <div class="settings-right">
+                        <div class="card settings-profile-card">
+                            <div class="card-title">用户画像</div>
+                            <div class="form-group" style="flex:1;display:flex;flex-direction:column">
+                                <div class="form-field" style="flex:1;display:flex;flex-direction:column">
+                                    <div class="form-label">用 Markdown 描述你的画像，AI 会参考此内容调整回答风格</div>
+                                    <textarea id="profile-md" class="form-input form-textarea" style="flex:1" placeholder="## 关于我&#10;&#10;- 职业：AI产品经理&#10;- 专业领域：NLP, RAG&#10;- 兴趣：大语言模型, AI Agent&#10;- 学习目标：深入理解 RAG 架构&#10;&#10;## 偏好&#10;&#10;- 回答风格：简洁&#10;- 回答深度：技术向"></textarea>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" onclick="saveUserProfile()">保存画像</button>
+                            <div id="profile-status" class="settings-hint" style="display: none;"></div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <div class="form-label">API Base</div>
-                        <input type="text" id="api-base" class="form-input" placeholder="https://api.openai.com/v1">
-                    </div>
-                    <div class="form-group">
-                        <div class="form-label">模型</div>
-                        <input type="text" id="model-name" class="form-input" placeholder="gpt-4">
-                    </div>
-                    <div class="form-group">
-                        <div class="form-label">Temperature</div>
-                        <input type="number" id="temperature" class="form-input" style="width: 120px;" step="0.1" min="0" max="2" value="0.7">
-                    </div>
-                    <div class="form-group">
-                        <div class="form-label">最大输出 Tokens</div>
-                        <input type="number" id="max-tokens" class="form-input" style="width: 120px;" min="100" max="128000" value="32000">
-                    </div>
-                    <div class="form-group">
-                        <div class="form-label">全局最大上下文</div>
-                        <input type="number" id="max-context" class="form-input" style="width: 120px;" min="1000" max="1000000" value="128000">
-                    </div>
-                    <div class="form-group" style="display: flex; align-items: center; justify-content: space-between;">
-                        <span style="font-size: 13px; color: var(--text);">关闭思考链</span>
-                        <label class="switch-container" style="cursor: pointer;">
-                            <input type="checkbox" id="disable-thinking" class="switch-input">
-                            <span class="switch-slider"></span>
-                        </label>
-                    </div>
-                    <button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button>
-                    <div id="api-config-status-popup" class="settings-hint" style="margin-top: 8px; display: none;"></div>
                 </div>
             </div>
         </div>
@@ -590,5 +684,27 @@
         </div>
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
+
+    <div class="modal-overlay" id="project-rules-modal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>项目规则</h3>
+                <button class="modal-close-btn" onclick="closeProjectRulesModal()" title="关闭">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">定义此工作区的项目规则，AI 在回答问题时会参考这些规则。</p>
+                <textarea id="project-rules-input" class="form-input form-textarea" rows="12" placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库&#10;- 所有笔记使用中文&#10;- 代码示例使用 Python&#10;- 优先使用简洁的技术文档风格"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeProjectRulesModal()">跳过</button>
+                <button class="btn btn-primary" onclick="saveProjectRulesModal()">保存规则</button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

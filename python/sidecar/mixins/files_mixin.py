@@ -1,14 +1,6 @@
 """Preview, save, read, reveal, delete (from python/main.py)."""
 
-import json
-import re
-import sys
-import shutil
-import threading
 from pathlib import Path
-
-import yaml
-from config import config, is_ignored_dir
 
 class FilesMixin:
     def _get_file_preview(self, params):
@@ -97,9 +89,37 @@ class FilesMixin:
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
 
+        file_topic = None
+        if full_path.suffix.lower() == '.md':
+            try:
+                import re
+                text = full_path.read_text(encoding='utf-8')
+                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                if m:
+                    for line in m.group(1).split('\n'):
+                        idx = line.find(':')
+                        if idx < 0:
+                            continue
+                        key = line[:idx].strip()
+                        val = line[idx + 1:].strip()
+                        if key == 'topic':
+                            file_topic = val.strip().strip("'\"")
+                            break
+            except Exception:
+                pass
+
         try:
             import send2trash
             send2trash.send2trash(str(full_path))
+
+            if file_topic:
+                from utils.topic_assigner import remove_file_from_wiki_topic
+                try:
+                    remove_file_from_wiki_topic(path)
+                except Exception:
+                    pass
+                self._start_task(f"cascade_update_{file_topic}", self._do_cascade_survey_update, args=(file_topic,))
+
             return {"success": True}
         except ImportError:
             return {"success": False, "message": "未安装 send2trash，无法安全删除文件。请运行: uv pip install send2trash"}

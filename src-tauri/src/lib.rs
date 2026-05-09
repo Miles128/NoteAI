@@ -75,6 +75,8 @@ async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
 
     let mut child = Command::new(&python_path)
         .arg(&script_path)
+        .env("HF_ENDPOINT", "https://hf-mirror.com")
+        .env("NO_PROXY", "huggingface.co,hf-mirror.com")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -233,10 +235,16 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_api_config", "get_ui_config", "save_ui_config",
     "get_theme_preference", "save_theme_preference",
     "import_files",
-    "start_web_download", "start_file_conversion", "extract_topics",
+    "start_web_download", "start_file_conversion", "auto_convert_pending", "extract_topics",
     "refresh_log", "get_backlinks", "confirm_link", "reject_link",
     "confirm_all_links", "sync_wiki_with_files",
     "check_workspace_path_valid", "clear_saved_workspace", "reveal_in_finder",
+    "rag_chat", "rag_rebuild_index", "rag_incremental_update",
+    "get_changelog",
+    "get_user_profile", "save_user_profile",
+    "get_project_rules", "save_project_rules",
+    "get_all_pending",
+    "check_and_generate_surveys",
 ];
 
 #[tauri::command]
@@ -441,6 +449,12 @@ pub fn run() {
                 let state = window.state::<AppState>();
                 let child_arc = state.python_child.clone();
                 let stdin_arc = state.python_stdin.clone();
+                {
+                    let mut pending = state.pending_requests.lock().unwrap();
+                    for (_, sender) in pending.drain() {
+                        let _ = sender.send(serde_json::Value::Null);
+                    }
+                }
                 tauri::async_runtime::block_on(async {
                     if let Some(mut child) = child_arc.lock().await.take() {
                         let _ = child.kill().await;

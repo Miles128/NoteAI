@@ -9,7 +9,7 @@
   "max_chunk_length": 8000,
   "min_chunk_size": 200,
   "theme": "light",
-  "theme_preference": "system",
+  "theme_preference": "light",
   "accent_color": "#5B7DB1",
   "window_width": 1400,
   "window_height": 900,

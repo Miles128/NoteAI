@@ -659,11 +659,10 @@ showLog(), closeLogPanel(), refreshLog()
 ### 7.2 运行测试
 
 ```bash
-cd webui
-python3 -m http.server 8080
+cargo tauri dev
 ```
 
-然后访问 `http://localhost:8080/test-modules.html`，点击"运行所有测试"按钮。
+然后访问应用内测试页面，或打开 `webui/test-modules.html` 进行测试。
 
 ---
 

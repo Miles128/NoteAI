@@ -1,7 +1,13 @@
 function escapeHtml(text) {
+    if (!text) return '';
     var div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function formatFileSize(bytes) {
@@ -30,6 +36,14 @@ function formatFileSizeForTree(size) {
     }
 }
 
+function Path_stem(p) {
+    if (!p) return p;
+    var parts = p.split('/');
+    var name = parts[parts.length - 1];
+    var dotIdx = name.lastIndexOf('.');
+    return dotIdx > 0 ? name.substring(0, dotIdx) : name;
+}
+
 function getTauriEventAPI() {
     if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
         return window.__TAURI__.event;
@@ -37,16 +51,15 @@ function getTauriEventAPI() {
     if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && typeof window.__TAURI_INTERNALS__.event.listen === 'function') {
         return window.__TAURI_INTERNALS__.event;
     }
-    if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-        return window.__TAURI__.event;
-    }
     return null;
 }
 
 window.utils = {
     escapeHtml: escapeHtml,
+    escapeAttr: escapeAttr,
     formatFileSize: formatFileSize,
     formatFileSizeForTree: formatFileSizeForTree,
     formatModifiedTime: formatModifiedTime,
+    Path_stem: Path_stem,
     getTauriEventAPI: getTauriEventAPI
 };

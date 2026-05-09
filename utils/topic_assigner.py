@@ -64,16 +64,14 @@ def parse_wiki_headings():
 
 def parse_wiki_structure():
     """
-    解析 WIKI.md 的主题结构，返回主题列表及其文件
+    解析 WIKI.md 的主题结构，支持多级主题（用 / 分隔的路径）
     
     返回格式:
     [
         {
-            "name": "主题名",
-            "files": [
-                {"title": "文件标题", "path": "相对路径"},
-                ...
-            ]
+            "name": "主题路径",  # 例如 "人工智能/深度学习"
+            "label": "深度学习",  # 最后一段名称
+            "files": [...]
         },
         ...
     ]
@@ -97,44 +95,56 @@ def parse_wiki_structure():
     current_topic = None
     in_source_files = False
     current_file = None
+    topic_stack = []
 
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
     source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
+    def _flush_topic():
+        nonlocal current_topic, current_file
+        if current_topic:
+            if current_file:
+                if current_file.get('path'):
+                    current_topic['files'].append(current_file)
+                current_file = None
+            if current_topic['files']:
+                topics.append(current_topic)
+            current_topic = None
+
     for line in lines:
         stripped = line.strip()
 
-        if stripped.startswith('## ') and not stripped.startswith('### '):
-            if current_topic:
-                if current_file:
-                    if current_file.get('path'):
-                        current_topic['files'].append(current_file)
-                    current_file = None
-                if current_topic['files']:
-                    topics.append(current_topic)
-                current_topic = None
-                in_source_files = False
+        heading_match = re.match(r'^(#{2,})\s+(.+)$', stripped)
+        if heading_match:
+            level = len(heading_match.group(1))
+            heading_text = heading_match.group(2).strip()
 
-            topic_name = stripped[3:].strip()
-            if topic_name and topic_name != '目录':
-                current_topic = {"name": topic_name, "files": []}
-                in_source_files = False
-                current_file = None
-            continue
+            if heading_text == '目录' or heading_text == '来源文件':
+                if heading_text == '来源文件':
+                    in_source_files = True
+                    if current_file:
+                        if current_file.get('path'):
+                            current_topic['files'].append(current_file)
+                        current_file = None
+                else:
+                    in_source_files = False
+                continue
 
-        if stripped.startswith('### ') and current_topic:
-            if stripped[4:].strip() == '来源文件':
-                in_source_files = True
-                if current_file:
-                    if current_file.get('path'):
-                        current_topic['files'].append(current_file)
-                    current_file = None
+            _flush_topic()
+
+            while len(topic_stack) >= level - 1:
+                topic_stack.pop()
+
+            parent_path = topic_stack[-1] if topic_stack else ''
+            if parent_path:
+                topic_path = parent_path + '/' + heading_text
             else:
-                in_source_files = False
-                if current_file:
-                    if current_file.get('path'):
-                        current_topic['files'].append(current_file)
-                    current_file = None
+                topic_path = heading_text
+
+            topic_stack.append(topic_path)
+            current_topic = {"name": topic_path, "label": heading_text, "files": []}
+            in_source_files = False
+            current_file = None
             continue
 
         if in_source_files and current_topic:
@@ -152,12 +162,7 @@ def parse_wiki_structure():
                 if path_match:
                     current_file['path'] = path_match.group(1).strip()
 
-    if current_topic:
-        if current_file:
-            if current_file.get('path'):
-                current_topic['files'].append(current_file)
-        if current_topic['files']:
-            topics.append(current_topic)
+    _flush_topic()
 
     return topics
 
@@ -165,8 +170,13 @@ def parse_wiki_structure():
 def write_topic_to_file(file_path, topic):
     try:
         text = Path(file_path).read_text(encoding='utf-8')
-        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', text.lstrip('\ufeff'))
+        bom = '\ufeff' if text.startswith('\ufeff') else ''
+        clean = text.lstrip('\ufeff')
+        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
         if not m:
+            import yaml
+            frontmatter = '---\ntopic: ' + yaml.dump(topic, default_flow_style=True).strip() + '\n---\n'
+            Path(file_path).write_text(bom + frontmatter + clean, encoding='utf-8')
             return
         yaml_text = m.group(2)
         lines = yaml_text.split('\n')
@@ -184,37 +194,72 @@ def write_topic_to_file(file_path, topic):
         if not found:
             lines.append(f'topic: {topic}')
         new_yaml = '\n'.join(lines)
-        prefix = '\ufeff' if text.startswith('\ufeff') else ''
-        new_text = prefix + m.group(1) + new_yaml + m.group(3) + text.lstrip('\ufeff')[m.end():]
+        new_text = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
         Path(file_path).write_text(new_text, encoding='utf-8')
     except Exception as e:
         sys.stderr.write(f"[write_topic] failed: {e}\n")
         sys.stderr.flush()
 
 
+def move_file_to_notes_topic_folder(file_path, topic):
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区"}
+
+    src = Path(file_path)
+    if not src.exists():
+        src = Path(workspace) / file_path
+    if not src.exists():
+        return {"success": False, "message": f"文件不存在: {file_path}"}
+
+    import shutil
+    safe_topic = topic.replace('..', '').strip('/')
+    if not safe_topic:
+        return {"success": False, "message": "主题名称非法"}
+
+    topic_dir = Path(workspace) / config.NOTES_FOLDER / safe_topic
+    topic_dir.mkdir(parents=True, exist_ok=True)
+
+    dst = topic_dir / src.name
+    if dst.exists() and dst.resolve() != src.resolve():
+        stem = src.stem
+        suffix = src.suffix
+        counter = 1
+        while dst.exists():
+            dst = topic_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+
+    if dst.resolve() == src.resolve():
+        return {"success": True, "message": "文件已在目标位置", "new_path": str(dst.relative_to(workspace))}
+
+    try:
+        shutil.move(str(src), str(dst))
+        new_rel = str(dst.relative_to(workspace))
+        return {"success": True, "message": f"已移动到 {new_rel}", "new_path": new_rel}
+    except Exception as e:
+        return {"success": False, "message": f"文件移动失败: {e}"}
+
+
 def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
     """
     向 WIKI.md 添加文件到指定主题下
+    支持多级主题路径（用 / 分隔），自动创建层级标题
     
     格式:
-    ## 主题名
+    ## 人工智能
     
-    ### 来源文件
+    ### 深度学习
     
+    #### Transformer
     1. **文件标题**
-       - 文件名：xxx.md
        - 原始路径：Notes/xxx.md
-    
-    2. **文件标题2**
-       - 文件名：xxx2.md
-       - 原始路径：Notes/xxx2.md
     """
     wiki_path = _get_wiki_path()
     workspace = config.workspace_path
     if not wiki_path or not workspace:
         return False
 
-    display_title = file_title or Path(file_rel_path).stem
+    display_title = file_title or Path(file_rel_path).name
     file_name = Path(file_rel_path).name
 
     try:
@@ -228,8 +273,14 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         sys.stderr.flush()
         return False
 
+    parts = topic.split('/')
+    topic_leaf = parts[-1]
+    topic_depth = len(parts)
+
     lines = content.split('\n')
-    topic_heading = f'## {topic}'
+
+    heading_prefix = '#' * (topic_depth + 1)
+    topic_heading = f'{heading_prefix} {topic_leaf}'
 
     topic_start_idx = None
     source_files_idx = None
@@ -237,14 +288,16 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
 
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.lower() == topic_heading.lower():
+        if stripped == topic_heading:
             topic_start_idx = i
             source_files_idx = None
         elif topic_start_idx is not None and stripped == '### 来源文件':
             source_files_idx = i
-        elif topic_start_idx is not None and stripped.startswith('## ') and not stripped.startswith('### '):
-            topic_end_idx = i
-            break
+        elif topic_start_idx is not None and re.match(r'^#{2,}\s+', stripped):
+            existing_level = len(re.match(r'^(#{2,})', stripped).group(1))
+            if existing_level <= topic_depth + 1:
+                topic_end_idx = i
+                break
 
     if topic_end_idx is None and topic_start_idx is not None:
         topic_end_idx = len(lines)
@@ -278,7 +331,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
                     if next_file_match:
                         insert_idx = j
                         break
-                    if next_stripped.startswith('## '):
+                    if re.match(r'^#{2,}\s+', next_stripped):
                         insert_idx = j
                         break
                 if insert_idx == topic_end_idx:
@@ -307,9 +360,42 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
             lines.insert(topic_end_idx + i, line)
 
     else:
+        parent_insert_idx = len(lines)
+
+        for pi in range(len(parts) - 1):
+            parent_path = '/'.join(parts[:pi + 1])
+            parent_label = parts[pi]
+            parent_heading_prefix = '#' * (pi + 2)
+            parent_heading = f'{parent_heading_prefix} {parent_label}'
+
+            parent_found = False
+            for i, line in enumerate(lines):
+                if line.strip() == parent_heading:
+                    parent_found = True
+                    parent_insert_idx = i + 1
+                    while parent_insert_idx < len(lines):
+                        next_stripped = lines[parent_insert_idx].strip()
+                        next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
+                        if next_heading_match:
+                            next_level = len(next_heading_match.group(1))
+                            if next_level <= pi + 2:
+                                break
+                        parent_insert_idx += 1
+                    break
+
+            if not parent_found:
+                new_section = [
+                    '',
+                    parent_heading,
+                    ''
+                ]
+                for i, l in enumerate(new_section):
+                    lines.insert(parent_insert_idx + i, l)
+                parent_insert_idx += len(new_section)
+
         new_lines = [
             '',
-            f'## {topic}',
+            topic_heading,
             '',
             '### 来源文件',
             '',
@@ -317,7 +403,8 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
             f"   - 文件名：{file_name}",
             f"   - 原始路径：{file_rel_path}"
         ]
-        lines.extend(new_lines)
+        for i, l in enumerate(new_lines):
+            lines.insert(parent_insert_idx + i, l)
 
     try:
         new_content = '\n'.join(lines)
@@ -398,7 +485,103 @@ def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
     return _normalize_for_match(word) in _normalize_for_match(topic_name)
 
 
-def auto_assign_topic_for_file(file_path):
+def _needs_format_optimization(body):
+    if not body or not body.strip():
+        return False
+    has_sub_heading = bool(re.search(r'^#{2,3}\s+\S', body, re.MULTILINE))
+    if has_sub_heading:
+        return False
+    has_punctuation = bool(re.search(r'[，,。.！!？?；;：:、]', body))
+    if has_punctuation:
+        return False
+    return True
+
+
+def _optimize_file_format(full_path, text, m):
+    from utils.helpers import smart_format_markdown
+
+    body = text
+    title = full_path.stem
+    if m:
+        body = text[m.end():]
+        for line in m.group(1).split('\n'):
+            idx = line.find(':')
+            if idx < 0:
+                continue
+            key = line[:idx].strip()
+            val = line[idx + 1:].strip()
+            if key == 'title':
+                title = val.strip().strip("'\"")
+                break
+
+    if not _needs_format_optimization(body):
+        return False
+
+    optimized_body = smart_format_markdown(body, title)
+    if optimized_body == body:
+        return False
+
+    if m:
+        import yaml as _yaml
+        try:
+            fm = _yaml.safe_load(m.group(1))
+        except Exception:
+            fm = None
+        if fm and isinstance(fm, dict):
+            fm_str = _yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+            new_content = '---\n' + fm_str + '\n---\n' + optimized_body
+        else:
+            new_content = optimized_body
+    else:
+        new_content = optimized_body
+
+    try:
+        full_path.write_text(new_content, encoding='utf-8')
+        return True
+    except Exception:
+        return False
+
+
+def _llm_suggest_topic(title, tags, content_preview, topic_names):
+    if not config.api_key:
+        return []
+    if not topic_names:
+        return []
+
+    from utils.llm_utils import call_llm
+    from prompts.topic_assignment import TOPIC_SUGGESTION_PROMPT
+
+    tags_str = ", ".join(tags) if tags else "无"
+    topic_list_str = "\n".join(f"- {t}" for t in topic_names)
+
+    prompt = TOPIC_SUGGESTION_PROMPT.format(title=title, tags=tags_str)
+
+    prompt += f"\n\n已有的主题分类列表（请优先从中选择）：\n{topic_list_str}"
+
+    prompt += f"\n\n文章内容预览：\n{content_preview}"
+
+    try:
+        result = call_llm(prompt, temperature=0.3)
+        suggested = []
+        for line in result.strip().split('\n'):
+            line = line.strip().lstrip('-•*0-9. ').strip()
+            if not line:
+                continue
+            for tn in topic_names:
+                if _normalize_for_match(line) == _normalize_for_match(tn):
+                    suggested.append(tn)
+                    break
+            else:
+                if line and len(line) <= 20:
+                    suggested.append(line)
+        return suggested[:4]
+    except Exception as e:
+        sys.stderr.write(f"[llm_suggest_topic] failed: {e}\n")
+        sys.stderr.flush()
+        return []
+
+
+def auto_assign_topic_for_file(file_path, use_llm=True):
     workspace = config.workspace_path
     if not workspace:
         return None
@@ -413,26 +596,49 @@ def auto_assign_topic_for_file(file_path):
         return None
 
     m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-    if not m:
-        return None
 
-    yaml_text = m.group(1)
+    yaml_text = m.group(1) if m else ''
     tags = []
     title = full_path.stem
 
-    for line in yaml_text.split('\n'):
-        idx = line.find(':')
-        if idx < 0:
-            continue
-        key = line[:idx].strip()
-        val = line[idx + 1:].strip()
-        if key == 'tags' and val.startswith('[') and val.endswith(']'):
-            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-        elif key == 'title':
-            title = val.strip().strip("'\"")
+    if m:
+        for line in yaml_text.split('\n'):
+            idx = line.find(':')
+            if idx < 0:
+                continue
+            key = line[:idx].strip()
+            val = line[idx + 1:].strip()
+            if key == 'tags' and val.startswith('[') and val.endswith(']'):
+                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+            elif key == 'title':
+                title = val.strip().strip("'\"")
 
-    if not _check_topic_needs_processing(yaml_text):
+    if m and not _check_topic_needs_processing(yaml_text):
         return None
+
+    format_optimized = _optimize_file_format(full_path, text, m)
+
+    if format_optimized:
+        try:
+            text = full_path.read_text(encoding='utf-8')
+        except Exception:
+            pass
+        else:
+            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+            yaml_text = m.group(1) if m else ''
+            if m:
+                tags = []
+                title = full_path.stem
+                for line in yaml_text.split('\n'):
+                    idx = line.find(':')
+                    if idx < 0:
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'tags' and val.startswith('[') and val.endswith(']'):
+                        tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                    elif key == 'title':
+                        title = val.strip().strip("'\"")
 
     headings = parse_wiki_headings()
     filename = full_path.stem
@@ -448,7 +654,7 @@ def auto_assign_topic_for_file(file_path):
             "source": "none"
         })
         save_pending(pending)
-        return {"status": "pending", "source": "none"}
+        return {"status": "pending", "source": "none", "format_optimized": format_optimized}
 
     high_priority_candidates = []
     low_priority_candidates = []
@@ -498,9 +704,45 @@ def auto_assign_topic_for_file(file_path):
         write_topic_to_file(str(full_path), candidates[0])
         rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
         add_file_to_wiki_topic(rel, candidates[0], title)
-        return {"status": "auto_assigned", "topic": candidates[0]}
+        move_file_to_notes_topic_folder(str(full_path), candidates[0])
+        return {"status": "auto_assigned", "topic": candidates[0], "format_optimized": format_optimized}
 
     all_candidates = candidates + extra_candidates
+
+    need_llm = use_llm and config.api_key and (
+        not high_priority_candidates or len(all_candidates) > 1
+    )
+
+    if need_llm:
+        body = text
+        if m:
+            body = text[m.end():]
+        content_preview = body[:1500].strip()
+        topic_names = [h["name"] for h in headings]
+        llm_suggestions = _llm_suggest_topic(title, tags, content_preview, topic_names)
+
+        if llm_suggestions:
+            matched = []
+            for s in llm_suggestions:
+                for h in headings:
+                    if _normalize_for_match(s) == _normalize_for_match(h["name"]):
+                        matched.append(h["name"])
+                        break
+
+            if len(matched) == 1 and not extra_candidates:
+                topic = matched[0]
+                write_topic_to_file(str(full_path), topic)
+                rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
+                add_file_to_wiki_topic(rel, topic, title)
+                move_file_to_notes_topic_folder(str(full_path), topic)
+                return {"status": "auto_assigned", "topic": topic, "source": "llm", "format_optimized": format_optimized}
+
+            for t in matched:
+                if t not in all_candidates:
+                    all_candidates.append(t)
+            for s in llm_suggestions:
+                if s not in all_candidates:
+                    all_candidates.append(s)
 
     pending = load_pending()
     rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
@@ -509,10 +751,10 @@ def auto_assign_topic_for_file(file_path):
         "title": title,
         "tags": tags,
         "candidates": all_candidates,
-        "source": "wiki" if high_priority_candidates else "low_priority"
+        "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
     })
     save_pending(pending)
-    return {"status": "pending", "source": "wiki" if high_priority_candidates else "low_priority"}
+    return {"status": "pending", "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority"), "format_optimized": format_optimized}
 
 
 def rename_wiki_topic(old_topic, new_topic):
@@ -603,6 +845,26 @@ def rename_wiki_topic(old_topic, new_topic):
         if not new_content.endswith('\n'):
             new_content += '\n'
         wiki_path.write_text(new_content, encoding='utf-8')
+
+        workspace = config.workspace_path
+        if workspace:
+            import shutil
+            old_dir = Path(workspace) / config.NOTES_FOLDER / old_topic
+            new_dir = Path(workspace) / config.NOTES_FOLDER / new_topic
+            if old_dir.exists() and old_dir.is_dir():
+                if new_dir.exists():
+                    for item in old_dir.iterdir():
+                        dst = new_dir / item.name
+                        if dst.exists():
+                            if item.is_dir():
+                                shutil.rmtree(str(dst))
+                            else:
+                                dst.unlink()
+                        shutil.move(str(item), str(dst))
+                    old_dir.rmdir()
+                else:
+                    old_dir.rename(new_dir)
+
         return True, file_paths
     except Exception as e:
         sys.stderr.write(f"[rename_topic] write failed: {e}\n")
@@ -1025,6 +1287,21 @@ def delete_topic(topic_name):
     if not wiki_ok:
         return {"success": False, "message": "从 WIKI.md 删除主题失败"}
 
+    import shutil
+    notes_topic_dir = Path(workspace) / config.NOTES_FOLDER / topic_name
+    if notes_topic_dir.exists() and notes_topic_dir.is_dir():
+        try:
+            shutil.rmtree(str(notes_topic_dir))
+        except Exception:
+            pass
+
+    organized_topic_dir = Path(workspace) / config.ORGANIZED_FOLDER / topic_name
+    if organized_topic_dir.exists() and organized_topic_dir.is_dir():
+        try:
+            shutil.rmtree(str(organized_topic_dir))
+        except Exception:
+            pass
+
     workspace_path = Path(workspace)
 
     for rel_path in file_paths:
@@ -1382,6 +1659,8 @@ def move_file_to_topic(file_rel_path, new_topic, file_title=None):
 
     write_topic_to_file(str(file_path), new_topic)
 
+    move_file_to_notes_topic_folder(str(file_path), new_topic)
+
     if add_success:
         if old_topic:
             return {"success": True, "message": f"已从「{old_topic}」移动到「{new_topic}」"}
@@ -1393,13 +1672,8 @@ def move_file_to_topic(file_rel_path, new_topic, file_title=None):
 
 def create_topic(topic_name):
     """
-    在 WIKI.md 中创建新的主题条目
-    
-    格式:
-    ## 主题名
-    
-    ### 来源文件
-    
+    在 WIKI.md 中创建新的主题条目，支持多级路径（用 / 分隔）
+    自动创建父级标题（如果不存在）
     """
     wiki_path = _get_wiki_path()
     workspace = config.workspace_path
@@ -1424,9 +1698,14 @@ def create_topic(topic_name):
             if h["name"].lower() == topic_name.lower():
                 return {"success": False, "message": f"主题「{topic_name}」已存在"}
         
+        parts = topic_name.split('/')
+        topic_leaf = parts[-1]
+        topic_depth = len(parts)
+        heading_prefix = '#' * (topic_depth + 1)
+        
         new_topic_lines = [
             "",
-            f"## {topic_name}",
+            f"{heading_prefix} {topic_leaf}",
             "",
             "### 来源文件",
             "",
@@ -1434,23 +1713,70 @@ def create_topic(topic_name):
         
         lines = content.split('\n')
         
-        insert_idx = len(lines)
-        for i in range(len(lines) - 1, -1, -1):
-            stripped = lines[i].strip()
-            if stripped.startswith('## ') and not stripped.startswith('### '):
-                if stripped[3:].strip() != '目录':
-                    insert_idx = i + 1
-                    while insert_idx < len(lines):
-                        next_stripped = lines[insert_idx].strip()
-                        if next_stripped.startswith('## ') and not next_stripped.startswith('### '):
-                            break
-                        insert_idx += 1
-                    break
+        if topic_depth > 1:
+            parent_insert_idx = len(lines)
+            for pi in range(len(parts) - 1):
+                parent_label = parts[pi]
+                parent_heading_prefix = '#' * (pi + 2)
+                parent_heading = f'{parent_heading_prefix} {parent_label}'
+                
+                parent_found = False
+                for i, line in enumerate(lines):
+                    if line.strip() == parent_heading:
+                        parent_found = True
+                        parent_insert_idx = i + 1
+                        while parent_insert_idx < len(lines):
+                            next_stripped = lines[parent_insert_idx].strip()
+                            next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
+                            if next_heading_match:
+                                next_level = len(next_heading_match.group(1))
+                                if next_level <= pi + 2:
+                                    break
+                            parent_insert_idx += 1
+                        break
+                
+                if not parent_found:
+                    parent_section = [
+                        '',
+                        parent_heading,
+                        ''
+                    ]
+                    for i, l in enumerate(parent_section):
+                        lines.insert(parent_insert_idx + i, l)
+                    parent_insert_idx += len(parent_section)
+            
+            for i, l in enumerate(new_topic_lines):
+                lines.insert(parent_insert_idx + i, l)
+        else:
+            insert_idx = len(lines)
+            for i in range(len(lines) - 1, -1, -1):
+                stripped = lines[i].strip()
+                if re.match(r'^#{2,}\s+', stripped):
+                    heading_match = re.match(r'^(#{2,})', stripped)
+                    if heading_match:
+                        existing_level = len(heading_match.group(1))
+                        if existing_level <= 2:
+                            if stripped[existing_level:].strip() != '目录':
+                                insert_idx = i + 1
+                                while insert_idx < len(lines):
+                                    next_stripped = lines[insert_idx].strip()
+                                    next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
+                                    if next_heading_match:
+                                        next_level = len(next_heading_match.group(1))
+                                        if next_level <= 2:
+                                            break
+                                    insert_idx += 1
+                                break
+            
+            new_lines = lines[:insert_idx] + new_topic_lines + lines[insert_idx:]
+            lines = new_lines
         
-        new_lines = lines[:insert_idx] + new_topic_lines + lines[insert_idx:]
-        new_content = '\n'.join(new_lines)
+        new_content = '\n'.join(lines)
         
         wiki_path.write_text(new_content, encoding='utf-8')
+        
+        notes_topic_dir = Path(workspace) / config.NOTES_FOLDER / topic_name
+        notes_topic_dir.mkdir(parents=True, exist_ok=True)
         
         return {"success": True, "message": f"主题「{topic_name}」创建成功"}
         

@@ -1,14 +1,8 @@
 """API / UI / theme + connectivity test (from python/main.py)."""
 
-import json
-import re
-import sys
-import shutil
-import threading
 from pathlib import Path
 
-import yaml
-from config import config, is_ignored_dir
+from config import config
 from utils.helpers import test_api_connection
 
 class ConfigMixin:
@@ -42,7 +36,6 @@ class ConfigMixin:
         if not api_key or not api_key.strip():
             return {"success": False, "message": "API Key 不能为空"}
 
-        from utils.helpers import test_api_connection
         connected, conn_msg = test_api_connection(api_key, api_base, model_name)
         if not connected:
             return {"success": False, "message": conn_msg}
@@ -111,3 +104,59 @@ class ConfigMixin:
                 return {"success": False, "message": conn_msg}
         except Exception as e:
             return {"success": False, "message": str(e)}
+
+    def _get_user_profile(self, params):
+        from sidecar.rag.profile import load_profile
+        return {"success": True, "profile": load_profile()}
+
+    def _save_user_profile(self, params):
+        from sidecar.rag.profile import load_profile, save_profile
+        profile = load_profile()
+
+        if "profile_md" in params:
+            profile["profile_md"] = params["profile_md"]
+            save_profile(profile)
+            return {"success": True, "message": "用户画像已保存"}
+
+        identity = profile.get("identity", {})
+        if "profession" in params:
+            identity["profession"] = params["profession"]
+        if "expertise_areas" in params:
+            identity["expertise_areas"] = params["expertise_areas"]
+        if "interests" in params:
+            identity["interests"] = params["interests"]
+        if "learning_goals" in params:
+            identity["learning_goals"] = params["learning_goals"]
+        profile["identity"] = identity
+
+        prefs = profile.get("preferences", {})
+        if "answer_style" in params:
+            prefs["answer_style"] = params["answer_style"]
+        if "detail_level" in params:
+            prefs["detail_level"] = params["detail_level"]
+        profile["preferences"] = prefs
+
+        save_profile(profile)
+        return {"success": True, "message": "用户画像已保存"}
+
+    def _get_project_rules(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": True, "rules": ""}
+        rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
+        if rules_path.exists():
+            try:
+                return {"success": True, "rules": rules_path.read_text(encoding='utf-8')}
+            except Exception:
+                pass
+        return {"success": True, "rules": ""}
+
+    def _save_project_rules(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        rules = params.get("rules", "")
+        rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
+        rules_path.parent.mkdir(parents=True, exist_ok=True)
+        rules_path.write_text(rules, encoding='utf-8')
+        return {"success": True, "message": "项目规则已保存"}

@@ -26,7 +26,6 @@ window.GraphModule = (function() {
         html += '<div class="graph-filter-bar">';
         html += '<button class="graph-filter-btn active" data-gfilter="all" onclick="window.GraphModule.onFilter(\'all\')">全部</button>';
         html += '<button class="graph-filter-btn" data-gfilter="topic" onclick="window.GraphModule.onFilter(\'topic\')">主题</button>';
-        html += '<button class="graph-filter-btn" data-gfilter="tag" onclick="window.GraphModule.onFilter(\'tag\')">标签</button>';
         html += '<button class="graph-filter-btn" data-gfilter="link" onclick="window.GraphModule.onFilter(\'link\')">链接</button>';
         html += '<button class="graph-filter-btn graph-label-toggle" id="graph-label-toggle" onclick="window.GraphModule.toggleFileLabels()" title="显示/隐藏文件名称">Aa</button>';
         html += '</div>';
@@ -38,7 +37,6 @@ window.GraphModule = (function() {
         html += '<div class="graph-legend">';
         html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#4A90D9"></span>文件</span>';
         html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#E8913A"></span>主题</span>';
-        html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#50B87F"></span>标签</span>';
         html += '</div>';
         html += '<div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>';
         html += '</div>';
@@ -70,6 +68,20 @@ window.GraphModule = (function() {
             }
 
             _graphData = result;
+
+            var validIds = {};
+            if (_graphData.nodes) {
+                for (var vi = 0; vi < _graphData.nodes.length; vi++) {
+                    validIds[_graphData.nodes[vi].id] = true;
+                }
+            }
+            var oldPositions = _graphNodePositions;
+            _graphNodePositions = {};
+            for (var pid in oldPositions) {
+                if (validIds[pid]) {
+                    _graphNodePositions[pid] = oldPositions[pid];
+                }
+            }
 
             if (!_graphData.nodes || _graphData.nodes.length === 0) {
                 if (emptyEl) {
@@ -153,6 +165,7 @@ window.GraphModule = (function() {
 
         var visited = {};
         var revealOrder = [];
+        if (sorted.length === 0) return revealOrder;
         var queue = [sorted[0].id];
         visited[sorted[0].id] = true;
 
@@ -316,14 +329,25 @@ window.GraphModule = (function() {
         var edges = [];
         var nodeMap = {};
 
+        function initPos(n) {
+            var pos = _graphNodePositions[n.id];
+            if (pos) return { x: pos.x, y: pos.y };
+            var angle = Math.random() * Math.PI * 2;
+            if (n.nodeType === 'topic') {
+                var r = Math.random() * Math.min(w, h) * 0.1;
+                return { x: w / 2 + Math.cos(angle) * r, y: h / 2 + Math.sin(angle) * r };
+            } else {
+                var r = Math.min(w, h) * 0.2 + Math.random() * Math.min(w, h) * 0.25;
+                return { x: w / 2 + Math.cos(angle) * r, y: h / 2 + Math.sin(angle) * r };
+            }
+        }
+
         if (_graphFilter === 'all') {
             allNodes.forEach(function(n) {
-                var pos = _graphNodePositions[n.id];
+                var p = initPos(n);
                 var node = {
                     id: n.id, label: n.label, nodeType: n.nodeType,
-                    x: pos ? pos.x : w / 2 + (Math.random() - 0.5) * w * 0.5,
-                    y: pos ? pos.y : h / 2 + (Math.random() - 0.5) * h * 0.5,
-                    vx: 0, vy: 0
+                    x: p.x, y: p.y, vx: 0, vy: 0
                 };
                 nodes.push(node);
                 nodeMap[n.id] = node;
@@ -340,8 +364,8 @@ window.GraphModule = (function() {
             allEdges.forEach(function(e) { if (e.type === 'topic') fileIds.add(e.source); });
             allNodes.forEach(function(n) {
                 if (topicIds.has(n.id) || fileIds.has(n.id)) {
-                    var pos = _graphNodePositions[n.id];
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                    var p = initPos(n);
+                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: p.x, y: p.y, vx:0, vy:0 };
                     nodes.push(node); nodeMap[n.id] = node;
                 }
             });
@@ -350,30 +374,13 @@ window.GraphModule = (function() {
                     edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
                 }
             });
-        } else if (_graphFilter === 'tag') {
-            var tagIds = new Set();
-            allNodes.forEach(function(n) { if (n.nodeType === 'tag') tagIds.add(n.id); });
-            var fileIds2 = new Set();
-            allEdges.forEach(function(e) { if (e.type === 'tag') fileIds2.add(e.source); });
-            allNodes.forEach(function(n) {
-                if (tagIds.has(n.id) || fileIds2.has(n.id)) {
-                    var pos = _graphNodePositions[n.id];
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
-                    nodes.push(node); nodeMap[n.id] = node;
-                }
-            });
-            allEdges.forEach(function(e) {
-                if (e.type === 'tag' && nodeMap[e.source] && nodeMap[e.target]) {
-                    edges.push({ source: nodeMap[e.source], target: nodeMap[e.target], type: e.type });
-                }
-            });
         } else if (_graphFilter === 'link') {
             var fileIds3 = new Set();
             allEdges.forEach(function(e) { if (e.type === 'link') { fileIds3.add(e.source); fileIds3.add(e.target); } });
             allNodes.forEach(function(n) {
                 if (n.nodeType === 'file' && fileIds3.has(n.id)) {
-                    var pos = _graphNodePositions[n.id];
-                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: pos ? pos.x : w/2+(Math.random()-0.5)*w*0.5, y: pos ? pos.y : h/2+(Math.random()-0.5)*h*0.5, vx:0, vy:0 };
+                    var p = initPos(n);
+                    var node = { id: n.id, label: n.label, nodeType: n.nodeType, x: p.x, y: p.y, vx:0, vy:0 };
                     nodes.push(node); nodeMap[n.id] = node;
                 }
             });
@@ -418,10 +425,12 @@ window.GraphModule = (function() {
         var linkDistance = nodeCount > 200 ? 35 : nodeCount > 100 ? 45 : 55;
         var linkStrength = nodeCount > 200 ? 0.008 : 0.012;
         var repulseStrength = nodeCount > 200 ? 150 : 250;
-        var sphereRadius = Math.min(w, h) * 0.48;
 
         function tick() {
             if (_graphAlpha < alphaMin) { _graphAlpha = alphaMin; }
+            var cw = _graphCanvasW || w;
+            var ch = _graphCanvasH || h;
+            var sr = Math.min(cw, ch) * 0.48;
 
             for (var i = 0; i < edges.length; i++) {
                 var e = edges[i];
@@ -489,17 +498,26 @@ window.GraphModule = (function() {
 
             for (var i = 0; i < nodes.length; i++) {
                 var n = nodes[i];
-                n.vx += (w / 2 - n.x) * centerPull * _graphAlpha;
-                n.vy += (h / 2 - n.y) * centerPull * _graphAlpha;
+                if (n.nodeType === 'topic') {
+                    n.vx += (cw / 2 - n.x) * centerPull * 3 * _graphAlpha;
+                    n.vy += (ch / 2 - n.y) * centerPull * 3 * _graphAlpha;
+                } else {
+                    n.vx += (cw / 2 - n.x) * centerPull * _graphAlpha;
+                    n.vy += (ch / 2 - n.y) * centerPull * _graphAlpha;
+                }
+            }
+
+            for (var i = 0; i < nodes.length; i++) {
+                var n = nodes[i];
                 n.vx *= friction; n.vy *= friction;
                 n.x += n.vx; n.y += n.vy;
-                var dx = n.x - w / 2;
-                var dy = n.y - h / 2;
+                var dx = n.x - cw / 2;
+                var dy = n.y - ch / 2;
                 var distFromCenter = Math.sqrt(dx * dx + dy * dy);
-                if (distFromCenter > sphereRadius) {
-                    var scale = sphereRadius / distFromCenter;
-                    n.x = w / 2 + dx * scale;
-                    n.y = h / 2 + dy * scale;
+                if (distFromCenter > sr) {
+                    var s = sr / distFromCenter;
+                    n.x = cw / 2 + dx * s;
+                    n.y = ch / 2 + dy * s;
                     var nx = dx / distFromCenter;
                     var ny = dy / distFromCenter;
                     var dot = n.vx * nx + n.vy * ny;
@@ -512,19 +530,21 @@ window.GraphModule = (function() {
             _graphAlpha *= (1 - alphaDecay);
         }
 
-        var edgeColors = { topic: 'rgba(232,145,58,0.25)', tag: 'rgba(80,184,127,0.25)', link: 'rgba(74,144,217,0.3)' };
-        var nodeColors = { file: '#4A90D9', topic: '#E8913A', tag: '#50B87F' };
+        var edgeColors = { topic: 'rgba(232,145,58,0.25)', link: 'rgba(74,144,217,0.3)' };
+        var nodeColors = { file: '#4A90D9', topic: '#E8913A' };
 
         function draw() {
             var dw = _graphCanvasW || w;
             var dh = _graphCanvasH || h;
+            var dpr = window.devicePixelRatio || 1;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, dw, dh);
             ctx.save();
             ctx.translate(dw / 2, dh / 2);
             ctx.scale(_graphScale, _graphScale);
             ctx.translate(-dw / 2 + _graphOffsetX, -dh / 2 + _graphOffsetY);
 
-            var edgeTypeOrder = ['topic', 'tag', 'link'];
+            var edgeTypeOrder = ['topic', 'link'];
             for (var t = 0; t < edgeTypeOrder.length; t++) {
                 var etype = edgeTypeOrder[t];
                 ctx.strokeStyle = edgeColors[etype] || 'rgba(150,150,150,0.3)';
@@ -541,7 +561,7 @@ window.GraphModule = (function() {
                 ctx.setLineDash([]);
             }
 
-            var nodeTypeOrder = ['file', 'topic', 'tag'];
+            var nodeTypeOrder = ['file', 'topic'];
             for (var t = 0; t < nodeTypeOrder.length; t++) {
                 var ntype = nodeTypeOrder[t];
                 ctx.fillStyle = nodeColors[ntype] || '#999';
@@ -632,8 +652,8 @@ window.GraphModule = (function() {
             if (_isPanning) {
                 var dx = mx - _dragStartX;
                 var dy = my - _dragStartY;
-                _graphOffsetX += dx / _graphScale;
-                _graphOffsetY += dy / _graphScale;
+                _graphOffsetX -= dx / _graphScale;
+                _graphOffsetY -= dy / _graphScale;
                 _dragStartX = mx; _dragStartY = my;
                 draw();
                 return;
@@ -720,8 +740,8 @@ window.GraphModule = (function() {
             if (_isPanning) {
                 var dx = mx - _dragStartX;
                 var dy = my - _dragStartY;
-                _graphOffsetX += dx / _graphScale;
-                _graphOffsetY += dy / _graphScale;
+                _graphOffsetX -= dx / _graphScale;
+                _graphOffsetY -= dy / _graphScale;
                 _dragStartX = mx; _dragStartY = my;
                 draw();
             }
@@ -739,11 +759,20 @@ window.GraphModule = (function() {
 
         canvas.addEventListener('wheel', function(ev) {
             ev.preventDefault();
+            var rect = canvas.getBoundingClientRect();
+            var mx = ev.clientX - rect.left;
+            var my = ev.clientY - rect.top;
+            var dw = _graphCanvasW || w;
+            var dh = _graphCanvasH || h;
+            var gp = screenToGraph(mx, my);
             if (ev.deltaY < 0) {
                 _graphScale = Math.min(_graphScale * 1.1, 5);
             } else {
                 _graphScale = Math.max(_graphScale / 1.1, 0.2);
             }
+            var newGp = screenToGraph(mx, my);
+            _graphOffsetX += newGp.x - gp.x;
+            _graphOffsetY += newGp.y - gp.y;
             draw();
         }, acOpts);
 
@@ -780,15 +809,23 @@ window.GraphModule = (function() {
             canvasEl.height = nh * dpr;
             canvasEl.style.width = nw + 'px';
             canvasEl.style.height = nh + 'px';
-            var nctx = canvasEl.getContext('2d');
-            nctx.scale(dpr, dpr);
-            var scaleRatio = Math.sqrt((nw * nh) / (oldW * oldH));
-            if (scaleRatio > 0.05 && scaleRatio < 20 && oldW > 20 && oldH > 20) {
-                _graphScale *= scaleRatio;
+            if (oldW > 20 && oldH > 20 && _graphNodes && _graphNodes.length > 0) {
+                var ratio = Math.sqrt((nw * nh) / (oldW * oldH));
+                _graphScale *= ratio;
                 _graphScale = Math.max(0.2, Math.min(5, _graphScale));
+                var dx = (nw - oldW) / 2;
+                var dy = (nh - oldH) / 2;
+                for (var i = 0; i < _graphNodes.length; i++) {
+                    _graphNodes[i].x += dx;
+                    _graphNodes[i].y += dy;
+                    if (_graphNodePositions[_graphNodes[i].id]) {
+                        _graphNodePositions[_graphNodes[i].id].x += dx;
+                        _graphNodePositions[_graphNodes[i].id].y += dy;
+                    }
+                }
+                _graphOffsetX = 0;
+                _graphOffsetY = 0;
             }
-            _graphOffsetX = 0;
-            _graphOffsetY = 0;
             _graphCanvasW = nw;
             _graphCanvasH = nh;
             if (_graphDrawFrame) _graphDrawFrame();

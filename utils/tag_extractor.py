@@ -38,7 +38,7 @@ def _collect_workspace_md_filenames(workspace_path: str) -> List[str]:
     workspace = Path(workspace_path)
     filenames = []
     
-    for folder_name in ['Notes', 'Organized', 'Used']:
+    for folder_name in ['Notes', 'Abstract', 'Used']:
         folder = workspace / folder_name
         if not folder.exists():
             continue

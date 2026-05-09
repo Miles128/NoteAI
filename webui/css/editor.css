@@ -22,7 +22,7 @@
 }
 
 .editor-status-bar.rewriting {
-    color: #E8913A;
+    color: var(--color-topic);
     background: rgba(232, 145, 58, 0.06);
 }
 
@@ -77,6 +77,26 @@
 
 .obsidian-prop-val:hover {
     border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.obsidian-topic-breadcrumb {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: none;
+    flex: 1;
+}
+
+.topic-breadcrumb-item {
+    color: var(--primary);
+    font-size: 13px;
+}
+
+.topic-breadcrumb-sep {
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 0 2px;
 }
 
 .obsidian-prop-tags {
@@ -243,7 +263,7 @@
 
 .editor-toolbar-btn.active {
     background: var(--primary);
-    color: #ffffff;
+    color: var(--on-primary);
 }
 
 .editor-toolbar-btn svg {
@@ -281,7 +301,7 @@
 
 .editor-mode-btn.active {
     background: var(--primary);
-    color: #ffffff;
+    color: var(--on-primary);
 }
 
 .tiptap-editor-container {
@@ -303,6 +323,11 @@
     flex-shrink: 0;
     overflow-x: auto;
     min-height: 40px;
+}
+
+.tiptap-toolbar .tiptap-spacer {
+    flex: 1;
+    min-width: 8px;
 }
 
 .tiptap-toolbar::-webkit-scrollbar {
@@ -343,7 +368,7 @@
 
 .tiptap-btn.active {
     background: var(--primary);
-    color: #ffffff;
+    color: var(--on-primary);
 }
 
 .tiptap-btn:disabled {
@@ -363,6 +388,21 @@
     background: var(--border);
     margin: 0 4px;
     flex-shrink: 0;
+}
+
+.tiptap-btn-rewrite {
+    margin-left: auto;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    padding: 4px 10px !important;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.tiptap-btn-rewrite:hover:not(:disabled) {
+    border-color: var(--primary) !important;
+    color: var(--primary);
+    background: var(--primary-light);
 }
 
 .tiptap-editor-content {
@@ -718,8 +758,8 @@
 }
 
 .rewrite-confirm-btn {
-    background: #2ea043;
-    color: #fff;
+    background: var(--color-confirmed);
+    color: var(--on-primary);
 }
 
 .rewrite-confirm-btn:hover {
@@ -727,8 +767,8 @@
 }
 
 .rewrite-cancel-btn {
-    background: #da3633;
-    color: #fff;
+    background: var(--color-danger);
+    color: var(--on-primary);
 }
 
 .rewrite-cancel-btn:hover {
@@ -774,7 +814,7 @@
 }
 
 [data-theme="dark"] .rewrite-confirm-btn {
-    background: #238636;
+    background: var(--color-confirmed);
 }
 
 [data-theme="dark"] .rewrite-confirm-btn:hover {
@@ -782,7 +822,7 @@
 }
 
 [data-theme="dark"] .rewrite-cancel-btn {
-    background: #b62324;
+    background: var(--color-danger);
 }
 
 [data-theme="dark"] .rewrite-cancel-btn:hover {

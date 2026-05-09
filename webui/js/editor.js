@@ -245,7 +245,7 @@ function updateMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
-            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : rawHtml;
+            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             previewEl.innerHTML = '<p class="preview-error">解析失败</p>';
@@ -259,7 +259,7 @@ function renderMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
-            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : rawHtml;
+            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             return '<p class="preview-error">解析失败</p>';
@@ -327,9 +327,12 @@ async function performSave(content) {
     await _savePromise;
 }
 
+var _previewScrollBound = false;
+
 function initPreviewScrollListener() {
     const previewScroll = document.getElementById('editor-preview-scroll');
-    if (!previewScroll) return;
+    if (!previewScroll || _previewScrollBound) return;
+    _previewScrollBound = true;
     
     previewScroll.addEventListener('scroll', () => {
         if (window.mdEditor.isScrollSyncing) return;
@@ -420,28 +423,30 @@ async function toggleEditMode() {
     
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         exitEditMode();
-        if (currentPreviewData && currentPreviewData.type === 'markdown') {
+        var pd = window.PreviewModule ? window.PreviewModule.currentPreviewData : null;
+        if (pd && pd.type === 'markdown') {
             const content = document.getElementById('preview-content');
             if (content) {
-                content.innerHTML = renderMarkdownPreview(currentPreviewData.content);
+                content.innerHTML = renderMarkdownPreview(pd.content);
             }
         }
     } else {
-        if (currentPreviewData && currentPreviewData.type === 'markdown') {
+        var pd = window.PreviewModule ? window.PreviewModule.currentPreviewData : null;
+        if (pd && pd.type === 'markdown') {
             if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
                 const success = await window.TiptapEditorModule.openMarkdownInEditor(
-                    currentPreviewData.content,
-                    selectedFilePath
+                    pd.content,
+                    window.AppState.selectedFilePath
                 );
                 if (!success) {
                     console.warn('[Editor] Tiptap init failed, using CodeMirror fallback');
                     enterEditMode();
-                    initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+                    initCodeMirrorEditor(pd.content, window.AppState.selectedFilePath);
                     if (splitBtn) splitBtn.classList.add('active');
                 }
             } else {
                 enterEditMode();
-                initCodeMirrorEditor(currentPreviewData.content, selectedFilePath);
+                initCodeMirrorEditor(pd.content, window.AppState.selectedFilePath);
                 if (splitBtn) splitBtn.classList.add('active');
             }
         }

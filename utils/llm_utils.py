@@ -106,6 +106,9 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
     return ChatOpenAI(**kwargs)
 
 
+create_llm = _create_llm
+
+
 def call_llm(
     prompt_template: str,
     temperature: float = 0.7,
@@ -146,12 +149,15 @@ def call_llm_raw(
         return llm.invoke(prompt_text)
 
     def _invoke_with_timeout():
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_invoke)
-            try:
-                return future.result(timeout=90)
-            except FutureTimeout:
-                raise RuntimeError("LLM 调用超时（90秒）")
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(_invoke)
+        try:
+            return future.result(timeout=90)
+        except FutureTimeout:
+            future.cancel()
+            raise RuntimeError("LLM 调用超时（90秒）")
+        finally:
+            executor.shutdown(wait=False)
 
     response = _retry_with_backoff(_invoke_with_timeout)
     if hasattr(response, "content"):

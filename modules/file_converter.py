@@ -10,8 +10,7 @@ from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
     ensure_dir, get_file_extension, read_file_with_encoding,
     check_api_config, APIConfigError, NetworkError, is_network_error,
-    extract_pdf_text, extract_pdf_pages,
-    smart_format_markdown
+    extract_pdf_text, extract_pdf_pages
 )
 from utils.tag_extractor import (
     extract_tags_from_filename,
@@ -49,8 +48,6 @@ class PDFConverter(BaseConverter):
             markdown_content = self._extract_pdf_text(file_path)
             markdown_content = clean_text(markdown_content)
             markdown_content = self._remove_repeated_signatures(markdown_content, file_path)
-
-            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -143,8 +140,6 @@ class TXTConverter(BaseConverter):
 
             markdown_content = clean_text(raw_content)
 
-            markdown_content = smart_format_markdown(markdown_content)
-
             markdown_content = remove_images_from_markdown(markdown_content)
 
             logger.info(f"TXT转换完成: {file_path}")
@@ -167,8 +162,6 @@ class DOCXConverter(BaseConverter):
         try:
             markdown_content = self._extract_docx_text(file_path)
             markdown_content = clean_text(markdown_content)
-
-            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -198,8 +191,6 @@ class PPTConverter(BaseConverter):
         try:
             markdown_content = self._extract_pptx_text(file_path)
             markdown_content = clean_text(markdown_content)
-
-            markdown_content = smart_format_markdown(markdown_content)
 
             markdown_content = remove_images_from_markdown(markdown_content)
 
@@ -250,8 +241,6 @@ class HTMLConverter(BaseConverter):
             markdown_content = self._extract_html_text(file_path)
             markdown_content = clean_text(markdown_content)
 
-            markdown_content = smart_format_markdown(markdown_content)
-
             markdown_content = remove_images_from_markdown(markdown_content)
 
             logger.info(f"HTML转换完成: {file_path}")
@@ -287,6 +276,23 @@ class FileConverterManager:
         self._txt_converter = None
         self._ppt_converter = None
         self._html_converter = None
+
+    @staticmethod
+    def _needs_llm_rewrite(content: str) -> bool:
+        if not content or len(content.strip()) < 50:
+            return True
+        text = content.strip()
+        has_heading = bool(re.search(r'^#{1,3}\s+\S', text, re.MULTILINE))
+        has_sentence_end = bool(re.search(r'[。！？.!?\n]', text))
+        has_comma = bool(re.search(r'[，,、；;：:]', text))
+        has_paragraph = text.count('\n\n') >= 1
+        if has_heading and has_sentence_end:
+            return False
+        if has_sentence_end and has_comma and len(text) > 100:
+            return False
+        if has_paragraph and has_sentence_end:
+            return False
+        return True
 
     @property
     def pdf_converter(self):
@@ -374,7 +380,21 @@ class FileConverterManager:
             
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path))
-            
+
+            if self._needs_llm_rewrite(markdown_content):
+                try:
+                    from utils.llm_utils import check_api_config, call_llm_raw
+                    ok, msg = check_api_config()
+                    if ok:
+                        from prompts.unified import GENERAL_CONTENT_TO_MARKDOWN_PROMPT
+                        prompt = GENERAL_CONTENT_TO_MARKDOWN_PROMPT.format(source_type=ext, content=markdown_content[:6000])
+                        rewritten = call_llm_raw(prompt, temperature=0.3)
+                        if rewritten and len(rewritten.strip()) > len(markdown_content.strip()) * 0.3:
+                            markdown_content = rewritten.strip()
+                            logger.info(f"LLM 重写转换结果: {file_path}")
+                except Exception as e:
+                    logger.warning(f"LLM 重写失败，保留原始转换: {e}")
+
             # 添加YAML front matter
             markdown_content = add_yaml_frontmatter_to_content(
                 markdown_content,
@@ -444,14 +464,6 @@ class FileConverterManager:
         if self.progress_callback:
             success_count = sum(1 for r in results if r['success'])
             self.progress_callback(total, total, f"转换完成: {success_count}/{total} 成功")
-
-        try:
-            from config import config
-            from utils.tag_extractor import save_tags_md
-            if config.workspace_path:
-                save_tags_md(config.workspace_path)
-        except Exception as e:
-            logger.warning(f"保存 tags.md 失败: {e}")
 
         return results
 

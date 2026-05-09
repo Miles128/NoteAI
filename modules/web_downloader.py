@@ -14,8 +14,7 @@ from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
     extract_title_from_markdown, ensure_dir, is_valid_url, retry_on_failure,
-    check_api_config, APIConfigError, NetworkError, is_network_error,
-    smart_format_markdown
+    check_api_config, APIConfigError, NetworkError, is_network_error
 )
 from utils.tag_extractor import (
     extract_tags_from_filename,
@@ -344,6 +343,7 @@ class WebDownloader:
             'success': False,
             'title': '',
             'content': '',
+            'html_content': '',
             'error': None,
             'file_path': None
         }
@@ -381,11 +381,6 @@ class WebDownloader:
             img_count_after_clean = self._count_images_in_markdown(markdown_content)
             logger.info(f"clean_text后: {img_count_after_clean} 个图片链接")
 
-            markdown_content = smart_format_markdown(markdown_content, title)
-
-            img_count_after_optimize = self._count_images_in_markdown(markdown_content)
-            logger.info(f"格式化后: {img_count_after_optimize} 个图片链接")
-
             if self.include_images:
                 logger.info("保留图片URL链接...")
                 markdown_content = self._normalize_image_urls_in_markdown(markdown_content, url)
@@ -399,6 +394,7 @@ class WebDownloader:
             result['success'] = True
             result['title'] = title
             result['content'] = markdown_content
+            result['html_content'] = html_content
 
             logger.info(f"下载成功: {title}")
 
@@ -473,6 +469,23 @@ class WebDownloader:
                     tags = extract_tags_from_filename(str(file_path))
                     if tags:
                         add_yaml_frontmatter_to_file(str(file_path), tags=tags, source=url)
+
+                    html_raw = result.get('html_content', '')
+                    if html_raw:
+                        try:
+                            raw_dir = Path(save_path) / "Raw"
+                            raw_dir.mkdir(parents=True, exist_ok=True)
+                            html_filename = sanitize_filename(article_title) + '.html'
+                            html_path = raw_dir / html_filename
+                            counter = 1
+                            while html_path.exists():
+                                html_filename = sanitize_filename(article_title) + f'_{counter}.html'
+                                html_path = raw_dir / html_filename
+                                counter += 1
+                            html_path.write_text(html_raw, encoding='utf-8')
+                            logger.info(f"已保存HTML: {html_path}")
+                        except Exception as e:
+                            logger.warning(f"保存HTML失败: {e}")
 
                     try:
                         from utils.topic_assigner import auto_assign_topic_for_file

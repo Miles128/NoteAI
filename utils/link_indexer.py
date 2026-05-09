@@ -294,25 +294,21 @@ def discover_links(progress_callback=None) -> Dict[str, Any]:
         if not ok:
             return {"success": False, "message": f"API 未配置: {msg}"}
 
-    # Step 4: 合并到已有链接
+    # Step 4: 合并到已有链接，新链接直接标记为 confirmed
     existing = load_links()
     existing_links = existing.get("links", [])
 
-    # 保留已确认的链接
-    confirmed = [l for l in existing_links if l.get("status") == "confirmed"]
-
-    # 生成已存在链接的 key set（用于去重）
     existing_keys = set()
     for l in existing_links:
         key = tuple(sorted([l["from"], l["to"]]))
         existing_keys.add(key)
 
-    # 合并新链接（去重）
     merged = list(existing_links)
     added_count = 0
     for link in new_links:
         key = tuple(sorted([link["from"], link["to"]]))
         if key not in existing_keys:
+            link["status"] = "confirmed"
             merged.append(link)
             existing_keys.add(key)
             added_count += 1

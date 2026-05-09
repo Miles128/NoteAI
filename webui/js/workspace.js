@@ -1,5 +1,5 @@
 function updateStatus(text) {
-    const statusBar = document.getElementById('status-bar');
+    var statusBar = document.getElementById('status-bar') || document.getElementById('editor-status-bar');
     if (statusBar) {
         statusBar.textContent = text;
     }
@@ -62,18 +62,14 @@ function updateWorkspaceDisplay(workspacePath) {
         if (workspacePath) {
             container.innerHTML = `
                 <div class="workspace-folder-display">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                        <path d="M3 7C3 5.89543 3.89543 5 5 5H8.17157C8.70201 5 9.21071 5.21071 9.58579 5.58579L10.4142 6.41421C10.7893 6.78929 11.298 7 11.8284 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z"></path>
-                    </svg>
+                    ${window.Icons.get('folderFilled')}
                     <span class="workspace-path">${escapeHtml(workspacePath)}</span>
                 </div>
             `;
         } else {
             container.innerHTML = `
                 <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="打开工作区">
-                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                        <path d="M3 7C3 5.89543 3.89543 5 5 5H8.17157C8.70201 5 9.21071 5.21071 9.58579 5.58579L10.4142 6.41421C10.7893 6.78929 11.298 7 11.8284 7H19C20.1046 7 21 7.89543 21 9V18C21 19.1046 20.1046 20 19 20H5C3.89543 20 3 19.1046 3 18V7Z"></path>
-                    </svg>
+                    ${window.Icons.get('folderFilled')}
                     <span>打开工作区</span>
                 </button>
             `;
@@ -92,6 +88,9 @@ function showWorkspaceOptions() {
         } else {
             openWorkspace();
         }
+    }).catch(e => {
+        console.error('[Workspace] get_workspace_status error:', e);
+        openWorkspace();
     });
 }
 
@@ -100,6 +99,12 @@ async function checkWorkspaceStatus() {
         if (window.api) {
             const status = await window.api.get_workspace_status();
             updateWorkspaceDisplay(status.is_set ? status.workspace_path : null);
+            if (status.is_set && window.api.rag_rebuild_index) {
+                window.api.rag_rebuild_index().catch(function() {});
+            }
+            if (status.is_set) {
+                checkProjectRules();
+            }
         } else {
             updateWorkspaceDisplay(null);
         }
@@ -107,6 +112,38 @@ async function checkWorkspaceStatus() {
         console.error('检查工作区状态失败:', e);
         updateWorkspaceDisplay(null);
     }
+}
+
+async function checkProjectRules() {
+    try {
+        var result = await window.api.get_project_rules();
+        if (result && result.success && !result.rules) {
+            showProjectRulesModal();
+        }
+    } catch (e) {
+        console.error('[Workspace] check project rules error:', e);
+    }
+}
+
+function showProjectRulesModal() {
+    var modal = document.getElementById('project-rules-modal');
+    if (modal) modal.style.display = '';
+}
+
+function closeProjectRulesModal() {
+    var modal = document.getElementById('project-rules-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveProjectRulesModal() {
+    var input = document.getElementById('project-rules-input');
+    var rules = input ? input.value : '';
+    try {
+        await window.api.save_project_rules(rules);
+    } catch (e) {
+        console.error('[Workspace] save project rules error:', e);
+    }
+    closeProjectRulesModal();
 }
 
 async function addFiles() {
@@ -161,6 +198,9 @@ function showSettings() {
 
     if (window.SettingsModule && window.SettingsModule.loadApiConfigToForm) {
         window.SettingsModule.loadApiConfigToForm();
+    }
+    if (window.SettingsModule && window.SettingsModule.loadUserProfile) {
+        window.SettingsModule.loadUserProfile();
     }
 }
 

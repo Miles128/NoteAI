@@ -88,12 +88,14 @@ class FilePreviewer:
         pages_data = []
         total_pages = 0
         full_text = ""
+        MAX_PREVIEW_PAGES = 50
 
         try:
             doc = fitz.open(file_path)
             total_pages = len(doc)
+            preview_pages = min(total_pages, MAX_PREVIEW_PAGES)
 
-            for page_num in range(total_pages):
+            for page_num in range(preview_pages):
                 page = doc[page_num]
 
                 text = page.get_text("text") or ""
@@ -122,23 +124,19 @@ class FilePreviewer:
                 "file_size": file_size,
                 "total_pages": total_pages,
                 "pages": pages_data,
-                "full_text": full_text.strip()
+                "full_text": full_text.strip(),
+                "truncated": total_pages > MAX_PREVIEW_PAGES
             }
         except Exception as e:
             logger.error(f"PDF预览失败 (PyMuPDF): {e}")
             return self._preview_pdf_legacy(file_path, file_size)
 
     def _preview_pdf_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
-        import fitz
-
-        pages_data = []
-        total_pages = 0
-
         try:
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-            for i, page in enumerate(doc):
-                text = page.get_text("text") or ""
+            from utils.pdf_utils import extract_pdf_pages
+            pages_text = extract_pdf_pages(file_path)
+            pages_data = []
+            for i, text in enumerate(pages_text):
                 pages_data.append({
                     "page_number": i + 1,
                     "text": text.strip(),
@@ -146,14 +144,12 @@ class FilePreviewer:
                     "width": 0,
                     "height": 0
                 })
-            doc.close()
-
             return {
                 "success": True,
                 "type": "pdf",
                 "file_name": os.path.basename(file_path),
                 "file_size": file_size,
-                "total_pages": total_pages,
+                "total_pages": len(pages_data),
                 "pages": pages_data,
                 "full_text": "\n\n".join([p["text"] for p in pages_data])
             }

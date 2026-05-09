@@ -5,9 +5,7 @@
     width: 100%;
     min-width: 0;
     max-width: none;
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--article-bg);
     overflow: hidden;
     position: relative;
 }
@@ -31,6 +29,18 @@
     transition: background 0.2s;
     flex-shrink: 0;
     -webkit-app-region: no-drag;
+    position: relative;
+    z-index: 10;
+}
+
+.preview-resizer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -6px;
+    right: -6px;
+    bottom: 0;
+    z-index: 10;
 }
 
 .preview-resizer:hover {

@@ -18,6 +18,7 @@ from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.mixins.tags_mixin import TagsMixin
 from sidecar.mixins.topics_mixin import TopicsMixin
 from sidecar.mixins.transfer_mixin import TransferMixin
+from sidecar.mixins.rag_mixin import RagMixin
 from sidecar.mixins.workspace_mixin import WorkspaceMixin
 
 
@@ -31,6 +32,7 @@ class SidecarServer(
     TopicsMixin,
     LinksMixin,
     IntelMixin,
+    RagMixin,
 ):
     _watchdog_missing_logged = False
 
@@ -207,6 +209,7 @@ class SidecarServer(
             "extract_topics",
             "llm_rewrite_stream",
             "ai_topic_survey",
+            "check_and_generate_surveys",
         }
     )
 
@@ -231,6 +234,7 @@ class SidecarServer(
             "reveal_in_finder": self._reveal_in_finder,
             "delete_file": self._delete_file,
             "start_file_conversion": self._start_file_conversion,
+            "auto_convert_pending": self._auto_convert_pending,
             "extract_topics": self._extract_topics,
             "start_note_integration": self._start_note_integration,
             "get_file_preview": self._get_file_preview,
@@ -250,6 +254,7 @@ class SidecarServer(
             "batch_auto_assign_topics": self._batch_auto_assign_topics,
             "create_topic": self._create_topic,
             "get_pending_topics": self._get_pending_topics,
+            "get_all_pending": self._get_all_pending,
             "resolve_topic": self._resolve_topic,
             "rename_topic": self._rename_topic,
             "move_file_to_topic": self._move_file_to_topic,
@@ -273,6 +278,15 @@ class SidecarServer(
             "ai_topic_analyze": self._ai_topic_analyze,
             "ai_topic_survey": self._ai_topic_survey,
             "apply_topic_suggestion": self._apply_topic_suggestion,
+            "rag_chat": self._rag_chat,
+            "rag_rebuild_index": self._rag_rebuild_index,
+            "rag_incremental_update": self._rag_incremental_update,
+            "get_changelog": self._get_changelog,
+            "check_and_generate_surveys": self._check_and_generate_surveys,
+            "get_user_profile": self._get_user_profile,
+            "save_user_profile": self._save_user_profile,
+            "get_project_rules": self._get_project_rules,
+            "save_project_rules": self._save_project_rules,
         }
 
         handler = handler_map.get(method)

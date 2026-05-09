@@ -1,13 +1,10 @@
 """Web download, import, conversion, topic extract, note integration (from python/main.py)."""
 
-import json
-import re
 import sys
 import shutil
 import threading
 from pathlib import Path
 
-import yaml
 from config import config, is_ignored_dir
 from modules.note_integration import NoteIntegration
 
@@ -51,7 +48,6 @@ class TransferMixin:
             })
 
     def _import_files(self, params):
-        import shutil
         files = params.get("files", [])
         workspace = config.workspace_path
         if not workspace:
@@ -105,13 +101,6 @@ class TransferMixin:
             success_count = sum(1 for r in result if r.get("success"))
             fail_count = sum(1 for r in result if not r.get("success"))
 
-            try:
-                from utils.tag_extractor import save_tags_md
-                if workspace:
-                    save_tags_md(workspace)
-            except Exception:
-                pass
-
             self._send_response({
                 "id": "event",
                 "result": {
@@ -144,10 +133,61 @@ class TransferMixin:
 
         return {"success": True, "message": "转换已开始"}
 
+    def _auto_convert_pending(self, params=None):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "pending": 0, "converted": 0}
+
+        from modules.file_converter import FileConverterManager, RAW_FOLDER
+        supported = set(FileConverterManager.get_supported_formats())
+        ws = Path(workspace)
+        raw_dir = ws / RAW_FOLDER
+
+        pending = []
+        for f in ws.rglob('*'):
+            if not f.is_file() or f.name.startswith('.'):
+                continue
+            rel = f.relative_to(ws)
+            if RAW_FOLDER in rel.parts:
+                continue
+            if f.suffix.lower() in supported:
+                pending.append(str(f))
+
+        if not pending:
+            return {"success": True, "pending": 0, "converted": 0}
+
+        if not self._start_task("auto_convert", self._do_auto_convert, args=(workspace, pending)):
+            return {"success": False, "pending": len(pending), "converted": 0, "message": "转换任务正在进行中"}
+
+        return {"success": True, "pending": len(pending), "converted": 0}
+
+    def _do_auto_convert(self, workspace, pending_files):
+        try:
+            raw_path = str(Path(workspace) / "Raw")
+            results = self.file_converter.convert_batch(
+                pending_files, workspace, raw_path=raw_path
+            )
+            converted = sum(1 for r in results if r['success'])
+            self._send_response({
+                "id": "event",
+                "result": {
+                    "type": "auto_convert_complete",
+                    "data": {"total": len(pending_files), "converted": converted}
+                }
+            })
+        except Exception as e:
+            import traceback
+            sys.stderr.write(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
+            sys.stderr.flush()
+            self._send_response({
+                "id": "event",
+                "result": {"type": "auto_convert_error", "error": str(e)}
+            })
+
     def _do_file_conversion(self, workspace, ai_assist):
         try:
             result = self.file_converter.convert_folder(
-                workspace, ai_assist=ai_assist
+                workspace
             )
             self._send_response({
                 "id": "event",
@@ -195,12 +235,14 @@ class TransferMixin:
                 save_path=workspace,
                 user_topics=topics if topics else None
             )
+            self.note_integration.documents = []
             self._send_response({
                 "id": "event",
                 "result": {"type": "note_integration_complete", "data": result}
             })
         except Exception as e:
             import traceback
+            self.note_integration.documents = []
             sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             sys.stderr.flush()
             self._send_response({

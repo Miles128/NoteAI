@@ -1,13 +1,8 @@
 """Topic tree, batch assign, topic CRUD, file moves, add tag to file (from python/main.py)."""
 
-import json
-import re
 import sys
-import shutil
-import threading
 from pathlib import Path
 
-import yaml
 from config import config, is_ignored_dir
 
 class TopicsMixin:
@@ -83,11 +78,11 @@ class TopicsMixin:
                     continue
                 md_files.append(md_file)
 
-        save_pending([])
-
         files_to_process = 0
         auto_assigned_count = 0
         skipped = 0
+        format_optimized_count = 0
+        auto_assigned_files = {}
 
         for md_file in md_files:
             try:
@@ -97,22 +92,88 @@ class TopicsMixin:
                 continue
 
             m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-            if not m:
+            if m and not _check_topic_needs_processing(m.group(1)):
                 skipped += 1
                 continue
 
-            if not _check_topic_needs_processing(m.group(1)):
-                skipped += 1
-                continue
+            files_to_process += 1
+            file_name = md_file.name
+
+            self._send_response({
+                "id": "event",
+                "result": {
+                    "type": "batch_assign_progress",
+                    "file": file_name,
+                    "current": files_to_process,
+                    "message": f"正在处理: {file_name}"
+                }
+            })
 
             result = auto_assign_topic_for_file(str(md_file))
-            files_to_process += 1
+
+            if result and result.get("format_optimized"):
+                format_optimized_count += 1
+                self._send_response({
+                    "id": "event",
+                    "result": {
+                        "type": "batch_assign_progress",
+                        "file": file_name,
+                        "message": f"已优化格式: {file_name}"
+                    }
+                })
+
             if result and result.get("status") == "auto_assigned":
                 auto_assigned_count += 1
+                topic = result.get("topic", "")
+                source = result.get("source", "keyword")
+                if topic:
+                    if topic not in auto_assigned_files:
+                        auto_assigned_files[topic] = []
+                    auto_assigned_files[topic].append(str(md_file))
+                    self._send_response({
+                        "id": "event",
+                        "result": {
+                            "type": "batch_assign_progress",
+                            "file": file_name,
+                            "message": f"已分配主题「{topic}」: {file_name}" + (" (LLM)" if source == "llm" else "")
+                        }
+                    })
+            elif result and result.get("status") == "pending":
+                candidates = result.get("candidates", [])
+                self._send_response({
+                    "id": "event",
+                    "result": {
+                        "type": "batch_assign_progress",
+                        "file": file_name,
+                        "message": f"待确认主题: {file_name}" + (f" (候选: {', '.join(candidates[:3])})" if candidates else " (无候选)")
+                    }
+                })
 
         pending = load_pending()
         need_confirm = len(pending)
         auto_assigned = auto_assigned_count
+
+        for topic, file_paths in auto_assigned_files.items():
+            for fp in file_paths:
+                self._start_task(f"cascade_{topic}_{Path(fp).stem}", self._do_cascade_on_resolve, args=(fp, topic))
+
+        summary_parts = []
+        if auto_assigned > 0:
+            summary_parts.append(f"自动分配 {auto_assigned} 个文件")
+        if need_confirm > 0:
+            summary_parts.append(f"{need_confirm} 个待确认")
+        if format_optimized_count > 0:
+            summary_parts.append(f"优化 {format_optimized_count} 个格式")
+        if not summary_parts:
+            summary_parts.append("所有文件主题已分配")
+
+        self._send_response({
+            "id": "event",
+            "result": {
+                "type": "batch_assign_progress",
+                "message": "完成 - " + "，".join(summary_parts)
+            }
+        })
 
         return {
             "success": True,
@@ -120,22 +181,72 @@ class TopicsMixin:
             "auto_assigned": auto_assigned,
             "need_confirm": need_confirm,
             "skipped": skipped,
+            "format_optimized": format_optimized_count,
             "pending": pending
         }
 
     def _create_topic(self, params):
         from utils.topic_assigner import create_topic
+        from sidecar.cascade import ensure_topic_folder, collect_topic_notes, generate_new_survey, append_changelog
         topic_name = params.get("name", "")
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
-        return create_topic(topic_name)
+
+        result = create_topic(topic_name)
+        if not result.get("success"):
+            return result
+
+        ensure_topic_folder(topic_name)
+
+        notes = collect_topic_notes(topic_name)
+        if notes:
+            survey_result = generate_new_survey(topic_name, notes)
+            if survey_result.get("success"):
+                append_changelog(f"创建主题并生成综述: {topic_name}")
+            else:
+                append_changelog(f"创建主题「{topic_name}」但综述生成失败: {survey_result.get('message', '')}")
+        else:
+            append_changelog(f"创建主题「{topic_name}」（暂无笔记，跳过综述生成）")
+
+        return result
 
     def _get_pending_topics(self, params):
         from utils.topic_assigner import load_pending
         return {"pending": load_pending()}
 
+    def _get_all_pending(self, params):
+        from utils.topic_assigner import load_pending
+        from utils.link_indexer import get_backlinks
+
+        items = []
+
+        pending_topics = load_pending()
+        for p in pending_topics:
+            items.append({
+                "type": "topic",
+                "file": p.get("file", ""),
+                "title": p.get("title", ""),
+                "candidates": p.get("candidates", []),
+                "source": p.get("source", ""),
+            })
+
+        try:
+            links_data = get_backlinks()
+            for link in links_data:
+                if link.get("status") == "pending":
+                    items.append({
+                        "type": "link",
+                        "source": link.get("source", ""),
+                        "target": link.get("target", ""),
+                        "context": link.get("context", ""),
+                    })
+        except Exception:
+            pass
+
+        return {"items": items, "count": len(items)}
+
     def _resolve_topic(self, params):
-        from utils.topic_assigner import write_topic_to_file, load_pending, save_pending, add_file_to_wiki_topic
+        from utils.topic_assigner import write_topic_to_file, load_pending, save_pending, add_file_to_wiki_topic, move_file_to_notes_topic_folder
         file_path = params.get("file_path", "")
         topic = params.get("topic", "")
         if not file_path or not topic:
@@ -162,7 +273,61 @@ class TopicsMixin:
 
         add_file_to_wiki_topic(file_path, topic, file_title)
 
+        move_file_to_notes_topic_folder(full_path, topic)
+
+        self._start_task(f"cascade_{topic}_{Path(full_path).stem}", self._do_cascade_on_resolve, args=(full_path, topic))
+
         return {"success": True, "topic": topic}
+
+    def _do_cascade_on_resolve(self, file_path, topic):
+        from sidecar.cascade import cascade_on_topic_resolved
+
+        def on_chunk(token):
+            self._send_response({
+                "id": "event",
+                "result": {
+                    "type": "cascade_survey_chunk",
+                    "topic": topic,
+                    "token": token,
+                }
+            })
+
+        try:
+            result = cascade_on_topic_resolved(file_path, topic, on_chunk=on_chunk)
+            self._send_response({
+                "id": "event",
+                "result": {
+                    "type": "cascade_done",
+                    "topic": topic,
+                    "data": result,
+                }
+            })
+        except Exception as e:
+            sys.stderr.write(f"[cascade] cascade_on_topic_resolved failed: {e}\n")
+            sys.stderr.flush()
+
+    def _do_cascade_survey_update(self, topic):
+        from sidecar.cascade import collect_topic_notes, generate_new_survey, get_survey_path, update_existing_survey, append_changelog
+
+        try:
+            notes = collect_topic_notes(topic)
+            if not notes:
+                survey_path = get_survey_path(topic)
+                if survey_path and survey_path.exists():
+                    survey_path.unlink()
+                return
+
+            survey_path = get_survey_path(topic)
+            if survey_path and survey_path.exists():
+                result = generate_new_survey(topic, notes)
+            else:
+                result = generate_new_survey(topic, notes)
+
+            if result.get("success"):
+                append_changelog(f"更新综述（文件变动）: {topic}")
+        except Exception as e:
+            sys.stderr.write(f"[cascade] survey update failed for {topic}: {e}\n")
+            sys.stderr.flush()
 
     def _rename_topic(self, params):
         from utils.topic_assigner import rename_topic
@@ -191,7 +356,24 @@ class TopicsMixin:
         if not file_path or not new_topic:
             return {"success": False, "message": "参数不完整"}
 
-        return move_file_to_topic(file_path, new_topic)
+        result = move_file_to_topic(file_path, new_topic)
+
+        if result.get("success"):
+            msg = result.get("message", "")
+            old_topic = None
+            if "「" in msg and "」" in msg:
+                import re as _re
+                m = _re.search(r'从「(.+?)」', msg)
+                if m:
+                    old_topic = m.group(1)
+
+            full_path = self._resolve_path(file_path)
+            if full_path:
+                self._start_task(f"cascade_{new_topic}_{Path(full_path).stem}", self._do_cascade_on_resolve, args=(full_path, new_topic))
+            if old_topic and old_topic != new_topic:
+                self._start_task(f"cascade_update_{old_topic}", self._do_cascade_survey_update, args=(old_topic,))
+
+        return result
 
     def _move_file(self, params):
         import shutil
@@ -320,3 +502,17 @@ class TopicsMixin:
             return {"success": True, "message": f"已添加标签「{tag}」"}
         except Exception as e:
             return {"success": False, "message": f"添加标签失败: {e}"}
+
+    def _get_changelog(self, params):
+        from sidecar.cascade import get_changelog
+        limit = params.get("limit", 50)
+        entries = get_changelog(limit=limit)
+        return {"success": True, "entries": entries}
+
+    def _check_and_generate_surveys(self, params):
+        from sidecar.cascade import check_and_generate_surveys
+
+        def on_progress(current, total, message):
+            self._send_progress("survey_check", current / total if total > 0 else 0, message)
+
+        return check_and_generate_surveys(on_progress=on_progress)

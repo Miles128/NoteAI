@@ -245,7 +245,7 @@
 }
 .toast-icon.success { color: var(--success); }
 .toast-icon.error { color: var(--error); }
-.toast-icon.warning { color: #FF9500; }
+.toast-icon.warning { color: var(--warning); }
 .toast-icon.info { color: var(--primary); }
 
 .toast-content { flex: 1; min-width: 0; }
@@ -365,8 +365,8 @@
     transition: background 0.15s;
 }
 .delete-confirm-yes {
-    background: #e74c3c;
-    color: #fff;
+    background: var(--color-danger);
+    color: var(--on-primary);
 }
 .delete-confirm-yes:hover {
     background: #c0392b;

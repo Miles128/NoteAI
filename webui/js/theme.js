@@ -116,34 +116,40 @@ function restoreSidebarWidth() {
 function initResizer() {
     const resizer = document.getElementById('sidebar-resizer');
     const sidebar = document.querySelector('.sidebar');
-    if (!resizer || !sidebar) {
-        console.log('[DEBUG] initResizer: resizer or sidebar not found', { resizer, sidebar });
-        return;
-    }
-    console.log('[DEBUG] initResizer: initialized successfully');
+    if (!resizer || !sidebar) return;
     let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
 
     restoreSidebarWidth();
 
     resizer.addEventListener('mousedown', (e) => {
         isResizing = true;
+        startX = e.clientX;
+        startWidth = sidebar.offsetWidth;
+        sidebar.classList.add('resizing-active');
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
         e.preventDefault();
+        e.stopPropagation();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isResizing) return;
-        const newWidth = e.clientX;
+        const delta = e.clientX - startX;
+        const newWidth = startWidth + delta;
         if (newWidth >= 180 && newWidth <= 600) {
             sidebar.style.width = newWidth + 'px';
+            sidebar.style.minWidth = newWidth + 'px';
         }
     });
 
     document.addEventListener('mouseup', () => {
         if (!isResizing) return;
         isResizing = false;
+        sidebar.classList.remove('resizing-active');
+        sidebar.style.minWidth = '';
         resizer.classList.remove('resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';

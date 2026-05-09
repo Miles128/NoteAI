@@ -219,7 +219,15 @@ function renderFrontmatterPanel(frontmatter) {
         var safeKey = key.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         html += '<div class="obsidian-prop-row">';
         html += '<span class="obsidian-prop-key">' + safeKey + '</span>';
-        if (Array.isArray(val) && val.length > 0) {
+        if (key === 'topic' && typeof val === 'string' && val.indexOf('/') >= 0) {
+            var parts = val.split('/');
+            html += '<span class="obsidian-prop-val obsidian-topic-breadcrumb">';
+            parts.forEach(function(part, idx) {
+                if (idx > 0) html += '<span class="topic-breadcrumb-sep"> &gt; </span>';
+                html += '<span class="topic-breadcrumb-item">' + part.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</span>';
+            });
+            html += '</span>';
+        } else if (Array.isArray(val) && val.length > 0) {
             html += '<span class="obsidian-prop-val obsidian-prop-tags">';
             val.forEach(function(item) {
                 html += '<span class="obsidian-tag-chip">' + String(item).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</span>';

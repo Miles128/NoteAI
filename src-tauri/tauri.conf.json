@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "NoteAI",
-        "width": 1400,
+        "width": 1580,
         "height": 900,
-        "minWidth": 1000,
+        "minWidth": 1180,
         "minHeight": 700,
         "decorations": true,
         "titleBarStyle": "Overlay",

@@ -5,16 +5,6 @@ function checkIsTauri() {
     if (_isTauriChecked) return _isTauri;
     _isTauriChecked = true;
     _isTauri = typeof window !== 'undefined' && !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
-    if (!_isTauri && typeof window !== 'undefined') {
-        // 延迟检测：Tauri 可能还没注入
-        var start = Date.now();
-        while (Date.now() - start < 2000) {
-            if (window.__TAURI_INTERNALS__ || window.__TAURI__) {
-                _isTauri = true;
-                break;
-            }
-        }
-    }
     return _isTauri;
 }
 
@@ -55,9 +45,11 @@ async function openWorkspace() {
         var invoke = getTauriInvoke();
         var folder = await invoke('open_folder_dialog');
         if (folder) {
-            await invoke('set_workspace_path', { path: folder });
-            await pyCall('set_workspace_path', { path: folder });
-            return { success: true, workspace_path: folder };
+            var pyResult = await pyCall('set_workspace_path', { path: folder });
+            if (pyResult && pyResult.success) {
+                await invoke('set_workspace_path', { path: folder });
+            }
+            return pyResult || { success: false, message: '设置工作区失败' };
         }
         return { success: false, message: '未选择文件夹' };
     }
@@ -111,6 +103,10 @@ async function createTag(name) {
 
 async function getPendingTopics() {
     return pyCall('get_pending_topics');
+}
+
+async function getAllPending() {
+    return pyCall('get_all_pending');
 }
 
 async function resolveTopic(filePath, topic) {
@@ -213,6 +209,10 @@ async function startFileConversion(aiAssist) {
     return pyCall('start_file_conversion', { ai_assist: aiAssist });
 }
 
+async function autoConvertPending() {
+    return pyCall('auto_convert_pending', {});
+}
+
 async function extractTopics(topicCount) {
     return pyCall('extract_topics', { topic_count: topicCount });
 }
@@ -300,6 +300,38 @@ async function applyTopicSuggestion(suggestion) {
     return pyCall('apply_topic_suggestion', { suggestion: suggestion });
 }
 
+async function ragChat(question, topics, tags) {
+    return pyCall('rag_chat', { question: question, topics: topics || null, tags: tags || null });
+}
+
+async function ragRebuildIndex() {
+    return pyCall('rag_rebuild_index', {});
+}
+
+async function getChangelog(limit) {
+    return pyCall('get_changelog', { limit: limit || 50 });
+}
+
+async function checkAndGenerateSurveys() {
+    return pyCall('check_and_generate_surveys', {});
+}
+
+async function getUserProfile() {
+    return pyCall('get_user_profile', {});
+}
+
+async function saveUserProfile(data) {
+    return pyCall('save_user_profile', data);
+}
+
+async function getProjectRules() {
+    return pyCall('get_project_rules', {});
+}
+
+async function saveProjectRules(rules) {
+    return pyCall('save_project_rules', { rules: rules });
+}
+
 function getTauriWindow() {
     if (window.__TAURI__ && window.__TAURI__.window) {
         if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
@@ -361,35 +393,6 @@ async function openFileInNewWindow(path, name) {
     throw new Error('Not running in Tauri');
 }
 
-function apiUpdateStatus(text) {
-    var statusEl = document.getElementById('status-bar');
-    if (statusEl) statusEl.textContent = text;
-}
-
-function apiUpdateProgress(elementId, progress, message) {
-    var fillEl = document.getElementById(elementId + '-fill');
-    var textEl = document.getElementById(elementId + '-text');
-    if (fillEl) fillEl.style.width = (progress * 100) + '%';
-    if (textEl) textEl.textContent = message;
-}
-
-function showMessage(title, message, msgType) {
-    var type = msgType || 'info';
-    if (typeof toast !== 'undefined' && toast.show) {
-        toast.show(message, type);
-    } else {
-        console.log('[' + type.toUpperCase() + '] ' + title + ': ' + message);
-    }
-}
-
-function showAbout() {
-    if (checkIsTauri() && window.__TAURI__ && window.__TAURI__.dialog) {
-        window.__TAURI__.dialog.message('NoteAI v0.1.0\nAI驱动的Markdown笔记知识库管理桌面应用', { title: '关于 NoteAI' });
-    } else {
-        alert('NoteAI v0.1.0\nAI驱动的Markdown笔记知识库管理桌面应用');
-    }
-}
-
 window.api = {
     invoke: pyCall,
     getApiPort: function() { return 0; },
@@ -401,7 +404,6 @@ window.api = {
     getTopicTree: getTopicTree,
     autoTagFiles: autoTagFiles,
     saveTagsMd: saveTagsMd,
-    ensureTagsMd: ensureTagsMd,
     autoAssignTopic: autoAssignTopic,
     getPendingTopics: getPendingTopics,
     resolveTopic: resolveTopic,
@@ -423,6 +425,7 @@ window.api = {
     browseFolder: browseFolder,
     startWebDownload: startWebDownload,
     startFileConversion: startFileConversion,
+    autoConvertPending: autoConvertPending,
     extractTopics: extractTopics,
     startNoteIntegration: startNoteIntegration,
     refreshLog: refreshLog,
@@ -437,9 +440,6 @@ window.api = {
     maximizeWindow: maximizeWindow,
     closeWindow: closeWindow,
     openFileInNewWindow: openFileInNewWindow,
-    updateStatus: apiUpdateStatus,
-    updateProgress: apiUpdateProgress,
-    showMessage: showMessage,
 
     open_workspace: openWorkspace,
     get_workspace_status: getWorkspaceStatus,
@@ -454,6 +454,7 @@ window.api = {
     create_topic: createTopic,
     create_tag: createTag,
     get_pending_topics: getPendingTopics,
+    get_all_pending: getAllPending,
     resolve_topic: resolveTopic,
     rename_topic: renameTopic,
     delete_topic: deleteTopic,
@@ -472,6 +473,7 @@ window.api = {
     browse_folder: browseFolder,
     start_web_download: startWebDownload,
     start_file_conversion: startFileConversion,
+    auto_convert_pending: autoConvertPending,
     extract_topics: extractTopics,
     start_note_integration: startNoteIntegration,
     refresh_log: refreshLog,
@@ -488,9 +490,6 @@ window.api = {
     maximize_window: maximizeWindow,
     close_window: closeWindow,
     open_file_in_new_window: openFileInNewWindow,
-    update_status: apiUpdateStatus,
-    update_progress: apiUpdateProgress,
-    show_message: showMessage,
 
     discover_links: discoverLinks,
     get_backlinks: getBacklinks,
@@ -504,5 +503,13 @@ window.api = {
     llm_rewrite_apply: llmRewriteApply,
     ai_topic_analyze: aiTopicAnalyze,
     ai_topic_survey: aiTopicSurvey,
-    apply_topic_suggestion: applyTopicSuggestion
+    apply_topic_suggestion: applyTopicSuggestion,
+    rag_chat: ragChat,
+    rag_rebuild_index: ragRebuildIndex,
+    get_changelog: getChangelog,
+    check_and_generate_surveys: checkAndGenerateSurveys,
+    get_user_profile: getUserProfile,
+    save_user_profile: saveUserProfile,
+    get_project_rules: getProjectRules,
+    save_project_rules: saveProjectRules
 };

@@ -176,6 +176,8 @@ class NoteIntegration:
             except Exception as e:
                 logger.warning(f"保存 tags.md 失败: {e}")
 
+            self.documents = []
+
             return {
                 'content': '\n\n---\n\n'.join([r['content'] for r in topic_results]),
                 'document_count': len(documents),

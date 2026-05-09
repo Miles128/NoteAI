@@ -200,10 +200,7 @@
                 <span>window.api 对象存在</span>
                 <span class="test-status pending" id="test-api-exists">待测试</span>
             </div>
-            <div class="test-item">
-                <span>window.pywebview.api 兼容层存在</span>
-                <span class="test-status pending" id="test-pywebview-compat">待测试</span>
-            </div>
+
             <div class="test-item">
                 <span>API 方法列表完整</span>
                 <span class="test-status pending" id="test-api-methods">待测试</span>
@@ -211,7 +208,7 @@
         </div>
         <div class="btn-group">
             <button class="btn btn-secondary" onclick="testApiExists()">测试 API 存在</button>
-            <button class="btn btn-secondary" onclick="testPywebviewCompat()">测试 pywebview 兼容</button>
+
         </div>
         <div class="test-output" id="api-output"></div>
     </div>
@@ -487,17 +484,7 @@
             }
         }
         
-        function testPywebviewCompat() {
-            appendOutput('api-output', '测试 pywebview 兼容层...');
-            
-            if (window.pywebview && window.pywebview.api) {
-                updateTestStatus('test-pywebview-compat', 'passed');
-                appendOutput('api-output', '✓ window.pywebview.api 兼容层存在');
-            } else {
-                updateTestStatus('test-pywebview-compat', 'failed');
-                appendOutput('api-output', '✗ window.pywebview.api 兼容层不存在');
-            }
-        }
+
         
         function testModulesExist() {
             appendOutput('module-output', '测试业务模块存在...');
@@ -560,7 +547,7 @@
             testUpdateStatus();
             testUpdateProgress();
             testApiExists();
-            testPywebviewCompat();
+
             testModulesExist();
             
             appendOutput('utils-output', '\n=== 所有测试完成 ===');

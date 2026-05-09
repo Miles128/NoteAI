@@ -20,7 +20,7 @@ async function saveApiConfig() {
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
     const showStatus = (msg, isError = false) => {
-        const displayMsg = isError ? `<span style="color: #e53e3e;">${msg}</span>` : `<span style="color: #38a169;">${msg}</span>`;
+        const displayMsg = isError ? `<span style="color: #e53e3e;">${escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${escapeHtml(msg)}</span>`;
         if (statusEl) {
             statusEl.innerHTML = displayMsg;
             statusEl.style.display = 'block';
@@ -110,6 +110,21 @@ function closeAboutPanel() {
     }
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+    var settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        settingsPanel.addEventListener('click', function(e) {
+            if (e.target === settingsPanel) closeSettingsPanel();
+        });
+    }
+    var aboutPanel = document.getElementById('about-panel');
+    if (aboutPanel) {
+        aboutPanel.addEventListener('click', function(e) {
+            if (e.target === aboutPanel) closeAboutPanel();
+        });
+    }
+});
+
 async function autoSaveConfig() {
     try {
         const uiConfig = {
@@ -157,5 +172,60 @@ window.SettingsModule = {
     closeLogPanel,
     closeAboutPanel,
     autoSaveConfig,
-    resetApiConfig
+    resetApiConfig,
+    saveUserProfile,
+    loadUserProfile
 };
+
+async function saveUserProfile() {
+    var profileMd = document.getElementById('profile-md')?.value || '';
+
+    var data = {
+        profile_md: profileMd,
+    };
+
+    var statusEl = document.getElementById('profile-status');
+    try {
+        var result = await window.api.save_user_profile(data);
+        if (result && result.success) {
+            if (statusEl) { statusEl.innerHTML = '<span style="color: #38a169;">画像已保存</span>'; statusEl.style.display = 'block'; }
+        } else {
+            if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">保存失败</span>'; statusEl.style.display = 'block'; }
+        }
+    } catch (e) {
+        if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">' + escapeHtml(e.message) + '</span>'; statusEl.style.display = 'block'; }
+    }
+    setTimeout(function() { if (statusEl) statusEl.style.display = 'none'; }, 3000);
+}
+
+async function loadUserProfile() {
+    try {
+        var result = await window.api.get_user_profile();
+        if (result && result.success && result.profile) {
+            var profileMd = result.profile.profile_md || '';
+
+            if (!profileMd) {
+                var identity = result.profile.identity || {};
+                var prefs = result.profile.preferences || {};
+                var lines = [];
+                lines.push('## 关于我');
+                lines.push('');
+                if (identity.profession) lines.push('- 职业：' + identity.profession);
+                if (identity.expertise_areas && identity.expertise_areas.length) lines.push('- 专业领域：' + identity.expertise_areas.join(', '));
+                if (identity.interests && identity.interests.length) lines.push('- 兴趣：' + identity.interests.join(', '));
+                if (identity.learning_goals && identity.learning_goals.length) lines.push('- 学习目标：' + identity.learning_goals.join(', '));
+                lines.push('');
+                lines.push('## 偏好');
+                lines.push('');
+                lines.push('- 回答风格：' + (prefs.answer_style === 'detailed' ? '详细' : '简洁'));
+                lines.push('- 回答深度：' + (prefs.detail_level === 'general' ? '通俗向' : '技术向'));
+                profileMd = lines.join('\n');
+            }
+
+            var mdEl = document.getElementById('profile-md');
+            if (mdEl) mdEl.value = profileMd;
+        }
+    } catch (e) {
+        console.error('[Settings] Load user profile error:', e);
+    }
+}

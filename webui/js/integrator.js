@@ -187,7 +187,8 @@ function clearTopicList() {
 }
 
 window.IntegratorModule = {
-    topicsReady,
+    get topicsReady() { return topicsReady; },
+    set topicsReady(v) { topicsReady = v; },
     updateIntegrateBtnState,
     extractTopics,
     startNoteIntegration,

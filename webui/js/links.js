@@ -1,5 +1,4 @@
 window.LinksModule = (function() {
-    var _pendingLinksData = [];
     var _linkDiscoveryUnlisten = null;
 
     function Path_stem(p) {
@@ -55,10 +54,10 @@ window.LinksModule = (function() {
 
         var allLinks = result.links || [];
         var confirmedLinks = allLinks.filter(function(l) { return l.status === 'confirmed'; });
-        var pendingLinks = allLinks.filter(function(l) { return l.status === 'pending'; });
 
         if (confirmedLinks.length === 0) {
             if (emptyEl) emptyEl.style.display = '';
+            if (emptyEl) emptyEl.textContent = '暂无链接';
             listEl.innerHTML = '';
         } else {
             if (emptyEl) emptyEl.style.display = 'none';
@@ -93,89 +92,6 @@ window.LinksModule = (function() {
                 }
             };
         }
-
-        loadPendingLinksPanel(pendingLinks);
-
-        var currentView = window.AppState ? window.AppState.currentSidebarView : 'tree';
-        if (currentView === 'graph' && pendingLinks.length > 0) {
-            var pendingLinksPanel = document.getElementById('pending-links-panel');
-            if (pendingLinksPanel) pendingLinksPanel.style.display = 'flex';
-        }
-    }
-
-    function togglePendingLinksPanel() {
-        var panel = document.getElementById('pending-links-panel');
-        if (!panel) return;
-
-        if (panel.style.display === 'none' || !panel.style.display) {
-            panel.style.display = 'flex';
-        } else {
-            panel.style.display = 'none';
-        }
-    }
-
-    function loadPendingLinksPanel(pendingLinks) {
-        _pendingLinksData = pendingLinks || [];
-        var listEl = document.getElementById('pending-links-list');
-        var emptyEl = document.getElementById('pending-links-empty');
-        if (!listEl) return;
-
-        if (_pendingLinksData.length === 0) {
-            if (emptyEl) emptyEl.style.display = '';
-            listEl.innerHTML = '';
-            return;
-        }
-
-        if (emptyEl) emptyEl.style.display = 'none';
-
-        var html = '';
-        for (var i = 0; i < _pendingLinksData.length; i++) {
-            var link = _pendingLinksData[i];
-            var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
-            var fromPath = link.from || link.file || '';
-            var toPath = link.to || link.other || '';
-            var fromName = fromPath ? Path_stem(fromPath) : fromPath;
-            var toName = toPath ? Path_stem(toPath) : toPath;
-
-            html += '<div class="link-card ' + dirClass + ' link-pending" data-from="' + escapeAttr(fromPath) + '" data-to="' + escapeAttr(toPath) + '">';
-            html += '<div class="link-card-header">';
-            html += '<span class="link-status-badge link-pending">待确认</span>';
-            html += '<div class="link-card-actions">';
-            html += '<button class="link-action-btn link-confirm-btn" data-action="confirm" title="确认">✓</button>';
-            html += '<button class="link-action-btn link-reject-btn" data-action="reject" title="删除">✕</button>';
-            html += '</div>';
-            html += '</div>';
-            html += '<div class="link-card-relation">';
-            html += '<span class="link-node link-from" data-file-path="' + escapeAttr(fromPath) + '">' + escapeHtml(fromName) + '</span>';
-            html += '<span class="link-arrow ' + dirClass + '">→</span>';
-            html += '<span class="link-node link-to" data-file-path="' + escapeAttr(toPath) + '">' + escapeHtml(toName) + '</span>';
-            html += '</div>';
-            if (link.reason) {
-                html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
-            }
-            html += '</div>';
-        }
-
-        listEl.innerHTML = html;
-
-        listEl.onclick = function(ev) {
-            var target = ev.target;
-            var card = target.closest('.link-card');
-            if (!card) {
-                var node = target.closest('.link-node');
-                if (node && node.dataset.filePath) {
-                    openLinkedFile(node.dataset.filePath);
-                }
-                return;
-            }
-            var from = card.dataset.from || '';
-            var to = card.dataset.to || '';
-            if (target.dataset.action === 'confirm') {
-                onConfirmLink(from, to);
-            } else if (target.dataset.action === 'reject') {
-                onRejectLink(from, to);
-            }
-        };
     }
 
     async function onDiscoverLinks() {
@@ -281,29 +197,6 @@ window.LinksModule = (function() {
         }
     }
 
-    async function onConfirmLink(fromPath, toPath) {
-        var result = await window.api.confirm_link(fromPath, toPath);
-        if (result.success) { loadLinksData(); } else { alert('确认失败: ' + (result.message || '')); }
-    }
-
-    async function onRejectLink(fromPath, toPath) {
-        var result = await window.api.reject_link(fromPath, toPath);
-        if (result.success) { loadLinksData(); } else { alert('删除失败: ' + (result.message || '')); }
-    }
-
-    async function onConfirmAllLinks() {
-        var result = await window.api.confirm_all_links();
-        if (result.success) { loadLinksData(); } else { alert('操作失败: ' + (result.message || '')); }
-    }
-
-    function onLinkFilter(filter) {
-        if (window.AppState) window.AppState.linkFilter = filter;
-        document.querySelectorAll('.link-filter-btn').forEach(function(btn) {
-            btn.classList.toggle('active', btn.dataset.filter === filter);
-        });
-        loadLinksData();
-    }
-
     function openLinkedFile(filePath) {
         if (window.TreeModule && window.TreeModule.selectFile) {
             window.TreeModule.selectFile(filePath);
@@ -313,14 +206,7 @@ window.LinksModule = (function() {
     return {
         loadGraphView: loadGraphView,
         loadLinksData: loadLinksData,
-        togglePendingLinksPanel: togglePendingLinksPanel,
-        loadPendingLinksPanel: loadPendingLinksPanel,
         onDiscoverLinks: onDiscoverLinks,
-        onConfirmLink: onConfirmLink,
-        onRejectLink: onRejectLink,
-        onConfirmAllLinks: onConfirmAllLinks,
-        onLinkFilter: onLinkFilter,
         openLinkedFile: openLinkedFile,
-        get pendingLinksData() { return _pendingLinksData; }
     };
 })();

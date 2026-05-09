@@ -289,7 +289,7 @@ class WorkspaceStateManager:
 workspace_manager = WorkspaceStateManager()
 
 NOTES_FOLDER = "Notes"
-ORGANIZED_FOLDER = "Organized"
+ORGANIZED_FOLDER = "Abstract"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
 

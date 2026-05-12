@@ -1,3 +1,4 @@
+<img width="720" height="441" alt="image" src="https://github.com/user-attachments/assets/d36bc718-227e-468a-a6b0-45b1eae35ae3" />
 # NoteAI
 
 **AI 驱动的个人知识库 + AI 助手桌面应用** — 采集、整理、链接、检索、对话，让零散信息生长为结构化知识，让 AI 助手基于你的知识库回答问题。

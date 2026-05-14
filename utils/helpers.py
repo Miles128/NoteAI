@@ -8,23 +8,7 @@ from typing import Optional, List
 import unicodedata
 
 
-# 从子模块 re-export，保持向后兼容
-from utils.llm_utils import (
-    APIConfigError,
-    NetworkError,
-    is_network_error,
-    _create_llm,
-    call_llm,
-    call_llm_raw,
-    check_api_config,
-    test_api_connection,
-    _estimate_tokens,
-    summarize_with_llm,
-    compress_with_llm,
-    process_content_with_llm,
-    reformat_markdown_with_llm,
-)
-from utils.pdf_utils import extract_pdf_text, extract_pdf_pages
+from utils.llm_utils import reformat_markdown_with_llm
 
 
 def sanitize_filename(filename: str, max_length: int = 100) -> str:
@@ -40,7 +24,7 @@ def sanitize_filename(filename: str, max_length: int = 100) -> str:
 
 def generate_hash(content: str, length: int = 8) -> str:
     """生成内容哈希"""
-    return hashlib.md5(content.encode('utf-8')).hexdigest()[:length]
+    return hashlib.sha256(content.encode('utf-8')).hexdigest()[:length]
 
 
 def clean_text(text: str) -> str:
@@ -79,6 +63,8 @@ def extract_title_from_markdown(md_content: str) -> Optional[str]:
 
 def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
     """将文本分割成块"""
+    if overlap >= chunk_size:
+        overlap = chunk_size - 1
     chunks = []
     start = 0
     text_length = len(text)
@@ -92,7 +78,10 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200
                     break
 
         chunks.append(text[start:end].strip())
-        start = end - overlap
+        next_start = end - overlap
+        if next_start <= start:
+            next_start = end
+        start = next_start
 
     return chunks
 
@@ -215,7 +204,8 @@ def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_head
         chunk = f"{current_heading}\n\n{chunk}"
     chunks.append(chunk)
 
-    remaining_start = split_pos - overlap
+    safe_overlap = min(overlap, max(split_pos - 1, 0))
+    remaining_start = split_pos - safe_overlap
     if remaining_start >= split_pos:
         remaining_start = split_pos
 
@@ -245,10 +235,12 @@ def ensure_dir(path: str) -> Path:
 
 
 def is_valid_url(url: str) -> bool:
-    """验证URL是否有效"""
+    """验证URL是否有效，阻止对私有网络地址的请求（SSRF 防护）"""
+    import ipaddress
     try:
         import validators
-        return validators.url(url) is True
+        if validators.url(url) is not True:
+            return False
     except ImportError:
         pattern = re.compile(
             r'^https?://'
@@ -257,7 +249,30 @@ def is_valid_url(url: str) -> bool:
             r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
             r'(?::\d+)?'
             r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-        return bool(pattern.match(url))
+        if not pattern.match(url):
+            return False
+
+    # SSRF 防护：阻止对私有网络地址的请求
+    try:
+        parsed = __import__('urllib.parse').urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        # 阻止 localhost
+        if hostname in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
+            return False
+        # 阻止私有 IP 和链路本地地址
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+        except ValueError:
+            # hostname 不是 IP 地址（是域名），允许通过
+            pass
+    except Exception:
+        pass
+
+    return True
 
 
 def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:

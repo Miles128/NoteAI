@@ -1,7 +1,4 @@
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g,'&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+(function() { 'use strict';
 
 function toggleSidebar() {
     var sidebar = document.getElementById('sidebar');
@@ -19,79 +16,66 @@ function toggleSidebar() {
     }
 }
 
-function escapeAttr(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function _deactivatePendingBtn() {
-    if (typeof _pendingViewVisible !== 'undefined') {
+    if (typeof window._pendingViewVisible !== 'undefined') {
         _pendingViewVisible = false;
     }
     var btn = document.getElementById('titlebar-pending-btn');
     if (btn) btn.classList.remove('active');
+    var pendingView = document.getElementById('pending-view');
+    if (pendingView) pendingView.style.display = 'none';
 }
 
 function showGraphHomeView() {
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
-    var graphHome = document.getElementById('graph-home-view');
     var contentArea = document.getElementById('content-area');
     var graphPanel = document.getElementById('graph-panel');
     var pendingView = document.getElementById('pending-view');
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
-    if (graphPanel) graphPanel.style.display = 'none';
-    if (graphHome) graphHome.style.display = '';
+    if (graphPanel) graphPanel.style.display = 'flex';
     if (contentArea) contentArea.style.display = 'none';
     if (pendingView) pendingView.style.display = 'none';
+    var gh = document.getElementById('graph-home-view');
+    if (gh) gh.style.display = 'none';
     _deactivatePendingBtn();
     updateHomeStats();
+    if (window.Graph3Tier && window.Graph3Tier.load) {
+        window.Graph3Tier.load();
+    }
 }
 
 function updateHomeStats() {
     var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
+    var topicCount = window.AppState.lastFileTreeData ? _countTopicFolders(window.AppState.lastFileTreeData) : 0;
+
+    // Home overlay stats
     var el1 = document.getElementById('home-stat-notes');
     var el2 = document.getElementById('home-stat-topics');
     var el3 = document.getElementById('home-stat-links');
     if (el1) el1.textContent = fileCount;
+    if (el2) el2.textContent = topicCount;
 
-    if (window.api && window.api.get_topic_tree) {
-        window.api.get_topic_tree().then(function(result) {
-            if (result && result.topics) {
-                var count = 0;
-                function countTopics(nodes) {
-                    if (!nodes) return;
-                    for (var i = 0; i < nodes.length; i++) {
-                        count++;
-                        if (nodes[i].children) countTopics(nodes[i].children);
-                    }
-                }
-                countTopics(result.topics);
-                if (el2) el2.textContent = count;
-            }
-        }).catch(function() {});
-    }
+    // Graph header stats
+    var gs1 = document.getElementById('graph-stat-notes');
+    var gs2 = document.getElementById('graph-stat-topics');
+    var gs3 = document.getElementById('graph-stat-links');
+    if (gs1) gs1.textContent = fileCount;
+    if (gs2) gs2.textContent = topicCount;
 
-    if (window.api && window.api.get_relation_graph) {
-        window.api.get_relation_graph().then(function(result) {
+    if (window.api && window.api.getRelationGraph) {
+        window.api.getRelationGraph().then(function(result) {
             if (result && result.edges) {
                 var linkCount = 0;
                 for (var i = 0; i < result.edges.length; i++) {
                     if (result.edges[i].type === 'link') linkCount++;
                 }
                 if (el3) el3.textContent = linkCount;
+                if (gs3) gs3.textContent = linkCount;
             }
         }).catch(function() {});
     }
-}
-
-function Path_stem(p) {
-    if (!p) return p;
-    var parts = p.split('/');
-    var name = parts[parts.length - 1];
-    var dotIdx = name.lastIndexOf('.');
-    return dotIdx > 0 ? name.substring(0, dotIdx) : name;
 }
 
 function _countFiles(nodes) {
@@ -100,6 +84,20 @@ function _countFiles(nodes) {
     for (var i = 0; i < nodes.length; i++) {
         if (nodes[i].type === 'file' && nodes[i].name && nodes[i].name.toLowerCase().endsWith('.md')) count++;
         if (nodes[i].children) count += _countFiles(nodes[i].children);
+    }
+    return count;
+}
+
+function _countTopicFolders(nodes) {
+    if (!nodes) return 0;
+    var count = 0;
+    for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].type === 'folder') {
+            var depth = (nodes[i].path.match(/\//g) || []).length;
+            // Count only folders that are topic-like (inside Notes/ directory, depth >= 1)
+            if (nodes[i].path.indexOf('Notes/') >= 0) count++;
+        }
+        if (nodes[i].children) count += _countTopicFolders(nodes[i].children);
     }
     return count;
 }
@@ -175,8 +173,8 @@ function switchSidebarView(view) {
 
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
-    var graphHome = document.getElementById('graph-home-view');
     var contentArea = document.getElementById('content-area');
+    var graphPanel = document.getElementById('graph-panel');
 
     var isPreviewShowing = previewPanel && previewPanel.style.display !== 'none';
 
@@ -185,16 +183,26 @@ function switchSidebarView(view) {
     } else {
         if (contentPanel) contentPanel.style.display = 'flex';
         if (window.AppState.selectedFilePath) {
-            if (graphHome) graphHome.style.display = 'none';
+            if (graphPanel) graphPanel.style.display = 'none';
             if (contentArea) contentArea.style.display = '';
         } else {
-            if (graphHome) graphHome.style.display = '';
             if (contentArea) contentArea.style.display = 'none';
         }
     }
 
     if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); }).catch(function() {});
     if (view === 'graph' && window.LinksModule) { window.LinksModule.loadGraphView(); setTimeout(updateSidebarStats, 500); }
+
+    // 联动知识图谱过滤
+    if (window.Graph3Tier && window.Graph3Tier.load) {
+        if (view === 'tags') {
+            window.Graph3Tier.load('tag');
+        } else if (view === 'graph') {
+            window.Graph3Tier.load('all');
+        } else if (view === 'tree') {
+            window.Graph3Tier.load('topic');
+        }
+    }
     updateSidebarStats();
 }
 
@@ -203,3 +211,9 @@ window.updateSidebarStats = updateSidebarStats;
 window.setSidebarStatus = setSidebarStatus;
 window.showGraphHomeView = showGraphHomeView;
 window.updateHomeStats = updateHomeStats;
+
+window.toggleSidebar = toggleSidebar;
+window._deactivatePendingBtn = _deactivatePendingBtn;
+
+})();
+

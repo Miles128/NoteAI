@@ -18,3 +18,4 @@
     window.switchTab = switchTab;
     window.TabsModule = { switchTab };
 })();
+

@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 window.AssistantModule = (function() {
     var _chatHistory = [];
     var _isStreaming = false;
@@ -23,32 +25,6 @@ window.AssistantModule = (function() {
         _setupResizers();
     }
 
-    var _sidebarOriginalWidth = null;
-    var _windowExpanded = false;
-
-    function _resizeWindow(deltaWidth) {
-        var win = (typeof getTauriWindow === 'function') ? getTauriWindow() : null;
-        if (!win) return;
-        win.isMaximized().then(function(maximized) {
-            if (maximized) {
-                win.unmaximize();
-            }
-            Promise.all([win.innerSize(), win.scaleFactor()]).then(function(results) {
-                var size = results[0];
-                var sf = results[1];
-                var LogicalSize = window.__TAURI__.window.LogicalSize
-                    || (window.__TAURI__.dpi && window.__TAURI__.dpi.LogicalSize);
-                var logicalWidth = size.width / sf + deltaWidth;
-                var logicalHeight = size.height / sf;
-                if (LogicalSize) {
-                    win.setSize(new LogicalSize(logicalWidth, logicalHeight));
-                } else {
-                    win.setSize({ type: 'Logical', width: logicalWidth, height: logicalHeight });
-                }
-            });
-        });
-    }
-
     function toggle() {
         var panel = document.getElementById('ai-panel');
         if (!panel) return;
@@ -56,40 +32,17 @@ window.AssistantModule = (function() {
         _panelVisible = !_panelVisible;
         if (_panelVisible) {
             panel.style.display = 'flex';
-            panel.style.width = '480px';
+            panel.style.width = '30%';
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
             if (toggleBtn) toggleBtn.classList.add('active');
             if (_chatHistory.length === 0) {
                 addSystemMessage('嗨，我是小忆，你的贴心个人助理～有什么可以帮你的吗？');
             }
             _scrollToBottom();
-
-            var sidebar = document.getElementById('sidebar');
-            if (sidebar && _sidebarOriginalWidth === null) {
-                _sidebarOriginalWidth = sidebar.offsetWidth;
-                var newSidebarWidth = Math.max(180, _sidebarOriginalWidth - 160);
-                sidebar.style.width = newSidebarWidth + 'px';
-            }
-
-            if (!_windowExpanded) {
-                _resizeWindow(320);
-                _windowExpanded = true;
-            }
         } else {
             panel.style.display = 'none';
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
             if (toggleBtn) toggleBtn.classList.remove('active');
-
-            var sidebar = document.getElementById('sidebar');
-            if (sidebar && _sidebarOriginalWidth !== null) {
-                sidebar.style.width = _sidebarOriginalWidth + 'px';
-                _sidebarOriginalWidth = null;
-            }
-
-            if (_windowExpanded) {
-                _resizeWindow(-320);
-                _windowExpanded = false;
-            }
         }
     }
 
@@ -132,13 +85,6 @@ window.AssistantModule = (function() {
             }
             newWidth = Math.max(280, Math.min(700, newWidth));
             panel.style.width = newWidth + 'px';
-
-            if (side === 'left') {
-                var widthDiff = newWidth - startWidth;
-                _resizeWindow(widthDiff);
-                startX = e.clientX;
-                startWidth = newWidth;
-            }
         }
 
         function onMouseUp() {
@@ -172,8 +118,24 @@ window.AssistantModule = (function() {
 
         var topics = _extractTopics();
         var tags = _extractTags();
+        var currentFile = _extractCurrentFile();
 
-        window.api.rag_chat(question, topics, tags).catch(function(err) {
+        window.api.ragChat(question, topics, tags, currentFile).then(function(result) {
+            if (result && result.success === false) {
+                _isStreaming = false;
+                assistantEl.textContent = result.message || '请求失败';
+                assistantEl.classList.remove('ai-typing');
+            } else {
+                setTimeout(function() {
+                    if (_isStreaming && _currentStreamEl === assistantEl && !assistantEl.textContent) {
+                        _isStreaming = false;
+                        assistantEl.textContent = '响应超时，请检查后端服务是否正常运行';
+                        assistantEl.classList.remove('ai-typing');
+                        _currentStreamEl = null;
+                    }
+                }, 30000);
+            }
+        }).catch(function(err) {
             _isStreaming = false;
             var msg = (err && err.message) ? err.message : String(err || '未知错误');
             assistantEl.textContent = '请求失败: ' + msg;
@@ -193,6 +155,11 @@ window.AssistantModule = (function() {
         var data = window.AppState.lastTagsData;
         if (!data || !data.tags) return null;
         return data.tags.map(function(t) { return t.name; });
+    }
+
+    function _extractCurrentFile() {
+        if (!window.AppState || !window.AppState.selectedFilePath) return "";
+        return window.AppState.selectedFilePath;
     }
 
     function _createAvatar(type) {
@@ -287,7 +254,7 @@ window.AssistantModule = (function() {
 
     function rebuildIndex() {
         addSystemMessage('正在构建知识库索引...');
-        window.api.rag_rebuild_index().catch(function(err) {
+        window.api.ragRebuildIndex().catch(function(err) {
             addSystemMessage('索引构建请求失败: ' + err.message);
         });
     }
@@ -303,3 +270,7 @@ window.AssistantModule = (function() {
 function toggleAIPanel() {
     if (window.AssistantModule) window.AssistantModule.toggle();
 }
+
+window.toggleAIPanel = toggleAIPanel;
+
+})();

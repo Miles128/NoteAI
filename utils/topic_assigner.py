@@ -1,11 +1,16 @@
 import re
 import json
 import sys
+import threading
 from pathlib import Path
+
+from utils.activity_log import add_entry as _log
 from config.settings import config
 from utils.logger import logger
 
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
+
+_pending_lock = threading.Lock()
 
 
 def _get_pending_path():
@@ -19,33 +24,81 @@ def _get_wiki_path():
     workspace = config.workspace_path
     if not workspace:
         return None
-    return Path(workspace) / "WIKI.md"
+    ws = Path(workspace)
+    new_path = ws / "wiki" / "WIKI.md"
+    if new_path.exists():
+        return new_path
+    old_path = ws / "WIKI.md"
+    if old_path.exists():
+        return old_path
+    return new_path
 
 
 def load_pending():
-    path = _get_pending_path()
-    if not path or not path.exists():
-        return []
-    try:
-        return json.loads(path.read_text(encoding='utf-8'))
-    except Exception:
-        return []
+    with _pending_lock:
+        path = _get_pending_path()
+        if not path or not path.exists():
+            return []
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            sys.stderr.write(f"[topic_assigner] load_pending failed: {e}\n")
+            sys.stderr.flush()
+            return []
 
 
 def save_pending(pending):
-    path = _get_pending_path()
-    if not path:
-        return
-    tmp_path = path.with_suffix('.tmp')
-    tmp_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
-    tmp_path.replace(path)
+    with _pending_lock:
+        path = _get_pending_path()
+        if not path:
+            return
+        tmp_path = path.with_suffix('.tmp')
+        tmp_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp_path.replace(path)
+
+
+def cleanup_stale_pending():
+    workspace = config.workspace_path
+    if not workspace:
+        return 0
+    pending = load_pending()
+    if not pending:
+        return 0
+    ws = Path(workspace)
+    original_count = len(pending)
+    valid = []
+    seen = set()
+    for p in pending:
+        file_path = p.get("file", "")
+        if not file_path:
+            continue
+        if file_path in seen:
+            continue
+        seen.add(file_path)
+        full = ws / file_path if not Path(file_path).is_absolute() else Path(file_path)
+        if not full.exists():
+            logger.info(f"[topic_assigner] 清理无效待办: {file_path} 文件已不存在")
+            continue
+        try:
+            text = full.read_text(encoding='utf-8')
+            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+            if m and not _check_topic_needs_processing(m.group(1)):
+                logger.info(f"[topic_assigner] 清理已处理待办: {file_path} 已有主题")
+                continue
+        except Exception as e:
+            sys.stderr.write(f"[cleanup_stale] read failed: {e}\n"); sys.stderr.flush()
+        valid.append(p)
+    removed = original_count - len(valid)
+    if removed > 0:
+        save_pending(valid)
+    return removed
 
 
 def parse_wiki_headings():
     workspace = config.workspace_path
     if not workspace:
         return []
-    wiki_path = Path(workspace) / "WIKI.md"
+    wiki_path = Path(workspace) / "wiki" / "WIKI.md"
     if not wiki_path.exists():
         return []
     try:
@@ -79,7 +132,7 @@ def parse_wiki_structure():
     workspace = config.workspace_path
     if not workspace:
         return []
-    wiki_path = Path(workspace) / "WIKI.md"
+    wiki_path = Path(workspace) / "wiki" / "WIKI.md"
     if not wiki_path.exists():
         return []
     try:
@@ -107,8 +160,7 @@ def parse_wiki_structure():
                 if current_file.get('path'):
                     current_topic['files'].append(current_file)
                 current_file = None
-            if current_topic['files']:
-                topics.append(current_topic)
+            topics.append(current_topic)
             current_topic = None
 
     for line in lines:
@@ -177,7 +229,7 @@ def write_topic_to_file(file_path, topic):
             import yaml
             frontmatter = '---\ntopic: ' + yaml.dump(topic, default_flow_style=True).strip() + '\n---\n'
             Path(file_path).write_text(bom + frontmatter + clean, encoding='utf-8')
-            return
+            return {"success": True}
         yaml_text = m.group(2)
         lines = yaml_text.split('\n')
         found = False
@@ -196,9 +248,11 @@ def write_topic_to_file(file_path, topic):
         new_yaml = '\n'.join(lines)
         new_text = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
         Path(file_path).write_text(new_text, encoding='utf-8')
+        return {"success": True}
     except Exception as e:
         sys.stderr.write(f"[write_topic] failed: {e}\n")
         sys.stderr.flush()
+        return {"success": False, "message": str(e)}
 
 
 def move_file_to_notes_topic_folder(file_path, topic):
@@ -266,6 +320,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         if wiki_path.exists():
             content = wiki_path.read_text(encoding='utf-8')
         else:
+            wiki_path.parent.mkdir(parents=True, exist_ok=True)
             from datetime import datetime
             content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
     except Exception as e:
@@ -321,22 +376,19 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         next_index = max_index + 1
 
         insert_idx = topic_end_idx
+        last_file_item_idx = None
         for i in range(source_files_idx + 1, topic_end_idx):
             stripped = lines[i].strip()
             file_match = file_item_pattern.match(stripped)
             if file_match:
-                for j in range(i + 1, topic_end_idx):
-                    next_stripped = lines[j].strip()
-                    next_file_match = file_item_pattern.match(next_stripped)
-                    if next_file_match:
-                        insert_idx = j
-                        break
-                    if re.match(r'^#{2,}\s+', next_stripped):
-                        insert_idx = j
-                        break
-                if insert_idx == topic_end_idx:
-                    insert_idx = topic_end_idx
+                last_file_item_idx = i
+            elif re.match(r'^#{2,}\s+', stripped):
                 break
+
+        if last_file_item_idx is not None:
+            insert_idx = last_file_item_idx + 1
+            while insert_idx < topic_end_idx and source_path_pattern.match(lines[insert_idx].strip()):
+                insert_idx += 1
 
         new_lines = [
             f"{next_index}. **{display_title}**",
@@ -456,6 +508,43 @@ def _check_topic_needs_processing(yaml_text: str) -> bool:
     return False
 
 
+def _find_best_topic_match(hint: str, headings: list) -> str:
+    hint_norm = _normalize_for_match(hint)
+    hint_tokens = tokenize_text(hint)
+
+    for h in headings:
+        if _normalize_for_match(h["name"]) == hint_norm:
+            return h["name"]
+
+    for h in headings:
+        name_norm = _normalize_for_match(h["name"])
+        if hint_norm in name_norm or name_norm in hint_norm:
+            return h["name"]
+
+    best_score = 0
+    best_topic = None
+    for h in headings:
+        topic_tokens = tokenize_text(h["name"])
+        score = 0
+        for ht in hint_tokens:
+            if _is_meaningful_tag(ht):
+                for tt in topic_tokens:
+                    if _normalize_for_match(ht) == _normalize_for_match(tt):
+                        score += 2
+        if _has_consecutive_two_words_match(topic_tokens, hint):
+            score += 3
+        if _has_consecutive_two_words_match(hint_tokens, h["name"]):
+            score += 3
+        if score > best_score:
+            best_score = score
+            best_topic = h["name"]
+
+    if best_topic and best_score >= 2:
+        return best_topic
+
+    return None
+
+
 def _has_consecutive_two_words_match(topic_tokens: list, filename: str) -> bool:
     """
     第一优先级匹配：主题分词后是否有连续的两个词在文件名中出现（忽略空格）
@@ -538,7 +627,9 @@ def _optimize_file_format(full_path, text, m):
     try:
         full_path.write_text(new_content, encoding='utf-8')
         return True
-    except Exception:
+    except (OSError, ValueError) as e:
+        sys.stderr.write(f"[topic_assigner] _optimize_file_format write failed: {e}\n")
+        sys.stderr.flush()
         return False
 
 
@@ -621,8 +712,8 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
     if format_optimized:
         try:
             text = full_path.read_text(encoding='utf-8')
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"[auto_assign] re-read failed: {e}\n"); sys.stderr.flush()
         else:
             m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
             yaml_text = m.group(1) if m else ''
@@ -640,20 +731,36 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
                     elif key == 'title':
                         title = val.strip().strip("'\"")
 
+    filename = full_path.stem
+    is_survey = filename.endswith('综述') or filename.endswith('_综述')
+    if is_survey:
+        survey_hint = re.sub(r'[_\s]*综述$', '', filename).strip()
+        if survey_hint:
+            headings = parse_wiki_headings()
+            best_match = _find_best_topic_match(survey_hint, headings)
+            if best_match:
+                write_topic_to_file(str(full_path), best_match)
+                rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
+                add_file_to_wiki_topic(rel, best_match, title)
+                move_file_to_notes_topic_folder(str(full_path), best_match)
+                _log("topic_auto", f"自动分配主题「{best_match}」→ {full_path.name}", full_path.name)
+                return {"status": "auto_assigned", "topic": best_match, "source": "survey", "format_optimized": format_optimized}
+
     headings = parse_wiki_headings()
     filename = full_path.stem
 
     if not headings:
         pending = load_pending()
         rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-        pending.append({
-            "file": rel,
-            "title": title,
-            "tags": tags,
-            "candidates": [],
-            "source": "none"
-        })
-        save_pending(pending)
+        if not any(p.get("file") == rel for p in pending):
+            pending.append({
+                "file": rel,
+                "title": title,
+                "tags": tags,
+                "candidates": [],
+                "source": "none"
+            })
+            save_pending(pending)
         return {"status": "pending", "source": "none", "format_optimized": format_optimized}
 
     high_priority_candidates = []
@@ -700,12 +807,14 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
             if token not in candidates and token not in extra_candidates:
                 extra_candidates.append(token)
 
-    if high_priority_candidates and len(candidates) == 1 and not extra_candidates:
-        write_topic_to_file(str(full_path), candidates[0])
+    if high_priority_candidates and len(candidates) == 1:
+        topic = candidates[0]
+        write_topic_to_file(str(full_path), topic)
         rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-        add_file_to_wiki_topic(rel, candidates[0], title)
-        move_file_to_notes_topic_folder(str(full_path), candidates[0])
-        return {"status": "auto_assigned", "topic": candidates[0], "format_optimized": format_optimized}
+        add_file_to_wiki_topic(rel, topic, title)
+        move_file_to_notes_topic_folder(str(full_path), topic)
+        _log("topic_auto", f"自动分配主题「{topic}」→ {full_path.name}", full_path.name)
+        return {"status": "auto_assigned", "topic": topic, "format_optimized": format_optimized}
 
     all_candidates = candidates + extra_candidates
 
@@ -729,12 +838,13 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
                         matched.append(h["name"])
                         break
 
-            if len(matched) == 1 and not extra_candidates:
+            if len(matched) == 1:
                 topic = matched[0]
                 write_topic_to_file(str(full_path), topic)
                 rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
                 add_file_to_wiki_topic(rel, topic, title)
                 move_file_to_notes_topic_folder(str(full_path), topic)
+                _log("topic_auto", f"AI 分配主题「{topic}」→ {full_path.name}", full_path.name)
                 return {"status": "auto_assigned", "topic": topic, "source": "llm", "format_optimized": format_optimized}
 
             for t in matched:
@@ -746,13 +856,20 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
 
     pending = load_pending()
     rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-    pending.append({
-        "file": rel,
-        "title": title,
-        "tags": tags,
-        "candidates": all_candidates,
-        "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
-    })
+    existing = next((p for p in pending if p.get("file") == rel), None)
+    if existing:
+        existing["title"] = title
+        existing["tags"] = tags
+        existing["candidates"] = all_candidates
+        existing["source"] = "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
+    else:
+        pending.append({
+            "file": rel,
+            "title": title,
+            "tags": tags,
+            "candidates": all_candidates,
+            "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
+        })
     save_pending(pending)
     return {"status": "pending", "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority"), "format_optimized": format_optimized}
 
@@ -861,7 +978,7 @@ def rename_wiki_topic(old_topic, new_topic):
                             else:
                                 dst.unlink()
                         shutil.move(str(item), str(dst))
-                    old_dir.rmdir()
+                    shutil.rmtree(str(old_dir))
                 else:
                     old_dir.rename(new_dir)
 
@@ -1068,8 +1185,8 @@ def _merge_duplicate_topics_in_wiki():
         if not new_content.endswith('\n'):
             new_content += '\n'
         wiki_path.write_text(new_content, encoding='utf-8')
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"[_merge_topics] write failed: {e}\n"); sys.stderr.flush()
 
     return merged_count
 
@@ -1164,8 +1281,8 @@ def _deduplicate_files_in_wiki():
             if not new_content.endswith('\n'):
                 new_content += '\n'
             wiki_path.write_text(new_content, encoding='utf-8')
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"[_deduplicate_files] write failed: {e}\n"); sys.stderr.flush()
 
     return removed_count
 
@@ -1260,84 +1377,139 @@ def _remove_topic_from_wiki(topic_name):
 def delete_topic(topic_name):
     """
     删除主题：
-    1. 从 WIKI.md 中移除整个主题（标题+文件列表+目录链接）
-    2. 清除该主题下所有文件的 YAML topic 字段
-    3. 对每个文件重新尝试自动匹配主题
-    4. 匹配不到的放入待确认列表
+    1. 将主题文件夹下所有文件移动到 Notes 根目录
+    2. 从 WIKI.md 中移除整个主题
+    3. 清除文件的 YAML topic 字段，等待重新分配
+    4. 清理空的主题文件夹和综述文件
 
     返回: {"success": bool, "message": str, "reassigned": int, "pending": int}
     """
+    import shutil
+
     workspace = config.workspace_path
     if not workspace:
         return {"success": False, "message": "未设置工作区"}
 
+    workspace_path = Path(workspace)
+    notes_dir = workspace_path / config.NOTES_FOLDER
+    notes_topic_dir = notes_dir / topic_name
+    organized_topic_dir = workspace_path / config.ORGANIZED_FOLDER / topic_name
+
+    # Collect all actual files from the topic directory
+    actual_files = []
+    if notes_topic_dir.exists() and notes_topic_dir.is_dir():
+        for f in notes_topic_dir.rglob("*"):
+            if f.is_file() and f.suffix.lower() == ".md":
+                actual_files.append(f)
+
+    # Also collect from WIKI.md for cleanup reference
     wiki_structure = parse_wiki_structure()
-    topic_data = None
+    wiki_file_paths = []
     for t in wiki_structure:
         if t["name"] == topic_name:
-            topic_data = t
+            wiki_file_paths = [f.get("path", "") for f in t.get("files", []) if f.get("path")]
             break
 
-    if not topic_data:
-        return {"success": False, "message": f"主题「{topic_name}」不存在"}
+    # 1. Move all files from topic folder to Notes root
+    notes_root = notes_dir
+    notes_root.mkdir(parents=True, exist_ok=True)
+    moved_count = 0
+    for src in actual_files:
+        dst = notes_root / src.name
+        # Handle name conflicts: append _1, _2 etc.
+        if dst.exists():
+            stem = src.stem
+            suffix = src.suffix
+            counter = 1
+            while dst.exists():
+                dst = notes_root / f"{stem}_{counter}{suffix}"
+                counter += 1
+        try:
+            shutil.move(str(src), str(dst))
+            moved_count += 1
+        except Exception as e:
+            sys.stderr.write(f"[delete_topic] move file failed: {src} -> {dst}: {e}\n")
+            sys.stderr.flush()
 
-    file_paths = [f.get("path", "") for f in topic_data.get("files", []) if f.get("path")]
+    # 2. Remove empty topic directories (including subdirectories)
+    if notes_topic_dir.exists():
+        _remove_empty_dir(notes_topic_dir)
+    if organized_topic_dir.exists():
+        _remove_empty_dir(organized_topic_dir)
 
+    # 3. Remove topic from WIKI.md
     wiki_ok, _ = _remove_topic_from_wiki(topic_name)
     if not wiki_ok:
-        return {"success": False, "message": "从 WIKI.md 删除主题失败"}
+        sys.stderr.write(f"[delete_topic] WIKI.md removal failed for {topic_name}\n")
+        sys.stderr.flush()
 
-    import shutil
-    notes_topic_dir = Path(workspace) / config.NOTES_FOLDER / topic_name
-    if notes_topic_dir.exists() and notes_topic_dir.is_dir():
-        try:
-            shutil.rmtree(str(notes_topic_dir))
-        except Exception:
-            pass
+    # 4. Clear YAML topic field from all moved files
+    notes_root_files = set()
+    for src in actual_files:
+        dst = notes_root / src.name
+        # Re-derive the actual destination path (accounting for conflict renames)
+        stem = src.stem
+        suffix = src.suffix
+        candidate = notes_root / f"{stem}{suffix}"
+        counter = 1
+        while not candidate.exists():
+            candidate = notes_root / f"{stem}_{counter}{suffix}"
+            counter += 1
+            if counter > 100:
+                candidate = None
+                break
+        if candidate and candidate.exists():
+            notes_root_files.add(candidate)
+        else:
+            notes_root_files.add(notes_root / src.name)
 
-    organized_topic_dir = Path(workspace) / config.ORGANIZED_FOLDER / topic_name
-    if organized_topic_dir.exists() and organized_topic_dir.is_dir():
-        try:
-            shutil.rmtree(str(organized_topic_dir))
-        except Exception:
-            pass
-
-    workspace_path = Path(workspace)
-
-    for rel_path in file_paths:
-        full_path = workspace_path / rel_path
-        if full_path.exists():
+    for fp in notes_root_files:
+        if fp.exists():
             try:
-                _clear_topic_in_file(str(full_path))
+                _clear_topic_in_file(str(fp))
             except Exception as e:
-                sys.stderr.write(f"[delete_topic] clear topic failed: {rel_path} - {e}\n")
+                sys.stderr.write(f"[delete_topic] clear topic failed: {fp} - {e}\n")
                 sys.stderr.flush()
 
+    # 5. Re-assign topics for moved files
     reassigned_count = 0
     pending_count = 0
 
-    for rel_path in file_paths:
-        full_path = workspace_path / rel_path
-        if not full_path.exists():
+    for fp in notes_root_files:
+        if not fp.exists():
             continue
-
         try:
-            result = auto_assign_topic_for_file(str(full_path))
-            if result:
+            result = auto_assign_topic_for_file(str(fp))
+            if result and result.get("status") == "auto_assigned":
                 reassigned_count += 1
             else:
                 pending_count += 1
         except Exception as e:
-            sys.stderr.write(f"[delete_topic] reassign failed: {rel_path} - {e}\n")
+            sys.stderr.write(f"[delete_topic] reassign failed: {fp} - {e}\n")
             sys.stderr.flush()
             pending_count += 1
 
     return {
         "success": True,
-        "message": f"已删除主题「{topic_name}」，重新分配 {reassigned_count} 个文件，{pending_count} 个待确认",
+        "message": f"已删除主题「{topic_name}」，{moved_count} 个文件移至 Notes 根目录，"
+                   f"重新分配 {reassigned_count} 个，{pending_count} 个待确认",
         "reassigned": reassigned_count,
-        "pending": pending_count
+        "pending": pending_count,
+        "moved": moved_count,
     }
+
+
+def _remove_empty_dir(dir_path):
+    """递归删除空目录"""
+    import shutil
+    dir_path = Path(dir_path)
+    if not dir_path.exists():
+        return
+    try:
+        shutil.rmtree(str(dir_path))
+    except Exception as e:
+        sys.stderr.write(f"[delete_topic] remove dir failed: {dir_path} - {e}\n")
+        sys.stderr.flush()
 
 
 def _clear_topic_in_file(file_path):
@@ -1419,6 +1591,21 @@ def rename_topic(old_topic, new_topic):
         _remove_topic_from_wiki(old_topic)
         _merge_duplicate_topics_in_wiki()
         _deduplicate_files_in_wiki()
+
+        import shutil
+        old_dir = workspace_path / config.NOTES_FOLDER / old_topic
+        new_dir = workspace_path / config.NOTES_FOLDER / new_topic
+        if old_dir.exists() and old_dir.is_dir():
+            new_dir.mkdir(parents=True, exist_ok=True)
+            for item in old_dir.iterdir():
+                dst = new_dir / item.name
+                if dst.exists():
+                    if dst.is_dir():
+                        shutil.rmtree(str(dst))
+                    else:
+                        dst.unlink()
+                shutil.move(str(item), str(dst))
+            shutil.rmtree(str(old_dir))
 
         return {
             "success": True,
@@ -1690,6 +1877,7 @@ def create_topic(topic_name):
         if wiki_path.exists():
             content = wiki_path.read_text(encoding='utf-8')
         else:
+            wiki_path.parent.mkdir(parents=True, exist_ok=True)
             from datetime import datetime
             content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
         
@@ -1865,11 +2053,11 @@ def sync_wiki_with_files():
     workspace_path = Path(workspace)
 
     md_files = list(workspace_path.rglob('*.md'))
-    wiki_path = workspace_path / "WIKI.md"
+    wiki_path = workspace_path / "wiki" / "WIKI.md"
 
     file_topics = {}
     for md_file in md_files:
-        if md_file.name == 'WIKI.md':
+        if md_file.name == 'WIKI.md' and 'wiki' in md_file.parts:
             continue
         try:
             rel_path = str(md_file.relative_to(workspace_path))

@@ -2,10 +2,14 @@ import sys
 import json
 import shutil
 import re
+import threading
 from pathlib import Path
 from datetime import datetime
 
 from config import config
+from sidecar.textutils import parse_frontmatter
+
+_changelog_lock = threading.Lock()
 
 
 def _safe_topic_segment(segment: str) -> str:
@@ -106,7 +110,7 @@ def move_file_to_topic_folder(file_path: str, topic: str) -> dict:
         return {"success": False, "message": f"文件操作失败: {e}"}
 
 
-def collect_topic_notes(topic: str, max_chars: int = 2000) -> list[dict]:
+def collect_topic_notes(topic: str) -> list[dict]:
     workspace = config.workspace_path
     if not workspace:
         return []
@@ -117,13 +121,12 @@ def collect_topic_notes(topic: str, max_chars: int = 2000) -> list[dict]:
     for md_file in sorted(workspace_path.rglob('*.md')):
         if md_file.name.startswith('.'):
             continue
-        if md_file.name.lower() in ('wiki.md', 'tags.md'):
+        if 'wiki' in md_file.parts:
             continue
-        if md_file.name.endswith('_综述.md'):
+        if md_file.name.endswith('_综述.md') or md_file.name.endswith('综述.md'):
             continue
         try:
             text = md_file.read_text(encoding='utf-8')
-            from sidecar.textutils import parse_frontmatter
             fm, body = parse_frontmatter(text)
 
             topic_match = False
@@ -136,7 +139,7 @@ def collect_topic_notes(topic: str, max_chars: int = 2000) -> list[dict]:
                     topic_match = True
 
             if topic_match:
-                content = body.strip()[:max_chars]
+                content = body.strip()
                 if content:
                     notes.append({
                         "file_name": md_file.name,
@@ -149,6 +152,160 @@ def collect_topic_notes(topic: str, max_chars: int = 2000) -> list[dict]:
     return notes
 
 
+def _compress_text(content: str, target_ratio: float = 0.6) -> str:
+    try:
+        from snownlp import SnowNLP
+        s = SnowNLP(content)
+        sentences = s.sentences
+        if not sentences:
+            return content
+
+        target_count = max(1, int(len(sentences) * target_ratio))
+        summary = s.summary(target_count)
+        if not summary:
+            return content
+
+        return ''.join(summary)
+    except Exception as e:
+        sys.stderr.write(f"[compress_text] SnowNLP failed: {e}, fallback to jieba\n")
+        sys.stderr.flush()
+        return _compress_text_jieba(content, target_ratio)
+
+
+def _compress_text_jieba(content: str, target_ratio: float = 0.6) -> str:
+    try:
+        import jieba.analyse
+    except ImportError:
+        return content
+
+    sentences = re.split(r'[。！？\n]', content)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    if not sentences:
+        return content
+
+    keywords = set(jieba.analyse.extract_tags(content, topK=15))
+    scored = []
+    for s in sentences:
+        score = sum(1 for w in keywords if w in s)
+        scored.append((score, s))
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    target_count = max(1, int(len(sentences) * target_ratio))
+    kept = [s for _, s in scored[:target_count]]
+
+    seen = set()
+    ordered = []
+    for s in sentences:
+        if s in kept and s not in seen:
+            ordered.append(s)
+            seen.add(s)
+
+    return '。'.join(ordered) + '。' if ordered else content
+
+
+def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_total_len: int = 5000) -> list[dict]:
+    if not notes:
+        return notes
+
+    total_len = sum(len(n["content"]) for n in notes)
+    target_len = int(total_len * target_ratio)
+
+    if total_len <= max_total_len:
+        return notes
+
+    long_notes = [(i, n) for i, n in enumerate(notes) if len(n["content"]) > 500]
+    long_notes.sort(key=lambda x: len(x[1]["content"]), reverse=True)
+
+    current_total = total_len
+    compressed_indices = set()
+
+    for idx, note in long_notes:
+        if current_total <= target_len:
+            break
+
+        original_len = len(note["content"])
+        note_ratio = max(0.3, target_len / current_total)
+        compressed = _compress_text(note["content"], note_ratio)
+        compressed_len = len(compressed)
+
+        if compressed_len < original_len:
+            notes[idx] = {
+                "file_name": note["file_name"],
+                "file_path": note["file_path"],
+                "content": compressed,
+            }
+            current_total -= (original_len - compressed_len)
+            compressed_indices.add(idx)
+
+    if current_total > target_len and long_notes:
+        for idx, note in long_notes:
+            if idx in compressed_indices:
+                continue
+            if current_total <= target_len:
+                break
+            if len(note["content"]) <= 500:
+                continue
+
+            original_len = len(note["content"])
+            note_ratio = max(0.3, target_len / current_total)
+            compressed = _compress_text(note["content"], note_ratio)
+            compressed_len = len(compressed)
+
+            if compressed_len < original_len:
+                notes[idx] = {
+                    "file_name": note["file_name"],
+                    "file_path": note["file_path"],
+                    "content": compressed,
+                }
+                current_total -= (original_len - compressed_len)
+
+    return notes
+
+
+def _add_survey_frontmatter(topic: str, content: str) -> str:
+    import yaml
+    fm = {"topic": topic, "type": "survey", "tags": [topic]}
+    fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+    return f"---\n{fm_str}\n---\n\n{content}"
+
+
+def fix_existing_survey_topics() -> dict:
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区"}
+
+    workspace_path = Path(workspace)
+    fixed = 0
+    skipped = 0
+
+    for md_file in workspace_path.rglob('*.md'):
+        if md_file.name.startswith('.'):
+            continue
+        if not (md_file.name.endswith('_综述.md') or md_file.name.endswith('综述.md')):
+            continue
+        try:
+            text = md_file.read_text(encoding='utf-8')
+            fm, body = parse_frontmatter(text)
+
+            stem = md_file.stem
+            topic_name = re.sub(r'[_\s]*综述$', '', stem).strip()
+            if not topic_name:
+                skipped += 1
+                continue
+
+            if fm and fm.get('topic') == topic_name:
+                skipped += 1
+                continue
+
+            new_content = _add_survey_frontmatter(topic_name, body.strip())
+            md_file.write_text(new_content, encoding='utf-8')
+            fixed += 1
+        except Exception:
+            skipped += 1
+
+    return {"success": True, "fixed": fixed, "skipped": skipped}
+
+
 def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
     from prompts.cascade import CASCADE_SURVEY_NEW_PROMPT
     from utils.llm_utils import create_llm, check_api_config, APIConfigError
@@ -159,6 +316,8 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
             return {"success": False, "message": error_msg}
     except APIConfigError as e:
         return {"success": False, "message": str(e)}
+
+    notes = compress_notes_if_needed(notes, target_ratio=0.8)
 
     notes_content = '\n\n---\n\n'.join(
         f"### {n['file_name']}\n\n{n['content']}" for n in notes
@@ -187,7 +346,8 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
             return {"success": False, "message": "主题名称非法"}
 
         survey_path.parent.mkdir(parents=True, exist_ok=True)
-        survey_path.write_text(full_text.strip(), encoding='utf-8')
+        survey_content = _add_survey_frontmatter(topic, full_text.strip())
+        survey_path.write_text(survey_content, encoding='utf-8')
 
         append_changelog(f"生成综述: {config.ORGANIZED_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
@@ -211,6 +371,9 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
         return {"success": False, "message": str(e)}
 
     existing_text = survey_path.read_text(encoding='utf-8')
+    _fm, existing_body = parse_frontmatter(existing_text)
+
+    new_notes = compress_notes_if_needed(new_notes, target_ratio=0.8)
 
     new_notes_content = '\n\n---\n\n'.join(
         f"### {n['file_name']}\n\n{n['content']}" for n in new_notes
@@ -218,7 +381,7 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
 
     prompt = CASCADE_SURVEY_UPDATE_PROMPT.format(
         topic_name=topic,
-        existing_survey=existing_text,
+        existing_survey=existing_body,
         new_notes=new_notes_content
     )
 
@@ -235,7 +398,8 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
             if on_chunk:
                 on_chunk(token)
 
-        survey_path.write_text(full_text.strip(), encoding='utf-8')
+        survey_content = _add_survey_frontmatter(topic, full_text.strip())
+        survey_path.write_text(survey_content, encoding='utf-8')
 
         append_changelog(f"更新综述: {config.ORGANIZED_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
@@ -285,45 +449,46 @@ def cascade_on_topic_resolved(file_path: str, topic: str, on_chunk=None) -> dict
 
 
 def append_changelog(message: str):
-    workspace = config.workspace_path
-    if not workspace:
-        return
+    with _changelog_lock:
+        workspace = config.workspace_path
+        if not workspace:
+            return
 
-    log_path = Path(workspace) / "wiki" / "log.md"
+        log_path = Path(workspace) / "wiki" / "log.md"
 
-    if not log_path.parent.exists():
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if not log_path.parent.exists():
+            log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if not log_path.exists():
-        header = "# 知识库变更日志\n\n"
-        log_path.write_text(header, encoding='utf-8')
+        if not log_path.exists():
+            header = "# 知识库变更日志\n\n"
+            log_path.write_text(header, encoding='utf-8')
 
-    try:
-        content = log_path.read_text(encoding='utf-8')
-    except Exception:
-        content = ""
+        try:
+            content = log_path.read_text(encoding='utf-8')
+        except Exception:
+            content = ""
 
-    today = datetime.now().strftime('%Y-%m-%d')
-    day_header = f"\n## {today}\n"
+        today = datetime.now().strftime('%Y-%m-%d')
+        day_header = f"\n## {today}\n"
 
-    if day_header.strip() not in content:
-        if not content.endswith('\n'):
-            content += '\n'
-        content += day_header
+        if day_header.strip() not in content:
+            if not content.endswith('\n'):
+                content += '\n'
+            content += day_header
 
-    entry = f"- `{timestamp}` {message}\n"
+        entry = f"- `{timestamp}` {message}\n"
 
-    lines = content.split('\n')
-    insert_idx = len(lines)
-    for i, line in enumerate(lines):
-        if line.strip() == day_header.strip():
-            insert_idx = i + 1
-            break
+        lines = content.split('\n')
+        insert_idx = len(lines)
+        for i, line in enumerate(lines):
+            if line.strip() == day_header.strip():
+                insert_idx = i + 1
+                break
 
-    lines.insert(insert_idx, entry.rstrip('\n'))
-    log_path.write_text('\n'.join(lines), encoding='utf-8')
+        lines.insert(insert_idx, entry.rstrip('\n'))
+        log_path.write_text('\n'.join(lines), encoding='utf-8')
 
 
 def get_changelog(limit: int = 50) -> list[dict]:
@@ -363,15 +528,27 @@ def check_and_generate_surveys(on_progress=None) -> dict:
     if not headings:
         return {"success": True, "checked": 0, "generated": 0, "skipped": 0, "message": "没有找到任何主题"}
 
+    survey_status = _read_survey_status_from_wiki()
+
     total = len(headings)
     generated = 0
     skipped = 0
+    survey_skipped = 0
     errors = []
 
     for i, h in enumerate(headings):
         topic = h["name"]
         if on_progress:
             on_progress(i, total, f"检查主题「{topic}」...")
+
+        if topic in ("AI 指南书",):
+            skipped += 1
+            continue
+
+        is_on = survey_status.get(topic, True)
+        if not is_on:
+            survey_skipped += 1
+            continue
 
         survey_path = get_survey_path(topic)
         if survey_path and survey_path.exists():
@@ -397,12 +574,52 @@ def check_and_generate_surveys(on_progress=None) -> dict:
             errors.append({"topic": topic, "error": result.get("message", "未知错误")})
 
     if on_progress:
-        on_progress(total, total, f"完成：检查 {total} 个主题，生成 {generated} 篇综述")
+        on_progress(total, total, f"完成：检查 {total} 个主题，生成 {generated} 篇综述，跳过 {survey_skipped} 篇（已关闭）")
 
     return {
         "success": True,
         "checked": total,
         "generated": generated,
         "skipped": skipped,
+        "survey_skipped": survey_skipped,
         "errors": errors,
     }
+
+
+def _read_survey_status_from_wiki() -> dict:
+    workspace = config.workspace_path
+    if not workspace:
+        return {}
+    workspace_path = Path(workspace)
+    wiki_path = workspace_path / "wiki" / "WIKI.md"
+    if not wiki_path.exists():
+        wiki_path = workspace_path / "WIKI.md"
+    if not wiki_path.exists():
+        return {}
+    try:
+        text = wiki_path.read_text(encoding='utf-8')
+        lines = text.split('\n')
+        surveys = {}
+        current_parent = ''
+        for i in range(len(lines)):
+            stripped = lines[i].strip()
+            if stripped.startswith('## '):
+                current_parent = stripped[3:].strip()
+                is_off = False
+                if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
+                    is_off = True
+                surveys[current_parent] = not is_off
+            elif stripped.startswith('### ') and current_parent:
+                child = stripped[4:].strip()
+                full = f"{current_parent}/{child}"
+                parent_on = surveys.get(current_parent, True)
+                if parent_on:
+                    surveys[full] = False
+                else:
+                    is_off = False
+                    if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
+                        is_off = True
+                    surveys[full] = not is_off
+        return surveys
+    except Exception:
+        return {}

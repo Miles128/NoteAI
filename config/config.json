@@ -1,4 +1,8 @@
 {
+  "NOTES_FOLDER": "Notes",
+  "ORGANIZED_FOLDER": "Abstract",
+  "RAW_FOLDER": "Raw",
+  "USED_FOLDER": "Used",
   "workspace_path": "/Users/sihai/Documents/My Notes",
   "log_path": "/Users/sihai/NoteAI/logs",
   "batch_size": 5,

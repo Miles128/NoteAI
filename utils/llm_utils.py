@@ -23,8 +23,9 @@ class LLMRateLimitError(Exception):
     pass
 
 
-# 全局信号量，限制并发 LLM 调用数
-_LLM_SEMAPHORE = threading.BoundedSemaphore(4)
+# 全局信号量，限制并发 LLM 调用数（Semaphore 而非 BoundedSemaphore，
+# 防止超时场景下后台线程释放时抛 ValueError 导致级联崩溃）
+_LLM_SEMAPHORE = threading.Semaphore(4)
 
 
 def _retry_with_backoff(
@@ -37,8 +38,13 @@ def _retry_with_backoff(
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            with _LLM_SEMAPHORE:
+            acquired = _LLM_SEMAPHORE.acquire(timeout=60)
+            if not acquired:
+                raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
+            try:
                 return fn()
+            finally:
+                _LLM_SEMAPHORE.release()
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
@@ -163,6 +169,35 @@ def call_llm_raw(
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
+
+
+def call_llm_raw_stream(
+    prompt_text: str,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    chunk_callback=None,
+) -> str:
+    """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。"""
+    import sys
+    is_valid, error_msg = check_api_config()
+    if not is_valid:
+        raise RuntimeError(error_msg)
+
+    logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+    llm = _create_llm(temperature, max_tokens)
+    full_text = ""
+    try:
+        for chunk in llm.stream(prompt_text):
+            token = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_text += token
+            if chunk_callback:
+                chunk_callback(token)
+    except Exception as e:
+        sys.stderr.write(f"[llm_utils] stream error: {e}\n")
+        sys.stderr.flush()
+        raise
+    logger.info(f"LLM stream done, response length: {len(full_text)}")
+    return full_text.strip()
 
 
 def check_api_config() -> Tuple[bool, str]:

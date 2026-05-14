@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 function toggleTheme() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
@@ -15,7 +17,7 @@ function toggleTheme() {
     }
 
     if (window.api) {
-        window.api.save_theme_preference(html.getAttribute('data-theme') || 'system');
+        window.api.saveThemePreference(html.getAttribute('data-theme') || 'system');
     }
 }
 
@@ -34,7 +36,7 @@ function setTheme(theme) {
     });
 
     if (window.api) {
-        window.api.save_theme_preference(theme);
+        window.api.saveThemePreference(theme);
     }
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
@@ -233,6 +235,8 @@ function hideAboutPanel() {
     document.getElementById('about-panel').classList.remove('active');
 }
 
+window.setTheme = setTheme;
+
 window.ThemeModule = {
     toggleTheme,
     setTheme,
@@ -245,3 +249,6 @@ window.ThemeModule = {
     showAboutPanel,
     hideAboutPanel
 };
+
+})();
+

@@ -6,7 +6,7 @@ updated = 0
 skipped = 0
 
 for f in sorted(workspace.rglob('*.md')):
-    if f.name.startswith('.') or f.name.lower() in ('wiki.md', 'tags.md'):
+    if f.name.startswith('.') or 'wiki' in f.parts:
         continue
 
     stem = f.stem

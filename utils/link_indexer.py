@@ -10,6 +10,7 @@
 
 import json
 import re
+import sys
 import time
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
@@ -51,9 +52,68 @@ def save_links(data: Dict[str, Any]) -> bool:
         return False
 
 
+def cleanup_stale_links() -> int:
+    workspace = config.workspace_path
+    if not workspace:
+        return 0
+    data = load_links()
+    links = data.get("links", [])
+    if not links:
+        return 0
+    ws = Path(workspace)
+    original_count = len(links)
+    valid = []
+    auto_confirmed = 0
+    for link in links:
+        from_path = link.get("from", "")
+        to_path = link.get("to", "")
+        from_full = ws / from_path if not Path(from_path).is_absolute() else Path(from_path)
+        to_full = ws / to_path if not Path(to_path).is_absolute() else Path(to_path)
+        if not from_full.exists() or not to_full.exists():
+            logger.info(f"[link_indexer] 清理无效链接: {from_path} -> {to_path}")
+            continue
+        if link.get("status") == "pending":
+            from_topic = _read_file_topic(from_full)
+            to_topic = _read_file_topic(to_full)
+            if from_topic and to_topic:
+                link["status"] = "confirmed"
+                auto_confirmed += 1
+                logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path} (主题: {from_topic} / {to_topic})")
+        valid.append(link)
+    changed = (original_count - len(valid)) + auto_confirmed
+    if changed > 0:
+        data["links"] = valid
+        save_links(data)
+    return changed
+
+
+def _read_file_topic(file_path: Path) -> str:
+    try:
+        text = file_path.read_text(encoding='utf-8')
+        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+        if not m:
+            return ""
+        for line in m.group(1).split('\n'):
+            idx = line.find(':')
+            if idx < 0:
+                continue
+            key = line[:idx].strip()
+            val = line[idx + 1:].strip()
+            if key == 'topic' and val:
+                if val.startswith('['):
+                    items = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                    if len(items) == 1:
+                        return items[0]
+                    return ""
+                return val.strip().strip("'\"")
+    except Exception as e:
+        sys.stderr.write(f"[_read_file_topic] read failed: {e}\n"); sys.stderr.flush()
+    return ""
+
+
 def _iter_md_files(workspace: Path) -> List[Path]:
     """收集所有 MD 文件（排除隐藏文件和忽略目录）"""
-    excluded = {'AI Wiki', '.git', '.obsidian', '.trash'}
+    excluded = {'AI Wiki', '.git', '.obsidian', '.trash', 'wiki'}
     files = []
     for folder in workspace.iterdir():
         if not folder.is_dir():
@@ -63,7 +123,7 @@ def _iter_md_files(workspace: Path) -> List[Path]:
         if is_ignored_dir(folder.name):
             continue
         for md_file in folder.rglob('*.md'):
-            if md_file.name.startswith('.') or md_file.name.lower() in ('wiki.md', 'tags.md'):
+            if md_file.name.startswith('.'):
                 continue
             files.append(md_file)
     return files

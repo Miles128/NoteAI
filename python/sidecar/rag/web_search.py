@@ -117,8 +117,9 @@ def baidu_search(query: str) -> list:
                         href = str(head_resp.url)
                     else:
                         href = ""
-                except Exception:
-                    pass
+                except Exception as e:
+                    sys.stderr.write(f"[rag/web_search] resolve url {href} error: {e}\n")
+                    sys.stderr.flush()
 
             if title and href:
                 results.append({
@@ -159,8 +160,9 @@ def _is_safe_url(url: str) -> bool:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
                 return False
-        except ValueError:
-            pass
+        except ValueError as e:
+            sys.stderr.write(f"[rag/web_search] parse ip error: {e}\n")
+            sys.stderr.flush()
         if parsed.scheme not in ("http", "https"):
             return False
         return True

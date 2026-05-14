@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 window.mdEditor = {
     view: null,
     filePath: null,
@@ -13,7 +15,11 @@ function initMarked() {
     if (typeof marked !== 'undefined') {
         var renderer = new marked.Renderer();
         renderer.html = function(html) {
-            return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'code', 'br', 'span', 'sub', 'sup', 'mark', 'abbr', 'kbd'] });
+            }
+            // fallback: strip all tags except safe inline ones
+            return html.replace(/<(?!\/?(?:b|i|em|strong|code|br|span|sub|sup|mark|abbr|kbd)\b)[^>]*>/gi, '');
         };
         marked.setOptions({
             gfm: true,
@@ -245,13 +251,13 @@ function updateMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
-            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
+            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             previewEl.innerHTML = '<p class="preview-error">解析失败</p>';
         }
     } else {
-        previewEl.innerHTML = '<pre>' + escapeHtml(content) + '</pre>';
+        previewEl.innerHTML = '<pre>' + window.escapeHtml(content) + '</pre>';
     }
 }
 
@@ -259,13 +265,13 @@ function renderMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
-            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
+            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
             return '<p class="preview-error">解析失败</p>';
         }
     }
-    return '<pre>' + escapeHtml(content) + '</pre>';
+    return '<pre>' + window.escapeHtml(content) + '</pre>';
 }
 
 function scheduleAutoSave(content) {
@@ -299,18 +305,17 @@ var _savePromise = null;
 
 async function performSave(content) {
     if (!window.mdEditor.filePath) return;
-    
-    if (_savePromise) {
+
+    while (_savePromise) {
         await _savePromise;
     }
-    
-    var saveId = Date.now();
+
     _savePromise = (async () => {
         updateSaveStatus('saving', '保存中...');
-        
+
         try {
-            const result = await window.api.save_note_file(window.mdEditor.filePath, content);
-            
+            const result = await window.api.saveFileContent(window.mdEditor.filePath, content);
+
             if (result && result.success) {
                 window.mdEditor.originalContent = content;
                 updateSaveStatus('saved', '已保存');
@@ -323,7 +328,7 @@ async function performSave(content) {
             _savePromise = null;
         }
     })();
-    
+
     await _savePromise;
 }
 
@@ -459,6 +464,8 @@ function initEditorInnerResizer() {
 function initWindowDrag() {
 }
 
+window.toggleEditMode = toggleEditMode;
+
 window.EditorModule = {
     mdEditor: window.mdEditor,
     initMarked,
@@ -484,3 +491,6 @@ window.EditorModule = {
     initEditorInnerResizer,
     initWindowDrag
 };
+
+})();
+

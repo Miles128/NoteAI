@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _fileConversionUnlisten = null;
 
 async function startFileConversion() {
@@ -16,7 +18,7 @@ async function startFileConversion() {
         updateStatus('正在转换...');
         updateProgress('conv-progress', 0, '正在准备转换...');
 
-        if (typeof getTauriEventAPI === 'function') {
+        if (typeof window.getTauriEventAPI === 'function') {
             var eventAPI = getTauriEventAPI();
             if (eventAPI) {
                 if (_fileConversionUnlisten) {
@@ -59,7 +61,7 @@ async function startFileConversion() {
             }
         }
 
-        const result = await window.api.start_file_conversion(aiAssist);
+        const result = await window.api.startFileConversion(aiAssist);
         
         if (result && result.success) {
             updateStatus('正在转换，请稍候...');
@@ -125,3 +127,8 @@ window.ConverterModule = {
     autoSaveConvConfig,
     loadSavedConvConfig
 };
+
+window.startFileConversion = startFileConversion;
+
+})();
+

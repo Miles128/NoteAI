@@ -1,0 +1,23 @@
+{
+  "name": "noteai",
+  "version": "1.0.0",
+  "description": "**AI 驱动的个人知识库 + AI 助手桌面应用** — 采集、整理、链接、检索、对话，让零散信息生长为结构化知识，让 AI 助手基于你的知识库回答问题。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@tiptap/core": "^2.27.2",
+    "@tiptap/starter-kit": "^2.27.2",
+    "punycode": "^2.3.1",
+    "tiptap-markdown": "^0.8.0"
+  }
+}

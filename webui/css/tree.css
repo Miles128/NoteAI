@@ -210,8 +210,6 @@
 
 .toast {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 0.5px solid var(--border);
     border-radius: 8px;
     padding: 12px 16px;
@@ -263,7 +261,6 @@
 .status-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 16px; background: var(--topbar-bg);
-    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     border-top: 0.5px solid var(--border); font-size: 12px; color: var(--text-muted); flex-shrink: 0;
 }
 
@@ -286,15 +283,13 @@
 
 .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.4);
     display: none; align-items: center; justify-content: center; z-index: 2000;
 }
 .modal-overlay.active { display: flex; }
 
 .modal {
-    background: var(--surface); backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface);
     border: 0.5px solid var(--border); border-radius: 12px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     max-width: 500px; width: 90%; max-height: 80vh; overflow: hidden;

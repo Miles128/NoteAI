@@ -153,8 +153,6 @@
 
 .card {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 0.5px solid var(--border);
     border-radius: var(--card-radius);
     padding: 18px;
@@ -332,16 +330,26 @@
     color: var(--text);
 }
 
-.graph-legend-dot-file {
-    background: var(--graph-color-file, #4A90D9);
+.graph-legend-dot-l1 {
+    background: #e85d3a;
 }
 
-.graph-legend-dot-topic {
-    background: var(--graph-color-topic, #E8913A);
+.graph-legend-dot-l2 {
+    background: #ea8600;
 }
 
-.graph-legend-dot-tag {
-    background: var(--graph-color-tag, #50B87F);
+.graph-legend-dot-l3 {
+    background: #f4a930;
+}
+
+.graph-legend-dot-abstract {
+    background: none;
+    border: 2px solid #ffd700;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
 }
 
 .settings-hint-spacing {
@@ -435,8 +443,6 @@
 .ai-toggle-card {
     border: 0.5px solid var(--border);
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     transition: all 0.3s ease;
 }
 
@@ -635,8 +641,6 @@
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
     z-index: 2000;
     align-items: center;
     justify-content: center;
@@ -1307,8 +1311,6 @@
     background: rgba(0, 0, 0, 0.15);
     display: flex;
     justify-content: center;
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
 }
 
 .search-modal {
@@ -1492,10 +1494,7 @@
     flex-shrink: 0;
 }
 
-.graph-panel-header .graph-filter-bar {
-    border-bottom: none;
-    padding: 4px 0;
-}
+
 
 .graph-panel-close {
     background: none;
@@ -1524,13 +1523,6 @@
     justify-content: center;
 }
 
-.graph-panel-body canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    display: block;
-}
-
 .graph-panel-footer {
     display: flex;
     align-items: center;
@@ -1547,18 +1539,9 @@
     justify-content: center;
 }
 
-.graph-refresh-btn {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 3px 6px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    transition: all 0.15s;
+#titlebar-graph-btn.active {
+    color: var(--accent);
+    background: rgba(74, 144, 217, 0.1);
 }
 
 .graph-toolbar {
@@ -1592,53 +1575,53 @@
     border-color: var(--accent);
 }
 
-.graph-refresh-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-}
-
-#titlebar-graph-btn.active {
-    color: var(--accent);
-    background: rgba(74, 144, 217, 0.1);
+.graph-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 4px;
 }
 
 .graph-filter-bar {
     display: flex;
-    gap: 4px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    gap: 1px;
+    align-items: center;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 2px;
 }
 
 .graph-filter-btn {
-    padding: 3px 10px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    padding: 3px 14px;
+    border: none;
+    border-radius: 5px;
     background: transparent;
     color: var(--text-muted);
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .graph-filter-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 .graph-filter-btn.active {
-    background: rgba(0, 0, 0, 0.1);
-    color: var(--text);
-    border-color: rgba(0, 0, 0, 0.2);
+    background: var(--accent);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 1px 3px rgba(74, 144, 217, 0.25);
 }
 
-@media (prefers-color-scheme: dark) {
-    .graph-filter-btn.active {
-        background: rgba(255, 255, 255, 0.12);
-        color: var(--text);
-        border-color: rgba(255, 255, 255, 0.2);
-    }
+.graph-stats {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 8px;
 }
+
+
 
 .graph-loading,
 .graph-empty {
@@ -1673,22 +1656,7 @@
     display: inline-block;
 }
 
-.graph-tooltip {
-    position: absolute;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-size: 13px;
-    color: var(--text);
-    pointer-events: none;
-    z-index: 10;
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    max-width: 300px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
+
 
 .link-view {
     display: flex;

@@ -7,7 +7,9 @@ from typing import List, Dict, Optional, Callable
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
-    sanitize_filename, clean_text, extract_title_from_markdown,
+    sanitize_filename, clean_text, extract_title_from_markdown
+)
+from utils.llm_utils import (
     check_api_config, APIConfigError, NetworkError, is_network_error
 )
 from utils.tag_extractor import process_and_tag_file_with_yaml
@@ -54,11 +56,6 @@ class NoteIntegration:
         self.documents = documents
         logger.info(f"已加载 {len(documents)} 个文档")
         return documents
-    
-    
-    
-    
-    
     
     def integrate(
         self,
@@ -156,7 +153,9 @@ class NoteIntegration:
             
             wiki_path = None
             if config.workspace_path and Path(config.workspace_path).exists():
-                wiki_path = Path(config.workspace_path) / "WIKI.md"
+                wiki_dir = Path(config.workspace_path) / "wiki"
+                wiki_dir.mkdir(parents=True, exist_ok=True)
+                wiki_path = wiki_dir / "WIKI.md"
             else:
                 wiki_path = save_dir / "WIKI.md"
             
@@ -198,7 +197,7 @@ class NoteIntegration:
 
     def _map_documents_to_topics(self, topics: List[str], documents: List[Dict]) -> Dict[str, List[int]]:
         """使用 LLM 将整个文件分配到最匹配的主题"""
-        from utils.helpers import call_llm
+        from utils.llm_utils import call_llm
 
         topic_doc_mapping = {t: [] for t in topics}
 
@@ -222,6 +221,17 @@ class NoteIntegration:
             mapping = result.get('mapping', {})
 
             for topic_name, doc_indices in mapping.items():
+                # 验证 doc_indices 是整数列表且在有效范围内
+                if isinstance(doc_indices, list):
+                    validated = []
+                    for idx in doc_indices:
+                        if isinstance(idx, int) and 0 <= idx < len(documents):
+                            validated.append(idx)
+                        elif isinstance(idx, str) and idx.isdigit():
+                            int_idx = int(idx)
+                            if 0 <= int_idx < len(documents):
+                                validated.append(int_idx)
+                    doc_indices = validated
                 if topic_name in topic_doc_mapping:
                     topic_doc_mapping[topic_name] = doc_indices
                 else:
@@ -239,6 +249,7 @@ class NoteIntegration:
     def _fallback_doc_mapping(self, topics: List[str], documents: List[Dict]) -> Dict[str, List[int]]:
         """降级策略：基于关键词匹配将文档分配到主题"""
         topic_doc_mapping = {t: [] for t in topics}
+        assigned_docs = set()
 
         for i, doc in enumerate(documents):
             title = doc.get('title', '').lower()
@@ -262,8 +273,9 @@ class NoteIntegration:
                     best_score = score
                     best_topic = topic
 
-            if best_topic:
+            if best_topic and best_score > 0:
                 topic_doc_mapping[best_topic].append(i)
+                assigned_docs.add(i)
 
         assigned = set()
         for indices in topic_doc_mapping.values():
@@ -288,7 +300,7 @@ class NoteIntegration:
         Returns:
             {topic_name, content, document_count, original_word_count, source_files}
         """
-        topic_docs = [documents[i] for i in doc_indices]
+        topic_docs = [documents[i] for i in doc_indices if isinstance(i, int) and 0 <= i < len(documents)]
 
         combined_content = '\n\n---\n\n'.join([d['content'] for d in topic_docs])
         original_word_count = self._count_words(combined_content)
@@ -416,16 +428,20 @@ class NoteIntegration:
         return '\n'.join(lines)
 
     def _count_words(self, text: str) -> int:
-        """统计中文字符数（包含英文单词）"""
+        """统计中文字符数（包含英文单词），排除代码块和链接"""
         if not text:
             return 0
-        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', text))
-        english_words = len(re.findall(r'[a-zA-Z]+', text))
+        # 移除代码块避免统计代码中的标识符
+        cleaned = re.sub(r'```[\s\S]*?```', '', text)
+        # 移除链接 URL
+        cleaned = re.sub(r'https?://\S+', '', cleaned)
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', cleaned))
+        english_words = len(re.findall(r'\b[a-zA-Z]+\b', cleaned))
         return chinese_chars + english_words
 
     def _generate_topic_note(self, topic_name: str, content: str, target_word_count: int) -> str:
         """LLM 生成主题笔记"""
-        from utils.helpers import call_llm
+        from utils.llm_utils import call_llm
 
         try:
             if self.progress_callback:

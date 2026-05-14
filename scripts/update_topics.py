@@ -98,6 +98,7 @@ for topic_name in sorted(topic_files.keys()):
         wiki_lines.append(f'   - 原始路径：Notes/{topic_name}/{fname}')
     wiki_lines.append('')
 
-wiki_path = workspace / 'WIKI.md'
+wiki_path = workspace / 'wiki' / 'WIKI.md'
+wiki_path.parent.mkdir(parents=True, exist_ok=True)
 wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
 print(f'WIKI.md rewritten with {len(topic_files)} topics')

@@ -1,4 +1,5 @@
 import json
+import sys
 import threading
 from pathlib import Path
 
@@ -75,8 +76,9 @@ def extract_user_info_sync(message):
         text = text.strip()
         if text and text != "无":
             return text
-    except Exception:
-        pass
+    except Exception as e:
+        sys.stderr.write(f"[rag/memory] extract_user_info_sync error: {e}\n")
+        sys.stderr.flush()
     return ""
 
 

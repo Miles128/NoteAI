@@ -1,0 +1,433 @@
+import re
+import sys
+from pathlib import Path
+
+import yaml
+from config import config, is_ignored_dir
+from sidecar.handlers.base import BaseHandler
+
+
+class TagsHandler(BaseHandler):
+    def _get_all_tags(self, params):
+        return self._cached_or_compute("all_tags", self._compute_all_tags)
+
+    def _compute_all_tags(self):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"tags": []}
+
+        tag_map = {}
+
+        def _scan_dir(path):
+            try:
+                for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
+                    if entry.name.startswith('.'):
+                        continue
+                    if entry.is_dir():
+                        if is_ignored_dir(entry.name):
+                            continue
+                        _scan_dir(str(entry))
+                    elif entry.suffix.lower() == '.md':
+                        try:
+                            text = entry.read_text(encoding='utf-8')
+                            meta, _body = self._parse_frontmatter(text)
+                            if meta is None:
+                                continue
+                            tags = meta.get('tags', [])
+                            if isinstance(tags, str):
+                                tags = [t.strip() for t in tags.split(',') if t.strip()]
+                            elif not isinstance(tags, list):
+                                continue
+                            rel = str(entry.relative_to(workspace))
+                            for tag in tags:
+                                tag = str(tag).strip()
+                                if tag:
+                                    if tag not in tag_map:
+                                        tag_map[tag] = []
+                                    tag_map[tag].append(rel)
+                        except Exception as e:
+                            sys.stderr.write(f"[get_all_tags] error reading {entry}: {e}\n")
+                            sys.stderr.flush()
+            except PermissionError as e:
+                sys.stderr.write(f"[get_all_tags] permission denied: {e}\n")
+                sys.stderr.flush()
+
+        _scan_dir(workspace)
+
+        sorted_tags = sorted(tag_map.items(), key=lambda x: -len(x[1]))
+        return {"tags": [{"name": t, "count": len(f), "files": f} for t, f in sorted_tags]}
+
+    def _auto_tag_files(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        dry_run = params.get("dry_run", False)
+
+        tag_map = {}
+        for md_file in Path(workspace).rglob('*.md'):
+            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+                continue
+            if any(is_ignored_dir(p.name) for p in md_file.relative_to(Path(workspace)).parents):
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                meta, _ = self._parse_frontmatter(text)
+                if meta is None:
+                    continue
+                tags = meta.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [t.strip().strip("'\"") for t in tags.split(',') if t.strip()]
+                elif not isinstance(tags, list):
+                    continue
+                for tag in tags:
+                    if tag not in tag_map:
+                        tag_map[tag] = []
+            except Exception as e:
+                sys.stderr.write(f"[auto_tag_files] error reading {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        if not tag_map:
+            return {"success": True, "updated": 0, "preview": [], "message": "未找到已有标签"}
+
+        all_tag_names = list(tag_map.keys())
+
+        changes = []
+
+        for entry in Path(workspace).rglob('*.md'):
+            if entry.name.startswith('.') or 'wiki' in entry.parts:
+                continue
+            rel = entry.relative_to(Path(workspace))
+            if any(is_ignored_dir(p) for p in rel.parts):
+                continue
+            try:
+                text = entry.read_text(encoding='utf-8')
+                fname = entry.stem
+                matched_tags = [t for t in all_tag_names if t.lower() in fname.lower()]
+                if not matched_tags:
+                    continue
+
+                had_bom = text.startswith('\ufeff')
+                clean = text.lstrip('\ufeff')
+                m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+                if m:
+                    yaml_text = m.group(2)
+                    existing_tags = set()
+                    for i, line in enumerate(yaml_text.split('\n')):
+                        idx = line.find(':')
+                        if idx < 0:
+                            continue
+                        key = line[:idx].strip()
+                        val = line[idx + 1:].strip()
+                        if key == 'tags':
+                            if val.startswith('[') and val.endswith(']'):
+                                existing_tags = set(t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip())
+                            break
+
+                    new_tags = [t for t in matched_tags if t not in existing_tags]
+                    if not new_tags:
+                        continue
+
+                    changes.append({
+                        "path": str(entry.relative_to(workspace)),
+                        "existing_tags": sorted(existing_tags),
+                        "matched_tags": matched_tags,
+                        "new_tags_to_add": new_tags,
+                    })
+                else:
+                    changes.append({
+                        "path": str(entry.relative_to(workspace)),
+                        "existing_tags": [],
+                        "matched_tags": matched_tags,
+                        "new_tags_to_add": matched_tags,
+                    })
+            except Exception as e:
+                sys.stderr.write(f"[auto_tag] error scanning {entry}: {e}\n")
+                sys.stderr.flush()
+
+        if dry_run:
+            return {
+                "success": True,
+                "dry_run": True,
+                "updated": 0,
+                "preview": changes,
+                "message": f"预览：{len(changes)} 个文件将被修改"
+            }
+
+        updated = 0
+        for ch in changes:
+            rel_path = Path(ch["path"])
+            md_file = Path(workspace) / rel_path
+            if not md_file.exists():
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                fname = md_file.stem
+                had_bom = text.startswith('\ufeff')
+                clean = text.lstrip('\ufeff')
+                m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+                if m:
+                    yaml_text = m.group(2)
+                    existing_tags = set(ch["existing_tags"])
+                    tags_line_idx = None
+                    lines = yaml_text.split('\n')
+                    for i, line in enumerate(lines):
+                        idx = line.find(':')
+                        if idx < 0:
+                            continue
+                        key = line[:idx].strip()
+                        if key == 'tags':
+                            tags_line_idx = i
+                            break
+
+                    new_tags = ch["new_tags_to_add"]
+                    all_tags = list(existing_tags) + new_tags
+                    new_tags_str = '[' + ', '.join(all_tags) + ']'
+
+                    prefix = '\ufeff' if had_bom else ''
+                    if tags_line_idx is not None:
+                        lines[tags_line_idx] = 'tags: ' + new_tags_str
+                        new_yaml = '\n'.join(lines)
+                        new_text = prefix + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+                    else:
+                        new_yaml = yaml_text + '\ntags: ' + new_tags_str
+                        new_text = prefix + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+
+                    md_file.write_text(new_text, encoding='utf-8')
+                    updated += 1
+                else:
+                    new_tags_str = '[' + ', '.join(ch["matched_tags"]) + ']'
+                    frontmatter = '---\ntags: ' + new_tags_str + '\n---\n'
+                    new_text = frontmatter + text
+                    md_file.write_text(new_text, encoding='utf-8')
+                    updated += 1
+            except Exception as e:
+                sys.stderr.write(f"[auto_tag] error writing {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        return {
+            "success": True,
+            "updated": updated,
+            "preview": changes,
+        }
+
+    def _save_tags_md(self, params):
+        from utils.tag_extractor import save_tags_md
+        return save_tags_md(config.workspace_path)
+
+    def _ensure_tags_md(self, params):
+        from utils.tag_extractor import save_tags_md
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        return save_tags_md(workspace)
+
+    def _create_tag(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        tag_name = params.get("name", "")
+        if not tag_name or not tag_name.strip():
+            return {"success": False, "message": "标签名不能为空"}
+
+        tag_name = tag_name.strip()
+
+        existing_tags = set()
+        workspace_path = Path(workspace)
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                meta, _ = self._parse_frontmatter(text)
+                if meta is None:
+                    continue
+                tags = meta.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(',') if t.strip()]
+                elif not isinstance(tags, list):
+                    continue
+                for t in tags:
+                    existing_tags.add(str(t).strip())
+            except Exception as e:
+                sys.stderr.write(f"[create_tag] error reading {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        if tag_name in existing_tags:
+            return {"success": True, "message": "标签已存在", "created": False}
+
+        return {"success": True, "message": f"标签「{tag_name}」已就绪，可通过编辑文件 frontmatter 使用", "created": True}
+
+    def _rename_tag(self, params):
+        old_tag = params.get("old_tag", "")
+        new_tag = params.get("new_tag", "")
+        if not old_tag or not new_tag:
+            return {"success": False, "message": "标签名不能为空"}
+        if old_tag == new_tag:
+            return {"success": True, "message": "标签名相同", "updated": 0}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+
+        existing_tags = set()
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+                if not m:
+                    continue
+                yaml_text = m.group(1)
+                for line in yaml_text.split('\n'):
+                    idx = line.find(':')
+                    if idx < 0:
+                        continue
+                    key = line[:idx].strip()
+                    val = line[idx + 1:].strip()
+                    if key == 'tags':
+                        if val.startswith('[') and val.endswith(']'):
+                            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+                            for t in tags:
+                                existing_tags.add(t)
+                        elif val:
+                            existing_tags.add(val.strip().strip("'\""))
+            except Exception as e:
+                sys.stderr.write(f"[rename_tag] error scanning {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        new_tag_exists = False
+        for t in existing_tags:
+            if t.lower() == new_tag.lower() and t != new_tag:
+                new_tag = t
+                new_tag_exists = True
+                break
+            elif t == new_tag:
+                new_tag_exists = True
+                break
+
+        updated_count = 0
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                had_bom = text.startswith('\ufeff')
+                meta, body = self._parse_frontmatter(text)
+                if meta is None:
+                    continue
+
+                tags = meta.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(',') if t.strip()]
+                if not isinstance(tags, list):
+                    continue
+
+                changed = False
+                new_tags = []
+                for t in tags:
+                    t = str(t).strip()
+                    if t == old_tag:
+                        if new_tag not in new_tags:
+                            new_tags.append(new_tag)
+                        changed = True
+                    else:
+                        if t not in new_tags:
+                            new_tags.append(t)
+
+                if changed:
+                    meta['tags'] = new_tags
+                    new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+                    prefix = '\ufeff' if had_bom else ''
+                    new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
+                    md_file.write_text(new_content, encoding='utf-8')
+                    updated_count += 1
+            except Exception as e:
+                sys.stderr.write(f"[rename_tag] error processing {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        merged = new_tag_exists
+        if merged:
+            return {
+                "success": True,
+                "message": f"已合并标签到「{new_tag}」，更新 {updated_count} 个文件",
+                "updated": updated_count,
+                "merged": True
+            }
+
+        return {
+            "success": True,
+            "message": f"已重命名标签，更新 {updated_count} 个文件",
+            "updated": updated_count,
+            "merged": False
+        }
+
+    def _delete_tag(self, params):
+        tag_name = params.get("tag_name", "")
+        if not tag_name:
+            return {"success": False, "message": "标签名不能为空"}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        workspace_path = Path(workspace)
+        updated_count = 0
+
+        for md_file in workspace_path.rglob('*.md'):
+            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+                continue
+            try:
+                text = md_file.read_text(encoding='utf-8')
+                had_bom = text.startswith('\ufeff')
+                meta, body = self._parse_frontmatter(text)
+                if meta is None:
+                    continue
+
+                tags = meta.get('tags', [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(',') if t.strip()]
+                if not isinstance(tags, list):
+                    continue
+
+                filtered = [t for t in tags if str(t).strip() != tag_name]
+                if len(filtered) != len(tags):
+                    if filtered:
+                        meta['tags'] = filtered
+                        new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+                        prefix = '\ufeff' if had_bom else ''
+                        new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
+                    else:
+                        meta.pop('tags', None)
+                        if meta:
+                            new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+                            prefix = '\ufeff' if had_bom else ''
+                            new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
+                        else:
+                            prefix = '\ufeff' if had_bom else ''
+                            new_content = prefix + body.lstrip('\n')
+                    md_file.write_text(new_content, encoding='utf-8')
+                    updated_count += 1
+            except Exception as e:
+                sys.stderr.write(f"[delete_tag] error processing {md_file}: {e}\n")
+                sys.stderr.flush()
+
+        return {
+            "success": True,
+            "message": f"已删除标签「{tag_name}」，更新 {updated_count} 个文件",
+            "updated": updated_count
+        }
+
+    def register_routes(self, router):
+        router.register("get_all_tags", self._get_all_tags)
+        router.register("auto_tag_files", self._auto_tag_files)
+        router.register("save_tags_md", self._save_tags_md)
+        router.register("ensure_tags_md", self._ensure_tags_md)
+        router.register("create_tag", self._create_tag)
+        router.register("rename_tag", self._rename_tag)
+        router.register("delete_tag", self._delete_tag)

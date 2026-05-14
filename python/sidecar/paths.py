@@ -51,6 +51,6 @@ def find_file_by_name_in_workspace(path: str) -> str | None:
                     return str(match_abs)
                 except ValueError:
                     continue
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] find_file_by_name_in_workspace error for '{path}': {e}", file=sys.stderr)
     return None

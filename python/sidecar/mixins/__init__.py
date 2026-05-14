@@ -1,1 +1,3 @@
-# Mixins composing sidecar.SidecarServer (split from legacy python/main.py monolith)
+from .path_helpers import PathHelpersMixin
+
+__all__ = ['PathHelpersMixin']

@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 let topicsReady = false;
 var _noteIntegrationUnlisten = null;
 
@@ -41,7 +43,7 @@ async function extractTopics() {
             }
         }
 
-        const result = await window.api.extract_topics(topicCount);
+        const result = await window.api.extractTopics(topicCount);
 
         if (result && result.success) {
             if (progressFill) progressFill.style.width = '90%';
@@ -111,7 +113,7 @@ async function startNoteIntegration() {
         updateStatus('正在整合...');
         updateProgress('integration-progress', 0, '正在准备整合...');
 
-        if (typeof getTauriEventAPI === 'function') {
+        if (typeof window.getTauriEventAPI === 'function') {
             var eventAPI = getTauriEventAPI();
             if (eventAPI) {
                 if (_noteIntegrationUnlisten) {
@@ -154,7 +156,7 @@ async function startNoteIntegration() {
             }
         }
 
-        const result = await window.api.start_note_integration(false, topics);
+        const result = await window.api.startNoteIntegration(false, topics);
         
         if (result && result.success) {
             updateStatus('正在整合，请稍候...');
@@ -186,6 +188,8 @@ function clearTopicList() {
     updateIntegrateBtnState();
 }
 
+window.updateIntegrateBtnState = updateIntegrateBtnState;
+
 window.IntegratorModule = {
     get topicsReady() { return topicsReady; },
     set topicsReady(v) { topicsReady = v; },
@@ -194,3 +198,9 @@ window.IntegratorModule = {
     startNoteIntegration,
     clearTopicList
 };
+
+window.extractTopics = extractTopics;
+window.startNoteIntegration = startNoteIntegration;
+
+})();
+

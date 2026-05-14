@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _webDownloadUnlisten = null;
 var _modalDragState = {
     isDragging: false,
@@ -17,20 +19,27 @@ var _downloadState = {
     currentMessage: ''
 };
 
+var _downloadEventRetries = 0;
+var _downloadEventMaxRetries = 20;
+
 function initDownloadEventListener() {
     console.log('[Downloader] Initializing event listener...');
     
     var eventAPI = getTauriEventAPI();
     if (eventAPI) {
+        _downloadEventRetries = 0;
         eventAPI.listen('python-event', handleGlobalDownloadEvent).then(function(unlisten) {
             _webDownloadUnlisten = unlisten;
             console.log('[Downloader] Event listener initialized successfully');
         }).catch(function(err) {
             console.error('[Downloader] Failed to initialize event listener:', err);
         });
-    } else {
-        console.warn('[Downloader] Tauri event API not ready, retrying in 500ms...');
+    } else if (_downloadEventRetries < _downloadEventMaxRetries) {
+        _downloadEventRetries++;
+        console.warn('[Downloader] Tauri event API not ready, retrying in 500ms... (' + _downloadEventRetries + '/' + _downloadEventMaxRetries + ')');
         setTimeout(initDownloadEventListener, 500);
+    } else {
+        console.error('[Downloader] Tauri event API not available after max retries');
     }
 }
 
@@ -335,7 +344,7 @@ async function startDownloadFromModal() {
         
         try {
             console.log('[Downloader] Calling start_web_download with urls:', urls);
-            const result = await window.api.start_web_download(urls, false, includeImagesVal);
+            const result = await window.api.startWebDownload(urls, false, includeImagesVal);
             console.log('[Downloader] API result:', result);
             
             if (result && result.success) {
@@ -400,7 +409,7 @@ async function startWebDownload() {
         updateStatus('正在下载...');
         updateProgress('web-progress', 0, '正在准备下载...');
 
-        const result = await window.api.start_web_download(urls, aiAssist, includeImages);
+        const result = await window.api.startWebDownload(urls, aiAssist, includeImages);
         
         if (result && result.success) {
             updateStatus('正在下载，请稍候...');
@@ -492,3 +501,9 @@ window.DownloaderModule = {
     startDownloadFromModal,
     getDownloadState: function() { return _downloadState; }
 };
+
+window.closeDownloadModal = closeDownloadModal;
+window.startDownloadFromModal = startDownloadFromModal;
+
+})();
+

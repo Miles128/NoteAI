@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from config.settings import config
 from utils.logger import logger
-from utils.helpers import check_api_config
+from utils.llm_utils import check_api_config
 from prompts.topic_extraction import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
     TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
@@ -175,7 +175,7 @@ class TopicExtractor:
             )
 
             # 调用大模型
-            from utils.helpers import call_llm_raw
+            from utils.llm_utils import call_llm_raw
 
             content = call_llm_raw(final_prompt, temperature=0.5)
 

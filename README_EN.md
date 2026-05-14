@@ -1,6 +1,8 @@
 # NoteAI
 
-**AI-Powered Markdown Knowledge Base Desktop App** — Collect, organize, link, and gain insights. Turn scattered information into structured knowledge.
+**AI-Powered Personal Knowledge Base + AI Assistant Desktop App** — Collect, organize, link, search, and chat. Turn scattered information into structured knowledge, and let the AI assistant answer questions based on your knowledge base.
+
+[中文](./README.md)
 
 Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): instead of re-deriving answers from raw documents every time, let LLMs "compile" scattered materials into a structured knowledge base that compounds over time.
 
@@ -10,21 +12,23 @@ Inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914
 
 Traditional RAG searches raw documents on every query, assembling answers from scratch with no accumulation. NoteAI inserts a "compilation layer" between raw materials and final answers — a structured Markdown knowledge base actively maintained by AI. Knowledge is compiled once and grows in value, rather than being re-derived every time.
 
+At the same time, NoteAI deeply integrates the personal knowledge base with an AI assistant: the assistant not only possesses general knowledge but can also answer questions and provide insights based on your knowledge base, with both short-term and long-term memory, truly becoming a personal assistant that "understands you."
+
 ## Features
 
 ### 📥 Collection
 
 | Feature | Description |
 |---------|-------------|
-| Web Article Download | Batch URL input, auto-extract body text to Markdown; optimized title extraction for WeChat Official Accounts, Zhihu, etc. |
-| Multi-format Conversion | PDF / DOCX / PPTX / HTML / TXT → Markdown; auto-remove duplicate headers/footers in PDF |
+| Web Article Download | Batch URL input, auto-extract body text to Markdown; optimized for WeChat Official Accounts, Zhihu, etc. |
+| Multi-format Conversion | PDF / DOCX / PPTX / HTML / TXT → Markdown; auto-convert pending files on startup |
 | AI-assisted Formatting | LLM smart formatting, clean up garbled text, normalize headings and lists |
 
 ### 🗂️ Organization
 
 | Feature | Description |
 |---------|-------------|
-| Hierarchical Topics | Unlimited topic depth (paths separated by `/`), tree view in sidebar, breadcrumb navigation in preview |
+| Hierarchical Topics | Unlimited topic depth (paths separated by `/`), tree view in sidebar, breadcrumb navigation |
 | Tag System | jieba tokenization + word frequency auto-tagging; YAML front matter management |
 | Note Integration | Concatenate files by topic → LLM generates integrated notes → save to Organized directory |
 | AI Topic Analysis | LLM reviews existing topic structure, suggests new/adjusted/merged topics |
@@ -41,10 +45,23 @@ Traditional RAG searches raw documents on every query, assembling answers from s
 
 | Feature | Description |
 |---------|-------------|
-| Markdown Editor | Tiptap rich text + CodeMirror 6 style editing |
+| Markdown Editor | Tiptap rich text + CodeMirror 6 dual-engine editing |
 | Live Preview | marked.js + highlight.js rendering, edit/preview split-pane mode |
 | AI Rewrite | Select content → LLM streaming rewrite → preview comparison → apply or discard |
 | Topic Survey | LLM writes a survey article for a specified topic |
+
+### 🤖 AI Assistant (RAG)
+
+| Feature | Description |
+|---------|-------------|
+| Knowledge Base Q&A | RAG retrieval-augmented generation based on workspace knowledge base, evidence-backed answers |
+| HyDE Query Optimization | Hypothetical Document Embedding — LLM generates a hypothetical answer first, then retrieves, improving recall |
+| Flashrank Reranking | Local reranking model for secondary sorting of retrieval results, improving precision |
+| Parent-Child Document Retrieval | Auto-expand from retrieved child chunks to parent documents for full context |
+| Short-term Memory | In-session dialogue summaries, maintaining contextual coherence |
+| Long-term Memory | Auto-extract user self-description info, persist across sessions (≤1500 chars, auto-compress when exceeded) |
+| Personalized Assistant | "Xiao Yi" — a caring personal assistant, concise yet warm |
+| Resizable Panel | Assistant panel expandable/collapsible, width adjustable by dragging |
 
 ### 🔍 Search & Browsing
 
@@ -62,22 +79,34 @@ Traditional RAG searches raw documents on every query, assembling answers from s
 │  ┌─────────────────────────────────────────┐ │
 │  │          Frontend (HTML/CSS/JS)          │ │
 │  │  sidebar · editor · preview · graph     │ │
+│  │  assistant (RAG chat panel)              │ │
 │  └──────────────┬──────────────────────────┘ │
 │                 │ window.api (JSON-RPC)       │
 │  ┌──────────────▼──────────────────────────┐ │
 │  │        Python Sidecar (stdin/stdout)     │ │
 │  │  ┌─────────────────────────────────┐    │ │
-│  │  │  SidecarServer (9 Mixins)       │    │ │
+│  │  │  SidecarServer (10 Mixins)      │    │ │
 │  │  │  Config · Workspace · Transfer  │    │ │
-│  │  │  Files · Tags · Topics          │    │ │
-│  │  │  Links · Intel · Paths          │    │ │
+│  │  │  Files · Tags · Topics · Links  │    │ │
+│  │  │  Intel · Paths · RAG            │    │ │
 │  │  └─────────────────────────────────┘    │ │
-│  │  modules/ · utils/ · prompts/           │ │
+│  │  rag/ · modules/ · utils/ · prompts/    │ │
 │  └─────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
 ```
 
-**Three-layer knowledge architecture** (aligned with Karpathy LLM Wiki):
+**RAG Retrieval Pipeline**:
+
+```
+User Query → HyDE hypothetical answer generation
+           → Milvus Lite hybrid retrieval (dense + sparse, bge-small-zh-v1.5)
+           → Topic/tag filtering
+           → FlagReranker reranking (bge-reranker-v2-m3)
+           → MMR deduplication
+           → LLM generates answer (streaming output)
+```
+
+**Three-layer Knowledge Architecture** (aligned with Karpathy LLM Wiki):
 
 ```
 Workspace/
@@ -94,8 +123,9 @@ Workspace/
 | Category | Technology |
 |----------|------------|
 | Desktop Shell | Tauri v2 + Rust |
-| Frontend | HTML5 / CSS3 / JS, marked.js, highlight.js, PDF.js, Tiptap |
+| Frontend | HTML5 / CSS3 / JS, marked.js, highlight.js, PDF.js, Tiptap, CodeMirror 6 |
 | Backend | Python 3.10+, LangChain + LangChain-OpenAI |
+| RAG | Milvus Lite, fastembed (BAAI/bge-small-zh-v1.5), FlagEmbedding (BAAI/bge-reranker-v2-m3) |
 | Document Parsing | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |
 | NLP | jieba tokenization |
 | File Watching | watchdog |
@@ -118,12 +148,6 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 uv sync
 ```
 
-Using pip:
-
-```bash
-pip install -e .
-```
-
 ### Running
 
 ```bash
@@ -140,17 +164,20 @@ NoteAI/
 ├── src-tauri/              # Tauri shell (Rust)
 ├── webui/                  # Frontend static assets
 │   ├── index.html
-│   ├── css/                # variables · layout · components · tree · editor
-│   └── js/                 # state · icons · sidebar · tree · topic · tags · links · graph · editor · ...
+│   ├── css/                # variables · layout · components · tree · editor · preview
+│   └── js/                 # state · sidebar · tree · topic · tags · links · graph
+│                          # editor · assistant · preview · search · settings · ...
 ├── python/
 │   ├── main.py             # Sidecar process entry point
-│   └── sidecar/            # RPC routing + 9 Mixin business modules
+│   └── sidecar/            # RPC routing + 10 Mixin business modules
+│       ├── mixins/         # Config · Workspace · Transfer · Files · Tags
+│       │                   # Topics · Links · Intel · Paths · RAG
+│       └── rag/            # chunker · embedder · index · retriever · memory · web_search
 ├── modules/                # Business modules (download · convert · integrate · preview · topic extraction)
 ├── utils/                  # Utility libraries (LLM · tags · links · text processing · logging)
 ├── prompts/                # LLM prompts (independently managed, imported by business code)
 ├── config/                 # Configuration (settings.py + config.json)
-├── tests/                  # Tests
-└── docs/                   # Documentation
+└── tests/                  # Tests
 ```
 
 ## Roadmap

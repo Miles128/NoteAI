@@ -1,3 +1,5 @@
+from .loader import load_prompt
+
 from .note_integration import (
     TOPIC_NOTE_GENERATION_PROMPT,
     CONTENT_SUMMARIZE_PROMPT,
@@ -33,7 +35,9 @@ from .rag_assistant import (
     RAG_ASSISTANT_NO_CONTEXT_PROMPT,
     MEMORY_COMPRESS_PROMPT,
     LONG_MEMORY_COMPRESS_PROMPT,
-    USER_INFO_EXTRACT_PROMPT
+    USER_INFO_EXTRACT_PROMPT,
+    ASSISTANT_ACTION_PROMPT,
+    FILE_OPERATION_PROMPT
 )
 
 from .cascade import (
@@ -71,7 +75,12 @@ from .topic_assignment import (
     TOPIC_SUGGESTION_PROMPT
 )
 
+from .abstract import (
+    ABSTRACT_PROMPT
+)
+
 __all__ = [
+    'load_prompt',
     'TOPIC_NOTE_GENERATION_PROMPT',
     'CONTENT_SUMMARIZE_PROMPT',
     'CONTENT_COMPRESS_PROMPT',
@@ -92,6 +101,8 @@ __all__ = [
     'MEMORY_COMPRESS_PROMPT',
     'LONG_MEMORY_COMPRESS_PROMPT',
     'USER_INFO_EXTRACT_PROMPT',
+    'ASSISTANT_ACTION_PROMPT',
+    'FILE_OPERATION_PROMPT',
     'CASCADE_SURVEY_NEW_PROMPT',
     'CASCADE_SURVEY_UPDATE_PROMPT',
     'PROFILE_EXTRACT_PROMPT',
@@ -109,4 +120,5 @@ __all__ = [
     'MARKDOWN_REFORMAT_PROMPT',
     'WEB_TO_MARKDOWN_PROMPT',
     'TOPIC_SUGGESTION_PROMPT',
+    'ABSTRACT_PROMPT',
 ]

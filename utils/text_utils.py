@@ -1,4 +1,5 @@
 import re
+import sys
 from pathlib import Path
 
 try:
@@ -248,8 +249,8 @@ def tokenize(text: str) -> list:
         try:
             tokens = jieba.lcut(text)
             return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"[tokenize] jieba lcut failed: {e}\n"); sys.stderr.flush()
 
     text = re.sub(r'[（(].*?[）)]', '', text)
     parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', text)

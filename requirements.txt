@@ -1,9 +1,0 @@
-# Editable install: resolves dependencies from pyproject.toml (single source of truth).
-# Run from repository root:
-#   pip install -e .
-#   pip install -e ".[dev]"
-#
-# Recommended (uses uv.lock when present):
-#   uv sync
-#   uv sync --extra dev
--e .

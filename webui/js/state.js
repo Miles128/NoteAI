@@ -42,12 +42,14 @@
     }
 
     function getState() {
-        return {
-            apiConfig: _state.apiConfig ? Object.assign({}, _state.apiConfig) : null,
-            uiConfig: _state.uiConfig ? Object.assign({}, _state.uiConfig) : null,
+        // 使用 JSON 序列化实现深拷贝，防止外部修改影响内部状态
+        var snapshot = {
+            apiConfig: _state.apiConfig,
+            uiConfig: _state.uiConfig,
             themePreference: _state.themePreference,
             workspacePath: _state.workspacePath
         };
+        return JSON.parse(JSON.stringify(snapshot));
     }
 
     function getUi(key) {
@@ -185,3 +187,4 @@
     window.subscribeToState = subscribe;
     window.notifyStateChange = notify;
 })();
+

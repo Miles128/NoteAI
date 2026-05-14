@@ -1,22 +1,7 @@
+(function() {
+"use strict";
 window.LinksModule = (function() {
     var _linkDiscoveryUnlisten = null;
-
-    function Path_stem(p) {
-        if (!p) return p;
-        var parts = p.split('/');
-        var name = parts[parts.length - 1];
-        return name.replace(/\.[^.]+$/, '');
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function escapeAttr(str) {
-        if (!str) return '';
-        return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
 
     function loadGraphView() {
         var container = document.getElementById('sidebar-graph');
@@ -46,7 +31,7 @@ window.LinksModule = (function() {
         if (!listEl) return;
 
         var selPath = window.AppState ? window.AppState.selectedFilePath : null;
-        var result = await window.api.get_backlinks(selPath || '');
+        var result = await window.api.getBacklinks(selPath || '');
         if (!result || !result.success) {
             if (emptyEl) emptyEl.textContent = '无法加载链接数据';
             return;
@@ -68,17 +53,17 @@ window.LinksModule = (function() {
                 var dirClass = link.direction === 'incoming' ? 'link-incoming' : 'link-outgoing';
                 var fromPath = link.from || link.file || '';
                 var toPath = link.to || link.other || '';
-                var fromName = fromPath ? Path_stem(fromPath) : fromPath;
-                var toName = toPath ? Path_stem(toPath) : toPath;
+                var fromName = fromPath ? window.Path_stem(fromPath) : fromPath;
+                var toName = toPath ? window.Path_stem(toPath) : toPath;
 
                 html += '<div class="link-card ' + dirClass + ' link-confirmed">';
                 html += '<div class="link-card-relation">';
-                html += '<span class="link-node link-from" data-file-path="' + escapeAttr(fromPath) + '">' + escapeHtml(fromName) + '</span>';
+                html += '<span class="link-node link-from" data-file-path="' + window.escapeAttr(fromPath) + '">' + window.escapeHtml(fromName) + '</span>';
                 html += '<span class="link-arrow ' + dirClass + '">→</span>';
-                html += '<span class="link-node link-to" data-file-path="' + escapeAttr(toPath) + '">' + escapeHtml(toName) + '</span>';
+                html += '<span class="link-node link-to" data-file-path="' + window.escapeAttr(toPath) + '">' + window.escapeHtml(toName) + '</span>';
                 html += '</div>';
                 if (link.reason) {
-                    html += '<div class="link-card-reason">' + escapeHtml(link.reason) + '</div>';
+                    html += '<div class="link-card-reason">' + window.escapeHtml(link.reason) + '</div>';
                 }
                 html += '</div>';
             }
@@ -102,7 +87,7 @@ window.LinksModule = (function() {
         var emptyEl = document.getElementById('link-empty');
 
         try {
-            var apiCfg = await window.api.get_api_config();
+            var apiCfg = await window.api.getApiConfig();
             if (!apiCfg || !apiCfg.api_key) {
                 alert('请先在设置中配置 API Key');
                 return;
@@ -184,7 +169,7 @@ window.LinksModule = (function() {
         }
 
         try {
-            var startResult = await window.api.discover_links();
+            var startResult = await window.api.discoverLinks();
             if (!startResult || !startResult.success) {
                 if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
                 if (progressText) progressText.textContent = (startResult && startResult.message) || '启动失败';
@@ -210,3 +195,16 @@ window.LinksModule = (function() {
         openLinkedFile: openLinkedFile,
     };
 })();
+
+window.onConfirmAllLinks = function() {
+    if (window.api && window.api.confirmAllLinks) {
+        window.api.confirmAllLinks().then(function(r) {
+            if (r && r.success && window.LinksModule && window.LinksModule.loadLinksData) {
+                window.LinksModule.loadLinksData();
+            }
+        }).catch(function(e) { console.error('[links] confirmAllLinks error:', e); });
+    }
+};
+
+})();
+

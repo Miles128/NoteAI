@@ -37,6 +37,11 @@ def check_dependencies():
         ("PIL", "pillow"),
         ("html2text", "html2text"),
         ("watchdog", "watchdog"),
+        ("keyring", "keyring"),
+        ("send2trash", "send2trash"),
+        ("numpy", "numpy"),
+        ("pymilvus", "pymilvus"),
+        ("fastembed", "fastembed"),
     ]
 
     missing = []

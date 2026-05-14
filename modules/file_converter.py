@@ -1,4 +1,3 @@
-import os
 import re
 from typing import Optional, Callable, Dict, List
 from pathlib import Path
@@ -8,10 +7,12 @@ from config.settings import config, RAW_FOLDER
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
-    ensure_dir, get_file_extension, read_file_with_encoding,
-    check_api_config, APIConfigError, NetworkError, is_network_error,
-    extract_pdf_text, extract_pdf_pages
+    ensure_dir, get_file_extension, read_file_with_encoding
 )
+from utils.llm_utils import (
+    check_api_config, APIConfigError, NetworkError, is_network_error
+)
+from utils.pdf_utils import extract_pdf_text, extract_pdf_pages
 from utils.tag_extractor import (
     extract_tags_from_filename,
     add_yaml_frontmatter_to_content,
@@ -98,10 +99,9 @@ class PDFConverter(BaseConverter):
         """从Markdown内容中移除重复出现的签名、页眉、页脚（单次打开PDF）"""
         import fitz
 
-        doc = fitz.open(file_path)
-        page_count = len(doc)
-        page_texts = [page.get_text() for page in doc]
-        doc.close()
+        with fitz.open(file_path) as doc:
+            page_count = len(doc)
+            page_texts = [page.get_text() for page in doc]
 
         if page_count < self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION:
             logger.info(f"页数({page_count})少于{self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION}，跳过签名检测")
@@ -526,8 +526,6 @@ class FileConverterManager:
                 ext = file_path.suffix.lower()
                 if ext != '.md' and ext in self.get_supported_formats():
                     file_paths.append(str(file_path))
-
-        file_paths = [str(p) for p in file_paths]
 
         logger.info(f"找到 {len(file_paths)} 个可转换文件")
 

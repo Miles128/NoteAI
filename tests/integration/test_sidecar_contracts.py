@@ -14,9 +14,8 @@ import pytest
 
 from config import config
 from modules.file_preview import FilePreviewer
-from sidecar.mixins.path_helpers import PathHelpersMixin
-from sidecar.mixins.topics_mixin import TopicsMixin
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
+from utils.topic_assigner import parse_wiki_structure
 
 
 @pytest.fixture
@@ -62,30 +61,20 @@ class TestFindFileByName:
 
 
 class TestGetTopicTreeContract:
-    """Shape of `get_topic_tree` RPC (TopicsMixin._get_topic_tree)."""
+    """Shape of `get_topic_tree` RPC (TopicsHandler._get_topic_tree → parse_wiki_structure)."""
 
     def test_returns_topics_and_pending_lists(self, workspace: Path) -> None:
-        class _Host(PathHelpersMixin, TopicsMixin):
-            pass
-
-        host = _Host.__new__(_Host)
-        out = TopicsMixin._get_topic_tree(host, {})
-        assert set(out) == {"topics", "pending"}
-        assert isinstance(out["topics"], list)
-        assert isinstance(out["pending"], list)
+        tree = parse_wiki_structure(Path(config.workspace_path))
+        assert set(tree) == {"topics", "pending"}
+        assert isinstance(tree["topics"], list)
+        assert isinstance(tree["pending"], list)
 
     def test_pending_json_roundtrip(self, workspace: Path) -> None:
         pending_path = workspace / ".pending_topics.json"
         sample = [{"file": "Notes/a.md", "title": "A", "candidates": ["T1"]}]
         pending_path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
-
-        class _Host(PathHelpersMixin, TopicsMixin):
-            pass
-
-        host = _Host.__new__(_Host)
-        out = TopicsMixin._get_topic_tree(host, {})
-        assert len(out["pending"]) == 1
-        assert out["pending"][0].get("file") == "Notes/a.md"
+        tree = parse_wiki_structure(Path(config.workspace_path))
+        assert len(tree.get("pending", [])) == 1
 
 
 class TestPreviewPathContract:

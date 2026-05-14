@@ -205,11 +205,11 @@ def rebuild_index(progress_callback=None):
     for md_file in sorted(workspace_path.rglob("*.md")):
         if md_file.name.startswith("."):
             continue
-        if md_file.name.lower() in ("wiki.md", "tags.md"):
+        if "wiki" in md_file.parts:
             continue
         if any(p.name in excluded_dirs for p in md_file.relative_to(workspace_path).parents):
             continue
-        if md_file.name.endswith("_综述.md"):
+        if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
 
         try:

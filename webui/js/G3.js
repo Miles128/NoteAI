@@ -100,9 +100,11 @@ const Graph3Tier = {
 
         this.zoom = d3.zoom()
             .scaleExtent([0.06, 5])
-            .filter(() => false)
             .on('zoom', (e) => { this.g.attr('transform', e.transform); });
         this.svg.call(this.zoom);
+
+        // Prevent zoom on node drag
+        this.svg.on('dblclick.zoom', null);
 
         const emptyEl = document.getElementById('graph-empty');
         const loadingEl = document.getElementById('graph-loading');
@@ -352,12 +354,11 @@ const Graph3Tier = {
             })
             .style('font-weight', d => d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal')
             .style('fill', d => {
-                if (d.type === 'topic') return '#555';
-                if (d.type === 'tag') return '#6a3de8';
-                return '#777';
+                if (d.type === 'topic') return 'var(--text-muted, #555)';
+                if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
+                return 'var(--text-muted, #777)';
             })
-            .style('pointer-events', 'none')
-            .style('text-shadow', '0 1px 0 rgba(255,255,255,0.85)');
+            .style('pointer-events', 'none');
 
         // Drag behavior
         const drag = d3.drag()
@@ -467,10 +468,39 @@ const Graph3Tier = {
         if (!this.svg || !this.data) return;
         const container = document.getElementById('graph-panel-body');
         if (!container) return;
-        this.svg
-            .attr('width', container.clientWidth || 800)
-            .attr('height', container.clientHeight || 600);
-        this.render();
+        const newW = container.clientWidth || 800;
+        const newH = container.clientHeight || 600;
+        const oldW = +this.svg.attr('width');
+        const oldH = +this.svg.attr('height');
+
+        if (newW === oldW && newH === oldH) return;
+
+        this.svg.attr('width', newW).attr('height', newH);
+
+        if (!this.simulation) return;
+
+        // Re-center and re-fit without rebuilding
+        var self = this;
+        var nodes = this.simulation.nodes();
+        if (!nodes || !nodes.length) return;
+
+        var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+        nodes.forEach(function(n) {
+            if (n.x < bounds.x1) bounds.x1 = n.x;
+            if (n.y < bounds.y1) bounds.y1 = n.y;
+            if (n.x > bounds.x2) bounds.x2 = n.x;
+            if (n.y > bounds.y2) bounds.y2 = n.y;
+        });
+        var bw = bounds.x2 - bounds.x1 || 100;
+        var bh = bounds.y2 - bounds.y1 || 100;
+        var scale = Math.min((newW - 120) / bw, (newH - 120) / bh, 1.5);
+        var midX = (bounds.x1 + bounds.x2) / 2;
+        var midY = (bounds.y1 + bounds.y2) / 2;
+
+        self.svg.transition().duration(300).call(
+            self.zoom.transform,
+            d3.zoomIdentity.translate(newW / 2, newH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+        );
     },
 
     zoomIn() {

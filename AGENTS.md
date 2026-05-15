@@ -59,3 +59,51 @@ Tauri v2 shell (src-tauri/)
 - **Tauri sidecar**: configured in `src-tauri/tauri.conf.json`. Python binary resolved via `python/main.py` → `sidecar.server.main()`.
 - **Test coverage**: ~3-5% overall. No tests for any handler, RAG component, or business module. `tests/integration/test_sidecar_contracts.py` is the only integration test.
 - **Prompts** live in `prompts/` as Python module constants. YAML migration in `prompts/yaml/` is stalled at ~4%.
+
+
+---
+
+# NoteAI 通用 AI 行为规范
+
+以下规则适用于 NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成等），作用于所有工作区。
+
+## 标签规则
+
+- 标签从文章内容自动提取（jieba 分词 + 词频）
+- 标签应具备实际分类意义，避免过于泛化的词
+- 优先使用中文标签
+- 每篇文章建议 2-5 个标签
+
+## 知识架构（三层）
+
+```
+Notes/        ← 原始笔记（Markdown，不可变来源）
+wiki/         ← AI 编译的结构化知识（综述、WIKI.md 索引）
+Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
+```
+
+- **Notes**: 采集的文章。按主题分文件夹。文件标题 = 文件名 stem。
+- **wiki**: AI 生成的产物。WIKI.md 仅含主题标题 + 文件列表。综述按主题存放。
+- **Raw**: 非 Markdown 格式文件的归档区。
+
+## AI 功能行为准则
+
+1. **自动分类**: 以当前工作区 `wiki/GUIDE.md` 中定义的主题归类规则为准。不确定则标记 pending。
+2. **标签提取**: 从标题和正文提取有区分度的关键词，避免通用词。
+3. **综述生成**: 针对二级主题，综合该主题下所有笔记内容。
+4. **知识问答**: 优先从知识库检索，结合工作区的主题体系给出回答。
+5. **级联更新**: 新资料入库时，主动检查并更新受影响的已有综述和 WIKI 条目。
+
+## 文件命名规范
+
+- 文件名 = 文章标题
+- 中文命名优先
+- 避免特殊字符（`/ \ : * ? " < > |`）
+- 综述文件: `{主题名}_综述.md`
+
+## 主题存储格式（所有工作区通用）
+
+- YAML frontmatter: `topic: 一级 > 二级 > 三级`
+- 文件系统: `Notes/一级/二级/三级/文件名.md`
+- 分隔符: ` > `
+- 最多三层，三级下不再设子题

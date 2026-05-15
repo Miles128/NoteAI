@@ -1,4 +1,3 @@
-from typing import Dict
 
 from sidecar.pending_topics import load_pending_topics, save_pending_topics
 
@@ -38,7 +37,7 @@ class BaseHandler:
         raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     @staticmethod
-    def _parse_frontmatter(md_text: str) -> Dict:
+    def _parse_frontmatter(md_text: str) -> dict:
         from sidecar.textutils import parse_frontmatter
         return parse_frontmatter(md_text)
 

@@ -64,8 +64,8 @@ def save_profile(profile: dict):
 
 
 def extract_structured_info(message: str) -> dict | None:
-    from utils.llm_utils import create_llm
     from prompts.profile import PROFILE_EXTRACT_PROMPT
+    from utils.llm_utils import create_llm
 
     prompt = PROFILE_EXTRACT_PROMPT.format(message=message)
     try:
@@ -78,8 +78,7 @@ def extract_structured_info(message: str) -> dict | None:
             if text.startswith("json"):
                 text = text[4:]
             text = text.strip()
-        data = json.loads(text)
-        return data
+        return json.loads(text)
     except Exception as e:
         sys.stderr.write(f"[profile] extract_structured_info error: {e}\n")
         sys.stderr.flush()

@@ -2,7 +2,6 @@ import base64
 import platform
 import re
 import subprocess
-import sys
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
@@ -21,8 +20,7 @@ class FilesHandler(BaseHandler):
             alt = self._find_file_by_name(path)
             if alt:
                 full_path = alt
-        result = self.file_previewer.get_preview_data(full_path)
-        return result
+        return self.file_previewer.get_preview_data(full_path)
 
     def _can_preview_file(self, params):
         path = params.get("path", "")

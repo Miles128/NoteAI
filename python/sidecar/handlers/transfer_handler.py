@@ -1,5 +1,4 @@
 import shutil
-import sys
 import time
 import traceback
 from pathlib import Path
@@ -101,7 +100,7 @@ class TransferHandler(BaseHandler):
     def _do_file_import(self, copied, workspace, skipped):
         try:
             total = len(copied)
-            for i, f in enumerate(copied):
+            for i, _f in enumerate(copied):
                 self._send_progress("import-progress", (i + 1) / total, f"正在转换 {i + 1}/{total}")
 
             result = self.file_converter.convert_batch(copied, workspace)
@@ -162,10 +161,10 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "pending": 0, "converted": 0}
 
-        from modules.file_converter import FileConverterManager, RAW_FOLDER
+        from modules.file_converter import RAW_FOLDER, FileConverterManager
         supported = set(FileConverterManager.get_supported_formats())
         ws = Path(workspace)
-        raw_dir = ws / RAW_FOLDER
+        ws / RAW_FOLDER
 
         pending = []
         for f in ws.rglob('*'):

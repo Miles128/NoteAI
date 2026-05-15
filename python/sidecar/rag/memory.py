@@ -65,8 +65,8 @@ def save_short_memory(content):
 
 
 def extract_user_info_sync(message):
-    from utils.llm_utils import create_llm
     from prompts.rag_assistant import USER_INFO_EXTRACT_PROMPT
+    from utils.llm_utils import create_llm
 
     prompt = USER_INFO_EXTRACT_PROMPT.format(message=message)
     try:
@@ -104,10 +104,7 @@ def update_long_memory(user_message):
             return
 
         current = load_long_memory()
-        if current:
-            combined = current + "\n" + new_info
-        else:
-            combined = new_info
+        combined = current + "\n" + new_info if current else new_info
 
         if len(combined) > _MAX_LONG_MEMORY_CHARS:
             from prompts.rag_assistant import LONG_MEMORY_COMPRESS_PROMPT

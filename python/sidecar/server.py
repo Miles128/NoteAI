@@ -8,7 +8,6 @@ from pathlib import Path
 from config import config
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
-from sidecar.mixins.path_helpers import PathHelpersMixin
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
@@ -22,13 +21,13 @@ from sidecar.handlers import (
     TopicsHandler,
     TransferHandler,
     WorkspaceHandler,
-    BaseHandler,
 )
+from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rpc_router import RpcRouter
 from sidecar.service_context import ServiceContext
-from utils.ttl_cache import TTLCache
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger as app_logger
+from utils.ttl_cache import TTLCache
 
 
 class SidecarServer(PathHelpersMixin):
@@ -235,12 +234,13 @@ class SidecarServer(PathHelpersMixin):
 
     def _auto_process_md_file(self, file_path):
         import re
-        from config.settings import NOTES_FOLDER, ABSTRACT_FOLDER
+
+        from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER
         from utils.topic_assigner import (
-            move_file_to_notes_topic_folder,
+            _check_topic_needs_processing,
             add_file_to_wiki_topic,
             auto_assign_topic_for_file,
-            _check_topic_needs_processing,
+            move_file_to_notes_topic_folder,
         )
 
         try:

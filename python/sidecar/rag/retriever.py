@@ -1,5 +1,3 @@
-import sys
-import json
 import threading
 from pathlib import Path
 
@@ -59,18 +57,17 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
             results.sort(key=lambda x: x.get("score", 0), reverse=True)
             results = results[:top_k]
 
-    if not results:
-        if profile_query != query:
-            profile_emb = encode_query(profile_query)
-            if profile_emb.get("dense_vec"):
-                results = hybrid_search(
-                    workspace,
-                    query_dense=profile_emb["dense_vec"],
-                    query_sparse=profile_emb.get("lexical_weights", {}),
-                    top_k=top_k,
-                    topics=topics,
-                    tags=tags,
-                )
+    if not results and profile_query != query:
+        profile_emb = encode_query(profile_query)
+        if profile_emb.get("dense_vec"):
+            results = hybrid_search(
+                workspace,
+                query_dense=profile_emb["dense_vec"],
+                query_sparse=profile_emb.get("lexical_weights", {}),
+                top_k=top_k,
+                topics=topics,
+                tags=tags,
+            )
 
     if len(results) >= 2:
         results = _mmr_dedup(results, top_k=DEFAULT_TOP_K)
@@ -83,8 +80,8 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
     try:
-        from utils.llm_utils import create_llm
         from prompts.rag_assistant import HYDE_PROMPT
+        from utils.llm_utils import create_llm
 
         prompt = HYDE_PROMPT.format(query=query)
         llm = create_llm(temperature=0.3)
@@ -252,7 +249,7 @@ def incremental_update(file_path: str, action: str = "update"):
 
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import delete_by_file, add_chunks
+    from sidecar.rag.index import add_chunks, delete_by_file
 
     p = Path(file_path)
     if not p.exists():

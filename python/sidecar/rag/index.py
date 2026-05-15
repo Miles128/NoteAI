@@ -1,12 +1,8 @@
-import sys
 import json
-import numpy as np
 from pathlib import Path
-from typing import Optional
 
-from pymilvus import MilvusClient, DataType
+from pymilvus import DataType, MilvusClient
 
-from config import config
 from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
@@ -80,7 +76,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
         batch_embeds = embeddings[i:i + batch_size]
 
         data = []
-        for chunk, emb in zip(batch_chunks, batch_embeds):
+        for chunk, emb in zip(batch_chunks, batch_embeds, strict=False):
             tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
             row = {
                 "id": chunk.get("id", f"chunk_{i}"),
@@ -112,7 +108,7 @@ def _save_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict
     path.parent.mkdir(parents=True, exist_ok=True)
 
     sparse_data = {}
-    for chunk, emb in zip(chunks, embeddings):
+    for chunk, emb in zip(chunks, embeddings, strict=False):
         chunk_id = chunk.get("id", "")
         lexical = emb.get("lexical_weights", {})
         if isinstance(lexical, dict):
@@ -275,7 +271,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
         _create_collection(client)
 
     data = []
-    for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+    for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
         tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
         row = {
             "id": chunk.get("id", f"chunk_add_{i}"),
@@ -292,7 +288,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
         client.insert(collection_name=_COLLECTION_NAME, data=data)
 
     sparse_index = _load_sparse_index(workspace)
-    for chunk, emb in zip(chunks, embeddings):
+    for chunk, emb in zip(chunks, embeddings, strict=False):
         chunk_id = chunk.get("id", "")
         lexical = emb.get("lexical_weights", {})
         if isinstance(lexical, dict):

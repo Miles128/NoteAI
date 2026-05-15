@@ -115,8 +115,7 @@ class ConfigHandler(BaseHandler):
             connected, conn_msg = test_api_connection(api_key, api_base, model_name)
             if connected:
                 return {"success": True, "message": conn_msg}
-            else:
-                return {"success": False, "message": conn_msg}
+            return {"success": False, "message": conn_msg}
         except Exception as e:
             return {"success": False, "message": str(e)}
 

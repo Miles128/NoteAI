@@ -8,7 +8,7 @@ class Topics3TierMixin:
 
     def _get_topic_tree_3tier(self, params):
         """返回三层主题树（含文件系统扫描 + WIKI.md 解析 + 综述状态）"""
-        from utils.topic_manager import TopicManager, LEVEL1_TOPICS
+        from utils.topic_manager import TopicManager
         workspace = config.workspace_path
         if not workspace:
             return {"success": True, "topics": [], "pending": []}
@@ -27,7 +27,7 @@ class Topics3TierMixin:
 
                 # 检查二级主题综述
                 for l2 in l1.get("children", []):
-                    l2_full_name = f"{l1['name']}/{l2['name']}"
+                    f"{l1['name']}/{l2['name']}"
                     l2_abstract = abstract_folder / l1["name"] / f"{l2['name']}.md"
                     if l2_abstract.exists():
                         l2["has_abstract"] = True
@@ -48,7 +48,7 @@ class Topics3TierMixin:
 
     def _create_topic_folder(self, params):
         """创建新主题文件夹（自动判定一二三级）"""
-        from utils.topic_manager import TopicManager, LEVEL1_TOPICS
+        from utils.topic_manager import LEVEL1_TOPICS, TopicManager
         folder_name = params.get("name", "").strip()
         parent_path = params.get("parent_path", "")
         level_hint = params.get("level", 0)
@@ -62,18 +62,12 @@ class Topics3TierMixin:
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
 
-        if parent_path:
-            parent = Path(self._resolve_path(parent_path) or "")
-        else:
-            parent = Path(workspace) / config.NOTES_FOLDER
+        parent = Path(self._resolve_path(parent_path) or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
 
         if not parent.exists():
             return {"success": False, "message": "父目录不存在"}
 
-        if level_hint == 0:
-            level = TopicManager.determine_folder_level(str(parent), workspace)
-        else:
-            level = level_hint
+        level = TopicManager.determine_folder_level(str(parent), workspace) if level_hint == 0 else level_hint
 
         if level == 1 and folder_name not in LEVEL1_TOPICS:
             return {
@@ -248,7 +242,7 @@ class Topics3TierMixin:
 
     def _delete_topic_safe(self, params):
         """安全删除主题（含删除保护）"""
-        from utils.topic_manager import TopicManager, LEVEL1_TOPICS
+        from utils.topic_manager import LEVEL1_TOPICS, TopicManager
         topic_name = params.get("topic_name", "").strip()
 
         if not topic_name:

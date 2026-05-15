@@ -1,11 +1,11 @@
 import ipaddress
-import sys
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import quote_plus, unquote_plus, urlparse, parse_qs, urljoin
+from urllib.parse import parse_qs, quote_plus, unquote_plus, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
 from utils.logger import logger
 
 MAX_RESULTS = 5
@@ -113,10 +113,7 @@ def baidu_search(query: str) -> list:
                         urljoin("https://www.baidu.com", href),
                         headers=_HEADERS, timeout=3, allow_redirects=True,
                     )
-                    if _is_safe_url(head_resp.url):
-                        href = str(head_resp.url)
-                    else:
-                        href = ""
+                    href = str(head_resp.url) if _is_safe_url(head_resp.url) else ""
                 except Exception as e:
                     logger.warning(f"[rag/web_search] resolve url {href} error: {e}\n")
 
@@ -159,9 +156,7 @@ def _is_safe_url(url: str) -> bool:
                 return False
         except ValueError as e:
             logger.warning(f"[rag/web_search] parse ip error: {e}\n")
-        if parsed.scheme not in ("http", "https"):
-            return False
-        return True
+        return parsed.scheme in ("http", "https")
     except Exception:
         return False
 
@@ -170,8 +165,8 @@ def fetch_page_content(url: str) -> str:
     if not _is_safe_url(url):
         return ""
     try:
-        from readability import Document
         from markdownify import markdownify as md
+        from readability import Document
 
         resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
         if not _is_safe_url(resp.url):

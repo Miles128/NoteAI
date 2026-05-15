@@ -1,10 +1,8 @@
-import sys
-import json
-import shutil
 import re
+import shutil
 import threading
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from config import config
 from sidecar.textutils import parse_frontmatter
@@ -45,7 +43,7 @@ def get_survey_path(topic: str) -> Path | None:
     topic_dir = get_organized_topic_dir(topic)
     if not topic_dir:
         return None
-    leaf_name = _safe_topic_segment(topic.split('/')[-1])
+    leaf_name = _safe_topic_segment(topic.rsplit('/', maxsplit=1)[-1])
     return topic_dir / f"{leaf_name}_综述.md"
 
 
@@ -308,7 +306,7 @@ def fix_existing_survey_topics() -> dict:
 
 def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
     from prompts.cascade import CASCADE_SURVEY_NEW_PROMPT
-    from utils.llm_utils import create_llm, check_api_config, APIConfigError
+    from utils.llm_utils import APIConfigError, check_api_config, create_llm
 
     try:
         is_valid, error_msg = check_api_config()
@@ -357,7 +355,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
 def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> dict:
     from prompts.cascade import CASCADE_SURVEY_UPDATE_PROMPT
-    from utils.llm_utils import create_llm, check_api_config, APIConfigError
+    from utils.llm_utils import APIConfigError, check_api_config, create_llm
 
     survey_path = get_survey_path(topic)
     if not survey_path or not survey_path.exists():
@@ -590,10 +588,8 @@ def _read_survey_status_from_wiki() -> dict:
     workspace = config.workspace_path
     if not workspace:
         return {}
-    workspace_path = Path(workspace)
-    wiki_path = workspace_path / "wiki" / "WIKI.md"
-    if not wiki_path.exists():
-        wiki_path = workspace_path / "WIKI.md"
+    from sidecar.wiki_utils import resolve_wiki_path
+    wiki_path = resolve_wiki_path(workspace)
     if not wiki_path.exists():
         return {}
     try:

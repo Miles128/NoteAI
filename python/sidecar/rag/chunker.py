@@ -21,8 +21,7 @@ def chunk_file(file_path: str, text: str) -> list:
     elif not isinstance(tags, list):
         tags = []
 
-    chunks = _split_by_headings(body, file_path, topic, tags)
-    return chunks
+    return _split_by_headings(body, file_path, topic, tags)
 
 
 def _split_by_headings(body: str, file_path: str, topic, tags) -> list:
@@ -82,29 +81,20 @@ def _add_paragraph_chunks(content: str, file_path: str, topic, tags, section_tit
         if _is_table(seg_stripped):
             if current:
                 chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
-                if len(current) > overlap_size:
-                    current = current[-overlap_size:]
-                else:
-                    current = ""
+                current = current[-overlap_size:] if len(current) > overlap_size else ""
             chunks.append(_make_chunk(seg_stripped, file_path, topic, tags, section_title))
             continue
 
         if _is_code_block(seg_stripped):
             if current:
                 chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
-                if len(current) > overlap_size:
-                    current = current[-overlap_size:]
-                else:
-                    current = ""
+                current = current[-overlap_size:] if len(current) > overlap_size else ""
             chunks.append(_make_chunk(seg_stripped, file_path, topic, tags, section_title))
             continue
 
         if len(current) + len(seg) + 2 > MAX_CHUNK_CHARS and current:
             chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
-            if len(current) > overlap_size:
-                current = current[-overlap_size:] + "\n\n" + seg
-            else:
-                current = seg
+            current = current[-overlap_size:] + "\n\n" + seg if len(current) > overlap_size else seg
         else:
             current = current + "\n\n" + seg if current else seg
 

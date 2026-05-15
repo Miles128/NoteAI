@@ -1,8 +1,7 @@
 """Model preloader: warms up RAG embedder and reranker in background on sidecar start."""
 
-import sys
 import threading
-from typing import Optional
+
 from utils.logger import logger
 
 

@@ -1,11 +1,10 @@
 import re
-import sys
 import threading
 from pathlib import Path
 
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
-from utils.link_indexer import discover_links, get_backlinks, confirm_link, reject_link, confirm_all_links
+from utils.link_indexer import confirm_all_links, confirm_link, discover_links, get_backlinks, reject_link
 from utils.logger import logger
 
 
@@ -236,7 +235,7 @@ class LinksHandler(BaseHandler):
                     tag_nodes[t] = {"id": "tag:" + t, "label": t, "nodeType": "tag"}
 
         all_nodes = []
-        for rel, n in nodes.items():
+        for _rel, n in nodes.items():
             node = {
                 "id": n["id"],
                 "label": n["label"],

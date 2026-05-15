@@ -1,14 +1,14 @@
-import json
 from pathlib import Path
 
 import yaml
-from config import config, is_ignored_dir
+
+from config import config
 from sidecar.handlers.base import BaseHandler
 
 
 class IntelHandler(BaseHandler):
     def _llm_rewrite(self, params):
-        from utils.llm_utils import rewrite_with_llm, APIConfigError
+        from utils.llm_utils import APIConfigError, rewrite_with_llm
 
         file_path = params.get("file_path", "")
         if not file_path:
@@ -42,7 +42,7 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": f"改写失败: {str(e)}"}
 
     def _llm_rewrite_stream(self, params):
-        from utils.llm_utils import rewrite_with_llm_stream, APIConfigError
+        from utils.llm_utils import APIConfigError, rewrite_with_llm_stream
 
         file_path = params.get("file_path", "")
         if not file_path:

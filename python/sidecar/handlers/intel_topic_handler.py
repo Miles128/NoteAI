@@ -1,9 +1,9 @@
 import json
 import re
-import sys
 from pathlib import Path
 
 import yaml
+
 from config import config
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
@@ -11,8 +11,8 @@ from utils.logger import logger
 
 class IntelTopicHandler(BaseHandler):
     def _ai_topic_analyze(self, params):
-        from utils.llm_utils import call_llm_raw, check_api_config, APIConfigError
         from prompts.ai_topic_consolidate import AI_TOPIC_ANALYZE_PROMPT
+        from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
 
         workspace = config.workspace_path
         if not workspace:
@@ -92,8 +92,8 @@ class IntelTopicHandler(BaseHandler):
             return {"success": False, "message": f"分析失败: {str(e)}"}
 
     def _ai_topic_survey(self, params):
-        from utils.llm_utils import check_api_config, APIConfigError
         from prompts.topic_survey import TOPIC_SURVEY_PROMPT
+        from utils.llm_utils import APIConfigError, check_api_config
 
         topic_name = params.get("topic", "")
         if not topic_name:
@@ -120,11 +120,10 @@ class IntelTopicHandler(BaseHandler):
             try:
                 text = md_file.read_text(encoding='utf-8')
                 fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get('topics'), list):
-                    if topic_name in fm['topics']:
-                        content = body.strip()[:2000]
-                        if content:
-                            notes_parts.append(f"### {md_file.name}\n\n{content}")
+                if fm and isinstance(fm.get('topics'), list) and topic_name in fm['topics']:
+                    content = body.strip()[:2000]
+                    if content:
+                        notes_parts.append(f"### {md_file.name}\n\n{content}")
             except Exception:
                 continue
 
@@ -151,6 +150,7 @@ class IntelTopicHandler(BaseHandler):
 
         try:
             from langchain_core.prompts import PromptTemplate
+
             from utils.llm_utils import create_llm
 
             llm = create_llm(temperature=0.3)
@@ -225,7 +225,6 @@ class IntelTopicHandler(BaseHandler):
             return {"success": False, "message": f"撰写失败: {str(e)}"}
 
     def _apply_topic_suggestion(self, params):
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
 
         workspace = config.workspace_path
         if not workspace:
@@ -256,7 +255,7 @@ class IntelTopicHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def _apply_new_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
         topic_name = suggestion.get("topic", "").strip()
         files = suggestion.get("files", [])
@@ -316,15 +315,16 @@ class IntelTopicHandler(BaseHandler):
                     write_topic_to_file(str(md_file), topic_name)
                     move_file_to_notes_topic_folder(str(md_file), topic_name)
 
-        from sidecar.cascade import ensure_topic_folder, collect_topic_notes, generate_new_survey, append_changelog
+        from sidecar.cascade import append_changelog, collect_topic_notes, ensure_topic_folder, generate_new_survey
         ensure_topic_folder(topic_name)
         notes = collect_topic_notes(topic_name)
         if notes:
             generate_new_survey(topic_name, notes)
             append_changelog(f"AI创建主题并生成综述: {topic_name}")
+        return None
 
     def _apply_change_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
         fname = suggestion.get("file", "").strip()
         new_topic = suggestion.get("suggested_topic", "").strip()
@@ -389,7 +389,14 @@ class IntelTopicHandler(BaseHandler):
                 write_topic_to_file(str(md_file), new_topic)
                 move_file_to_notes_topic_folder(str(md_file), new_topic)
 
-        from sidecar.cascade import ensure_topic_folder, collect_topic_notes, update_existing_survey, get_survey_path, generate_new_survey, append_changelog
+        from sidecar.cascade import (
+            append_changelog,
+            collect_topic_notes,
+            ensure_topic_folder,
+            generate_new_survey,
+            get_survey_path,
+            update_existing_survey,
+        )
         ensure_topic_folder(new_topic)
         notes = collect_topic_notes(new_topic)
         if notes:
@@ -402,9 +409,10 @@ class IntelTopicHandler(BaseHandler):
             else:
                 generate_new_survey(new_topic, notes)
             append_changelog(f"AI变更主题并更新综述: {fname} → {new_topic}")
+        return None
 
     def _apply_assign_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
         fname = suggestion.get("file", "").strip()
         topic_name = suggestion.get("topic", "").strip()
@@ -454,7 +462,14 @@ class IntelTopicHandler(BaseHandler):
                 write_topic_to_file(str(md_file), topic_name)
                 move_file_to_notes_topic_folder(str(md_file), topic_name)
 
-        from sidecar.cascade import ensure_topic_folder, collect_topic_notes, update_existing_survey, get_survey_path, generate_new_survey, append_changelog
+        from sidecar.cascade import (
+            append_changelog,
+            collect_topic_notes,
+            ensure_topic_folder,
+            generate_new_survey,
+            get_survey_path,
+            update_existing_survey,
+        )
         ensure_topic_folder(topic_name)
         notes = collect_topic_notes(topic_name)
         if notes:
@@ -467,6 +482,7 @@ class IntelTopicHandler(BaseHandler):
             else:
                 generate_new_survey(topic_name, notes)
             append_changelog(f"AI分配主题并更新综述: {fname} → {topic_name}")
+        return None
 
     def _apply_merge_topic(self, suggestion, workspace_path, wiki_path):
         from utils.topic_assigner import move_file_to_notes_topic_folder
@@ -491,8 +507,7 @@ class IntelTopicHandler(BaseHandler):
                 if heading == source:
                     in_source = True
                     continue
-                else:
-                    in_source = False
+                in_source = False
             if in_source:
                 if stripped.startswith('### '):
                     moved_files.append(stripped[4:].strip())
@@ -545,15 +560,15 @@ class IntelTopicHandler(BaseHandler):
             try:
                 text = md_file.read_text(encoding='utf-8')
                 fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get('topics'), list):
-                    if source in fm['topics']:
-                        fm['topics'] = [target if t == source else t for t in fm['topics']]
-                        new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-                        new_content = '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
-                        md_file.write_text(new_content, encoding='utf-8')
-                        move_file_to_notes_topic_folder(str(md_file), target)
+                if fm and isinstance(fm.get('topics'), list) and source in fm['topics']:
+                    fm['topics'] = [target if t == source else t for t in fm['topics']]
+                    new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+                    new_content = '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
+                    md_file.write_text(new_content, encoding='utf-8')
+                    move_file_to_notes_topic_folder(str(md_file), target)
             except Exception:
                 continue
+        return None
 
     def register_routes(self, router):
         router.register("ai_topic_analyze", self._ai_topic_analyze)

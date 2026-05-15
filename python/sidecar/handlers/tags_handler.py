@@ -1,8 +1,8 @@
 import re
-import sys
 from pathlib import Path
 
 import yaml
+
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
@@ -119,7 +119,7 @@ class TagsHandler(BaseHandler):
                         val = line[idx + 1:].strip()
                         if key == 'tags':
                             if val.startswith('[') and val.endswith(']'):
-                                existing_tags = set(t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip())
+                                existing_tags = {t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()}
                             break
 
                     new_tags = [t for t in matched_tags if t not in existing_tags]
@@ -300,7 +300,7 @@ class TagsHandler(BaseHandler):
                 new_tag = t
                 new_tag_exists = True
                 break
-            elif t == new_tag:
+            if t == new_tag:
                 new_tag_exists = True
                 break
 
@@ -330,9 +330,8 @@ class TagsHandler(BaseHandler):
                         if new_tag not in new_tags:
                             new_tags.append(new_tag)
                         changed = True
-                    else:
-                        if t not in new_tags:
-                            new_tags.append(t)
+                    elif t not in new_tags:
+                        new_tags.append(t)
 
                 if changed:
                     meta['tags'] = new_tags

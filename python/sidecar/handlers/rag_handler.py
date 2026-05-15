@@ -1,12 +1,10 @@
+import contextlib
 import json
 import re
-import sys
 import threading
-from collections import OrderedDict
 from pathlib import Path
 
 from config import config
-from prompts import FILE_OPERATION_PROMPT
 from sidecar.handlers.base import BaseHandler
 
 try:
@@ -22,9 +20,9 @@ class RagHandler(BaseHandler):
     _rag_build_lock = threading.Lock()
 
     def _init_rag_index(self, params):
+        from sidecar.rag.chunker import chunk_file
         from sidecar.rag.embedder import encode_documents
         from sidecar.rag.index import build_index
-        from sidecar.rag.chunker import chunk_file
 
         workspace = params.get("workspace", config.workspace_path)
 
@@ -104,20 +102,16 @@ class RagHandler(BaseHandler):
 
     @staticmethod
     def _clear_error_reset():
-        try:
+        with contextlib.suppress(OSError):
             Path(RagHandler._error_state_path()).unlink(missing_ok=True)
-        except OSError:
-            pass
 
     @staticmethod
     def _record_error(msg):
         import time
-        try:
+        with contextlib.suppress(OSError):
             Path(RagHandler._error_state_path()).write_text(
                 json.dumps({"ts": time.time(), "msg": msg}, ensure_ascii=False),
                 encoding="utf-8")
-        except OSError:
-            pass
 
     def _rag_add_chunks(self, params):
         file_path = params.get("file_path", "")
@@ -164,10 +158,10 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def _rag_chat(self, params):
-        from sidecar.rag.retriever import retrieve
-        from sidecar.rag.memory import load_short_memory, save_short_memory
-        from utils.llm_utils import call_llm_raw_stream, check_api_config, APIConfigError
         from prompts.rag_assistant import RAG_CHAT_PROMPT
+        from sidecar.rag.memory import load_short_memory, save_short_memory
+        from sidecar.rag.retriever import retrieve
+        from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
 
         with self._rag_chat_lock:
             return self._do_rag_chat_inner(
@@ -268,8 +262,8 @@ class RagHandler(BaseHandler):
         return {"success": True}
 
     def _generate_hyde(self, question):
-        from utils.llm_utils import call_llm_raw, check_api_config, APIConfigError
         from prompts.rag_assistant import RAG_HYDE_PROMPT
+        from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
 
         try:
             is_valid, _ = check_api_config()

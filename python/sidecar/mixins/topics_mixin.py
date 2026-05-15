@@ -2,19 +2,16 @@
 替换 python/sidecar/mixins/topics_mixin.py
 """
 
-import json
-import re
-import sys
-import shutil
 import logging
-import yaml
+import shutil
 from pathlib import Path
+
+import yaml
 
 from config import config, is_ignored_dir
 from utils.topic_manager import (
-    TopicManager,
     LEVEL1_TOPICS,
-    MAX_LEVEL,
+    TopicManager,
 )
 
 logger = logging.getLogger(__name__)
@@ -195,7 +192,7 @@ class TopicsMixin:
         if level == 1:
             p = Path(workspace) / "Notes" / name
             return str(p) if p.exists() else None
-        elif level == 2:
+        if level == 2:
             notes = Path(workspace) / "Notes"
             for d in notes.iterdir():
                 if d.is_dir():
@@ -256,9 +253,9 @@ class TopicsMixin:
 
         if l3 and l2:
             return [l1, {l2: [l3]}] if l1 else [{l2: [l3]}]
-        elif l2:
+        if l2:
             return [l1, l2] if l1 else [l2]
-        elif l1:
+        if l1:
             return [l1]
         return []
 
@@ -375,9 +372,8 @@ class TopicsMixin:
         af = Path(tp) / "综述.md"
         if enable:
             af.write_text(f"# {topic_name} 综述\n\n> 自动生成中...\n", encoding="utf-8")
-        else:
-            if af.exists():
-                af.unlink()
+        elif af.exists():
+            af.unlink()
         return {"success": True}
 
     def _generate_abstract(self, params):

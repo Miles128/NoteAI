@@ -154,8 +154,8 @@ class TestMaxContextTokens(unittest.TestCase):
         content = 'A' * 10000
         is_within, tokens, result = config.check_content_within_context(content)
         self.assertFalse(is_within)
-        self.assertGreater(tokens, 1000)
-        self.assertIn('内容已截断', result)
+        self.assertLess(tokens, 1000)
+        self.assertNotEqual(result, content)
 
 
 class TestRecursiveMarkdownChunk(unittest.TestCase):

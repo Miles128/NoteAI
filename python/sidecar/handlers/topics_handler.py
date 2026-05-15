@@ -1,9 +1,8 @@
-import re
 import sys
-from collections import Counter
 from pathlib import Path
 
 import yaml
+
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
@@ -15,12 +14,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return self._get_topic_tree_3tier(params)
 
     def _parse_wiki_headings(self):
+        from sidecar.wiki_utils import resolve_wiki_path
         workspace = config.workspace_path
         if not workspace:
             return []
-        wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = Path(workspace) / "WIKI.md"
+        wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return []
         try:
@@ -49,7 +47,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from utils.topic_assigner import auto_assign_topic_for_file, write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import (
+            auto_assign_topic_for_file,
+            move_file_to_notes_topic_folder,
+            write_topic_to_file,
+        )
         try:
             result = auto_assign_topic_for_file(str(full_path))
             if not result:
@@ -72,7 +74,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def _batch_auto_assign_topics(self, params):
         if not config.workspace_path:
             return {"success": False, "message": "未设置工作区或工作区不存在"}
-        from utils.topic_assigner import auto_assign_topic_for_file, write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import (
+            auto_assign_topic_for_file,
+            move_file_to_notes_topic_folder,
+            write_topic_to_file,
+        )
 
         ws = Path(config.workspace_path)
         md_files = [f for f in ws.rglob("*.md") if not f.name.startswith(".")
@@ -133,7 +139,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
         try:
             write_topic_to_file(str(full_path), topic)
             move_file_to_notes_topic_folder(str(full_path), topic)
@@ -147,10 +153,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         parent = params.get("parent", "").strip()
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
-        if parent:
-            topic_full = f"{parent}/{topic_name}"
-        else:
-            topic_full = topic_name
+        topic_full = f"{parent}/{topic_name}" if parent else topic_name
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
@@ -160,12 +163,16 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not result.get("success"):
             return result
 
-        from sidecar.cascade import ensure_topic_folder, append_changelog
+        from sidecar.cascade import append_changelog, ensure_topic_folder
         folder_result = ensure_topic_folder(topic_full)
         if folder_result.get("success"):
             append_changelog(f"创建主题: {topic_full}")
 
-        from utils.topic_assigner import auto_assign_topic_for_file, write_topic_to_file, move_file_to_notes_topic_folder
+        from utils.topic_assigner import (
+            auto_assign_topic_for_file,
+            move_file_to_notes_topic_folder,
+            write_topic_to_file,
+        )
         assigned = 0
         ws = Path(workspace)
         for md_file in ws.rglob("*.md"):
@@ -203,16 +210,15 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         workspace_path = Path(workspace)
         import shutil
-        wiki_path = workspace_path / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = workspace_path / "WIKI.md"
+        from sidecar.wiki_utils import resolve_wiki_path
+        wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": False, "message": "WIKI.md 不存在"}
 
         try:
             wiki_text = wiki_path.read_text(encoding='utf-8')
             lines = wiki_text.split('\n')
-            old_leaf = old_name.split('/')[-1]
+            old_name.split('/')[-1]
             new_leaf = new_name.split('/')[-1]
             current_parent = ''
 
@@ -272,11 +278,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         import shutil
         from pathlib import Path
+        from sidecar.wiki_utils import resolve_wiki_path
         workspace_path = Path(workspace)
 
-        wiki_path = workspace_path / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = workspace_path / "WIKI.md"
+        wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": False, "message": "WIKI.md 不存在"}
 
@@ -352,13 +357,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                         if current_parent == topic_name:
                             in_section = True
                             continue
-                        else:
-                            in_section = False
+                        in_section = False
                     else:
-                        if current_parent == topic_name.split('/')[0]:
-                            in_parent = True
-                        else:
-                            in_parent = False
+                        in_parent = current_parent == topic_name.split('/')[0]
                         in_section = False
                 elif stripped.startswith('### ') and in_parent and not is_parent:
                     child = stripped[4:].strip()
@@ -366,8 +367,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     if full == topic_name:
                         in_section = True
                         continue
-                    else:
-                        in_section = False
+                    in_section = False
                 if in_section:
                     continue
                 new_lines.append(line)
@@ -401,7 +401,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     logger.warning(f"[delete_topic] error processing {md_file}: {e}\n")
 
             # 5. Auto-assign new topics for moved files
-            from utils.topic_assigner import auto_assign_topic_for_file, write_topic_to_file, move_file_to_notes_topic_folder
+            from utils.topic_assigner import (
+                auto_assign_topic_for_file,
+                move_file_to_notes_topic_folder,
+                write_topic_to_file,
+            )
             reassigned = 0; pending = 0
             for f in moved_files:
                 if not f.exists(): continue
@@ -423,9 +427,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": f"删除失败: {str(e)}"}
 
     def _get_all_topic_names(self, params):
-        wiki_path = Path(config.workspace_path) / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = Path(config.workspace_path) / "WIKI.md"
+        from sidecar.wiki_utils import resolve_wiki_path
+        wiki_path = resolve_wiki_path()
         if not wiki_path.exists():
             return {"success": True, "topics": []}
         try:
@@ -519,7 +522,14 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": str(e)}
 
     def _do_cascade_survey_update(self, topic):
-        from sidecar.cascade import ensure_topic_folder, collect_topic_notes, update_existing_survey, get_survey_path, generate_new_survey, append_changelog
+        from sidecar.cascade import (
+            append_changelog,
+            collect_topic_notes,
+            ensure_topic_folder,
+            generate_new_survey,
+            get_survey_path,
+            update_existing_survey,
+        )
         try:
             ensure_topic_folder(topic)
             notes = collect_topic_notes(topic)
@@ -545,8 +555,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             sys.stderr.write(f"[topics_handler] file_added_cascade error: {e}\n")
 
     def _get_all_pending(self, params):
-        from utils.topic_assigner import load_pending, cleanup_stale_pending
-        from utils.link_indexer import get_backlinks, cleanup_stale_links
+        from utils.link_indexer import cleanup_stale_links, get_backlinks
+        from utils.topic_assigner import cleanup_stale_pending, load_pending
 
         cleanup_stale_pending()
         cleanup_stale_links()
@@ -589,7 +599,13 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
 
-        from utils.topic_assigner import write_topic_to_file, move_file_to_notes_topic_folder, add_file_to_wiki_topic, load_pending, save_pending
+        from utils.topic_assigner import (
+            add_file_to_wiki_topic,
+            load_pending,
+            move_file_to_notes_topic_folder,
+            save_pending,
+            write_topic_to_file,
+        )
 
         result = write_topic_to_file(str(full_path), topic)
         if not result.get("success"):
@@ -619,7 +635,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return {"entries": get_entries(limit)}
 
     def _merge_duplicate_topics(self, params):
-        from utils.topic_assigner import _merge_duplicate_topics_in_wiki, _deduplicate_files_in_wiki
+        from utils.topic_assigner import _deduplicate_files_in_wiki, _merge_duplicate_topics_in_wiki
         merged = _merge_duplicate_topics_in_wiki()
         deduped = _deduplicate_files_in_wiki()
         return {"success": True, "merged_topics": merged, "deduplicated_files": deduped}
@@ -647,10 +663,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        workspace_path = Path(workspace)
-        wiki_path = workspace_path / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = workspace_path / "WIKI.md"
+        from sidecar.wiki_utils import resolve_wiki_path
+        wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": True, "surveys": {}}
         try:
@@ -690,10 +704,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        workspace_path = Path(workspace)
-        wiki_path = workspace_path / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = workspace_path / "WIKI.md"
+        from sidecar.wiki_utils import resolve_wiki_path
+        wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": False, "message": "WIKI.md 不存在"}
 
@@ -703,7 +715,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             new_lines = []
             current_parent = ''
             is_parent = '/' not in topic_name
-            target_leaf = topic_name.split('/')[-1] if not is_parent else topic_name
+            topic_name.split('/')[-1] if not is_parent else topic_name
             i = 0
 
             while i < len(lines):
@@ -713,39 +725,38 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                 if stripped.startswith('## '):
                     current_parent = stripped[3:].strip()
 
-                    if is_parent:
-                        if current_parent == topic_name:
-                            if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                                i += 1
-                            else:
-                                new_lines.append('> 综述: off')
-                                i += 1
+                    if is_parent and current_parent == topic_name:
+                        if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
                             i += 1
-                            while i < len(lines):
-                                s = lines[i].strip()
-                                if s.startswith('## '):
-                                    new_lines.append(lines[i])
+                        else:
+                            new_lines.append('> 综述: off')
+                            i += 1
+                        i += 1
+                        while i < len(lines):
+                            s = lines[i].strip()
+                            if s.startswith('## '):
+                                new_lines.append(lines[i])
+                                i += 1
+                                break
+                            if s.startswith('### ') and current_parent:
+                                child = s[4:].strip()
+                                full = f"{current_parent}/{child}"
+                                new_lines.append(lines[i])
+                                i += 1
+                                if i < len(lines) and lines[i].strip() == '> 综述: off':
                                     i += 1
-                                    break
-                                elif s.startswith('### ') and current_parent:
-                                    child = s[4:].strip()
-                                    full = f"{current_parent}/{child}"
-                                    new_lines.append(lines[i])
-                                    i += 1
-                                    if i < len(lines) and lines[i].strip() == '> 综述: off':
-                                        i += 1
-                                    while i < len(lines):
-                                        ns = lines[i].strip()
-                                        if ns.startswith('## ') or ns.startswith('### '):
-                                            break
-                                        new_lines.append(lines[i])
-                                        i += 1
-                                else:
-                                    new_lines.append(lines[i])
-                                    i += 1
-                                    if s.startswith('## '):
+                                while i < len(lines):
+                                    ns = lines[i].strip()
+                                    if ns.startswith('## ') or ns.startswith('### '):
                                         break
-                            continue
+                                    new_lines.append(lines[i])
+                                    i += 1
+                            else:
+                                new_lines.append(lines[i])
+                                i += 1
+                                if s.startswith('## '):
+                                    break
+                        continue
                 elif stripped.startswith('### ') and current_parent and not is_parent:
                     child = stripped[4:].strip()
                     full = f"{current_parent}/{child}"

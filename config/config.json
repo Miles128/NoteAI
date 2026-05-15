@@ -1,6 +1,6 @@
 {
   "NOTES_FOLDER": "Notes",
-  "ORGANIZED_FOLDER": "Abstract",
+  "ABSTRACT_FOLDER": "wiki",
   "RAW_FOLDER": "Raw",
   "USED_FOLDER": "Used",
   "workspace_path": "/Users/sihai/Documents/My Notes",
@@ -14,6 +14,7 @@
   "min_chunk_size": 200,
   "theme": "light",
   "theme_preference": "light",
+  "font_size": "medium",
   "accent_color": "#5B7DB1",
   "window_width": 1400,
   "window_height": 900,

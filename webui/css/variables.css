@@ -173,3 +173,58 @@ body[data-theme="dark"] {
     --glow-purple: rgba(188, 140, 255, 0.04);
     --ai-panel-bg: #161b22;
 }
+
+/* ── Paper / Mercury 2 inspired ── */
+[data-theme="paper"] {
+    --bg: #faf8f0;
+    --sidebar-bg: #f5f2ea;
+    --surface: #fffefb;
+    --surface-hover: rgba(0, 0, 0, 0.03);
+    --text: #1a292a;
+    --text-muted: #797670;
+    --primary: #159999;
+    --primary-dark: #127575;
+    --primary-light: rgba(21, 153, 153, 0.08);
+    --primary-hover: rgba(21, 153, 153, 0.14);
+    --border: rgba(0, 0, 0, 0.06);
+    --scrollbar: rgba(0, 0, 0, 0.12);
+    --topbar-bg: #faf8f0;
+    --statusbar-bg: #f5f2ea;
+    --card-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.06);
+    --article-bg: #fffefb;
+    --heading-color: #1a292a;
+    --h1-color: #041414;
+    --italic-color: #1a292a;
+    --bold-color: #1a292a;
+    --italic-bg: rgba(21, 153, 153, 0.06);
+    --sidebar-text: #1a292a;
+    --sidebar-text-muted: #797670;
+    --sidebar-surface-hover: rgba(0, 0, 0, 0.03);
+    --sidebar-border: rgba(0, 0, 0, 0.06);
+    --sidebar-active: rgba(21, 153, 153, 0.10);
+    --on-primary: #ffffff;
+    --switch-bg: #f0ece5;
+    --switch-border: #d5cfc2;
+    --switch-active: #159999;
+    --color-file: #159999;
+    --color-topic: #d97706;
+    --color-tag: #059669;
+    --color-change: #7c3aed;
+    --color-danger: #dc2626;
+    --color-danger-text: #dc2626;
+    --color-pending: #d97706;
+    --color-confirmed: #059669;
+    --color-close: #dc2626;
+    --color-progress-end: #159999;
+    --glass-bg: #fffefb;
+    --glass-border: rgba(0, 0, 0, 0.06);
+    --glass-blur: none;
+    --glow-cyan: rgba(21, 153, 153, 0.04);
+    --glow-purple: transparent;
+    --ai-panel-bg: #fffefb;
+}
+
+[data-theme="paper"] body,
+body[data-theme="paper"] {
+    background: #faf8f0;
+}

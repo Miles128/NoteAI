@@ -549,40 +549,83 @@ const Graph3Tier = {
         var nodeMap = {};
         nodes.forEach(function(n) { nodeMap[n.id] = n; });
 
-        // Compute subtitle hierarchies
-        var levelMap = {};
-        function assignLevel(id, lvl, visited) {
-            if (visited.has(id)) return;
-            visited.add(id);
-            var node = nodeMap[id];
-            if (!node) return;
-            if (!(node.type === 'topic' || node.type === 'file')) return;
-            levelMap[id] = Math.max(levelMap[id] || 0, lvl);
-            var children = edges.filter(function(e) {
-                var src = typeof e.source === 'string' ? e.source : e.source.id;
-                return src === id;
-            });
-            children.forEach(function(e) {
-                var tgt = typeof e.target === 'string' ? e.target : e.target.id;
-                assignLevel(tgt, lvl + 1, new Set(visited));
+        // ---- compute target positions (same radial layout as render) ----
+        var childMap = {};
+        edges.forEach(function(e) {
+            var src = typeof e.source === 'string' ? e.source : e.source.id || e.source;
+            var tgt = typeof e.target === 'string' ? e.target : e.target.id || e.target;
+            if (!childMap[src]) childMap[src] = [];
+            childMap[src].push(tgt);
+        });
+
+        var fileCounts = {};
+        function countFiles(nid) {
+            if (fileCounts[nid] !== undefined) return fileCounts[nid];
+            var ch = childMap[nid] || [];
+            var c = 0;
+            ch.forEach(function(cid) { var nd = nodeMap[cid]; if (!nd) return; c += nd.type === 'file' ? 1 : countFiles(cid); });
+            fileCounts[nid] = c;
+            return c;
+        }
+        nodes.forEach(function(n) { countFiles(n.id); });
+        var maxFC = Math.max(1, Math.max.apply(null, Object.values(fileCounts)));
+
+        function countLeaves(nid, vis) {
+            if (vis.has(nid)) return 0; vis.add(nid);
+            var ch = childMap[nid] || [];
+            return ch.length === 0 ? 1 : ch.reduce(function(s, c) { return s + countLeaves(c, new Set(vis)); }, 0);
+        }
+
+        var maxR = Math.min(svgW, svgH) * 0.43;
+        function scaleR(minR, maxR2, pid) {
+            var fc = fileCounts[pid] || 0;
+            return minR + (maxR2 - minR) * (fc / maxFC);
+        }
+
+        function assignRadial(pid, a0, sector, vis) {
+            var ch = (childMap[pid] || []).filter(function(c) { return nodeMap[c] && !vis.has(c); });
+            if (ch.length === 0) return;
+            var totalL = ch.reduce(function(s, c) { return s + countLeaves(c, new Set(vis)); }, 0) || ch.length;
+            var a = a0;
+            ch.forEach(function(cid) {
+                var nd = nodeMap[cid];
+                var cl = countLeaves(cid, new Set(vis));
+                var cs = (cl / totalL) * sector;
+                var ca = a + cs / 2;
+                var r;
+                if (nd.type === 'topic') {
+                    r = nd.level === 2 ? scaleR(maxR * 0.12, maxR * 0.32, cid) : scaleR(maxR * 0.28, maxR * 0.48, cid);
+                } else if (nd.type === 'tag') {
+                    r = scaleR(maxR * 0.30, maxR * 0.55, cid);
+                } else {
+                    r = scaleR(maxR * 0.40, maxR * 0.72, cid);
+                }
+                nd.tx = cx + Math.cos(ca) * r;
+                nd.ty = cy + Math.sin(ca) * r;
+                assignRadial(cid, a, cs, new Set(vis));
+                a += cs;
             });
         }
 
-        // root nodes are L1 topics
-        nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; }).forEach(function(n) {
-            assignLevel(n.id, 0, new Set());
+        var l1s = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
+        l1s.forEach(function(n, i) {
+            var a = (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2;
+            n.tx = cx + Math.cos(a) * 18;
+            n.ty = cy + Math.sin(a) * 18;
         });
-        // tag and orphan nodes get max level + 1
-        var maxLvl = 0;
-        Object.values(levelMap).forEach(function(l) { if (l > maxLvl) maxLvl = l; });
-
-        nodes.forEach(function(n) {
-            if (levelMap[n.id] === undefined) levelMap[n.id] = maxLvl + 1;
+        var vis = new Set();
+        l1s.forEach(function(n, i) {
+            assignRadial(n.id, (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2, (2 * Math.PI) / (l1s.length || 1), vis);
         });
 
-        var totalFrames = 300;
-        var frame = 0;
-        var startTime = null;
+        var orphans = nodes.filter(function(n) { return n.tx === undefined; });
+        orphans.forEach(function(n, i) {
+            var a = ((orphans.length > 1 ? i / orphans.length : 0)) * 2 * Math.PI;
+            var r = n.type === 'tag' ? scaleR(maxR * 0.30, maxR * 0.55, n.id) : scaleR(maxR * 0.40, maxR * 0.72, n.id);
+            n.tx = cx + Math.cos(a) * (r + 50);
+            n.ty = cy + Math.sin(a) * (r + 50);
+        });
+        // ---- end target position computation ----
 
         this.g.selectAll('*').remove();
 

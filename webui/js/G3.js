@@ -536,10 +536,14 @@ const Graph3Tier = {
     replay() {
         if (!this.svg || !this.data) return;
         if (this.simulation) this.simulation.stop();
+        this.simulation = null;
 
         var self = this;
         var nodes = this.data.nodes.map(function(n) { return Object.assign({}, n); });
-        var edges = this.data.edges.map(function(e) { return { source: e.source, target: e.target }; });
+        var edges = this.data.edges.map(function(e) {
+            return { source: typeof e.source === 'string' ? e.source : e.source.id || e.source,
+                     target: typeof e.target === 'string' ? e.target : e.target.id || e.target };
+        });
 
         var svgW = +this.svg.attr('width');
         var svgH = +this.svg.attr('height');
@@ -549,13 +553,13 @@ const Graph3Tier = {
         var nodeMap = {};
         nodes.forEach(function(n) { nodeMap[n.id] = n; });
 
-        // ---- compute target positions (same radial layout as render) ----
+        // ---- compute target positions (radial layout) ----
         var childMap = {};
+        var parentMap = {};
         edges.forEach(function(e) {
-            var src = typeof e.source === 'string' ? e.source : e.source.id || e.source;
-            var tgt = typeof e.target === 'string' ? e.target : e.target.id || e.target;
-            if (!childMap[src]) childMap[src] = [];
-            childMap[src].push(tgt);
+            if (!childMap[e.source]) childMap[e.source] = [];
+            childMap[e.source].push(e.target);
+            parentMap[e.target] = e.source;
         });
 
         var fileCounts = {};
@@ -578,8 +582,7 @@ const Graph3Tier = {
 
         var maxR = Math.min(svgW, svgH) * 0.43;
         function scaleR(minR, maxR2, pid) {
-            var fc = fileCounts[pid] || 0;
-            return minR + (maxR2 - minR) * (fc / maxFC);
+            return minR + (maxR2 - minR) * ((fileCounts[pid] || 0) / maxFC);
         }
 
         function assignRadial(pid, a0, sector, vis) {
@@ -600,8 +603,9 @@ const Graph3Tier = {
                 } else {
                     r = scaleR(maxR * 0.40, maxR * 0.72, cid);
                 }
-                nd.tx = cx + Math.cos(ca) * r;
-                nd.ty = cy + Math.sin(ca) * r;
+                nd._tx = cx + Math.cos(ca) * r;
+                nd._ty = cy + Math.sin(ca) * r;
+                nd._depth = Math.max(nd._depth || 0, (nodeMap[pid] ? (nodeMap[pid]._depth || 0) + 1 : 1));
                 assignRadial(cid, a, cs, new Set(vis));
                 a += cs;
             });
@@ -609,24 +613,30 @@ const Graph3Tier = {
 
         var l1s = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
         l1s.forEach(function(n, i) {
+            n._depth = 0;
             var a = (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2;
-            n.tx = cx + Math.cos(a) * 18;
-            n.ty = cy + Math.sin(a) * 18;
+            n._tx = cx + Math.cos(a) * 18;
+            n._ty = cy + Math.sin(a) * 18;
         });
         var vis = new Set();
         l1s.forEach(function(n, i) {
             assignRadial(n.id, (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2, (2 * Math.PI) / (l1s.length || 1), vis);
         });
 
-        var orphans = nodes.filter(function(n) { return n.tx === undefined; });
+        var orphans = nodes.filter(function(n) { return n._tx === undefined; });
+        var maxD = 0;
+        nodes.forEach(function(n) { if (n._depth > maxD) maxD = n._depth; });
         orphans.forEach(function(n, i) {
+            n._depth = maxD + 1;
             var a = ((orphans.length > 1 ? i / orphans.length : 0)) * 2 * Math.PI;
             var r = n.type === 'tag' ? scaleR(maxR * 0.30, maxR * 0.55, n.id) : scaleR(maxR * 0.40, maxR * 0.72, n.id);
-            n.tx = cx + Math.cos(a) * (r + 50);
-            n.ty = cy + Math.sin(a) * (r + 50);
+            n._tx = cx + Math.cos(a) * (r + 50);
+            n._ty = cy + Math.sin(a) * (r + 50);
         });
-        // ---- end target position computation ----
 
+        nodes.forEach(function(n) { maxD = Math.max(maxD, n._depth || 0); });
+
+        // ---- build SVG elements ----
         this.g.selectAll('*').remove();
 
         var getRadius = function(d) {
@@ -640,21 +650,23 @@ const Graph3Tier = {
             return '#81c784';
         };
 
-        // Prepare SVG elements
-        var linkGroup = this.g.append('g').attr('class', 'graph-links');
-        var link = linkGroup.selectAll('line').data(edges).join('line')
-            .attr('stroke', '#c8c8c8').attr('stroke-width', 0.3).attr('opacity', 0.3);
+        // Create all elements hidden initially
+        var linkGroup = self.g.append('g').attr('class', 'graph-links');
+        var nodeGroup = self.g.append('g').attr('class', 'graph-nodes');
 
-        var nodeGroup = this.g.append('g').attr('class', 'graph-nodes');
-        var node = nodeGroup.selectAll('g').data(nodes).join('g').attr('cursor', 'pointer');
+        // Add nodes at center, invisible
+        var nodeSel = nodeGroup.selectAll('g').data(nodes).join('g')
+            .attr('cursor', 'pointer')
+            .attr('opacity', 0)
+            .attr('transform', function(d) { d.x = cx; d.y = cy; return 'translate(' + cx + ',' + cy + ')'; });
 
-        node.append('circle')
+        nodeSel.append('circle')
             .attr('r', function(d) { return getRadius(d); })
             .attr('fill', function(d) { return getColor(d); })
             .attr('stroke', function(d) { return d.has_abstract ? '#e6c200' : 'rgba(255,255,255,0.3)'; })
             .attr('stroke-width', function(d) { return d.has_abstract ? 3 : 0.8; });
 
-        node.append('text')
+        nodeSel.append('text')
             .text(function(d) { return d.name || ''; })
             .attr('text-anchor', 'middle')
             .attr('dy', function(d) { return -(getRadius(d) + 4); })
@@ -672,44 +684,123 @@ const Graph3Tier = {
             })
             .style('pointer-events', 'none');
 
-        // Start all nodes at center
-        nodes.forEach(function(n) { n.x = cx; n.y = cy; });
-        node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+        // Add edges, invisible
+        var linkSel = linkGroup.selectAll('line').data(edges).join('line')
+            .attr('stroke', '#c8c8c8').attr('stroke-width', 0.3).attr('opacity', 0)
+            .attr('x1', cx).attr('y1', cy).attr('x2', cx).attr('y2', cy);
 
-        var sim = d3.forceSimulation(nodes)
-            .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(50).strength(0.05))
-            .force('charge', d3.forceManyBody().strength(-150))
-            .force('x', d3.forceX(function(d) { return d.tx; }).strength(0.02))
-            .force('y', d3.forceY(function(d) { return d.ty; }).strength(0.02))
-            .force('collision', d3.forceCollide().radius(function(d) { return getRadius(d) + 4; }))
-            .alpha(0.1).alphaDecay(0.005).velocityDecay(0.5)
-            .on('tick', function() {
-                link.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
-                    .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
-                node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
-            })
-            .on('end', function() {
-                var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
-                nodes.forEach(function(n) {
-                    if (n.x < bounds.x1) bounds.x1 = n.x;
-                    if (n.y < bounds.y1) bounds.y1 = n.y;
-                    if (n.x > bounds.x2) bounds.x2 = n.x;
-                    if (n.y > bounds.y2) bounds.y2 = n.y;
-                });
-                var bw = bounds.x2 - bounds.x1 || 100;
-                var bh = bounds.y2 - bounds.y1 || 100;
-                var scale = Math.min((svgW - 120) / bw, (svgH - 120) / bh, 1.2);
-                var midX = (bounds.x1 + bounds.x2) / 2;
-                var midY = (bounds.y1 + bounds.y2) / 2;
-                self.svg.transition().duration(600).call(
-                    self.zoom.transform,
-                    d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
-                );
+        // ---- sequential growth animation ----
+        var totalNodes = nodes.length;
+        var durationPerNode = Math.max(200, Math.min(500, 35000 / totalNodes)); // scale with node count
+        var depthDelay = 800; // delay between depth layers
 
-                // Restore regular interaction
-                self.svg.on('click', null);
-                self.simulation = null;
+        function nodesAtDepth(d) {
+            return nodes.filter(function(n) { return (n._depth || 0) === d; });
+        }
+        function edgesForNodes(nset) {
+            var ids = new Set(nset.map(function(n) { return n.id; }));
+            return edges.filter(function(e) {
+                return ids.has(e.source) && ids.has(e.target);
             });
+        }
+        function visibleNodes(upToDepth) {
+            return nodes.filter(function(n) { return (n._depth || 0) <= upToDepth; });
+        }
+        function visibleEdges(upToDepth) {
+            var ids = new Set(visibleNodes(upToDepth).map(function(n) { return n.id; }));
+            return edges.filter(function(e) { return ids.has(e.source) && ids.has(e.target); });
+        }
+
+        var currentDepth = 0;
+        var revealed = new Set();
+        var timer;
+
+        function revealNextBatch() {
+            var batch = nodesAtDepth(currentDepth).filter(function(n) { return !revealed.has(n.id); });
+
+            if (batch.length === 0) {
+                currentDepth++;
+                if (currentDepth > maxD + 1) {
+                    // all done - zoom to fit
+                    clearTimeout(timer);
+                    var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+                    nodes.forEach(function(n) {
+                        var x = n._tx, y = n._ty;
+                        if (x < bounds.x1) bounds.x1 = x;
+                        if (y < bounds.y1) bounds.y1 = y;
+                        if (x > bounds.x2) bounds.x2 = x;
+                        if (y > bounds.y2) bounds.y2 = y;
+                    });
+                    var bw = bounds.x2 - bounds.x1 || 100;
+                    var bh = bounds.y2 - bounds.y1 || 100;
+                    var scale = Math.min((svgW - 120) / bw, (svgH - 120) / bh, 1.2);
+                    var midX = (bounds.x1 + bounds.x2) / 2;
+                    var midY = (bounds.y1 + bounds.y2) / 2;
+                    self.svg.transition().duration(600).call(
+                        self.zoom.transform,
+                        d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+                    );
+                    self.svg.on('click', null);
+                    return;
+                }
+                // short pause before next depth
+                timer = setTimeout(revealNextBatch, depthDelay);
+                return;
+            }
+
+            // Reveal one node from this batch
+            var n = batch[0];
+            revealed.add(n.id);
+
+            // Update visible edges
+            var visE = visibleEdges(currentDepth);
+            linkSel
+                .attr('opacity', function(d) {
+                    var src = d.source, tgt = d.target;
+                    return (revealed.has(src) && revealed.has(tgt)) ? 0.3 : 0;
+                })
+                .attr('x1', function(d) { return revealed.has(d.source) ? nodeMap[d.source].x : cx; })
+                .attr('y1', function(d) { return revealed.has(d.source) ? nodeMap[d.source].y : cy; })
+                .attr('x2', function(d) { return revealed.has(d.target) ? nodeMap[d.target].x : cx; })
+                .attr('y2', function(d) { return revealed.has(d.target) ? nodeMap[d.target].y : cy; });
+
+            // Animate this node from center to target
+            n.x = cx; n.y = cy;
+            nodeSel.filter(function(d) { return d.id === n.id; })
+                .attr('opacity', 1)
+                .transition().duration(durationPerNode * 3).ease(d3.easeCubicOut)
+                .attr('transform', 'translate(' + n._tx + ',' + n._ty + ')')
+                .on('end', function() {
+                    n.x = n._tx;
+                    n.y = n._ty;
+                    // Update edges after node moved
+                    linkSel
+                        .attr('x1', function(d) { return revealed.has(d.source) ? nodeMap[d.source].x : cx; })
+                        .attr('y1', function(d) { return revealed.has(d.source) ? nodeMap[d.source].y : cy; })
+                        .attr('x2', function(d) { return revealed.has(d.target) ? nodeMap[d.target].x : cx; })
+                        .attr('y2', function(d) { return revealed.has(d.target) ? nodeMap[d.target].y : cy; });
+                });
+
+            // Schedule next node
+            timer = setTimeout(revealNextBatch, durationPerNode);
+        }
+
+        // Start: show L1 nodes immediately, then grow
+        var l1Ids = new Set(l1s.map(function(n) { return n.id; }));
+        l1s.forEach(function(n) { revealed.add(n.id); });
+
+        // Show L1 nodes at their positions
+        nodeSel.filter(function(d) { return l1Ids.has(d.id); })
+            .attr('opacity', 1)
+            .attr('transform', function(d) { d.x = d._tx; d.y = d._ty; return 'translate(' + d._tx + ',' + d._ty + ')'; });
+
+        // Show L1-L1 edges
+        linkSel.attr('opacity', function(d) {
+            return l1Ids.has(d.source) && l1Ids.has(d.target) ? 0.3 : 0;
+        });
+
+        // Brief pause then start growing outward
+        timer = setTimeout(function() { currentDepth = 1; revealNextBatch(); }, 400);
     },
 };
 

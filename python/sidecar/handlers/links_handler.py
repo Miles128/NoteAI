@@ -63,7 +63,8 @@ class LinksHandler(BaseHandler):
             from utils.topic_assigner import auto_assign_topic_for_file
             quick_count = 0
             for f in workspace_path.rglob('*.md'):
-                if f.name.startswith('.') or 'wiki' in f.parts: continue
+                if f.name.startswith('.') or 'wiki' in f.parts:
+                    continue
                 try:
                     t = f.read_text(encoding='utf-8')
                     fm, _ = self._parse_frontmatter(t)
@@ -71,10 +72,12 @@ class LinksHandler(BaseHandler):
                         r = auto_assign_topic_for_file(str(f), use_llm=False)
                         if r and r.get('status') == 'auto_assigned':
                             quick_count += 1
-                except Exception: pass
+                except Exception:
+                    pass
             if quick_count > 0:
                 logger.warning(f"[links] quick auto_assign: {quick_count} files\n")
-        except Exception: pass
+        except Exception:
+            pass
 
         file_data = []
         for md_file in workspace_path.rglob('*.md'):
@@ -122,7 +125,8 @@ class LinksHandler(BaseHandler):
                         if yaml_raw:
                             for line in yaml_raw.group(1).split('\n'):
                                 idx = line.find(':')
-                                if idx < 0: continue
+                                if idx < 0:
+                                    continue
                                 key = line[:idx].strip()
                                 val = line[idx+1:].strip().strip("'\"")
                                 if key == 'topic' and val and not topic:
@@ -130,7 +134,8 @@ class LinksHandler(BaseHandler):
                                 elif key == 'topics' and val and not topic:
                                     if val.startswith('['):
                                         items = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                                        if items: topic = items[0]
+                                        if items:
+                                            topic = items[0]
                                 elif key == 'tags' and val and (not tags):
                                     if val.startswith('['):
                                         tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]

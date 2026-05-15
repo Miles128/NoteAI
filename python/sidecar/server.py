@@ -26,7 +26,7 @@ from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rpc_router import RpcRouter
 from sidecar.service_context import ServiceContext
 from utils.fulltext_index import fulltext_index
-from utils.logger import logger as app_logger
+from utils.logger import logger
 from utils.ttl_cache import TTLCache
 
 
@@ -50,7 +50,7 @@ class SidecarServer(PathHelpersMixin):
         self._cache = TTLCache(ttl=300, max_size=500)
         self._cache_lock = threading.Lock()  # retained for _cached_or_compat compat
         self._router = RpcRouter(send_response=self._send_response)
-        self._ctx = ServiceContext(config=config, logger=app_logger)
+        self._ctx = ServiceContext(config=config, logger=logger)
         self._config_handler = ConfigHandler(self)
         self._workspace_handler = WorkspaceHandler(self)
         self._transfer_handler = TransferHandler(self)

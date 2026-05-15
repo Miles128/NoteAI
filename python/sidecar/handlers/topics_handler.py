@@ -210,6 +210,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         workspace_path = Path(workspace)
         import shutil
+
         from sidecar.wiki_utils import resolve_wiki_path
         wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
@@ -278,6 +279,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         import shutil
         from pathlib import Path
+
         from sidecar.wiki_utils import resolve_wiki_path
         workspace_path = Path(workspace)
 

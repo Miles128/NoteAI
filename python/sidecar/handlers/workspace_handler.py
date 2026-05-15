@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from config import config
 from config.settings import workspace_manager
 from sidecar.handlers.base import BaseHandler
 

@@ -691,54 +691,64 @@ const Graph3Tier = {
 
         // ---- force-directed growth animation ----
         var totalNodes = nodes.length;
-        var totalTime = Math.max(15000, Math.min(45000, totalNodes * 350)); // ~30-40s for 100 nodes
-        var depthInterval = totalTime / (maxD + 2); // time between depth reveals
+        var depthRevealInterval = Math.max(1200, Math.min(4000, 30000 / (maxD + 1)));
 
-        // All nodes start at center
+        // All nodes start at center, hidden except L1
         nodes.forEach(function(n) { n.x = cx; n.y = cy; });
-        nodeSel
-            .attr('transform', function(d) { return 'translate(' + cx + ',' + cy + ')'; });
+        nodeSel.attr('transform', function(d) { return 'translate(' + cx + ',' + cy + ')'; });
+        nodeSel.attr('opacity', 0);
 
-        // L1 visible immediately
         var l1Ids = new Set(l1s.map(function(n) { return n.id; }));
         nodeSel.filter(function(d) { return l1Ids.has(d.id); }).attr('opacity', 1);
-        linkSel.attr('opacity', function(d) { return (l1Ids.has(d.source) && l1Ids.has(d.target)) ? 0.3 : 0; });
+        linkSel.attr('opacity', 0);
 
         var revealed = new Set(l1Ids);
-        var currentRevealDepth = 1;
-        var simStartTime = Date.now();
+        var allRevealed = (maxD === 0);
+        var currentDepth = 1;
+        var revealTimer = null;
+
+        function revealNextDepth() {
+            if (currentDepth > maxD) {
+                allRevealed = true;
+                return;
+            }
+            var batch = nodes.filter(function(n) { return (n._depth || 0) === currentDepth; });
+            batch.forEach(function(n) { revealed.add(n.id); });
+            // Re-heat simulation so new nodes get pushed out
+            sim.alpha(Math.max(sim.alpha(), 0.15));
+            sim.restart();
+            currentDepth++;
+            if (currentDepth <= maxD) {
+                revealTimer = setTimeout(revealNextDepth, depthRevealInterval);
+            } else {
+                allRevealed = true;
+            }
+        }
 
         var sim = d3.forceSimulation(nodes)
             .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(45).strength(0.04))
             .force('charge', d3.forceManyBody().strength(-120))
-            .force('x', d3.forceX(function(d) { return d._tx; }).strength(0.01))
-            .force('y', d3.forceY(function(d) { return d._ty; }).strength(0.01))
+            .force('x', d3.forceX(function(d) { return d._tx; }).strength(0.015))
+            .force('y', d3.forceY(function(d) { return d._ty; }).strength(0.015))
             .force('collision', d3.forceCollide().radius(function(d) { return getRadius(d) + 6; }))
-            .alpha(0.3).alphaDecay(0.01).velocityDecay(0.55);
+            .alpha(0.4).alphaDecay(0.0008).velocityDecay(0.5);
 
         sim.on('tick', function() {
-            var elapsed = Date.now() - simStartTime;
-
-            // Reveal next depth on schedule
-            while (currentRevealDepth <= maxD + 1 && elapsed >= currentRevealDepth * depthInterval) {
-                nodes.filter(function(n) { return (n._depth || 0) === currentRevealDepth; }).forEach(function(n) {
-                    revealed.add(n.id);
-                });
-                currentRevealDepth++;
-            }
-
-            // Update opacity: visible if revealed, fade in over 300ms from reveal time
             nodeSel.attr('opacity', function(d) { return revealed.has(d.id) ? 1 : 0; });
-
             linkSel
                 .attr('opacity', function(d) { return (revealed.has(d.source) && revealed.has(d.target)) ? 0.3 : 0; })
                 .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
                 .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
-
             nodeSel.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+
+            // Stop simulation early only when all nodes are revealed and cooled down
+            if (allRevealed && sim.alpha() < 0.005) {
+                sim.stop();
+            }
         });
 
         sim.on('end', function() {
+            if (revealTimer) clearTimeout(revealTimer);
             var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
             nodes.forEach(function(n) {
                 if (n.x < bounds.x1) bounds.x1 = n.x;
@@ -758,6 +768,11 @@ const Graph3Tier = {
             self.svg.on('click', null);
             self.simulation = null;
         });
+
+        // Start depth reveal timer
+        if (maxD >= 1) {
+            revealTimer = setTimeout(revealNextDepth, depthRevealInterval);
+        }
     },
 };
 

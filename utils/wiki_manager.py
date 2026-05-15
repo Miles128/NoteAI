@@ -46,19 +46,20 @@ def parse_wiki_headings():
     return headings
 
 
+def _title_from_path(file_rel_path: str) -> str:
+    """从文件相对路径提取标题（文件名 stem）"""
+    return Path(file_rel_path).stem
+
+
 def parse_wiki_structure():
-    """
-    解析 WIKI.md 的主题结构，支持多级主题（用 / 分隔的路径）
-    
-    返回格式:
-    [
-        {
-            "name": "主题路径",  # 例如 "人工智能/深度学习"
-            "label": "深度学习",  # 最后一段名称
-            "files": [...]
-        },
-        ...
-    ]
+    """解析 WIKI.md 的主题结构。
+
+    新格式每行独立判断：
+      ## / ### / #### … → 新主题段
+      1. **标题**        → 当前主题下的文件（title 存入 files 列表）
+
+    返回:
+      [{"name": "full_topic_path", "label": "leaf_name", "files": ["title1", ...]}, ...]
     """
     workspace = config.workspace_path
     if not workspace:
@@ -75,22 +76,13 @@ def parse_wiki_structure():
 
     topics = []
     lines = text.split('\n')
-
     current_topic = None
-    in_source_files = False
-    current_file = None
     topic_stack = []
-
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
 
-    def _flush_topic():
-        nonlocal current_topic, current_file
+    def _flush():
+        nonlocal current_topic
         if current_topic:
-            if current_file:
-                if current_file.get('path'):
-                    current_topic['files'].append(current_file)
-                current_file = None
             topics.append(current_topic)
             current_topic = None
 
@@ -102,67 +94,41 @@ def parse_wiki_structure():
             level = len(heading_match.group(1))
             heading_text = heading_match.group(2).strip()
 
-            if heading_text == '目录' or heading_text == '来源文件':
-                if heading_text == '来源文件':
-                    in_source_files = True
-                    if current_file:
-                        if current_file.get('path'):
-                            current_topic['files'].append(current_file)
-                        current_file = None
-                else:
-                    in_source_files = False
+            if heading_text in ('目录', '来源文件'):
                 continue
 
-            _flush_topic()
+            _flush()
 
             while len(topic_stack) >= level - 1:
                 topic_stack.pop()
 
             parent_path = topic_stack[-1] if topic_stack else ''
-            if parent_path:
-                topic_path = parent_path + TOPIC_SEP + heading_text
-            else:
-                topic_path = heading_text
+            topic_path = (parent_path + TOPIC_SEP + heading_text) if parent_path else heading_text
 
             topic_stack.append(topic_path)
             current_topic = {"name": topic_path, "label": heading_text, "files": []}
-            in_source_files = False
-            current_file = None
             continue
 
-        if in_source_files and current_topic:
+        if current_topic:
             file_match = file_item_pattern.match(stripped)
             if file_match:
-                if current_file:
-                    if current_file.get('path'):
-                        current_topic['files'].append(current_file)
-                file_title = file_match.group(2).strip()
-                current_file = {"title": file_title, "path": ""}
-                continue
+                current_topic['files'].append(file_match.group(2).strip())
 
-            if current_file:
-                path_match = source_path_pattern.match(stripped)
-                if path_match:
-                    current_file['path'] = path_match.group(1).strip()
-
-    _flush_topic()
-
+    _flush()
     return topics
 
 
 def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
-    """
-    向 WIKI.md 添加文件到指定主题下
-    支持多级主题路径（用 / 分隔），自动创建层级标题
-    
-    格式:
-    ## 人工智能
-    
-    ### 深度学习
-    
-    #### Transformer
-    1. **文件标题**
-       - 原始路径：Notes/xxx.md
+    """向 WIKI.md 添加文件到指定主题下。
+
+    WIKI.md 格式（仅含标题 + 文件列表）::
+
+        ## 一级主题
+        1. **文件标题1**
+        2. **文件标题2**
+
+        ### 二级主题
+        1. **文件标题3**
     """
     wiki_path = _get_wiki_path()
     workspace = config.workspace_path
@@ -172,15 +138,13 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
     if '/' in topic and TOPIC_SEP not in topic:
         topic = topic.replace('/', TOPIC_SEP)
 
-    display_title = file_title or Path(file_rel_path).name
-    file_name = Path(file_rel_path).name
+    display_title = file_title or _title_from_path(file_rel_path)
 
     try:
         if wiki_path.exists():
             content = wiki_path.read_text(encoding='utf-8')
         else:
             wiki_path.parent.mkdir(parents=True, exist_ok=True)
-            from datetime import datetime
             content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
     except Exception as e:
         sys.stderr.write(f"[wiki] read failed: {e}\n")
@@ -188,134 +152,69 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         return False
 
     parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+    if not parts:
+        return False
     topic_leaf = parts[-1]
     topic_depth = len(parts)
-
-    lines = content.split('\n')
-
     heading_prefix = '#' * (topic_depth + 1)
     topic_heading = f'{heading_prefix} {topic_leaf}'
 
-    topic_start_idx = None
-    source_files_idx = None
-    topic_end_idx = None
+    lines = content.split('\n')
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
 
+    # ---- ensure parent headings exist ----
+    insert_base = len(lines)
+    for pi in range(len(parts) - 1):
+        parent_label = parts[pi]
+        parent_prefix = '#' * (pi + 2)
+        parent_heading = f'{parent_prefix} {parent_label}'
+        found = False
+        for idx, line in enumerate(lines):
+            if line.strip() == parent_heading:
+                found = True
+                insert_base = idx + 1
+                break
+        if not found:
+            new_section = ['', parent_heading, '']
+            for j, sl in enumerate(new_section):
+                lines.insert(insert_base + j, sl)
+            insert_base += len(new_section)
+
+    # ---- find topic heading ----
+    topic_start = None
+    topic_end = len(lines)
     for i, line in enumerate(lines):
         stripped = line.strip()
         if stripped == topic_heading:
-            topic_start_idx = i
-            source_files_idx = None
-        elif topic_start_idx is not None and stripped == '### 来源文件':
-            source_files_idx = i
-        elif topic_start_idx is not None and re.match(r'^#{2,}\s+', stripped):
-            existing_level = len(re.match(r'^(#{2,})', stripped).group(1))
-            if existing_level <= topic_depth + 1:
-                topic_end_idx = i
+            topic_start = i
+        elif topic_start is not None and re.match(r'^#{2,}\s+', stripped):
+            h_level = len(re.match(r'^(#{2,})', stripped).group(1))
+            if h_level <= topic_depth + 1:
+                topic_end = i
                 break
 
-    if topic_end_idx is None and topic_start_idx is not None:
-        topic_end_idx = len(lines)
-
-    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
-
-    if topic_start_idx is not None and source_files_idx is not None:
-        max_index = 0
-        for i in range(source_files_idx + 1, topic_end_idx):
-            stripped = lines[i].strip()
-            file_match = file_item_pattern.match(stripped)
-            if file_match:
-                idx = int(file_match.group(1))
-                if idx > max_index:
-                    max_index = idx
-            path_match = source_path_pattern.match(stripped)
-            if path_match and path_match.group(1).strip() == file_rel_path:
-                return True
-
-        next_index = max_index + 1
-
-        insert_idx = topic_end_idx
-        last_file_item_idx = None
-        for i in range(source_files_idx + 1, topic_end_idx):
-            stripped = lines[i].strip()
-            file_match = file_item_pattern.match(stripped)
-            if file_match:
-                last_file_item_idx = i
-            elif re.match(r'^#{2,}\s+', stripped):
-                break
-
-        if last_file_item_idx is not None:
-            insert_idx = last_file_item_idx + 1
-            while insert_idx < topic_end_idx and source_path_pattern.match(lines[insert_idx].strip()):
-                insert_idx += 1
-
-        new_lines = [
-            f"{next_index}. **{display_title}**",
-            f"   - 文件名：{file_name}",
-            f"   - 原始路径：{file_rel_path}"
-        ]
-
-        for i, line in enumerate(new_lines):
-            lines.insert(insert_idx + i, line)
-
-    elif topic_start_idx is not None:
-        insert_lines = [
-            '',
-            '### 来源文件',
-            '',
-            f"1. **{display_title}**",
-            f"   - 文件名：{file_name}",
-            f"   - 原始路径：{file_rel_path}"
-        ]
-        for i, line in enumerate(insert_lines):
-            lines.insert(topic_end_idx + i, line)
-
+    if topic_start is None:
+        # create topic heading + file
+        new_section = ['', topic_heading, '', f'1. **{display_title}**']
+        for j, sl in enumerate(new_section):
+            lines.insert(insert_base + j, sl)
     else:
-        parent_insert_idx = len(lines)
+        # add file under existing topic, after last file item
+        last_file_idx = topic_start
+        for i in range(topic_start + 1, topic_end):
+            if file_item_pattern.match(lines[i].strip()):
+                last_file_idx = i
 
-        for pi in range(len(parts) - 1):
-            parent_path = TOPIC_SEP.join(parts[:pi + 1])
-            parent_label = parts[pi]
-            parent_heading_prefix = '#' * (pi + 2)
-            parent_heading = f'{parent_heading_prefix} {parent_label}'
+        # check for duplicate
+        for i in range(topic_start + 1, topic_end):
+            fm = file_item_pattern.match(lines[i].strip())
+            if fm and fm.group(2).strip() == display_title:
+                return True  # already present
 
-            parent_found = False
-            for i, line in enumerate(lines):
-                if line.strip() == parent_heading:
-                    parent_found = True
-                    parent_insert_idx = i + 1
-                    while parent_insert_idx < len(lines):
-                        next_stripped = lines[parent_insert_idx].strip()
-                        next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
-                        if next_heading_match:
-                            next_level = len(next_heading_match.group(1))
-                            if next_level <= pi + 2:
-                                break
-                        parent_insert_idx += 1
-                    break
+        lines.insert(last_file_idx + 1, f'0. **{display_title}**')
 
-            if not parent_found:
-                new_section = [
-                    '',
-                    parent_heading,
-                    ''
-                ]
-                for i, l in enumerate(new_section):
-                    lines.insert(parent_insert_idx + i, l)
-                parent_insert_idx += len(new_section)
-
-        new_lines = [
-            '',
-            topic_heading,
-            '',
-            '### 来源文件',
-            '',
-            f"1. **{display_title}**",
-            f"   - 文件名：{file_name}",
-            f"   - 原始路径：{file_rel_path}"
-        ]
-        for i, l in enumerate(new_lines):
-            lines.insert(parent_insert_idx + i, l)
+    # ---- re-number all topic sections ----
+    _renumber_wiki_files(lines)
 
     try:
         new_content = '\n'.join(lines)
@@ -330,12 +229,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
 
 
 def rename_wiki_topic(old_topic, new_topic):
-    """
-    重命名 WIKI.md 中的主题（包括标题和目录）
-    
-    返回: (success, updated_file_paths)
-    - updated_file_paths: 该主题下所有文件的相对路径列表（用于后续更新 YAML）
-    """
+    """重命名 WIKI.md 中的主题标题，返回该主题下的文件标题列表。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
         return False, []
@@ -348,75 +242,36 @@ def rename_wiki_topic(old_topic, new_topic):
         return False, []
 
     lines = content.split('\n')
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
     new_lines = []
-    in_target_topic = False
-    target_ended = False
-    file_paths = []
+    in_target = False
+    file_titles = []
 
     old_heading = f'## {old_topic}'
     new_heading = f'## {new_topic}'
 
-    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
-
-    current_file_has_path = False
-
     for line in lines:
         stripped = line.strip()
-
         if stripped == old_heading:
-            in_target_topic = True
-            target_ended = False
+            in_target = True
             new_lines.append(new_heading)
             continue
-
-        if in_target_topic and not target_ended:
-            if stripped.startswith('## ') and not stripped.startswith('### '):
-                target_ended = True
+        if in_target:
+            if re.match(r'^#{2,}\s+', stripped):
+                in_target = False
                 new_lines.append(line)
                 continue
-
-            file_match = file_item_pattern.match(stripped)
-            if file_match:
-                current_file_has_path = False
-
-            path_match = source_path_pattern.match(stripped)
-            if path_match:
-                file_paths.append(path_match.group(1).strip())
-                current_file_has_path = True
-
+            fm = file_item_pattern.match(stripped)
+            if fm:
+                file_titles.append(fm.group(2).strip())
+            new_lines.append(line)
+            continue
         new_lines.append(line)
 
-    toc_line = None
-    toc_start_idx = -1
-    toc_end_idx = -1
-
-    for i, line in enumerate(new_lines):
-        stripped = line.strip()
-        if stripped == '## 目录':
-            toc_start_idx = i
-            toc_end_idx = len(new_lines)
-            for j in range(i + 1, len(new_lines)):
-                if new_lines[j].strip().startswith('## ') and not new_lines[j].strip().startswith('### '):
-                    toc_end_idx = j
-                    break
-            break
-
-    if toc_start_idx >= 0:
-        for i in range(toc_start_idx, toc_end_idx):
-            stripped = new_lines[i].strip()
-            if stripped.startswith('- [') and f'](#' in stripped:
-                if f'](#{old_topic}' in stripped:
-                    link_name = stripped[3:stripped.find(']')]
-                    if link_name == old_topic:
-                        new_lines[i] = f'- [{new_topic}](#{new_topic})'
-                    break
+    _renumber_wiki_files(new_lines)
 
     try:
-        new_content = '\n'.join(new_lines)
-        if not new_content.endswith('\n'):
-            new_content += '\n'
-        wiki_path.write_text(new_content, encoding='utf-8')
+        wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
 
         workspace = config.workspace_path
         if workspace:
@@ -437,11 +292,37 @@ def rename_wiki_topic(old_topic, new_topic):
                 else:
                     old_dir.rename(new_dir)
 
-        return True, file_paths
+        return True, file_titles
     except Exception as e:
         sys.stderr.write(f"[rename_topic] write failed: {e}\n")
         sys.stderr.flush()
         return False, []
+
+
+def _renumber_wiki_files(lines):
+    """重新编号 WIKI.md 中每个主题区域下的文件列表（1. 2. 3. ...）"""
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+    in_topic = False
+    counter = 0
+    result = []
+    for line in lines:
+        stripped = line.strip()
+        if re.match(r'^#{2,}\s+', stripped) and stripped[2:].strip() not in ('目录', '来源文件'):
+            in_topic = True
+            counter = 0
+            result.append(line)
+        elif in_topic and re.match(r'^#{2,}\s+', stripped):
+            result.append(line)
+        elif in_topic:
+            fm = file_item_pattern.match(stripped)
+            if fm:
+                counter += 1
+                result.append(f'{counter}. **{fm.group(2)}**')
+            else:
+                result.append(line)
+        else:
+            result.append(line)
+    lines[:] = result
 
 
 def _remove_empty_topic_sections(topic_name_lower):
@@ -468,7 +349,7 @@ def _remove_empty_topic_sections(topic_name_lower):
                     if s.startswith('## ') and not s.startswith('### '):
                         break
                     section_lines.append(lines[j])
-                    if s.startswith('- 原始路径') or s.startswith('- 原始路径：') or s.startswith('- 原始路径:'):
+                    if re.match(r'^\d+\.\s+\*\*', s):
                         has_files = True
                     j += 1
                 if has_files:
@@ -487,14 +368,7 @@ def _remove_empty_topic_sections(topic_name_lower):
 
 
 def _merge_duplicate_topics_in_wiki():
-    """
-    直接操作 WIKI.md 文本，将所有同名（小写匹配）的主题段合并为第一个段。
-    合并逻辑：
-    1. 扫描 WIKI.md，按小写名称分组所有主题段
-    2. 对有多个段的同名主题，将后续段的文件追加到第一个段，然后移除后续段
-    3. 去重：同一文件路径只保留一次
-    返回: 合并的重复主题数量
-    """
+    """合并 WIKI.md 中同名（小写匹配）的重复主题段。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
         return 0
@@ -505,152 +379,87 @@ def _merge_duplicate_topics_in_wiki():
         return 0
 
     lines = content.split('\n')
+    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
 
+    # Collect sections by heading
     sections = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
-        if stripped.startswith('## ') and not stripped.startswith('### '):
+        if re.match(r'^## (?!目录)', stripped):
             heading_name = stripped[3:].strip()
-            if heading_name == '目录':
-                i += 1
-                continue
-            section_start = i
             section_lines = [lines[i]]
             j = i + 1
             while j < len(lines):
                 s = lines[j].strip()
-                if s.startswith('## ') and not s.startswith('### '):
+                if re.match(r'^## (?!目录)', s):
                     break
                 section_lines.append(lines[j])
                 j += 1
-            sections.append({
-                "name": heading_name,
-                "start": section_start,
-                "end": j,
-                "lines": section_lines
-            })
+            sections.append({"name": heading_name, "start": i, "end": j, "lines": section_lines})
             i = j
         else:
             i += 1
 
-    name_groups = {}
+    # Group by lowercase name
+    groups = {}
     for sec in sections:
         key = sec["name"].lower()
-        if key not in name_groups:
-            name_groups[key] = []
-        name_groups[key].append(sec)
+        groups.setdefault(key, []).append(sec)
 
-    merged_count = 0
-    sections_to_remove = []
-
-    for key, group in name_groups.items():
+    merged = 0
+    for key, group in groups.items():
         if len(group) <= 1:
             continue
-
         keeper = group[0]
-        source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
-        file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-
-        existing_paths = set()
+        seen_titles = set()
         for line in keeper["lines"]:
-            m = source_path_pattern.match(line.strip())
-            if m:
-                existing_paths.add(m.group(1).strip())
+            fm = file_item_pattern.match(line.strip())
+            if fm:
+                seen_titles.add(fm.group(2).strip())
 
-        new_file_entries = []
         for dup in group[1:]:
-            current_title = None
-            current_path = None
             for line in dup["lines"]:
-                s = line.strip()
-                fm = file_item_pattern.match(s)
-                if fm:
-                    current_title = fm.group(2).strip()
-                    current_path = None
-                pm = source_path_pattern.match(s)
-                if pm:
-                    current_path = pm.group(1).strip()
-                    if current_path and current_path not in existing_paths:
-                        existing_paths.add(current_path)
-                        new_file_entries.append({
-                            "title": current_title or Path(current_path).stem,
-                            "path": current_path
-                        })
-            sections_to_remove.append(dup)
-
-        if new_file_entries:
-            max_index = 0
-            for line in keeper["lines"]:
                 fm = file_item_pattern.match(line.strip())
-                if fm:
-                    idx = int(fm.group(1))
-                    if idx > max_index:
-                        max_index = idx
+                if fm and fm.group(2).strip() not in seen_titles:
+                    seen_titles.add(fm.group(2).strip())
+                    keeper["lines"].append(f"{len(seen_titles)}. **{fm.group(2)}**")
+            merged += 1
 
-            insert_pos = len(keeper["lines"])
-            for k in range(len(keeper["lines"]) - 1, -1, -1):
-                s = keeper["lines"][k].strip()
-                pm = source_path_pattern.match(s)
-                if pm:
-                    insert_pos = k + 1
-                    break
-
-            new_lines = []
-            for entry in new_file_entries:
-                max_index += 1
-                new_lines.append(f"{max_index}. **{entry['title']}**")
-                new_lines.append(f"   - 文件名：{Path(entry['path']).name}")
-                new_lines.append(f"   - 原始路径：{entry['path']}")
-
-            keeper["lines"] = keeper["lines"][:insert_pos] + new_lines + keeper["lines"][insert_pos:]
-
-        merged_count += len(group) - 1
-
-    if merged_count == 0:
+    if merged == 0:
         return 0
 
+    # Rebuild lines
     remove_ranges = set()
-    for sec in sections_to_remove:
-        for idx in range(sec["start"], sec["end"]):
-            remove_ranges.add(idx)
-    for key, group in name_groups.items():
+    keeper_starts = {}
+    for key, group in groups.items():
         if len(group) > 1:
             keeper = group[0]
+            keeper_starts[keeper["start"]] = keeper["lines"]
+            for dup in group:
+                for idx in range(dup["start"], dup["end"]):
+                    remove_ranges.add(idx if dup is not keeper else -1)
+            # Don't remove keeper lines
             for idx in range(keeper["start"], keeper["end"]):
-                remove_ranges.add(idx)
-
-    keeper_replacements = {}
-    for key, group in name_groups.items():
-        if len(group) > 1:
-            keeper = group[0]
-            keeper_replacements[keeper["start"]] = keeper["lines"]
+                remove_ranges.discard(idx)
 
     new_lines = []
     for i, line in enumerate(lines):
         if i in remove_ranges:
-            if i in keeper_replacements:
-                for sl in keeper_replacements[i]:
-                    new_lines.append(sl)
+            continue
+        if i in keeper_starts:
+            for sl in keeper_starts[i]:
+                new_lines.append(sl)
             continue
         new_lines.append(line)
 
-    try:
-        new_content = '\n'.join(new_lines)
-        if not new_content.endswith('\n'):
-            new_content += '\n'
-        wiki_path.write_text(new_content, encoding='utf-8')
-    except Exception as e:
-        sys.stderr.write(f"[_merge_topics] write failed: {e}\n"); sys.stderr.flush()
-
-    return merged_count
+    _renumber_wiki_files(new_lines)
+    wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
+    return merged
 
 
 def _deduplicate_files_in_wiki():
-    """
-    去除 WIKI.md 中每个主题段内的重复文件（按原始路径去重）
-    返回: 去除的重复文件数量
-    """
+    """按标题去重 WIKI.md 每个主题下的文件。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
         return 0
@@ -661,92 +470,48 @@ def _deduplicate_files_in_wiki():
         return 0
 
     lines = content.split('\n')
-    result_lines = []
-    i = 0
-    removed_count = 0
-
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
+    new_lines = []
+    i = 0
+    removed = 0
 
     while i < len(lines):
-        stripped = lines[i].strip()
+        line = lines[i]
+        stripped = line.strip()
+        is_heading = bool(re.match(r'^#{2,}\s+', stripped)) and stripped[2:].strip() not in ('目录', '来源文件')
 
-        if stripped.startswith('## ') and not stripped.startswith('### '):
-            section_start = i
-            section_lines = [lines[i]]
-            seen_paths = set()
+        if is_heading:
+            new_lines.append(line)
+            seen = set()
             j = i + 1
-            current_file_lines = []
-            current_path = None
-
             while j < len(lines):
                 s = lines[j].strip()
-                if s.startswith('## ') and not s.startswith('### '):
+                if re.match(r'^#{2,}\s+', s):
                     break
-
                 fm = file_item_pattern.match(s)
                 if fm:
-                    if current_file_lines:
-                        if current_path is None or current_path not in seen_paths:
-                            if current_path:
-                                seen_paths.add(current_path)
-                            section_lines.extend(current_file_lines)
-                        else:
-                            removed_count += 1
-                    current_file_lines = [lines[j]]
-                    current_path = None
-                elif current_file_lines:
-                    current_file_lines.append(lines[j])
-                    pm = source_path_pattern.match(s)
-                    if pm:
-                        current_path = pm.group(1).strip()
+                    title = fm.group(2).strip()
+                    if title not in seen:
+                        seen.add(title)
+                        new_lines.append(lines[j])
+                    else:
+                        removed += 1
                 else:
-                    section_lines.append(lines[j])
-
+                    new_lines.append(lines[j])
                 j += 1
-
-            if current_file_lines:
-                if current_path is None or current_path not in seen_paths:
-                    if current_path:
-                        seen_paths.add(current_path)
-                    section_lines.extend(current_file_lines)
-                else:
-                    removed_count += 1
-
-            idx = 1
-            final_section = []
-            for line in section_lines:
-                fm = file_item_pattern.match(line.strip())
-                if fm:
-                    final_section.append(f"{idx}. **{fm.group(2)}**")
-                    idx += 1
-                else:
-                    final_section.append(line)
-
-            result_lines.extend(final_section)
             i = j
-            continue
+        else:
+            new_lines.append(line)
+            i += 1
 
-        result_lines.append(lines[i])
-        i += 1
-
-    if removed_count > 0:
-        try:
-            new_content = '\n'.join(result_lines)
-            if not new_content.endswith('\n'):
-                new_content += '\n'
-            wiki_path.write_text(new_content, encoding='utf-8')
-        except Exception as e:
-            sys.stderr.write(f"[_deduplicate_files] write failed: {e}\n"); sys.stderr.flush()
-
-    return removed_count
+    if removed > 0:
+        _renumber_wiki_files(new_lines)
+        wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
+    return removed
 
 
 def _remove_topic_from_wiki(topic_name):
-    """
-    从 WIKI.md 中移除整个主题（包括标题和所有文件）
-    返回: (success, removed_file_paths)
-    """
+    """从 WIKI.md 移除整个主题段落（标题 + 文件列表），返回被移除的文件标题列表。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
         return False, []
@@ -759,74 +524,31 @@ def _remove_topic_from_wiki(topic_name):
         return False, []
 
     lines = content.split('\n')
-    new_lines = []
-    in_target_topic = False
-    target_ended = False
-    removed_file_paths = []
-
-    target_heading = f'## {topic_name}'
-
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
+    new_lines = []
+    in_target = False
+    removed_titles = []
+    target_heading = f'## {topic_name}'
 
     for line in lines:
         stripped = line.strip()
-
         if stripped == target_heading:
-            in_target_topic = True
-            target_ended = False
+            in_target = True
             continue
-
-        if in_target_topic and not target_ended:
-            if stripped.startswith('## ') and not stripped.startswith('### '):
-                target_ended = True
+        if in_target:
+            if re.match(r'^#{2,}\s+', stripped):
+                in_target = False
                 new_lines.append(line)
                 continue
-
-            path_match = source_path_pattern.match(stripped)
-            if path_match:
-                removed_file_paths.append(path_match.group(1).strip())
+            fm = file_item_pattern.match(stripped)
+            if fm:
+                removed_titles.append(fm.group(2).strip())
             continue
-
         new_lines.append(line)
 
-    toc_start_idx = -1
-    toc_end_idx = -1
-
-    for i, line in enumerate(new_lines):
-        stripped = line.strip()
-        if stripped == '## 目录':
-            toc_start_idx = i
-            toc_end_idx = len(new_lines)
-            for j in range(i + 1, len(new_lines)):
-                if new_lines[j].strip().startswith('## ') and not new_lines[j].strip().startswith('### '):
-                    toc_end_idx = j
-                    break
-            break
-
-    if toc_start_idx >= 0:
-        final_toc_lines = []
-        for i in range(toc_start_idx, toc_end_idx):
-            stripped = new_lines[i].strip()
-            if stripped.startswith('- [') and f'](#' in stripped:
-                if f'](#{topic_name}' in stripped:
-                    link_name = stripped[3:stripped.find(']')]
-                    if link_name == topic_name:
-                        continue
-            final_toc_lines.append(new_lines[i])
-
-        new_lines = new_lines[:toc_start_idx] + final_toc_lines + new_lines[toc_end_idx:]
-
-    try:
-        new_content = '\n'.join(new_lines)
-        if not new_content.endswith('\n'):
-            new_content += '\n'
-        wiki_path.write_text(new_content, encoding='utf-8')
-        return True, removed_file_paths
-    except Exception as e:
-        sys.stderr.write(f"[_remove_topic] write failed: {e}\n")
-        sys.stderr.flush()
-        return False, removed_file_paths
+    _renumber_wiki_files(new_lines)
+    wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
+    return True, removed_titles
 
 
 def delete_topic(topic_name):
@@ -861,14 +583,6 @@ def delete_topic(topic_name):
         for f in notes_topic_dir.rglob("*"):
             if f.is_file() and f.suffix.lower() == ".md":
                 actual_files.append(f)
-
-    # Also collect from WIKI.md for cleanup reference
-    wiki_structure = parse_wiki_structure()
-    wiki_file_paths = []
-    for t in wiki_structure:
-        if t["name"] == topic_name:
-            wiki_file_paths = [f.get("path", "") for f in t.get("files", []) if f.get("path")]
-            break
 
     # 1. Move all files from topic folder to Notes root
     notes_root = notes_dir
@@ -999,16 +713,18 @@ def rename_topic(old_topic, new_topic):
         if not old_topic_data:
             return {"success": False, "message": f"主题「{old_topic}」不存在", "updated": 0, "merged": False}
 
-        old_file_paths = [f.get("path", "") for f in old_topic_data.get("files", []) if f.get("path")]
+        # files are now just title strings; derive paths from topic folder
+        old_topic_parts = [p.strip() for p in old_topic.split(TOPIC_SEP) if p.strip()]
+        old_topic_dir = workspace_path / config.NOTES_FOLDER
+        for part in old_topic_parts:
+            old_topic_dir = old_topic_dir / part
 
-        for rel_path in old_file_paths:
-            write_topic_to_file(str(workspace_path / rel_path), new_topic)
-
-        for f in old_topic_data.get("files", []):
-            file_path = f.get("path", "")
-            file_title = f.get("title", "")
-            if file_path:
-                add_file_to_wiki_topic(file_path, new_topic, file_title)
+        old_file_titles = old_topic_data.get("files", [])
+        for title in old_file_titles:
+            fp = old_topic_dir / f"{title}.md"
+            if fp.exists():
+                write_topic_to_file(str(fp), new_topic)
+                add_file_to_wiki_topic(str(fp), new_topic, title)
 
         _remove_topic_from_wiki(old_topic)
         _merge_duplicate_topics_in_wiki()
@@ -1031,22 +747,27 @@ def rename_topic(old_topic, new_topic):
 
         return {
             "success": True,
-            "message": f"已合并到「{new_topic}」，移动 {len(old_file_paths)} 个文件",
-            "updated": len(old_file_paths),
+            "message": f"已合并到「{new_topic}」，移动 {len(old_file_titles)} 个文件",
+            "updated": len(old_file_titles),
             "merged": True
         }
 
-    wiki_success, old_file_paths = rename_wiki_topic(old_topic, new_topic)
+    wiki_success, old_file_titles = rename_wiki_topic(old_topic, new_topic)
+
+    old_topic_parts = [p.strip() for p in old_topic.split(TOPIC_SEP) if p.strip()]
+    old_topic_dir = workspace_path / config.NOTES_FOLDER
+    for part in old_topic_parts:
+        old_topic_dir = old_topic_dir / part
 
     updated_count = 0
-    for rel_path in old_file_paths:
-        full_path = workspace_path / rel_path
+    for title in old_file_titles:
+        full_path = old_topic_dir / f"{title}.md"
         if full_path.exists():
             try:
                 write_topic_to_file(str(full_path), new_topic)
                 updated_count += 1
             except Exception as e:
-                sys.stderr.write(f"[rename_topic] update YAML failed: {rel_path} - {e}\n")
+                sys.stderr.write(f"[rename_topic] update YAML failed: {title} - {e}\n")
                 sys.stderr.flush()
 
     if not wiki_success and updated_count == 0:
@@ -1061,11 +782,10 @@ def rename_topic(old_topic, new_topic):
 
 
 def remove_file_from_wiki_topic(file_rel_path):
-    """
-    从 WIKI.md 中移除指定文件的记录（保留序号连续性）
-    
+    """从 WIKI.md 中移除指定文件的记录。
+
+    通过文件名 stem 匹配主题区域下的 ``N. **title**`` 行。
     返回: (success, old_topic_name)
-    - old_topic_name: 文件原来所在的主题名（如果找到）
     """
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
@@ -1078,142 +798,33 @@ def remove_file_from_wiki_topic(file_rel_path):
         sys.stderr.flush()
         return False, None
 
+    target_title = _title_from_path(file_rel_path)
     lines = content.split('\n')
-    new_lines = []
-
-    current_topic = None
-    in_source_files = False
-    current_file_index = None
-    current_file_contains_target = False
-    file_item_buffer = []
-    skip_count = 0
-    old_topic = None
-
     file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-    source_path_pattern = re.compile(r'^\s*-\s*原始路径\s*[：:]\s*`?(.+?)`?\s*$')
+    old_topic = None
+    current_topic = None
+    new_lines = []
 
     for line in lines:
         stripped = line.strip()
-
-        if stripped.startswith('## ') and not stripped.startswith('### '):
-            if file_item_buffer:
-                for buf_line in file_item_buffer:
-                    new_lines.append(buf_line)
-                file_item_buffer = []
-
-            current_topic = stripped[3:].strip()
-            in_source_files = False
-            current_file_index = None
-            current_file_contains_target = False
-            skip_count = 0
+        heading_match = re.match(r'^(#{2,})\s+(.+)$', stripped)
+        if heading_match:
+            heading_text = heading_match.group(2).strip()
+            if heading_text not in ('目录', '来源文件'):
+                current_topic = heading_text
             new_lines.append(line)
             continue
 
-        if stripped == '### 来源文件':
-            if file_item_buffer:
-                for buf_line in file_item_buffer:
-                    new_lines.append(buf_line)
-                file_item_buffer = []
-
-            in_source_files = True
-            current_file_index = None
-            current_file_contains_target = False
-            skip_count = 0
-            new_lines.append(line)
-            continue
-
-        if in_source_files and current_topic:
+        if current_topic:
             file_match = file_item_pattern.match(stripped)
-            if file_match:
-                if file_item_buffer:
-                    if current_file_contains_target:
-                        old_topic = current_topic
-                        skip_count += 1
-                    else:
-                        for buf_line in file_item_buffer:
-                            new_lines.append(buf_line)
-                    file_item_buffer = []
-
-                current_file_index = int(file_match.group(1))
-                current_file_contains_target = False
-                file_item_buffer.append(line)
-                continue
-
-            path_match = source_path_pattern.match(stripped)
-            if path_match and path_match.group(1).strip() == file_rel_path:
-                current_file_contains_target = True
-                if file_item_buffer:
-                    file_item_buffer.append(line)
-                continue
-
-            if file_item_buffer:
-                file_item_buffer.append(line)
-                continue
+            if file_match and file_match.group(2).strip() == target_title:
+                old_topic = current_topic
+                continue  # skip this file line
 
         new_lines.append(line)
 
-    if file_item_buffer:
-        if current_file_contains_target:
-            old_topic = current_topic
-            skip_count += 1
-        else:
-            for buf_line in file_item_buffer:
-                new_lines.append(buf_line)
-
-    if skip_count > 0:
-        def _renumber_lines(lines_list):
-            result = []
-            file_item_pattern_inner = re.compile(r'^(\s*)(\d+)\.\s+\*\*(.+?)\*\*\s*$')
-
-            current_number = 0
-            buffer = []
-            in_section = False
-
-            for line in lines_list:
-                stripped = line.strip()
-                if stripped == '### 来源文件':
-                    in_section = True
-                    current_number = 0
-                    result.append(line)
-                    continue
-
-                if in_section:
-                    if stripped.startswith('## ') and not stripped.startswith('### '):
-                        in_section = False
-                        if buffer:
-                            for buf_line in buffer:
-                                result.append(buf_line)
-                            buffer = []
-                        result.append(line)
-                        continue
-
-                    file_match_inner = file_item_pattern_inner.match(line)
-                    if file_match_inner:
-                        if buffer:
-                            for buf_line in buffer:
-                                result.append(buf_line)
-                            buffer = []
-
-                        current_number += 1
-                        indent = file_match_inner.group(1)
-                        title = file_match_inner.group(3)
-                        new_line = f"{indent}{current_number}. **{title}**"
-                        buffer.append(new_line)
-                        continue
-
-                    if buffer:
-                        buffer.append(line)
-                        continue
-
-                result.append(line)
-
-            if buffer:
-                for buf_line in buffer:
-                    result.append(buf_line)
-
-            return result
-
-        new_lines = _renumber_lines(new_lines)
+    if old_topic:
+        _renumber_wiki_files(new_lines)
 
     try:
         new_content = '\n'.join(new_lines)
@@ -1228,122 +839,69 @@ def remove_file_from_wiki_topic(file_rel_path):
 
 
 def create_topic(topic_name):
-    """
-    在 WIKI.md 中创建新的主题条目，支持多级路径（用 / 分隔）
-    自动创建父级标题（如果不存在）
-    """
+    """在 WIKI.md 中创建主题（仅添加标题，无文件列表）。"""
     wiki_path = _get_wiki_path()
     workspace = config.workspace_path
-    
+
     if not wiki_path or not workspace:
         return {"success": False, "message": "未设置工作区"}
-    
+
     if not topic_name or not topic_name.strip():
         return {"success": False, "message": "主题名不能为空"}
-    
+
     topic_name = topic_name.strip()
     if '/' in topic_name and TOPIC_SEP not in topic_name:
         topic_name = topic_name.replace('/', TOPIC_SEP)
-    
+
     try:
         if wiki_path.exists():
             content = wiki_path.read_text(encoding='utf-8')
         else:
             wiki_path.parent.mkdir(parents=True, exist_ok=True)
-            from datetime import datetime
             content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
-        
-        headings = parse_wiki_headings()
-        for h in headings:
+
+        for h in parse_wiki_headings():
             if h["name"].lower() == topic_name.lower():
                 return {"success": False, "message": f"主题「{topic_name}」已存在"}
-        
+
         parts = [p.strip() for p in topic_name.split(TOPIC_SEP) if p.strip()]
         if not parts:
             return {"success": False, "message": "主题名不能为空"}
         topic_leaf = parts[-1]
-        topic_depth = len(parts)
-        heading_prefix = '#' * (topic_depth + 1)
+        heading_prefix = '#' * (len(parts) + 1)
 
-        new_topic_lines = [
-            "",
-            f"{heading_prefix} {topic_leaf}",
-            "",
-            "### 来源文件",
-            "",
-        ]
-        
+        new_topic_lines = ['', f'{heading_prefix} {topic_leaf}', '']
         lines = content.split('\n')
-        
-        if topic_depth > 1:
-            parent_insert_idx = len(lines)
-            for pi in range(len(parts) - 1):
-                parent_label = parts[pi]
-                parent_heading_prefix = '#' * (pi + 2)
-                parent_heading = f'{parent_heading_prefix} {parent_label}'
-                
-                parent_found = False
-                for i, line in enumerate(lines):
-                    if line.strip() == parent_heading:
-                        parent_found = True
-                        parent_insert_idx = i + 1
-                        while parent_insert_idx < len(lines):
-                            next_stripped = lines[parent_insert_idx].strip()
-                            next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
-                            if next_heading_match:
-                                next_level = len(next_heading_match.group(1))
-                                if next_level <= pi + 2:
-                                    break
-                            parent_insert_idx += 1
-                        break
-                
-                if not parent_found:
-                    parent_section = [
-                        '',
-                        parent_heading,
-                        ''
-                    ]
-                    for i, l in enumerate(parent_section):
-                        lines.insert(parent_insert_idx + i, l)
-                    parent_insert_idx += len(parent_section)
-            
-            for i, l in enumerate(new_topic_lines):
-                lines.insert(parent_insert_idx + i, l)
-        else:
-            insert_idx = len(lines)
-            for i in range(len(lines) - 1, -1, -1):
-                stripped = lines[i].strip()
-                if re.match(r'^#{2,}\s+', stripped):
-                    heading_match = re.match(r'^(#{2,})', stripped)
-                    if heading_match:
-                        existing_level = len(heading_match.group(1))
-                        if existing_level <= 2:
-                            if stripped[existing_level:].strip() != '目录':
-                                insert_idx = i + 1
-                                while insert_idx < len(lines):
-                                    next_stripped = lines[insert_idx].strip()
-                                    next_heading_match = re.match(r'^(#{2,})\s+', next_stripped)
-                                    if next_heading_match:
-                                        next_level = len(next_heading_match.group(1))
-                                        if next_level <= 2:
-                                            break
-                                    insert_idx += 1
-                                break
-            
-            new_lines = lines[:insert_idx] + new_topic_lines + lines[insert_idx:]
-            lines = new_lines
-        
-        new_content = '\n'.join(lines)
-        
-        wiki_path.write_text(new_content, encoding='utf-8')
+
+        # ensure parent headings
+        insert_idx = len(lines)
+        for pi in range(len(parts) - 1):
+            parent_label = parts[pi]
+            parent_prefix = '#' * (pi + 2)
+            parent_heading = f'{parent_prefix} {parent_label}'
+            found = False
+            for i, line in enumerate(lines):
+                if line.strip() == parent_heading:
+                    found = True
+                    insert_idx = i + 1
+                    break
+            if not found:
+                for j, sl in enumerate(['', parent_heading, '']):
+                    lines.insert(insert_idx + j, sl)
+                insert_idx += 3
+
+        for j, sl in enumerate(new_topic_lines):
+            lines.insert(insert_idx + j, sl)
+
+        wiki_path.write_text('\n'.join(lines), encoding='utf-8')
 
         notes_topic_dir = Path(workspace) / config.NOTES_FOLDER
         for part in parts:
             notes_topic_dir = notes_topic_dir / part
         notes_topic_dir.mkdir(parents=True, exist_ok=True)
-        
+
         return {"success": True, "message": f"主题「{topic_name}」创建成功"}
-        
+
     except Exception as e:
         sys.stderr.write(f"[create_topic] failed: {e}\n")
         sys.stderr.flush()
@@ -1392,20 +950,19 @@ def sync_wiki_with_files():
 
     wiki_structure = parse_wiki_structure()
 
-    wiki_file_to_topic = {}
+    # Build title→topic map from WIKI
+    wiki_title_to_topic = {}
     for topic in wiki_structure:
-        topic_name = topic["name"]
-        for f in topic["files"]:
-            file_path = f.get("path", "")
-            if file_path:
-                wiki_file_to_topic[file_path] = topic_name
+        for title in topic["files"]:
+            wiki_title_to_topic[title] = topic["name"]
 
     moved_count = 0
     added_count = 0
     removed_count = 0
 
     for rel_path, yaml_topic in file_topics.items():
-        wiki_topic = wiki_file_to_topic.get(rel_path)
+        file_title = _title_from_path(rel_path)
+        wiki_topic = wiki_title_to_topic.get(file_title)
 
         if yaml_topic is None:
             if wiki_topic is not None:
@@ -1414,7 +971,6 @@ def sync_wiki_with_files():
             continue
 
         if wiki_topic is None:
-            file_title = _read_title_from_file(str(workspace_path / rel_path))
             headings = parse_wiki_headings()
             topic_exists = False
             for h in headings:
@@ -1427,12 +983,18 @@ def sync_wiki_with_files():
             add_file_to_wiki_topic(rel_path, yaml_topic, file_title)
             added_count += 1
         elif wiki_topic.lower() != yaml_topic.lower():
-            move_file_to_topic(rel_path, yaml_topic)
+            move_file_to_topic(rel_path, yaml_topic, file_title)
             moved_count += 1
 
-    for rel_path in wiki_file_to_topic:
-        if rel_path not in file_topics:
-            remove_file_from_wiki_topic(rel_path)
+    for title, wiki_topic in list(wiki_title_to_topic.items()):
+        # Check if any file with this title exists and has a YAML topic
+        found = False
+        for rel_path, yaml_topic in file_topics.items():
+            if _title_from_path(rel_path) == title and yaml_topic is not None:
+                found = True
+                break
+        if not found:
+            remove_file_from_wiki_topic(title)
             removed_count += 1
 
     merged_topic_count = _merge_duplicate_topics_in_wiki()

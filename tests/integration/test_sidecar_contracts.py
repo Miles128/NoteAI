@@ -71,16 +71,14 @@ class TestParseWikiStructure:
         wiki.write_text(
             "## AI 产品经理之路\n\n"
             "1. **产品思维**\n"
-            "   - 原始路径: `Notes/产品思维.md`\n\n"
-            "## AI 产品经理之路/Agent 架构\n\n"
-            "1. **Agent 设计**\n"
-            "   - 原始路径: `Notes/Agent 设计.md`\n",
+            "2. **需求分析**\n\n"
+            "### Agent 架构\n\n"
+            "1. **Agent 设计**\n",
             encoding="utf-8",
         )
         topics = parse_wiki_structure()
         assert isinstance(topics, list)
         assert len(topics) >= 2
-        # Each topic dict has expected keys
         for t in topics:
             assert "name" in t
             assert "label" in t

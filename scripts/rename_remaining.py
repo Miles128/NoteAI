@@ -1,7 +1,16 @@
+import sys
 import pathlib
 import re
+from pathlib import Path
 
-ws = pathlib.Path('/Users/sihai/Documents/My Notes')
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.settings import config
+
+workspace_path = config.workspace_path
+if not workspace_path:
+    print("Error: 未设置工作区路径 (workspace_path)")
+    exit(1)
+ws = pathlib.Path(workspace_path)
 
 f1 = ws / 'Notes/Harness和Agent前沿发展'
 targets1 = list(f1.glob('*野马*'))

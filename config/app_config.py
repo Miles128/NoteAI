@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from .constants import (
+    ABSTRACT_FOLDER,
     API_CONFIG_FILE,
     NOTES_FOLDER,
-    ORGANIZED_FOLDER,
     PROJECT_CONFIG_PATH,
     RAW_FOLDER,
     SYSTEM_APP_DATA_DIR,
@@ -20,7 +20,7 @@ from .security import _deobfuscate, _restrict_file_permissions
 @dataclass
 class AppConfig:
     NOTES_FOLDER: str = NOTES_FOLDER
-    ORGANIZED_FOLDER: str = ORGANIZED_FOLDER
+    ABSTRACT_FOLDER: str = ABSTRACT_FOLDER
     RAW_FOLDER: str = RAW_FOLDER
     USED_FOLDER: str = USED_FOLDER
 
@@ -90,7 +90,7 @@ class AppConfig:
     def get_organized_folder(self) -> str:
         if not self.workspace_path:
             return ""
-        return str(Path(self.workspace_path) / ORGANIZED_FOLDER)
+        return str(Path(self.workspace_path) / ABSTRACT_FOLDER)
 
     def get_raw_folder(self) -> str:
         if not self.workspace_path:
@@ -112,7 +112,7 @@ class AppConfig:
                 return False, f"工作文件夹不存在: {self.workspace_path}"
 
             notes_folder = workspace / NOTES_FOLDER
-            organized_folder = workspace / ORGANIZED_FOLDER
+            organized_folder = workspace / ABSTRACT_FOLDER
             raw_folder = workspace / RAW_FOLDER
 
             notes_folder.mkdir(parents=True, exist_ok=True)

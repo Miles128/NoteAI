@@ -100,6 +100,7 @@ const Graph3Tier = {
 
         this.zoom = d3.zoom()
             .scaleExtent([0.06, 5])
+            .filter(() => false)
             .on('zoom', (e) => { this.g.attr('transform', e.transform); });
         this.svg.call(this.zoom);
 
@@ -336,7 +337,7 @@ const Graph3Tier = {
                 if (d.type === 'tag') return 'rgba(124,77,255,0.4)';
                 return d.type === 'topic' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)';
             })
-            .attr('stroke-width', d => d.has_abstract ? 1.8 : 0.8);
+            .attr('stroke-width', d => d.has_abstract ? 3 : 0.8);
 
         // Labels - show full names
         const label = node.append('text')
@@ -388,13 +389,34 @@ const Graph3Tier = {
                 .attr('r', getRadius(d));
         });
 
+        // Double-click: open abstract for topics that have one
+        node.on('dblclick', (e, d) => {
+            e.stopPropagation();
+            if (d.type === 'topic' && d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
+                showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' 综述' });
+            }
+        });
+
         // Click
         node.on('click', (e, d) => {
             e.stopPropagation();
             if (d.type === 'file' && d.full_path && typeof showPreview === 'function') {
                 showPreview({ path: d.full_path, name: d.name });
-            } else if (d.type === 'topic' && typeof TopicTree3Tier !== 'undefined') {
-                TopicTree3Tier.loadFiles(d.name || d.id, d.level || 1);
+            } else if (d.type === 'topic') {
+                if (d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
+                    showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' 综述' });
+                } else {
+                    // Center and zoom on this node
+                    const node = self.svg.node();
+                    const svgW = node ? node.clientWidth : 800;
+                    const svgH = node ? node.clientHeight : 600;
+                    const currentTransform = d3.zoomTransform(node);
+                    const scale = Math.min(2, currentTransform.k * 1.5);
+                    self.svg.transition().duration(500).call(
+                        self.zoom.transform,
+                        d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(scale).translate(-d.x, -d.y)
+                    );
+                }
             } else if (d.type === 'tag' && self.filter === 'tag') {
                 if (typeof switchSidebarView === 'function') {
                     switchSidebarView('tags');

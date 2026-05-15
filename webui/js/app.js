@@ -567,7 +567,23 @@ function initWorkspaceFileWatcher() {
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
-        if (!data || data.type !== 'workspace_files_changed') return;
+        if (!data || !data.type) return;
+
+        if (data.type === 'auto_topic_assigned') {
+            updateStatus('✓ ' + (data.topic ? '已自动分配到「' + data.topic + '」' : '已自动分配主题'));
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
+            refreshCurrentSidebarView();
+            return;
+        }
+
+        if (data.type === 'auto_file_moved') {
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            refreshCurrentSidebarView();
+            return;
+        }
+
+        if (data.type !== 'workspace_files_changed') return;
 
         if (_workspaceWatcherDebounce) {
             clearTimeout(_workspaceWatcherDebounce);

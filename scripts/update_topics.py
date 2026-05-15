@@ -1,8 +1,15 @@
-import os, re, yaml
+import os, re, yaml, sys
 from pathlib import Path
 from datetime import datetime
 
-workspace = Path('/Users/sihai/Documents/My Notes')
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.settings import config
+
+workspace = config.workspace_path
+if not workspace:
+    print('Error: 未设置工作区路径 (workspace_path)')
+    exit(1)
+workspace = Path(workspace)
 notes_dir = workspace / 'Notes'
 
 topic_map = {}

@@ -33,9 +33,10 @@ const TopicTree3Tier = {
         html += '<div class="tier-label">一级标题</div>';
         for (const l1 of topics) {
             const hasAbs = l1.has_abstract ? ' has-abstract' : '';
+            const absFile = l1.abstract_file ? ` data-abstract-file="${this.esc(l1.abstract_file)}"` : '';
             html += `
-                <div class="topic-node topic-l1${hasAbs}" data-name="${this.esc(l1.name)}" data-level="1"
-                     onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(this)">
+                <div class="topic-node topic-l1${hasAbs}" data-name="${this.esc(l1.name)}" data-level="1"${absFile}
+                     onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(event, this)">
                     <span class="topic-icon">■</span>
                     <span class="topic-name">${this.esc(l1.name)}</span>
                     <span class="topic-count">${l1.file_count}</span>
@@ -70,10 +71,11 @@ const TopicTree3Tier = {
         for (const l2 of children) {
             const hasAbs = l2.has_abstract ? ' has-abstract' : '';
             const hasL3 = l2.children && l2.children.length > 0;
+            const absFile = l2.abstract_file ? ` data-abstract-file="${this.esc(l2.abstract_file)}"` : '';
             html += `
                 <div class="topic-node topic-l2${hasAbs}" data-name="${this.esc(l2.name)}" data-level="2"
-                     data-parent="${this.esc(parentL1)}"
-                     onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(this)">
+                     data-parent="${this.esc(parentL1)}"${absFile}
+                     onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(event, this)">
                     <span class="topic-icon">◆</span>
                     <span class="topic-name">${this.esc(l2.name)}</span>
                     <span class="topic-count">${l2.file_count}</span>
@@ -89,7 +91,7 @@ const TopicTree3Tier = {
                     html += `
                         <div class="topic-node topic-l3" data-name="${this.esc(l3.name)}" data-level="3"
                              data-parent="${this.esc(l2.name)}"
-                             onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(this)">
+                             onclick="TopicTree3Tier.onClick(this)" ondblclick="TopicTree3Tier.onDblClick(event, this)">
                             <span class="topic-icon">○</span>
                             <span class="topic-name">${this.esc(l3.name)}</span>
                             <span class="topic-count">${l3.file_count}</span>
@@ -122,30 +124,48 @@ const TopicTree3Tier = {
             if (arrow) arrow.textContent = isVisible ? '▶' : '▼';
         }
 
-        // 加载文件列表到右侧面板
-        this.loadFiles(name, level);
+        // 加载文件列表到右侧面板（仅当面板存在时）
+        const panel = document.getElementById('topic-files-panel');
+        if (panel) {
+            this.loadFiles(name, level);
+        }
     },
 
     /**
-     * 双击：如果有综述，进入综述页面
+     * 双击：只有有综述的主题节点才打开综述预览，其他情况不做任何操作
      */
-    onDblClick(el) {
+    onDblClick(event, el) {
+        // 阻止事件传播，防止 d3 图捕获双击事件
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+
         const name = el.dataset.name;
         const level = parseInt(el.dataset.level);
+        const abstractFile = el.dataset.abstractFile;
 
-        if (el.classList.contains('has-abstract')) {
-            // 进入综述
+        console.log('[TopicTree3Tier] Double-click on topic:', name, 'level:', level, 'has_abstract:', el.classList.contains('has-abstract'), 'abstractFile:', abstractFile);
+
+        if (el.classList.contains('has-abstract') && abstractFile) {
+            // 有综述，直接打开综述预览
+            console.log('[TopicTree3Tier] Opening abstract preview:', abstractFile);
+            if (typeof showPreview === 'function') {
+                showPreview({ path: abstractFile, name: name + ' 综述' });
+            }
+        } else if (el.classList.contains('has-abstract')) {
+            // 有综述标记但没有路径，尝试生成并打开
+            console.log('[TopicTree3Tier] Generating abstract for:', name);
             api.generateAbstract(name, level).then(result => {
-                if (result.success) {
-                    // 在预览区显示综述内容
+                if (result.success && result.abstract_file) {
                     if (typeof showPreview === 'function') {
                         showPreview({ path: result.abstract_file, name: name + ' 综述' });
                     }
                 }
             });
         } else {
-            // 没有综述，显示文件列表
-            this.loadFiles(name, level);
+            // 没有综述，什么都不做
+            console.log('[TopicTree3Tier] No abstract, doing nothing');
         }
     },
 
@@ -156,12 +176,24 @@ const TopicTree3Tier = {
         try {
             const result = await api.getTopicFiles(name, level);
             const panel = document.getElementById('topic-files-panel');
-            if (!panel) return;
+            if (!panel) {
+                console.error('topic-files-panel not found');
+                return;
+            }
+
+            // 确保面板可见
+            panel.style.display = 'block';
+
+            if (!result || !result.files) {
+                panel.innerHTML = `<h4>${name}</h4><p>加载失败或无文件</p>`;
+                return;
+            }
 
             let html = `<h4>${name}</h4><ul>`;
             for (const f of result.files) {
                 html += `<li class="file-item" data-path="${this.esc(f.path)}"
-                         onclick="TopicTree3Tier.openFile('${this.esc(f.path)}')">${this.esc(f.name)}</li>`;
+                         onclick="TopicTree3Tier.openFile('${this.esc(f.path)}')"
+                         ondblclick="TopicTree3Tier.openFilePreview('${this.esc(f.path)}', '${this.esc(f.name)}')">${this.esc(f.name)}</li>`;
             }
             html += '</ul>';
 
@@ -184,6 +216,10 @@ const TopicTree3Tier = {
             panel.innerHTML = html;
         } catch (e) {
             console.error('加载文件列表失败:', e);
+            const panel = document.getElementById('topic-files-panel');
+            if (panel) {
+                panel.innerHTML = `<h4>${name}</h4><p>加载失败: ${e.message || '未知错误'}</p>`;
+            }
         }
     },
 
@@ -197,13 +233,31 @@ const TopicTree3Tier = {
     },
 
     /**
+     * 双击打开文件预览
+     */
+    openFilePreview(path, name) {
+        if (typeof showPreview === 'function') {
+            showPreview({ path: path, name: name });
+        }
+    },
+
+    /**
      * 新建文件夹对话框
      */
     showNewFolder(parentName, parentLevel) {
         const name = prompt(`在「${parentName}」下新建文件夹（将自动判定层级）:`);
         if (!name) return;
 
-        api.createTopicFolder(name, parentName, parentLevel).then(r => {
+        let parentPath = '';
+        if (parentLevel === 1) {
+            parentPath = 'Notes/' + parentName;
+        } else if (parentLevel === 2) {
+            const activeEl = document.querySelector('.topic-node.active');
+            const l1Parent = activeEl ? activeEl.dataset.parent : '';
+            parentPath = l1Parent ? 'Notes/' + l1Parent + '/' + parentName : 'Notes/' + parentName;
+        }
+
+        api.createTopicFolder(name, parentPath, parentLevel).then(r => {
             if (r.success) {
                 alert(r.message);
                 this.load();  // 刷新

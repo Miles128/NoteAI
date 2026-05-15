@@ -197,16 +197,16 @@ function destroyCodeMirrorEditor() {
 
 function updateEditorTheme() {
     if (!window.mdEditor.view || !window.EditorBridge || !window.EditorBridge.isReady) return;
-    
+
     const M = window.EditorBridge.modules;
     const isDark = getEffectiveTheme() === 'dark';
     const theme = isDark ? M.oneDark : M.oneLight;
-    
+
     const currentDoc = window.mdEditor.view.state.doc;
     const container = window.mdEditor.view.dom.parentElement;
-    
+
     window.mdEditor.view.destroy();
-    
+
     const updateListener = M.EditorView.updateListener.of((v) => {
         if (v.docChanged) {
             const newContent = v.state.doc.toString();
@@ -239,7 +239,7 @@ function updateEditorTheme() {
         state: state,
         parent: container
     });
-    
+
     updateHljsTheme();
     console.log('[Editor] Theme updated to:', isDark ? 'dark' : 'light');
 }
@@ -247,7 +247,7 @@ function updateEditorTheme() {
 function updateMarkdownPreview(content) {
     const previewEl = document.getElementById('editor-preview-scroll');
     if (!previewEl) return;
-    
+
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
@@ -264,7 +264,8 @@ function updateMarkdownPreview(content) {
 function renderMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
-            var rawHtml = marked.parse(content);
+            var processedContent = processAbstractLinks(content);
+            var rawHtml = marked.parse(processedContent);
             return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
@@ -274,11 +275,49 @@ function renderMarkdownPreview(content) {
     return '<pre>' + window.escapeHtml(content) + '</pre>';
 }
 
+function processAbstractLinks(content) {
+    if (!content) return content;
+
+    var result = content;
+
+    // 处理 {{abstract:主题名}} 嵌入语法
+    result = result.replace(/\{\{abstract:([^}]+)\}\}/g, function(match, topicName) {
+        var trimmed = topicName.trim();
+        var absPath = buildAbstractPath(trimmed);
+        return `<span class="abstract-embed" data-topic="${escapeHtml(trimmed)}" data-path="${escapeHtml(absPath)}">📄 ${trimmed} 综述</span>`;
+    });
+
+    // 处理 [[主题名|显示文本]] 带显示文本的链接
+    result = result.replace(/\[\[([^\|]+)\|([^\]]+)\]\]/g, function(match, topicName, displayText) {
+        var trimmedTopic = topicName.trim();
+        var display = displayText.trim();
+        var absPath = buildAbstractPath(trimmedTopic);
+        return `[${display}](notes://${encodeURIComponent(absPath)})`;
+    });
+
+    // 处理 [[主题名]] 简单链接
+    result = result.replace(/\[\[([^\]]+)\]\]/g, function(match, topicName) {
+        var trimmed = topicName.trim();
+        var absPath = buildAbstractPath(trimmed);
+        return `[${trimmed}](notes://${encodeURIComponent(absPath)})`;
+    });
+
+    return result;
+}
+
+function buildAbstractPath(topicName) {
+    if (topicName.includes('/')) {
+        var parts = topicName.split('/');
+        return `wiki/${parts[0]}/${parts[parts.length - 1]}.md`;
+    }
+    return `wiki/${topicName}.md`;
+}
+
 function scheduleAutoSave(content) {
     if (window.mdEditor.saveTimer) {
         clearTimeout(window.mdEditor.saveTimer);
     }
-    
+
     window.mdEditor.saveTimer = setTimeout(() => {
         performSave(content);
     }, 1000);
@@ -293,7 +332,7 @@ function performImmediateSave() {
     } else {
         return;
     }
-    
+
     if (window.mdEditor.saveTimer) {
         clearTimeout(window.mdEditor.saveTimer);
         window.mdEditor.saveTimer = null;
@@ -338,7 +377,7 @@ function initPreviewScrollListener() {
     const previewScroll = document.getElementById('editor-preview-scroll');
     if (!previewScroll || _previewScrollBound) return;
     _previewScrollBound = true;
-    
+
     previewScroll.addEventListener('scroll', () => {
         if (window.mdEditor.isScrollSyncing) return;
         syncScrollFromPreview(previewScroll);
@@ -348,22 +387,22 @@ function initPreviewScrollListener() {
 function syncScrollFromEditor(view) {
     const previewScroll = document.getElementById('editor-preview-scroll');
     if (!previewScroll) return;
-    
+
     window.mdEditor.isScrollSyncing = true;
-    
+
     const editorScrollTop = view.scrollDOM.scrollTop;
     const editorScrollHeight = view.scrollDOM.scrollHeight;
     const editorClientHeight = view.scrollDOM.clientHeight;
-    
+
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
-    
+
     const editorMaxScroll = editorScrollHeight - editorClientHeight;
     const scrollRatio = editorMaxScroll > 0 ? editorScrollTop / editorMaxScroll : 0;
     const previewScrollTop = scrollRatio * (previewScrollHeight - previewClientHeight);
-    
+
     previewScroll.scrollTop = previewScrollTop;
-    
+
     setTimeout(() => {
         window.mdEditor.isScrollSyncing = false;
     }, 50);
@@ -371,23 +410,23 @@ function syncScrollFromEditor(view) {
 
 function syncScrollFromPreview(previewScroll) {
     if (!window.mdEditor.view) return;
-    
+
     window.mdEditor.isScrollSyncing = true;
-    
+
     const previewScrollTop = previewScroll.scrollTop;
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
-    
+
     const editorScrollDOM = window.mdEditor.view.scrollDOM;
     const editorScrollHeight = editorScrollDOM.scrollHeight;
     const editorClientHeight = editorScrollDOM.clientHeight;
-    
+
     const previewMaxScroll = previewScrollHeight - previewClientHeight;
     const scrollRatio = previewMaxScroll > 0 ? previewScrollTop / previewMaxScroll : 0;
     const editorScrollTop = scrollRatio * (editorScrollHeight - editorClientHeight);
-    
+
     editorScrollDOM.scrollTop = editorScrollTop;
-    
+
     setTimeout(() => {
         window.mdEditor.isScrollSyncing = false;
     }, 50);
@@ -425,7 +464,7 @@ function exitEditMode() {
 
 async function toggleEditMode() {
     const splitBtn = document.getElementById('titlebar-split-btn');
-    
+
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         exitEditMode();
         var pd = window.PreviewModule ? window.PreviewModule.currentPreviewData : null;

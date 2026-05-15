@@ -38,6 +38,7 @@ def clean_text(text: str) -> str:
         cleaned_lines.append(line.strip())
     text = '\n'.join(cleaned_lines)
     text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
+    text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
 

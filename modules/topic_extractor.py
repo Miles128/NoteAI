@@ -131,9 +131,9 @@ class TopicExtractor:
             organized_count = len(organized_filenames)
 
             if notes_count == 0 and organized_count == 0:
-                return {"success": False, "error": "Notes 和 Abstract 文件夹中都没有 Markdown 文件"}
+                return {"success": False, "error": "Notes 和 wiki 文件夹中都没有 Markdown 文件"}
 
-            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 Abstract 文件")
+            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 wiki 文件")
 
             # 计算主题个数范围
             if specified_topic_count is None or specified_topic_count <= 0:

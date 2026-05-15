@@ -1,8 +1,8 @@
 from .constants import (
+    ABSTRACT_FOLDER,
     API_CONFIG_FILE,
     IGNORED_DIRS,
     NOTES_FOLDER,
-    ORGANIZED_FOLDER,
     PROJECT_CONFIG_PATH,
     PROJECT_ROOT,
     RAW_FOLDER,
@@ -23,7 +23,7 @@ __all__ = [
     'WorkspaceStateManager',
     'workspace_manager',
     'NOTES_FOLDER',
-    'ORGANIZED_FOLDER',
+    'ABSTRACT_FOLDER',
     'RAW_FOLDER',
     'USED_FOLDER',
     'IGNORED_DIRS',

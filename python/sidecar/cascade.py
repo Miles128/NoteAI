@@ -37,7 +37,7 @@ def get_organized_topic_dir(topic: str) -> Path | None:
     safe = _safe_topic_path(topic)
     if not safe:
         return None
-    return Path(workspace) / config.ORGANIZED_FOLDER / safe
+    return Path(workspace) / config.ABSTRACT_FOLDER / safe
 
 
 def get_survey_path(topic: str) -> Path | None:
@@ -58,7 +58,7 @@ def ensure_topic_folder(topic: str) -> dict:
         return {"success": False, "message": "未设置工作区"}
 
     notes_dir = Path(workspace) / config.NOTES_FOLDER / safe_topic
-    organized_dir = Path(workspace) / config.ORGANIZED_FOLDER / safe_topic
+    organized_dir = Path(workspace) / config.ABSTRACT_FOLDER / safe_topic
 
     is_new = not notes_dir.exists() and not organized_dir.exists()
 
@@ -66,7 +66,7 @@ def ensure_topic_folder(topic: str) -> dict:
     organized_dir.mkdir(parents=True, exist_ok=True)
 
     if is_new:
-        append_changelog(f"创建主题文件夹: Notes/{safe_topic}/, {config.ORGANIZED_FOLDER}/{safe_topic}/")
+        append_changelog(f"创建主题文件夹: Notes/{safe_topic}/, {config.ABSTRACT_FOLDER}/{safe_topic}/")
 
     return {"success": True, "topic_dir": str(notes_dir), "organized_dir": str(organized_dir), "is_new": is_new}
 
@@ -349,7 +349,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
         survey_path.write_text(survey_content, encoding='utf-8')
 
-        append_changelog(f"生成综述: {config.ORGANIZED_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
+        append_changelog(f"生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
     except Exception as e:
         return {"success": False, "message": f"综述生成失败: {e}"}
@@ -401,7 +401,7 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
         survey_path.write_text(survey_content, encoding='utf-8')
 
-        append_changelog(f"更新综述: {config.ORGANIZED_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
+        append_changelog(f"更新综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
     except Exception as e:
         return {"success": False, "message": f"综述更新失败: {e}"}
@@ -569,7 +569,7 @@ def check_and_generate_surveys(on_progress=None) -> dict:
         result = generate_new_survey(topic, notes)
         if result.get("success"):
             generated += 1
-            append_changelog(f"补生成综述: {config.ORGANIZED_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.split('/')[-1])}_综述.md")
+            append_changelog(f"补生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.split('/')[-1])}_综述.md")
         else:
             errors.append({"topic": topic, "error": result.get("message", "未知错误")})
 

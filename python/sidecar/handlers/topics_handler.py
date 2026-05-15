@@ -264,7 +264,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": f"重命名失败: {str(e)}"}
 
     def _delete_topic(self, params):
-        topic_name = params.get("name", "").strip()
+        topic_name = params.get("topic_name", "").strip()
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
         workspace = config.workspace_path
@@ -335,7 +335,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if notes_topic_dir.exists():
             try: shutil.rmtree(str(notes_topic_dir))
             except Exception as e: sys.stderr.write(f"[delete_topic] rmdir: {e}\n")
-        org_dir = workspace_path / config.ORGANIZED_FOLDER / topic_name
+        org_dir = workspace_path / config.ABSTRACT_FOLDER / topic_name
         if org_dir.exists():
             try: shutil.rmtree(str(org_dir))
             except Exception as e: sys.stderr.write(f"[delete_topic] rmdir org: {e}\n")

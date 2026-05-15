@@ -177,7 +177,6 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
         for i, score in enumerate(scores):
             if i < len(results):
                 results[i]["rerank_score"] = float(score)
-                results[i]["score"] = float(score)
 
         results.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
         return results[:top_k]

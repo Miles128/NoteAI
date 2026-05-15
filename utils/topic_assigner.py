@@ -227,7 +227,7 @@ def write_topic_to_file(file_path, topic):
         m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
         if not m:
             import yaml
-            frontmatter = '---\ntopic: ' + yaml.dump(topic, default_flow_style=True).strip() + '\n---\n'
+            frontmatter = '---\ntopic: ' + yaml.dump(topic, allow_unicode=True, default_flow_style=True).strip() + '\n---\n'
             Path(file_path).write_text(bom + frontmatter + clean, encoding='utf-8')
             return {"success": True}
         yaml_text = m.group(2)
@@ -240,7 +240,7 @@ def write_topic_to_file(file_path, topic):
             key = line[:idx].strip()
             if key == 'topic':
                 import yaml
-                lines[i] = 'topic: ' + yaml.dump(topic, default_flow_style=True).strip()
+                lines[i] = 'topic: ' + yaml.dump(topic, allow_unicode=True, default_flow_style=True).strip()
                 found = True
                 break
         if not found:
@@ -1393,7 +1393,7 @@ def delete_topic(topic_name):
     workspace_path = Path(workspace)
     notes_dir = workspace_path / config.NOTES_FOLDER
     notes_topic_dir = notes_dir / topic_name
-    organized_topic_dir = workspace_path / config.ORGANIZED_FOLDER / topic_name
+    organized_topic_dir = workspace_path / config.ABSTRACT_FOLDER / topic_name
 
     # Collect all actual files from the topic directory
     actual_files = []

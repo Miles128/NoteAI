@@ -4,6 +4,8 @@ import re
 from sidecar.textutils import parse_frontmatter
 
 MAX_CHUNK_CHARS = 1000
+OVERLAP_MIN_CHARS = 100
+OVERLAP_RATIO = 0.2
 
 
 def chunk_file(file_path: str, text: str) -> list:
@@ -68,18 +70,99 @@ def _add_paragraph_chunks(content: str, file_path: str, topic, tags, section_tit
         chunks.append(_make_chunk(content, file_path, topic, tags, section_title))
         return
 
-    paragraphs = re.split(r"\n{2,}", content)
+    segments = _split_into_segments(content)
+    overlap_size = max(OVERLAP_MIN_CHARS, int(MAX_CHUNK_CHARS * OVERLAP_RATIO))
+
     current = ""
-    for para in paragraphs:
-        if not para.strip():
+    for seg in segments:
+        seg_stripped = seg.strip()
+        if not seg_stripped:
             continue
-        if len(current) + len(para) + 2 > MAX_CHUNK_CHARS and current:
+
+        if _is_table(seg_stripped):
+            if current:
+                chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
+                if len(current) > overlap_size:
+                    current = current[-overlap_size:]
+                else:
+                    current = ""
+            chunks.append(_make_chunk(seg_stripped, file_path, topic, tags, section_title))
+            continue
+
+        if _is_code_block(seg_stripped):
+            if current:
+                chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
+                if len(current) > overlap_size:
+                    current = current[-overlap_size:]
+                else:
+                    current = ""
+            chunks.append(_make_chunk(seg_stripped, file_path, topic, tags, section_title))
+            continue
+
+        if len(current) + len(seg) + 2 > MAX_CHUNK_CHARS and current:
             chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
-            current = para
+            if len(current) > overlap_size:
+                current = current[-overlap_size:] + "\n\n" + seg
+            else:
+                current = seg
         else:
-            current = current + "\n\n" + para if current else para
+            current = current + "\n\n" + seg if current else seg
+
     if current.strip():
         chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
+
+
+def _split_into_segments(content: str) -> list:
+    segments = []
+    code_pattern = re.compile(r"(```[\s\S]*?```)", re.MULTILINE)
+    table_pattern = re.compile(r"(\|.*\|(\n\|[-:|]+\|)?(\n\|.*\|)*)", re.MULTILINE)
+
+    pos = 0
+    while pos < len(content):
+        code_match = code_pattern.search(content, pos)
+        table_match = table_pattern.search(content, pos)
+
+        next_code_pos = code_match.start() if code_match else float('inf')
+        next_table_pos = table_match.start() if table_match else float('inf')
+
+        if next_code_pos < next_table_pos:
+            if next_code_pos > pos:
+                segments.append(content[pos:next_code_pos])
+            segments.append(code_match.group(1))
+            pos = code_match.end()
+        elif next_table_pos < next_code_pos:
+            if next_table_pos > pos:
+                segments.append(content[pos:next_table_pos])
+            segments.append(table_match.group(1))
+            pos = table_match.end()
+        else:
+            paragraphs = re.split(r"\n{2,}", content[pos:])
+            segments.extend(paragraphs)
+            break
+
+    return segments
+
+
+def _is_table(text: str) -> bool:
+    lines = text.strip().split('\n')
+    if len(lines) < 2:
+        return False
+
+    first_line = lines[0].strip()
+    if not first_line.startswith('|') or not first_line.endswith('|'):
+        return False
+
+    if len(lines) >= 2:
+        second_line = lines[1].strip()
+        if second_line.startswith('|') and re.match(r'^\|[-:|]+\|$', second_line):
+            return True
+
+    return False
+
+
+def _is_code_block(text: str) -> bool:
+    text = text.strip()
+    return text.startswith('```') and text.endswith('```')
 
 
 def _make_chunk(content: str, file_path: str, topic, tags, section_title) -> dict:

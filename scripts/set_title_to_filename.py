@@ -1,7 +1,16 @@
 import re
+import sys
 import pathlib
+from pathlib import Path
 
-workspace = pathlib.Path('/Users/sihai/Documents/My Notes')
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.settings import config
+
+workspace = config.workspace_path
+if not workspace:
+    print("Error: 未设置工作区路径 (workspace_path)")
+    exit(1)
+workspace = pathlib.Path(workspace)
 updated = 0
 skipped = 0
 

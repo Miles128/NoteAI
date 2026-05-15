@@ -35,9 +35,6 @@ window.AssistantModule = (function() {
             panel.style.width = '30%';
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
             if (toggleBtn) toggleBtn.classList.add('active');
-            if (_chatHistory.length === 0) {
-                addSystemMessage('嗨，我是小忆，你的贴心个人助理～有什么可以帮你的吗？');
-            }
             _scrollToBottom();
         } else {
             panel.style.display = 'none';

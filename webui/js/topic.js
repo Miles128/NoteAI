@@ -1134,17 +1134,15 @@ function loadTopicPendingPanel(pending, topicNames) {
             html += '<button class="topic-candidate-btn" data-topic="' + escapeAttr(c) + '" data-file="' + escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + escapeHtml(c) + '</button>';
         });
         html += '</div>';
+        html += '<div class="topic-assign-row">';
         if (topicNames.length > 0) {
-            html += '<div class="topic-select-row">';
             html += '<select class="topic-select" data-file="' + escapeAttr(p.file) + '" onchange="onTopicSelectChange(this)">';
             html += '<option value="">-- 选择已有主题 --</option>';
             topicNames.forEach(function(name) {
                 html += '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
             });
             html += '</select>';
-            html += '</div>';
         }
-        html += '<div class="topic-custom-row">';
         html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '">';
         html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">确定</button>';
         html += '</div>';

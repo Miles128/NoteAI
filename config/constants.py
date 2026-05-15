@@ -24,13 +24,12 @@ WORKSPACE_STATE_FILE = SYSTEM_APP_DATA_DIR / "workspace_state.json"
 API_CONFIG_FILE = SYSTEM_APP_DATA_DIR / "api_config.json"
 
 NOTES_FOLDER = "Notes"
-ORGANIZED_FOLDER = "Abstract"
+ABSTRACT_FOLDER = "wiki"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
 
 IGNORED_DIRS = {
     "ai",
-    "wki",
     "wiki",
     "ai wiki",
     "ai-wiki",

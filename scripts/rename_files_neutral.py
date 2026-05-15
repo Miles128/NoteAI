@@ -1,7 +1,16 @@
 import re
+import sys
 import pathlib
+from pathlib import Path
 
-WORKSPACE = pathlib.Path('/Users/sihai/Documents/My Notes')
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from config.settings import config
+
+workspace_path = config.workspace_path
+if not workspace_path:
+    print('Error: 未设置工作区路径 (workspace_path)')
+    exit(1)
+WORKSPACE = pathlib.Path(workspace_path)
 
 RENAMES = {
     'AI Agent 架构分析综述.md': 'AI Agent架构分析综述.md',

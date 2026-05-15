@@ -31,7 +31,7 @@ class WorkspaceHandler(BaseHandler):
                 "is_set": True,
                 "workspace_path": path,
                 "notes_folder": str(Path(path) / "Notes"),
-                "organized_folder": str(Path(path) / "Abstract"),
+                "organized_folder": str(Path(path) / config.ABSTRACT_FOLDER),
                 "saved_workspace": True,
             }
         return {"is_set": False, "saved_workspace": False}

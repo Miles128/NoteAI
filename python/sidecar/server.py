@@ -239,7 +239,7 @@ class SidecarServer(PathHelpersMixin):
 
     def _auto_process_md_file(self, file_path):
         import re
-        from config.settings import NOTES_FOLDER, ORGANIZED_FOLDER
+        from config.settings import NOTES_FOLDER, ABSTRACT_FOLDER
         from utils.topic_assigner import (
             move_file_to_notes_topic_folder,
             add_file_to_wiki_topic,
@@ -255,15 +255,12 @@ class SidecarServer(PathHelpersMixin):
             return
 
         m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-        if not m:
-            return
+        yaml_text = m.group(1) if m else ""
 
-        yaml_text = m.group(1)
-
-        if _check_topic_needs_processing(yaml_text):
+        if not m or _check_topic_needs_processing(yaml_text):
             try:
                 result = auto_assign_topic_for_file(file_path)
-                if result and result.get("success") and result.get("topic"):
+                if result and result.get("status") == "auto_assigned" and result.get("topic"):
                     self._send_response({
                         "id": "event",
                         "result": {
@@ -296,7 +293,7 @@ class SidecarServer(PathHelpersMixin):
 
         is_survey = filename.endswith('综述') or filename.endswith('_综述')
         if is_survey:
-            expected_dir = Path(workspace) / ORGANIZED_FOLDER / file_topic
+            expected_dir = Path(workspace) / ABSTRACT_FOLDER / file_topic
         else:
             expected_dir = Path(workspace) / NOTES_FOLDER / file_topic
 

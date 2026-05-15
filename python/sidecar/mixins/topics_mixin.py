@@ -48,6 +48,24 @@ class TopicsMixin:
             return {"topics": [], "pending": []}
 
         tree = self._build_tree_from_filesystem(workspace)
+
+        # 检查 Abstract 文件夹中的综述文件
+        abstract_folder = Path(workspace) / config.ABSTRACT_FOLDER
+        if abstract_folder.exists():
+            for l1 in tree:
+                # 检查一级主题综述
+                l1_abstract = abstract_folder / f"{l1['name']}.md"
+                if l1_abstract.exists():
+                    l1["has_abstract"] = True
+                    l1["abstract_file"] = f"{config.ABSTRACT_FOLDER}/{l1['name']}.md"
+
+                # 检查二级主题综述
+                for l2 in l1.get("children", []):
+                    l2_abstract = abstract_folder / l1["name"] / f"{l2['name']}.md"
+                    if l2_abstract.exists():
+                        l2["has_abstract"] = True
+                        l2["abstract_file"] = f"{config.ABSTRACT_FOLDER}/{l1['name']}/{l2['name']}.md"
+
         pending = self._load_pending_topics()
         return {
             "topics": TopicManager.tree_to_json(tree),

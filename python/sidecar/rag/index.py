@@ -247,6 +247,10 @@ def delete_by_file(workspace: str, file_path: str):
     if not _collection_exists(client):
         return
 
+    # 查询要删除的 chunk ID（在 delete 之前查询，避免最终一致性问题）
+    chunks_to_check = _get_chunks_by_file(workspace, file_path)
+    chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
+
     try:
         client.delete(
             collection_name=_COLLECTION_NAME,
@@ -257,8 +261,6 @@ def delete_by_file(workspace: str, file_path: str):
         sys.stderr.flush()
 
     sparse_index = _load_sparse_index(workspace)
-    chunks_to_check = _get_chunks_by_file(workspace, file_path)
-    chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
     to_remove = [k for k in sparse_index if k in chunk_ids_to_remove]
     for k in to_remove:
         del sparse_index[k]

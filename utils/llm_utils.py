@@ -183,21 +183,27 @@ def call_llm_raw_stream(
     if not is_valid:
         raise RuntimeError(error_msg)
 
-    logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
-    llm = _create_llm(temperature, max_tokens)
-    full_text = ""
+    acquired = _LLM_SEMAPHORE.acquire(timeout=60)
+    if not acquired:
+        raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
     try:
-        for chunk in llm.stream(prompt_text):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            if chunk_callback:
-                chunk_callback(token)
-    except Exception as e:
-        sys.stderr.write(f"[llm_utils] stream error: {e}\n")
-        sys.stderr.flush()
-        raise
-    logger.info(f"LLM stream done, response length: {len(full_text)}")
-    return full_text.strip()
+        logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+        llm = _create_llm(temperature, max_tokens)
+        full_text = ""
+        try:
+            for chunk in llm.stream(prompt_text):
+                token = chunk.content if hasattr(chunk, "content") else str(chunk)
+                full_text += token
+                if chunk_callback:
+                    chunk_callback(token)
+        except Exception as e:
+            sys.stderr.write(f"[llm_utils] stream error: {e}\n")
+            sys.stderr.flush()
+            raise
+        logger.info(f"LLM stream done, response length: {len(full_text)}")
+        return full_text.strip()
+    finally:
+        _LLM_SEMAPHORE.release()
 
 
 def check_api_config() -> Tuple[bool, str]:

@@ -15,6 +15,7 @@ import pytest
 from config import config
 from modules.file_preview import FilePreviewer
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
+from sidecar.pending_topics import load_pending_topics
 from utils.topic_assigner import parse_wiki_structure
 
 
@@ -23,7 +24,7 @@ def workspace(tmp_path: Path) -> Path:
     d = tmp_path / "ws"
     d.mkdir()
     (d / "Notes").mkdir()
-    (d / "Abstract").mkdir()
+    (d / "wiki").mkdir(parents=True, exist_ok=True)
     config.workspace_path = str(d)
     return d
 
@@ -54,27 +55,57 @@ class TestResolveWorkspacePath:
 
 class TestFindFileByName:
     def test_finds_first_match_in_workspace(self, workspace: Path) -> None:
-        (workspace / "Abstract" / "dup.md").write_text("1", encoding="utf-8")
-        got = find_file_by_name_in_workspace("Abstract/dup.md")
+        (workspace / "wiki" / "dup.md").write_text("1", encoding="utf-8")
+        got = find_file_by_name_in_workspace("wiki/dup.md")
         assert got is not None
         assert got.endswith("dup.md")
 
 
-class TestGetTopicTreeContract:
-    """Shape of `get_topic_tree` RPC (TopicsHandler._get_topic_tree → parse_wiki_structure)."""
+class TestParseWikiStructure:
+    """parse_wiki_structure() parses WIKI.md into a list of topic dicts."""
 
-    def test_returns_topics_and_pending_lists(self, workspace: Path) -> None:
-        tree = parse_wiki_structure(Path(config.workspace_path))
-        assert set(tree) == {"topics", "pending"}
-        assert isinstance(tree["topics"], list)
-        assert isinstance(tree["pending"], list)
+    def test_returns_topic_list(self, workspace: Path) -> None:
+        wiki_dir = workspace / "wiki"
+        wiki_dir.mkdir(exist_ok=True)
+        wiki = wiki_dir / "WIKI.md"
+        wiki.write_text(
+            "## AI 产品经理之路\n\n"
+            "1. **产品思维**\n"
+            "   - 原始路径: `Notes/产品思维.md`\n\n"
+            "## AI 产品经理之路/Agent 架构\n\n"
+            "1. **Agent 设计**\n"
+            "   - 原始路径: `Notes/Agent 设计.md`\n",
+            encoding="utf-8",
+        )
+        topics = parse_wiki_structure()
+        assert isinstance(topics, list)
+        assert len(topics) >= 2
+        # Each topic dict has expected keys
+        for t in topics:
+            assert "name" in t
+            assert "label" in t
+            assert "files" in t
+            assert isinstance(t["files"], list)
+
+    def test_empty_when_no_wiki(self, workspace: Path) -> None:
+        topics = parse_wiki_structure()
+        assert topics == []
+
+
+class TestPendingTopics:
+    """load_pending_topics() reads .pending_topics.json from workspace."""
 
     def test_pending_json_roundtrip(self, workspace: Path) -> None:
         pending_path = workspace / ".pending_topics.json"
         sample = [{"file": "Notes/a.md", "title": "A", "candidates": ["T1"]}]
         pending_path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
-        tree = parse_wiki_structure(Path(config.workspace_path))
-        assert len(tree.get("pending", [])) == 1
+        pending = load_pending_topics()
+        assert len(pending) == 1
+        assert pending[0]["file"] == "Notes/a.md"
+
+    def test_empty_when_no_file(self, workspace: Path) -> None:
+        pending = load_pending_topics()
+        assert pending == []
 
 
 class TestPreviewPathContract:

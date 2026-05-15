@@ -165,12 +165,22 @@ class IntelTopicHandler(BaseHandler):
             safe_name = "".join(c for c in topic_name if c.isalnum() or c in ('_', '-', '.', ' ') or '\u4e00' <= c <= '\u9fff').strip()
             if not safe_name or '..' in safe_name:
                 return {"success": False, "message": "主题名称包含非法字符"}
-            survey_filename = f"{safe_name}_综述.md"
-            # 保存到 Abstract/主题名/ 子目录，与 cascade.py 保持一致
-            from config.settings import ORGANIZED_FOLDER
-            survey_dir = workspace_path / ORGANIZED_FOLDER / topic_name
-            survey_dir.mkdir(parents=True, exist_ok=True)
-            survey_path = survey_dir / survey_filename
+
+            # 方案四：保存到 Abstract/主题名.md（一级主题）或 Abstract/父主题/子主题.md（二级主题）
+            abstract_folder = workspace_path / config.ABSTRACT_FOLDER
+            abstract_folder.mkdir(parents=True, exist_ok=True)
+
+            if '/' in topic_name:
+                # 二级主题
+                parts = topic_name.split('/')
+                parent_name = parts[0]
+                child_name = parts[-1]
+                parent_folder = abstract_folder / parent_name
+                parent_folder.mkdir(exist_ok=True)
+                survey_path = parent_folder / f"{child_name}.md"
+            else:
+                # 一级主题
+                survey_path = abstract_folder / f"{topic_name}.md"
             try:
                 survey_path.resolve().relative_to(workspace_path.resolve())
             except ValueError:
@@ -179,6 +189,7 @@ class IntelTopicHandler(BaseHandler):
             fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
             survey_with_fm = f"---\n{fm_str}\n---\n\n{full_text.strip()}"
             survey_path.write_text(survey_with_fm, encoding='utf-8')
+            survey_file = str(survey_path.relative_to(workspace_path))
 
             self._send_response({
                 "id": "event",
@@ -186,10 +197,10 @@ class IntelTopicHandler(BaseHandler):
                     "type": "survey_done",
                     "topic": topic_name,
                     "success": True,
-                    "file_path": survey_filename,
+                    "file_path": survey_file,
                 }
             })
-            return {"success": True, "message": "综述撰写完成", "file_path": survey_filename}
+            return {"success": True, "message": "综述撰写完成", "file_path": survey_file}
         except APIConfigError as e:
             self._send_response({
                 "id": "event",

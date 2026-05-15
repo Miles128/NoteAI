@@ -100,6 +100,10 @@ async function createTopic(name) {
     return pyCall('create_topic', { name: name });
 }
 
+async function createTopicFolder(name, parentPath, level) {
+    return pyCall('create_topic_folder', { name: name, parent_path: parentPath || '', level: level || 0 });
+}
+
 async function createTag(name) {
     return pyCall('create_tag', { name: name });
 }
@@ -291,6 +295,14 @@ async function syncWikiWithFiles() {
     return pyCall('sync_wiki_with_files', {});
 }
 
+async function getTopicFiles(topicName, level) {
+    return pyCall('get_topic_files', { topic_name: topicName, level: level });
+}
+
+async function generateAbstract(topicName, level) {
+    return pyCall('generate_abstract', { topic_name: topicName, level: level });
+}
+
 async function llmRewrite(filePath) {
     return pyCall('llm_rewrite', { file_path: filePath });
 }
@@ -423,6 +435,7 @@ window.api = {
     autoAssignTopic: autoAssignTopic,
     batchAutoAssignTopics: batchAutoAssignTopics,
     createTopic: createTopic,
+    createTopicFolder: createTopicFolder,
     createTag: createTag,
     getPendingTopics: getPendingTopics,
     getAllPending: getAllPending,
@@ -457,6 +470,8 @@ window.api = {
     saveFileContent: saveFileContent,
     readFileRaw: readFileRaw,
     syncWikiWithFiles: syncWikiWithFiles,
+    getTopicFiles: getTopicFiles,
+    generateAbstract: generateAbstract,
 
     moveWindow: moveWindow,
     minimizeWindow: minimizeWindow,

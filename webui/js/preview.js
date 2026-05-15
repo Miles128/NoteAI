@@ -544,5 +544,15 @@ window.closePreview = closePreview;
 window.closePreviewPanel = closePreviewPanel;
 window.backToContent = backToContent;
 
+window.showPreview = function(options) {
+    if (!options || !options.path) {
+        console.error('[showPreview] Missing path parameter');
+        return;
+    }
+    const path = options.path;
+    const name = options.name || path.split('/').pop() || '预览';
+    window.PreviewModule.loadFilePreview(path, name);
+};
+
 })();
 

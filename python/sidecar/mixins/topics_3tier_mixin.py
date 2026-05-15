@@ -15,16 +15,23 @@ class Topics3TierMixin:
 
         tree = TopicManager.build_tree_from_filesystem(workspace)
 
-        wiki_entries = self._parse_wiki_headings()
-        for entry in wiki_entries:
-            name = entry["name"]
-            level = entry["level"]
+        # 检查 Abstract 文件夹中的综述文件（方案四）
+        abstract_folder = Path(workspace) / config.ABSTRACT_FOLDER
+        if abstract_folder.exists():
             for l1 in tree:
-                if l1["name"] == name and level == 2:
+                # 检查一级主题综述
+                l1_abstract = abstract_folder / f"{l1['name']}.md"
+                if l1_abstract.exists():
                     l1["has_abstract"] = True
+                    l1["abstract_file"] = f"{config.ABSTRACT_FOLDER}/{l1['name']}.md"
+
+                # 检查二级主题综述
                 for l2 in l1.get("children", []):
-                    if l2["name"] == name and level == 3:
+                    l2_full_name = f"{l1['name']}/{l2['name']}"
+                    l2_abstract = abstract_folder / l1["name"] / f"{l2['name']}.md"
+                    if l2_abstract.exists():
                         l2["has_abstract"] = True
+                        l2["abstract_file"] = f"{config.ABSTRACT_FOLDER}/{l1['name']}/{l2['name']}.md"
 
         pending = []
         try:
@@ -242,7 +249,7 @@ class Topics3TierMixin:
     def _delete_topic_safe(self, params):
         """安全删除主题（含删除保护）"""
         from utils.topic_manager import TopicManager, LEVEL1_TOPICS
-        topic_name = params.get("name", "").strip()
+        topic_name = params.get("topic_name", "").strip()
 
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}

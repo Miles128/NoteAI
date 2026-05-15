@@ -28,6 +28,8 @@ ABSTRACT_FOLDER = "wiki"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
 
+TOPIC_SEP = " > "
+
 IGNORED_DIRS = {
     "ai",
     "wiki",

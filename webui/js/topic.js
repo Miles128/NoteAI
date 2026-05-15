@@ -8,12 +8,12 @@ var _pendingDragData = { filePath: null, cardEl: null };
 function _buildTopicTree(topics) {
     var root = { children: {}, files: [], name: '', label: '' };
     topics.forEach(function(topic) {
-        var parts = topic.name.split('/');
+        var parts = topic.name.split(' > ');
         var node = root;
         for (var i = 0; i < parts.length; i++) {
             var part = parts[i];
             if (!node.children[part]) {
-                node.children[part] = { children: {}, files: [], name: parts.slice(0, i + 1).join('/'), label: part };
+                node.children[part] = { children: {}, files: [], name: parts.slice(0, i + 1).join(' > '), label: part };
             }
             node = node.children[part];
         }

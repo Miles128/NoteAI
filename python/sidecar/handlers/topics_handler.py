@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 
 from config import config, is_ignored_dir
+from config.constants import TOPIC_SEP
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
 from utils.logger import logger
@@ -153,7 +154,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         parent = params.get("parent", "").strip()
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
-        topic_full = f"{parent}/{topic_name}" if parent else topic_name
+        topic_full = TOPIC_SEP.join([parent, topic_name]) if parent else topic_name
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
@@ -217,10 +218,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "WIKI.md 不存在"}
 
         try:
+            from config.constants import TOPIC_SEP as _sep
             wiki_text = wiki_path.read_text(encoding='utf-8')
             lines = wiki_text.split('\n')
-            old_name.split('/')[-1]
-            new_leaf = new_name.split('/')[-1]
             current_parent = ''
 
             for i, line in enumerate(lines):
@@ -231,7 +231,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                         lines[i] = line.replace(old_name, new_name, 1)
                 elif stripped.startswith('### '):
                     child = stripped[4:].strip()
-                    full = f"{current_parent}/{child}" if current_parent else child
+                    full = _sep.join([current_parent, child]) if current_parent else child
                     if full == old_name:
                         lines[i] = line.replace(child, new_leaf, 1)
             wiki_path.write_text('\n'.join(lines), encoding='utf-8')
@@ -361,11 +361,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                             continue
                         in_section = False
                     else:
-                        in_parent = current_parent == topic_name.split('/')[0]
+                        in_parent = current_parent == topic_name.split(TOPIC_SEP)[0].strip()
                         in_section = False
                 elif stripped.startswith('### ') and in_parent and not is_parent:
                     child = stripped[4:].strip()
-                    full = f"{current_parent}/{child}"
+                    full = f"{current_parent}{TOPIC_SEP}{child}"
                     if full == topic_name:
                         in_section = True
                         continue
@@ -444,7 +444,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     topics.append(current_parent)
                 elif stripped.startswith('### '):
                     child = stripped[4:].strip()
-                    full = f"{current_parent}/{child}" if current_parent else child
+                    full = f"{current_parent}{TOPIC_SEP}{child}" if current_parent else child
                     topics.append(full)
             return {"success": True, "topics": topics}
         except Exception as e:
@@ -685,7 +685,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     surveys[current_parent] = not is_off
                 elif stripped.startswith('### ') and current_parent:
                     child = stripped[4:].strip()
-                    full = f"{current_parent}/{child}"
+                    full = f"{current_parent}{TOPIC_SEP}{child}"
                     parent_on = surveys.get(current_parent, True)
                     if parent_on:
                         surveys[full] = False
@@ -716,8 +716,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             lines = text.split('\n')
             new_lines = []
             current_parent = ''
-            is_parent = '/' not in topic_name
-            topic_name.split('/')[-1] if not is_parent else topic_name
+            is_parent = TOPIC_SEP not in topic_name
             i = 0
 
             while i < len(lines):
@@ -742,7 +741,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                                 break
                             if s.startswith('### ') and current_parent:
                                 child = s[4:].strip()
-                                full = f"{current_parent}/{child}"
+                                full = f"{current_parent}{TOPIC_SEP}{child}"
                                 new_lines.append(lines[i])
                                 i += 1
                                 if i < len(lines) and lines[i].strip() == '> 综述: off':
@@ -761,7 +760,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                         continue
                 elif stripped.startswith('### ') and current_parent and not is_parent:
                     child = stripped[4:].strip()
-                    full = f"{current_parent}/{child}"
+                    full = f"{current_parent}{TOPIC_SEP}{child}"
                     if full == topic_name:
                         if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
                             i += 1

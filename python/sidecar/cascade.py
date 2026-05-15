@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import config
+from config.constants import TOPIC_SEP
 from sidecar.textutils import parse_frontmatter
 from utils.logger import logger
 
@@ -19,7 +20,10 @@ def _safe_topic_segment(segment: str) -> str:
 
 
 def _safe_topic_path(topic: str) -> str:
-    parts = topic.split('/')
+    """将 > 分隔的主题字符串转为文件系统安全路径（用 / 连接）。"""
+    if '/' in topic and TOPIC_SEP not in topic:
+        topic = topic.replace('/', TOPIC_SEP)
+    parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     safe_parts = []
     for p in parts:
         s = _safe_topic_segment(p)
@@ -43,7 +47,7 @@ def get_survey_path(topic: str) -> Path | None:
     topic_dir = get_organized_topic_dir(topic)
     if not topic_dir:
         return None
-    leaf_name = _safe_topic_segment(topic.rsplit('/', maxsplit=1)[-1])
+    leaf_name = _safe_topic_segment(topic.rsplit(TOPIC_SEP, maxsplit=1)[-1])
     return topic_dir / f"{leaf_name}_综述.md"
 
 
@@ -567,7 +571,7 @@ def check_and_generate_surveys(on_progress=None) -> dict:
         result = generate_new_survey(topic, notes)
         if result.get("success"):
             generated += 1
-            append_changelog(f"补生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.split('/')[-1])}_综述.md")
+            append_changelog(f"补生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.rsplit(TOPIC_SEP, maxsplit=1)[-1])}_综述.md")
         else:
             errors.append({"topic": topic, "error": result.get("message", "未知错误")})
 
@@ -607,7 +611,7 @@ def _read_survey_status_from_wiki() -> dict:
                 surveys[current_parent] = not is_off
             elif stripped.startswith('### ') and current_parent:
                 child = stripped[4:].strip()
-                full = f"{current_parent}/{child}"
+                full = TOPIC_SEP.join([current_parent, child])
                 parent_on = surveys.get(current_parent, True)
                 if parent_on:
                     surveys[full] = False

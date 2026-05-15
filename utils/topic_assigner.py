@@ -89,7 +89,17 @@ def cleanup_stale_pending():
     return removed
 
 
+def _norm_topic(topic: str) -> str:
+    """将传入的主题字符串规范化：移除旧式 / 分隔 → 统一用  >"""
+    from config.constants import TOPIC_SEP
+    clean = topic.strip()
+    if '/' in clean and TOPIC_SEP not in clean:
+        clean = clean.replace('/', TOPIC_SEP)
+    return clean
+
+
 def write_topic_to_file(file_path, topic):
+    topic = _norm_topic(topic)
     try:
         text = Path(file_path).read_text(encoding='utf-8')
         bom = '\ufeff' if text.startswith('\ufeff') else ''
@@ -126,6 +136,7 @@ def write_topic_to_file(file_path, topic):
 
 
 def move_file_to_notes_topic_folder(file_path, topic):
+    topic = _norm_topic(topic)
     workspace = config.workspace_path
     if not workspace:
         return {"success": False, "message": "未设置工作区"}
@@ -137,11 +148,19 @@ def move_file_to_notes_topic_folder(file_path, topic):
         return {"success": False, "message": f"文件不存在: {file_path}"}
 
     import shutil
-    safe_topic = topic.replace('..', '').strip('/')
-    if not safe_topic:
+    from config.constants import TOPIC_SEP
+
+    clean = topic.replace('..', '').strip()
+    if not clean:
         return {"success": False, "message": "主题名称非法"}
 
-    topic_dir = Path(workspace) / config.NOTES_FOLDER / safe_topic
+    parts = [p.strip() for p in clean.split(TOPIC_SEP) if p.strip()]
+    if not parts:
+        return {"success": False, "message": "主题名称非法"}
+
+    topic_dir = Path(workspace) / config.NOTES_FOLDER
+    for part in parts:
+        topic_dir = topic_dir / part
     topic_dir.mkdir(parents=True, exist_ok=True)
 
     dst = topic_dir / src.name
@@ -605,6 +624,7 @@ def _clear_topic_in_file(file_path):
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):
+    new_topic = _norm_topic(new_topic)
     """
     移动文件到新主题：
     1. 从原主题的 WIKI.md 中移除文件记录
@@ -675,7 +695,7 @@ def _read_topic_from_file(file_path):
             val = line[idx + 1:].strip()
             if key == 'topic':
                 if val and val.strip():
-                    return val.strip()
+                    return _norm_topic(val.strip())
                 return None
         return None
     except Exception as e:

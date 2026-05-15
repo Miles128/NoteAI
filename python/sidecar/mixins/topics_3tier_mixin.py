@@ -27,7 +27,6 @@ class Topics3TierMixin:
 
                 # 检查二级主题综述
                 for l2 in l1.get("children", []):
-                    f"{l1['name']}/{l2['name']}"
                     l2_abstract = abstract_folder / l1["name"] / f"{l2['name']}.md"
                     if l2_abstract.exists():
                         l2["has_abstract"] = True

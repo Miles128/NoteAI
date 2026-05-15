@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from config import config
+from config.constants import TOPIC_SEP
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
@@ -170,9 +171,9 @@ class IntelTopicHandler(BaseHandler):
             abstract_folder = workspace_path / config.ABSTRACT_FOLDER
             abstract_folder.mkdir(parents=True, exist_ok=True)
 
-            if '/' in topic_name:
-                # 二级主题
-                parts = topic_name.split('/')
+            if TOPIC_SEP in topic_name:
+                # 多级主题
+                parts = [p.strip() for p in topic_name.split(TOPIC_SEP) if p.strip()]
                 parent_name = parts[0]
                 child_name = parts[-1]
                 parent_folder = abstract_folder / parent_name

@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import datetime
 
 from config.settings import config
+from config.constants import TOPIC_SEP
 from utils.logger import logger
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
 
@@ -119,7 +120,7 @@ def parse_wiki_structure():
 
             parent_path = topic_stack[-1] if topic_stack else ''
             if parent_path:
-                topic_path = parent_path + '/' + heading_text
+                topic_path = parent_path + TOPIC_SEP + heading_text
             else:
                 topic_path = heading_text
 
@@ -168,6 +169,9 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
     if not wiki_path or not workspace:
         return False
 
+    if '/' in topic and TOPIC_SEP not in topic:
+        topic = topic.replace('/', TOPIC_SEP)
+
     display_title = file_title or Path(file_rel_path).name
     file_name = Path(file_rel_path).name
 
@@ -183,7 +187,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         sys.stderr.flush()
         return False
 
-    parts = topic.split('/')
+    parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     topic_leaf = parts[-1]
     topic_depth = len(parts)
 
@@ -270,7 +274,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         parent_insert_idx = len(lines)
 
         for pi in range(len(parts) - 1):
-            parent_path = '/'.join(parts[:pi + 1])
+            parent_path = TOPIC_SEP.join(parts[:pi + 1])
             parent_label = parts[pi]
             parent_heading_prefix = '#' * (pi + 2)
             parent_heading = f'{parent_heading_prefix} {parent_label}'
@@ -843,8 +847,13 @@ def delete_topic(topic_name):
 
     workspace_path = Path(workspace)
     notes_dir = workspace_path / config.NOTES_FOLDER
-    notes_topic_dir = notes_dir / topic_name
-    organized_topic_dir = workspace_path / config.ABSTRACT_FOLDER / topic_name
+    parts = [p.strip() for p in topic_name.split(TOPIC_SEP) if p.strip()]
+    notes_topic_dir = notes_dir
+    for part in parts:
+        notes_topic_dir = notes_topic_dir / part
+    organized_topic_dir = workspace_path / config.ABSTRACT_FOLDER
+    for part in parts:
+        organized_topic_dir = organized_topic_dir / part
 
     # Collect all actual files from the topic directory
     actual_files = []
@@ -1233,6 +1242,8 @@ def create_topic(topic_name):
         return {"success": False, "message": "主题名不能为空"}
     
     topic_name = topic_name.strip()
+    if '/' in topic_name and TOPIC_SEP not in topic_name:
+        topic_name = topic_name.replace('/', TOPIC_SEP)
     
     try:
         if wiki_path.exists():
@@ -1247,11 +1258,13 @@ def create_topic(topic_name):
             if h["name"].lower() == topic_name.lower():
                 return {"success": False, "message": f"主题「{topic_name}」已存在"}
         
-        parts = topic_name.split('/')
+        parts = [p.strip() for p in topic_name.split(TOPIC_SEP) if p.strip()]
+        if not parts:
+            return {"success": False, "message": "主题名不能为空"}
         topic_leaf = parts[-1]
         topic_depth = len(parts)
         heading_prefix = '#' * (topic_depth + 1)
-        
+
         new_topic_lines = [
             "",
             f"{heading_prefix} {topic_leaf}",
@@ -1323,8 +1336,10 @@ def create_topic(topic_name):
         new_content = '\n'.join(lines)
         
         wiki_path.write_text(new_content, encoding='utf-8')
-        
-        notes_topic_dir = Path(workspace) / config.NOTES_FOLDER / topic_name
+
+        notes_topic_dir = Path(workspace) / config.NOTES_FOLDER
+        for part in parts:
+            notes_topic_dir = notes_topic_dir / part
         notes_topic_dir.mkdir(parents=True, exist_ok=True)
         
         return {"success": True, "message": f"主题「{topic_name}」创建成功"}

@@ -306,8 +306,8 @@ function processAbstractLinks(content) {
 }
 
 function buildAbstractPath(topicName) {
-    if (topicName.includes('/')) {
-        var parts = topicName.split('/');
+    if (topicName.includes(' > ')) {
+        var parts = topicName.split(' > ');
         return `wiki/${parts[0]}/${parts[parts.length - 1]}.md`;
     }
     return `wiki/${topicName}.md`;

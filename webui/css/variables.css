@@ -36,8 +36,8 @@
     --sidebar-border: rgba(255, 255, 255, 0.05);
     --sidebar-active: rgba(108, 99, 255, 0.12);
     --on-primary: #ffffff;
-    --switch-bg: #2a2a2e;
-    --switch-border: #3a3a3e;
+    --switch-bg: #1e1e21;
+    --switch-border: #2e2e32;
     --switch-active: #6C63FF;
     --color-file: #6C63FF;
     --color-topic: #d29922;
@@ -176,8 +176,8 @@ body[data-theme="dark"] {
     --sidebar-border: rgba(255, 255, 255, 0.05);
     --sidebar-active: rgba(108, 99, 255, 0.12);
     --on-primary: #ffffff;
-    --switch-bg: #2a2a2e;
-    --switch-border: #3a3a3e;
+    --switch-bg: #1e1e21;
+    --switch-border: #2e2e32;
     --switch-active: #6C63FF;
     --color-danger: #f85149;
     --color-close: #f85149;
@@ -192,7 +192,7 @@ body[data-theme="dark"] {
 /* ── Paper / Mercury 2 inspired ── */
 [data-theme="paper"] {
     --bg: #faf8f0;
-    --sidebar-bg: #ede6d8;
+    --sidebar-bg: #f3f0e9;
     --surface: #fffefb;
     --surface-hover: rgba(0, 0, 0, 0.03);
     --text: #1a292a;
@@ -204,7 +204,7 @@ body[data-theme="dark"] {
     --border: rgba(0, 0, 0, 0.04);
     --scrollbar: rgba(0, 0, 0, 0.10);
     --topbar-bg: #faf8f0;
-    --statusbar-bg: #ede6d8;
+    --statusbar-bg: #f3f0e9;
     --card-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03), 0 1px 6px rgba(0, 0, 0, 0.04);
     --article-bg: #fffefb;
     --heading-color: #1a292a;

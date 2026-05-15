@@ -214,10 +214,33 @@ const Graph3Tier = {
         // Reset targets
         nodes.forEach(n => { n.tx = undefined; n.ty = undefined; });
 
+        // ---- crossing reduction: compute subtree barycenter angles ----
+        const barycenterMap = {};
+        function computeBarycenter(nodeId, visited) {
+            if (barycenterMap[nodeId] !== undefined) return barycenterMap[nodeId];
+            if (visited.has(nodeId)) { barycenterMap[nodeId] = 0; return 0; }
+            visited.add(nodeId);
+            const ch = (childMap[nodeId] || []).filter(c => nodeMap[c] && !visited.has(c));
+            if (ch.length === 0) { barycenterMap[nodeId] = 0; return 0; }
+            let sum = 0;
+            ch.forEach(function(c, i) {
+                computeBarycenter(c, new Set(visited));
+                sum += (i / Math.max(1, ch.length - 1)) * 2 - 1; // spread -1..1
+            });
+            barycenterMap[nodeId] = sum / ch.length;
+            return barycenterMap[nodeId];
+        }
+        nodes.forEach(function(n) { computeBarycenter(n.id, new Set()); });
+
         // Assign positions recursively within an angular sector
         function assignRadial(parentId, a0, sector, visited) {
-            const children = (childMap[parentId] || []).filter(c => nodeMap[c] && !visited.has(c));
+            var children = (childMap[parentId] || []).filter(function(c) { return nodeMap[c] && !visited.has(c); });
             if (children.length === 0) return;
+
+            // Sort children by barycenter to minimize edge crossings
+            children.sort(function(a, b) {
+                return (barycenterMap[a] || 0) - (barycenterMap[b] || 0);
+            });
 
             const totalL = children.reduce((s, c) => s + countLeaves(c, new Set([...visited])), 0) || children.length;
             let a = a0;
@@ -509,15 +532,153 @@ const Graph3Tier = {
     zoomOut() {
         if (this.svg && this.zoom) this.svg.transition().duration(300).call(this.zoom.scaleBy, 0.7);
     },
+
+    replay() {
+        if (!this.svg || !this.data) return;
+        if (this.simulation) this.simulation.stop();
+
+        var self = this;
+        var nodes = this.data.nodes.map(function(n) { return Object.assign({}, n); });
+        var edges = this.data.edges.map(function(e) { return { source: e.source, target: e.target }; });
+
+        var svgW = +this.svg.attr('width');
+        var svgH = +this.svg.attr('height');
+        var cx = svgW / 2;
+        var cy = svgH / 2;
+
+        var nodeMap = {};
+        nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+        // Compute subtitle hierarchies
+        var levelMap = {};
+        function assignLevel(id, lvl, visited) {
+            if (visited.has(id)) return;
+            visited.add(id);
+            var node = nodeMap[id];
+            if (!node) return;
+            if (!(node.type === 'topic' || node.type === 'file')) return;
+            levelMap[id] = Math.max(levelMap[id] || 0, lvl);
+            var children = edges.filter(function(e) {
+                var src = typeof e.source === 'string' ? e.source : e.source.id;
+                return src === id;
+            });
+            children.forEach(function(e) {
+                var tgt = typeof e.target === 'string' ? e.target : e.target.id;
+                assignLevel(tgt, lvl + 1, new Set(visited));
+            });
+        }
+
+        // root nodes are L1 topics
+        nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; }).forEach(function(n) {
+            assignLevel(n.id, 0, new Set());
+        });
+        // tag and orphan nodes get max level + 1
+        var maxLvl = 0;
+        Object.values(levelMap).forEach(function(l) { if (l > maxLvl) maxLvl = l; });
+
+        nodes.forEach(function(n) {
+            if (levelMap[n.id] === undefined) levelMap[n.id] = maxLvl + 1;
+        });
+
+        var totalFrames = 300;
+        var frame = 0;
+        var startTime = null;
+
+        this.g.selectAll('*').remove();
+
+        var getRadius = function(d) {
+            if (d.type === 'topic') return d.level === 1 ? 7 : d.level === 2 ? 5 : 4;
+            if (d.type === 'tag') return 4 + Math.min(d.file_count || 0, 30) * 0.25;
+            return 2.5;
+        };
+        var getColor = function(d) {
+            if (d.type === 'topic') return d.level === 1 ? '#e85d3a' : d.level === 2 ? '#ea8600' : '#f4a930';
+            if (d.type === 'tag') return '#7c4dff';
+            return '#81c784';
+        };
+
+        // Prepare SVG elements
+        var linkGroup = this.g.append('g').attr('class', 'graph-links');
+        var link = linkGroup.selectAll('line').data(edges).join('line')
+            .attr('stroke', '#c8c8c8').attr('stroke-width', 0.3).attr('opacity', 0.3);
+
+        var nodeGroup = this.g.append('g').attr('class', 'graph-nodes');
+        var node = nodeGroup.selectAll('g').data(nodes).join('g').attr('cursor', 'pointer');
+
+        node.append('circle')
+            .attr('r', function(d) { return getRadius(d); })
+            .attr('fill', function(d) { return getColor(d); })
+            .attr('stroke', function(d) { return d.has_abstract ? '#e6c200' : 'rgba(255,255,255,0.3)'; })
+            .attr('stroke-width', function(d) { return d.has_abstract ? 3 : 0.8; });
+
+        node.append('text')
+            .text(function(d) { return d.name || ''; })
+            .attr('text-anchor', 'middle')
+            .attr('dy', function(d) { return -(getRadius(d) + 4); })
+            .style('font-size', function(d) {
+                if (d.type === 'topic' && d.level === 1) return '10px';
+                if (d.type === 'topic' && d.level === 2) return '9px';
+                if (d.type === 'tag') return '9px';
+                return '8px';
+            })
+            .style('font-weight', function(d) { return d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal'; })
+            .style('fill', function(d) {
+                if (d.type === 'topic') return 'var(--text-muted, #555)';
+                if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
+                return 'var(--text-muted, #777)';
+            })
+            .style('pointer-events', 'none');
+
+        // Start all nodes at center
+        nodes.forEach(function(n) { n.x = cx; n.y = cy; });
+        node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+
+        var sim = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(50).strength(0.05))
+            .force('charge', d3.forceManyBody().strength(-150))
+            .force('x', d3.forceX(function(d) { return d.tx; }).strength(0.02))
+            .force('y', d3.forceY(function(d) { return d.ty; }).strength(0.02))
+            .force('collision', d3.forceCollide().radius(function(d) { return getRadius(d) + 4; }))
+            .alpha(0.1).alphaDecay(0.005).velocityDecay(0.5)
+            .on('tick', function() {
+                link.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
+                    .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+                node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+            })
+            .on('end', function() {
+                var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+                nodes.forEach(function(n) {
+                    if (n.x < bounds.x1) bounds.x1 = n.x;
+                    if (n.y < bounds.y1) bounds.y1 = n.y;
+                    if (n.x > bounds.x2) bounds.x2 = n.x;
+                    if (n.y > bounds.y2) bounds.y2 = n.y;
+                });
+                var bw = bounds.x2 - bounds.x1 || 100;
+                var bh = bounds.y2 - bounds.y1 || 100;
+                var scale = Math.min((svgW - 120) / bw, (svgH - 120) / bh, 1.2);
+                var midX = (bounds.x1 + bounds.x2) / 2;
+                var midY = (bounds.y1 + bounds.y2) / 2;
+                self.svg.transition().duration(600).call(
+                    self.zoom.transform,
+                    d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+                );
+
+                // Restore regular interaction
+                self.svg.on('click', null);
+                self.simulation = null;
+            });
+    },
 };
 
 window.Graph3Tier = Graph3Tier;
 
 function graphZoomIn() { Graph3Tier.zoomIn(); }
 function graphZoomOut() { Graph3Tier.zoomOut(); }
+function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
 window.graphZoomIn = graphZoomIn;
 window.graphZoomOut = graphZoomOut;
+window.graphReplay = graphReplay;
 window.loadRelationGraphData = loadRelationGraphData;
 
 document.addEventListener('DOMContentLoaded', () => {

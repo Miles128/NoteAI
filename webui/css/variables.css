@@ -119,6 +119,18 @@ body {
     --glow-purple: transparent;
     --ai-panel-bg: #fafafa;
     --modal-bg: #ffffff;
+    --success: #059669;
+    --warning: #d97706;
+    --error: #dc2626;
+    --color-dark-dot: #d1d5db;
+    --color-link-incoming: #2563eb;
+    --color-link-outgoing: #7c3aed;
+    --graph-color-file: #2563eb;
+    --graph-color-topic: #d97706;
+    --graph-color-tag: #059669;
+    --heading-bg: transparent;
+    --italic-bg: rgba(37, 99, 235, 0.04);
+    --font-scale: 1;
 }
 
 [data-theme="light"] body,
@@ -217,14 +229,29 @@ body[data-theme="dark"] {
     --color-danger-text: #dc2626;
     --color-pending: #d97706;
     --color-confirmed: #059669;
+    --color-link-incoming: #159999;
+    --color-link-outgoing: #7c3aed;
     --color-close: #dc2626;
     --color-progress-end: #159999;
+    --color-dark-dot: #1c1c1e;
+    --graph-color-file: #159999;
+    --graph-color-topic: #d97706;
+    --graph-color-tag: #059669;
     --glass-bg: #fffefb;
     --glass-border: rgba(0, 0, 0, 0.04);
     --glass-blur: none;
     --glow-cyan: rgba(21, 153, 153, 0.03);
     --glow-purple: transparent;
     --ai-panel-bg: #faf8f0;
+    --modal-bg: #fffefb;
+    --success: #059669;
+    --warning: #d97706;
+    --error: #dc2626;
+    --heading-bg: transparent;
+    --card-radius: 12px;
+    --btn-radius: 8px;
+    --input-radius: 8px;
+    --font-scale: 1;
 }
 
 [data-theme="paper"] body,

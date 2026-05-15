@@ -24,7 +24,7 @@ class TestFullWorkflow:
 
         # 创建一级 + 二级 + 三级文件夹结构
         notes = workspace / "Notes"
-        l1 = notes / "AI 技术开发架构前沿"
+        l1 = notes / "AI应用开发教程"
         l2 = l1 / "Agent 架构设计"
         l3 = l2 / "MCP vs CLI 对比"
         l3.mkdir(parents=True)
@@ -35,15 +35,15 @@ class TestFullWorkflow:
 
         # 模拟构建树
         tree_entries = [
-            {"name": "AI 技术开发架构前沿", "level": 1, "parent": None},
-            {"name": "Agent 架构设计", "level": 2, "parent": "AI 技术开发架构前沿"},
+            {"name": "AI应用开发教程", "level": 1, "parent": None},
+            {"name": "Agent 架构设计", "level": 2, "parent": "AI应用开发教程"},
             {"name": "MCP vs CLI 对比", "level": 3, "parent": "Agent 架构设计"},
         ]
         tree = TopicManager.build_topic_tree(tree_entries)
 
         assert len(tree) == 1
         l1_node = tree[0]
-        assert l1_node["name"] == "AI 技术开发架构前沿"
+        assert l1_node["name"] == "AI应用开发教程"
         assert l1_node["level"] == 1
         assert len(l1_node["children"]) == 1
 
@@ -59,19 +59,19 @@ class TestFullWorkflow:
     def test_tree_to_json_format(self):
         """验证前端 JSON 输出格式"""
         entries = [
-            {"name": "AI 产品经理之路", "level": 1, "parent": None},
-            {"name": "需求分析", "level": 2, "parent": "AI 产品经理之路"},
+            {"name": "AI产品经理之路", "level": 1, "parent": None},
+            {"name": "需求分析", "level": 2, "parent": "AI产品经理之路"},
         ]
         tree = TopicManager.build_topic_tree(entries)
         json_tree = TopicManager.tree_to_json(tree)
 
         assert isinstance(json_tree, list)
-        assert json_tree[0]["name"] == "AI 产品经理之路"
+        assert json_tree[0]["name"] == "AI产品经理之路"
         assert json_tree[0]["level"] == 1
         assert json_tree[0]["parent"] is None
         assert isinstance(json_tree[0]["children"], list)
         assert json_tree[0]["children"][0]["name"] == "需求分析"
-        assert json_tree[0]["children"][0]["parent"] == "AI 产品经理之路"
+        assert json_tree[0]["children"][0]["parent"] == "AI产品经理之路"
         # 必须有这些字段
         for key in ("has_abstract", "abstract_file", "file_count"):
             assert key in json_tree[0]
@@ -83,7 +83,7 @@ class TestDeleteProtection:
     def test_delete_l1_blocked_by_l2(self):
         tree = [
             {
-                "name": "Vibe coding 方法论",
+                "name": "AI使用技巧和信息",
                 "level": 1,
                 "children": [
                     {"name": "工具链", "level": 2, "children": []},
@@ -91,20 +91,20 @@ class TestDeleteProtection:
                 ],
             }
         ]
-        can, reason = TopicManager.can_delete_topic("Vibe coding 方法论", 1, tree)
+        can, reason = TopicManager.can_delete_topic("AI使用技巧和信息", 1, tree)
         assert can is False
         assert "工具链" in reason
         assert "最佳实践" in reason
 
     def test_delete_l1_allowed_when_no_children(self):
-        tree = [{"name": "AI 工具使用技巧", "level": 1, "children": []}]
-        can, _ = TopicManager.can_delete_topic("AI 工具使用技巧", 1, tree)
+        tree = [{"name": "AI使用技巧和信息", "level": 1, "children": []}]
+        can, _ = TopicManager.can_delete_topic("AI使用技巧和信息", 1, tree)
         assert can is True
 
     def test_delete_l2_warns_cascade(self):
         tree = [
             {
-                "name": "AI 技术开发架构前沿",
+                "name": "AI应用开发教程",
                 "level": 1,
                 "children": [
                     {
@@ -128,7 +128,7 @@ class TestAbstractMutualExclusion:
     def test_mutual_exclusion_l1_vs_l2(self):
         tree = [
             {
-                "name": "AI 产品经理之路",
+                "name": "AI产品经理之路",
                 "level": 1,
                 "has_abstract": False,  # 一级没综述
                 "children": [
@@ -138,7 +138,7 @@ class TestAbstractMutualExclusion:
             }
         ]
         # 一级不能再设综述
-        can, reason = TopicManager.can_generate_abstract("AI 产品经理之路", tree)
+        can, reason = TopicManager.can_generate_abstract("AI产品经理之路", tree)
         assert can is False
 
         # 竞品分析可以设综述（其他二级有也不影响）
@@ -150,9 +150,9 @@ class TestFolderLevelDetermination:
     """文件夹层级判定"""
 
     @pytest.mark.parametrize("parent,expected", [
-        ("Notes/AI 产品经理之路", 2),
-        ("Notes/AI 产品经理之路/需求分析", 3),
-        ("Notes/AI 产品经理之路/需求分析/细节", -1),  # 三级下不再作为标题
+        ("Notes/AI产品经理之路", 2),
+        ("Notes/AI产品经理之路/需求分析", 3),
+        ("Notes/AI产品经理之路/需求分析/细节", -1),  # 三级下不再作为标题
         ("Notes", -1),  # Notes 根目录下不自动判定
     ])
     def test_level_determination(self, tmp_path, parent, expected):

@@ -69,7 +69,7 @@ class TestParseWikiStructure:
         wiki_dir.mkdir(exist_ok=True)
         wiki = wiki_dir / "WIKI.md"
         wiki.write_text(
-            "## AI 产品经理之路\n\n"
+            "## AI产品经理之路\n\n"
             "1. **产品思维**\n"
             "2. **需求分析**\n\n"
             "### Agent 架构\n\n"

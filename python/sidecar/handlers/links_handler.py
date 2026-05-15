@@ -6,6 +6,7 @@ from pathlib import Path
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from utils.link_indexer import discover_links, get_backlinks, confirm_link, reject_link, confirm_all_links
+from utils.logger import logger
 
 
 class LinksHandler(BaseHandler):
@@ -73,8 +74,7 @@ class LinksHandler(BaseHandler):
                             quick_count += 1
                 except Exception: pass
             if quick_count > 0:
-                sys.stderr.write(f"[links] quick auto_assign: {quick_count} files\n")
-                sys.stderr.flush()
+                logger.warning(f"[links] quick auto_assign: {quick_count} files\n")
         except Exception: pass
 
         file_data = []

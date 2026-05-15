@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 
 class TagsHandler(BaseHandler):
@@ -46,11 +47,9 @@ class TagsHandler(BaseHandler):
                                         tag_map[tag] = []
                                     tag_map[tag].append(rel)
                         except Exception as e:
-                            sys.stderr.write(f"[get_all_tags] error reading {entry}: {e}\n")
-                            sys.stderr.flush()
+                            logger.warning(f"[get_all_tags] error reading {entry}: {e}\n")
             except PermissionError as e:
-                sys.stderr.write(f"[get_all_tags] permission denied: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[get_all_tags] permission denied: {e}\n")
 
         _scan_dir(workspace)
 
@@ -84,8 +83,7 @@ class TagsHandler(BaseHandler):
                     if tag not in tag_map:
                         tag_map[tag] = []
             except Exception as e:
-                sys.stderr.write(f"[auto_tag_files] error reading {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[auto_tag_files] error reading {md_file}: {e}\n")
 
         if not tag_map:
             return {"success": True, "updated": 0, "preview": [], "message": "未找到已有标签"}
@@ -142,8 +140,7 @@ class TagsHandler(BaseHandler):
                         "new_tags_to_add": matched_tags,
                     })
             except Exception as e:
-                sys.stderr.write(f"[auto_tag] error scanning {entry}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[auto_tag] error scanning {entry}: {e}\n")
 
         if dry_run:
             return {
@@ -202,8 +199,7 @@ class TagsHandler(BaseHandler):
                     md_file.write_text(new_text, encoding='utf-8')
                     updated += 1
             except Exception as e:
-                sys.stderr.write(f"[auto_tag] error writing {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[auto_tag] error writing {md_file}: {e}\n")
 
         return {
             "success": True,
@@ -251,8 +247,7 @@ class TagsHandler(BaseHandler):
                 for t in tags:
                     existing_tags.add(str(t).strip())
             except Exception as e:
-                sys.stderr.write(f"[create_tag] error reading {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[create_tag] error reading {md_file}: {e}\n")
 
         if tag_name in existing_tags:
             return {"success": True, "message": "标签已存在", "created": False}
@@ -297,8 +292,7 @@ class TagsHandler(BaseHandler):
                         elif val:
                             existing_tags.add(val.strip().strip("'\""))
             except Exception as e:
-                sys.stderr.write(f"[rename_tag] error scanning {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[rename_tag] error scanning {md_file}: {e}\n")
 
         new_tag_exists = False
         for t in existing_tags:
@@ -348,8 +342,7 @@ class TagsHandler(BaseHandler):
                     md_file.write_text(new_content, encoding='utf-8')
                     updated_count += 1
             except Exception as e:
-                sys.stderr.write(f"[rename_tag] error processing {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[rename_tag] error processing {md_file}: {e}\n")
 
         merged = new_tag_exists
         if merged:
@@ -414,8 +407,7 @@ class TagsHandler(BaseHandler):
                     md_file.write_text(new_content, encoding='utf-8')
                     updated_count += 1
             except Exception as e:
-                sys.stderr.write(f"[delete_tag] error processing {md_file}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[delete_tag] error processing {md_file}: {e}\n")
 
         return {
             "success": True,

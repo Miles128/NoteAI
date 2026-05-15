@@ -58,6 +58,9 @@ config/config.json
 # Trae IDE
 .trae/
 
+# CodeGraph
+.codegraph/
+
 # Downloaded bundles
 codemirror-bundle.mjs
 

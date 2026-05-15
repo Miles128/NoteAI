@@ -7,6 +7,7 @@ import yaml
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
+from utils.logger import logger
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
@@ -35,8 +36,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     headings.append({"name": name, "level": 3})
             return headings
         except Exception as e:
-            sys.stderr.write(f"[topics_handler] reading wiki headings: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[topics_handler] reading wiki headings: {e}\n")
             return []
 
     def _auto_assign_topic(self, params):
@@ -250,8 +250,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                         md_file.write_text(new_content, encoding='utf-8')
                         updated_count += 1
                 except Exception as e:
-                    sys.stderr.write(f"[rename_topic] error processing {md_file}: {e}\n")
-                    sys.stderr.flush()
+                    logger.warning(f"[rename_topic] error processing {md_file}: {e}\n")
 
             old_notes_dir = workspace_path / config.NOTES_FOLDER / old_name
             new_notes_dir = workspace_path / config.NOTES_FOLDER / new_name
@@ -314,8 +313,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                             shutil.move(str(f), str(dst))
                             moved_files.append(dst)
                         except Exception as e:
-                            sys.stderr.write(f"[delete_topic] move failed: {e}\n")
-                            sys.stderr.flush()
+                            logger.warning(f"[delete_topic] move failed: {e}\n")
             else:
                 for f in notes_topic_dir.rglob("*"):
                     if f.is_file() and f.suffix.lower() == ".md":
@@ -329,8 +327,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                             shutil.move(str(f), str(dst))
                             moved_files.append(dst)
                         except Exception as e:
-                            sys.stderr.write(f"[delete_topic] move failed: {e}\n")
-                            sys.stderr.flush()
+                            logger.warning(f"[delete_topic] move failed: {e}\n")
 
         if notes_topic_dir.exists():
             try: shutil.rmtree(str(notes_topic_dir))
@@ -401,8 +398,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                         md_file.write_text(new_content, encoding='utf-8')
                         updated_count += 1
                 except Exception as e:
-                    sys.stderr.write(f"[delete_topic] error processing {md_file}: {e}\n")
-                    sys.stderr.flush()
+                    logger.warning(f"[delete_topic] error processing {md_file}: {e}\n")
 
             # 5. Auto-assign new topics for moved files
             from utils.topic_assigner import auto_assign_topic_for_file, write_topic_to_file, move_file_to_notes_topic_folder

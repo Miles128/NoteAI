@@ -7,6 +7,7 @@ from typing import Optional
 from pymilvus import MilvusClient, DataType
 
 from config import config
+from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
@@ -257,8 +258,7 @@ def delete_by_file(workspace: str, file_path: str):
             filter=f'file_path == "{file_path}"',
         )
     except Exception as e:
-        sys.stderr.write(f"[rag/index] delete_by_file error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/index] delete_by_file error: {e}\n")
 
     sparse_index = _load_sparse_index(workspace)
     to_remove = [k for k in sparse_index if k in chunk_ids_to_remove]

@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 from config import config
+from utils.logger import logger
 
 DEFAULT_TOP_K = 5
 
@@ -105,8 +106,7 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
             tags=tags,
         )
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] HyDE search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] HyDE search error: {e}\n")
         return []
 
 
@@ -156,8 +156,7 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
         return [results[i] for i in selected_indices]
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] MMR dedup error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] MMR dedup error: {e}\n")
         return results[:top_k]
 
 
@@ -183,8 +182,7 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
     except ImportError:
         return results[:top_k]
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] rerank error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] rerank error: {e}\n")
         return results[:top_k]
 
 
@@ -216,8 +214,7 @@ def rebuild_index(progress_callback=None):
             chunks = chunk_file(str(md_file), text)
             all_chunks.extend(chunks)
         except Exception as e:
-            sys.stderr.write(f"[rag/retriever] chunk error {md_file}: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[rag/retriever] chunk error {md_file}: {e}\n")
 
     if not all_chunks:
         return {"success": False, "message": "未找到可索引的文件"}

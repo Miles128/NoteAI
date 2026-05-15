@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config import config
 from sidecar.textutils import parse_frontmatter
+from utils.logger import logger
 
 _changelog_lock = threading.Lock()
 
@@ -167,8 +168,7 @@ def _compress_text(content: str, target_ratio: float = 0.6) -> str:
 
         return ''.join(summary)
     except Exception as e:
-        sys.stderr.write(f"[compress_text] SnowNLP failed: {e}, fallback to jieba\n")
-        sys.stderr.flush()
+        logger.warning(f"[compress_text] SnowNLP failed: {e}, fallback to jieba\n")
         return _compress_text_jieba(content, target_ratio)
 
 

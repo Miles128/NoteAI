@@ -6,6 +6,7 @@ from pathlib import Path
 import yaml
 from config import config
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 
 class IntelTopicHandler(BaseHandler):
@@ -52,8 +53,7 @@ class IntelTopicHandler(BaseHandler):
                             break
                 content_summary = ' '.join(summary_lines)[:200]
             except Exception as e:
-                sys.stderr.write(f"[intel_topic] reading file for topic analysis: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[intel_topic] reading file for topic analysis: {e}\n")
             files_info.append({
                 "name": md_file.name,
                 "path": rel_path,

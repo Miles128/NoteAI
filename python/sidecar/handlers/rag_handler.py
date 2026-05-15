@@ -328,107 +328,13 @@ class RagHandler(BaseHandler):
 
         return "\n".join(parts)
 
-    def _filter_history(self, history, max_assistant_msgs=3):
-        if not history:
-            return []
-        assistant_count = 0
-        filtered = []
-        for msg in reversed(history):
-            if msg["role"] == "assistant":
-                if assistant_count >= max_assistant_msgs:
-                    continue
-                assistant_count += 1
-            filtered.append(msg)
-        filtered.reverse()
-        return filtered
+    # _filter_history, _build_messages_with_history, _compress_history removed — unused dead code
 
-    def _build_messages_with_history(self, system_content, user_content, history):
-        messages = [{"role": "system", "content": system_content}]
-        for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
-        messages.append({"role": "user", "content": user_content})
-        return messages
-
-    def _compress_history(self, history):
-        from utils.llm_utils import call_llm_raw, check_api_config, APIConfigError
-        from prompts.rag_assistant import RAG_COMPRESS_PROMPT
-
-        try:
-            is_valid, _ = check_api_config()
-            if not is_valid:
-                return history
-        except APIConfigError:
-            return history
-
-        try:
-            conv_text = ""
-            for h in history:
-                role = "用户" if h["role"] == "user" else "助手"
-                conv_text += f"{role}: {h['content']}\n"
-            prompt = RAG_COMPRESS_PROMPT.format(conversation=conv_text)
-            result = call_llm_raw(prompt, temperature=0.1, max_tokens=500)
-            return result.strip() or conv_text
-        except Exception:
-            return history
-
-    def _execute_single_action(self, action):
-        from utils.llm_utils import call_llm_raw, check_api_config, APIConfigError
-
-        action_type = action.get("action", "")
-        if action_type != "execute":
-            return
-
-        code = action.get("code", "")
-        if not code:
-            return
-
-        try:
-            is_valid, _ = check_api_config()
-            if not is_valid:
-                return
-        except APIConfigError:
-            return
-
-        workspace = config.workspace_path
-        if not workspace:
-            return
-
-        exec_prompt = FILE_OPERATION_PROMPT.format(
-            workspace=workspace,
-            code=code
-        )
-
-        try:
-            result = call_llm_raw(exec_prompt, temperature=0.1)
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rag_action_result",
-                    "code": code,
-                    "result": result,
-                }
-            })
-        except Exception as e:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rag_action_error",
-                    "code": code,
-                    "error": str(e),
-                }
-            })
+    # _execute_single_action removed — LLM-generated code execution is a security risk
 
     def _rag_chat_with_actions(self, params):
-        from sidecar.rag.retriever import retrieve
-        from sidecar.rag.memory import load_short_memory, save_short_memory
-        from utils.llm_utils import call_llm_raw, call_llm_raw_stream, check_api_config, APIConfigError
-        from prompts.rag_assistant import RAG_CHAT_PROMPT
-
-        with self._rag_chat_lock:
-            return self._do_rag_chat_inner(
-                params, retrieve, load_short_memory, save_short_memory,
-                call_llm_raw_stream, check_api_config, APIConfigError, RAG_CHAT_PROMPT
-            )
+        """Alias for _rag_chat — kept for backward-compatible RPC route."""
+        return self._rag_chat(params)
 
     def register_routes(self, router):
         router.register("init_rag_index", self._init_rag_index)

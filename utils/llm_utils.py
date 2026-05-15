@@ -197,8 +197,7 @@ def call_llm_raw_stream(
                 if chunk_callback:
                     chunk_callback(token)
         except Exception as e:
-            sys.stderr.write(f"[llm_utils] stream error: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[llm_utils] stream error: {e}\n")
             raise
         logger.info(f"LLM stream done, response length: {len(full_text)}")
         return full_text.strip()
@@ -536,6 +535,5 @@ def reformat_markdown_with_llm(content: str) -> str:
         return content
     except Exception as e:
         import sys
-        sys.stderr.write(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
         return content

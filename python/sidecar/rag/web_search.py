@@ -6,6 +6,7 @@ from urllib.parse import quote_plus, unquote_plus, urlparse, parse_qs, urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from utils.logger import logger
 
 MAX_RESULTS = 5
 MAX_CONTENT_CHARS = 2000
@@ -64,8 +65,7 @@ def duckduckgo_search(query: str) -> list:
 
         return results
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] DuckDuckGo search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] DuckDuckGo search error: {e}\n")
         return []
 
 
@@ -118,8 +118,7 @@ def baidu_search(query: str) -> list:
                     else:
                         href = ""
                 except Exception as e:
-                    sys.stderr.write(f"[rag/web_search] resolve url {href} error: {e}\n")
-                    sys.stderr.flush()
+                    logger.warning(f"[rag/web_search] resolve url {href} error: {e}\n")
 
             if title and href:
                 results.append({
@@ -133,8 +132,7 @@ def baidu_search(query: str) -> list:
 
         return results
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] Baidu search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] Baidu search error: {e}\n")
         return []
 
 
@@ -143,8 +141,7 @@ def web_search(query: str) -> list:
     if results:
         return results
 
-    sys.stderr.write("[rag/web_search] DuckDuckGo returned no results, trying Baidu\n")
-    sys.stderr.flush()
+    logger.warning("[rag/web_search] DuckDuckGo returned no results, trying Baidu")
     return baidu_search(query)
 
 
@@ -161,8 +158,7 @@ def _is_safe_url(url: str) -> bool:
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
                 return False
         except ValueError as e:
-            sys.stderr.write(f"[rag/web_search] parse ip error: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[rag/web_search] parse ip error: {e}\n")
         if parsed.scheme not in ("http", "https"):
             return False
         return True
@@ -195,8 +191,7 @@ def fetch_page_content(url: str) -> str:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text[:MAX_CONTENT_CHARS]
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] fetch {url} error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] fetch {url} error: {e}\n")
         return ""
 
 

@@ -3,6 +3,7 @@
 import sys
 import threading
 from typing import Optional
+from utils.logger import logger
 
 
 class ModelWarmupManager:
@@ -24,14 +25,12 @@ class ModelWarmupManager:
                 return
             cls._warmup_done = True
 
-        sys.stderr.write("[preload] Starting model warmup...\n")
-        sys.stderr.flush()
+        logger.warning("[preload] Starting model warmup...")
 
         cls._preload_embedder()
         cls._preload_reranker()
 
-        sys.stderr.write("[preload] Model warmup complete\n")
-        sys.stderr.flush()
+        logger.warning("[preload] Model warmup complete")
 
     @classmethod
     def _preload_embedder(cls):
@@ -39,8 +38,7 @@ class ModelWarmupManager:
             from sidecar.rag.embedder import get_model
             get_model()
         except Exception as e:
-            sys.stderr.write(f"[preload] embedder warmup skipped: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[preload] embedder warmup skipped: {e}\n")
 
     @classmethod
     def _preload_reranker(cls):
@@ -48,8 +46,7 @@ class ModelWarmupManager:
             from sidecar.rag.retriever import _get_reranker
             _get_reranker()
         except Exception as e:
-            sys.stderr.write(f"[preload] reranker warmup skipped: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[preload] reranker warmup skipped: {e}\n")
 
     @classmethod
     def is_ready(cls) -> bool:

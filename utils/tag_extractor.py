@@ -193,8 +193,7 @@ def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
                 add_yaml_frontmatter_to_file(fp, tags=tags)
                 results[fp] = tags
         except Exception as e:
-            sys.stderr.write(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
     
     return results
 
@@ -510,8 +509,7 @@ def add_yaml_frontmatter_to_file(
         p.write_text(new_content, encoding='utf-8')
         return True
     except (OSError, ValueError) as e:
-        sys.stderr.write(f"[tag_extractor] add_yaml_frontmatter_to_file failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[tag_extractor] add_yaml_frontmatter_to_file failed: {e}\n")
         return False
 
 
@@ -568,8 +566,7 @@ def process_and_tag_file_with_yaml(
 
         return result
     except (OSError, ValueError, UnicodeError) as e:
-        sys.stderr.write(f"[tag_extractor] process_and_tag_file_with_yaml failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[tag_extractor] process_and_tag_file_with_yaml failed: {e}\n")
         return result
 
 

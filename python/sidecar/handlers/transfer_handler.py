@@ -5,6 +5,7 @@ import traceback
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 
 class TransferHandler(BaseHandler):
@@ -46,8 +47,7 @@ class TransferHandler(BaseHandler):
                 "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
             })
         except Exception as e:
-            sys.stderr.write(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "web_download_error", "error": str(e)}
@@ -121,8 +121,7 @@ class TransferHandler(BaseHandler):
                 }
             })
         except Exception as e:
-            sys.stderr.write(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "file_import_error", "error": str(e)}
@@ -152,8 +151,7 @@ class TransferHandler(BaseHandler):
                 "result": {"type": "file_conversion_complete", "data": result}
             })
         except Exception as e:
-            sys.stderr.write(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "file_conversion_error", "error": str(e)}
@@ -204,8 +202,7 @@ class TransferHandler(BaseHandler):
             if converted > 0:
                 self._start_task("batch_assign_after_convert", self._do_batch_assign_after_convert)
         except Exception as e:
-            sys.stderr.write(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "auto_convert_error", "error": str(e)}
@@ -216,8 +213,7 @@ class TransferHandler(BaseHandler):
         try:
             self._batch_auto_assign_topics({})
         except Exception as e:
-            sys.stderr.write(f"[auto_convert] post-convert batch_assign failed: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[auto_convert] post-convert batch_assign failed: {e}\n")
 
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
@@ -264,8 +260,7 @@ class TransferHandler(BaseHandler):
         except Exception as e:
             if self.note_integration:
                 self.note_integration.documents = []
-            sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "note_integration_error", "error": str(e)}

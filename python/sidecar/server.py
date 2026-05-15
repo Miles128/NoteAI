@@ -159,8 +159,7 @@ class SidecarServer(PathHelpersMixin):
             observer.start()
             self._watcher_observer = observer
         except Exception as e:
-            sys.stderr.write(f"[watcher] start failed: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[watcher] start failed: {e}\n")
 
     def _stop_watcher(self):
         if self._watcher_observer:
@@ -168,8 +167,7 @@ class SidecarServer(PathHelpersMixin):
                 self._watcher_observer.stop()
                 self._watcher_observer.join(timeout=2)
             except Exception as e:
-                sys.stderr.write(f"[watcher] stop failed: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[watcher] stop failed: {e}\n")
             self._watcher_observer = None
 
     def _invalidate_cache(self):
@@ -224,16 +222,14 @@ class SidecarServer(PathHelpersMixin):
                     if not any(is_ignored_dir(p) for p in rel.parts):
                         self._auto_process_md_file(str(path))
                 except ValueError:
-                    sys.stderr.write(f"[watcher] path outside workspace: {file_path}\n")
-                    sys.stderr.flush()
+                    logger.warning(f"[watcher] path outside workspace: {file_path}\n")
 
         with self._watcher_debounce_lock:
             if self._watcher_debounce_timer:
                 try:
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
-                    sys.stderr.write("[watcher] debounce timer already cancelled\n")
-                    sys.stderr.flush()
+                    logger.warning("[watcher] debounce timer already cancelled")
             self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
 
@@ -250,8 +246,7 @@ class SidecarServer(PathHelpersMixin):
         try:
             text = Path(file_path).read_text(encoding='utf-8')
         except Exception as e:
-            sys.stderr.write(f"[watcher] failed to read {file_path}: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
             return
 
         m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
@@ -270,8 +265,7 @@ class SidecarServer(PathHelpersMixin):
                         },
                     })
             except Exception as e:
-                sys.stderr.write(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
             return
 
         file_topic = None
@@ -330,8 +324,7 @@ def main():
     from sidecar.rag.model_preload import ModelWarmupManager
 
     server = SidecarServer()
-    sys.stderr.write("[Python Sidecar] Ready\n")
-    sys.stderr.flush()
+    logger.warning("[Python Sidecar] Ready")
 
     ModelWarmupManager.start_preload()
 

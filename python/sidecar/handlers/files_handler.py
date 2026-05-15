@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 
 class FilesHandler(BaseHandler):
@@ -109,8 +110,7 @@ class FilesHandler(BaseHandler):
                             file_topic = val.strip().strip("'\"")
                             break
             except Exception as e:
-                sys.stderr.write(f"[files_handler] reading file topic for deletion: {e}\n")
-                sys.stderr.flush()
+                logger.warning(f"[files_handler] reading file topic for deletion: {e}\n")
 
         try:
             import send2trash
@@ -121,8 +121,7 @@ class FilesHandler(BaseHandler):
                 try:
                     remove_file_from_wiki_topic(path)
                 except Exception as e:
-                    sys.stderr.write(f"[files_handler] removing file from wiki topic: {e}\n")
-                    sys.stderr.flush()
+                    logger.warning(f"[files_handler] removing file from wiki topic: {e}\n")
                 self._start_task(f"cascade_update_{file_topic}", self._do_cascade_survey_update, args=(file_topic,))
 
             return {"success": True}

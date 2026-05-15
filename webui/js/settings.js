@@ -175,6 +175,34 @@ function resetApiConfig() {
     if (maxContextEl) maxContextEl.value = 128000;
 }
 
+async function saveFontSize(size) {
+    try {
+        var result = await window.api.saveUiConfig({ font_size: size });
+        if (!result || !result.success) {
+            console.error('[Settings] save font_size failed:', result);
+        }
+    } catch (e) {
+        console.error('[Settings] save font_size error:', e);
+    }
+}
+
+async function loadUiConfigToForm() {
+    try {
+        var uiConfig = await window.api.getUiConfig();
+        if (uiConfig) {
+            var savedFontSize = uiConfig.font_size || 'small';
+            if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+                window.ThemeModule.setFontSize(savedFontSize);
+            }
+            document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+                radio.checked = radio.value === savedFontSize;
+            });
+        }
+    } catch (e) {
+        console.error('[Settings] Load UI config error:', e);
+    }
+}
+
 window.SettingsModule = {
     saveApiConfig,
     loadApiConfigToForm,
@@ -185,7 +213,9 @@ window.SettingsModule = {
     autoSaveConfig,
     resetApiConfig,
     saveUserProfile,
-    loadUserProfile
+    loadUserProfile,
+    saveFontSize,
+    loadUiConfigToForm
 };
 
 async function saveUserProfile() {

@@ -75,6 +75,7 @@ class ConfigHandler(BaseHandler):
             "integration_strategy": self.config.integration_strategy,
             "auto_topic": self.config.auto_topic,
             "topic_list": self.config.topic_list,
+            "font_size": self.config.font_size,
         }
 
     def _save_ui_config(self, params):
@@ -90,6 +91,8 @@ class ConfigHandler(BaseHandler):
             self.config.auto_topic = params["auto_topic"]
         if "topic_list" in params:
             self.config.topic_list = params["topic_list"]
+        if "font_size" in params:
+            self.config.font_size = params["font_size"]
         save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}

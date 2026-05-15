@@ -4,10 +4,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     initMarked();
     
     initSystemThemeListener();
-    
+
     const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
     applyTheme(savedTheme);
-    
+
+    if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+        window.ThemeModule.restoreFontSize();
+    }
+
     initResizer();
     initPreviewResizer();
     initWindowDrag();

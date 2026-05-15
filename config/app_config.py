@@ -47,6 +47,7 @@ class AppConfig:
 
     theme: str = "light"
     theme_preference: str = "system"
+    font_size: str = "small"
     accent_color: str = "#4A90D9"
     window_width: int = 1400
     window_height: int = 900

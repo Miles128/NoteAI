@@ -236,6 +236,30 @@ function hideAboutPanel() {
 }
 
 window.setTheme = setTheme;
+window.setFontSize = applyFontSize;
+
+var FONT_SCALE_MAP = { small: 1, medium: 1.15, large: 1.3 };
+
+function setFontSize(size) {
+    var scale = FONT_SCALE_MAP[size] || 1;
+    document.documentElement.style.setProperty('--font-scale', scale);
+    document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+        radio.checked = radio.value === size;
+    });
+}
+
+function applyFontSize(size) {
+    setFontSize(size);
+    localStorage.setItem('noteai_font_size', size);
+    if (window.SettingsModule && window.SettingsModule.saveFontSize) {
+        window.SettingsModule.saveFontSize(size);
+    }
+}
+
+function restoreFontSize() {
+    var saved = localStorage.getItem('noteai_font_size') || 'small';
+    setFontSize(saved);
+}
 
 window.ThemeModule = {
     toggleTheme,
@@ -243,6 +267,8 @@ window.ThemeModule = {
     applySystemTheme,
     initSystemThemeListener,
     applyTheme,
+    setFontSize: applyFontSize,
+    restoreFontSize,
     restoreSidebarWidth,
     initResizer,
     initPreviewResizer,

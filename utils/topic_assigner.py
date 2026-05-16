@@ -383,6 +383,199 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
         return []
 
 
+def _workspace_rel(path: Path, workspace: str) -> str:
+    return str(path.relative_to(workspace)) if path.is_relative_to(workspace) else str(path)
+
+
+def _extract_assignment_meta(full_path: Path, match) -> tuple[str, list[str], str]:
+    yaml_text = match.group(1) if match else ''
+    tags = []
+    title = full_path.stem
+    if not match:
+        return title, tags, yaml_text
+
+    for line in yaml_text.split('\n'):
+        idx = line.find(':')
+        if idx < 0:
+            continue
+        key = line[:idx].strip()
+        val = line[idx + 1:].strip()
+        if key == 'tags' and val.startswith('[') and val.endswith(']'):
+            tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
+        elif key == 'title':
+            title = val.strip().strip("'\"")
+    return title, tags, yaml_text
+
+
+def _apply_auto_topic(full_path: Path, workspace: str, topic: str, title: str, source: str | None, format_optimized: bool):
+    write_topic_to_file(str(full_path), topic)
+    add_file_to_wiki_topic(_workspace_rel(full_path, workspace), topic, title)
+    move_file_to_notes_topic_folder(str(full_path), topic)
+    prefix = "AI 分配" if source == "llm" else "自动分配"
+    _log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
+    result = {"status": "auto_assigned", "topic": topic, "format_optimized": format_optimized}
+    if source:
+        result["source"] = source
+    return result
+
+
+def _save_pending_assignment(full_path: Path, workspace: str, title: str, tags: list[str], candidates: list[str], source: str, format_optimized: bool):
+    pending = load_pending()
+    rel = _workspace_rel(full_path, workspace)
+    existing = next((p for p in pending if p.get("file") == rel), None)
+    payload = {"file": rel, "title": title, "tags": tags, "candidates": candidates, "source": source}
+    if existing:
+        existing.update(payload)
+    else:
+        pending.append(payload)
+    save_pending(pending)
+    return {"status": "pending", "source": source, "format_optimized": format_optimized}
+
+
+def _collect_topic_candidates(headings, filename: str, tags: list[str]):
+    high_priority_candidates = []
+    low_priority_candidates = []
+    normalized_filename = _normalize_for_match(filename)
+
+    for heading in headings:
+        h_name = heading["name"]
+        topic_tokens = tokenize_text(h_name)
+        if _has_consecutive_two_words_match(topic_tokens, filename):
+            high_priority_candidates.append(heading)
+            continue
+        if any(_has_meaningful_word_match(tag, h_name) for tag in tags):
+            if heading not in low_priority_candidates:
+                low_priority_candidates.append(heading)
+            continue
+        for token in topic_tokens:
+            if _is_meaningful_tag(token) and _normalize_for_match(token) in normalized_filename:
+                if heading not in low_priority_candidates and heading not in high_priority_candidates:
+                    low_priority_candidates.append(heading)
+                break
+
+    candidates = [h["name"] for h in high_priority_candidates]
+    extra_candidates = [h["name"] for h in low_priority_candidates if h["name"] not in candidates]
+    for raw in [*tags, *tokenize_text(filename)]:
+        if _is_meaningful_tag(raw) and not _is_generic_word(raw) and raw not in candidates and raw not in extra_candidates:
+            extra_candidates.append(raw)
+    return high_priority_candidates, candidates, extra_candidates
+
+
+def _match_llm_suggestions(llm_suggestions, headings):
+    matched = []
+    for suggestion in llm_suggestions:
+        for heading in headings:
+            if _normalize_for_match(suggestion) == _normalize_for_match(heading["name"]):
+                matched.append(heading["name"])
+                break
+    return matched
+
+
+def _load_assignment_text(full_path: Path):
+    try:
+        text = full_path.read_text(encoding='utf-8')
+    except Exception:
+        return None, None, "", [], ""
+    match = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+    title, tags, yaml_text = _extract_assignment_meta(full_path, match)
+    return text, match, title, tags, yaml_text
+
+
+def _try_assign_survey(full_path: Path, workspace: str, title: str, format_optimized: bool):
+    filename = full_path.stem
+    if not (filename.endswith('综述') or filename.endswith('_综述')):
+        return None
+    survey_hint = re.sub(r'[_\s]*综述$', '', filename).strip()
+    if not survey_hint:
+        return None
+    best_match = _find_best_topic_match(survey_hint, parse_wiki_headings())
+    if not best_match:
+        return None
+    return _apply_auto_topic(full_path, workspace, best_match, title, "survey", format_optimized)
+
+
+def _try_assign_single_candidate(
+    full_path: Path,
+    workspace: str,
+    title: str,
+    candidates: list[str],
+    high_priority_candidates: list,
+    format_optimized: bool,
+):
+    if high_priority_candidates and len(candidates) == 1:
+        return _apply_auto_topic(full_path, workspace, candidates[0], title, None, format_optimized)
+    return None
+
+
+def _try_assign_with_llm(
+    full_path: Path,
+    workspace: str,
+    text: str,
+    match,
+    title: str,
+    tags: list[str],
+    headings,
+    format_optimized: bool,
+):
+    body = text[match.end():] if match else text
+    content_preview = body[:1500].strip()
+    topic_names = [h["name"] for h in headings]
+    llm_suggestions = _llm_suggest_topic(title, tags, content_preview, topic_names)
+    if not llm_suggestions:
+        return None, []
+    matched = _match_llm_suggestions(llm_suggestions, headings)
+    if len(matched) == 1:
+        return _apply_auto_topic(full_path, workspace, matched[0], title, "llm", format_optimized), matched
+    return None, [*matched, *llm_suggestions]
+
+
+def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  # noqa: PLR0911
+    text, match, title, tags, yaml_text = _load_assignment_text(full_path)
+    if text is None:
+        return None
+
+    if match and not _check_topic_needs_processing(yaml_text):
+        return None
+
+    format_optimized = _optimize_file_format(full_path, text, match)
+
+    if format_optimized:
+        text, match, title, tags, yaml_text = _load_assignment_text(full_path)
+        if text is None:
+            return None
+
+    survey_result = _try_assign_survey(full_path, workspace, title, format_optimized)
+    if survey_result:
+        return survey_result
+
+    headings = parse_wiki_headings()
+    if not headings:
+        return _save_pending_assignment(full_path, workspace, title, tags, [], "none", format_optimized)
+
+    high_priority_candidates, candidates, extra_candidates = _collect_topic_candidates(headings, full_path.stem, tags)
+    single_candidate_result = _try_assign_single_candidate(
+        full_path, workspace, title, candidates, high_priority_candidates, format_optimized
+    )
+    if single_candidate_result:
+        return single_candidate_result
+
+    all_candidates = candidates + extra_candidates
+    need_llm = use_llm and config.api_key and (not high_priority_candidates or len(all_candidates) > 1)
+
+    if need_llm:
+        llm_result, llm_candidates = _try_assign_with_llm(
+            full_path, workspace, text, match, title, tags, headings, format_optimized
+        )
+        if llm_result:
+            return llm_result
+        for candidate in llm_candidates:
+            if candidate not in all_candidates:
+                all_candidates.append(candidate)
+
+    source = "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
+    return _save_pending_assignment(full_path, workspace, title, tags, all_candidates, source, format_optimized)
+
+
 def auto_assign_topic_for_file(file_path, use_llm=True):
     workspace = config.workspace_path
     if not workspace:
@@ -392,197 +585,7 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
     if not full_path.exists():
         return None
 
-    try:
-        text = full_path.read_text(encoding='utf-8')
-    except Exception:
-        return None
-
-    m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-
-    yaml_text = m.group(1) if m else ''
-    tags = []
-    title = full_path.stem
-
-    if m:
-        for line in yaml_text.split('\n'):
-            idx = line.find(':')
-            if idx < 0:
-                continue
-            key = line[:idx].strip()
-            val = line[idx + 1:].strip()
-            if key == 'tags' and val.startswith('[') and val.endswith(']'):
-                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-            elif key == 'title':
-                title = val.strip().strip("'\"")
-
-    if m and not _check_topic_needs_processing(yaml_text):
-        return None
-
-    format_optimized = _optimize_file_format(full_path, text, m)
-
-    if format_optimized:
-        try:
-            text = full_path.read_text(encoding='utf-8')
-        except Exception as e:
-            sys.stderr.write(f"[auto_assign] re-read failed: {e}\n"); sys.stderr.flush()
-        else:
-            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-            yaml_text = m.group(1) if m else ''
-            if m:
-                tags = []
-                title = full_path.stem
-                for line in yaml_text.split('\n'):
-                    idx = line.find(':')
-                    if idx < 0:
-                        continue
-                    key = line[:idx].strip()
-                    val = line[idx + 1:].strip()
-                    if key == 'tags' and val.startswith('[') and val.endswith(']'):
-                        tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                    elif key == 'title':
-                        title = val.strip().strip("'\"")
-
-    filename = full_path.stem
-    is_survey = filename.endswith('综述') or filename.endswith('_综述')
-    if is_survey:
-        survey_hint = re.sub(r'[_\s]*综述$', '', filename).strip()
-        if survey_hint:
-            headings = parse_wiki_headings()
-            best_match = _find_best_topic_match(survey_hint, headings)
-            if best_match:
-                write_topic_to_file(str(full_path), best_match)
-                rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-                add_file_to_wiki_topic(rel, best_match, title)
-                move_file_to_notes_topic_folder(str(full_path), best_match)
-                _log("topic_auto", f"自动分配主题「{best_match}」→ {full_path.name}", full_path.name)
-                return {"status": "auto_assigned", "topic": best_match, "source": "survey", "format_optimized": format_optimized}
-
-    headings = parse_wiki_headings()
-    filename = full_path.stem
-
-    if not headings:
-        pending = load_pending()
-        rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-        if not any(p.get("file") == rel for p in pending):
-            pending.append({
-                "file": rel,
-                "title": title,
-                "tags": tags,
-                "candidates": [],
-                "source": "none"
-            })
-            save_pending(pending)
-        return {"status": "pending", "source": "none", "format_optimized": format_optimized}
-
-    high_priority_candidates = []
-    low_priority_candidates = []
-
-    for h in headings:
-        h_name = h["name"]
-        topic_tokens = tokenize_text(h_name)
-
-        if _has_consecutive_two_words_match(topic_tokens, filename):
-            high_priority_candidates.append(h)
-            continue
-
-        for tag in tags:
-            if _has_meaningful_word_match(tag, h_name):
-                if h not in low_priority_candidates:
-                    low_priority_candidates.append(h)
-                break
-
-        for token in topic_tokens:
-            if _is_meaningful_tag(token) and _normalize_for_match(token) in _normalize_for_match(filename):
-                if h not in low_priority_candidates and h not in high_priority_candidates:
-                    low_priority_candidates.append(h)
-                break
-
-    if high_priority_candidates:
-        candidates = [h["name"] for h in high_priority_candidates]
-    else:
-        candidates = []
-
-    extra_candidates = []
-    for h in low_priority_candidates:
-        if h["name"] not in candidates:
-            extra_candidates.append(h["name"])
-
-    for tag in tags:
-        if _is_meaningful_tag(tag) and not _is_generic_word(tag):
-            if tag not in candidates and tag not in extra_candidates:
-                extra_candidates.append(tag)
-
-    filename_tokens = tokenize_text(filename)
-    for token in filename_tokens:
-        if _is_meaningful_tag(token) and not _is_generic_word(token):
-            if token not in candidates and token not in extra_candidates:
-                extra_candidates.append(token)
-
-    if high_priority_candidates and len(candidates) == 1:
-        topic = candidates[0]
-        write_topic_to_file(str(full_path), topic)
-        rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-        add_file_to_wiki_topic(rel, topic, title)
-        move_file_to_notes_topic_folder(str(full_path), topic)
-        _log("topic_auto", f"自动分配主题「{topic}」→ {full_path.name}", full_path.name)
-        return {"status": "auto_assigned", "topic": topic, "format_optimized": format_optimized}
-
-    all_candidates = candidates + extra_candidates
-
-    need_llm = use_llm and config.api_key and (
-        not high_priority_candidates or len(all_candidates) > 1
-    )
-
-    if need_llm:
-        body = text
-        if m:
-            body = text[m.end():]
-        content_preview = body[:1500].strip()
-        topic_names = [h["name"] for h in headings]
-        llm_suggestions = _llm_suggest_topic(title, tags, content_preview, topic_names)
-
-        if llm_suggestions:
-            matched = []
-            for s in llm_suggestions:
-                for h in headings:
-                    if _normalize_for_match(s) == _normalize_for_match(h["name"]):
-                        matched.append(h["name"])
-                        break
-
-            if len(matched) == 1:
-                topic = matched[0]
-                write_topic_to_file(str(full_path), topic)
-                rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-                add_file_to_wiki_topic(rel, topic, title)
-                move_file_to_notes_topic_folder(str(full_path), topic)
-                _log("topic_auto", f"AI 分配主题「{topic}」→ {full_path.name}", full_path.name)
-                return {"status": "auto_assigned", "topic": topic, "source": "llm", "format_optimized": format_optimized}
-
-            for t in matched:
-                if t not in all_candidates:
-                    all_candidates.append(t)
-            for s in llm_suggestions:
-                if s not in all_candidates:
-                    all_candidates.append(s)
-
-    pending = load_pending()
-    rel = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
-    existing = next((p for p in pending if p.get("file") == rel), None)
-    if existing:
-        existing["title"] = title
-        existing["tags"] = tags
-        existing["candidates"] = all_candidates
-        existing["source"] = "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
-    else:
-        pending.append({
-            "file": rel,
-            "title": title,
-            "tags": tags,
-            "candidates": all_candidates,
-            "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority")
-        })
-    save_pending(pending)
-    return {"status": "pending", "source": "llm" if need_llm else ("wiki" if high_priority_candidates else "low_priority"), "format_optimized": format_optimized}
+    return _auto_assign_existing_file(full_path, workspace, use_llm)
 
 
 def _remove_empty_dir(dir_path):

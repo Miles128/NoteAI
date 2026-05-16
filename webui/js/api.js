@@ -271,8 +271,8 @@ async function getBacklinks(filePath) {
     return pyCall('get_backlinks', { file_path: filePath });
 }
 
-async function getRelationGraph() {
-    return pyCall('get_relation_graph', {});
+async function getLinkStats() {
+    return pyCall('get_link_stats', {});
 }
 
 async function getGraphData(filter) {
@@ -481,7 +481,7 @@ window.api = {
 
     discoverLinks: discoverLinks,
     getBacklinks: getBacklinks,
-    getRelationGraph: getRelationGraph,
+    getLinkStats: getLinkStats,
     getGraphData: getGraphData,
     confirmLink: confirmLink,
     rejectLink: rejectLink,

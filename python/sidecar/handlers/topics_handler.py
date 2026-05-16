@@ -1,3 +1,4 @@
+import shutil
 import sys
 from pathlib import Path
 
@@ -5,17 +6,65 @@ import yaml
 
 from config import config, is_ignored_dir
 from config.constants import TOPIC_SEP
+from sidecar.cascade import (
+    append_changelog,
+    cascade_on_topic_resolved,
+    collect_topic_notes,
+    ensure_topic_folder,
+    generate_new_survey,
+    get_survey_path,
+    update_existing_survey,
+)
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
+from sidecar.wiki_utils import resolve_wiki_path
+from utils.activity_log import get_entries
+from utils.link_indexer import cleanup_stale_links, get_backlinks
 from utils.logger import logger
+from utils.topic_assigner import (
+    _deduplicate_files_in_wiki,
+    _merge_duplicate_topics_in_wiki,
+    auto_assign_topic_for_file,
+    cleanup_stale_pending,
+    load_pending,
+    move_file_to_notes_topic_folder,
+    save_pending,
+    sync_wiki_with_files,
+    write_topic_to_file,
+)
+from utils.topic_assigner import (
+    create_topic as wiki_create_topic,
+)
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
+    def _sync_wiki_with_folder_system(self):
+        try:
+            return sync_wiki_with_files()
+        except Exception as e:
+            logger.warning(f"[topics_handler] sync WIKI with folder system failed: {e}\n")
+            return {"success": False, "message": str(e)}
+
+    def _topic_dir_path(self, workspace_path: Path, topic_name: str) -> Path:
+        normalized = topic_name.replace('/', TOPIC_SEP)
+        parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
+        topic_dir = workspace_path / config.NOTES_FOLDER
+        for part in parts:
+            topic_dir = topic_dir / part
+        return topic_dir
+
+    def _topic_artifact_dir_path(self, workspace_path: Path, root_folder: str, topic_name: str) -> Path:
+        normalized = topic_name.replace('/', TOPIC_SEP)
+        parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
+        topic_dir = workspace_path / root_folder
+        for part in parts:
+            topic_dir = topic_dir / part
+        return topic_dir
+
     def _get_topic_tree(self, params):
         return self._get_topic_tree_3tier(params)
 
     def _parse_wiki_headings(self):
-        from sidecar.wiki_utils import resolve_wiki_path
         workspace = config.workspace_path
         if not workspace:
             return []
@@ -38,7 +87,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             logger.warning(f"[topics_handler] reading wiki headings: {e}\n")
             return []
 
-    def _auto_assign_topic(self, params):
+    def _auto_assign_topic(self, params):  # noqa: PLR0911
         path = params.get("path", "")
         if not path:
             return {"success": False, "message": "未指定文件"}
@@ -48,11 +97,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from utils.topic_assigner import (
-            auto_assign_topic_for_file,
-            move_file_to_notes_topic_folder,
-            write_topic_to_file,
-        )
         try:
             result = auto_assign_topic_for_file(str(full_path))
             if not result:
@@ -62,24 +106,15 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             topic = result.get("topic", "")
             if not topic:
                 return {"success": False, "message": "未找到匹配主题"}
-            write_topic_to_file(str(full_path), topic)
-            try:
-                move_file_to_notes_topic_folder(str(full_path), topic)
-            except Exception as e:
-                sys.stderr.write(f"[topics_handler] auto assign file move error: {e}\n")
+            self._sync_wiki_with_folder_system()
             self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
             return {"success": True, "topic": topic}
         except Exception as e:
             return {"success": False, "message": f"自动分配失败: {str(e)}"}
 
-    def _batch_auto_assign_topics(self, params):
+    def _batch_auto_assign_topics(self, _params):
         if not config.workspace_path:
             return {"success": False, "message": "未设置工作区或工作区不存在"}
-        from utils.topic_assigner import (
-            auto_assign_topic_for_file,
-            move_file_to_notes_topic_folder,
-            write_topic_to_file,
-        )
 
         ws = Path(config.workspace_path)
         md_files = [f for f in ws.rglob("*.md") if not f.name.startswith(".")
@@ -97,11 +132,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     topic = result.get("topic", "")
                     if topic:
                         assigned_topics.add(topic)
-                        write_topic_to_file(str(md_file), topic)
-                        try:
-                            move_file_to_notes_topic_folder(str(md_file), topic)
-                        except Exception as e:
-                            sys.stderr.write(f"[topics_handler] move error: {e}\n")
                     auto_assigned += 1
                 elif result and result.get("status") == "pending":
                     need_confirm += 1
@@ -117,6 +147,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         for topic in assigned_topics:
             self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
+
+        if assigned_topics:
+            self._sync_wiki_with_folder_system()
 
         return {
             "success": True,
@@ -140,10 +173,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
         try:
             write_topic_to_file(str(full_path), topic)
             move_file_to_notes_topic_folder(str(full_path), topic)
+            self._sync_wiki_with_folder_system()
             self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
             return {"success": True, "message": f"已移动到主题「{topic}」"}
         except Exception as e:
@@ -159,21 +192,14 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
 
-        from utils.topic_assigner import create_topic as wiki_create_topic
         result = wiki_create_topic(topic_full)
         if not result.get("success"):
             return result
 
-        from sidecar.cascade import append_changelog, ensure_topic_folder
         folder_result = ensure_topic_folder(topic_full)
         if folder_result.get("success"):
             append_changelog(f"创建主题: {topic_full}")
 
-        from utils.topic_assigner import (
-            auto_assign_topic_for_file,
-            move_file_to_notes_topic_folder,
-            write_topic_to_file,
-        )
         assigned = 0
         ws = Path(workspace)
         for md_file in ws.rglob("*.md"):
@@ -186,11 +212,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     continue
                 result2 = auto_assign_topic_for_file(str(md_file))
                 if result2 and result2.get("status") == "auto_assigned" and result2.get("topic") == topic_full:
-                    write_topic_to_file(str(md_file), topic_full)
-                    move_file_to_notes_topic_folder(str(md_file), topic_full)
                     assigned += 1
             except Exception:
                 pass
+
+        self._sync_wiki_with_folder_system()
 
         msg = f"主题「{topic_full}」创建成功"
         if assigned > 0:
@@ -210,62 +236,44 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "未设置工作区"}
 
         workspace_path = Path(workspace)
-        import shutil
-
-        from sidecar.wiki_utils import resolve_wiki_path
-        wiki_path = resolve_wiki_path(workspace)
-        if not wiki_path.exists():
-            return {"success": False, "message": "WIKI.md 不存在"}
-
         try:
-            from config.constants import TOPIC_SEP as _sep
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-            lines = wiki_text.split('\n')
-            current_parent = ''
+            old_notes_dir = self._topic_dir_path(workspace_path, old_name)
+            new_notes_dir = self._topic_dir_path(workspace_path, new_name)
+            if not old_notes_dir.exists():
+                return {"success": False, "message": f"主题文件夹不存在: {old_name}"}
 
-            for i, line in enumerate(lines):
-                stripped = line.strip()
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-                    if current_parent == old_name:
-                        lines[i] = line.replace(old_name, new_name, 1)
-                elif stripped.startswith('### '):
-                    child = stripped[4:].strip()
-                    full = _sep.join([current_parent, child]) if current_parent else child
-                    if full == old_name:
-                        lines[i] = line.replace(child, new_leaf, 1)
-            wiki_path.write_text('\n'.join(lines), encoding='utf-8')
-
-            updated_count = 0
-            for md_file in workspace_path.rglob('*.md'):
-                if md_file.name.startswith('.') or 'wiki' in md_file.parts:
-                    continue
-                try:
-                    text = md_file.read_text(encoding='utf-8')
-                    had_bom = text.startswith('\ufeff')
-                    meta, body = self._parse_frontmatter(text)
-                    if meta is None:
-                        continue
-                    changed = False
-                    if isinstance(meta.get('topic'), str) and meta['topic'] == old_name:
-                        meta['topic'] = new_name
-                        changed = True
-                    if changed:
-                        new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-                        prefix = '\ufeff' if had_bom else ''
-                        new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
-                        md_file.write_text(new_content, encoding='utf-8')
-                        updated_count += 1
-                except Exception as e:
-                    logger.warning(f"[rename_topic] error processing {md_file}: {e}\n")
-
-            old_notes_dir = workspace_path / config.NOTES_FOLDER / old_name
-            new_notes_dir = workspace_path / config.NOTES_FOLDER / new_name
-            if old_notes_dir.exists() and not new_notes_dir.exists():
-                new_notes_dir.parent.mkdir(parents=True, exist_ok=True)
+            new_notes_dir.parent.mkdir(parents=True, exist_ok=True)
+            merged = False
+            if new_notes_dir.exists():
+                merged = True
+                for item in old_notes_dir.iterdir():
+                    dst = new_notes_dir / item.name
+                    if dst.exists():
+                        stem = item.stem
+                        suffix = item.suffix
+                        counter = 1
+                        while dst.exists():
+                            dst = new_notes_dir / f"{stem}_{counter}{suffix}"
+                            counter += 1
+                    shutil.move(str(item), str(dst))
+                shutil.rmtree(str(old_notes_dir))
+            else:
                 shutil.move(str(old_notes_dir), str(new_notes_dir))
 
-            return {"success": True, "message": f"已重命名主题，更新 {updated_count} 个文件", "updated": updated_count}
+            old_abstract_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, old_name)
+            new_abstract_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, new_name)
+            if old_abstract_dir.exists() and not new_abstract_dir.exists():
+                new_abstract_dir.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(old_abstract_dir), str(new_abstract_dir))
+
+            sync_result = self._sync_wiki_with_folder_system()
+            updated_count = sync_result.get("updated", 0) if sync_result.get("success") else 0
+            return {
+                "success": True,
+                "message": f"已{'合并' if merged else '重命名'}主题，更新 {updated_count} 个文件",
+                "updated": updated_count,
+                "merged": merged,
+            }
         except Exception as e:
             return {"success": False, "message": f"重命名失败: {str(e)}"}
 
@@ -277,159 +285,50 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
 
-        import shutil
-        from pathlib import Path
-
-        from sidecar.wiki_utils import resolve_wiki_path
         workspace_path = Path(workspace)
-
-        wiki_path = resolve_wiki_path(workspace)
-        if not wiki_path.exists():
-            return {"success": False, "message": "WIKI.md 不存在"}
-
-        is_parent = '/' not in topic_name
-        if is_parent:
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-            lines = wiki_text.split('\n')
-            current_parent = ''
-            children = []
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-                elif stripped.startswith('### ') and current_parent == topic_name:
-                    children.append(stripped[4:].strip())
-            if children:
-                return {"success": False, "message": f"无法删除：该主题下还有 {len(children)} 个子主题（{', '.join(children[:3])}{'...' if len(children) > 3 else ''}），请先删除所有子主题"}
-
-        notes_topic_dir = workspace_path / config.NOTES_FOLDER / topic_name
         notes_root = workspace_path / config.NOTES_FOLDER
+        notes_topic_dir = self._topic_dir_path(workspace_path, topic_name)
         moved_files = []
 
         if notes_topic_dir.exists() and notes_topic_dir.is_dir():
-            if is_parent:
-                for f in notes_topic_dir.iterdir():
-                    if f.is_file() and f.suffix.lower() == ".md":
-                        dst = notes_root / f.name
-                        if dst.exists():
-                            stem = f.stem; counter = 1
-                            while dst.exists():
-                                dst = notes_root / f"{stem}_{counter}{f.suffix}"
-                                counter += 1
-                        try:
-                            shutil.move(str(f), str(dst))
-                            moved_files.append(dst)
-                        except Exception as e:
-                            logger.warning(f"[delete_topic] move failed: {e}\n")
-            else:
-                for f in notes_topic_dir.rglob("*"):
-                    if f.is_file() and f.suffix.lower() == ".md":
-                        dst = notes_root / f.name
-                        if dst.exists():
-                            stem = f.stem; counter = 1
-                            while dst.exists():
-                                dst = notes_root / f"{stem}_{counter}{f.suffix}"
-                                counter += 1
-                        try:
-                            shutil.move(str(f), str(dst))
-                            moved_files.append(dst)
-                        except Exception as e:
-                            logger.warning(f"[delete_topic] move failed: {e}\n")
+            for f in sorted(notes_topic_dir.rglob("*.md")):
+                dst = notes_root / f.name
+                if dst.exists():
+                    stem = f.stem
+                    counter = 1
+                    while dst.exists():
+                        dst = notes_root / f"{stem}_{counter}{f.suffix}"
+                        counter += 1
+                try:
+                    shutil.move(str(f), str(dst))
+                    moved_files.append(dst)
+                except Exception as e:
+                    logger.warning(f"[delete_topic] move failed: {e}\n")
+            try:
+                shutil.rmtree(str(notes_topic_dir))
+            except Exception as e:
+                sys.stderr.write(f"[delete_topic] rmdir: {e}\n")
 
-        if notes_topic_dir.exists():
-            try: shutil.rmtree(str(notes_topic_dir))
-            except Exception as e: sys.stderr.write(f"[delete_topic] rmdir: {e}\n")
-        org_dir = workspace_path / config.ABSTRACT_FOLDER / topic_name
+        org_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, topic_name)
         if org_dir.exists():
-            try: shutil.rmtree(str(org_dir))
-            except Exception as e: sys.stderr.write(f"[delete_topic] rmdir org: {e}\n")
+            try:
+                shutil.rmtree(str(org_dir))
+            except Exception as e:
+                sys.stderr.write(f"[delete_topic] rmdir org: {e}\n")
 
         try:
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-            lines = wiki_text.split('\n')
-            new_lines = []
-            in_section = False
-            in_parent = False
-            current_parent = ''
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-                    if is_parent:
-                        if current_parent == topic_name:
-                            in_section = True
-                            continue
-                        in_section = False
-                    else:
-                        in_parent = current_parent == topic_name.split(TOPIC_SEP)[0].strip()
-                        in_section = False
-                elif stripped.startswith('### ') and in_parent and not is_parent:
-                    child = stripped[4:].strip()
-                    full = f"{current_parent}{TOPIC_SEP}{child}"
-                    if full == topic_name:
-                        in_section = True
-                        continue
-                    in_section = False
-                if in_section:
-                    continue
-                new_lines.append(line)
-            wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
-
-            updated_count = 0
-            for md_file in workspace_path.rglob('*.md'):
-                if md_file.name.startswith('.') or 'wiki' in md_file.parts:
-                    continue
-                try:
-                    text = md_file.read_text(encoding='utf-8')
-                    had_bom = text.startswith('\ufeff')
-                    meta, body = self._parse_frontmatter(text)
-                    if meta is None:
-                        continue
-                    changed = False
-                    if isinstance(meta.get('topic'), str) and meta['topic'] == topic_name:
-                        meta.pop('topic', None)
-                        changed = True
-                    if changed:
-                        if meta:
-                            new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-                            prefix = '\ufeff' if had_bom else ''
-                            new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
-                        else:
-                            prefix = '\ufeff' if had_bom else ''
-                            new_content = prefix + body.lstrip('\n')
-                        md_file.write_text(new_content, encoding='utf-8')
-                        updated_count += 1
-                except Exception as e:
-                    logger.warning(f"[delete_topic] error processing {md_file}: {e}\n")
-
-            # 5. Auto-assign new topics for moved files
-            from utils.topic_assigner import (
-                auto_assign_topic_for_file,
-                move_file_to_notes_topic_folder,
-                write_topic_to_file,
-            )
-            reassigned = 0; pending = 0
-            for f in moved_files:
-                if not f.exists(): continue
-                try:
-                    result = auto_assign_topic_for_file(str(f))
-                    if result and result.get("status") == "auto_assigned" and result.get("topic"):
-                        write_topic_to_file(str(f), result["topic"])
-                        move_file_to_notes_topic_folder(str(f), result["topic"])
-                        reassigned += 1
-                    else:
-                        pending += 1
-                except Exception as e:
-                    sys.stderr.write(f"[delete_topic] reassign failed: {e}\n")
-                    pending += 1
-
-            return {"success": True, "message": f"已删除主题「{topic_name}」，{len(moved_files)} 个文件移至 Notes 根目录，重新分配 {reassigned} 个，{pending} 个待确认",
-                    "moved": len(moved_files), "updated": updated_count, "reassigned": reassigned, "pending": pending}
+            sync_result = self._sync_wiki_with_folder_system()
+            updated_count = sync_result.get("updated", 0) if sync_result.get("success") else 0
+            return {
+                "success": True,
+                "message": f"已删除主题「{topic_name}」，{len(moved_files)} 个文件移至 Notes 根目录，更新 {updated_count} 个文件",
+                "moved": len(moved_files),
+                "updated": updated_count,
+            }
         except Exception as e:
             return {"success": False, "message": f"删除失败: {str(e)}"}
 
-    def _get_all_topic_names(self, params):
-        from sidecar.wiki_utils import resolve_wiki_path
+    def _get_all_topic_names(self, _params):
         wiki_path = resolve_wiki_path()
         if not wiki_path.exists():
             return {"success": True, "topics": []}
@@ -519,19 +418,23 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                     prefix = '\ufeff' if had_bom else ''
                     new_content = prefix + body.lstrip('\n')
                 full_path.write_text(new_content, encoding='utf-8')
+                notes_root = Path(config.workspace_path) / config.NOTES_FOLDER
+                notes_root.mkdir(parents=True, exist_ok=True)
+                if full_path.parent != notes_root:
+                    dst = notes_root / full_path.name
+                    if dst.exists():
+                        stem = full_path.stem
+                        counter = 1
+                        while dst.exists():
+                            dst = notes_root / f"{stem}_{counter}{full_path.suffix}"
+                            counter += 1
+                    shutil.move(str(full_path), str(dst))
+                self._sync_wiki_with_folder_system()
             return {"success": True}
         except Exception as e:
             return {"success": False, "message": str(e)}
 
     def _do_cascade_survey_update(self, topic):
-        from sidecar.cascade import (
-            append_changelog,
-            collect_topic_notes,
-            ensure_topic_folder,
-            generate_new_survey,
-            get_survey_path,
-            update_existing_survey,
-        )
         try:
             ensure_topic_folder(topic)
             notes = collect_topic_notes(topic)
@@ -546,7 +449,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             sys.stderr.write(f"[topics_handler] cascade survey update failed: {e}\n")
 
     def _do_file_added_cascade(self, file_path: Path):
-        from sidecar.cascade import cascade_on_topic_resolved
         try:
             text = file_path.read_text(encoding="utf-8")
             fm, _ = self._parse_frontmatter(text)
@@ -556,10 +458,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             sys.stderr.write(f"[topics_handler] file_added_cascade error: {e}\n")
 
-    def _get_all_pending(self, params):
-        from utils.link_indexer import cleanup_stale_links, get_backlinks
-        from utils.topic_assigner import cleanup_stale_pending, load_pending
-
+    def _get_all_pending(self, _params):
         cleanup_stale_pending()
         cleanup_stale_links()
 
@@ -601,29 +500,19 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
 
-        from utils.topic_assigner import (
-            add_file_to_wiki_topic,
-            load_pending,
-            move_file_to_notes_topic_folder,
-            save_pending,
-            write_topic_to_file,
-        )
-
         result = write_topic_to_file(str(full_path), topic)
         if not result.get("success"):
             return result
 
         move_file_to_notes_topic_folder(str(full_path), topic)
+        self._sync_wiki_with_folder_system()
 
+        pending = load_pending()
         workspace = config.workspace_path
         try:
             rel_path = str(full_path.relative_to(workspace)) if full_path.is_relative_to(workspace) else str(full_path)
         except ValueError:
             rel_path = str(full_path)
-        file_title = full_path.stem
-        add_file_to_wiki_topic(rel_path, topic, file_title)
-
-        pending = load_pending()
         pending = [p for p in pending if p.get("file") != rel_path]
         save_pending(pending)
 
@@ -632,12 +521,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return {"success": True, "message": f"已确认主题「{topic}」"}
 
     def _get_activity_log(self, params):
-        from utils.activity_log import get_entries
         limit = params.get("limit", 50)
         return {"entries": get_entries(limit)}
 
-    def _merge_duplicate_topics(self, params):
-        from utils.topic_assigner import _deduplicate_files_in_wiki, _merge_duplicate_topics_in_wiki
+    def _merge_duplicate_topics(self, _params):
         merged = _merge_duplicate_topics_in_wiki()
         deduped = _deduplicate_files_in_wiki()
         return {"success": True, "merged_topics": merged, "deduplicated_files": deduped}
@@ -661,11 +548,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("get_survey_status", self._get_survey_status)
         router.register("toggle_survey", self._toggle_survey)
 
-    def _get_survey_status(self, params):
+    def _get_survey_status(self, _params):
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        from sidecar.wiki_utils import resolve_wiki_path
         wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": True, "surveys": {}}
@@ -699,14 +585,13 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def _toggle_survey(self, params):
+    def _toggle_survey(self, params):  # noqa: PLR0912, PLR0915
         topic_name = params.get("topic", "").strip()
         if not topic_name:
             return {"success": False, "message": "未指定主题"}
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        from sidecar.wiki_utils import resolve_wiki_path
         wiki_path = resolve_wiki_path(workspace)
         if not wiki_path.exists():
             return {"success": False, "message": "WIKI.md 不存在"}

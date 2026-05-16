@@ -1,4 +1,7 @@
 import re
+import shutil
+import subprocess
+import tempfile
 from typing import Optional, Callable, Dict, List
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -180,6 +183,80 @@ class DOCXConverter(BaseConverter):
             return result.value
 
 
+class LegacyDOCConverter(BaseConverter):
+    """旧版 Word .doc 转 Markdown，依赖系统可用的文本提取工具。"""
+
+    SUPPORTED_FORMATS = ['.doc']
+
+    def to_markdown(self, file_path: str) -> str:
+        logger.info(f"开始转换旧版Word文档: {file_path}")
+
+        errors = []
+        for extractor in (self._extract_with_textutil, self._extract_with_antiword, self._extract_with_catdoc):
+            try:
+                content = extractor(file_path)
+                if content and content.strip():
+                    markdown_content = clean_text(content)
+                    markdown_content = remove_images_from_markdown(markdown_content)
+                    logger.info(f"旧版Word文档转换完成: {file_path}")
+                    return markdown_content
+            except Exception as e:
+                errors.append(str(e))
+
+        msg = "无法转换旧版 .doc 文件：需要 macOS textutil，或安装 antiword/catdoc"
+        if errors:
+            msg += f"；错误: {'; '.join(errors[-2:])}"
+        raise RuntimeError(msg)
+
+    def _extract_with_textutil(self, file_path: str) -> str:
+        textutil = shutil.which("textutil")
+        if not textutil:
+            raise RuntimeError("textutil not found")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / (Path(file_path).stem + ".txt")
+            proc = subprocess.run(
+                [textutil, "-convert", "txt", "-output", str(out_path), file_path],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if proc.returncode != 0:
+                raise RuntimeError((proc.stderr or proc.stdout or "textutil failed").strip())
+            return read_file_with_encoding(str(out_path))
+
+    def _extract_with_antiword(self, file_path: str) -> str:
+        antiword = shutil.which("antiword")
+        if not antiword:
+            raise RuntimeError("antiword not found")
+        proc = subprocess.run(
+            [antiword, file_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or "antiword failed").strip())
+        return proc.stdout
+
+    def _extract_with_catdoc(self, file_path: str) -> str:
+        catdoc = shutil.which("catdoc")
+        if not catdoc:
+            raise RuntimeError("catdoc not found")
+        proc = subprocess.run(
+            [catdoc, file_path],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError((proc.stderr or "catdoc failed").strip())
+        return proc.stdout
+
+
 class PPTConverter(BaseConverter):
     """PPT转Markdown转换器（使用python-pptx，仅支持 .pptx）"""
 
@@ -229,6 +306,119 @@ class PPTConverter(BaseConverter):
         return "\n\n---\n\n".join(slides)
 
 
+class LegacyPPTConverter(BaseConverter):
+    """旧版 PowerPoint .ppt 转 Markdown，解析 OLE PowerPoint Document 文本记录。"""
+
+    SUPPORTED_FORMATS = ['.ppt']
+    TEXT_CHARS_ATOM = 4000
+    TEXT_BYTES_ATOM = 4008
+    CSTRING = 4026
+
+    def to_markdown(self, file_path: str) -> str:
+        logger.info(f"开始转换旧版PPT: {file_path}")
+
+        try:
+            markdown_content = self._extract_ppt_text(file_path)
+            markdown_content = clean_text(markdown_content)
+            markdown_content = remove_images_from_markdown(markdown_content)
+            logger.info(f"旧版PPT转换完成: {file_path}")
+            return markdown_content
+        except Exception as e:
+            logger.error(f"旧版PPT转换失败 {file_path}: {e}")
+            raise
+
+    def _extract_ppt_text(self, file_path: str) -> str:
+        import olefile
+
+        with olefile.OleFileIO(file_path) as ole:
+            stream_name = self._find_powerpoint_stream(ole)
+            if not stream_name:
+                raise RuntimeError("未找到 PowerPoint Document 数据流")
+            data = ole.openstream(stream_name).read()
+
+        texts = self._extract_text_records(data)
+        if not texts:
+            raise RuntimeError("未能从旧版 .ppt 文件中提取文本")
+        return "\n\n".join(texts)
+
+    def _find_powerpoint_stream(self, ole) -> list[str] | None:
+        for entry in ole.listdir(streams=True, storages=False):
+            if entry and entry[-1] == "PowerPoint Document":
+                return entry
+        return None
+
+    def _extract_text_records(self, data: bytes) -> list[str]:
+        texts = []
+        pos = 0
+        data_len = len(data)
+        while pos + 8 <= data_len:
+            rec_header = int.from_bytes(data[pos:pos + 2], "little")
+            rec_type = int.from_bytes(data[pos + 2:pos + 4], "little")
+            rec_len = int.from_bytes(data[pos + 4:pos + 8], "little")
+            next_pos = pos + 8 + rec_len
+            if rec_len < 0 or next_pos > data_len:
+                pos += 1
+                continue
+
+            payload = data[pos + 8:next_pos]
+            if rec_type == self.TEXT_CHARS_ATOM:
+                text = self._decode_utf16(payload)
+                if text:
+                    texts.append(text)
+            elif rec_type == self.TEXT_BYTES_ATOM:
+                text = self._decode_latin_text(payload)
+                if text:
+                    texts.append(text)
+            elif rec_type == self.CSTRING:
+                text = self._decode_cstring(payload)
+                if text:
+                    texts.append(text)
+
+            pos = next_pos if next_pos > pos else pos + 1
+            _ = rec_header
+
+        return self._dedupe_texts(texts)
+
+    def _decode_utf16(self, payload: bytes) -> str:
+        try:
+            return self._normalize_text(payload.decode("utf-16le", errors="ignore"))
+        except Exception:
+            return ""
+
+    def _decode_latin_text(self, payload: bytes) -> str:
+        return self._normalize_text(payload.decode("latin-1", errors="ignore"))
+
+    def _decode_cstring(self, payload: bytes) -> str:
+        utf16 = self._decode_utf16(payload)
+        latin = self._decode_latin_text(payload)
+        return utf16 if self._text_score(utf16) >= self._text_score(latin) else latin
+
+    def _normalize_text(self, text: str) -> str:
+        text = text.replace("\x00", "")
+        lines = [line.strip() for line in re.split(r"[\r\n]+", text) if line.strip()]
+        return "\n".join(lines).strip()
+
+    def _text_score(self, text: str) -> int:
+        if not text:
+            return 0
+        score = len(text)
+        score -= sum(4 for ch in text if ord(ch) < 32 and ch not in "\n\r\t")
+        score += sum(2 for ch in text if "\u4e00" <= ch <= "\u9fff")
+        score += sum(1 for ch in text if ch.isalpha() or ch.isdigit())
+        return score
+
+    def _dedupe_texts(self, texts: list[str]) -> list[str]:
+        deduped = []
+        seen = set()
+        for text in texts:
+            key = re.sub(r"\s+", " ", text).strip()
+            if len(key) < 2 or key in seen:
+                continue
+            seen.add(key)
+            deduped.append(text)
+        return deduped
+
+
 class HTMLConverter(BaseConverter):
     """HTML转Markdown转换器（使用html2text）"""
 
@@ -265,7 +455,9 @@ class FileConverterManager:
 
     PDF_FORMATS = ['.pdf']
     DOCX_FORMATS = ['.docx']
+    LEGACY_DOC_FORMATS = ['.doc']
     PPT_FORMATS = ['.pptx']
+    LEGACY_PPT_FORMATS = ['.ppt']
     HTML_FORMATS = ['.html', '.htm']
     TXT_FORMATS = ['.txt']
 
@@ -273,8 +465,10 @@ class FileConverterManager:
         self.progress_callback = progress_callback
         self._pdf_converter = None
         self._docx_converter = None
+        self._legacy_doc_converter = None
         self._txt_converter = None
         self._ppt_converter = None
+        self._legacy_ppt_converter = None
         self._html_converter = None
 
     @staticmethod
@@ -309,6 +503,12 @@ class FileConverterManager:
         return self._docx_converter
 
     @property
+    def legacy_doc_converter(self):
+        if self._legacy_doc_converter is None:
+            self._legacy_doc_converter = LegacyDOCConverter(self.progress_callback)
+        return self._legacy_doc_converter
+
+    @property
     def txt_converter(self):
         """懒加载TXT转换器"""
         if self._txt_converter is None:
@@ -320,6 +520,12 @@ class FileConverterManager:
         if self._ppt_converter is None:
             self._ppt_converter = PPTConverter(self.progress_callback)
         return self._ppt_converter
+
+    @property
+    def legacy_ppt_converter(self):
+        if self._legacy_ppt_converter is None:
+            self._legacy_ppt_converter = LegacyPPTConverter(self.progress_callback)
+        return self._legacy_ppt_converter
 
     @property
     def html_converter(self):
@@ -334,8 +540,12 @@ class FileConverterManager:
             return self.pdf_converter
         elif ext in self.DOCX_FORMATS:
             return self.docx_converter
+        elif ext in self.LEGACY_DOC_FORMATS:
+            return self.legacy_doc_converter
         elif ext in self.PPT_FORMATS:
             return self.ppt_converter
+        elif ext in self.LEGACY_PPT_FORMATS:
+            return self.legacy_ppt_converter
         elif ext in self.HTML_FORMATS:
             return self.html_converter
         elif ext in self.TXT_FORMATS:
@@ -534,4 +744,12 @@ class FileConverterManager:
     @classmethod
     def get_supported_formats(cls) -> List[str]:
         """获取支持的格式列表"""
-        return cls.PDF_FORMATS + cls.DOCX_FORMATS + cls.PPT_FORMATS + cls.HTML_FORMATS + cls.TXT_FORMATS
+        return (
+            cls.PDF_FORMATS
+            + cls.DOCX_FORMATS
+            + cls.LEGACY_DOC_FORMATS
+            + cls.PPT_FORMATS
+            + cls.LEGACY_PPT_FORMATS
+            + cls.HTML_FORMATS
+            + cls.TXT_FORMATS
+        )

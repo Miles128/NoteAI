@@ -64,13 +64,10 @@ function updateHomeStats() {
     if (gs1) gs1.textContent = fileCount;
     if (gs2) gs2.textContent = topicCount;
 
-    if (window.api && window.api.getRelationGraph) {
-        window.api.getRelationGraph().then(function(result) {
-            if (result && result.edges) {
-                var linkCount = 0;
-                for (var i = 0; i < result.edges.length; i++) {
-                    if (result.edges[i].type === 'link') linkCount++;
-                }
+    if (window.api && window.api.getLinkStats) {
+        window.api.getLinkStats().then(function(result) {
+            if (result && result.success) {
+                var linkCount = result.confirmed || 0;
                 if (el3) el3.textContent = linkCount;
                 if (gs3) gs3.textContent = linkCount;
             }

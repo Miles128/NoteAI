@@ -20,6 +20,8 @@ dependencies = [
     "PyMuPDF>=1.23.0",
     "mammoth>=1.0.0",
     "python-docx>=1.0.0",
+    "python-pptx>=1.0.0",
+    "olefile>=0.47",
     "pillow>=10.0.0",
     "markdown>=3.5.0",
     "PyYAML>=6.0",
@@ -45,7 +47,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["config*", "modules*", "prompts*", "utils*", "tests*"]
+include = ["config*", "modules*", "prompts*", "sidecar*", "utils*", "tests*"]
 
 # Maps import name `sidecar` → directory python/sidecar (Tauri sidecar package).
 [tool.setuptools.package-dir]

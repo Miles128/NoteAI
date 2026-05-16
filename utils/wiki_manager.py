@@ -1,15 +1,17 @@
 """WIKI.md 管理模块 — 解析、读写、同步、去重、合并"""
 
 import re
-import sys
 import shutil
-from pathlib import Path
+import sys
 from datetime import datetime
+from pathlib import Path
 
-from config.settings import config
+import yaml
+
 from config.constants import TOPIC_SEP
+from config.settings import config
 from utils.logger import logger
-from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
+
 
 def _get_wiki_path():
     workspace = config.workspace_path
@@ -37,12 +39,22 @@ def parse_wiki_headings():
     except Exception:
         return []
     headings = []
+    topic_stack = []
     for line in text.split('\n'):
         stripped = line.strip()
-        if stripped.startswith('## ') and not stripped.startswith('### '):
-            headings.append({"level": 2, "name": stripped[3:].strip()})
-        elif stripped.startswith('### '):
-            headings.append({"level": 3, "name": stripped[4:].strip()})
+        match = re.match(r'^(#{2,4})\s+(.+)$', stripped)
+        if not match:
+            continue
+        label = match.group(2).strip()
+        if label in ('目录', '来源文件'):
+            continue
+        topic_level = len(match.group(1)) - 1
+        while len(topic_stack) >= topic_level:
+            topic_stack.pop()
+        parent_path = topic_stack[-1] if topic_stack else ""
+        topic_path = parent_path + TOPIC_SEP + label if parent_path else label
+        topic_stack.append(topic_path)
+        headings.append({"level": topic_level, "name": topic_path, "label": label})
     return headings
 
 
@@ -118,7 +130,7 @@ def parse_wiki_structure():
     return topics
 
 
-def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
+def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):  # noqa: PLR0912, PLR0915
     """向 WIKI.md 添加文件到指定主题下。
 
     WIKI.md 格式（仅含标题 + 文件列表）::
@@ -228,7 +240,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
         return False
 
 
-def rename_wiki_topic(old_topic, new_topic):
+def rename_wiki_topic(old_topic, new_topic):  # noqa: PLR0912, PLR0915
     """重命名 WIKI.md 中的主题标题，返回该主题下的文件标题列表。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
@@ -275,7 +287,6 @@ def rename_wiki_topic(old_topic, new_topic):
 
         workspace = config.workspace_path
         if workspace:
-            import shutil
             old_dir = Path(workspace) / config.NOTES_FOLDER / old_topic
             new_dir = Path(workspace) / config.NOTES_FOLDER / new_topic
             if old_dir.exists() and old_dir.is_dir():
@@ -367,7 +378,7 @@ def _remove_empty_topic_sections(topic_name_lower):
         logger.warning(f"[topic_assigner] 写入 WIKI.md 失败: {e}")
 
 
-def _merge_duplicate_topics_in_wiki():
+def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
     """合并 WIKI.md 中同名（小写匹配）的重复主题段。"""
     wiki_path = _get_wiki_path()
     if not wiki_path or not wiki_path.exists():
@@ -408,7 +419,7 @@ def _merge_duplicate_topics_in_wiki():
         groups.setdefault(key, []).append(sec)
 
     merged = 0
-    for key, group in groups.items():
+    for group in groups.values():
         if len(group) <= 1:
             continue
         keeper = group[0]
@@ -432,7 +443,7 @@ def _merge_duplicate_topics_in_wiki():
     # Rebuild lines
     remove_ranges = set()
     keeper_starts = {}
-    for key, group in groups.items():
+    for group in groups.values():
         if len(group) > 1:
             keeper = group[0]
             keeper_starts[keeper["start"]] = keeper["lines"]
@@ -551,7 +562,7 @@ def _remove_topic_from_wiki(topic_name):
     return True, removed_titles
 
 
-def delete_topic(topic_name):
+def delete_topic(topic_name):  # noqa: PLR0912, PLR0915
     """
     删除主题：
     1. 将主题文件夹下所有文件移动到 Notes 根目录
@@ -561,7 +572,11 @@ def delete_topic(topic_name):
 
     返回: {"success": bool, "message": str, "reassigned": int, "pending": int}
     """
-    import shutil
+    from utils.topic_assigner import (  # noqa: PLC0415
+        _clear_topic_in_file,
+        _remove_empty_dir,
+        auto_assign_topic_for_file,
+    )
 
     workspace = config.workspace_path
     if not workspace:
@@ -629,7 +644,8 @@ def delete_topic(topic_name):
         while not candidate.exists():
             candidate = notes_root / f"{stem}_{counter}{suffix}"
             counter += 1
-            if counter > 100:
+            max_conflict_attempts = 100
+            if counter > max_conflict_attempts:
                 candidate = None
                 break
         if candidate and candidate.exists():
@@ -673,15 +689,16 @@ def delete_topic(topic_name):
     }
 
 
-def rename_topic(old_topic, new_topic):
+def rename_topic(old_topic, new_topic):  # noqa: PLR0911, PLR0912, PLR0915
     """
     重命名主题：
     1. 检查新主题名是否已存在
     2. 如果存在：合并文件（旧主题文件移到新主题，更新 YAML，删除旧主题）
     3. 如果不存在：按原来的方案（重命名 WIKI.md 标题 + 更新 YAML）
-    
+
     返回: {"success": bool, "message": str, "updated": int, "merged": bool}
     """
+    from utils.topic_assigner import write_topic_to_file  # noqa: PLC0415
     if not old_topic or not new_topic:
         return {"success": False, "message": "主题名不能为空"}
 
@@ -730,7 +747,6 @@ def rename_topic(old_topic, new_topic):
         _merge_duplicate_topics_in_wiki()
         _deduplicate_files_in_wiki()
 
-        import shutil
         old_dir = workspace_path / config.NOTES_FOLDER / old_topic
         new_dir = workspace_path / config.NOTES_FOLDER / new_topic
         if old_dir.exists() and old_dir.is_dir():
@@ -781,7 +797,7 @@ def rename_topic(old_topic, new_topic):
     }
 
 
-def remove_file_from_wiki_topic(file_rel_path):
+def remove_file_from_wiki_topic(file_rel_path):  # noqa: PLR0912
     """从 WIKI.md 中移除指定文件的记录。
 
     通过文件名 stem 匹配主题区域下的 ``N. **title**`` 行。
@@ -838,7 +854,7 @@ def remove_file_from_wiki_topic(file_rel_path):
         return False, None
 
 
-def create_topic(topic_name):
+def create_topic(topic_name):  # noqa: PLR0912
     """在 WIKI.md 中创建主题（仅添加标题，无文件列表）。"""
     wiki_path = _get_wiki_path()
     workspace = config.workspace_path
@@ -908,120 +924,173 @@ def create_topic(topic_name):
         return {"success": False, "message": f"创建失败: {e}"}
 
 
-def sync_wiki_with_files():
-    """
-    同步 WIKI.md 与文件的 YAML topic 标签：
-    1. 扫描工作区所有 .md 文件，读取每个文件的 YAML topic
-    2. 解析当前 WIKI.md 的结构
-    3. 对比：以文件 YAML 中的 topic 为准
-       - 如果文件在 WIKI 中位置与 YAML 不匹配 → 移动
-       - 如果 YAML 中有 topic 但 WIKI 中没有该文件 → 添加
-       - 如果文件在 WIKI 中但 YAML 没有 topic → 从 WIKI 移除
-    4. 清理空主题（没有任何文件的主题）
-    
-    返回: {
-        "success": bool,
-        "message": str,
-        "moved": int,    // 移动的文件数
-        "added": int,    // 新增的文件数
-        "removed": int,  // 从 WIKI 移除的文件数
-        "deleted_topics": int  // 删除的空主题数
-    }
+def _collect_survey_off_topics(wiki_path: Path) -> set[str]:
+    if not wiki_path.exists():
+        return set()
+    try:
+        lines = wiki_path.read_text(encoding='utf-8').split('\n')
+    except Exception:
+        return set()
+
+    off_topics = set()
+    topic_stack = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        match = re.match(r'^(#{2,4})\s+(.+)$', stripped)
+        if not match:
+            continue
+        label = match.group(2).strip()
+        if label in ('目录', '来源文件'):
+            continue
+        topic_level = len(match.group(1)) - 1
+        while len(topic_stack) >= topic_level:
+            topic_stack.pop()
+        parent_path = topic_stack[-1] if topic_stack else ""
+        topic_path = parent_path + TOPIC_SEP + label if parent_path else label
+        topic_stack.append(topic_path)
+        if idx + 1 < len(lines) and lines[idx + 1].strip() == '> 综述: off':
+            off_topics.add(topic_path)
+    return off_topics
+
+
+def _write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
+    try:
+        text = file_path.read_text(encoding='utf-8')
+        had_bom = text.startswith('\ufeff')
+        clean = text.lstrip('\ufeff')
+        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
+        if m:
+            try:
+                meta = yaml.safe_load(m.group(2)) or {}
+            except Exception:
+                meta = {}
+            if not isinstance(meta, dict):
+                meta = {}
+            body = clean[m.end():].lstrip('\n')
+        else:
+            meta = {}
+            body = clean
+
+        before = meta.get('topic')
+        if topic:
+            meta['topic'] = topic
+        else:
+            meta.pop('topic', None)
+
+        if before == meta.get('topic') and m:
+            return False
+
+        prefix = '\ufeff' if had_bom else ''
+        if meta:
+            fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+            new_text = prefix + '---\n' + fm + '\n---\n' + body
+        else:
+            new_text = prefix + body
+        file_path.write_text(new_text, encoding='utf-8')
+        return True
+    except Exception as e:
+        logger.warning(f"[wiki_sync] update file topic failed {file_path}: {e}")
+        return False
+
+
+def _is_hidden_path(path: Path) -> bool:
+    return any(part.startswith('.') for part in path.parts)
+
+
+def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
+    """Rebuild WIKI.md from the Notes folder hierarchy and align file frontmatter.
+
+    Folder hierarchy under Notes is the source of truth. Empty topic folders are
+    kept as WIKI headings; Markdown files directly under Notes are left unlisted
+    and have their topic field cleared.
     """
     workspace = config.workspace_path
     if not workspace:
-        return {"success": False, "message": "未设置工作区", "moved": 0, "added": 0, "removed": 0, "deleted_topics": 0}
+        return {"success": False, "message": "未设置工作区", "topics": 0, "files": 0, "updated": 0}
 
     workspace_path = Path(workspace)
+    notes_root = workspace_path / config.NOTES_FOLDER
+    wiki_path = _get_wiki_path()
+    if not wiki_path:
+        return {"success": False, "message": "WIKI.md 路径无效", "topics": 0, "files": 0, "updated": 0}
 
-    md_files = list(workspace_path.rglob('*.md'))
-    wiki_path = workspace_path / "wiki" / "WIKI.md"
+    wiki_path.parent.mkdir(parents=True, exist_ok=True)
+    off_topics = _collect_survey_off_topics(wiki_path)
 
-    file_topics = {}
-    for md_file in md_files:
-        if md_file.name == 'WIKI.md' and 'wiki' in md_file.parts:
-            continue
-        try:
-            rel_path = str(md_file.relative_to(workspace_path))
-            topic = _read_topic_from_file(str(md_file))
-            file_topics[rel_path] = topic
-        except Exception:
-            continue
+    topic_files: dict[str, list[str]] = {}
+    topic_parts: dict[str, tuple[str, ...]] = {}
+    root_md_files: list[Path] = []
+    updated_files = 0
 
-    wiki_structure = parse_wiki_structure()
+    if notes_root.exists():
+        for directory in sorted((p for p in notes_root.rglob('*') if p.is_dir()), key=lambda p: str(p.relative_to(notes_root))):
+            try:
+                rel_parts = directory.relative_to(notes_root).parts
+            except ValueError:
+                continue
+            if not rel_parts or _is_hidden_path(Path(*rel_parts)):
+                continue
+            for depth in range(1, min(len(rel_parts), 3) + 1):
+                parts = tuple(rel_parts[:depth])
+                topic = TOPIC_SEP.join(parts)
+                topic_parts.setdefault(topic, parts)
+                topic_files.setdefault(topic, [])
 
-    # Build title→topic map from WIKI
-    wiki_title_to_topic = {}
-    for topic in wiki_structure:
-        for title in topic["files"]:
-            wiki_title_to_topic[title] = topic["name"]
+        for md_file in sorted(notes_root.rglob('*.md'), key=lambda p: str(p.relative_to(notes_root))):
+            try:
+                rel_parts = md_file.relative_to(notes_root).parts
+            except ValueError:
+                continue
+            if _is_hidden_path(Path(*rel_parts)) or md_file.name in ('WIKI.md', 'tags.md'):
+                continue
+            topic_dir_parts = rel_parts[:-1]
+            if not topic_dir_parts:
+                root_md_files.append(md_file)
+                continue
+            parts = tuple(topic_dir_parts[:3])
+            topic = TOPIC_SEP.join(parts)
+            topic_parts.setdefault(topic, parts)
+            topic_files.setdefault(topic, []).append(md_file.stem)
+            if _write_file_topic_from_folder(md_file, topic):
+                updated_files += 1
 
-    moved_count = 0
-    added_count = 0
-    removed_count = 0
+    for md_file in root_md_files:
+        if _write_file_topic_from_folder(md_file, None):
+            updated_files += 1
 
-    for rel_path, yaml_topic in file_topics.items():
-        file_title = _title_from_path(rel_path)
-        wiki_topic = wiki_title_to_topic.get(file_title)
+    def _sort_key(item):
+        topic, parts = item
+        return parts
 
-        if yaml_topic is None:
-            if wiki_topic is not None:
-                remove_file_from_wiki_topic(rel_path)
-                removed_count += 1
-            continue
+    lines = [
+        "# WIKI",
+        "",
+        f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"主题数量: {len(topic_parts)}",
+        "",
+        "## 目录",
+        "",
+    ]
 
-        if wiki_topic is None:
-            headings = parse_wiki_headings()
-            topic_exists = False
-            for h in headings:
-                if h["name"].lower() == yaml_topic.lower():
-                    yaml_topic = h["name"]
-                    topic_exists = True
-                    break
-            if not topic_exists:
-                create_topic(yaml_topic)
-            add_file_to_wiki_topic(rel_path, yaml_topic, file_title)
-            added_count += 1
-        elif wiki_topic.lower() != yaml_topic.lower():
-            move_file_to_topic(rel_path, yaml_topic, file_title)
-            moved_count += 1
+    for topic, parts in sorted(topic_parts.items(), key=_sort_key):
+        heading = "#" * (len(parts) + 1) + " " + parts[-1]
+        lines.append(heading)
+        if topic in off_topics:
+            lines.append("> 综述: off")
+        files = sorted(dict.fromkeys(topic_files.get(topic, [])))
+        for idx, title in enumerate(files, 1):
+            lines.append(f"{idx}. **{title}**")
+        lines.append("")
 
-    for title, wiki_topic in list(wiki_title_to_topic.items()):
-        # Check if any file with this title exists and has a YAML topic
-        found = False
-        for rel_path, yaml_topic in file_topics.items():
-            if _title_from_path(rel_path) == title and yaml_topic is not None:
-                found = True
-                break
-        if not found:
-            remove_file_from_wiki_topic(title)
-            removed_count += 1
-
-    merged_topic_count = _merge_duplicate_topics_in_wiki()
-
-    dedup_count = _deduplicate_files_in_wiki()
-
-    deleted_topic_count = 0
-    while True:
-        current_structure = parse_wiki_structure()
-        deleted_any = False
-        for topic in current_structure:
-            if not topic["files"]:
-                _remove_topic_from_wiki(topic["name"])
-                deleted_topic_count += 1
-                deleted_any = True
-                break
-        if not deleted_any:
-            break
+    content = "\n".join(lines).rstrip() + "\n"
+    wiki_path.write_text(content, encoding='utf-8')
 
     return {
         "success": True,
-        "message": f"同步完成：移动 {moved_count}，新增 {added_count}，移除 {removed_count}，合并重复主题 {merged_topic_count}，删除空主题 {deleted_topic_count}",
-        "moved": moved_count,
-        "added": added_count,
-        "removed": removed_count,
-        "merged_topics": merged_topic_count,
-        "deleted_topics": deleted_topic_count
+        "message": f"同步完成：主题 {len(topic_parts)} 个，文件 {sum(len(v) for v in topic_files.values())} 个，更新 frontmatter {updated_files} 个",
+        "topics": len(topic_parts),
+        "files": sum(len(v) for v in topic_files.values()),
+        "updated": updated_files,
     }
 
 

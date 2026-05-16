@@ -1,11 +1,12 @@
 import base64
+import importlib
 import platform
-import re
 import subprocess
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
+from utils.topic_assigner import sync_wiki_with_files
 
 
 class FilesHandler(BaseHandler):
@@ -96,30 +97,23 @@ class FilesHandler(BaseHandler):
         if full_path.suffix.lower() == '.md':
             try:
                 text = full_path.read_text(encoding='utf-8')
-                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                if m:
-                    for line in m.group(1).split('\n'):
-                        idx = line.find(':')
-                        if idx < 0:
-                            continue
-                        key = line[:idx].strip()
-                        val = line[idx + 1:].strip()
-                        if key == 'topic':
-                            file_topic = val.strip().strip("'\"")
-                            break
+                meta, _ = self._parse_frontmatter(text)
+                if meta and isinstance(meta.get('topic'), str):
+                    file_topic = meta['topic'].strip().strip("'\"")
             except Exception as e:
                 logger.warning(f"[files_handler] reading file topic for deletion: {e}\n")
 
         try:
-            import send2trash
+            send2trash = importlib.import_module("send2trash")
             send2trash.send2trash(str(full_path))
 
-            if file_topic:
-                from utils.topic_assigner import remove_file_from_wiki_topic
+            if full_path.suffix.lower() == '.md':
                 try:
-                    remove_file_from_wiki_topic(path)
+                    sync_wiki_with_files()
                 except Exception as e:
-                    logger.warning(f"[files_handler] removing file from wiki topic: {e}\n")
+                    logger.warning(f"[files_handler] syncing WIKI after file deletion: {e}\n")
+
+            if file_topic:
                 self._start_task(f"cascade_update_{file_topic}", self._do_cascade_survey_update, args=(file_topic,))
 
             return {"success": True}

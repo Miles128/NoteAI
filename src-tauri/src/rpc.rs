@@ -4,7 +4,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "set_workspace_path", "get_workspace_status", "get_workspace_tree", "on_file_selected",
     "read_file_raw", "delete_file", "move_file", "search_files", "auto_assign_topic",
     "batch_auto_assign_topics", "add_tag_to_file",
-    "resolve_topic", "get_relation_graph", "discover_links", "llm_rewrite", "llm_rewrite_stream", "llm_rewrite_apply",
+    "resolve_topic", "get_link_stats", "discover_links", "llm_rewrite", "llm_rewrite_stream", "llm_rewrite_apply",
     "start_note_integration",
     "save_api_config", "test_api_connection",
     "ai_topic_analyze", "ai_topic_survey", "apply_topic_suggestion",

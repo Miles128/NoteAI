@@ -7,16 +7,18 @@ Requires project dependencies (see pyproject.toml). Run: pytest tests/integratio
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sidecar.handlers.workspace_handler import WorkspaceHandler
+from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
+from sidecar.pending_topics import load_pending_topics
+from sidecar.server import WATCHED_WORKSPACE_SUFFIXES
 
 from config import config
 from modules.file_preview import FilePreviewer
-from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
-from sidecar.pending_topics import load_pending_topics
-from utils.topic_assigner import parse_wiki_structure
+from utils.topic_assigner import parse_wiki_headings, parse_wiki_structure, sync_wiki_with_files
 
 
 @pytest.fixture
@@ -61,6 +63,36 @@ class TestFindFileByName:
         assert got.endswith("dup.md")
 
 
+class TestWorkspaceTree:
+    def test_watched_workspace_suffixes_match_user_visible_inputs(self) -> None:
+        assert {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"} == WATCHED_WORKSPACE_SUFFIXES
+
+    def test_only_supported_file_types_are_returned(self, workspace: Path) -> None:
+        notes = workspace / "Notes"
+        for name in ("a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"):
+            (notes / name).write_text("x", encoding="utf-8")
+        for name in ("ignore.png", "ignore.jpg", "ignore.json"):
+            (notes / name).write_text("x", encoding="utf-8")
+        (workspace / "empty").mkdir()
+        hidden = workspace / ".hidden"
+        hidden.mkdir()
+        (hidden / "secret.md").write_text("x", encoding="utf-8")
+        node_modules = workspace / "node_modules"
+        node_modules.mkdir()
+        (node_modules / "package-note.md").write_text("x", encoding="utf-8")
+
+        handler = WorkspaceHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+        tree = handler._compute_workspace_tree()
+        notes_node = next(node for node in tree if node["name"] == "Notes")
+        names = {node["name"] for node in notes_node["children"]}
+
+        assert names == {"a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
+        root_names = {node["name"] for node in tree}
+        assert "empty" not in root_names
+        assert ".hidden" not in root_names
+        assert "node_modules" not in root_names
+
+
 class TestParseWikiStructure:
     """parse_wiki_structure() parses WIKI.md into a list of topic dicts."""
 
@@ -78,7 +110,8 @@ class TestParseWikiStructure:
         )
         topics = parse_wiki_structure()
         assert isinstance(topics, list)
-        assert len(topics) >= 2
+        min_topic_count = 2
+        assert len(topics) >= min_topic_count
         for t in topics:
             assert "name" in t
             assert "label" in t
@@ -86,8 +119,44 @@ class TestParseWikiStructure:
             assert isinstance(t["files"], list)
 
     def test_empty_when_no_wiki(self, workspace: Path) -> None:
+        _ = workspace
         topics = parse_wiki_structure()
         assert topics == []
+
+    def test_wiki_sync_uses_notes_folder_as_source_of_truth(self, workspace: Path) -> None:
+        topic_dir = workspace / "Notes" / "普通人的AI指南" / "Agent 入门"
+        topic_dir.mkdir(parents=True)
+        note = topic_dir / "提示词.md"
+        note.write_text("---\ntopic: 旧主题\n---\n正文", encoding="utf-8")
+        root_note = workspace / "Notes" / "未分类.md"
+        root_note.write_text("---\ntopic: 不应保留\n---\n正文", encoding="utf-8")
+
+        result = sync_wiki_with_files()
+
+        assert result["success"] is True
+        wiki = (workspace / "wiki" / "WIKI.md").read_text(encoding="utf-8")
+        assert "## 普通人的AI指南" in wiki
+        assert "### Agent 入门" in wiki
+        assert "1. **提示词**" in wiki
+        assert "未分类" not in wiki
+        assert "topic: 普通人的AI指南 > Agent 入门" in note.read_text(encoding="utf-8")
+        assert "topic:" not in root_note.read_text(encoding="utf-8")
+
+    def test_parse_wiki_headings_returns_full_topic_paths(self, workspace: Path) -> None:
+        (workspace / "wiki" / "WIKI.md").write_text(
+            "## 普通人的AI指南\n\n"
+            "### Agent 入门\n\n"
+            "#### 工具调用\n",
+            encoding="utf-8",
+        )
+
+        names = [item["name"] for item in parse_wiki_headings()]
+
+        assert names == [
+            "普通人的AI指南",
+            "普通人的AI指南 > Agent 入门",
+            "普通人的AI指南 > Agent 入门 > 工具调用",
+        ]
 
 
 class TestPendingTopics:
@@ -102,6 +171,7 @@ class TestPendingTopics:
         assert pending[0]["file"] == "Notes/a.md"
 
     def test_empty_when_no_file(self, workspace: Path) -> None:
+        _ = workspace
         pending = load_pending_topics()
         assert pending == []
 

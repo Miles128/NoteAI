@@ -5,8 +5,8 @@
   "identifier": "com.noteai.app",
   "build": {
     "frontendDist": "../webui",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeDevCommand": "npm run build:tiptap",
+    "beforeBuildCommand": "npm run build:tiptap"
   },
   "app": {
     "withGlobalTauri": true,
@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' tauri://localhost ipc://localhost https://ipc.localhost; worker-src 'self' blob:; frame-src 'none'; object-src 'none'"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self' tauri://localhost ipc://localhost https://ipc.localhost; worker-src 'self' blob:; frame-src 'none'; object-src 'none'"
     }
   },
   "bundle": {

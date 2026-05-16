@@ -8,7 +8,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:tiptap": "node scripts/build-tiptap-bundle.mjs",
+    "test": "echo \"No frontend tests configured\""
   },
   "keywords": [],
   "author": "",
@@ -19,5 +20,8 @@
     "@tiptap/starter-kit": "^2.27.2",
     "punycode": "^2.3.1",
     "tiptap-markdown": "^0.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
   }
 }

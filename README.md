@@ -45,7 +45,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| Markdown 编辑器 | Tiptap 富文本 + CodeMirror 6 双引擎编辑 |
+| Markdown 编辑器 | Tiptap 富文本 Markdown 编辑，支持自动保存与基础格式工具栏 |
 | 实时预览 | marked.js + highlight.js 渲染，编辑/预览双栏模式 |
 | AI 改写 | 选中内容 → LLM 流式改写 → 预览对比 → 决定是否应用 |
 | 主题综述 | 针对指定主题，LLM 撰写综述文章 |
@@ -123,7 +123,7 @@
 | 类别 | 技术 |
 |------|------|
 | 桌面壳 | Tauri v2 + Rust |
-| 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap，CodeMirror 6 |
+| 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap |
 | 后端 | Python 3.10+，LangChain + LangChain-OpenAI |
 | RAG | Milvus Lite，fastembed (BAAI/bge-small-zh-v1.5)，FlagEmbedding (BAAI/bge-reranker-v2-m3) |
 | 文档解析 | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |

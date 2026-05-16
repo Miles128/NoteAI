@@ -1,8 +1,10 @@
 import shutil
-import time
 import traceback
 from pathlib import Path
 
+from config.settings import NOTES_FOLDER, RAW_FOLDER
+from modules.file_converter import FileConverterManager
+from modules.note_integration import NoteIntegration
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
@@ -138,7 +140,7 @@ class TransferHandler(BaseHandler):
         return {"success": True, "message": "转换已开始"}
 
     def _do_file_conversion(self, workspace, ai_assist):
-        from config.settings import NOTES_FOLDER, RAW_FOLDER
+        _ = ai_assist
         try:
             result = self.file_converter.convert_folder(
                 workspace,
@@ -156,12 +158,11 @@ class TransferHandler(BaseHandler):
                 "result": {"type": "file_conversion_error", "error": str(e)}
             })
 
-    def _auto_convert_pending(self, params=None):
+    def _auto_convert_pending(self, _params=None):
         workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "pending": 0, "converted": 0}
 
-        from modules.file_converter import RAW_FOLDER, FileConverterManager
         supported = set(FileConverterManager.get_supported_formats())
         ws = Path(workspace)
         ws / RAW_FOLDER
@@ -171,6 +172,8 @@ class TransferHandler(BaseHandler):
             if not f.is_file() or f.name.startswith('.'):
                 continue
             rel = f.relative_to(ws)
+            if any(part.startswith('.') for part in rel.parts):
+                continue
             if RAW_FOLDER in rel.parts:
                 continue
             if f.suffix.lower() in supported:
@@ -198,21 +201,12 @@ class TransferHandler(BaseHandler):
                     "data": {"total": len(pending_files), "converted": converted}
                 }
             })
-            if converted > 0:
-                self._start_task("batch_assign_after_convert", self._do_batch_assign_after_convert)
         except Exception as e:
             logger.warning(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "auto_convert_error", "error": str(e)}
             })
-
-    def _do_batch_assign_after_convert(self):
-        time.sleep(2)
-        try:
-            self._batch_auto_assign_topics({})
-        except Exception as e:
-            logger.warning(f"[auto_convert] post-convert batch_assign failed: {e}\n")
 
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
@@ -228,8 +222,6 @@ class TransferHandler(BaseHandler):
         return result
 
     def _start_note_integration(self, params):
-        from modules.note_integration import NoteIntegration
-
         auto_topic = params.get("auto_topic", True)
         topics = params.get("topics", [])
         workspace = self.config.workspace_path
@@ -244,6 +236,7 @@ class TransferHandler(BaseHandler):
         return {"success": True, "message": "整合已开始"}
 
     def _do_note_integration(self, workspace, auto_topic, topics):
+        _ = auto_topic
         try:
             documents = self.note_integration.load_documents_from_folder(workspace)
             result = self.note_integration.integrate(

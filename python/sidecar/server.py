@@ -1,11 +1,14 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
+import importlib
 import json
+import re
 import sys
 import threading
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
@@ -23,11 +26,20 @@ from sidecar.handlers import (
     WorkspaceHandler,
 )
 from sidecar.mixins.path_helpers import PathHelpersMixin
+from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
 from sidecar.service_context import ServiceContext
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger
+from utils.topic_assigner import (
+    _check_topic_needs_processing,
+    auto_assign_topic_for_file,
+    move_file_to_notes_topic_folder,
+    sync_wiki_with_files,
+)
 from utils.ttl_cache import TTLCache
+
+WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
 
 
 class SidecarServer(PathHelpersMixin):
@@ -118,8 +130,10 @@ class SidecarServer(PathHelpersMixin):
 
     def _setup_watcher(self, workspace_path):
         try:
-            from watchdog.events import FileSystemEventHandler
-            from watchdog.observers import Observer
+            events_module = importlib.import_module("watchdog.events")
+            observers_module = importlib.import_module("watchdog.observers")
+            FileSystemEventHandler = events_module.FileSystemEventHandler
+            Observer = observers_module.Observer
         except ImportError:
             if not SidecarServer._watchdog_missing_logged:
                 SidecarServer._watchdog_missing_logged = True
@@ -190,38 +204,27 @@ class SidecarServer(PathHelpersMixin):
         return self._topics_handler._batch_auto_assign_topics(params)
 
     def _on_workspace_file_changed(self, change_type, file_path, src_path=None):
+        _ = src_path
         path = Path(file_path)
-        if path.name.startswith("."):
+        workspace = config.workspace_path
+        try:
+            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
+        except ValueError:
+            rel_parts = path.parts
+        if any(part.startswith(".") for part in rel_parts):
             return
-        if 'wiki' in path.parts:
+        if 'wiki' in rel_parts:
             return
         suffix = path.suffix.lower()
-        if suffix not in (
-            ".md",
-            ".txt",
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".html",
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".gif",
-            ".webp",
-            ".svg",
-        ):
+        if suffix not in WATCHED_WORKSPACE_SUFFIXES:
             return
 
-        if change_type in ("created", "moved") and suffix == ".md":
-            workspace = config.workspace_path
-            if workspace:
-                try:
-                    rel = path.relative_to(workspace)
-                    from config import is_ignored_dir
-                    if not any(is_ignored_dir(p) for p in rel.parts):
-                        self._auto_process_md_file(str(path))
-                except ValueError:
-                    logger.warning(f"[watcher] path outside workspace: {file_path}\n")
+        if change_type in ("created", "moved") and suffix == ".md" and workspace:
+            try:
+                if not any(is_ignored_dir(p) for p in rel_parts):
+                    self._auto_process_md_file(str(path))
+            except ValueError:
+                logger.warning(f"[watcher] path outside workspace: {file_path}\n")
 
         with self._watcher_debounce_lock:
             if self._watcher_debounce_timer:
@@ -232,17 +235,7 @@ class SidecarServer(PathHelpersMixin):
             self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
 
-    def _auto_process_md_file(self, file_path):
-        import re
-
-        from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER
-        from utils.topic_assigner import (
-            _check_topic_needs_processing,
-            add_file_to_wiki_topic,
-            auto_assign_topic_for_file,
-            move_file_to_notes_topic_folder,
-        )
-
+    def _auto_process_md_file(self, file_path):  # noqa: PLR0912
         try:
             text = Path(file_path).read_text(encoding='utf-8')
         except Exception as e:
@@ -256,6 +249,7 @@ class SidecarServer(PathHelpersMixin):
             try:
                 result = auto_assign_topic_for_file(file_path)
                 if result and result.get("status") == "auto_assigned" and result.get("topic"):
+                    sync_wiki_with_files()
                     self._send_response({
                         "id": "event",
                         "result": {
@@ -300,8 +294,7 @@ class SidecarServer(PathHelpersMixin):
             move_result = move_file_to_notes_topic_folder(file_path, file_topic)
             if move_result.get("success"):
                 new_path = move_result.get("new_path", "")
-                if new_path:
-                    add_file_to_wiki_topic(new_path, file_topic)
+                sync_wiki_with_files()
                 self._send_response({
                     "id": "event",
                     "result": {
@@ -321,19 +314,17 @@ class SidecarServer(PathHelpersMixin):
 
 
 def main():
-    from sidecar.rag.model_preload import ModelWarmupManager
-
     server = SidecarServer()
     logger.warning("[Python Sidecar] Ready")
 
     ModelWarmupManager.start_preload()
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
+    for raw_line in sys.stdin:
+        request_line = raw_line.strip()
+        if not request_line:
             continue
         try:
-            request = json.loads(line)
+            request = json.loads(request_line)
             server.handle_request(request)
         except json.JSONDecodeError as e:
             server._send_response({"id": "", "error": f"Invalid JSON: {e}"})

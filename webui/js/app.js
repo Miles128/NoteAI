@@ -598,15 +598,6 @@ function initWorkspaceFileWatcher() {
             if (window.api && window.api.autoConvertPending) {
                 window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
             }
-            if (window.api && window.api.batchAutoAssignTopics) {
-                window.api.batchAutoAssignTopics().then(function(result) {
-                    if (result && result.success && result.need_confirm > 0) {
-                        updateStatus('发现 ' + result.need_confirm + ' 个文件需要确认主题');
-                    }
-                    if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-                    if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
-                }).catch(function(e) { console.warn('[App] watcher batch_auto_assign_topics failed:', e); });
-            }
         }, 3000);
     }).then(function(unlisten) {
         _workspaceWatcherUnlisten = unlisten;
@@ -642,6 +633,15 @@ function refreshCurrentSidebarView() {
     }
 }
 
+function refreshKnowledgeGraph() {
+    if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
+        window.Graph3Tier.load();
+    }
+    if (typeof window.updateHomeStats === 'function') {
+        window.updateHomeStats();
+    }
+}
+
 var _tooltipTimer = null;
 
 function initSidecarErrorListener() {
@@ -666,11 +666,6 @@ function initSidecarErrorListener() {
                 updateStatus('自动转换完成: ' + info.converted + '/' + info.total + ' 个文件');
                 if (window.TreeModule && window.TreeModule.loadFileTree) {
                     window.TreeModule.loadFileTree();
-                }
-                if (window.api && window.api.batchAutoAssignTopics) {
-                    window.api.batchAutoAssignTopics().then(function(result) {
-                        if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-                    }).catch(function(e) { console.warn('[App] post-convert batch_auto_assign_topics failed:', e); });
                 }
             }
         } else if (data.type === 'auto_convert_error') {

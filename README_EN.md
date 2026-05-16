@@ -45,7 +45,7 @@ At the same time, NoteAI deeply integrates the personal knowledge base with an A
 
 | Feature | Description |
 |---------|-------------|
-| Markdown Editor | Tiptap rich text + CodeMirror 6 dual-engine editing |
+| Markdown Editor | Tiptap rich-text Markdown editing with autosave and a basic formatting toolbar |
 | Live Preview | marked.js + highlight.js rendering, edit/preview split-pane mode |
 | AI Rewrite | Select content → LLM streaming rewrite → preview comparison → apply or discard |
 | Topic Survey | LLM writes a survey article for a specified topic |
@@ -123,7 +123,7 @@ Workspace/
 | Category | Technology |
 |----------|------------|
 | Desktop Shell | Tauri v2 + Rust |
-| Frontend | HTML5 / CSS3 / JS, marked.js, highlight.js, PDF.js, Tiptap, CodeMirror 6 |
+| Frontend | HTML5 / CSS3 / JS, marked.js, highlight.js, PDF.js, Tiptap |
 | Backend | Python 3.10+, LangChain + LangChain-OpenAI |
 | RAG | Milvus Lite, fastembed (BAAI/bge-small-zh-v1.5), FlagEmbedding (BAAI/bge-reranker-v2-m3) |
 | Document Parsing | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |

@@ -613,8 +613,33 @@ function extractFileSet(treeData) {
 }
 
 var _lastFileSet = null;
+var FILE_TREE_LOAD_TIMEOUT_MS = 15000;
+var _loadFileTreeInFlight = null;
+
+function _describeTreeLoadError(error) {
+    if (!error) return '未知错误';
+    if (typeof error === 'string') return error;
+    if (error.message) return error.message;
+    try {
+        return JSON.stringify(error);
+    } catch (_) {
+        return String(error);
+    }
+}
 
 async function loadFileTree() {
+    if (_loadFileTreeInFlight) {
+        return _loadFileTreeInFlight;
+    }
+    _loadFileTreeInFlight = _loadFileTreeOnce();
+    try {
+        return await _loadFileTreeInFlight;
+    } finally {
+        _loadFileTreeInFlight = null;
+    }
+}
+
+async function _loadFileTreeOnce() {
     var container = document.getElementById('file-tree');
     if (!container) return;
 
@@ -626,8 +651,12 @@ async function loadFileTree() {
     try {
         var treeData = await Promise.race([
             window.api.getWorkspaceTree(),
-            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, 5000); })
+            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, FILE_TREE_LOAD_TIMEOUT_MS); })
         ]);
+
+        if (!Array.isArray(treeData)) {
+            throw new Error('文件树返回格式错误: ' + _describeTreeLoadError(treeData));
+        }
 
         var newFileSet = extractFileSet(treeData);
         var newSetStr = JSON.stringify(newFileSet);
@@ -644,11 +673,22 @@ async function loadFileTree() {
             _flatVisibleNodes = flattenVisibleNodes(treeData);
             renderVirtualTree(container);
         }
-        window.updateSidebarStats();
+    } catch (e) {
+        console.warn('[Tree] Load skipped:', _describeTreeLoadError(e), e);
+        if (!_lastTreeData) {
+            container.innerHTML = '<div class="tree-empty">暂时无法加载文件树</div>';
+        }
+    }
+
+    try {
+        if (typeof window.updateSidebarStats === 'function') window.updateSidebarStats();
+    } catch (e) {
+        console.warn('[Tree] updateSidebarStats failed:', _describeTreeLoadError(e), e);
+    }
+    try {
         if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
     } catch (e) {
-        console.error('[Tree] Load failed:', e);
-        container.innerHTML = '<div class="tree-empty">加载失败</div>';
+        console.warn('[Tree] refreshPendingBtnState failed:', _describeTreeLoadError(e), e);
     }
 }
 

@@ -1,14 +1,16 @@
+from contextlib import suppress
 from pathlib import Path
 
 from config import config
+from utils.topic_assigner import load_pending, sync_wiki_with_files
+from utils.topic_manager import LEVEL1_TOPICS, MAX_LEVEL, TopicManager
 
 
 class Topics3TierMixin:
     """三层主题系统扩展方法（通过 mixin 注入 TopicsHandler）"""
 
-    def _get_topic_tree_3tier(self, params):
+    def _get_topic_tree_3tier(self, _params):
         """返回三层主题树（含文件系统扫描 + WIKI.md 解析 + 综述状态）"""
-        from utils.topic_manager import TopicManager
         workspace = config.workspace_path
         if not workspace:
             return {"success": True, "topics": [], "pending": []}
@@ -33,11 +35,8 @@ class Topics3TierMixin:
                         l2["abstract_file"] = f"{config.ABSTRACT_FOLDER}/{l1['name']}/{l2['name']}.md"
 
         pending = []
-        try:
-            from utils.topic_assigner import load_pending
+        with suppress(Exception):
             pending = load_pending()
-        except Exception:
-            pass
 
         return {
             "success": True,
@@ -45,9 +44,8 @@ class Topics3TierMixin:
             "pending": pending,
         }
 
-    def _create_topic_folder(self, params):
+    def _create_topic_folder(self, params):  # noqa: PLR0911
         """创建新主题文件夹（自动判定一二三级）"""
-        from utils.topic_manager import LEVEL1_TOPICS, TopicManager
         folder_name = params.get("name", "").strip()
         parent_path = params.get("parent_path", "")
         level_hint = params.get("level", 0)
@@ -79,17 +77,18 @@ class Topics3TierMixin:
             return {"success": False, "message": "已存在同名文件夹"}
 
         new_path.mkdir(parents=True)
-        topic_label = f"L{level}" if 1 <= level <= 3 else "普通文件夹"
+        with suppress(Exception):
+            sync_wiki_with_files()
+        topic_label = f"L{level}" if 1 <= level <= MAX_LEVEL else "普通文件夹"
         return {
             "success": True,
             "message": f"已创建 {topic_label}: {folder_name}",
             "topic": str(new_path.relative_to(Path(workspace))),
-            "level": level if 1 <= level <= 3 else None,
+            "level": level if 1 <= level <= MAX_LEVEL else None,
         }
 
     def _set_abstract_config(self, params):
         """设置综述开关（仅二级主题可用）"""
-        from utils.topic_manager import TopicManager
         topic_name = params.get("topic_name", "").strip()
         level = params.get("level", 1)
         enable = params.get("enable", False)
@@ -117,9 +116,103 @@ class Topics3TierMixin:
 
         return {"success": True, "message": f"综述已{'开启' if enable else '关闭'}: {topic_name}"}
 
+    def _append_topic_graph_nodes(self, topics, nodes, edges, seen_ids):
+        def add_topic_nodes(topic, parent=None):
+            tid = topic["name"]
+            if tid in seen_ids:
+                return
+            seen_ids.add(tid)
+            nodes.append({
+                "id": tid, "name": tid,
+                "level": topic["level"], "type": "topic",
+                "has_abstract": topic.get("has_abstract", False),
+                "abstract_file": topic.get("abstract_file"),
+                "file_count": topic.get("file_count", 0),
+                "is_center": topic["level"] == 1,
+            })
+            if parent:
+                edges.append({"source": parent, "target": tid})
+
+            children = topic.get("children", [])
+            if children:
+                for child in children:
+                    add_topic_nodes(child, tid)
+                return
+
+            topic_path = topic.get("path")
+            if not topic_path or not Path(topic_path).is_dir():
+                return
+            for file_path in sorted(Path(topic_path).iterdir()):
+                if not file_path.is_file() or file_path.name.startswith("."):
+                    continue
+                if file_path.name in ("综述.md", "WIKI.md", "tags.md"):
+                    continue
+                fid = f"file:{tid}:{file_path.stem}"
+                if fid in seen_ids:
+                    continue
+                seen_ids.add(fid)
+                nodes.append({"id": fid, "name": file_path.stem, "type": "file", "full_path": str(file_path)})
+                edges.append({"source": tid, "target": fid})
+
+        for topic in topics:
+            add_topic_nodes(topic)
+
+    def _collect_tag_files(self, workspace: str):
+        ignored_dirs = {"_assets", "_templates", ".git", "__pycache__", "node_modules", ".venv", ".obsidian", ".trash"}
+        tag_files = {}
+        ws_path = Path(workspace)
+
+        def scan(path: Path):
+            try:
+                entries = sorted(path.iterdir(), key=lambda e: e.name.lower())
+            except PermissionError:
+                return
+            for entry in entries:
+                if entry.name.startswith("."):
+                    continue
+                if entry.is_dir():
+                    if entry.name not in ignored_dirs:
+                        scan(entry)
+                    continue
+                if entry.suffix.lower() != ".md":
+                    continue
+                try:
+                    text = entry.read_text(encoding="utf-8")
+                    meta, _body = self._parse_frontmatter(text)
+                except Exception:
+                    continue
+                if meta is None:
+                    continue
+                tags = meta.get("tags", [])
+                if isinstance(tags, str):
+                    tags = [t.strip() for t in tags.split(",") if t.strip()]
+                elif not isinstance(tags, list):
+                    continue
+                rel = str(entry.relative_to(ws_path))
+                for raw_tag in tags:
+                    tag = str(raw_tag).strip()
+                    if tag:
+                        tag_files.setdefault(tag, []).append(rel)
+
+        scan(ws_path)
+        return tag_files
+
+    def _append_tag_graph_nodes(self, tag_files, workspace: str, nodes, edges, seen_ids):
+        ws_path = Path(workspace)
+        for tag_name, files in tag_files.items():
+            tag_id = f"tag:{tag_name}"
+            if tag_id not in seen_ids:
+                seen_ids.add(tag_id)
+                nodes.append({"id": tag_id, "name": tag_name, "type": "tag", "file_count": len(files)})
+            for fpath in files:
+                fid = f"file:{fpath}"
+                if fid not in seen_ids:
+                    seen_ids.add(fid)
+                    nodes.append({"id": fid, "name": Path(fpath).stem, "type": "file", "full_path": str(ws_path / fpath)})
+                edges.append({"source": tag_id, "target": fid})
+
     def _get_graph_data(self, params):
         """获取知识图谱数据，支持 filter: topic | tag | all"""
-        from pathlib import Path
         filter_mode = params.get("filter", "topic")
 
         workspace = config.workspace_path
@@ -133,104 +226,10 @@ class Topics3TierMixin:
         if filter_mode in ("topic", "all"):
             tree_result = self._get_topic_tree_3tier({})
             topics = tree_result.get("topics", [])
-
-            def add_topic_nodes(topic, parent=None):
-                tid = topic["name"]
-                if tid in seen_ids:
-                    return
-                seen_ids.add(tid)
-                nodes.append({
-                    "id": tid, "name": tid,
-                    "level": topic["level"], "type": "topic",
-                    "has_abstract": topic.get("has_abstract", False),
-                    "abstract_file": topic.get("abstract_file"),
-                    "file_count": topic.get("file_count", 0),
-                    "is_center": topic["level"] == 1,
-                })
-                if parent:
-                    edges.append({"source": parent, "target": tid})
-
-                children = topic.get("children", [])
-                if children:
-                    for child in children:
-                        add_topic_nodes(child, tid)
-                else:
-                    topic_path = topic.get("path")
-                    if topic_path and Path(topic_path).is_dir():
-                        for f in sorted(Path(topic_path).iterdir()):
-                            if not f.is_file() or f.name.startswith("."):
-                                continue
-                            if f.name in ("综述.md", "WIKI.md", "tags.md"):
-                                continue
-                            fid = f"file:{tid}:{f.stem}"
-                            if fid in seen_ids:
-                                continue
-                            seen_ids.add(fid)
-                            nodes.append({
-                                "id": fid, "name": f.stem,
-                                "type": "file", "full_path": str(f),
-                            })
-                            edges.append({"source": tid, "target": fid})
-
-            for l1 in topics:
-                add_topic_nodes(l1)
+            self._append_topic_graph_nodes(topics, nodes, edges, seen_ids)
 
         if filter_mode in ("tag", "all"):
-            tag_files = {}
-            ws_path = Path(workspace)
-
-            def _scan_tags(path):
-                p = Path(path) if not isinstance(path, Path) else path
-                try:
-                    for entry in sorted(p.iterdir(), key=lambda e: e.name.lower()):
-                        if entry.name.startswith("."):
-                            continue
-                        if entry.is_dir():
-                            if entry.name in ("_assets", "_templates", ".git", "__pycache__", "node_modules", ".venv", ".obsidian", ".trash"):
-                                continue
-                            _scan_tags(entry)
-                        elif entry.suffix.lower() == ".md":
-                            try:
-                                text = entry.read_text(encoding="utf-8")
-                                meta, _body = self._parse_frontmatter(text)
-                                if meta is None:
-                                    continue
-                                tags = meta.get("tags", [])
-                                if isinstance(tags, str):
-                                    tags = [t.strip() for t in tags.split(",") if t.strip()]
-                                elif not isinstance(tags, list):
-                                    continue
-                                rel = str(entry.relative_to(ws_path))
-                                for tag in tags:
-                                    tag = str(tag).strip()
-                                    if tag:
-                                        if tag not in tag_files:
-                                            tag_files[tag] = []
-                                        tag_files[tag].append(rel)
-                            except Exception:
-                                pass
-                except PermissionError:
-                    pass
-
-            _scan_tags(ws_path)
-
-            for tag_name, files in tag_files.items():
-                tag_id = f"tag:{tag_name}"
-                if tag_id not in seen_ids:
-                    seen_ids.add(tag_id)
-                    nodes.append({
-                        "id": tag_id, "name": tag_name,
-                        "type": "tag", "file_count": len(files),
-                    })
-                for fpath in files:
-                    fid = f"file:{fpath}"
-                    if fid not in seen_ids:
-                        seen_ids.add(fid)
-                        nodes.append({
-                            "id": fid, "name": Path(fpath).stem,
-                            "type": "file", "full_path": str(ws_path / fpath),
-                        })
-                    edges.append({"source": tag_id, "target": fid})
+            self._append_tag_graph_nodes(self._collect_tag_files(workspace), workspace, nodes, edges, seen_ids)
 
         return {
             "success": True,
@@ -241,7 +240,6 @@ class Topics3TierMixin:
 
     def _delete_topic_safe(self, params):
         """安全删除主题（含删除保护）"""
-        from utils.topic_manager import LEVEL1_TOPICS, TopicManager
         topic_name = params.get("topic_name", "").strip()
 
         if not topic_name:

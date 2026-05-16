@@ -67,7 +67,6 @@ class AppConfig:
     topic_list: str = ""
 
     def __post_init__(self):
-        Path(self.log_path).mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
     def _get_attr(self, name):

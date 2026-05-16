@@ -3,6 +3,7 @@ from pathlib import Path
 
 from pymilvus import DataType, MilvusClient
 
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
@@ -10,9 +11,13 @@ _DENSE_DIM = 512
 
 
 def _db_path(workspace: str) -> str:
-    p = Path(workspace) / ".rag_index" / "milvus_lite.db"
+    p = _rag_index_dir(workspace) / "milvus_lite.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return str(p)
+
+
+def _rag_index_dir(workspace: str) -> Path:
+    return Path(workspace) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
 
 
 def _get_client(workspace: str) -> MilvusClient:
@@ -100,7 +105,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
 
 
 def _sparse_index_path(workspace: str) -> Path:
-    return Path(workspace) / ".rag_index" / "sparse_index.json"
+    return _rag_index_dir(workspace) / "sparse_index.json"
 
 
 def _save_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict]):

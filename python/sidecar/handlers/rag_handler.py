@@ -4,8 +4,19 @@ import re
 import threading
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.handlers.base import BaseHandler
+
+RAG_EXCLUDED_DIRS = {
+    ".git",
+    ".obsidian",
+    ".trash",
+    ".rag_index",
+    ".ai_memory",
+    WORKSPACE_APP_FOLDER,
+    RAG_INDEX_FOLDER,
+}
 
 try:
     import jieba  # noqa: F811
@@ -38,6 +49,9 @@ class RagHandler(BaseHandler):
                 file_names = []
                 for md_file in ws_path.rglob("*.md"):
                     if md_file.name.startswith(".") or "wiki" in md_file.parts:
+                        continue
+                    rel_parts = md_file.relative_to(ws_path).parts
+                    if any(part in RAG_EXCLUDED_DIRS or is_ignored_dir(part) for part in rel_parts):
                         continue
                     try:
                         text = md_file.read_text(encoding="utf-8")
@@ -82,7 +96,7 @@ class RagHandler(BaseHandler):
     @staticmethod
     def _error_state_path():
         ws = config.workspace_path or ""
-        p = Path(ws) / ".rag_index" / "error_state.json"
+        p = Path(ws) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "error_state.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         return str(p)
 

@@ -537,12 +537,7 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if match and not _check_topic_needs_processing(yaml_text):
         return None
 
-    format_optimized = _optimize_file_format(full_path, text, match)
-
-    if format_optimized:
-        text, match, title, tags, yaml_text = _load_assignment_text(full_path)
-        if text is None:
-            return None
+    format_optimized = False
 
     survey_result = _try_assign_survey(full_path, workspace, title, format_optimized)
     if survey_result:

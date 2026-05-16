@@ -150,20 +150,22 @@ class SidecarServer(PathHelpersMixin):
 
         class WorkspaceHandler(FileSystemEventHandler):
             def on_created(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("created", event.src_path)
+                server._on_workspace_file_changed("created", event.src_path, is_directory=event.is_directory)
 
             def on_deleted(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("deleted", event.src_path)
+                server._on_workspace_file_changed("deleted", event.src_path, is_directory=event.is_directory)
 
             def on_moved(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("moved", event.dest_path, src_path=event.src_path)
+                server._on_workspace_file_changed(
+                    "moved",
+                    event.dest_path,
+                    src_path=event.src_path,
+                    is_directory=event.is_directory,
+                )
 
             def on_modified(self, event):
                 if not event.is_directory:
-                    server._on_workspace_file_changed("modified", event.src_path)
+                    server._on_workspace_file_changed("modified", event.src_path, is_directory=False)
 
         try:
             observer = Observer()
@@ -203,8 +205,7 @@ class SidecarServer(PathHelpersMixin):
     def _batch_auto_assign_topics(self, params):
         return self._topics_handler._batch_auto_assign_topics(params)
 
-    def _on_workspace_file_changed(self, change_type, file_path, src_path=None):
-        _ = src_path
+    def _is_relevant_workspace_change(self, file_path, is_directory=False):
         path = Path(file_path)
         workspace = config.workspace_path
         try:
@@ -212,14 +213,30 @@ class SidecarServer(PathHelpersMixin):
         except ValueError:
             rel_parts = path.parts
         if any(part.startswith(".") for part in rel_parts):
-            return
-        if 'wiki' in rel_parts:
-            return
-        suffix = path.suffix.lower()
-        if suffix not in WATCHED_WORKSPACE_SUFFIXES:
+            return False
+        if "wiki" in rel_parts:
+            return False
+        if any(is_ignored_dir(part) for part in rel_parts):
+            return False
+        if is_directory:
+            return True
+        return path.suffix.lower() in WATCHED_WORKSPACE_SUFFIXES
+
+    def _on_workspace_file_changed(self, change_type, file_path, src_path=None, is_directory=False):
+        if not self._is_relevant_workspace_change(file_path, is_directory=is_directory) and (
+            not src_path or not self._is_relevant_workspace_change(src_path, is_directory=is_directory)
+        ):
             return
 
-        if change_type in ("created", "moved") and suffix == ".md" and workspace:
+        path = Path(file_path)
+        workspace = config.workspace_path
+        try:
+            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
+        except ValueError:
+            rel_parts = path.parts
+        suffix = path.suffix.lower()
+
+        if not is_directory and change_type in ("created", "moved") and suffix == ".md" and workspace:
             try:
                 if not any(is_ignored_dir(p) for p in rel_parts):
                     self._auto_process_md_file(str(path))

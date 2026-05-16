@@ -577,13 +577,13 @@ function initWorkspaceFileWatcher() {
             updateStatus('✓ ' + (data.topic ? '已自动分配到「' + data.topic + '」' : '已自动分配主题'));
             if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
             if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
-            refreshCurrentSidebarView();
+            refreshWorkspaceViewsAfterChange();
             return;
         }
 
         if (data.type === 'auto_file_moved') {
             if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-            refreshCurrentSidebarView();
+            refreshWorkspaceViewsAfterChange();
             return;
         }
 
@@ -594,7 +594,7 @@ function initWorkspaceFileWatcher() {
         }
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
-            refreshCurrentSidebarView();
+            refreshWorkspaceViewsAfterChange();
             if (window.api && window.api.autoConvertPending) {
                 window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
             }
@@ -602,6 +602,22 @@ function initWorkspaceFileWatcher() {
     }).then(function(unlisten) {
         _workspaceWatcherUnlisten = unlisten;
     });
+}
+
+function refreshWorkspaceViewsAfterChange() {
+    var treeLoad = null;
+    if (window.TreeModule && window.TreeModule.loadFileTree) {
+        treeLoad = window.TreeModule.loadFileTree();
+    }
+
+    refreshCurrentSidebarView();
+    refreshKnowledgeGraph();
+
+    if (treeLoad && typeof window.updateHomeStats === 'function') {
+        Promise.resolve(treeLoad)
+            .then(function() { window.updateHomeStats(); })
+            .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+    }
 }
 
 function refreshCurrentSidebarView() {
@@ -664,9 +680,7 @@ function initSidecarErrorListener() {
             var info = data.data || {};
             if (info.converted > 0) {
                 updateStatus('自动转换完成: ' + info.converted + '/' + info.total + ' 个文件');
-                if (window.TreeModule && window.TreeModule.loadFileTree) {
-                    window.TreeModule.loadFileTree();
-                }
+                refreshWorkspaceViewsAfterChange();
             }
         } else if (data.type === 'auto_convert_error') {
             console.error('[App] Auto convert error:', data.error);

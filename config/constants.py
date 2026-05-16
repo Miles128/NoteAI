@@ -27,11 +27,14 @@ NOTES_FOLDER = "Notes"
 ABSTRACT_FOLDER = "wiki"
 RAW_FOLDER = "Raw"
 USED_FOLDER = "Used"
+WORKSPACE_APP_FOLDER = "NoteAI"
+RAG_INDEX_FOLDER = "rag_index"
 
 TOPIC_SEP = " > "
 
 IGNORED_DIRS = {
     "ai",
+    "noteai",
     "wiki",
     "ai wiki",
     "ai-wiki",

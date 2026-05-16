@@ -1,7 +1,8 @@
 import threading
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 DEFAULT_TOP_K = 5
@@ -193,7 +194,16 @@ def rebuild_index(progress_callback=None):
     from sidecar.rag.index import build_index
 
     workspace_path = Path(workspace)
-    excluded_dirs = {".git", ".obsidian", ".trash", ".rag_index", ".ai_memory", "Raw"}
+    excluded_dirs = {
+        ".git",
+        ".obsidian",
+        ".trash",
+        ".rag_index",
+        ".ai_memory",
+        "Raw",
+        WORKSPACE_APP_FOLDER,
+        RAG_INDEX_FOLDER,
+    }
     all_chunks = []
 
     for md_file in sorted(workspace_path.rglob("*.md")):
@@ -201,7 +211,7 @@ def rebuild_index(progress_callback=None):
             continue
         if "wiki" in md_file.parts:
             continue
-        if any(p.name in excluded_dirs for p in md_file.relative_to(workspace_path).parents):
+        if any(p.name in excluded_dirs or is_ignored_dir(p.name) for p in md_file.relative_to(workspace_path).parents):
             continue
         if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue

@@ -11,12 +11,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from sidecar.handlers.tags_handler import TagsHandler
 from sidecar.handlers.workspace_handler import WorkspaceHandler
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
 from sidecar.pending_topics import load_pending_topics
-from sidecar.server import WATCHED_WORKSPACE_SUFFIXES
+from sidecar.rag.index import _rag_index_dir
+from sidecar.server import WATCHED_WORKSPACE_SUFFIXES, SidecarServer
 
 from config import config
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_preview import FilePreviewer
 from utils.topic_assigner import parse_wiki_headings, parse_wiki_structure, sync_wiki_with_files
 
@@ -80,6 +83,9 @@ class TestWorkspaceTree:
         node_modules = workspace / "node_modules"
         node_modules.mkdir()
         (node_modules / "package-note.md").write_text("x", encoding="utf-8")
+        noteai = workspace / WORKSPACE_APP_FOLDER
+        noteai.mkdir()
+        (noteai / "GUIDE.md").write_text("x", encoding="utf-8")
 
         handler = WorkspaceHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
         tree = handler._compute_workspace_tree()
@@ -91,6 +97,54 @@ class TestWorkspaceTree:
         assert "empty" not in root_names
         assert ".hidden" not in root_names
         assert "node_modules" not in root_names
+        assert WORKSPACE_APP_FOLDER not in root_names
+
+    def test_workspace_watcher_treats_topic_directory_deletion_as_relevant(self, workspace: Path) -> None:
+        server = SidecarServer.__new__(SidecarServer)
+
+        assert server._is_relevant_workspace_change(workspace / "Notes" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / ".trash" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / "wiki" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / WORKSPACE_APP_FOLDER, is_directory=True)
+
+    def test_rag_index_lives_under_workspace_noteai_folder(self, workspace: Path) -> None:
+        assert _rag_index_dir(str(workspace)) == workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
+
+        ok, _message = config.setup_workspace_folders()
+
+        assert ok is True
+        assert (workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER).is_dir()
+
+
+class TestTagsHandler:
+    def test_auto_tag_files_only_updates_frontmatter(self, workspace: Path) -> None:
+        notes = workspace / "Notes"
+        source = notes / "source.md"
+        source.write_text("---\ntags:\n- LangGraph\n---\nsource body", encoding="utf-8")
+        target = notes / "LangGraph 实战.md"
+        body = "\n# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
+        target.write_text(body, encoding="utf-8")
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._auto_tag_files({"dry_run": False})
+
+        assert result["updated"] == 1
+        updated = target.read_text(encoding="utf-8")
+        assert "tags:\n- LangGraph" in updated
+        assert "# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |" in updated
+
+    def test_delete_tag_preserves_body(self, workspace: Path) -> None:
+        note = workspace / "Notes" / "tagged.md"
+        body = "\n# Title\n\nOriginal body\n"
+        note.write_text("---\ntags:\n- A\n- B\n---" + body, encoding="utf-8")
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._delete_tag({"tag_name": "A"})
+
+        assert result["updated"] == 1
+        updated = note.read_text(encoding="utf-8")
+        assert "tags:\n- B" in updated
+        assert "# Title\n\nOriginal body" in updated
 
 
 class TestParseWikiStructure:

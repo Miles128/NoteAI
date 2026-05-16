@@ -94,7 +94,7 @@ async function loadFilePreview(path, fileName) {
 
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-            window.TiptapEditorModule.hideEditorUI();
+            await window.TiptapEditorModule.hideEditorUI();
         }
     }
 
@@ -162,7 +162,7 @@ async function loadFilePreview(path, fileName) {
                         
                         if (requestId !== currentLoadRequestId) {
                             if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-                                window.TiptapEditorModule.hideEditorUI();
+                                await window.TiptapEditorModule.hideEditorUI();
                             }
                             return;
                         }

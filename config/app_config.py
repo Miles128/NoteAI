@@ -10,9 +10,11 @@ from .constants import (
     API_CONFIG_FILE,
     NOTES_FOLDER,
     PROJECT_CONFIG_PATH,
+    RAG_INDEX_FOLDER,
     RAW_FOLDER,
     SYSTEM_APP_DATA_DIR,
     USED_FOLDER,
+    WORKSPACE_APP_FOLDER,
 )
 from .security import _deobfuscate, _restrict_file_permissions
 
@@ -23,6 +25,8 @@ class AppConfig:
     ABSTRACT_FOLDER: str = ABSTRACT_FOLDER
     RAW_FOLDER: str = RAW_FOLDER
     USED_FOLDER: str = USED_FOLDER
+    WORKSPACE_APP_FOLDER: str = WORKSPACE_APP_FOLDER
+    RAG_INDEX_FOLDER: str = RAG_INDEX_FOLDER
 
     api_key: str = ""
     api_base: str = "https://api.openai.com/v1"
@@ -102,6 +106,16 @@ class AppConfig:
             return ""
         return str(Path(self.workspace_path) / USED_FOLDER)
 
+    def get_workspace_app_folder(self) -> str:
+        if not self.workspace_path:
+            return ""
+        return str(Path(self.workspace_path) / WORKSPACE_APP_FOLDER)
+
+    def get_rag_index_folder(self) -> str:
+        if not self.workspace_path:
+            return ""
+        return str(Path(self.workspace_path) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER)
+
     def setup_workspace_folders(self) -> Tuple[bool, str]:
         if not self.workspace_path:
             return False, "工作文件夹路径未设置"
@@ -114,10 +128,14 @@ class AppConfig:
             notes_folder = workspace / NOTES_FOLDER
             organized_folder = workspace / ABSTRACT_FOLDER
             raw_folder = workspace / RAW_FOLDER
+            noteai_folder = workspace / WORKSPACE_APP_FOLDER
 
             notes_folder.mkdir(parents=True, exist_ok=True)
             organized_folder.mkdir(parents=True, exist_ok=True)
             raw_folder.mkdir(parents=True, exist_ok=True)
+            (noteai_folder / "memory").mkdir(parents=True, exist_ok=True)
+            (noteai_folder / "logs").mkdir(parents=True, exist_ok=True)
+            (noteai_folder / RAG_INDEX_FOLDER).mkdir(parents=True, exist_ok=True)
 
             return True, f"工作文件夹已设置: {self.workspace_path}"
         except PermissionError:
@@ -296,7 +314,7 @@ class AppConfig:
             print(f"API配置已保存到: {API_CONFIG_FILE}")
         except PermissionError:
             api_save_ok = False
-            print(f"保存API配置到系统目录失败：没有写入权限")
+            print("保存API配置到系统目录失败：没有写入权限")
         except Exception as e:
             api_save_ok = False
             print(f"保存API配置到系统目录失败：{e}")

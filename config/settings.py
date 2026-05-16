@@ -1,3 +1,4 @@
+from .app_config import AppConfig, config
 from .constants import (
     ABSTRACT_FOLDER,
     API_CONFIG_FILE,
@@ -5,16 +6,16 @@ from .constants import (
     NOTES_FOLDER,
     PROJECT_CONFIG_PATH,
     PROJECT_ROOT,
+    RAG_INDEX_FOLDER,
     RAW_FOLDER,
     SYSTEM_APP_DATA_DIR,
     USED_FOLDER,
+    WORKSPACE_APP_FOLDER,
     WORKSPACE_STATE_FILE,
     get_system_app_data_dir,
     is_ignored_dir,
 )
-from .security import _deobfuscate, _obfuscate, _restrict_file_permissions
 from .workspace_state import WorkspaceStateError, WorkspaceStateManager, workspace_manager
-from .app_config import AppConfig, config
 
 __all__ = [
     'config',
@@ -26,6 +27,8 @@ __all__ = [
     'ABSTRACT_FOLDER',
     'RAW_FOLDER',
     'USED_FOLDER',
+    'WORKSPACE_APP_FOLDER',
+    'RAG_INDEX_FOLDER',
     'IGNORED_DIRS',
     'is_ignored_dir',
     'PROJECT_ROOT',

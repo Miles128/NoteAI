@@ -16,7 +16,7 @@
     }
 
     function getActiveFilePath() {
-        return TiptapEditor.filePath || (window.AppState && window.AppState.selectedFilePath) || null;
+        return TiptapEditor.filePath || null;
     }
 
     function refreshPreviewState(content) {
@@ -34,6 +34,7 @@
         savePromise: null,
         fallbackTextarea: null,
         isActive: false,
+        userEdited: false,
 
         getModules: function() {
             if (window.TiptapModules) {
@@ -56,17 +57,22 @@
             this.filePath = filePath || null;
             this.originalContent = content || '';
             this.fallbackTextarea = null;
-
-            var modules = this.getModules();
-            if (!modules) {
-                console.error('[Tiptap] Failed to load modules: TiptapModules not found');
-                this._createTextareaFallback(editorEl, content || '');
-                return true;
-            }
+            this.userEdited = false;
 
             if (this.editor) {
                 this.editor.destroy();
                 this.editor = null;
+                this.instance = null;
+            }
+            editorEl.innerHTML = '';
+
+            var modules = this.getModules();
+            if (!modules || this._needsPlainMarkdownEditor(content || '')) {
+                if (!modules) {
+                    console.error('[Tiptap] Failed to load modules: TiptapModules not found');
+                }
+                this._createTextareaFallback(editorEl, content || '');
+                return true;
             }
 
             try {
@@ -88,13 +94,19 @@
                         attributes: {
                             class: 'tiptap-prose',
                         },
+                        handleDOMEvents: {
+                            beforeinput: function() { self.userEdited = true; return false; },
+                            paste: function() { self.userEdited = true; return false; },
+                            drop: function() { self.userEdited = true; return false; },
+                            cut: function() { self.userEdited = true; return false; },
+                        },
                     },
                     onUpdate: function(_ref) {
                         var md = self.getContent();
                         if (md && window.updateYamlFrontMatter) {
                             window.updateYamlFrontMatter(md);
                         }
-                        if (!window._rewritingFilePath) {
+                        if (self.userEdited && !window._rewritingFilePath) {
                             self.scheduleAutoSave(md || '');
                         }
                         if (callback) {
@@ -176,7 +188,18 @@
             this.fallbackTextarea = null;
             this.filePath = null;
             this.originalContent = '';
+            this.userEdited = false;
             this.isActive = false;
+        },
+
+        _needsPlainMarkdownEditor: function(content) {
+            var lines = String(content || '').split(/\r?\n/);
+            for (var i = 0; i < lines.length - 1; i++) {
+                if (/^\s*\|.*\|\s*$/.test(lines[i]) && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i + 1])) {
+                    return true;
+                }
+            }
+            return false;
         },
 
         _createTextareaFallback: function(editorEl, content) {
@@ -186,6 +209,7 @@
             ta.value = content || '';
             ta.style.cssText = 'width:100%;height:100%;border:none;padding:12px;font-family:monospace;font-size:14px;resize:none;background:var(--bg, #fff);color:var(--text, #333);';
             ta.addEventListener('input', function() {
+                self.userEdited = true;
                 self.scheduleAutoSave(ta.value);
             });
             editorEl.innerHTML = '';
@@ -210,6 +234,12 @@
             if (this.saveTimer) {
                 clearTimeout(this.saveTimer);
                 this.saveTimer = null;
+            }
+            if (!this.userEdited) {
+                if (this.savePromise) {
+                    await this.savePromise;
+                }
+                return;
             }
             var content = this.getContent();
             if (content !== null && content !== this.originalContent) {
@@ -264,6 +294,7 @@
 
         runToolbarAction: function(btn) {
             if (!this.editor) return;
+            this.userEdited = true;
             var action = btn.dataset.action;
             var level = parseInt(btn.dataset.level || '0', 10);
             var chain = this.editor.chain().focus();
@@ -315,6 +346,8 @@
             var previewContent = document.getElementById('preview-content');
             var splitBtn = document.getElementById('titlebar-split-btn');
             var editorEl = document.getElementById('tiptap-editor');
+
+            await TiptapEditor.destroy();
 
             if (tiptapContainer) tiptapContainer.style.display = 'flex';
             if (toolbar) toolbar.style.display = 'flex';

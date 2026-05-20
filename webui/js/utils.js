@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 function escapeHtml(text) {
     if (!text) return '';
     var div = document.createElement('div');
@@ -54,6 +56,14 @@ function getTauriEventAPI() {
     return null;
 }
 
+window.escapeHtml = escapeHtml;
+window.escapeAttr = escapeAttr;
+window.formatFileSize = formatFileSize;
+window.formatModifiedTime = formatModifiedTime;
+window.formatFileSizeForTree = formatFileSizeForTree;
+window.Path_stem = Path_stem;
+window.getTauriEventAPI = getTauriEventAPI;
+
 window.utils = {
     escapeHtml: escapeHtml,
     escapeAttr: escapeAttr,
@@ -63,3 +73,5 @@ window.utils = {
     Path_stem: Path_stem,
     getTauriEventAPI: getTauriEventAPI
 };
+
+})();

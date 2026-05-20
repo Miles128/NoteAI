@@ -1,3 +1,4 @@
+import hashlib
 import os
 import base64
 from pathlib import Path
@@ -55,7 +56,7 @@ class FilePreviewer:
 
     def _preview_markdown(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hash(content)
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
 
         return {
             'success': True,
@@ -68,7 +69,7 @@ class FilePreviewer:
 
     def _preview_text(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hash(content)
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
 
         return {
             'success': True,
@@ -89,7 +90,11 @@ class FilePreviewer:
         total_pages = 0
         full_text = ""
         MAX_PREVIEW_PAGES = 50
+        MAX_PAGE_PIXELS = 3000 * 3000  # 单页最大像素限制，防止超大页面导致内存耗尽
+        MAX_TOTAL_IMAGE_SIZE = 200 * 1024 * 1024  # 总图片数据上限 200MB
+        total_image_size = 0
 
+        doc = None
         try:
             doc = fitz.open(file_path)
             total_pages = len(doc)
@@ -101,8 +106,20 @@ class FilePreviewer:
                 text = page.get_text("text") or ""
 
                 mat = fitz.Matrix(1.5, 1.5)
+                # 检查页面像素尺寸，防止恶意超大 PDF 导致内存耗尽
+                page_rect = page.rect
+                page_width_px = int(page_rect.width * 1.5)
+                page_height_px = int(page_rect.height * 1.5)
+                if page_width_px * page_height_px > MAX_PAGE_PIXELS:
+                    # 缩小渲染比例
+                    scale = (MAX_PAGE_PIXELS / (page_rect.width * page_rect.height)) ** 0.5
+                    mat = fitz.Matrix(scale, scale)
+
                 pix = page.get_pixmap(matrix=mat, alpha=False)
                 img_bytes = pix.tobytes("png")
+                total_image_size += len(img_bytes)
+                if total_image_size > MAX_TOTAL_IMAGE_SIZE:
+                    break
                 img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
                 pages_data.append({
@@ -114,8 +131,6 @@ class FilePreviewer:
                 })
 
                 full_text += text + "\n\n"
-
-            doc.close()
 
             return {
                 "success": True,
@@ -130,6 +145,9 @@ class FilePreviewer:
         except Exception as e:
             logger.error(f"PDF预览失败 (PyMuPDF): {e}")
             return self._preview_pdf_legacy(file_path, file_size)
+        finally:
+            if doc is not None:
+                doc.close()
 
     def _preview_pdf_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
         try:
@@ -209,14 +227,7 @@ class FilePreviewer:
                 'error': f'Word文档解析失败: {str(e)}'
             }
 
-
-def format_file_size(size_bytes: int) -> str:
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    else:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
+from utils.helpers import format_file_size  # noqa: E402, F811
 
 
 def get_file_type_display_name(ext: str) -> str:

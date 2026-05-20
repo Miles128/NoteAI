@@ -26,6 +26,9 @@ ENV/
 env/
 .venv/
 
+# JavaScript dependencies
+node_modules/
+
 # IDE
 .idea/
 .vscode/
@@ -58,8 +61,14 @@ config/config.json
 # Trae IDE
 .trae/
 
+# CodeGraph
+.codegraph/
+
 # Downloaded bundles
 codemirror-bundle.mjs
+!webui/lib/
+webui/lib/*
+!webui/lib/tiptap-bundle.js
 
 # Tauri
 src-tauri/target/

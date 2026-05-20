@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 function updateStatus(text) {
     var statusBar = document.getElementById('status-bar') || document.getElementById('editor-status-bar');
     if (statusBar) {
@@ -35,7 +37,7 @@ function updateProgress(elementId, progress, text) {
 }
 
 async function openWorkspace() {
-    const result = await window.api.open_workspace();
+    const result = await window.api.openWorkspace();
     if (result && result.success) {
         updateWorkspaceDisplay(result.workspace_path);
         updateStatus(result.message);
@@ -80,9 +82,9 @@ function updateWorkspaceDisplay(workspacePath) {
 function showWorkspaceOptions() {
     if (!window.api) return;
 
-    window.api.get_workspace_status().then(status => {
+    window.api.getWorkspaceStatus().then(async status => {
         if (status.is_set) {
-            if (confirm('是否要更改工作区？\n\n当前工作区: ' + status.workspace_path)) {
+            if (await window._customConfirm('是否要更改工作区？\n\n当前工作区: ' + status.workspace_path)) {
                 openWorkspace();
             }
         } else {
@@ -97,10 +99,10 @@ function showWorkspaceOptions() {
 async function checkWorkspaceStatus() {
     try {
         if (window.api) {
-            const status = await window.api.get_workspace_status();
+            const status = await window.api.getWorkspaceStatus();
             updateWorkspaceDisplay(status.is_set ? status.workspace_path : null);
-            if (status.is_set && window.api.rag_rebuild_index) {
-                window.api.rag_rebuild_index().catch(function() {});
+            if (status.is_set && window.api.ragRebuildIndex) {
+                window.api.ragRebuildIndex().catch(function() {});
             }
             if (status.is_set) {
                 checkProjectRules();
@@ -116,7 +118,7 @@ async function checkWorkspaceStatus() {
 
 async function checkProjectRules() {
     try {
-        var result = await window.api.get_project_rules();
+        var result = await window.api.getProjectRules();
         if (result && result.success && !result.rules) {
             showProjectRulesModal();
         }
@@ -139,7 +141,7 @@ async function saveProjectRulesModal() {
     var input = document.getElementById('project-rules-input');
     var rules = input ? input.value : '';
     try {
-        await window.api.save_project_rules(rules);
+        await window.api.saveProjectRules(rules);
     } catch (e) {
         console.error('[Workspace] save project rules error:', e);
     }
@@ -147,7 +149,7 @@ async function saveProjectRulesModal() {
 }
 
 async function addFiles() {
-    const files = await window.api.add_files();
+    const files = await window.api.addFiles();
     if (files && files.length > 0) {
         const select = document.getElementById('file-list');
         if (select) {
@@ -162,7 +164,7 @@ async function addFiles() {
 }
 
 async function addFolder() {
-    const folder = await window.api.browse_folder();
+    const folder = await window.api.browseFolder();
     if (folder) {
         const select = document.getElementById('file-list');
         if (select) {
@@ -182,8 +184,11 @@ function clearFiles() {
 }
 
 async function showAbout() {
-    if (window.ThemeModule && window.ThemeModule.showAboutPanel) {
-        window.ThemeModule.showAboutPanel();
+    const settingsPanel = document.getElementById('settings-panel');
+    if (settingsPanel) {
+        settingsPanel.classList.add('active');
+        window.SettingsModule.loadApiConfigToForm();
+        window.SettingsModule.switchSettingsTab('about');
     }
 }
 
@@ -201,6 +206,9 @@ function showSettings() {
     }
     if (window.SettingsModule && window.SettingsModule.loadUserProfile) {
         window.SettingsModule.loadUserProfile();
+    }
+    if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
+        window.SettingsModule.switchSettingsTab('model');
     }
 }
 
@@ -232,3 +240,15 @@ window.WorkspaceModule = {
     showSettings,
     showLog
 };
+
+window.updateStatus = updateStatus;
+window.updateProgress = updateProgress;
+window.openWorkspace = openWorkspace;
+window.showProjectRulesModal = showProjectRulesModal;
+window.closeProjectRulesModal = closeProjectRulesModal;
+window.saveProjectRulesModal = saveProjectRulesModal;
+window.showSettings = showSettings;
+window.showAbout = showAbout;
+
+})();
+

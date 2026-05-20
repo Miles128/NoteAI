@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 async function saveApiConfig() {
     const apiKeyEl = document.getElementById('api-key');
     const apiBaseEl = document.getElementById('api-base');
@@ -38,7 +40,7 @@ async function saveApiConfig() {
 
     showStatus('正在测试连接...');
     try {
-        const result = await window.api.save_api_config(config);
+        const result = await window.api.saveApiConfig(config);
         if (result && result.success) {
             showStatus('配置已保存');
             setTimeout(hideStatus, 3000);
@@ -52,7 +54,7 @@ async function saveApiConfig() {
 
 async function loadApiConfigToForm() {
     try {
-        const apiConfig = await window.api.get_api_config();
+        const apiConfig = await window.api.getApiConfig();
         if (apiConfig) {
             const apiKeyEl = document.getElementById('api-key');
             const apiBaseEl = document.getElementById('api-base');
@@ -80,7 +82,7 @@ async function loadApiConfigToForm() {
 
 async function refreshLog() {
     try {
-        const result = await window.api.refresh_log();
+        const result = await window.api.refreshLog();
         if (result && result.success) {
             updateStatus('日志已刷新');
         }
@@ -103,10 +105,15 @@ function closeLogPanel() {
     }
 }
 
-function closeAboutPanel() {
-    const aboutPanel = document.getElementById('about-panel');
-    if (aboutPanel) {
-        aboutPanel.classList.remove('active');
+function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.id === 'tab-' + tabName);
+    });
+    if (tabName === 'profile') {
+        loadUserProfile();
     }
 }
 
@@ -117,10 +124,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target === settingsPanel) closeSettingsPanel();
         });
     }
-    var aboutPanel = document.getElementById('about-panel');
-    if (aboutPanel) {
-        aboutPanel.addEventListener('click', function(e) {
-            if (e.target === aboutPanel) closeAboutPanel();
+
+    var settingsNav = document.getElementById('settings-nav');
+    if (settingsNav) {
+        settingsNav.addEventListener('click', function(e) {
+            var btn = e.target.closest('.settings-nav-btn');
+            if (btn && btn.dataset.tab) {
+                switchSettingsTab(btn.dataset.tab);
+            }
         });
     }
 });
@@ -139,7 +150,7 @@ async function autoSaveConfig() {
             topic_list: document.getElementById('topic-list')?.value || ''
         };
 
-        const result = await window.api.save_ui_config(uiConfig);
+        const result = await window.api.saveUiConfig(uiConfig);
         if (result && result.success) {
             updateStatus('配置已自动保存');
         } else {
@@ -164,17 +175,47 @@ function resetApiConfig() {
     if (maxContextEl) maxContextEl.value = 128000;
 }
 
+async function saveFontSize(size) {
+    try {
+        var result = await window.api.saveUiConfig({ font_size: size });
+        if (!result || !result.success) {
+            console.error('[Settings] save font_size failed:', result);
+        }
+    } catch (e) {
+        console.error('[Settings] save font_size error:', e);
+    }
+}
+
+async function loadUiConfigToForm() {
+    try {
+        var uiConfig = await window.api.getUiConfig();
+        if (uiConfig) {
+            var savedFontSize = uiConfig.font_size || 'small';
+            if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+                window.ThemeModule.setFontSize(savedFontSize);
+            }
+            document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+                radio.checked = radio.value === savedFontSize;
+            });
+        }
+    } catch (e) {
+        console.error('[Settings] Load UI config error:', e);
+    }
+}
+
 window.SettingsModule = {
     saveApiConfig,
     loadApiConfigToForm,
     refreshLog,
     closeSettingsPanel,
     closeLogPanel,
-    closeAboutPanel,
+    switchSettingsTab,
     autoSaveConfig,
     resetApiConfig,
     saveUserProfile,
-    loadUserProfile
+    loadUserProfile,
+    saveFontSize,
+    loadUiConfigToForm
 };
 
 async function saveUserProfile() {
@@ -186,7 +227,7 @@ async function saveUserProfile() {
 
     var statusEl = document.getElementById('profile-status');
     try {
-        var result = await window.api.save_user_profile(data);
+        var result = await window.api.saveUserProfile(data);
         if (result && result.success) {
             if (statusEl) { statusEl.innerHTML = '<span style="color: #38a169;">画像已保存</span>'; statusEl.style.display = 'block'; }
         } else {
@@ -200,7 +241,7 @@ async function saveUserProfile() {
 
 async function loadUserProfile() {
     try {
-        var result = await window.api.get_user_profile();
+        var result = await window.api.getUserProfile();
         if (result && result.success && result.profile) {
             var profileMd = result.profile.profile_md || '';
 
@@ -229,3 +270,13 @@ async function loadUserProfile() {
         console.error('[Settings] Load user profile error:', e);
     }
 }
+
+window.saveApiConfig = saveApiConfig;
+window.refreshLog = refreshLog;
+window.closeSettingsPanel = closeSettingsPanel;
+window.closeLogPanel = closeLogPanel;
+window.resetApiConfig = resetApiConfig;
+window.saveUserProfile = saveUserProfile;
+
+})();
+

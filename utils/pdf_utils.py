@@ -16,12 +16,11 @@ def extract_pdf_text(file_path: str, strip: bool = True) -> str:
     """
     import fitz
 
-    doc = fitz.open(file_path)
-    parts = []
-    for page in doc:
-        text = page.get_text("text")
-        parts.append(text.strip() if strip else text)
-    doc.close()
+    with fitz.open(file_path) as doc:
+        parts = []
+        for page in doc:
+            text = page.get_text("text")
+            parts.append(text.strip() if strip else text)
     return "\n\n".join(parts)
 
 
@@ -37,7 +36,6 @@ def extract_pdf_pages(file_path: str) -> List[str]:
     """
     import fitz
 
-    doc = fitz.open(file_path)
-    texts = [page.get_text("text").strip() for page in doc]
-    doc.close()
+    with fitz.open(file_path) as doc:
+        texts = [page.get_text("text").strip() for page in doc]
     return texts

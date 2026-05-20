@@ -1,21 +1,23 @@
-import sys
 import json
-import numpy as np
 from pathlib import Path
-from typing import Optional
 
-from pymilvus import MilvusClient, DataType
+from pymilvus import DataType, MilvusClient
 
-from config import config
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
 
 
 def _db_path(workspace: str) -> str:
-    p = Path(workspace) / ".rag_index" / "milvus_lite.db"
+    p = _rag_index_dir(workspace) / "milvus_lite.db"
     p.parent.mkdir(parents=True, exist_ok=True)
     return str(p)
+
+
+def _rag_index_dir(workspace: str) -> Path:
+    return Path(workspace) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
 
 
 def _get_client(workspace: str) -> MilvusClient:
@@ -79,7 +81,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
         batch_embeds = embeddings[i:i + batch_size]
 
         data = []
-        for chunk, emb in zip(batch_chunks, batch_embeds):
+        for chunk, emb in zip(batch_chunks, batch_embeds, strict=False):
             tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
             row = {
                 "id": chunk.get("id", f"chunk_{i}"),
@@ -103,7 +105,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
 
 
 def _sparse_index_path(workspace: str) -> Path:
-    return Path(workspace) / ".rag_index" / "sparse_index.json"
+    return _rag_index_dir(workspace) / "sparse_index.json"
 
 
 def _save_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict]):
@@ -111,7 +113,7 @@ def _save_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict
     path.parent.mkdir(parents=True, exist_ok=True)
 
     sparse_data = {}
-    for chunk, emb in zip(chunks, embeddings):
+    for chunk, emb in zip(chunks, embeddings, strict=False):
         chunk_id = chunk.get("id", "")
         lexical = emb.get("lexical_weights", {})
         if isinstance(lexical, dict):
@@ -247,18 +249,19 @@ def delete_by_file(workspace: str, file_path: str):
     if not _collection_exists(client):
         return
 
+    # 查询要删除的 chunk ID（在 delete 之前查询，避免最终一致性问题）
+    chunks_to_check = _get_chunks_by_file(workspace, file_path)
+    chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
+
     try:
         client.delete(
             collection_name=_COLLECTION_NAME,
             filter=f'file_path == "{file_path}"',
         )
     except Exception as e:
-        sys.stderr.write(f"[rag/index] delete_by_file error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/index] delete_by_file error: {e}\n")
 
     sparse_index = _load_sparse_index(workspace)
-    chunks_to_check = _get_chunks_by_file(workspace, file_path)
-    chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
     to_remove = [k for k in sparse_index if k in chunk_ids_to_remove]
     for k in to_remove:
         del sparse_index[k]
@@ -273,7 +276,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
         _create_collection(client)
 
     data = []
-    for i, (chunk, emb) in enumerate(zip(chunks, embeddings)):
+    for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
         tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
         row = {
             "id": chunk.get("id", f"chunk_add_{i}"),
@@ -290,7 +293,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
         client.insert(collection_name=_COLLECTION_NAME, data=data)
 
     sparse_index = _load_sparse_index(workspace)
-    for chunk, emb in zip(chunks, embeddings):
+    for chunk, emb in zip(chunks, embeddings, strict=False):
         chunk_id = chunk.get("id", "")
         lexical = emb.get("lexical_weights", {})
         if isinstance(lexical, dict):

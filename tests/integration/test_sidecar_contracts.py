@@ -7,16 +7,21 @@ Requires project dependencies (see pyproject.toml). Run: pytest tests/integratio
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from sidecar.handlers.tags_handler import TagsHandler
+from sidecar.handlers.workspace_handler import WorkspaceHandler
+from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
+from sidecar.pending_topics import load_pending_topics
+from sidecar.rag.index import _rag_index_dir
+from sidecar.server import WATCHED_WORKSPACE_SUFFIXES, SidecarServer
 
 from config import config
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_preview import FilePreviewer
-from sidecar.mixins.path_helpers import PathHelpersMixin
-from sidecar.mixins.topics_mixin import TopicsMixin
-from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
+from utils.topic_assigner import parse_wiki_headings, parse_wiki_structure, sync_wiki_with_files
 
 
 @pytest.fixture
@@ -24,7 +29,7 @@ def workspace(tmp_path: Path) -> Path:
     d = tmp_path / "ws"
     d.mkdir()
     (d / "Notes").mkdir()
-    (d / "Abstract").mkdir()
+    (d / "wiki").mkdir(parents=True, exist_ok=True)
     config.workspace_path = str(d)
     return d
 
@@ -55,37 +60,174 @@ class TestResolveWorkspacePath:
 
 class TestFindFileByName:
     def test_finds_first_match_in_workspace(self, workspace: Path) -> None:
-        (workspace / "Abstract" / "dup.md").write_text("1", encoding="utf-8")
-        got = find_file_by_name_in_workspace("Abstract/dup.md")
+        (workspace / "wiki" / "dup.md").write_text("1", encoding="utf-8")
+        got = find_file_by_name_in_workspace("wiki/dup.md")
         assert got is not None
         assert got.endswith("dup.md")
 
 
-class TestGetTopicTreeContract:
-    """Shape of `get_topic_tree` RPC (TopicsMixin._get_topic_tree)."""
+class TestWorkspaceTree:
+    def test_watched_workspace_suffixes_match_user_visible_inputs(self) -> None:
+        assert {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"} == WATCHED_WORKSPACE_SUFFIXES
 
-    def test_returns_topics_and_pending_lists(self, workspace: Path) -> None:
-        class _Host(PathHelpersMixin, TopicsMixin):
-            pass
+    def test_only_supported_file_types_are_returned(self, workspace: Path) -> None:
+        notes = workspace / "Notes"
+        for name in ("a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"):
+            (notes / name).write_text("x", encoding="utf-8")
+        for name in ("ignore.png", "ignore.jpg", "ignore.json"):
+            (notes / name).write_text("x", encoding="utf-8")
+        (workspace / "empty").mkdir()
+        hidden = workspace / ".hidden"
+        hidden.mkdir()
+        (hidden / "secret.md").write_text("x", encoding="utf-8")
+        node_modules = workspace / "node_modules"
+        node_modules.mkdir()
+        (node_modules / "package-note.md").write_text("x", encoding="utf-8")
+        noteai = workspace / WORKSPACE_APP_FOLDER
+        noteai.mkdir()
+        (noteai / "GUIDE.md").write_text("x", encoding="utf-8")
 
-        host = _Host.__new__(_Host)
-        out = TopicsMixin._get_topic_tree(host, {})
-        assert set(out) == {"topics", "pending"}
-        assert isinstance(out["topics"], list)
-        assert isinstance(out["pending"], list)
+        handler = WorkspaceHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+        tree = handler._compute_workspace_tree()
+        notes_node = next(node for node in tree if node["name"] == "Notes")
+        names = {node["name"] for node in notes_node["children"]}
+
+        assert names == {"a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
+        root_names = {node["name"] for node in tree}
+        assert "empty" not in root_names
+        assert ".hidden" not in root_names
+        assert "node_modules" not in root_names
+        assert WORKSPACE_APP_FOLDER not in root_names
+
+    def test_workspace_watcher_treats_topic_directory_deletion_as_relevant(self, workspace: Path) -> None:
+        server = SidecarServer.__new__(SidecarServer)
+
+        assert server._is_relevant_workspace_change(workspace / "Notes" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / ".trash" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / "wiki" / "主题", is_directory=True)
+        assert not server._is_relevant_workspace_change(workspace / WORKSPACE_APP_FOLDER, is_directory=True)
+
+    def test_rag_index_lives_under_workspace_noteai_folder(self, workspace: Path) -> None:
+        assert _rag_index_dir(str(workspace)) == workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
+
+        ok, _message = config.setup_workspace_folders()
+
+        assert ok is True
+        assert (workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER).is_dir()
+
+
+class TestTagsHandler:
+    def test_auto_tag_files_only_updates_frontmatter(self, workspace: Path) -> None:
+        notes = workspace / "Notes"
+        source = notes / "source.md"
+        source.write_text("---\ntags:\n- LangGraph\n---\nsource body", encoding="utf-8")
+        target = notes / "LangGraph 实战.md"
+        body = "\n# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
+        target.write_text(body, encoding="utf-8")
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._auto_tag_files({"dry_run": False})
+
+        assert result["updated"] == 1
+        updated = target.read_text(encoding="utf-8")
+        assert "tags:\n- LangGraph" in updated
+        assert "# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |" in updated
+
+    def test_delete_tag_preserves_body(self, workspace: Path) -> None:
+        note = workspace / "Notes" / "tagged.md"
+        body = "\n# Title\n\nOriginal body\n"
+        note.write_text("---\ntags:\n- A\n- B\n---" + body, encoding="utf-8")
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._delete_tag({"tag_name": "A"})
+
+        assert result["updated"] == 1
+        updated = note.read_text(encoding="utf-8")
+        assert "tags:\n- B" in updated
+        assert "# Title\n\nOriginal body" in updated
+
+
+class TestParseWikiStructure:
+    """parse_wiki_structure() parses WIKI.md into a list of topic dicts."""
+
+    def test_returns_topic_list(self, workspace: Path) -> None:
+        wiki_dir = workspace / "wiki"
+        wiki_dir.mkdir(exist_ok=True)
+        wiki = wiki_dir / "WIKI.md"
+        wiki.write_text(
+            "## AI产品经理之路\n\n"
+            "1. **产品思维**\n"
+            "2. **需求分析**\n\n"
+            "### Agent 架构\n\n"
+            "1. **Agent 设计**\n",
+            encoding="utf-8",
+        )
+        topics = parse_wiki_structure()
+        assert isinstance(topics, list)
+        min_topic_count = 2
+        assert len(topics) >= min_topic_count
+        for t in topics:
+            assert "name" in t
+            assert "label" in t
+            assert "files" in t
+            assert isinstance(t["files"], list)
+
+    def test_empty_when_no_wiki(self, workspace: Path) -> None:
+        _ = workspace
+        topics = parse_wiki_structure()
+        assert topics == []
+
+    def test_wiki_sync_uses_notes_folder_as_source_of_truth(self, workspace: Path) -> None:
+        topic_dir = workspace / "Notes" / "普通人的AI指南" / "Agent 入门"
+        topic_dir.mkdir(parents=True)
+        note = topic_dir / "提示词.md"
+        note.write_text("---\ntopic: 旧主题\n---\n正文", encoding="utf-8")
+        root_note = workspace / "Notes" / "未分类.md"
+        root_note.write_text("---\ntopic: 不应保留\n---\n正文", encoding="utf-8")
+
+        result = sync_wiki_with_files()
+
+        assert result["success"] is True
+        wiki = (workspace / "wiki" / "WIKI.md").read_text(encoding="utf-8")
+        assert "## 普通人的AI指南" in wiki
+        assert "### Agent 入门" in wiki
+        assert "1. **提示词**" in wiki
+        assert "未分类" not in wiki
+        assert "topic: 普通人的AI指南 > Agent 入门" in note.read_text(encoding="utf-8")
+        assert "topic:" not in root_note.read_text(encoding="utf-8")
+
+    def test_parse_wiki_headings_returns_full_topic_paths(self, workspace: Path) -> None:
+        (workspace / "wiki" / "WIKI.md").write_text(
+            "## 普通人的AI指南\n\n"
+            "### Agent 入门\n\n"
+            "#### 工具调用\n",
+            encoding="utf-8",
+        )
+
+        names = [item["name"] for item in parse_wiki_headings()]
+
+        assert names == [
+            "普通人的AI指南",
+            "普通人的AI指南 > Agent 入门",
+            "普通人的AI指南 > Agent 入门 > 工具调用",
+        ]
+
+
+class TestPendingTopics:
+    """load_pending_topics() reads .pending_topics.json from workspace."""
 
     def test_pending_json_roundtrip(self, workspace: Path) -> None:
         pending_path = workspace / ".pending_topics.json"
         sample = [{"file": "Notes/a.md", "title": "A", "candidates": ["T1"]}]
         pending_path.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
+        pending = load_pending_topics()
+        assert len(pending) == 1
+        assert pending[0]["file"] == "Notes/a.md"
 
-        class _Host(PathHelpersMixin, TopicsMixin):
-            pass
-
-        host = _Host.__new__(_Host)
-        out = TopicsMixin._get_topic_tree(host, {})
-        assert len(out["pending"]) == 1
-        assert out["pending"][0].get("file") == "Notes/a.md"
+    def test_empty_when_no_file(self, workspace: Path) -> None:
+        _ = workspace
+        pending = load_pending_topics()
+        assert pending == []
 
 
 class TestPreviewPathContract:

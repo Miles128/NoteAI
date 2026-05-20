@@ -15,10 +15,7 @@ def resolve_workspace_path(path: str) -> str | None:
         return None
     try:
         workspace_abs = Path(workspace).resolve()
-        if Path(path).is_absolute():
-            target_abs = Path(path).resolve()
-        else:
-            target_abs = (workspace_abs / path).resolve()
+        target_abs = Path(path).resolve() if Path(path).is_absolute() else (workspace_abs / path).resolve()
         target_abs.relative_to(workspace_abs)
         return str(target_abs)
     except ValueError:
@@ -51,6 +48,6 @@ def find_file_by_name_in_workspace(path: str) -> str | None:
                     return str(match_abs)
                 except ValueError:
                     continue
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[WARN] find_file_by_name_in_workspace error for '{path}': {e}", file=sys.stderr)
     return None

@@ -41,7 +41,7 @@ if %errorlevel% neq 0 (
 )
 
 echo 安装 Python 依赖 ^(从 pyproject.toml^) ...
-pip install -e .
+uv pip install -e .
 
 if %errorlevel% neq 0 (
     echo 错误: 安装依赖失败（可改用: uv sync）
@@ -80,7 +80,7 @@ if %errorlevel% neq 0 (
 )
 
 echo 安装 Python 依赖 ^(从 pyproject.toml^) ...
-pip install -e .
+uv pip install -e .
 
 if %errorlevel% neq 0 (
     echo 错误: 安装依赖失败（可改用: uv sync）

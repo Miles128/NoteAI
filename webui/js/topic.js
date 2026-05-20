@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _lastTopicData = null;
 var _aiSuggestions = [];
 var _existingTopics = [];
@@ -6,12 +8,12 @@ var _pendingDragData = { filePath: null, cardEl: null };
 function _buildTopicTree(topics) {
     var root = { children: {}, files: [], name: '', label: '' };
     topics.forEach(function(topic) {
-        var parts = topic.name.split('/');
+        var parts = topic.name.split(' > ');
         var node = root;
         for (var i = 0; i < parts.length; i++) {
             var part = parts[i];
             if (!node.children[part]) {
-                node.children[part] = { children: {}, files: [], name: parts.slice(0, i + 1).join('/'), label: part };
+                node.children[part] = { children: {}, files: [], name: parts.slice(0, i + 1).join(' > '), label: part };
             }
             node = node.children[part];
         }
@@ -93,7 +95,7 @@ async function loadTopicTree(silent) {
     }
 
     try {
-        var result = await window.api.get_topic_tree();
+        var result = await window.api.getTopicTree();
 
         if (!result || typeof result !== 'object') {
             container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">API 返回异常</span></div>';
@@ -138,7 +140,7 @@ async function loadTopicTree(silent) {
 
         setupTopicDragDrop(container);
         setupTopicContextMenu(container);
-        updateSidebarStats();
+        window.updateSidebarStats();
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
         container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
@@ -246,7 +248,7 @@ function setupTopicDragDrop(container) {
             }
 
             try {
-                var result = await window.api.resolve_topic(pendingFile, targetTopic);
+                var result = await window.api.resolveTopic(pendingFile, targetTopic);
                 if (result && result.success) {
                     pendingCard.classList.add('resolved');
                     animateCardOut(pendingCard);
@@ -284,7 +286,7 @@ function setupTopicDragDrop(container) {
         console.log('[Topic] Move file:', filePath, 'from:', dragData.srcTopic, 'to:', targetTopic2);
 
         try {
-            var result2 = await window.api.move_file_to_topic(filePath, targetTopic2);
+            var result2 = await window.api.moveFileToTopic(filePath, targetTopic2);
             if (result2 && result2.success) {
                 await loadTopicTree();
             } else {
@@ -462,6 +464,8 @@ function startTopicRename(tagNameEl, oldTopicName) {
         if (finished) return;
         finished = true;
 
+        if (input._renameCleanup) input._renameCleanup();
+
         var newName = input.value.trim();
         input.remove();
         tagNameEl.style.display = originalDisplay || '';
@@ -472,7 +476,7 @@ function startTopicRename(tagNameEl, oldTopicName) {
 
         console.log('[Topic] Rename:', oldTopicName, '->', newName);
 
-        window.api.rename_topic(oldTopicName, newName).then(function(result) {
+        window.api.renameTopic(oldTopicName, newName).then(function(result) {
             console.log('[Topic] rename result:', result);
             if (result && result.success) {
                 loadTopicTree();
@@ -508,6 +512,9 @@ function startTopicRename(tagNameEl, oldTopicName) {
         }
     };
     parentRow.addEventListener('click', rowClickHandler);
+    input._renameCleanup = function() {
+        parentRow.removeEventListener('click', rowClickHandler);
+    };
 }
 
 function onAddSubTopic(parentTopic) {
@@ -517,7 +524,7 @@ function onAddSubTopic(parentTopic) {
 
     var fullPath = parentTopic + '/' + subName;
 
-    window.api.create_topic(fullPath).then(function(result) {
+    window.api.createTopic(fullPath).then(function(result) {
         if (result && result.success) {
             loadTopicTree();
         } else {
@@ -529,11 +536,11 @@ function onAddSubTopic(parentTopic) {
     });
 }
 
-function onDeleteTopic(topicName) {
-    var confirmed = confirm('确定要删除主题「' + topicName + '」吗？\n\n该主题下的文件将从 WIKI.md 中移除，文件的 topic 标签也会被删除，之后会重新尝试自动匹配主题。');
+async function onDeleteTopic(topicName) {
+    var confirmed = await window._customConfirm('确定要删除主题「' + topicName + '」吗？\n\n该主题下的文件将从 WIKI.md 中移除，文件的 topic 标签也会被删除，之后会重新尝试自动匹配主题。');
     if (!confirmed) return;
 
-    window.api.delete_topic(topicName).then(function(result) {
+    window.api.deleteTopic(topicName).then(function(result) {
         if (result && result.success) {
             loadTopicTree();
             if (result.reassigned > 0) {
@@ -562,7 +569,7 @@ async function onBatchAutoAssignTopics() {
 
     try {
         console.log('[Topic] Step 1: Sync WIKI.md with file YAML topics...');
-        var syncResult = await window.api.sync_wiki_with_files();
+        var syncResult = await window.api.syncWikiWithFiles();
         console.log('[Topic] Sync result:', syncResult);
 
         if (syncResult && syncResult.success) {
@@ -576,7 +583,7 @@ async function onBatchAutoAssignTopics() {
         await loadTopicTree();
 
         console.log('[Topic] Step 2: Auto assign topics for files without topic...');
-        var result = await window.api.batch_auto_assign_topics();
+        var result = await window.api.batchAutoAssignTopics();
         if (result && result.success) {
             await loadTopicTree();
 
@@ -732,7 +739,7 @@ async function applyAISuggestion(idx, cardEl) {
 
     cardEl.style.opacity = '0.5';
     try {
-        var result = await window.api.apply_topic_suggestion(suggestion);
+        var result = await window.api.applyTopicSuggestion(suggestion);
         if (result && result.success) {
             cardEl.style.opacity = '0.3';
             cardEl.style.pointerEvents = 'none';
@@ -765,12 +772,12 @@ function closeAISuggestionPanel() {
 async function onAITopicAnalyze() {
     var btn = document.getElementById('btn-ai-analyze');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
-    setSidebarStatus('topic', '正在扫描文件...', true);
+    window.setSidebarStatus('topic', '正在扫描文件...', true);
     updateStatus('AI 正在扫描全量文件分析主题...');
 
     try {
         try {
-            var treeResult = await window.api.get_topic_tree();
+            var treeResult = await window.api.getTopicTree();
             if (treeResult && treeResult.topics) {
                 _existingTopics = treeResult.topics.map(function(t) { return t.name; });
             }
@@ -778,28 +785,28 @@ async function onAITopicAnalyze() {
             _existingTopics = [];
         }
 
-        setSidebarStatus('topic', '正在连接大模型...', true);
-        var result = await window.api.ai_topic_analyze();
+        window.setSidebarStatus('topic', '正在连接大模型...', true);
+        var result = await window.api.aiTopicAnalyze();
         if (result && result.success && result.suggestions && result.suggestions.length > 0) {
             _aiSuggestions = result.suggestions;
             showAISuggestionPanel();
-            setSidebarStatus('topic', result.suggestions.length + ' 条建议');
+            window.setSidebarStatus('topic', result.suggestions.length + ' 条建议');
             updateStatus('AI 分析完成，共 ' + result.suggestions.length + ' 条建议');
         } else if (result && result.success) {
-            setSidebarStatus('topic', '主题分配合理');
+            window.setSidebarStatus('topic', '主题分配合理');
             updateStatus('AI 分析完成，所有文件主题分配合理');
             _aiSuggestions = [];
         } else {
-            setSidebarStatus('topic', result && result.message ? result.message : '分析失败');
+            window.setSidebarStatus('topic', result && result.message ? result.message : '分析失败');
             updateStatus(result && result.message ? result.message : 'AI 分析未返回结果');
             _aiSuggestions = [];
         }
     } catch (e) {
-        setSidebarStatus('topic', '分析出错');
+        window.setSidebarStatus('topic', '分析出错');
         updateStatus('AI 分析出错: ' + (e.message || e));
     } finally {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
-        setTimeout(updateSidebarStats, 2000);
+        setTimeout(window.updateSidebarStats, 2000);
     }
 }
 
@@ -823,6 +830,7 @@ function _flushSurveyBuffer() {
     window._surveyDisplayText += take;
     if (window.TiptapEditor && window.TiptapEditor.instance && window.marked) {
         var html = window.marked.parse(window._surveyDisplayText);
+        if (typeof DOMPurify !== 'undefined') { html = DOMPurify.sanitize(html); }
         window.TiptapEditor.instance.commands.setContent(html, false);
     }
     var editorEl = document.getElementById('tiptap-editor');
@@ -838,7 +846,7 @@ function _flushSurveyBuffer() {
 async function onAITopicSurvey() {
     var headings = [];
     try {
-        var treeResult = await window.api.get_topic_tree();
+        var treeResult = await window.api.getTopicTree();
         if (treeResult && treeResult.topics) {
             headings = treeResult.topics.map(function(t) { return t.name; });
         }
@@ -856,7 +864,7 @@ async function onAITopicSurvey() {
 
     var btn = document.getElementById('btn-ai-survey');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
-    setSidebarStatus('topic', '正在连接大模型...', true);
+    window.setSidebarStatus('topic', '正在连接大模型...', true);
     updateStatus('AI 正在撰写「' + topic + '」综述...');
 
     window._surveyStreamText = '';
@@ -901,22 +909,22 @@ async function onAITopicSurvey() {
                 }
                 if (data.success) {
                     updateStatus('综述撰写完成，已保存为 ' + data.file_path);
-                    setSidebarStatus('topic', '综述已保存');
+                    window.setSidebarStatus('topic', '综述已保存');
                 } else {
                     alert('撰写失败：' + (data.message || '未知错误'));
                     updateStatus('综述撰写失败');
-                    setSidebarStatus('topic', '撰写失败');
+                    window.setSidebarStatus('topic', '撰写失败');
                 }
                 if (window.TiptapEditor && window.TiptapEditor.instance) {
                     window.TiptapEditor.instance.setEditable(true);
                 }
-                setTimeout(updateSidebarStats, 2000);
+                setTimeout(window.updateSidebarStats, 2000);
             }
         });
     }
 
     try {
-        await window.api.ai_topic_survey(topic);
+        await window.api.aiTopicSurvey(topic);
     } catch (e) {
         alert('撰写出错：' + (e.message || e));
         updateStatus('综述撰写出错');
@@ -1002,7 +1010,7 @@ async function onConfirmTopic() {
     }
 
     try {
-        var createResult = await window.api.create_topic(topicName);
+        var createResult = await window.api.createTopic(topicName);
         if (!createResult || !createResult.success) {
             alert(createResult ? createResult.message : '创建主题失败');
             if (inputField) inputField.focus();
@@ -1015,7 +1023,7 @@ async function onConfirmTopic() {
 
         await loadTopicTree();
 
-        var batchResult = await window.api.batch_auto_assign_topics();
+        var batchResult = await window.api.batchAutoAssignTopics();
         if (batchResult && batchResult.success) {
             if (batchResult.pending && batchResult.pending.length > 0) {
                 var topicNames2 = [];
@@ -1089,7 +1097,7 @@ async function loadTopicView() {
 
     var result;
     try {
-        result = await window.api.get_topic_tree();
+        result = await window.api.getTopicTree();
         console.log('[Topic] API result:', result);
     } catch (e) {
         console.error('[Topic] loadTopicView error:', e);
@@ -1126,17 +1134,15 @@ function loadTopicPendingPanel(pending, topicNames) {
             html += '<button class="topic-candidate-btn" data-topic="' + escapeAttr(c) + '" data-file="' + escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + escapeHtml(c) + '</button>';
         });
         html += '</div>';
+        html += '<div class="topic-assign-row">';
         if (topicNames.length > 0) {
-            html += '<div class="topic-select-row">';
             html += '<select class="topic-select" data-file="' + escapeAttr(p.file) + '" onchange="onTopicSelectChange(this)">';
             html += '<option value="">-- 选择已有主题 --</option>';
             topicNames.forEach(function(name) {
                 html += '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
             });
             html += '</select>';
-            html += '</div>';
         }
-        html += '<div class="topic-custom-row">';
         html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '">';
         html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">确定</button>';
         html += '</div>';
@@ -1206,36 +1212,21 @@ function onInputChange(inputEl) {
     btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
 }
 
-async function onTopicSelectChange(selectEl) {
+function onTopicSelectChange(selectEl) {
     var topicName = selectEl.value;
     if (!topicName) return;
 
     var card = selectEl.closest('.topic-pending-card');
-    var filePath = card ? card.getAttribute('data-file') : null;
-    if (!filePath) return;
+    if (!card) return;
 
-    selectEl.disabled = true;
-    card.classList.add('resolving');
-
-    try {
-        var result = await window.api.resolve_topic(filePath, topicName);
-        if (result && result.success) {
-            card.classList.remove('resolving');
-            card.classList.add('resolved');
-            animateCardOut(card);
-        } else {
-            card.classList.remove('resolving');
-            selectEl.disabled = false;
-            selectEl.value = '';
-            alert('确认主题失败：' + (result ? result.message : '未知错误'));
-        }
-    } catch (err) {
-        card.classList.remove('resolving');
-        selectEl.disabled = false;
-        selectEl.value = '';
-        console.error('[Topic] select resolve error:', err);
-        alert('确认主题失败：' + (err.message || '发生错误'));
+    var customInput = card.querySelector('.topic-custom-input');
+    if (customInput) {
+        customInput.value = topicName;
+        customInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
+
+    var btns = card.querySelectorAll('.topic-candidate-btn');
+    btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
 }
 
 function onInputEnter(inputEl) {
@@ -1259,10 +1250,14 @@ function doConfirmTopic(cardEl) {
     var input = cardEl.querySelector('.topic-custom-input');
     var custom = (input && input.value) ? input.value.trim() : '';
 
+    // Also read from the <select> dropdown
+    var selectEl = cardEl.querySelector('.topic-select');
+    var selectVal = (selectEl && selectEl.value) ? selectEl.value : '';
+
     var selectedBtn = cardEl.querySelector('.topic-candidate-btn.topic-candidate-selected');
     var selectedTopic = selectedBtn ? selectedBtn.getAttribute('data-topic') || '' : '';
 
-    var topic = custom || selectedTopic;
+    var topic = custom || selectVal || selectedTopic;
     if (!topic) return;
 
     var btns = cardEl.querySelectorAll('.topic-candidate-btn');
@@ -1277,10 +1272,11 @@ function doConfirmTopic(cardEl) {
     });
 
     if (input) input.disabled = true;
+    if (selectEl) selectEl.disabled = true;
     if (customBtn) customBtn.disabled = true;
     cardEl.classList.add('resolving');
 
-    window.api.resolve_topic(file, topic).then(function(result) {
+    window.api.resolveTopic(file, topic).then(function(result) {
         if (result && result.success) {
             cardEl.classList.add('resolved');
             animateCardOut(cardEl);
@@ -1288,15 +1284,18 @@ function doConfirmTopic(cardEl) {
             cardEl.classList.remove('resolving');
             btns.forEach(function(b) { b.classList.remove('topic-candidate-disabled'); });
             if (input) input.disabled = false;
+            if (selectEl) selectEl.disabled = false;
             if (customBtn) customBtn.disabled = false;
-            console.error('[Topic] resolve failed:', result);
+            alert('确认主题失败：' + (result ? result.message : '未知错误'));
         }
     }).catch(function(e) {
         console.error('[Topic] resolve error:', e);
         cardEl.classList.remove('resolving');
         btns.forEach(function(b) { b.classList.remove('topic-candidate-disabled'); });
         if (input) input.disabled = false;
+        if (selectEl) selectEl.disabled = false;
         if (customBtn) customBtn.disabled = false;
+        alert('确认主题失败：' + (e.message || '发生错误'));
     });
 }
 
@@ -1359,3 +1358,6 @@ if (document.readyState === 'loading') {
 } else {
     setupTopicInputEvents();
 }
+
+})();
+

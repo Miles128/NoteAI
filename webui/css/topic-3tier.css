@@ -1,0 +1,68 @@
+/* 三层主题树样式 */
+.topic-tree-3tier {
+    padding: 8px;
+    font-size: 14px;
+}
+
+.tier-level {
+    margin-bottom: 12px;
+}
+
+.tier-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    padding-left: 4px;
+}
+
+.topic-node {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    margin: 2px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.topic-node:hover { background: rgba(0,0,0,0.05); }
+.topic-node.active { background: rgba(66,133,244,0.12); }
+
+.topic-l1 { font-weight: 600; font-size: 15px; }
+.topic-l2 { padding-left: 24px; font-size: 14px; }
+.topic-l3 { padding-left: 48px; font-size: 13px; color: #666; }
+
+.topic-icon { margin-right: 6px; }
+.topic-l1 .topic-icon { color: #1a73e8; }
+.topic-l2 .topic-icon { color: #ea8600; }
+.topic-l3 .topic-icon { color: #34a853; }
+
+.topic-name { flex: 1; }
+.topic-count {
+    background: #eee;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 11px;
+    color: #666;
+    margin: 0 6px;
+}
+
+.abstract-badge {
+    background: #1a73e8;
+    color: white;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 10px;
+}
+
+.topic-expand { margin-left: 4px; font-size: 10px; color: #999; }
+
+.topic-children { margin-left: 0; }
+.tier-l2-container { margin-left: 16px; }
+.tier-l3-container { margin-left: 32px; border-left: 1px solid #eee; }
+
+.pending-topics { border-top: 1px solid #eee; margin-top: 12px; padding-top: 8px; }
+.pending-item { padding: 2px 8px; font-size: 12px; color: #666; }
+"""

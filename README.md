@@ -4,6 +4,8 @@
 
 **AI 驱动的个人知识库 + AI 助手桌面应用** — 采集、整理、链接、检索、对话，让零散信息生长为结构化知识，让 AI 助手基于你的知识库回答问题。
 
+[English](./README_EN.md)
+
 灵感源自 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)：不是每次提问都从原始文档重新检索，而是让 LLM 把零散资料"编译"成持续增值的结构化知识库。
 
 ## 核心理念
@@ -45,7 +47,7 @@
 
 | 功能 | 说明 |
 |------|------|
-| Markdown 编辑器 | Tiptap 富文本 + CodeMirror 6 双引擎编辑 |
+| Markdown 编辑器 | Tiptap 富文本 Markdown 编辑，支持自动保存与基础格式工具栏 |
 | 实时预览 | marked.js + highlight.js 渲染，编辑/预览双栏模式 |
 | AI 改写 | 选中内容 → LLM 流式改写 → 预览对比 → 决定是否应用 |
 | 主题综述 | 针对指定主题，LLM 撰写综述文章 |
@@ -56,7 +58,7 @@
 |------|------|
 | 知识库问答 | 基于工作区知识库的 RAG 检索增强生成，回答有据可依 |
 | HyDE 查询优化 | 假设性文档嵌入，先让 LLM 生成假设性答案再检索，提升召回率 |
-| FlashRank 重排序 | 本地重排序模型对检索结果二次排序，提升精度 |
+| Flashrank 重排序 | 本地重排序模型对检索结果二次排序，提升精度 |
 | 父子文档检索 | 检索到子片段后自动展开到父文档，提供完整上下文 |
 | 短期记忆 | 会话内对话摘要，保持上下文连贯 |
 | 长期记忆 | 自动提取用户自我描述信息，跨会话持久化（≤1500字，超限自动压缩） |
@@ -123,7 +125,7 @@
 | 类别 | 技术 |
 |------|------|
 | 桌面壳 | Tauri v2 + Rust |
-| 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap，CodeMirror 6 |
+| 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap |
 | 后端 | Python 3.10+，LangChain + LangChain-OpenAI |
 | RAG | Milvus Lite，fastembed (BAAI/bge-small-zh-v1.5)，FlagEmbedding (BAAI/bge-reranker-v2-m3) |
 | 文档解析 | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |

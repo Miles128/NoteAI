@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _searchVisible = false;
 var _searchDebounceTimer = null;
 
@@ -200,3 +202,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+window.toggleSearchModal = toggleSearchModal;
+window.closeSearchModal = closeSearchModal;
+window.onSearchResultClick = onSearchResultClick;
+
+})();
+

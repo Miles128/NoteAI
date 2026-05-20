@@ -1,9 +1,9 @@
-import sys
-import json
 import threading
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.logger import logger
 
 DEFAULT_TOP_K = 5
 
@@ -58,18 +58,17 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
             results.sort(key=lambda x: x.get("score", 0), reverse=True)
             results = results[:top_k]
 
-    if not results:
-        if profile_query != query:
-            profile_emb = encode_query(profile_query)
-            if profile_emb.get("dense_vec"):
-                results = hybrid_search(
-                    workspace,
-                    query_dense=profile_emb["dense_vec"],
-                    query_sparse=profile_emb.get("lexical_weights", {}),
-                    top_k=top_k,
-                    topics=topics,
-                    tags=tags,
-                )
+    if not results and profile_query != query:
+        profile_emb = encode_query(profile_query)
+        if profile_emb.get("dense_vec"):
+            results = hybrid_search(
+                workspace,
+                query_dense=profile_emb["dense_vec"],
+                query_sparse=profile_emb.get("lexical_weights", {}),
+                top_k=top_k,
+                topics=topics,
+                tags=tags,
+            )
 
     if len(results) >= 2:
         results = _mmr_dedup(results, top_k=DEFAULT_TOP_K)
@@ -82,8 +81,8 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
     try:
-        from utils.llm_utils import create_llm
         from prompts.rag_assistant import HYDE_PROMPT
+        from utils.llm_utils import create_llm
 
         prompt = HYDE_PROMPT.format(query=query)
         llm = create_llm(temperature=0.3)
@@ -105,8 +104,7 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
             tags=tags,
         )
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] HyDE search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] HyDE search error: {e}\n")
         return []
 
 
@@ -156,8 +154,7 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
         return [results[i] for i in selected_indices]
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] MMR dedup error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] MMR dedup error: {e}\n")
         return results[:top_k]
 
 
@@ -177,15 +174,13 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
         for i, score in enumerate(scores):
             if i < len(results):
                 results[i]["rerank_score"] = float(score)
-                results[i]["score"] = float(score)
 
         results.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
         return results[:top_k]
     except ImportError:
         return results[:top_k]
     except Exception as e:
-        sys.stderr.write(f"[rag/retriever] rerank error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/retriever] rerank error: {e}\n")
         return results[:top_k]
 
 
@@ -199,17 +194,26 @@ def rebuild_index(progress_callback=None):
     from sidecar.rag.index import build_index
 
     workspace_path = Path(workspace)
-    excluded_dirs = {".git", ".obsidian", ".trash", ".rag_index", ".ai_memory", "Raw"}
+    excluded_dirs = {
+        ".git",
+        ".obsidian",
+        ".trash",
+        ".rag_index",
+        ".ai_memory",
+        "Raw",
+        WORKSPACE_APP_FOLDER,
+        RAG_INDEX_FOLDER,
+    }
     all_chunks = []
 
     for md_file in sorted(workspace_path.rglob("*.md")):
         if md_file.name.startswith("."):
             continue
-        if md_file.name.lower() in ("wiki.md", "tags.md"):
+        if "wiki" in md_file.parts:
             continue
-        if any(p.name in excluded_dirs for p in md_file.relative_to(workspace_path).parents):
+        if any(p.name in excluded_dirs or is_ignored_dir(p.name) for p in md_file.relative_to(workspace_path).parents):
             continue
-        if md_file.name.endswith("_综述.md"):
+        if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
 
         try:
@@ -217,8 +221,7 @@ def rebuild_index(progress_callback=None):
             chunks = chunk_file(str(md_file), text)
             all_chunks.extend(chunks)
         except Exception as e:
-            sys.stderr.write(f"[rag/retriever] chunk error {md_file}: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[rag/retriever] chunk error {md_file}: {e}\n")
 
     if not all_chunks:
         return {"success": False, "message": "未找到可索引的文件"}
@@ -256,7 +259,7 @@ def incremental_update(file_path: str, action: str = "update"):
 
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import delete_by_file, add_chunks
+    from sidecar.rag.index import add_chunks, delete_by_file
 
     p = Path(file_path)
     if not p.exists():

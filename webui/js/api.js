@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _isTauri = null;
 var _isTauriChecked = false;
 
@@ -61,6 +63,7 @@ async function getWorkspaceStatus() {
     if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
+        pyCall('fix_survey_topics', {}).catch(function(err) { console.warn('[fix_survey_topics]', err); });
     }
     return result;
 }
@@ -97,6 +100,10 @@ async function createTopic(name) {
     return pyCall('create_topic', { name: name });
 }
 
+async function createTopicFolder(name, parentPath, level) {
+    return pyCall('create_topic_folder', { name: name, parent_path: parentPath || '', level: level || 0 });
+}
+
 async function createTag(name) {
     return pyCall('create_tag', { name: name });
 }
@@ -109,8 +116,16 @@ async function getAllPending() {
     return pyCall('get_all_pending');
 }
 
+async function getActivityLog(limit) {
+    return pyCall('get_activity_log', { limit: limit || 50 });
+}
+
 async function resolveTopic(filePath, topic) {
     return pyCall('resolve_topic', { file_path: filePath, topic: topic });
+}
+
+async function mergeDuplicateTopics() {
+    return pyCall('merge_duplicate_topics', {});
 }
 
 async function renameTopic(oldTopic, newTopic) {
@@ -256,8 +271,12 @@ async function getBacklinks(filePath) {
     return pyCall('get_backlinks', { file_path: filePath });
 }
 
-async function getRelationGraph() {
-    return pyCall('get_relation_graph', {});
+async function getLinkStats() {
+    return pyCall('get_link_stats', {});
+}
+
+async function getGraphData(filter) {
+    return pyCall('get_graph_data', { filter: filter || 'topic' });
 }
 
 async function confirmLink(fromPath, toPath) {
@@ -274,6 +293,14 @@ async function confirmAllLinks() {
 
 async function syncWikiWithFiles() {
     return pyCall('sync_wiki_with_files', {});
+}
+
+async function getTopicFiles(topicName, level) {
+    return pyCall('get_topic_files', { topic_name: topicName, level: level });
+}
+
+async function generateAbstract(topicName, level) {
+    return pyCall('generate_abstract', { topic_name: topicName, level: level });
 }
 
 async function llmRewrite(filePath) {
@@ -300,8 +327,8 @@ async function applyTopicSuggestion(suggestion) {
     return pyCall('apply_topic_suggestion', { suggestion: suggestion });
 }
 
-async function ragChat(question, topics, tags) {
-    return pyCall('rag_chat', { question: question, topics: topics || null, tags: tags || null });
+async function ragChat(question, topics, tags, currentFile) {
+    return pyCall('rag_chat', { question, topics: topics || null, tags: tags || null, current_file: currentFile || null });
 }
 
 async function ragRebuildIndex() {
@@ -404,9 +431,17 @@ window.api = {
     getTopicTree: getTopicTree,
     autoTagFiles: autoTagFiles,
     saveTagsMd: saveTagsMd,
+    ensureTagsMd: ensureTagsMd,
     autoAssignTopic: autoAssignTopic,
+    batchAutoAssignTopics: batchAutoAssignTopics,
+    createTopic: createTopic,
+    createTopicFolder: createTopicFolder,
+    createTag: createTag,
     getPendingTopics: getPendingTopics,
+    getAllPending: getAllPending,
+    getActivityLog: getActivityLog,
     resolveTopic: resolveTopic,
+    mergeDuplicateTopics: mergeDuplicateTopics,
     renameTopic: renameTopic,
     deleteTopic: deleteTopic,
     renameTag: renameTag,
@@ -433,7 +468,10 @@ window.api = {
     getFilePreview: getFilePreview,
     canPreviewFile: canPreviewFile,
     saveFileContent: saveFileContent,
+    readFileRaw: readFileRaw,
     syncWikiWithFiles: syncWikiWithFiles,
+    getTopicFiles: getTopicFiles,
+    generateAbstract: generateAbstract,
 
     moveWindow: moveWindow,
     minimizeWindow: minimizeWindow,
@@ -441,75 +479,29 @@ window.api = {
     closeWindow: closeWindow,
     openFileInNewWindow: openFileInNewWindow,
 
-    open_workspace: openWorkspace,
-    get_workspace_status: getWorkspaceStatus,
-    get_workspace_tree: getWorkspaceTree,
-    get_all_tags: getAllTags,
-    get_topic_tree: getTopicTree,
-    auto_tag_files: autoTagFiles,
-    save_tags_md: saveTagsMd,
-    ensure_tags_md: ensureTagsMd,
-    auto_assign_topic: autoAssignTopic,
-    batch_auto_assign_topics: batchAutoAssignTopics,
-    create_topic: createTopic,
-    create_tag: createTag,
-    get_pending_topics: getPendingTopics,
-    get_all_pending: getAllPending,
-    resolve_topic: resolveTopic,
-    rename_topic: renameTopic,
-    delete_topic: deleteTopic,
-    rename_tag: renameTag,
-    delete_tag: deleteTag,
-    move_file_to_topic: moveFileToTopic,
-    move_file: moveFile,
-    add_tag_to_file: addTagToFile,
-    get_api_config: getApiConfig,
-    save_api_config: saveApiConfig,
-    get_ui_config: getUiConfig,
-    save_ui_config: saveUiConfig,
-    get_theme_preference: getThemePreference,
-    save_theme_preference: saveThemePreference,
-    add_files: addFiles,
-    browse_folder: browseFolder,
-    start_web_download: startWebDownload,
-    start_file_conversion: startFileConversion,
-    auto_convert_pending: autoConvertPending,
-    extract_topics: extractTopics,
-    start_note_integration: startNoteIntegration,
-    refresh_log: refreshLog,
-    on_file_selected: onFileSelected,
-    get_file_preview: getFilePreview,
-    can_preview_file: canPreviewFile,
-    save_file_content: saveFileContent,
-    read_file_raw: readFileRaw,
-    read_note_file: getFilePreview,
-    save_note_file: saveFileContent,
-
-    move_window: moveWindow,
-    minimize_window: minimizeWindow,
-    maximize_window: maximizeWindow,
-    close_window: closeWindow,
-    open_file_in_new_window: openFileInNewWindow,
-
-    discover_links: discoverLinks,
-    get_backlinks: getBacklinks,
-    get_relation_graph: getRelationGraph,
-    confirm_link: confirmLink,
-    reject_link: rejectLink,
-    confirm_all_links: confirmAllLinks,
-    sync_wiki_with_files: syncWikiWithFiles,
-    llm_rewrite: llmRewrite,
-    llm_rewrite_stream: llmRewriteStream,
-    llm_rewrite_apply: llmRewriteApply,
-    ai_topic_analyze: aiTopicAnalyze,
-    ai_topic_survey: aiTopicSurvey,
-    apply_topic_suggestion: applyTopicSuggestion,
-    rag_chat: ragChat,
-    rag_rebuild_index: ragRebuildIndex,
-    get_changelog: getChangelog,
-    check_and_generate_surveys: checkAndGenerateSurveys,
-    get_user_profile: getUserProfile,
-    save_user_profile: saveUserProfile,
-    get_project_rules: getProjectRules,
-    save_project_rules: saveProjectRules
+    discoverLinks: discoverLinks,
+    getBacklinks: getBacklinks,
+    getLinkStats: getLinkStats,
+    getGraphData: getGraphData,
+    confirmLink: confirmLink,
+    rejectLink: rejectLink,
+    confirmAllLinks: confirmAllLinks,
+    llmRewrite: llmRewrite,
+    llmRewriteStream: llmRewriteStream,
+    llmRewriteApply: llmRewriteApply,
+    aiTopicAnalyze: aiTopicAnalyze,
+    aiTopicSurvey: aiTopicSurvey,
+    applyTopicSuggestion: applyTopicSuggestion,
+    ragChat: ragChat,
+    ragRebuildIndex: ragRebuildIndex,
+    getChangelog: getChangelog,
+    checkAndGenerateSurveys: checkAndGenerateSurveys,
+    getUserProfile: getUserProfile,
+    saveUserProfile: saveUserProfile,
+    getProjectRules: getProjectRules,
+    saveProjectRules: saveProjectRules
 };
+
+})();
+
+const api = window.api;

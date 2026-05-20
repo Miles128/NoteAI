@@ -1,39 +1,48 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
+import importlib
 import json
+import re
 import sys
 import threading
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
-from sidecar.mixins.config_mixin import ConfigMixin
-from sidecar.mixins.files_mixin import FilesMixin
-from sidecar.mixins.intel_mixin import IntelMixin
-from sidecar.mixins.links_mixin import LinksMixin
+from sidecar.handlers import (
+    ConfigHandler,
+    FilesHandler,
+    IntelHandler,
+    IntelTopicHandler,
+    LinksHandler,
+    RagHandler,
+    TagsHandler,
+    TopicsHandler,
+    TransferHandler,
+    WorkspaceHandler,
+)
 from sidecar.mixins.path_helpers import PathHelpersMixin
-from sidecar.mixins.tags_mixin import TagsMixin
-from sidecar.mixins.topics_mixin import TopicsMixin
-from sidecar.mixins.transfer_mixin import TransferMixin
-from sidecar.mixins.rag_mixin import RagMixin
-from sidecar.mixins.workspace_mixin import WorkspaceMixin
+from sidecar.rag.model_preload import ModelWarmupManager
+from sidecar.rpc_router import RpcRouter
+from sidecar.service_context import ServiceContext
+from utils.fulltext_index import fulltext_index
+from utils.logger import logger
+from utils.topic_assigner import (
+    _check_topic_needs_processing,
+    auto_assign_topic_for_file,
+    move_file_to_notes_topic_folder,
+    sync_wiki_with_files,
+)
+from utils.ttl_cache import TTLCache
+
+WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
 
 
-class SidecarServer(
-    PathHelpersMixin,
-    ConfigMixin,
-    WorkspaceMixin,
-    TransferMixin,
-    FilesMixin,
-    TagsMixin,
-    TopicsMixin,
-    LinksMixin,
-    IntelMixin,
-    RagMixin,
-):
+class SidecarServer(PathHelpersMixin):
     _watchdog_missing_logged = False
 
     def __init__(self):
@@ -50,10 +59,35 @@ class SidecarServer(
         self._watcher_debounce_timer = None
         self._watcher_debounce_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
-        # 查询缓存：工作区路径 → 缓存数据
-        self._cache = {}  # key → (workspace_path, data)
-        self._cache_lock = threading.Lock()
+        self._cache = TTLCache(ttl=300, max_size=500)
+        self._cache_lock = threading.Lock()  # retained for _cached_or_compat compat
+        self._router = RpcRouter(send_response=self._send_response)
+        self._ctx = ServiceContext(config=config, logger=logger)
+        self._config_handler = ConfigHandler(self)
+        self._workspace_handler = WorkspaceHandler(self)
+        self._transfer_handler = TransferHandler(self)
+        self._files_handler = FilesHandler(self)
+        self._tags_handler = TagsHandler(self)
+        self._topics_handler = TopicsHandler(self)
+        self._links_handler = LinksHandler(self)
+        self._intel_handler = IntelHandler(self)
+        self._intel_topic_handler = IntelTopicHandler(self)
+        self._rag_handler = RagHandler(self)
+        self._build_router()
         self._start_workspace_watcher()
+
+    def _build_router(self):
+        self._config_handler.register_routes(self._router)
+        self._workspace_handler.register_routes(self._router)
+        self._transfer_handler.register_routes(self._router)
+        self._files_handler.register_routes(self._router)
+        self._tags_handler.register_routes(self._router)
+        self._topics_handler.register_routes(self._router)
+        self._topics_handler.register_routes_3tier(self._router)
+        self._links_handler.register_routes(self._router)
+        self._intel_handler.register_routes(self._router)
+        self._intel_topic_handler.register_routes(self._router)
+        self._rag_handler.register_routes(self._router)
 
     def _send_response(self, resp):
         with self._stdout_lock:
@@ -96,8 +130,10 @@ class SidecarServer(
 
     def _setup_watcher(self, workspace_path):
         try:
-            from watchdog.events import FileSystemEventHandler
-            from watchdog.observers import Observer
+            events_module = importlib.import_module("watchdog.events")
+            observers_module = importlib.import_module("watchdog.observers")
+            FileSystemEventHandler = events_module.FileSystemEventHandler
+            Observer = observers_module.Observer
         except ImportError:
             if not SidecarServer._watchdog_missing_logged:
                 SidecarServer._watchdog_missing_logged = True
@@ -114,20 +150,22 @@ class SidecarServer(
 
         class WorkspaceHandler(FileSystemEventHandler):
             def on_created(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("created", event.src_path)
+                server._on_workspace_file_changed("created", event.src_path, is_directory=event.is_directory)
 
             def on_deleted(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("deleted", event.src_path)
+                server._on_workspace_file_changed("deleted", event.src_path, is_directory=event.is_directory)
 
             def on_moved(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("moved", event.dest_path, src_path=event.src_path)
+                server._on_workspace_file_changed(
+                    "moved",
+                    event.dest_path,
+                    src_path=event.src_path,
+                    is_directory=event.is_directory,
+                )
 
             def on_modified(self, event):
                 if not event.is_directory:
-                    server._on_workspace_file_changed("modified", event.src_path)
+                    server._on_workspace_file_changed("modified", event.src_path, is_directory=False)
 
         try:
             observer = Observer()
@@ -136,197 +174,174 @@ class SidecarServer(
             observer.start()
             self._watcher_observer = observer
         except Exception as e:
-            sys.stderr.write(f"[watcher] start failed: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[watcher] start failed: {e}\n")
 
     def _stop_watcher(self):
         if self._watcher_observer:
             try:
                 self._watcher_observer.stop()
                 self._watcher_observer.join(timeout=2)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[watcher] stop failed: {e}\n")
             self._watcher_observer = None
 
     def _invalidate_cache(self):
         """文件变更时失效所有缓存"""
-        with self._cache_lock:
-            self._cache.clear()
+        self._cache.clear()
+        fulltext_index.mark_dirty()
 
     def _cached_or_compute(self, key, compute_fn):
-        """通用缓存包装器：按工作区路径失效"""
-        workspace = config.workspace_path
-        with self._cache_lock:
-            if key in self._cache:
-                cached_workspace, cached_data = self._cache[key]
-                if cached_workspace == workspace:
-                    return cached_data
+        """通用缓存包装器：按工作区路径失效，带 TTL"""
+        cached = self._cache.get(key)
+        if cached is not None:
+            return cached
         data = compute_fn()
-        with self._cache_lock:
-            self._cache[key] = (workspace, data)
+        self._cache.set(key, data)
         return data
 
-    def _on_workspace_file_changed(self, change_type, file_path, src_path=None):
+    def _do_cascade_survey_update(self, topic):
+        return self._topics_handler._do_cascade_survey_update(topic)
+
+    def _batch_auto_assign_topics(self, params):
+        return self._topics_handler._batch_auto_assign_topics(params)
+
+    def _is_relevant_workspace_change(self, file_path, is_directory=False):
         path = Path(file_path)
-        if path.name.startswith("."):
-            return
-        suffix = path.suffix.lower()
-        if suffix not in (
-            ".md",
-            ".txt",
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".html",
-            ".png",
-            ".jpg",
-            ".jpeg",
-            ".gif",
-            ".webp",
-            ".svg",
+        workspace = config.workspace_path
+        try:
+            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
+        except ValueError:
+            rel_parts = path.parts
+        if any(part.startswith(".") for part in rel_parts):
+            return False
+        if "wiki" in rel_parts:
+            return False
+        if any(is_ignored_dir(part) for part in rel_parts):
+            return False
+        if is_directory:
+            return True
+        return path.suffix.lower() in WATCHED_WORKSPACE_SUFFIXES
+
+    def _on_workspace_file_changed(self, change_type, file_path, src_path=None, is_directory=False):
+        if not self._is_relevant_workspace_change(file_path, is_directory=is_directory) and (
+            not src_path or not self._is_relevant_workspace_change(src_path, is_directory=is_directory)
         ):
             return
+
+        path = Path(file_path)
+        workspace = config.workspace_path
+        try:
+            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
+        except ValueError:
+            rel_parts = path.parts
+        suffix = path.suffix.lower()
+
+        if not is_directory and change_type in ("created", "moved") and suffix == ".md" and workspace:
+            try:
+                if not any(is_ignored_dir(p) for p in rel_parts):
+                    self._auto_process_md_file(str(path))
+            except ValueError:
+                logger.warning(f"[watcher] path outside workspace: {file_path}\n")
 
         with self._watcher_debounce_lock:
             if self._watcher_debounce_timer:
                 try:
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
-                    pass
+                    logger.warning("[watcher] debounce timer already cancelled")
             self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
+
+    def _auto_process_md_file(self, file_path):  # noqa: PLR0912
+        try:
+            text = Path(file_path).read_text(encoding='utf-8')
+        except Exception as e:
+            logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
+            return
+
+        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
+        yaml_text = m.group(1) if m else ""
+
+        if not m or _check_topic_needs_processing(yaml_text):
+            try:
+                result = auto_assign_topic_for_file(file_path)
+                if result and result.get("status") == "auto_assigned" and result.get("topic"):
+                    sync_wiki_with_files()
+                    self._send_response({
+                        "id": "event",
+                        "result": {
+                            "type": "auto_topic_assigned",
+                            "file": file_path,
+                            "topic": result["topic"],
+                        },
+                    })
+            except Exception as e:
+                logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
+            return
+
+        file_topic = None
+        for line in yaml_text.split('\n'):
+            idx = line.find(':')
+            if idx < 0:
+                continue
+            key = line[:idx].strip()
+            val = line[idx + 1:].strip()
+            if key == 'topic' and val:
+                file_topic = val.strip().strip("'\"")
+                break
+
+        if not file_topic:
+            return
+
+        workspace = config.workspace_path
+        filename = Path(file_path).stem
+
+        is_survey = filename.endswith('综述') or filename.endswith('_综述')
+        if is_survey:
+            expected_dir = Path(workspace) / ABSTRACT_FOLDER / file_topic
+        else:
+            expected_dir = Path(workspace) / NOTES_FOLDER / file_topic
+
+        try:
+            in_correct_folder = Path(file_path).is_relative_to(expected_dir)
+        except AttributeError:
+            in_correct_folder = str(Path(file_path)).startswith(str(expected_dir))
+
+        if not in_correct_folder and not is_survey:
+            move_result = move_file_to_notes_topic_folder(file_path, file_topic)
+            if move_result.get("success"):
+                new_path = move_result.get("new_path", "")
+                sync_wiki_with_files()
+                self._send_response({
+                    "id": "event",
+                    "result": {
+                        "type": "auto_file_moved",
+                        "file": file_path,
+                        "topic": file_topic,
+                        "new_path": new_path,
+                    },
+                })
 
     def _emit_workspace_change(self):
         self._invalidate_cache()
         self._send_response({"id": "event", "result": {"type": "workspace_files_changed"}})
 
-    _ASYNC_METHODS = frozenset(
-        {
-            "sync_wiki_with_files",
-            "batch_auto_assign_topics",
-            "start_note_integration",
-            "start_file_conversion",
-            "extract_topics",
-            "llm_rewrite_stream",
-            "ai_topic_survey",
-            "check_and_generate_surveys",
-        }
-    )
-
     def handle_request(self, request):
-        method = request.get("method", "")
-        params = request.get("params", {})
-        req_id = request.get("id", "")
-
-        handler_map = {
-            "get_api_config": self._get_api_config,
-            "save_api_config": self._save_api_config,
-            "get_ui_config": self._get_ui_config,
-            "save_ui_config": self._save_ui_config,
-            "get_theme_preference": self._get_theme_preference,
-            "save_theme_preference": self._save_theme_preference,
-            "get_workspace_status": self._get_workspace_status,
-            "check_workspace_path_valid": self._check_workspace_path_valid,
-            "clear_saved_workspace": self._clear_saved_workspace,
-            "set_workspace_path": self._set_workspace_path,
-            "start_web_download": self._start_web_download,
-            "import_files": self._import_files,
-            "reveal_in_finder": self._reveal_in_finder,
-            "delete_file": self._delete_file,
-            "start_file_conversion": self._start_file_conversion,
-            "auto_convert_pending": self._auto_convert_pending,
-            "extract_topics": self._extract_topics,
-            "start_note_integration": self._start_note_integration,
-            "get_file_preview": self._get_file_preview,
-            "can_preview_file": self._can_preview_file,
-            "save_file_content": self._save_file_content,
-            "read_file_raw": self._read_file_raw,
-            "get_workspace_tree": self._get_workspace_tree,
-            "get_all_tags": self._get_all_tags,
-            "get_topic_tree": self._get_topic_tree,
-            "auto_tag_files": self._auto_tag_files,
-            "save_tags_md": self._save_tags_md,
-            "ensure_tags_md": self._ensure_tags_md,
-            "create_tag": self._create_tag,
-            "rename_tag": self._rename_tag,
-            "delete_tag": self._delete_tag,
-            "auto_assign_topic": self._auto_assign_topic,
-            "batch_auto_assign_topics": self._batch_auto_assign_topics,
-            "create_topic": self._create_topic,
-            "get_pending_topics": self._get_pending_topics,
-            "get_all_pending": self._get_all_pending,
-            "resolve_topic": self._resolve_topic,
-            "rename_topic": self._rename_topic,
-            "move_file_to_topic": self._move_file_to_topic,
-            "move_file": self._move_file,
-            "add_tag_to_file": self._add_tag_to_file,
-            "test_api_connection": self._test_api_connection,
-            "llm_rewrite": self._llm_rewrite,
-            "llm_rewrite_stream": self._llm_rewrite_stream,
-            "llm_rewrite_apply": self._llm_rewrite_apply,
-            "search_files": self._search_files,
-            "on_file_selected": self._on_file_selected,
-            "refresh_log": self._refresh_log,
-            "discover_links": self._discover_links,
-            "get_backlinks": self._get_backlinks,
-            "get_relation_graph": self._get_relation_graph,
-            "confirm_link": self._confirm_link,
-            "reject_link": self._reject_link,
-            "confirm_all_links": self._confirm_all_links,
-            "sync_wiki_with_files": self._sync_wiki_with_files,
-            "delete_topic": self._delete_topic,
-            "ai_topic_analyze": self._ai_topic_analyze,
-            "ai_topic_survey": self._ai_topic_survey,
-            "apply_topic_suggestion": self._apply_topic_suggestion,
-            "rag_chat": self._rag_chat,
-            "rag_rebuild_index": self._rag_rebuild_index,
-            "rag_incremental_update": self._rag_incremental_update,
-            "get_changelog": self._get_changelog,
-            "check_and_generate_surveys": self._check_and_generate_surveys,
-            "get_user_profile": self._get_user_profile,
-            "save_user_profile": self._save_user_profile,
-            "get_project_rules": self._get_project_rules,
-            "save_project_rules": self._save_project_rules,
-        }
-
-        handler = handler_map.get(method)
-        if handler:
-            if method in self._ASYNC_METHODS:
-
-                def _run_async():
-                    try:
-                        result = handler(params)
-                        self._send_response({"id": req_id, "result": result})
-                    except Exception as e:
-                        self._send_response({"id": req_id, "error": str(e)})
-
-                threading.Thread(target=_run_async, daemon=True).start()
-            else:
-                try:
-                    result = handler(params)
-                    self._send_response({"id": req_id, "result": result})
-                except Exception as e:
-                    import traceback
-
-                    sys.stderr.write(f"[ERROR] Handler exception: {e}\n")
-                    sys.stderr.write(traceback.format_exc())
-                    sys.stderr.flush()
-                    self._send_response({"id": req_id, "error": str(e)})
-        else:
-            self._send_response({"id": req_id, "error": f"Unknown method: {method}"})
+        self._router.handle(request)
 
 
 def main():
     server = SidecarServer()
-    sys.stderr.write("[Python Sidecar] Ready\n")
-    sys.stderr.flush()
+    logger.warning("[Python Sidecar] Ready")
 
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
+    ModelWarmupManager.start_preload()
+
+    for raw_line in sys.stdin:
+        request_line = raw_line.strip()
+        if not request_line:
             continue
         try:
-            request = json.loads(line)
+            request = json.loads(request_line)
             server.handle_request(request)
         except json.JSONDecodeError as e:
             server._send_response({"id": "", "error": f"Invalid JSON: {e}"})

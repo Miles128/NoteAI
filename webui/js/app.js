@@ -1,11 +1,17 @@
+(function() { 'use strict';
+
 document.addEventListener('DOMContentLoaded', async function() {
     initMarked();
     
     initSystemThemeListener();
-    
+
     const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
     applyTheme(savedTheme);
-    
+
+    if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+        window.ThemeModule.restoreFontSize();
+    }
+
     initResizer();
     initPreviewResizer();
     initWindowDrag();
@@ -27,8 +33,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             await window.TreeModule.loadFileTree();
         }
         
-        if (typeof showGraphHomeView === 'function') {
-            showGraphHomeView();
+        // Default: show knowledge graph (full right panel, no splits)
+        var ca = document.getElementById('content-area');
+        var gp = document.getElementById('graph-panel');
+        var cp = document.getElementById('content-panel');
+        if (ca) ca.style.display = 'none';
+        if (cp) cp.style.display = 'flex';
+        if (gp) gp.style.display = 'flex';
+        window.updateHomeStats();
+        if (window.Graph3Tier && window.Graph3Tier.load) {
+            window.Graph3Tier.load();
         }
         
         if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {
@@ -39,13 +53,13 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.ConverterModule.loadSavedConvConfig();
         }
         
-        if (window.api && window.api.auto_convert_pending) {
-            window.api.auto_convert_pending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+        if (window.api && window.api.autoConvertPending) {
+            window.api.autoConvertPending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
         }
 
         setTimeout(function() {
-            if (window.api && window.api.batch_auto_assign_topics) {
-                window.api.batch_auto_assign_topics().then(function(result) {
+            if (window.api && window.api.batchAutoAssignTopics) {
+                window.api.batchAutoAssignTopics().then(function(result) {
                     if (result && result.success) {
                         if (result.format_optimized > 0 || result.auto_assigned > 0 || result.need_confirm > 0) {
                             var parts = [];
@@ -57,12 +71,22 @@ document.addEventListener('DOMContentLoaded', async function() {
                             updateStatus('所有文件主题已分配');
                         }
                     }
-                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
+                    if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
                 }).catch(function(e) { console.warn('[App] batch_auto_assign_topics failed:', e); });
             }
 
-            if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
-        }, 5000);
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            }, 5000);
+        
+            setTimeout(function() {
+                if (window.api && window.api.mergeDuplicateTopics) {
+                    window.api.mergeDuplicateTopics().then(function(result) {
+                        if (result && result.success && result.merged_topics > 0) {
+                            console.log('[App] 合并重复主题: ' + result.merged_topics + ' 个, 去重文件: ' + result.deduplicated_files + ' 个');
+                        }
+                    }).catch(function(e) { console.warn('[App] merge_duplicate_topics failed:', e); });
+                }
+            }, 8000);
         
         updateStatus('就绪');
     } catch (e) {
@@ -186,7 +210,7 @@ async function importFiles() {
         if (result && result.success) {
             updateStatus('正在导入 ' + (result.file_count || '') + ' 个文件...');
 
-            if (typeof getTauriEventAPI === 'function') {
+            if (typeof window.getTauriEventAPI === 'function') {
                 var eventAPI = getTauriEventAPI();
                 if (eventAPI) {
                     if (_fileImportUnlisten) {
@@ -284,6 +308,7 @@ function _flushRewriteBuffer() {
     if (window.TiptapEditor && window.TiptapEditor.instance) {
         if (window.marked) {
             var html = window.marked.parse(window._rewriteDisplayText);
+            if (typeof DOMPurify !== 'undefined') { html = DOMPurify.sanitize(html); }
             window.TiptapEditor.instance.commands.setContent(html, false);
         }
     }
@@ -366,6 +391,11 @@ function _showRewriteDiffView() {
     var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + escapeHtml(oldText) + '</pre>';
     var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + escapeHtml(newText) + '</pre>';
 
+    if (typeof DOMPurify !== 'undefined') {
+        oldHtml = DOMPurify.sanitize(oldHtml);
+        newHtml = DOMPurify.sanitize(newHtml);
+    }
+
     diffPanel.innerHTML = '<div class="rewrite-diff-header">' +
         '<span class="rewrite-diff-title">改写对比</span>' +
         '<button class="rewrite-diff-btn rewrite-confirm-btn" onclick="onRewriteConfirm()">✓ 采用新版本</button>' +
@@ -388,7 +418,7 @@ async function onRewriteConfirm() {
 
     updateStatus('正在保存...');
     try {
-        var result = await window.api.llm_rewrite_apply(filePath, rewrittenText);
+        var result = await window.api.llmRewriteApply(filePath, rewrittenText);
         if (result && result.success) {
             updateStatus('已保存');
             var statusBar = document.getElementById('editor-status-bar');
@@ -447,12 +477,12 @@ async function onLLMRewrite() {
     }
 
     var btn = document.getElementById('tiptap-rewrite-btn');
-    if (!confirm('确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。')) return;
+    if (!(await window._customConfirm('确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。'))) return;
 
     var rewritePath = curPath;
 
     try {
-        var rawResult = await window.api.read_file_raw(rewritePath);
+        var rawResult = await window.api.readFileRaw(rewritePath);
         window._rewriteOriginalText = (rawResult && rawResult.content) ? rawResult.content : '';
     } catch (e) {
         window._rewriteOriginalText = '';
@@ -489,7 +519,7 @@ async function onLLMRewrite() {
     }
 
     try {
-        await window.api.llm_rewrite_stream(rewritePath);
+        await window.api.llmRewriteStream(rewritePath);
     } catch (e) {
         alert('改写出错：' + (e.message || e));
         updateStatus('改写出错');
@@ -541,26 +571,53 @@ function initWorkspaceFileWatcher() {
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
-        if (!data || data.type !== 'workspace_files_changed') return;
+        if (!data || !data.type) return;
+
+        if (data.type === 'auto_topic_assigned') {
+            updateStatus('✓ ' + (data.topic ? '已自动分配到「' + data.topic + '」' : '已自动分配主题'));
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
+            refreshWorkspaceViewsAfterChange();
+            return;
+        }
+
+        if (data.type === 'auto_file_moved') {
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            refreshWorkspaceViewsAfterChange();
+            return;
+        }
+
+        if (data.type !== 'workspace_files_changed') return;
 
         if (_workspaceWatcherDebounce) {
             clearTimeout(_workspaceWatcherDebounce);
         }
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
-            refreshCurrentSidebarView();
-            if (window.api && window.api.batch_auto_assign_topics) {
-                window.api.batch_auto_assign_topics().then(function(result) {
-                    if (result && result.success && result.need_confirm > 0) {
-                        updateStatus('发现 ' + result.need_confirm + ' 个文件需要确认主题');
-                    }
-                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
-                }).catch(function(e) { console.warn('[App] watcher batch_auto_assign_topics failed:', e); });
+            refreshWorkspaceViewsAfterChange();
+            if (window.api && window.api.autoConvertPending) {
+                window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
             }
         }, 3000);
     }).then(function(unlisten) {
         _workspaceWatcherUnlisten = unlisten;
     });
+}
+
+function refreshWorkspaceViewsAfterChange() {
+    var treeLoad = null;
+    if (window.TreeModule && window.TreeModule.loadFileTree) {
+        treeLoad = window.TreeModule.loadFileTree();
+    }
+
+    refreshCurrentSidebarView();
+    refreshKnowledgeGraph();
+
+    if (treeLoad && typeof window.updateHomeStats === 'function') {
+        Promise.resolve(treeLoad)
+            .then(function() { window.updateHomeStats(); })
+            .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+    }
 }
 
 function refreshCurrentSidebarView() {
@@ -577,22 +634,27 @@ function refreshCurrentSidebarView() {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             window.TreeModule.loadFileTree();
         }
-    } else if (view === 'topic') {
-        if (typeof loadTopicTree === 'function') {
-            loadTopicTree(true);
-        }
     } else if (view === 'tags') {
-        if (typeof loadTagsView === 'function') {
-            loadTagsView(true);
+        if (typeof window.loadTagsView === 'function') {
+            window.loadTagsView(true);
         }
     } else if (view === 'graph') {
         if (window.LinksModule && typeof window.LinksModule.loadLinksData === 'function') {
             window.LinksModule.loadLinksData();
         }
     } else if (view === 'relation') {
-        if (typeof loadRelationGraphData === 'function') {
-            loadRelationGraphData();
+        if (typeof window.loadRelationGraphData === 'function') {
+            window.loadRelationGraphData();
         }
+    }
+}
+
+function refreshKnowledgeGraph() {
+    if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
+        window.Graph3Tier.load();
+    }
+    if (typeof window.updateHomeStats === 'function') {
+        window.updateHomeStats();
     }
 }
 
@@ -618,9 +680,7 @@ function initSidecarErrorListener() {
             var info = data.data || {};
             if (info.converted > 0) {
                 updateStatus('自动转换完成: ' + info.converted + '/' + info.total + ' 个文件');
-                if (window.TreeModule && window.TreeModule.loadFileTree) {
-                    window.TreeModule.loadFileTree();
-                }
+                refreshWorkspaceViewsAfterChange();
             }
         } else if (data.type === 'auto_convert_error') {
             console.error('[App] Auto convert error:', data.error);
@@ -722,3 +782,8 @@ function initCustomTooltip() {
         tip.classList.remove('visible');
     });
 }
+
+window.importFiles = importFiles;
+
+})();
+

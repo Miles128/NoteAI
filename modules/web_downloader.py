@@ -1,4 +1,5 @@
 import requests
+import sys
 import time
 import re
 from typing import List, Dict, Optional, Callable
@@ -7,13 +8,14 @@ from urllib.parse import urlparse, urljoin
 from markdownify import markdownify as md
 from bs4 import BeautifulSoup
 from readability import Document
-import validators
 
 from config.settings import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
-    extract_title_from_markdown, ensure_dir, is_valid_url, retry_on_failure,
+    extract_title_from_markdown, ensure_dir, is_valid_url, retry_on_failure
+)
+from utils.llm_utils import (
     check_api_config, APIConfigError, NetworkError, is_network_error
 )
 from utils.tag_extractor import (
@@ -47,10 +49,8 @@ class WebDownloader:
         使用多种策略确保能获取到有效的标题
         针对微信公众号、小红书、知乎等平台优化
         """
-        from bs4 import BeautifulSoup
-        
         soup = BeautifulSoup(html_content, 'html.parser')
-        
+
         meta_selectors = [
             'meta[property="og:title"]',
             'meta[name="twitter:title"]',
@@ -69,15 +69,12 @@ class WebDownloader:
             'meta[name="title"]',
             'meta[property="title"]',
         ]
-        for selector in meta_selectors:
-            meta = soup.select_one(selector)
-            if meta:
-                content = meta.get('content', '').strip()
-                if content:
-                    return content
+        result = self._try_selectors(soup, meta_selectors, extract_from='content')
+        if result:
+            return result
         
-        doc_title_stripped = doc_title.strip() if doc_title else ""
         invalid_titles = {"no title", "未命名文章", ""}
+        doc_title_stripped = doc_title.strip() if doc_title else ""
         if doc_title_stripped.lower() not in invalid_titles:
             return doc_title_stripped
         
@@ -101,12 +98,9 @@ class WebDownloader:
             '.article-title',
             '.weui-article__title',
         ]
-        for selector in wechat_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                text = elem.get_text().strip()
-                if text and text not in invalid_titles:
-                    return text
+        result = self._try_selectors(soup, wechat_selectors, invalid_titles=invalid_titles)
+        if result:
+            return result
         
         xiaohongshu_selectors = [
             '.xiaohongshu-title',
@@ -116,12 +110,9 @@ class WebDownloader:
             '.note-content-title',
             '.content-title',
         ]
-        for selector in xiaohongshu_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                text = elem.get_text().strip()
-                if text and text not in invalid_titles:
-                    return text
+        result = self._try_selectors(soup, xiaohongshu_selectors, invalid_titles=invalid_titles)
+        if result:
+            return result
         
         zhihu_selectors = [
             'meta[itemprop="name"]',
@@ -130,12 +121,9 @@ class WebDownloader:
             '.question-title',
             '[itemprop="headline"]',
         ]
-        for selector in zhihu_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                text = elem.get_text().strip() if hasattr(elem, 'get_text') else elem.get('content', '').strip()
-                if text and text not in invalid_titles:
-                    return text
+        result = self._try_selectors(soup, zhihu_selectors, invalid_titles=invalid_titles, extract_from='auto')
+        if result:
+            return result
         
         article = soup.find('article') or soup.find('main')
         if article:
@@ -151,12 +139,9 @@ class WebDownloader:
             '#post-title', '#entry-title', '#article-title', '#headline',
             '.title', '#title', '.post-header h2', '.entry-title',
         ]
-        for selector in common_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                text = elem.get_text().strip()
-                if text and text not in invalid_titles:
-                    return text
+        result = self._try_selectors(soup, common_selectors, invalid_titles=invalid_titles)
+        if result:
+            return result
         
         for tag in ['h2', 'h3', 'h4']:
             elem = soup.find(tag)
@@ -175,10 +160,26 @@ class WebDownloader:
                         title = last_part.replace('-', ' ').replace('_', ' ').replace('.html', '').replace('.htm', '')
                         if title:
                             return title[:100]
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[_extract_title] URL parsing failed: {e}")
         
         return "未命名文章"
+    
+    def _try_selectors(self, soup: BeautifulSoup, selectors: List[str],
+                       extract_from: str = 'text', invalid_titles: set = None) -> Optional[str]:
+        for selector in selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                if extract_from == 'content':
+                    text = elem.get('content', '').strip()
+                elif extract_from == 'auto':
+                    text = elem.get_text().strip() if hasattr(elem, 'get_text') else elem.get('content', '').strip()
+                else:
+                    text = elem.get_text().strip()
+                if text:
+                    if not invalid_titles or text not in invalid_titles:
+                        return text
+        return None
     
     def _normalize_img_tags_in_html(self, html_content: str, base_url: str) -> str:
         """
@@ -197,10 +198,8 @@ class WebDownloader:
         Returns:
             处理后的HTML内容，所有img标签都有正确的src属性
         """
-        from bs4 import BeautifulSoup
-        
         soup = BeautifulSoup(html_content, 'html.parser')
-        
+
         lazy_load_attributes = [
             'data-src',
             'data-original',

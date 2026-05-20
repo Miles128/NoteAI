@@ -1,8 +1,15 @@
-"""Preview, save, read, reveal, delete (from python/main.py)."""
-
+import base64
+import importlib
+import platform
+import subprocess
 from pathlib import Path
 
-class FilesMixin:
+from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
+from utils.topic_assigner import sync_wiki_with_files
+
+
+class FilesHandler(BaseHandler):
     def _get_file_preview(self, params):
         path = params.get("path", "")
         full_path = self._resolve_path(path)
@@ -14,8 +21,7 @@ class FilesMixin:
             alt = self._find_file_by_name(path)
             if alt:
                 full_path = alt
-        result = self.file_previewer.get_preview_data(full_path)
-        return result
+        return self.file_previewer.get_preview_data(full_path)
 
     def _can_preview_file(self, params):
         path = params.get("path", "")
@@ -38,7 +44,6 @@ class FilesMixin:
             return {"success": False, "message": str(e)}
 
     def _read_file_raw(self, params):
-        import base64 as b64
         path = params.get("path", "")
         full_path = self._resolve_path(path)
         if not full_path:
@@ -47,15 +52,14 @@ class FilesMixin:
             raw_bytes = Path(full_path).read_bytes()
             return {
                 "success": True,
-                "content": b64.b64encode(raw_bytes).decode("utf-8"),
+                "content": base64.b64encode(raw_bytes).decode("utf-8"),
                 "size": len(raw_bytes),
                 "file_name": Path(full_path).name
             }
         except Exception as e:
             return {"success": False, "message": str(e)}
+
     def _reveal_in_finder(self, params):
-        import subprocess
-        import platform
         path = params.get("path", "")
         if not path or not Path(path).exists():
             return {"success": False, "message": "路径不存在"}
@@ -92,32 +96,24 @@ class FilesMixin:
         file_topic = None
         if full_path.suffix.lower() == '.md':
             try:
-                import re
                 text = full_path.read_text(encoding='utf-8')
-                m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                if m:
-                    for line in m.group(1).split('\n'):
-                        idx = line.find(':')
-                        if idx < 0:
-                            continue
-                        key = line[:idx].strip()
-                        val = line[idx + 1:].strip()
-                        if key == 'topic':
-                            file_topic = val.strip().strip("'\"")
-                            break
-            except Exception:
-                pass
+                meta, _ = self._parse_frontmatter(text)
+                if meta and isinstance(meta.get('topic'), str):
+                    file_topic = meta['topic'].strip().strip("'\"")
+            except Exception as e:
+                logger.warning(f"[files_handler] reading file topic for deletion: {e}\n")
 
         try:
-            import send2trash
+            send2trash = importlib.import_module("send2trash")
             send2trash.send2trash(str(full_path))
 
-            if file_topic:
-                from utils.topic_assigner import remove_file_from_wiki_topic
+            if full_path.suffix.lower() == '.md':
                 try:
-                    remove_file_from_wiki_topic(path)
-                except Exception:
-                    pass
+                    sync_wiki_with_files()
+                except Exception as e:
+                    logger.warning(f"[files_handler] syncing WIKI after file deletion: {e}\n")
+
+            if file_topic:
                 self._start_task(f"cascade_update_{file_topic}", self._do_cascade_survey_update, args=(file_topic,))
 
             return {"success": True}
@@ -125,3 +121,11 @@ class FilesMixin:
             return {"success": False, "message": "未安装 send2trash，无法安全删除文件。请运行: uv pip install send2trash"}
         except Exception as e:
             return {"success": False, "message": str(e)}
+
+    def register_routes(self, router):
+        router.register("get_file_preview", self._get_file_preview)
+        router.register("can_preview_file", self._can_preview_file)
+        router.register("save_file_content", self._save_file_content)
+        router.register("read_file_raw", self._read_file_raw)
+        router.register("reveal_in_finder", self._reveal_in_finder)
+        router.register("delete_file", self._delete_file)

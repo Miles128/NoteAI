@@ -1,4 +1,8 @@
 {
+  "NOTES_FOLDER": "Notes",
+  "ABSTRACT_FOLDER": "wiki",
+  "RAW_FOLDER": "Raw",
+  "USED_FOLDER": "Used",
   "workspace_path": "/Users/sihai/Documents/My Notes",
   "log_path": "/Users/sihai/NoteAI/logs",
   "batch_size": 5,
@@ -9,7 +13,8 @@
   "max_chunk_length": 8000,
   "min_chunk_size": 200,
   "theme": "light",
-  "theme_preference": "light",
+  "theme_preference": "paper",
+  "font_size": "medium",
   "accent_color": "#5B7DB1",
   "window_width": 1400,
   "window_height": 900,

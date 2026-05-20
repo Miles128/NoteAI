@@ -1,19 +1,28 @@
-"""Web download, import, conversion, topic extract, note integration (from python/main.py)."""
-
-import sys
 import shutil
-import threading
+import traceback
 from pathlib import Path
 
-from config import config, is_ignored_dir
+from config.settings import NOTES_FOLDER, RAW_FOLDER
+from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
+from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
-class TransferMixin:
+
+class TransferHandler(BaseHandler):
+    def register_routes(self, router):
+        router.register("start_web_download", self._start_web_download)
+        router.register("import_files", self._import_files)
+        router.register("start_file_conversion", self._start_file_conversion)
+        router.register("auto_convert_pending", self._auto_convert_pending)
+        router.register("extract_topics", self._extract_topics)
+        router.register("start_note_integration", self._start_note_integration)
+
     def _start_web_download(self, params):
         urls = params.get("urls", [])
         ai_assist = params.get("ai_assist", False)
         include_images = params.get("include_images", True)
-        save_path = config.workspace_path
+        save_path = self.config.workspace_path
         if not save_path:
             return {"success": False, "message": "请先设置工作区"}
         if not urls:
@@ -39,17 +48,16 @@ class TransferMixin:
                 "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
             })
         except Exception as e:
-            import traceback
-            sys.stderr.write(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "web_download_error", "error": str(e)}
             })
 
     def _import_files(self, params):
+
         files = params.get("files", [])
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
         if not files:
@@ -94,7 +102,7 @@ class TransferMixin:
     def _do_file_import(self, copied, workspace, skipped):
         try:
             total = len(copied)
-            for i, f in enumerate(copied):
+            for i, _f in enumerate(copied):
                 self._send_progress("import-progress", (i + 1) / total, f"正在转换 {i + 1}/{total}")
 
             result = self.file_converter.convert_batch(copied, workspace)
@@ -114,9 +122,7 @@ class TransferMixin:
                 }
             })
         except Exception as e:
-            import traceback
-            sys.stderr.write(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "file_import_error", "error": str(e)}
@@ -124,7 +130,7 @@ class TransferMixin:
 
     def _start_file_conversion(self, params):
         ai_assist = params.get("ai_assist", False)
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
@@ -133,21 +139,41 @@ class TransferMixin:
 
         return {"success": True, "message": "转换已开始"}
 
-    def _auto_convert_pending(self, params=None):
-        workspace = config.workspace_path
+    def _do_file_conversion(self, workspace, ai_assist):
+        _ = ai_assist
+        try:
+            result = self.file_converter.convert_folder(
+                workspace,
+                output_path=str(Path(workspace) / NOTES_FOLDER),
+                raw_path=str(Path(workspace) / RAW_FOLDER),
+            )
+            self._send_response({
+                "id": "event",
+                "result": {"type": "file_conversion_complete", "data": result}
+            })
+        except Exception as e:
+            logger.warning(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
+            self._send_response({
+                "id": "event",
+                "result": {"type": "file_conversion_error", "error": str(e)}
+            })
+
+    def _auto_convert_pending(self, _params=None):
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "pending": 0, "converted": 0}
 
-        from modules.file_converter import FileConverterManager, RAW_FOLDER
         supported = set(FileConverterManager.get_supported_formats())
         ws = Path(workspace)
-        raw_dir = ws / RAW_FOLDER
+        ws / RAW_FOLDER
 
         pending = []
         for f in ws.rglob('*'):
             if not f.is_file() or f.name.startswith('.'):
                 continue
             rel = f.relative_to(ws)
+            if any(part.startswith('.') for part in rel.parts):
+                continue
             if RAW_FOLDER in rel.parts:
                 continue
             if f.suffix.lower() in supported:
@@ -176,51 +202,33 @@ class TransferMixin:
                 }
             })
         except Exception as e:
-            import traceback
-            sys.stderr.write(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            logger.warning(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "auto_convert_error", "error": str(e)}
             })
 
-    def _do_file_conversion(self, workspace, ai_assist):
-        try:
-            result = self.file_converter.convert_folder(
-                workspace
-            )
-            self._send_response({
-                "id": "event",
-                "result": {"type": "file_conversion_complete", "data": result}
-            })
-        except Exception as e:
-            import traceback
-            sys.stderr.write(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
-            self._send_response({
-                "id": "event",
-                "result": {"type": "file_conversion_error", "error": str(e)}
-            })
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
         result = self.topic_extractor.extract_topics(
-            workspace, topic_count=topic_count
+            specified_topic_count=topic_count
         )
         if not result.get("success"):
             return {"success": False, "message": result.get("error", "提取主题失败")}
         return result
+
     def _start_note_integration(self, params):
         auto_topic = params.get("auto_topic", True)
         topics = params.get("topics", [])
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        self.note_integration = NoteIntegration()
+        self._server.note_integration = NoteIntegration()
 
         if not self._start_task("note_integration", self._do_note_integration, args=(workspace, auto_topic, topics)):
             return {"success": False, "message": "整合任务正在进行中，请稍后"}
@@ -228,6 +236,7 @@ class TransferMixin:
         return {"success": True, "message": "整合已开始"}
 
     def _do_note_integration(self, workspace, auto_topic, topics):
+        _ = auto_topic
         try:
             documents = self.note_integration.load_documents_from_folder(workspace)
             result = self.note_integration.integrate(
@@ -241,10 +250,9 @@ class TransferMixin:
                 "result": {"type": "note_integration_complete", "data": result}
             })
         except Exception as e:
-            import traceback
-            self.note_integration.documents = []
-            sys.stderr.write(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
-            sys.stderr.flush()
+            if self.note_integration:
+                self.note_integration.documents = []
+            logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             self._send_response({
                 "id": "event",
                 "result": {"type": "note_integration_error", "error": str(e)}

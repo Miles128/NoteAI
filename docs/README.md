@@ -95,11 +95,12 @@
 |------|------|
 | 桌面壳 | Tauri v2 + Rust |
 | 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap |
-| 后端 | Python 3.10+，LangChain + LangChain-OpenAI |
+| 后端 | Python 3.10+ sidecar（stdin/stdout JSON-RPC） |
+| AI | LangChain、LangChain-OpenAI |
 | 文档解析 | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |
 | NLP | jieba 分词 |
 | 文件监听 | watchdog |
-| 依赖管理 | uv + pyproject.toml |
+| 依赖管理 | uv + pyproject.toml（唯一事实来源） |
 
 ## 快速开始
 
@@ -131,6 +132,82 @@ python run.py
 ```
 
 会检查依赖后执行 `cargo tauri dev`，同时启动 Python sidecar 子进程。
+
+## 使用指南
+
+### 首次使用
+
+1. **设置工作区**
+   - 点击「打开工作区」按钮
+   - 选择一个文件夹作为工作目录
+   - 应用会自动创建子目录：
+     - `Notes/` - 存放原始 Markdown 文件
+     - `Organized/` - 存放整合后的笔记
+     - `Raw/` - 存放原始文件（PDF/DOCX 等）
+2. **配置 API**
+   - 点击侧边栏「设置」图标
+   - 输入 OpenAI API Key（或兼容格式的 API）
+   - 可选：设置 API Base URL、模型名称、温度等
+
+### 功能使用
+
+#### 网页下载
+
+1. 点击「网页」标签
+2. 在文本框中输入 URL（每行一个）
+3. 可选：
+   - 「AI 辅助」：启用智能排版
+   - 「包含图片」：下载网页图片
+4. 点击「开始下载」
+
+#### 文件转换
+
+1. 点击「转换」标签
+2. 点击「添加文件」或「添加文件夹」
+3. 支持格式：PDF、DOCX、PPTX、TXT
+4. 可选：启用「AI 辅助」
+5. 点击「开始转换」
+
+#### 主题提取与笔记整合
+
+1. 点击「整合」标签
+2. 点击「提取主题」：自动分析 Notes 文件夹中的文件
+3. 查看生成的主题列表，可手动编辑
+4. 点击「开始整合」：按主题生成结构化笔记
+
+#### 文件浏览与编辑
+
+1. 在左侧文件树中点击文件
+2. Markdown：Tiptap 所见即所得编辑，自动保存
+3. PDF / DOCX：预览区只读查看
+
+## API 配置
+
+### 支持的 API 提供商
+
+| 提供商 | 配置说明 |
+|--------|----------|
+| OpenAI (默认) | API Base: `https://api.openai.com/v1` |
+| Azure OpenAI | 填入对应的 API Base 和部署名称 |
+| 其他兼容格式 | 任何支持 OpenAI API 格式的服务商 |
+
+### 配置参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| API Key | 您的 API 密钥 | - |
+| API Base | API 端点地址 | `https://api.openai.com/v1` |
+| 模型名称 | 使用的模型 | `gpt-4` |
+| 温度 | 输出随机性 (0-1) | `0.7` |
+| Max Tokens | 最大输出 tokens | `32000` |
+
+### 配置存储
+
+配置文件保存在：
+
+- macOS: `~/.config/NoteAI/config.json`
+- Windows: `%APPDATA%\NoteAI\config.json`
+- Linux: `~/.config/NoteAI/config.json`
 
 ## 目录结构
 

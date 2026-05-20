@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _lastTagsData = null;
 var _tagsDragData = { filePath: null, fileName: null };
 
@@ -9,8 +11,8 @@ async function loadTagsView(silent) {
     }
 
     try {
-        await window.api.ensure_tags_md();
-        var result = await window.api.get_all_tags();
+        await window.api.ensureTagsMd();
+        var result = await window.api.getAllTags();
 
         var dataStr = JSON.stringify(result);
         if (silent && dataStr === _lastTagsData) return;
@@ -141,7 +143,7 @@ function setupTagsDragDrop(container) {
         }
 
         try {
-            var result = await window.api.add_tag_to_file(_tagsDragData.filePath, targetTag);
+            var result = await window.api.addTagToFile(_tagsDragData.filePath, targetTag);
             if (result && result.success) {
                 await loadTagsView();
             } else {
@@ -261,7 +263,7 @@ function startTagRename(tagNameEl, oldTagName) {
             return;
         }
 
-        window.api.rename_tag(oldTagName, newName).then(function(result) {
+        window.api.renameTag(oldTagName, newName).then(function(result) {
             if (result && result.success) {
                 loadTagsView(true);
             } else {
@@ -291,11 +293,11 @@ function startTagRename(tagNameEl, oldTagName) {
     });
 }
 
-function onDeleteTag(tagName) {
-    var confirmed = confirm('确定要删除标签「' + tagName + '」吗？\n\n该标签将从所有文件的 YAML tags 中移除，同时更新 WIKI.md。');
+async function onDeleteTag(tagName) {
+    var confirmed = await window._customConfirm('确定要删除标签「' + tagName + '」吗？\n\n该标签将从所有文件的 YAML tags 中移除，同时更新 WIKI.md。');
     if (!confirmed) return;
 
-    window.api.delete_tag(tagName).then(function(result) {
+    window.api.deleteTag(tagName).then(function(result) {
         if (result && result.success) {
             loadTagsView(true);
         } else {
@@ -367,7 +369,7 @@ async function doAutoTag() {
         btn.style.opacity = '0.5';
     }
     try {
-        var result = await window.api.auto_tag_files();
+        var result = await window.api.autoTagFiles();
         if (result && result.success) {
             setTimeout(function() { loadTagsView(); }, 1000);
         }
@@ -414,7 +416,7 @@ async function onConfirmTag() {
     if (!tagName) return;
 
     try {
-        var result = await window.api.create_tag(tagName);
+        var result = await window.api.createTag(tagName);
         if (result && result.success) {
             onHideTagInput();
             loadTagsView();
@@ -462,3 +464,6 @@ function setupTagInputEvents() {
 window.doAutoTag = doAutoTag;
 window.onShowAddTagInput = onShowAddTagInput;
 window.loadTagsView = loadTagsView;
+
+})();
+

@@ -1,45 +1,66 @@
-"""Workspace path, file tree, selection (from python/main.py)."""
-
+import sys
 from pathlib import Path
 
-from config import config
+from config import config, is_ignored_dir
+from config.settings import workspace_manager
+from sidecar.handlers.base import BaseHandler
 
-class WorkspaceMixin:
-    def _get_workspace_status(self, params):
-        path = config.workspace_path
+FILE_TREE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
+FILE_TREE_IGNORED_DIRS = {
+    "__pycache__",
+    "node_modules",
+    "target",
+    ".venv",
+    "venv",
+    "dist",
+    "build",
+    ".tauri",
+}
+
+
+class WorkspaceHandler(BaseHandler):
+    def register_routes(self, router):
+        router.register("get_workspace_status", self._get_workspace_status)
+        router.register("check_workspace_path_valid", self._check_workspace_path_valid)
+        router.register("clear_saved_workspace", self._clear_saved_workspace)
+        router.register("set_workspace_path", self._set_workspace_path)
+        router.register("get_workspace_tree", self._get_workspace_tree)
+        router.register("on_file_selected", self._on_file_selected)
+        router.register("refresh_log", self._refresh_log)
+
+    def _get_workspace_status(self, _params):
+        path = self.config.workspace_path
         if not path or not Path(path).exists():
-            from config.settings import workspace_manager
             saved_path, _ = workspace_manager.load_workspace()
             if saved_path and Path(saved_path).exists():
-                config.workspace_path = saved_path
-                config.save()
+                self.config.workspace_path = saved_path
+                self.config.save()
                 path = saved_path
-                config.setup_workspace_folders()
-                self._setup_watcher(path)
+                self.config.setup_workspace_folders()
+                self._server._setup_watcher(path)
         if path and Path(path).exists():
             self.file_previewer.workspace_path = path
             return {
                 "is_set": True,
                 "workspace_path": path,
                 "notes_folder": str(Path(path) / "Notes"),
-                "organized_folder": str(Path(path) / "Abstract"),
+                "organized_folder": str(Path(path) / config.ABSTRACT_FOLDER),
                 "saved_workspace": True,
             }
         return {"is_set": False, "saved_workspace": False}
 
     def _check_workspace_path_valid(self, params):
-        path = params.get("path", config.workspace_path)
+        path = params.get("path", self.config.workspace_path)
         if path and Path(path).exists():
             return {"is_valid": True, "message": "工作区路径有效", "path": path}
         return {"is_valid": False, "message": "工作区路径无效", "path": path}
 
-    def _clear_saved_workspace(self, params):
-        from config.settings import workspace_manager
+    def _clear_saved_workspace(self, _params):
         success, message = workspace_manager.clear_workspace_state()
         if not success:
             return {"success": False, "message": message}
-        config.workspace_path = ""
-        save_ok, save_msg = config.save()
+        self.config.workspace_path = ""
+        save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": "已清除保存的工作区"}
@@ -47,22 +68,22 @@ class WorkspaceMixin:
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
-            config.workspace_path = path
-            save_ok, save_msg = config.save()
+            self.config.workspace_path = path
+            save_ok, save_msg = self.config.save()
             if not save_ok:
                 return {"success": False, "message": save_msg}
             self.file_previewer.workspace_path = path
-            self._setup_watcher(path)
-            self._invalidate_cache()
-            from config.settings import workspace_manager
+            self._server._setup_watcher(path)
+            self._server._invalidate_cache()
             workspace_manager.save_workspace(path)
             return {"success": True, "message": "工作区已设置", "workspace_path": path}
         return {"success": False, "message": "路径无效"}
-    def _get_workspace_tree(self, params):
+
+    def _get_workspace_tree(self, _params):
         return self._cached_or_compute("workspace_tree", self._compute_workspace_tree)
 
     def _compute_workspace_tree(self):
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return []
 
@@ -73,16 +94,23 @@ class WorkspaceMixin:
                 for entry in entries:
                     if entry.name.startswith('.'):
                         continue
+                    if entry.is_dir() and (
+                        entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name)
+                    ):
+                        continue
                     rel = str(entry.relative_to(workspace))
                     if entry.is_dir():
                         children = _build_tree(str(entry), rel)
-                        items.append({
-                            "name": entry.name,
-                            "path": rel,
-                            "type": "folder",
-                            "children": children,
-                        })
+                        if children:
+                            items.append({
+                                "name": entry.name,
+                                "path": rel,
+                                "type": "folder",
+                                "children": children,
+                            })
                     else:
+                        if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                            continue
                         stat = entry.stat()
                         items.append({
                             "name": entry.name,
@@ -91,11 +119,13 @@ class WorkspaceMixin:
                             "size": stat.st_size,
                             "modified": stat.st_mtime,
                         })
-            except PermissionError:
-                pass
+            except PermissionError as e:
+                sys.stderr.write(f"[workspace_handler] building workspace tree: {e}\n")
+                sys.stderr.flush()
             return items
 
         return _build_tree(workspace)
+
     def _on_file_selected(self, params):
         path = params.get("path", "")
         full_path = self._resolve_path(path)
@@ -104,5 +134,6 @@ class WorkspaceMixin:
         if full_path:
             return {"success": True, "path": full_path}
         return {"success": False, "message": "路径无效或不在工作区内"}
-    def _refresh_log(self, params):
+
+    def _refresh_log(self, _params):
         return {"success": True, "message": "日志已刷新"}

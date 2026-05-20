@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 let currentPreviewData = null;
 let isPreviewActive = false;
 let currentLoadRequestId = 0;
@@ -15,10 +17,13 @@ function showContentView() {
     const titlebarSplitBtn = document.getElementById('titlebar-split-btn');
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
     const graphPanel = document.getElementById('graph-panel');
+    const pendingView = document.getElementById('pending-view');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
     if (graphPanel) graphPanel.style.display = 'none';
+    if (pendingView) pendingView.style.display = 'none';
+    if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
     if (titlebarFileName) {
         titlebarFileName.style.display = 'none';
         titlebarFileName.textContent = '';
@@ -34,16 +39,19 @@ function showContentView() {
     } else {
         if (graphHome) graphHome.style.display = '';
         if (contentArea) contentArea.style.display = 'none';
-        if (typeof updateHomeStats === 'function') updateHomeStats();
+        if (typeof window.updateHomeStats === 'function') window.updateHomeStats();
     }
 }
 
 function showPreviewView() {
     const contentPanel = document.getElementById('content-panel');
     const previewPanel = document.getElementById('preview-panel');
+    const pendingView = document.getElementById('pending-view');
 
     if (contentPanel) contentPanel.style.display = 'none';
     if (previewPanel) previewPanel.style.display = 'flex';
+    if (pendingView) pendingView.style.display = 'none';
+    if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
 }
 
 function updateTitlebarFileName(fileName, isMarkdown) {
@@ -86,7 +94,7 @@ async function loadFilePreview(path, fileName) {
 
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-            window.TiptapEditorModule.hideEditorUI();
+            await window.TiptapEditorModule.hideEditorUI();
         }
     }
 
@@ -119,7 +127,7 @@ async function loadFilePreview(path, fileName) {
     showPreviewView();
 
     try {
-        const result = await window.api.read_note_file(path);
+        const result = await window.api.getFilePreview(path);
         
         if (requestId !== currentLoadRequestId) {
             return;
@@ -154,7 +162,7 @@ async function loadFilePreview(path, fileName) {
                         
                         if (requestId !== currentLoadRequestId) {
                             if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-                                window.TiptapEditorModule.hideEditorUI();
+                                await window.TiptapEditorModule.hideEditorUI();
                             }
                             return;
                         }
@@ -226,7 +234,7 @@ async function loadPdfViewer(path, fileName, requestId) {
     previewContent.style.overflow = 'hidden';
 
     try {
-        var rawResult = await window.api.read_file_raw(path);
+        var rawResult = await window.api.readFileRaw(path);
         if (requestId !== currentLoadRequestId) return;
 
         if (!rawResult || !rawResult.success) {
@@ -531,3 +539,20 @@ window.PreviewModule = {
 };
 
 window.showTagsView = function() { window.switchSidebarView('tags'); };
+
+window.closePreview = closePreview;
+window.closePreviewPanel = closePreviewPanel;
+window.backToContent = backToContent;
+
+window.showPreview = function(options) {
+    if (!options || !options.path) {
+        console.error('[showPreview] Missing path parameter');
+        return;
+    }
+    const path = options.path;
+    const name = options.name || path.split('/').pop() || '预览';
+    window.PreviewModule.loadFilePreview(path, name);
+};
+
+})();
+

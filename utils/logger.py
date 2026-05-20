@@ -2,6 +2,7 @@ import logging
 import os
 import glob
 import threading
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
@@ -35,18 +36,6 @@ class AppLogger:
 
         self.logger.handlers.clear()
         
-        log_dir = Path(config.log_path)
-        log_dir.mkdir(parents=True, exist_ok=True)
-        
-        log_file = log_dir / "noteai.log"
-        file_handler = RotatingFileHandler(
-            log_file,
-            maxBytes=10 * 1024 * 1024,
-            backupCount=5,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(logging.DEBUG)
-        
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         
@@ -54,13 +43,43 @@ class AppLogger:
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
-        
-        self.logger.addHandler(file_handler)
+
+        log_dir = self._resolve_log_dir()
+        if log_dir is not None:
+            log_file = log_dir / "noteai.log"
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=10 * 1024 * 1024,
+                backupCount=5,
+                encoding='utf-8'
+            )
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
+            self._cleanup_old_logs(log_dir)
+
         self.logger.addHandler(console_handler)
-        
-        self._cleanup_old_logs(log_dir)
+
+    def _resolve_log_dir(self) -> Path | None:
+        """Return a writable log directory without making import fail in tests."""
+        candidates = []
+        env_dir = os.environ.get("NOTEAI_LOG_DIR")
+        if env_dir:
+            candidates.append(Path(env_dir))
+        candidates.append(Path(config.log_path))
+        candidates.append(Path(tempfile.gettempdir()) / "NoteAI" / "logs")
+
+        for log_dir in candidates:
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                test_file = log_dir / ".write_test"
+                test_file.write_text("", encoding="utf-8")
+                test_file.unlink(missing_ok=True)
+                return log_dir
+            except (PermissionError, OSError):
+                continue
+        return None
     
     def _cleanup_old_logs(self, log_dir: Path):
         """清理超过30天的日志文件"""

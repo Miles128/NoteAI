@@ -1,13 +1,27 @@
-"""API / UI / theme + connectivity test (from python/main.py)."""
-
+import sys
 from pathlib import Path
 
-from config import config
-from utils.helpers import test_api_connection
+from sidecar.handlers.base import BaseHandler
+from sidecar.rag.profile import load_profile, save_profile
+from utils.llm_utils import test_api_connection
 
-class ConfigMixin:
+
+class ConfigHandler(BaseHandler):
+    def register_routes(self, router):
+        router.register("get_api_config", self._get_api_config)
+        router.register("save_api_config", self._save_api_config)
+        router.register("get_ui_config", self._get_ui_config)
+        router.register("save_ui_config", self._save_ui_config)
+        router.register("get_theme_preference", self._get_theme_preference)
+        router.register("save_theme_preference", self._save_theme_preference)
+        router.register("test_api_connection", self._test_api_connection)
+        router.register("get_user_profile", self._get_user_profile)
+        router.register("save_user_profile", self._save_user_profile)
+        router.register("get_project_rules", self._get_project_rules)
+        router.register("save_project_rules", self._save_project_rules)
+
     def _get_api_config(self, params):
-        api_key = config.api_key or ""
+        api_key = self.config.api_key or ""
         if len(api_key) > 12:
             masked = api_key[:4] + "■■■■" + api_key[-4:]
         elif api_key:
@@ -16,13 +30,13 @@ class ConfigMixin:
             masked = ""
         return {
             "api_key": masked,
-            "api_key_configured": bool(config.api_key),
-            "api_base": config.api_base,
-            "model_name": config.model_name,
-            "temperature": config.temperature,
-            "max_tokens": config.max_tokens,
-            "max_context_tokens": config.max_context_tokens,
-            "disable_thinking": config.disable_thinking,
+            "api_key_configured": bool(self.config.api_key),
+            "api_base": self.config.api_base,
+            "model_name": self.config.model_name,
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "max_context_tokens": self.config.max_context_tokens,
+            "disable_thinking": self.config.disable_thinking,
         }
 
     def _save_api_config(self, params):
@@ -31,7 +45,7 @@ class ConfigMixin:
         model_name = params.get("model_name", "gpt-4")
 
         if "■■■■" in api_key:
-            api_key = config.api_key
+            api_key = self.config.api_key
 
         if not api_key or not api_key.strip():
             return {"success": False, "message": "API Key 不能为空"}
@@ -40,77 +54,78 @@ class ConfigMixin:
         if not connected:
             return {"success": False, "message": conn_msg}
 
-        config.api_key = api_key
-        config.api_base = api_base
-        config.model_name = model_name
-        config.temperature = params.get("temperature", 0.7)
-        config.max_tokens = params.get("max_tokens", 32000)
-        config.max_context_tokens = params.get("max_context_tokens", 128000)
-        config.disable_thinking = params.get("disable_thinking", True)
+        self.config.api_key = api_key
+        self.config.api_base = api_base
+        self.config.model_name = model_name
+        self.config.temperature = params.get("temperature", 0.7)
+        self.config.max_tokens = params.get("max_tokens", 32000)
+        self.config.max_context_tokens = params.get("max_context_tokens", 128000)
+        self.config.disable_thinking = params.get("disable_thinking", True)
 
-        save_ok, save_msg = config.save()
+        save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": f"配置已保存，{conn_msg}"}
 
     def _get_ui_config(self, params):
         return {
-            "web_ai_assist": config.web_ai_assist,
-            "web_include_images": config.web_include_images,
-            "conv_ai_assist": config.conv_ai_assist,
-            "integration_strategy": config.integration_strategy,
-            "auto_topic": config.auto_topic,
-            "topic_list": config.topic_list,
+            "web_ai_assist": self.config.web_ai_assist,
+            "web_include_images": self.config.web_include_images,
+            "conv_ai_assist": self.config.conv_ai_assist,
+            "integration_strategy": self.config.integration_strategy,
+            "auto_topic": self.config.auto_topic,
+            "topic_list": self.config.topic_list,
+            "font_size": self.config.font_size,
         }
 
     def _save_ui_config(self, params):
         if "web_ai_assist" in params:
-            config.web_ai_assist = params["web_ai_assist"]
+            self.config.web_ai_assist = params["web_ai_assist"]
         if "web_include_images" in params:
-            config.web_include_images = params["web_include_images"]
+            self.config.web_include_images = params["web_include_images"]
         if "conv_ai_assist" in params:
-            config.conv_ai_assist = params["conv_ai_assist"]
+            self.config.conv_ai_assist = params["conv_ai_assist"]
         if "integration_strategy" in params:
-            config.integration_strategy = params["integration_strategy"]
+            self.config.integration_strategy = params["integration_strategy"]
         if "auto_topic" in params:
-            config.auto_topic = params["auto_topic"]
+            self.config.auto_topic = params["auto_topic"]
         if "topic_list" in params:
-            config.topic_list = params["topic_list"]
-        save_ok, save_msg = config.save()
+            self.config.topic_list = params["topic_list"]
+        if "font_size" in params:
+            self.config.font_size = params["font_size"]
+        save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": "UI 配置已保存"}
 
     def _get_theme_preference(self, params):
-        return config.theme_preference
+        return self.config.theme_preference
 
     def _save_theme_preference(self, params):
-        config.theme_preference = params.get("theme", "system")
-        save_ok, save_msg = config.save()
+        self.config.theme_preference = params.get("theme", "system")
+        save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True}
+
     def _test_api_connection(self, params):
         try:
-            api_key = params.get("api_key", config.api_key or "")
-            api_base = params.get("api_base", config.api_base or "https://api.openai.com/v1")
-            model_name = params.get("model_name", config.model_name or "gpt-4")
+            api_key = params.get("api_key", self.config.api_key or "")
+            api_base = params.get("api_base", self.config.api_base or "https://api.openai.com/v1")
+            model_name = params.get("model_name", self.config.model_name or "gpt-4")
             if "■■■■" in api_key:
-                api_key = config.api_key
+                api_key = self.config.api_key
             connected, conn_msg = test_api_connection(api_key, api_base, model_name)
             if connected:
                 return {"success": True, "message": conn_msg}
-            else:
-                return {"success": False, "message": conn_msg}
+            return {"success": False, "message": conn_msg}
         except Exception as e:
             return {"success": False, "message": str(e)}
 
     def _get_user_profile(self, params):
-        from sidecar.rag.profile import load_profile
         return {"success": True, "profile": load_profile()}
 
     def _save_user_profile(self, params):
-        from sidecar.rag.profile import load_profile, save_profile
         profile = load_profile()
 
         if "profile_md" in params:
@@ -140,19 +155,20 @@ class ConfigMixin:
         return {"success": True, "message": "用户画像已保存"}
 
     def _get_project_rules(self, params):
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": True, "rules": ""}
         rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
         if rules_path.exists():
             try:
                 return {"success": True, "rules": rules_path.read_text(encoding='utf-8')}
-            except Exception:
-                pass
+            except Exception as e:
+                sys.stderr.write(f"[config_handler] reading project rules file: {e}\n")
+                sys.stderr.flush()
         return {"success": True, "rules": ""}
 
     def _save_project_rules(self, params):
-        workspace = config.workspace_path
+        workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
         rules = params.get("rules", "")

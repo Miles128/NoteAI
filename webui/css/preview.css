@@ -52,7 +52,25 @@
     flex-direction: column;
     flex: 1;
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
+}
+
+.preview-content-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 3px;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
 }
 
 .preview-header {
@@ -134,7 +152,27 @@
 .preview-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+}
+
+.preview-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 3px;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
 }
 
 .preview-content > *:not(.preview-file-info) {

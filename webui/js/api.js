@@ -42,6 +42,80 @@ async function pyCall(method, params) {
     throw new Error('Not running in Tauri');
 }
 
+var PREVIEW_RAW_SLICE_CHUNK_BYTES = 384 * 1024;
+
+function b64Utf8Decode(b64) {
+    if (!b64) return '';
+    var bin = typeof atob === 'function' ? atob(b64) : '';
+    var out = new Uint8Array(bin.length);
+    var i = 0;
+    for (; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return new TextDecoder('utf-8').decode(out);
+}
+
+function concatUint8(chunks) {
+    var len = 0;
+    chunks.forEach(function(chunk) {
+        len += chunk.length;
+    });
+    var out = new Uint8Array(len);
+    var off = 0;
+    chunks.forEach(function(chunk) {
+        out.set(chunk, off);
+        off += chunk.length;
+    });
+    return out;
+}
+
+function hydrateSemanticPreviewRpc(result) {
+    if (!result || !result.success) return result;
+    if (
+        result.preview_delivery === 'semantic_b64'
+        || (result.transport === 'base64_utf8' && result.content_b64)
+    ) {
+        result.content = b64Utf8Decode(result.content_b64);
+        return result;
+    }
+    return result;
+}
+
+async function assembleRawSlicesAsUtf8Preview(path, totalByteSize) {
+    var total = typeof totalByteSize === 'number' ? totalByteSize : 0;
+    if (total < 1) return '';
+    var parts = [];
+    var off = 0;
+    while (off < total) {
+        var want = Math.min(PREVIEW_RAW_SLICE_CHUNK_BYTES, total - off);
+        var slice = await pyCall('read_preview_raw_slice', {
+            path: path,
+            byte_offset: off,
+            byte_limit: want
+        });
+        if (!slice || !slice.success) {
+            throw new Error((slice && (slice.message || slice.error)) || '分页预览读取失败');
+        }
+        parts.push(sliceChunkToUint8(slice.chunk_b64 || ''));
+        off = typeof slice.next_byte_offset === 'number' ? slice.next_byte_offset : off + parts[parts.length - 1].length;
+        if (slice.done) break;
+        if (off >= total) break;
+    }
+    var merged = concatUint8(parts);
+    return new TextDecoder('utf-8').decode(merged);
+}
+
+function sliceChunkToUint8(b64) {
+    if (!b64) return new Uint8Array(0);
+    var bin = typeof atob === 'function' ? atob(b64) : '';
+    var out = new Uint8Array(bin.length);
+    var i = 0;
+    for (; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return out;
+}
+
 async function openWorkspace() {
     if (checkIsTauri()) {
         var invoke = getTauriInvoke();
@@ -228,6 +302,50 @@ async function autoConvertPending() {
     return pyCall('auto_convert_pending', {});
 }
 
+async function ensureSchema() {
+    return pyCall('ensure_schema', {});
+}
+
+async function getSchema() {
+    return pyCall('get_schema', {});
+}
+
+async function needsSchemaSetup() {
+    return pyCall('needs_schema_setup', {});
+}
+
+async function getSchemaTemplate() {
+    return pyCall('get_schema_template', {});
+}
+
+async function saveSchema(content) {
+    return pyCall('save_schema', { content: content });
+}
+
+async function startIngest(options) {
+    var opts = options || {};
+    return pyCall('start_ingest', {
+        mode: opts.mode || 'full',
+        file_paths: opts.file_paths || []
+    });
+}
+
+async function cancelIngest() {
+    return pyCall('cancel_ingest', {});
+}
+
+async function retryIngest(options) {
+    var opts = options || {};
+    return pyCall('retry_ingest', {
+        mode: opts.mode || 'full',
+        file_paths: opts.file_paths || []
+    });
+}
+
+async function getIngestStatus() {
+    return pyCall('get_ingest_status', {});
+}
+
 async function extractTopics(topicCount) {
     return pyCall('extract_topics', { topic_count: topicCount });
 }
@@ -248,7 +366,29 @@ async function onFileSelected(path) {
 }
 
 async function getFilePreview(path) {
-    return pyCall('get_file_preview', { path: path });
+    var raw = await pyCall('get_file_preview', { path: path });
+    if (!raw || !raw.success) return raw;
+
+    if (raw.preview_delivery === 'raw_slices') {
+        try {
+            var total = raw.total_byte_size != null ? raw.total_byte_size : raw.file_size;
+            var text = await assembleRawSlicesAsUtf8Preview(path, total);
+            return {
+                success: true,
+                type: raw.type || 'markdown',
+                preview_delivery: 'semantic_b64',
+                file_name: raw.file_name,
+                file_size: typeof total === 'number' ? total : undefined,
+                content: text
+            };
+        } catch (e) {
+            console.error('[API] chunk preview failed, falling back:', e);
+            var fallback = await pyCall('get_file_preview', { path: path, force_semantic_preview: true });
+            return hydrateSemanticPreviewRpc(fallback);
+        }
+    }
+
+    return hydrateSemanticPreviewRpc(raw);
 }
 
 async function canPreviewFile(path) {
@@ -333,6 +473,14 @@ async function ragChat(question, topics, tags, currentFile) {
 
 async function ragRebuildIndex() {
     return pyCall('rag_rebuild_index', {});
+}
+
+async function archiveChatAnswer(payload) {
+    return pyCall('archive_chat_answer', payload || {});
+}
+
+async function runKbLint() {
+    return pyCall('run_kb_lint', {});
 }
 
 async function getChangelog(limit) {
@@ -420,6 +568,15 @@ async function openFileInNewWindow(path, name) {
     throw new Error('Not running in Tauri');
 }
 
+async function cloudSyncListProviders() { return pyCall('cloud_sync_list_providers'); }
+async function cloudSyncAuth(provider, credentials) { return pyCall('cloud_sync_auth', { provider_name: provider, credentials: credentials }); }
+async function cloudSyncPush(provider) { return pyCall('cloud_sync_push', { provider_name: provider }); }
+async function cloudSyncPull(provider) { return pyCall('cloud_sync_pull', { provider_name: provider }); }
+async function cloudSyncStatus(provider) { return pyCall('cloud_sync_status', { provider_name: provider }); }
+async function cloudSyncSaveConfig(provider, config) { return pyCall('cloud_sync_save_config', { provider_name: provider, config: config }); }
+async function cloudSyncLoadConfig(provider) { return pyCall('cloud_sync_load_config', { provider_name: provider }); }
+async function cloudSyncDisconnect(provider) { return pyCall('cloud_sync_disconnect', { provider_name: provider }); }
+
 window.api = {
     invoke: pyCall,
     getApiPort: function() { return 0; },
@@ -494,12 +651,33 @@ window.api = {
     applyTopicSuggestion: applyTopicSuggestion,
     ragChat: ragChat,
     ragRebuildIndex: ragRebuildIndex,
+    archiveChatAnswer: archiveChatAnswer,
+    runKbLint: runKbLint,
     getChangelog: getChangelog,
     checkAndGenerateSurveys: checkAndGenerateSurveys,
     getUserProfile: getUserProfile,
     saveUserProfile: saveUserProfile,
     getProjectRules: getProjectRules,
-    saveProjectRules: saveProjectRules
+    saveProjectRules: saveProjectRules,
+
+    cloudSyncListProviders: cloudSyncListProviders,
+    cloudSyncAuth: cloudSyncAuth,
+    cloudSyncPush: cloudSyncPush,
+    cloudSyncPull: cloudSyncPull,
+    cloudSyncStatus: cloudSyncStatus,
+    cloudSyncSaveConfig: cloudSyncSaveConfig,
+    cloudSyncLoadConfig: cloudSyncLoadConfig,
+    cloudSyncDisconnect: cloudSyncDisconnect,
+
+    ensureSchema: ensureSchema,
+    getSchema: getSchema,
+    saveSchema: saveSchema,
+    needsSchemaSetup: needsSchemaSetup,
+    getSchemaTemplate: getSchemaTemplate,
+    startIngest: startIngest,
+    cancelIngest: cancelIngest,
+    retryIngest: retryIngest,
+    getIngestStatus: getIngestStatus
 };
 
 })();

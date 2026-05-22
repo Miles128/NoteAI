@@ -1,5 +1,19 @@
 (function() { 'use strict';
 
+var THEME_STORAGE_KEY = 'noteai_theme';
+
+function persistThemeLocal(theme) {
+    try {
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (_e) { /* noop */ }
+}
+
+function syncThemeRadioInputs(theme) {
+    document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(function(radio) {
+        radio.checked = radio.value === theme;
+    });
+}
+
 function toggleTheme() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
@@ -16,8 +30,12 @@ function toggleTheme() {
         darkIcon.style.display = 'none';
     }
 
+    var next = html.getAttribute('data-theme') || 'dark';
+    persistThemeLocal(next);
     if (window.api) {
-        window.api.saveThemePreference(html.getAttribute('data-theme') || 'system');
+        window.api.saveThemePreference(next).catch(function(err) {
+            console.warn('[Theme] saveThemePreference failed:', err);
+        });
     }
 }
 
@@ -31,12 +49,13 @@ function setTheme(theme) {
         html.setAttribute('data-theme', theme);
     }
 
-    document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(radio => {
-        radio.checked = radio.value === theme;
-    });
+    syncThemeRadioInputs(theme);
+    persistThemeLocal(theme);
 
     if (window.api) {
-        window.api.saveThemePreference(theme);
+        window.api.saveThemePreference(theme).catch(function(err) {
+            console.warn('[Theme] saveThemePreference failed:', err);
+        });
     }
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
@@ -61,11 +80,39 @@ function applySystemTheme() {
 
 function initSystemThemeListener() {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        const currentTheme = localStorage.getItem('noteai_theme') || 'system';
+        var currentTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
         if (currentTheme === 'system') {
             applySystemTheme();
         }
     });
+}
+
+async function applyThemeBootstrap() {
+    var pref = null;
+    try {
+        if (window.api && typeof window.api.getThemePreference === 'function') {
+            pref = await window.api.getThemePreference();
+        }
+    } catch (e) {
+        console.warn('[Theme] getThemePreference failed:', e);
+    }
+    if (pref === null || pref === undefined || String(pref).trim() === '') {
+        pref = localStorage.getItem(THEME_STORAGE_KEY);
+    }
+    pref = pref || 'system';
+
+    persistThemeLocal(pref);
+    syncThemeRadioInputs(pref);
+
+    if (pref === 'system') {
+        applySystemTheme();
+    } else {
+        applyTheme(pref);
+    }
+
+    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
+        window.EditorModule.updateEditorTheme();
+    }
 }
 
 function applyTheme(theme) {
@@ -133,6 +180,7 @@ function initResizer() {
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
+        if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
         e.preventDefault();
         e.stopPropagation();
     });
@@ -156,6 +204,7 @@ function initResizer() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         localStorage.setItem('sidebar-width', sidebar.offsetWidth);
+        if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
     });
 }
 
@@ -224,6 +273,7 @@ function showAboutPanel() {
             </ul>
         </div>
         <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">作者：四海</p>
+        <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">myx28@qq.com</p>
         <p class="about-tech" style="margin-top: 4px;">开源项目 · GitHub: Miles128/NoteAI</p>
     `;
 
@@ -267,6 +317,9 @@ window.ThemeModule = {
     applySystemTheme,
     initSystemThemeListener,
     applyTheme,
+    syncThemeRadioInputs,
+    persistThemeLocal,
+    applyThemeBootstrap,
     setFontSize: applyFontSize,
     restoreFontSize,
     restoreSidebarWidth,

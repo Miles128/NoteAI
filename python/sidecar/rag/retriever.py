@@ -1,26 +1,68 @@
+import os
+import sys
 import threading
 from pathlib import Path
 
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+from config.constants import SYSTEM_APP_DATA_DIR
 from config import config, is_ignored_dir
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 DEFAULT_TOP_K = 5
+# 单次查询：控制 Milvus 召回量、减少 MMR 内 batch-embed 与 cross-encoder 对数
+SEARCH_TOP_K_TAGS = 7
+# best hit 低于该阈值才走 HyDE（省一次 LLM）
+HYDE_TRIGGER_BELOW_SCORE = 0.33
+_MMR_CANDIDATE_CAP = 10
+_RERANK_CANDIDATE_CAP = 6
 
 _RERANKER = None
+_RERANKER_DISABLED = False
 _RERANKER_LOCK = threading.Lock()
 
 
+def _reranker_enabled() -> bool:
+    """Reranker pulls torch + second OpenMP runtime; on macOS default off unless opted in."""
+    if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
+        return False
+    if os.environ.get("NOTEAI_ENABLE_RERANKER", "").lower() in ("1", "true", "yes"):
+        return True
+    return sys.platform != "darwin"
+
+
 def _get_reranker():
-    global _RERANKER
+    global _RERANKER, _RERANKER_DISABLED
+    if not _reranker_enabled():
+        return None
+    if _RERANKER_DISABLED:
+        return None
     if _RERANKER is not None:
         return _RERANKER
     with _RERANKER_LOCK:
+        if _RERANKER_DISABLED:
+            return None
         if _RERANKER is not None:
             return _RERANKER
-        from FlagEmbedding import FlagReranker
-        _RERANKER = FlagReranker("BAAI/bge-reranker-v2-m3", use_fp16=True)
-        return _RERANKER
+        try:
+            from sidecar.rag.embedder import _ensure_hf_env
+            _ensure_hf_env()
+            from FlagEmbedding import FlagReranker
+
+            _hf_cache = SYSTEM_APP_DATA_DIR / "hf_hub"
+            _hf_cache.mkdir(parents=True, exist_ok=True)
+            _RERANKER = FlagReranker(
+                "BAAI/bge-reranker-v2-m3",
+                use_fp16=True,
+                cache_dir=str(_hf_cache),
+                batch_size=64,
+            )
+            return _RERANKER
+        except Exception as e:
+            _RERANKER_DISABLED = True
+            logger.warning(f"[rag/retriever] reranker unavailable, using vector scores only: {e}\n")
+            return None
 
 
 def retrieve(query: str, topics: list = None, tags: list = None, progress_callback=None) -> list:
@@ -37,7 +79,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     profile_query = rewrite_query_with_profile(query)
 
     from sidecar.rag.index import hybrid_search
-    top_k = DEFAULT_TOP_K * 2 if (topics or tags) else DEFAULT_TOP_K
+    top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
     results = hybrid_search(
         workspace,
         query_dense=query_emb["dense_vec"],
@@ -47,7 +89,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
         tags=tags,
     )
 
-    if not results or (results and results[0].get("score", 0) < 0.2):
+    if not results or (results and results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE):
         hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
         if hyde_results:
             existing_ids = {r.get("id") for r in results}
@@ -70,13 +112,19 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
                 tags=tags,
             )
 
+    if len(results) > _MMR_CANDIDATE_CAP:
+        results = results[:_MMR_CANDIDATE_CAP]
+
     if len(results) >= 2:
         results = _mmr_dedup(results, top_k=DEFAULT_TOP_K)
 
     if len(results) >= 2:
-        results = _rerank(query, results, top_k=DEFAULT_TOP_K)
+        results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=DEFAULT_TOP_K)
 
-    return results[:DEFAULT_TOP_K]
+    results = results[:DEFAULT_TOP_K]
+
+    from sidecar.rag.context_expand import expand_retrieval_context
+    return expand_retrieval_context(results, topics=topics, workspace=workspace)
 
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
@@ -161,6 +209,8 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 def _rerank(query: str, results: list, top_k: int = 5) -> list:
     try:
         reranker = _get_reranker()
+        if reranker is None:
+            return results[:top_k]
 
         pairs = [[query, r.get("content", "")] for r in results if r.get("content")]
         if not pairs:

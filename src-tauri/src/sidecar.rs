@@ -1,10 +1,109 @@
 use std::path::PathBuf;
-use tauri::Emitter;
-use tauri::Manager;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
 use crate::state::{AppState, PyResponse};
+
+static SIDECAR_GEN: AtomicU64 = AtomicU64::new(0);
+static SIDECAR_RESTARTING: AtomicBool = AtomicBool::new(false);
+
+fn hf_cache_dir() -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        let p = PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("NoteAI")
+            .join("hf_hub");
+        let _ = std::fs::create_dir_all(&p);
+        return p;
+    }
+    PathBuf::from("/tmp/noteai_hf_hub")
+}
+
+pub async fn is_sidecar_alive(state: &AppState) -> bool {
+    if SIDECAR_RESTARTING.load(Ordering::SeqCst) {
+        return false;
+    }
+    state.python_stdin.lock().await.is_some()
+}
+
+async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
+    let steps = max_ms / 100;
+    for _ in 0..steps {
+        if is_sidecar_alive(state).await {
+            return true;
+        }
+        if !SIDECAR_RESTARTING.load(Ordering::SeqCst) && state.python_stdin.lock().await.is_some() {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    is_sidecar_alive(state).await
+}
+
+/// Kill child and clear handles without notifying the UI (planned restart).
+async fn stop_python_sidecar_quiet(state: &AppState) {
+    SIDECAR_GEN.fetch_add(1, Ordering::SeqCst);
+    if let Some(mut child) = state.python_child.lock().await.take() {
+        let _ = child.kill().await;
+    }
+    *state.python_stdin.lock().await = None;
+}
+
+/// Unexpected exit: clear handles and notify UI.
+async fn on_sidecar_process_exit(app: &AppHandle, reader_gen: u64) {
+    if reader_gen != SIDECAR_GEN.load(Ordering::SeqCst) {
+        return;
+    }
+    if SIDECAR_RESTARTING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    let state = app.state::<AppState>();
+    *state.python_stdin.lock().await = None;
+    if let Some(mut child) = state.python_child.lock().await.take() {
+        let _ = child.kill().await;
+    }
+
+    eprintln!("[Rust] Python sidecar exited unexpectedly");
+    let _ = app.emit(
+        "python-event",
+        serde_json::json!({
+            "type": "sidecar_died",
+            "message": "Python 后端意外退出，下次操作将自动恢复"
+        }),
+    );
+}
+
+pub async fn restart_python_sidecar(app: &AppHandle) -> Result<(), String> {
+    if SIDECAR_RESTARTING.load(Ordering::SeqCst) {
+        let state = app.state::<AppState>();
+        if wait_for_sidecar(&state, 15_000).await {
+            return Ok(());
+        }
+        return Err("Python 后端正在重启，请稍候".into());
+    }
+
+    SIDECAR_RESTARTING.store(true, Ordering::SeqCst);
+    let state = app.state::<AppState>();
+    stop_python_sidecar_quiet(&state).await;
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+    let result = start_python_sidecar(app.clone()).await;
+    SIDECAR_RESTARTING.store(false, Ordering::SeqCst);
+    if result.is_ok() {
+        let _ = app.emit(
+            "python-event",
+            serde_json::json!({
+                "type": "sidecar_ready",
+                "message": "Python 后端已恢复"
+            }),
+        );
+    }
+    result
+}
 
 pub fn find_python() -> Result<PathBuf, String> {
     let exe_dir = std::env::current_exe()
@@ -33,6 +132,15 @@ pub fn find_python() -> Result<PathBuf, String> {
 
     for candidate in candidates {
         if candidate.exists() {
+            if let Ok(output) = std::process::Command::new(&candidate)
+                .arg("--version")
+                .output()
+            {
+                let ver = String::from_utf8_lossy(&output.stdout);
+                if ver.contains("Python 2") {
+                    continue;
+                }
+            }
             return Ok(candidate);
         }
     }
@@ -74,13 +182,32 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         }
     };
 
+    let hf_cache = hf_cache_dir();
+    let hf_cache_str = hf_cache.to_string_lossy().to_string();
+    let reader_gen = SIDECAR_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+
     let mut child = Command::new(&python_path)
         .arg(&script_path)
-        .env("HF_ENDPOINT", std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://hf-mirror.com".to_string()))
-        .env("NO_PROXY", std::env::var("NO_PROXY").unwrap_or_else(|_| "huggingface.co,hf-mirror.com".to_string()))
+        .env(
+            "HF_ENDPOINT",
+            std::env::var("HF_ENDPOINT").unwrap_or_else(|_| "https://hf-mirror.com".to_string()),
+        )
+        .env(
+            "NO_PROXY",
+            std::env::var("NO_PROXY").unwrap_or_else(|_| "huggingface.co,hf-mirror.com".to_string()),
+        )
+        .env("HF_HOME", &hf_cache_str)
+        .env("HUGGINGFACE_HUB_CACHE", &hf_cache_str)
+        .env("TRANSFORMERS_CACHE", &hf_cache_str)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUNBUFFERED", "1")
+        .env("KMP_DUPLICATE_LIB_OK", "TRUE")
+        .env("OMP_NUM_THREADS", "4")
+        .env("TERM", "dumb")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .process_group(0)
         .spawn()
         .map_err(|e| format!("Failed to start Python: {}", e))?;
 
@@ -120,6 +247,7 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
                 eprintln!("[Rust] Failed to parse Python stdout: {}", truncated);
             }
         }
+        on_sidecar_process_exit(&app_clone, reader_gen).await;
     });
 
     tokio::spawn(async move {
@@ -133,6 +261,9 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     *state.python_stdin.lock().await = stdin;
     *state.python_child.lock().await = Some(child);
+    if let Ok(mut slot) = state.app_handle.lock() {
+        *slot = Some(app.clone());
+    }
 
     Ok(())
 }

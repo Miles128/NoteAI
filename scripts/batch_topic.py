@@ -8,8 +8,8 @@ sys.path.insert(0, str(project_root))
 
 from config.settings import config, is_ignored_dir
 from utils.topic_assigner import auto_assign_topic_for_file, load_pending, parse_wiki_headings
+from utils.text_utils import parse_frontmatter
 import os
-import re
 
 
 def main():
@@ -49,13 +49,9 @@ def main():
                 continue
 
             has_topic = False
-            m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-            if m:
-                for line in m.group(1).split('\n'):
-                    idx = line.find(':')
-                    if idx > 0 and line[:idx].strip() == 'topic':
-                        has_topic = True
-                        break
+            meta, _ = parse_frontmatter(text)
+            if meta and meta.get('topic'):
+                has_topic = True
 
             if has_topic:
                 continue

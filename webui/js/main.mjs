@@ -7,10 +7,9 @@ async function loadModules() {
     ]);
 
     await import('./theme.js');
-    const { ThemeModule } = window;
+    const ThemeModule = window.ThemeModule;
     ThemeModule.initSystemThemeListener();
-    const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
-    ThemeModule.applyTheme(savedTheme);
+    await ThemeModule.applyThemeBootstrap();
 
     await import('./icons.js');
     const { IconsModule } = window;
@@ -33,6 +32,11 @@ async function loadModules() {
     window.resetApiConfig = resetApiConfig;
     window.saveUserProfile = saveUserProfile;
 
+    await import('./cloud-sync.js');
+    const { CloudSyncModule } = window;
+    window.CloudSyncModule = CloudSyncModule;
+    CloudSyncModule.init();
+
     await import('./workspace.js');
     const {
         WorkspaceModule, updateStatus, updateProgress, openWorkspace,
@@ -51,16 +55,14 @@ async function loadModules() {
     window.TreeModule = TreeModule;
 
     await import('./sidebar.js');
-    const {
-        switchSidebarView, updateSidebarStats, setSidebarStatus,
-        showGraphHomeView, updateHomeStats, toggleSidebar,
-    } = window;
-    window.switchSidebarView = switchSidebarView;
-    window.updateSidebarStats = updateSidebarStats;
-    window.setSidebarStatus = setSidebarStatus;
-    window.showGraphHomeView = showGraphHomeView;
-    window.updateHomeStats = updateHomeStats;
-    window.toggleSidebar = toggleSidebar;
+    window.switchSidebarView = window.switchSidebarView;
+    window.updateSidebarStats = window.updateSidebarStats;
+    window.setSidebarStatus = window.setSidebarStatus;
+    window.showGraphHomeView = window.showGraphHomeView;
+    window.updateHomeStats = window.updateHomeStats;
+    if (typeof window.toggleSidebar !== 'function') {
+        window.toggleSidebar = function _toggleSidebarMissing() {};
+    }
 
     await import('./links.js');
     const { LinksModule } = window;
@@ -138,6 +140,16 @@ async function loadModules() {
     await import('./tabs.js');
     const { TabsModule } = window;
     window.TabsModule = TabsModule;
+
+    await import('./schema-wizard.js');
+    if (window.SchemaWizard && window.SchemaWizard.init) {
+        window.SchemaWizard.init();
+    }
+
+    await import('./ingest.js');
+    const { IngestModule } = window;
+    window.IngestModule = IngestModule;
+    if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
     await import('./app.js');
     const { App, onLLMRewrite, onRewriteConfirm, onRewriteCancel, importFiles } = window;

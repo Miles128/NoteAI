@@ -152,8 +152,8 @@ class TestFolderLevelDetermination:
     @pytest.mark.parametrize("parent,expected", [
         ("Notes/AI产品经理之路", 2),
         ("Notes/AI产品经理之路/需求分析", 3),
-        ("Notes/AI产品经理之路/需求分析/细节", -1),  # 三级下不再作为标题
-        ("Notes", -1),  # Notes 根目录下不自动判定
+        ("Notes/AI产品经理之路/需求分析/细节", -1),
+        ("Notes", 1),
     ])
     def test_level_determination(self, tmp_path, parent, expected):
         p = tmp_path / parent

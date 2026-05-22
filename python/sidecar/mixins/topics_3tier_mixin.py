@@ -3,7 +3,25 @@ from pathlib import Path
 
 from config import config
 from utils.topic_assigner import load_pending, sync_wiki_with_files
-from utils.topic_manager import LEVEL1_TOPICS, MAX_LEVEL, TopicManager
+from utils.topic_manager import MAX_LEVEL, TopicManager
+
+
+def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = None) -> str:
+    """Stable unique graph node id (name alone collides across L1/L2)."""
+    path = topic.get("path")
+    if path and workspace:
+        try:
+            rel = Path(path).relative_to(Path(workspace)).as_posix()
+            return f"t:{rel}"
+        except ValueError:
+            pass
+    name = topic.get("name", "")
+    level = topic.get("level", 0)
+    if level == 1:
+        return f"t:L1:{name}"
+    if parent_tid:
+        return f"{parent_tid}/{name}"
+    return f"t:{name}:L{level}"
 
 
 class Topics3TierMixin:
@@ -14,6 +32,9 @@ class Topics3TierMixin:
         workspace = config.workspace_path
         if not workspace:
             return {"success": True, "topics": [], "pending": []}
+
+        with suppress(Exception):
+            sync_wiki_with_files()
 
         tree = TopicManager.build_tree_from_filesystem(workspace)
 
@@ -66,12 +87,6 @@ class Topics3TierMixin:
 
         level = TopicManager.determine_folder_level(str(parent), workspace) if level_hint == 0 else level_hint
 
-        if level == 1 and folder_name not in LEVEL1_TOPICS:
-            return {
-                "success": False,
-                "message": f"一级标题必须是预定义的: {', '.join(LEVEL1_TOPICS)}",
-            }
-
         new_path = parent / folder_name
         if new_path.exists():
             return {"success": False, "message": "已存在同名文件夹"}
@@ -117,13 +132,15 @@ class Topics3TierMixin:
         return {"success": True, "message": f"综述已{'开启' if enable else '关闭'}: {topic_name}"}
 
     def _append_topic_graph_nodes(self, topics, nodes, edges, seen_ids):
+        workspace = config.workspace_path or ""
+
         def add_topic_nodes(topic, parent=None):
-            tid = topic["name"]
+            tid = _graph_topic_node_id(workspace, topic, parent)
             if tid in seen_ids:
                 return
             seen_ids.add(tid)
             nodes.append({
-                "id": tid, "name": tid,
+                "id": tid, "name": topic["name"],
                 "level": topic["level"], "type": "topic",
                 "has_abstract": topic.get("has_abstract", False),
                 "abstract_file": topic.get("abstract_file"),
@@ -134,10 +151,8 @@ class Topics3TierMixin:
                 edges.append({"source": parent, "target": tid})
 
             children = topic.get("children", [])
-            if children:
-                for child in children:
-                    add_topic_nodes(child, tid)
-                return
+            for child in children:
+                add_topic_nodes(child, tid)
 
             topic_path = topic.get("path")
             if not topic_path or not Path(topic_path).is_dir():
@@ -245,10 +260,23 @@ class Topics3TierMixin:
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
 
-        if topic_name in LEVEL1_TOPICS:
-            tree_result = self._get_topic_tree_3tier({})
-            tree = tree_result.get("topics", [])
-            can, reason = TopicManager.can_delete_topic(topic_name, 1, tree)
+        tree_result = self._get_topic_tree_3tier({})
+        tree = tree_result.get("topics", [])
+        topic_level = 0
+        for l1 in tree:
+            if l1["name"] == topic_name:
+                topic_level = 1
+                break
+            for l2 in l1.get("children", []):
+                if l2["name"] == topic_name:
+                    topic_level = 2
+                    break
+                for l3 in l2.get("children", []):
+                    if l3["name"] == topic_name:
+                        topic_level = 3
+                        break
+        if topic_level > 0:
+            can, reason = TopicManager.can_delete_topic(topic_name, topic_level, tree)
             if not can:
                 return {"success": False, "message": reason}
 

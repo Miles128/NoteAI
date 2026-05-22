@@ -15,6 +15,7 @@ from utils.text_utils import (
     _count_tag_occurrence,
     _normalize_for_match,
     _is_generic_word,
+    parse_frontmatter,
 )
 
 try:
@@ -594,55 +595,20 @@ def save_tags_md(workspace_path: str) -> dict:
                 elif entry.suffix.lower() == '.md':
                     try:
                         text = entry.read_text(encoding='utf-8')
-                        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                        if not m:
+                        meta, _ = parse_frontmatter(text)
+                        if meta is None:
                             continue
-                        yaml_text = m.group(1)
                         rel = str(entry.relative_to(workspace))
-                        current_tags_key = False
-                        current_tags_arr = []
-                        for line in yaml_text.split('\n'):
-                            stripped = line.strip()
-                            if current_tags_key and stripped.startswith('- '):
-                                current_tags_arr.append(stripped[2:].strip().strip("'\""))
-                                continue
-                            if current_tags_key and current_tags_arr:
-                                for tag in current_tags_arr:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                                current_tags_arr = []
-                            idx = line.find(':')
-                            if idx < 0:
-                                continue
-                            key = line[:idx].strip()
-                            val = line[idx + 1:].strip()
-                            if key != 'tags':
-                                current_tags_key = False
-                                continue
-                            if val.startswith('[') and val.endswith(']'):
-                                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                                for tag in tags:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                            elif not val:
-                                current_tags_key = True
-                                current_tags_arr = []
-                            else:
-                                tag = val.strip().strip("'\"")
-                                if tag:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                        if current_tags_key and current_tags_arr:
-                            for tag in current_tags_arr:
-                                if tag not in tag_map:
-                                    tag_map[tag] = []
-                                tag_map[tag].append(rel)
+                        raw_tags = meta.get('tags', [])
+                        tags = []
+                        if isinstance(raw_tags, list):
+                            tags = [str(t).strip() for t in raw_tags if t]
+                        elif isinstance(raw_tags, str) and raw_tags.strip():
+                            tags = [raw_tags.strip()]
+                        for tag in tags:
+                            if tag not in tag_map:
+                                tag_map[tag] = []
+                            tag_map[tag].append(rel)
                     except Exception as e:
                         logger.warning(f"[save_tags_md] 跳过解析失败的文件 {entry.name}: {e}")
                         continue

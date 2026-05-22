@@ -10,18 +10,98 @@ from utils.topic_assigner import sync_wiki_with_files
 
 
 class FilesHandler(BaseHandler):
-    def _get_file_preview(self, params):
+    PREVIEW_LARGE_RAW_UTF8_THRESHOLD = 512 * 1024
+    RAW_SLICE_EXTENSIONS = frozenset({'.md', '.markdown', '.txt'})
+    RAW_SLICE_MAX = 786_432
+
+    def _resolved_preview_full_path(self, params):
         path = params.get("path", "")
         full_path = self._resolve_path(path)
         if not full_path:
             full_path = self._find_file_by_name(path)
         if not full_path:
-            return {"success": False, "message": "路径无效"}
+            return None
         if not Path(full_path).exists():
             alt = self._find_file_by_name(path)
             if alt:
                 full_path = alt
+        return full_path if Path(full_path).exists() else None
+
+    def _head_looks_utf8(self, blob: bytes) -> bool:
+        if not blob:
+            return True
+        try:
+            blob.decode('utf-8')
+        except UnicodeDecodeError:
+            return False
+        return True
+
+    def _get_file_preview(self, params):
+        full_path = self._resolved_preview_full_path(params)
+        if not full_path:
+            return {"success": False, "message": "路径无效"}
+        resolved = Path(full_path)
+        ext = resolved.suffix.lower()
+        if ext in self.RAW_SLICE_EXTENSIONS:
+            sz = resolved.stat().st_size
+            take = min(8192, sz)
+            header = resolved.read_bytes()[:take] if take else b''
+            if (
+                not bool(params.get("force_semantic_preview"))
+                and sz > self.PREVIEW_LARGE_RAW_UTF8_THRESHOLD
+                and self._head_looks_utf8(header)
+            ):
+                return {
+                    "success": True,
+                    "type": "markdown" if ext != ".txt" else "text",
+                    "preview_delivery": "raw_slices",
+                    "file_name": resolved.name,
+                    "file_size": sz,
+                    "total_byte_size": sz,
+                    "transport_hint": "raw_utf8",
+                }
+
         return self.file_previewer.get_preview_data(full_path)
+
+    def _read_preview_raw_slice(self, params):
+        full_path = self._resolved_preview_full_path(params)
+        if not full_path:
+            return {"success": False, "message": "路径无效"}
+        resolved = Path(full_path)
+        ext = resolved.suffix.lower()
+        if ext not in self.RAW_SLICE_EXTENSIONS:
+            return {"success": False, "message": "不支持对该类型分页读取"}
+
+        offset = params.get("byte_offset", 0)
+        byte_limit = params.get("byte_limit", 392_192)
+        try:
+            offset = max(0, int(offset))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit_req = max(1, int(byte_limit))
+        except (TypeError, ValueError):
+            limit_req = 392_192
+        limit_req = min(limit_req, self.RAW_SLICE_MAX)
+
+        sz = resolved.stat().st_size
+        if offset > sz:
+            offset = sz
+        remaining = sz - offset
+        read_len = min(limit_req, remaining)
+        with resolved.open('rb') as fh:
+            fh.seek(offset)
+            blob = fh.read(read_len)
+        next_off = offset + len(blob)
+
+        return {
+            "success": True,
+            "chunk_b64": base64.b64encode(blob).decode("ascii"),
+            "total_byte_size": sz,
+            "byte_offset_start": offset,
+            "next_byte_offset": next_off,
+            "done": next_off >= sz,
+        }
 
     def _can_preview_file(self, params):
         path = params.get("path", "")
@@ -124,6 +204,7 @@ class FilesHandler(BaseHandler):
 
     def register_routes(self, router):
         router.register("get_file_preview", self._get_file_preview)
+        router.register("read_preview_raw_slice", self._read_preview_raw_slice)
         router.register("can_preview_file", self._can_preview_file)
         router.register("save_file_content", self._save_file_content)
         router.register("read_file_raw", self._read_file_raw)

@@ -24,10 +24,10 @@ class ModelWarmupManager:
                 return
             cls._warmup_done = True
 
-        logger.warning("[preload] Starting model warmup...")
+        logger.warning("[preload] Starting model warmup (embedding only)…")
 
         cls._preload_embedder()
-        cls._preload_reranker()
+        # Reranker loads on first RAG query — avoids HF timeout killing startup.
 
         logger.warning("[preload] Model warmup complete")
 

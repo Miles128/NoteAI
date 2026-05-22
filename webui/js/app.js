@@ -2,11 +2,8 @@
 
 document.addEventListener('DOMContentLoaded', async function() {
     initMarked();
-    
-    initSystemThemeListener();
 
-    const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
-    applyTheme(savedTheme);
+    // 主题已由 main.mjs 中 applyThemeBootstrap（服务端偏好 + localStorage）应用，此处不再覆盖
 
     if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
         window.ThemeModule.restoreFontSize();
@@ -21,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     initCustomTooltip();
     
     if (window.TiptapEditorModule && window.TiptapEditorModule.preloadModules) {
-        window.TiptapEditorModule.preloadModules();
+        await window.TiptapEditorModule.preloadModules();
     }
     
     updateStatus('正在加载...');
@@ -53,30 +50,9 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.ConverterModule.loadSavedConvConfig();
         }
         
-        if (window.api && window.api.autoConvertPending) {
-            window.api.autoConvertPending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+        if (typeof window.runPostWorkspaceSetup === 'function') {
+            /* ingest deferred until schema wizard completes, if needed */
         }
-
-        setTimeout(function() {
-            if (window.api && window.api.batchAutoAssignTopics) {
-                window.api.batchAutoAssignTopics().then(function(result) {
-                    if (result && result.success) {
-                        if (result.format_optimized > 0 || result.auto_assigned > 0 || result.need_confirm > 0) {
-                            var parts = [];
-                            if (result.auto_assigned > 0) parts.push('分配 ' + result.auto_assigned + ' 个主题');
-                            if (result.need_confirm > 0) parts.push(result.need_confirm + ' 个待确认');
-                            if (result.format_optimized > 0) parts.push('优化 ' + result.format_optimized + ' 个格式');
-                            updateStatus('主题处理完成 - ' + parts.join('，'));
-                        } else {
-                            updateStatus('所有文件主题已分配');
-                        }
-                    }
-                    if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-                }).catch(function(e) { console.warn('[App] batch_auto_assign_topics failed:', e); });
-            }
-
-            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-            }, 5000);
         
             setTimeout(function() {
                 if (window.api && window.api.mergeDuplicateTopics) {
@@ -595,7 +571,11 @@ function initWorkspaceFileWatcher() {
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
             refreshWorkspaceViewsAfterChange();
-            if (window.api && window.api.autoConvertPending) {
+            if (window.IngestModule && window.IngestModule.startIngest) {
+                window.IngestModule.startIngest('incremental').catch(function(e) {
+                    console.warn('[App] watcher incremental ingest failed:', e);
+                });
+            } else if (window.api && window.api.autoConvertPending) {
                 window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
             }
         }, 3000);
@@ -607,10 +587,13 @@ function initWorkspaceFileWatcher() {
 function refreshWorkspaceViewsAfterChange() {
     var treeLoad = null;
     if (window.TreeModule && window.TreeModule.loadFileTree) {
-        treeLoad = window.TreeModule.loadFileTree();
+        treeLoad = window.TreeModule.loadFileTree(true);
     }
 
-    refreshCurrentSidebarView();
+    if (typeof window.loadTopicTree === 'function') {
+        window.loadTopicTree(true, true);
+    }
+    refreshCurrentSidebarView(true);
     refreshKnowledgeGraph();
 
     if (treeLoad && typeof window.updateHomeStats === 'function') {
@@ -620,11 +603,11 @@ function refreshWorkspaceViewsAfterChange() {
     }
 }
 
-function refreshCurrentSidebarView() {
+function refreshCurrentSidebarView(forceRefresh) {
     var activeView = document.querySelector('.sidebar-view-btn.active');
     if (!activeView) {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
+            window.TreeModule.loadFileTree(!!forceRefresh);
         }
         return;
     }
@@ -632,7 +615,7 @@ function refreshCurrentSidebarView() {
     var view = activeView.getAttribute('data-sidebar');
     if (view === 'tree') {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
+            window.TreeModule.loadFileTree(!!forceRefresh);
         }
     } else if (view === 'tags') {
         if (typeof window.loadTagsView === 'function') {
@@ -660,6 +643,26 @@ function refreshKnowledgeGraph() {
 
 var _tooltipTimer = null;
 
+async function runPostWorkspaceSetup() {
+    if (window.api && window.api.needsSchemaSetup) {
+        try {
+            var st = await window.api.needsSchemaSetup();
+            if (st && st.needs_setup) return;
+        } catch (e) {
+            console.warn('[App] needs_schema_setup check:', e);
+        }
+    }
+    if (window.IngestModule && window.IngestModule.startIngest) {
+        window.IngestModule.startIngest('incremental').catch(function(e) {
+            console.warn('[App] start_ingest failed:', e);
+        });
+    } else if (window.api && window.api.autoConvertPending) {
+        window.api.autoConvertPending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+    }
+}
+
+window.runPostWorkspaceSetup = runPostWorkspaceSetup;
+
 function initSidecarErrorListener() {
     var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
         ? window.__TAURI__.event
@@ -671,7 +674,17 @@ function initSidecarErrorListener() {
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
         if (!data) return;
-        if (data.type === 'sidecar_error') {
+        if (data.type === 'sidecar_died') {
+            var diedMsg = data.message || 'Python 后端已退出';
+            console.error('[App] Sidecar died:', diedMsg);
+            if (typeof window.updateStatus === 'function') {
+                window.updateStatus(diedMsg);
+            }
+        } else if (data.type === 'sidecar_ready') {
+            if (typeof window.updateStatus === 'function') {
+                window.updateStatus(data.message || 'Python 后端已恢复');
+            }
+        } else if (data.type === 'sidecar_error') {
             var msg = data.message || 'Python 后端启动失败';
             console.error('[App] Sidecar error:', msg);
             updateStatus('错误: ' + msg);
@@ -703,7 +716,8 @@ function initRagEventListener() {
             updateStatus(data.message || '索引构建中...');
         } else if (data.type === 'progress' && data.element_id === 'survey_check') {
             updateStatus(data.message || '检查综述中...');
-        } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done' || data.type === 'rag_index_built') {
+        } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done'
+            || data.type === 'rag_error' || data.type === 'rag_index_built') {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {
                 window.AssistantModule.handleEvent(data);
             }
@@ -713,6 +727,10 @@ function initRagEventListener() {
                 } else {
                     updateStatus('RAG 索引构建失败');
                 }
+            }
+        } else if (data.type === 'ingest_progress' || data.type === 'ingest_complete') {
+            if (window.IngestModule && window.IngestModule.handleEvent) {
+                window.IngestModule.handleEvent(data);
             }
         } else if (data.type === 'cascade_survey_chunk') {
             updateStatus('正在更新综述: ' + (data.topic || ''));

@@ -627,11 +627,11 @@ function _describeTreeLoadError(error) {
     }
 }
 
-async function loadFileTree() {
+async function loadFileTree(force) {
     if (_loadFileTreeInFlight) {
         return _loadFileTreeInFlight;
     }
-    _loadFileTreeInFlight = _loadFileTreeOnce();
+    _loadFileTreeInFlight = _loadFileTreeOnce(!!force);
     try {
         return await _loadFileTreeInFlight;
     } finally {
@@ -639,7 +639,7 @@ async function loadFileTree() {
     }
 }
 
-async function _loadFileTreeOnce() {
+async function _loadFileTreeOnce(force) {
     var container = document.getElementById('file-tree');
     if (!container) return;
 
@@ -661,7 +661,7 @@ async function _loadFileTreeOnce() {
         var newFileSet = extractFileSet(treeData);
         var newSetStr = JSON.stringify(newFileSet);
 
-        if (newSetStr === _lastFileSet) return;
+        if (!force && newSetStr === _lastFileSet) return;
         _lastFileSet = newSetStr;
         _lastTreeData = treeData;
         window.AppState.lastFileTreeData = treeData;

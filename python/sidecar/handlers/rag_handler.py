@@ -171,17 +171,46 @@ class RagHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def _emit_rag_error(self, message: str) -> None:
+        self._send_response({
+            "id": "event",
+            "result": {"type": "rag_error", "message": message},
+        })
+
+    def _fail_rag(self, message: str) -> dict:
+        self._emit_rag_error(message)
+        return {"success": False, "message": message, "error_emitted": True}
+
     def _rag_chat(self, params):
         from prompts.rag_assistant import RAG_CHAT_PROMPT
         from sidecar.rag.memory import load_short_memory, save_short_memory
         from sidecar.rag.retriever import retrieve
         from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
 
-        with self._rag_chat_lock:
-            return self._do_rag_chat_inner(
-                params, retrieve, load_short_memory, save_short_memory,
-                call_llm_raw_stream, check_api_config, APIConfigError, RAG_CHAT_PROMPT
-            )
+        question = (params.get("question") or "").strip()
+        if not question:
+            return {"success": False, "message": "问题不能为空"}
+
+        if not self._rag_chat_lock.acquire(blocking=False):
+            return {"success": False, "message": "已有对话正在进行，请稍候"}
+
+        def _worker() -> None:
+            try:
+                result = self._do_rag_chat_inner(
+                    params, retrieve, load_short_memory, save_short_memory,
+                    call_llm_raw_stream, check_api_config, APIConfigError, RAG_CHAT_PROMPT,
+                )
+                if isinstance(result, dict) and not result.get("success", True):
+                    if not result.get("error_emitted"):
+                        self._emit_rag_error(result.get("message", "请求失败"))
+            except Exception as e:
+                RagHandler._record_error(str(e))
+                self._emit_rag_error(str(e))
+            finally:
+                self._rag_chat_lock.release()
+
+        threading.Thread(target=_worker, daemon=True).start()
+        return {"success": True, "started": True}
 
     def _rag_clear_memory(self, params):
         from sidecar.rag.memory import save_short_memory
@@ -210,18 +239,22 @@ class RagHandler(BaseHandler):
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
 
+        topics = params.get("topics") or None
+        tags = params.get("tags") or None
+
         try:
             hyde_question = self._generate_hyde(question)
-            search_results = search_fn(hyde_question)
+            search_results = search_fn(hyde_question, topics=topics, tags=tags)
             if not search_results:
-                search_results = search_fn(question)
+                search_results = search_fn(question, topics=topics, tags=tags)
         except Exception as e:
             RagHandler._record_error(f"检索失败: {e}")
-            return {"success": False, "message": f"检索失败: {e}"}
+            return self._fail_rag(f"检索失败: {e}")
 
         context_parts = []
         for i, r in enumerate(search_results):
-            context_parts.append(f"[{i + 1}] {r.get('file_name', r.get('file_path', ''))}\n{r.get('content', '')}")
+            label = r.get("source_label") or r.get("file_name") or r.get("file_path", "")
+            context_parts.append(f"[{i + 1}] {label}\n{r.get('content', '')}")
         context = "\n\n".join(context_parts)
 
         history = load_memory_fn() or ""
@@ -248,32 +281,39 @@ class RagHandler(BaseHandler):
             assistant_response = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_token)
         except APIConfigError as e:
             RagHandler._record_error(f"LLM调用失败: {e}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "rag_error", "message": str(e)}
-            })
-            return {"success": False, "message": str(e)}
+            return self._fail_rag(str(e))
         except Exception as e:
             RagHandler._record_error(f"LLM错误: {e}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "rag_error", "message": str(e)}
-            })
-            return {"success": False, "message": str(e)}
+            return self._fail_rag(str(e))
 
         if not assistant_response.strip():
-            return {"success": False, "message": "AI 未生成回复"}
+            return self._fail_rag("AI 未生成回复")
+
+        from sidecar.archive_wiki import parse_save_suggestion
+
+        display_answer, suggest_save_note = parse_save_suggestion(assistant_response)
+
+        if not display_answer.strip():
+            return self._fail_rag("AI 未生成回复")
 
         RagHandler._clear_error_reset()
 
-        updated_history = f"{history}\n用户: {question}\n助手: {assistant_response}" if history else f"用户: {question}\n助手: {assistant_response}"
+        updated_history = (
+            f"{history}\n用户: {question}\n助手: {display_answer}"
+            if history
+            else f"用户: {question}\n助手: {display_answer}"
+        )
         save_memory_fn(updated_history)
 
         self._send_response({
             "id": "event",
-            "result": {"type": "rag_chat_done"}
+            "result": {
+                "type": "rag_chat_done",
+                "answer": display_answer,
+                "suggest_save_note": suggest_save_note,
+            },
         })
-        return {"success": True}
+        return {"success": True, "suggest_save_note": suggest_save_note}
 
     def _generate_hyde(self, question):
         from prompts.rag_assistant import RAG_HYDE_PROMPT
@@ -344,8 +384,13 @@ class RagHandler(BaseHandler):
         """Alias for _rag_chat — kept for backward-compatible RPC route."""
         return self._rag_chat(params)
 
+    def _rag_rebuild_index(self, params):
+        """Manual full rebuild (settings / assistant); not run on app open."""
+        return self._init_rag_index(params)
+
     def register_routes(self, router):
         router.register("init_rag_index", self._init_rag_index)
+        router.register("rag_rebuild_index", self._rag_rebuild_index)
         router.register("rag_add_chunks", self._rag_add_chunks)
         router.register("rag_remove_chunks", self._rag_remove_chunks)
         router.register("rag_chat", self._rag_chat, async_mode=True)

@@ -92,12 +92,6 @@ async function loadFilePreview(path, fileName) {
         return;
     }
 
-    if (window.TiptapEditor && window.TiptapEditor.isActive) {
-        if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-            await window.TiptapEditorModule.hideEditorUI();
-        }
-    }
-
     if (window.mdEditor && window.mdEditor.isActive) {
         if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
             window.EditorModule.destroyCodeMirrorEditor();
@@ -137,28 +131,56 @@ async function loadFilePreview(path, fileName) {
             const fileType = result.type || 'markdown';
             const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
             const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
+            const isDocx = fileType === 'docx' || fileType === 'word'
+                || /\.docx?$/i.test(fileName);
             
             currentPreviewData = {
                 path: path,
                 name: fileName,
-                type: fileType,
-                content: result.content,
-                metadata: result.metadata,
+                type: isDocx ? 'docx' : fileType,
+                content: result.content || result.full_text || '',
+                contentKind: result.content_kind || 'text',
+                metadata: result.metadata || {
+                    type: isDocx ? 'Word 文档' : undefined,
+                    size: result.file_size,
+                },
                 pdfData: result
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
             
             if (isPdf) {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
                 showEditButton(false);
                 await loadPdfViewer(path, fileName, requestId);
+            } else if (isDocx) {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
+                showEditButton(false);
+                renderPreviewContent(currentPreviewData);
             } else if (isMarkdown) {
                 if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
                     try {
-                        const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                        let editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
                             result.content,
                             path
                         );
+
+                        if (!editorReady && window.TiptapEditor && window.TiptapEditor.whenModulesReady) {
+                            const modulesOk = await window.TiptapEditor.whenModulesReady(8000);
+                            if (modulesOk && requestId === currentLoadRequestId) {
+                                if (window.TiptapEditorModule.hideEditorUI) {
+                                    await window.TiptapEditorModule.hideEditorUI();
+                                }
+                                editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                                    result.content,
+                                    path
+                                );
+                            }
+                        }
                         
                         if (requestId !== currentLoadRequestId) {
                             if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
@@ -169,6 +191,7 @@ async function loadFilePreview(path, fileName) {
                         
                         if (!editorReady) {
                             showEditButton(false);
+                            console.warn('[Preview] WYSIWYG editor unavailable, showing read-only preview');
                             renderPreviewContent(currentPreviewData);
                         } else {
                             showEditButton(false);
@@ -179,10 +202,16 @@ async function loadFilePreview(path, fileName) {
                         renderPreviewContent(currentPreviewData);
                     }
                 } else {
+                    if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                        await window.TiptapEditorModule.hideEditorUI();
+                    }
                     showEditButton(false);
                     renderPreviewContent(currentPreviewData);
                 }
             } else {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
                 showEditButton(false);
                 renderPreviewContent(currentPreviewData);
             }
@@ -422,6 +451,8 @@ function renderPreviewContent(previewData) {
         } else {
             previewHtml += `<div class="preview-content"><pre>${escapeHtml(content)}</pre></div>`;
         }
+    } else if (type === 'docx' || type === 'word') {
+        previewHtml += renderDocxPreviewHtml(content, previewData.contentKind);
     } else if (type === 'image') {
         previewHtml += `
             <div class="preview-content" style="display: flex; justify-content: center; align-items: center; padding: 20px;">
@@ -443,6 +474,23 @@ function renderPreviewContent(previewData) {
             hljs.highlightElement(block);
         });
     }
+}
+
+function renderDocxPreviewHtml(content, contentKind) {
+    const body = content || '';
+    if (!body.trim()) {
+        return '<div class="preview-content docx-preview"><p class="docx-preview-empty">（文档无可见正文）</p></div>';
+    }
+    if (contentKind === 'html') {
+        const safe = typeof DOMPurify !== 'undefined'
+            ? DOMPurify.sanitize(body, { USE_PROFILES: { html: true } })
+            : escapeHtml(body);
+        return `<article class="preview-content docx-preview">${safe}</article>`;
+    }
+    if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
+        return `<div class="preview-content docx-preview">${window.EditorModule.renderMarkdownPreview(body)}</div>`;
+    }
+    return `<div class="preview-content docx-preview"><pre>${escapeHtml(body)}</pre></div>`;
 }
 
 function showPreviewError(title, message) {

@@ -21,6 +21,16 @@
     max-width: none;
 }
 
+.preview-panel.editor-active .preview-content-wrapper {
+    flex: 1;
+    min-height: 0;
+}
+
+.preview-panel.editor-active .tiptap-editor-container {
+    flex: 1;
+    min-height: 0;
+}
+
 .preview-resizer {
     width: 4px;
     height: 100%;
@@ -173,6 +183,65 @@
 
 .preview-content::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* Word / DOCX 排版预览（mammoth HTML） */
+.docx-preview {
+    max-width: 900px;
+    margin: 0 auto;
+    line-height: 1.75;
+    color: var(--text);
+    font-size: 15px;
+}
+
+.docx-preview h1,
+.docx-preview h2,
+.docx-preview h3,
+.docx-preview h4 {
+    margin: 1.2em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.docx-preview p {
+    margin: 0.65em 0;
+}
+
+.docx-preview ul,
+.docx-preview ol {
+    margin: 0.65em 0;
+    padding-left: 1.5em;
+}
+
+.docx-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 14px;
+}
+
+.docx-preview table th,
+.docx-preview table td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    vertical-align: top;
+}
+
+.docx-preview table th {
+    background: var(--bg-hover);
+    font-weight: 600;
+}
+
+.docx-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+.docx-preview-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 48px 16px;
 }
 
 .preview-content > *:not(.preview-file-info) {

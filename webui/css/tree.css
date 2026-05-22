@@ -1,10 +1,12 @@
 .file-tree-container {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 4px 0;
     user-select: none;
 }
+
 
 .tree-empty {
     padding: 32px 16px;

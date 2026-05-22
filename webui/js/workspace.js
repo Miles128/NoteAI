@@ -42,7 +42,15 @@ async function openWorkspace() {
         updateWorkspaceDisplay(result.workspace_path);
         updateStatus(result.message);
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
+            await window.TreeModule.loadFileTree(true);
+        }
+        if (window.SchemaWizard && window.SchemaWizard.maybePromptSchemaSetup) {
+            var prompted = await window.SchemaWizard.maybePromptSchemaSetup(result.needs_schema_setup);
+            if (!prompted && typeof window.runPostWorkspaceSetup === 'function') {
+                window.runPostWorkspaceSetup();
+            }
+        } else if (typeof window.runPostWorkspaceSetup === 'function') {
+            window.runPostWorkspaceSetup();
         }
     }
 }
@@ -101,10 +109,15 @@ async function checkWorkspaceStatus() {
         if (window.api) {
             const status = await window.api.getWorkspaceStatus();
             updateWorkspaceDisplay(status.is_set ? status.workspace_path : null);
-            if (status.is_set && window.api.ragRebuildIndex) {
-                window.api.ragRebuildIndex().catch(function() {});
-            }
             if (status.is_set) {
+                if (window.SchemaWizard && window.SchemaWizard.maybePromptSchemaSetup) {
+                    var prompted = await window.SchemaWizard.maybePromptSchemaSetup(status.needs_schema_setup);
+                    if (!prompted && typeof window.runPostWorkspaceSetup === 'function') {
+                        window.runPostWorkspaceSetup();
+                    }
+                } else if (typeof window.runPostWorkspaceSetup === 'function') {
+                    window.runPostWorkspaceSetup();
+                }
                 checkProjectRules();
             }
         } else {

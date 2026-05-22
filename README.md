@@ -1,220 +1,242 @@
-<img width="720" height="441" alt="image" src="https://github.com/user-attachments/assets/d36bc718-227e-468a-a6b0-45b1eae35ae3" />
+<img width="720" height="441" alt="NoteAI" src="https://github.com/user-attachments/assets/d36bc718-227e-468a-a6b0-45b1eae35ae3" />
 
 # NoteAI
 
-**AI 驱动的个人知识库 + AI 助手桌面应用** — 采集、整理、链接、检索、对话，让零散信息生长为结构化知识，让 AI 助手基于你的知识库回答问题。
+**AI 驱动的个人知识库桌面应用** — 采集资料、编译知识、发现关联，并用「小忆」助手基于你的工作区回答问题。
 
-[English](./README_EN.md)
+[English](./README_EN.md) · [📖 详细文档](./docs/README.md)
 
-灵感源自 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)：不是每次提问都从原始文档重新检索，而是让 LLM 把零散资料"编译"成持续增值的结构化知识库。
+---
 
-## 核心理念
+## 💡 它解决什么问题
+
+灵感来自 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)：
 
 > **Stop re-deriving, start compiling.**
 
-传统 RAG 每次提问都从原始文档临时翻找、拼凑答案，没有积累。NoteAI 在原始资料和最终答案之间插入一个"编译层"——由 AI 主动维护的结构化 Markdown 知识库。知识编译一次，持续增值，而不是每次重新推导。
+普通 RAG 每次提问都从原始笔记临时检索、临时拼凑。NoteAI 在中间加一层 **由 AI 维护的结构化知识（wiki 综述、索引、双链）**，让信息「编译一次、持续增值」；同时内置 **RAG 对话助手**，回答时优先引用你自己的资料。
 
-同时，NoteAI 将个人知识库与 AI 助手深度融合：助手不仅拥有通用知识，还能基于你的知识库回答问题、提供洞察，并具备短期和长期记忆，真正成为"懂你的"个人助理。
+---
 
-## 功能全景
+## ✨ 亮点
 
-### 📥 采集
+- 🖥️ **桌面原生**：Tauri v2 + Python sidecar，本地工作区，数据在你手里
+- ✍️ **所见即所得**：Markdown 用 Tiptap 直接排版编辑；PDF / DOCX 可在应用内预览
+- 🔄 **自动转笔记**：工作区内 PDF / DOCX / PPTX 等会在启动与文件变更后自动转为 Markdown（无需每次手动点转换）
+- 🕸️ **知识图谱**：主题、标签、双向链接力导向可视化
+- 💬 **可对话**：HyDE + 混合检索 + 重排序，流式问答，带短期/长期记忆
+- 📥 **可扩展采集**：网页下载、手动批量转换、自动主题/标签
 
-| 功能 | 说明 |
-|------|------|
-| 网页文章下载 | 批量 URL 输入，自动提取正文转 Markdown；针对微信公众号、知乎等平台优化 |
-| 多格式转换 | PDF / DOCX / PPTX / HTML / TXT → Markdown；启动时自动转换待处理文件 |
-| AI 辅助排版 | LLM 智能格式化，清理乱码，规范化标题与列表 |
+---
 
-### 🗂️ 整理
+## 🚀 快速开始
 
-| 功能 | 说明 |
-|------|------|
-| 多级主题 | 主题支持无限层级（用 `/` 分隔路径），侧边栏树形展示，面包屑导航 |
-| 标签系统 | jieba 分词 + 词频统计自动打标签；YAML front matter 管理 |
-| 笔记整合 | 按主题拼接文件 → LLM 生成整合笔记 → 保存到 Organized 目录 |
-| AI 主题分析 | LLM 审视现有主题结构，给出新建/调整/合并建议 |
-
-### 🔗 链接
-
-| 功能 | 说明 |
-|------|------|
-| 双向链接发现 | 本地粗筛（同主题/共享标签/文件名重叠）→ AI 精判内容相关性 |
-| 关系图可视化 | 文件-主题-标签-双链的完整图结构，Canvas 力导向布局 |
-| WIKI.md 索引 | 自动生成并维护多级主题目录、文件大纲、来源列表 |
-
-### ✍️ 编辑
-
-| 功能 | 说明 |
-|------|------|
-| Markdown 编辑器 | Tiptap 富文本 Markdown 编辑，支持自动保存与基础格式工具栏 |
-| 实时预览 | marked.js + highlight.js 渲染，编辑/预览双栏模式 |
-| AI 改写 | 选中内容 → LLM 流式改写 → 预览对比 → 决定是否应用 |
-| 主题综述 | 针对指定主题，LLM 撰写综述文章 |
-
-### 🤖 AI 助手（RAG）
-
-| 功能 | 说明 |
-|------|------|
-| 知识库问答 | 基于工作区知识库的 RAG 检索增强生成，回答有据可依 |
-| HyDE 查询优化 | 假设性文档嵌入，先让 LLM 生成假设性答案再检索，提升召回率 |
-| Flashrank 重排序 | 本地重排序模型对检索结果二次排序，提升精度 |
-| 父子文档检索 | 检索到子片段后自动展开到父文档，提供完整上下文 |
-| 短期记忆 | 会话内对话摘要，保持上下文连贯 |
-| 长期记忆 | 自动提取用户自我描述信息，跨会话持久化（≤1500字，超限自动压缩） |
-| 人格化助手 | "小忆"——贴心个人助理，言简意赅切中要害且温柔可亲 |
-| 可调面板 | 助手面板可展开/折叠，宽度可左右拖拽调整 |
-
-### 🔍 搜索与浏览
-
-| 功能 | 说明 |
-|------|------|
-| 全文搜索 | 工作区内大小写不敏感搜索，返回匹配文件、标题、上下文片段 |
-| 侧边栏视图 | 文件树 / 主题 / 标签 / 双向链接 四视图切换 |
-| 文件预览 | Markdown、TXT、PDF（逐页渲染）、Word 文档 |
-
-## 架构
-
-```
-┌─────────────────────────────────────────────┐
-│                  Tauri v2 壳                  │
-│  ┌─────────────────────────────────────────┐ │
-│  │          前端 (HTML/CSS/JS)              │ │
-│  │  sidebar · editor · preview · graph     │ │
-│  │  assistant (RAG对话面板)                 │ │
-│  └──────────────┬──────────────────────────┘ │
-│                 │ window.api (JSON-RPC)       │
-│  ┌──────────────▼──────────────────────────┐ │
-│  │        Python Sidecar (stdin/stdout)     │ │
-│  │  ┌─────────────────────────────────┐    │ │
-│  │  │  SidecarServer (10 Mixins)      │    │ │
-│  │  │  Config · Workspace · Transfer  │    │ │
-│  │  │  Files · Tags · Topics · Links  │    │ │
-│  │  │  Intel · Paths · RAG            │    │ │
-│  │  └─────────────────────────────────┘    │ │
-│  │  rag/ · modules/ · utils/ · prompts/    │ │
-│  └─────────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
-```
-
-**RAG 检索流水线**：
-
-```
-用户提问 → HyDE 假设性答案生成
-         → Milvus Lite 混合检索 (dense + sparse, bge-small-zh-v1.5)
-         → 主题/标签过滤
-         → FlagReranker 重排序 (bge-reranker-v2-m3)
-         → MMR 去重
-         → LLM 生成回答（流式输出）
-```
-
-**三层知识架构**（对齐 Karpathy LLM Wiki）：
-
-```
-工作区/
-├── Notes/               ← Raw 层：原始 Markdown（不可变，来源真相）
-├── Organized/           ← Wiki 层：AI 编译的结构化知识（LLM 拥有，持续更新）
-├── Raw/                 ← 原始文件归档（PDF/DOCX/PPTX）
-├── WIKI.md              ← 全局索引（多级主题目录 + 文件大纲）
-├── tags.md              ← 标签索引（按标签聚合的双链索引）
-└── .links.json          ← 双向链接数据（pending / confirmed）
-```
-
-## 技术栈
-
-| 类别 | 技术 |
-|------|------|
-| 桌面壳 | Tauri v2 + Rust |
-| 前端 | HTML5 / CSS3 / JS，marked.js，highlight.js，PDF.js，Tiptap |
-| 后端 | Python 3.10+，LangChain + LangChain-OpenAI |
-| RAG | Milvus Lite，fastembed (BAAI/bge-small-zh-v1.5)，FlagEmbedding (BAAI/bge-reranker-v2-m3) |
-| 文档解析 | PyMuPDF, mammoth, python-docx, html2text, readability-lxml |
-| NLP | jieba 分词 |
-| 文件监听 | watchdog |
-| 依赖管理 | uv + pyproject.toml |
-
-## 快速开始
-
-### 环境要求
-
-- **Python 3.10+**
-- **Rust** 与 [Tauri CLI v2](https://v2.tauri.app/)
-- 推荐使用 [uv](https://docs.astral.sh/uv/) 管理依赖
-
-### 安装
+**环境**：Python 3.10+、Rust、[Tauri CLI v2](https://v2.tauri.app/)，推荐 [uv](https://docs.astral.sh/uv/)
 
 ```bash
+git clone https://github.com/Miles128/NoteAI.git
 cd NoteAI
-uv venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
 uv sync
-```
-
-### 运行
-
-```bash
 python run.py
 ```
 
-会检查依赖后执行 `cargo tauri dev`，同时启动 Python sidecar 子进程。
+`run.py` 会检查依赖并启动 `cargo tauri dev`（同时拉起 Python sidecar）。首次构建会执行 `npm run build:tiptap` 打包编辑器资源。
 
-## 目录结构
+1. 📂 在应用中 **打开工作区**（任意文件夹）
+2. ⚙️ 在 **设置** 中配置 LLM API Key（支持 OpenAI 兼容接口）
+3. 📄 将 PDF / DOCX 等放入工作区（**不要只放在 `Raw/` 根目录里指望自动转**，见下方说明），或走「导入文件」
+4. 🤖 从侧栏浏览笔记，打开 **小忆助手** 开始对话
+
+---
+
+## 🧩 功能概览
+
+### 📥 采集与导入
+
+| 功能 | 说明 |
+|------|------|
+| 🌐 网页下载 | 批量 URL → Markdown，针对公众号、知乎等优化 |
+| 📄 格式转换 | PDF / DOCX / PPTX / HTML / TXT → Markdown；「转换」页可选手动批量 |
+| 🔄 **自动转换** | 打开工作区后、以及监听到文件变更（约 3s 防抖）时，自动扫描并转换支持的格式 → 生成 `Notes/` 下 Markdown，原文件归档到 `Raw/` |
+| 📥 导入文件 | 选择文件 → 复制到 `Raw/` → 后台立即 `convert_batch`，无需再点转换按钮 |
+| ✨ AI 排版 | 可选 LLM 清理版式、标题与列表 |
+
+**自动转换范围（实现说明）**
+
+- 扫描整个工作区中支持的后缀（与 `FileConverterManager` 一致）
+- **跳过** 路径已在 `Raw/` 下的文件（避免对归档重复处理）
+- 因此：新文件请放在工作区根目录、`Notes/` 外层级等；若只拷贝进 `Raw/` 且未走「导入」，需用「转换」页或挪出 `Raw/` 后再触发自动转换
+
+### 🗂️ 整理与索引
+
+| 功能 | 说明 |
+|------|------|
+| 📁 三级主题 | `一级 > 二级 > 三级`，对应 `Notes/` 目录与 frontmatter |
+| 🏷️ 标签 | jieba 分词 + 词频自动打标 |
+| 🧠 主题建议 | LLM 分析现有结构，建议新建/合并主题 |
+| 📚 WIKI 索引 | 自动维护 `wiki/WIKI.md` 与主题综述 |
+
+### 🔗 链接与图谱
+
+| 功能 | 说明 |
+|------|------|
+| ↔️ 双向链接 | 本地粗筛 + AI 精判，待确认/已确认状态 |
+| 🕸️ 关系图谱 | 笔记、主题、标签、链接的力导向图 |
+| 🔍 全文搜索 | 工作区内标题与正文检索 |
+
+### ✍️ 阅读与编辑
+
+| 功能 | 说明 |
+|------|------|
+| 📝 Markdown | Tiptap 所见即所得编辑，自动保存 |
+| 👁️ 预览 | PDF 分页浏览；DOCX 排版预览（mammoth，只读） |
+| 🪄 AI 改写 | 流式改写选中内容，对比后应用 |
+| 📑 主题综述 | 按主题生成/更新 `wiki/*_综述.md` |
+
+### 🤖 小忆助手（RAG）
+
+| 功能 | 说明 |
+|------|------|
+| 💡 知识库问答 | 基于当前工作区向量索引 |
+| 🔎 检索链路 | HyDE → Milvus Lite 混合检索 → FlagReranker → MMR → LLM 流式输出 |
+| 🧠 记忆 | 会话摘要 + 跨会话用户画像（`NoteAI/profile.md`） |
+
+### ☁️ 云盘同步（实验性）
+
+支持将工作区同步到多种云存储（如 WebDAV / 坚果云、阿里云、腾讯云、OneDrive、百度网盘等），在 **设置 → 云盘同步** 中配置。
+
+---
+
+## 📂 工作区结构
+
+```
+<你的工作区>/
+├── Notes/          # 原始笔记（Markdown，按主题分文件夹）
+├── wiki/           # AI 编译层：综述、WIKI.md 索引
+├── Raw/            # 原始文件归档（PDF、DOCX、PPTX…）
+└── NoteAI/         # 工作区运行时数据
+    ├── GUIDE.md    # 主题归类规则
+    ├── memory/     # RAG 对话记忆
+    ├── logs/
+    └── rag_index/  # 向量索引
+```
+
+项目根目录另有 **L1 用户画像**：`NoteAI/profile.md`（跨工作区共享）。
+
+---
+
+## 🏗️ 架构
+
+```
+┌──────────────────────────────────────────────┐
+│  Tauri v2（Rust）                               │
+│  ┌────────────────────────────────────────┐  │
+│  │  webui/  侧栏 · 编辑器 · 预览 · 图谱 · 助手 │  │
+│  └──────────────────┬─────────────────────┘  │
+│                     │ invoke → JSON-RPC       │
+│  ┌──────────────────▼─────────────────────┐  │
+│  │  Python sidecar（stdin/stdout）           │  │
+│  │  Handlers: 工作区 · 文件 · 主题 · 标签 · 链接  │  │
+│  │           · RAG · 云同步 · 配置 …          │  │
+│  │  rag/: 分块 · 嵌入 · Milvus · 检索 · 记忆   │  │
+│  └──────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
+```
+
+**⚡ RAG 流水线（简述）**
+
+```
+提问 → HyDE 查询扩展 → 稠密+稀疏混合检索 (bge-small-zh)
+     → 主题/标签过滤 → bge-reranker 重排 → MMR 去重 → LLM 流式回答
+```
+
+---
+
+## 🛠️ 技术栈
+
+| 类别 | 技术 |
+|------|------|
+| 🦀 桌面壳 | Tauri v2、Rust |
+| 🎨 前端 | 原生 HTML/CSS/JS、Tiptap、marked.js、PDF.js、D3 |
+| 🐍 后端 | Python 3.10+ sidecar、LangChain |
+| 🧬 RAG | Milvus Lite、fastembed、FlagEmbedding |
+| 📑 文档 | PyMuPDF、mammoth、python-docx、html2text |
+| 🇨🇳 中文 NLP | jieba |
+| 📦 依赖 | uv、`pyproject.toml` |
+
+---
+
+## 📁 项目结构
 
 ```
 NoteAI/
-├── run.py                  # 启动器
-├── src-tauri/              # Tauri 壳（Rust）
-├── webui/                  # 前端静态资源
-│   ├── index.html
-│   ├── css/                # variables · layout · components · tree · editor · preview
-│   └── js/                 # state · sidebar · tree · topic · tags · links · graph
-│                          # editor · assistant · preview · search · settings · ...
-├── python/
-│   ├── main.py             # sidecar 进程入口
-│   └── sidecar/            # RPC 路由 + 10 个 Mixin 业务模块
-│       ├── mixins/         # Config · Workspace · Transfer · Files · Tags
-│       │                   # Topics · Links · Intel · Paths · RAG
-│       └── rag/            # chunker · embedder · index · retriever · memory · web_search
-├── modules/                # 业务模块（下载 · 转换 · 整合 · 预览 · 主题提取）
-├── utils/                  # 工具库（LLM · 标签 · 链接 · 文本处理 · 日志）
-├── prompts/                # LLM 提示词（独立管理，业务代码 import 使用）
-├── config/                 # 配置（settings.py + config.json）
-└── tests/                  # 测试
+├── run.py              # 开发启动入口（≠ python/main.py sidecar）
+├── src-tauri/          # Tauri 应用
+├── webui/              # 前端静态资源
+├── python/sidecar/     # RPC 服务与业务 handlers
+├── modules/            # 下载、转换、预览、整合等
+├── utils/              # LLM、主题、链接、日志
+├── prompts/            # 提示词
+├── config/             # 配置
+└── tests/
 ```
 
-## 下一步计划
+---
 
-### 🔥 级联更新（Cascade Updates）
-
-新资料进入知识库时，不只创建新页面，还要主动找到并更新所有受影响的已有页面。一篇新论文触发 5 个已有页面的更新——这是 LLM Wiki 的灵魂，没有它知识库就是"只加不改"的死水。
-
-### 🔥 矛盾检测（Contradiction Detection）
-
-Ingest 新资料时，让 LLM 比对新内容与已有 wiki 内容，主动标注冲突。两篇文章说法打架，帮你发现。
-
-### 🔥 Lint 自检
-
-手动触发知识库体检：找矛盾、找过时论断、找断链（相关但未互链的文章）、找空白（被多次引用但没有独立页面的概念）。
-
-### 🟡 操作日志
-
-维护 `wiki/log.md`，记录每次 Ingest/Lint/级联更新的变更内容，追溯知识库的演变历史。
-
-### 🟡 主题拖拽排序
-
-侧边栏主题树支持拖拽调整顺序和层级，拖拽子主题到另一个父主题下自动更新路径前缀。
-
-## 测试
+## 🧪 开发与测试
 
 ```bash
 uv sync --extra dev
 pytest
 ```
 
-## 作者
+更细的 API、配置与使用说明见 [docs/README.md](./docs/README.md)。
 
-四海
+---
 
-## 许可证
+## 🗺️ 路线图
 
-MIT
+与 [docs/PRD.md](./docs/PRD.md) 对齐，目标是从「批处理工具」升级为 **持续维护的知识编译器**。
+
+### 🔥 产品闭环（P0）
+
+| 方向 | 说明 |
+|------|------|
+| 级联更新 | 新资料入库后，自动刷新受影响的 `wiki/*_综述.md` 与 WIKI 条目 |
+| Ingest 进度 | 转换、分类、索引、综述生成统一任务条（可取消、可重试） |
+| Query → Archive | 小忆助手优质回答一键存为 wiki 页或追加综述 |
+| Lint 首版 | 断链、孤儿页、源已改但综述未更新 |
+| schema.md | 工作区顶层约定：frontmatter、AI 何时可改 wiki、冲突处理 |
+
+### 🟡 体验与智能（P1）
+
+| 方向 | 说明 |
+|------|------|
+| 保存时交叉引用 | 保存 Markdown 后异步建议双向链接（接入现有 pending 流程） |
+| 搜索增强 | 结果跳转预览、命中高亮；按主题/标签过滤 |
+| WIKI 摘要索引 | WIKI.md 每主题一行摘要，而不只是文件列表 |
+| 转换可感知 | 自动转换进度/失败原因进收件箱；`Raw/` 内遗留文件支持「重新转换」 |
+| 云盘同步 | 正式产品化或暂时隐藏入口 |
+| 检索扩展 | RAG 自动附带已确认反链与主题 `*_综述.md`（非 Graph RAG 全量建图） |
+
+### 🎨 界面与工程（P1）
+
+| 方向 | 说明 |
+|------|------|
+| 主区域状态机 | 统一 home / 图谱 / 预览 / 待办 / 设置，避免多处改 `display` 互相遮挡 |
+| 侧栏底栏 | 折叠、字号缩放下 dock 区始终可见；统计可点击跳转 |
+| 小忆助手 | 回答附可点击引用片段；「存入库」主按钮；宽度持久化 |
+| 统一收件箱 | 待分类、待确认链接、转换失败、Lint 项合并展示 |
+| 首次引导 | 工作区 → API Key → 示例笔记三步 |
+
+### 🟢 后续（P2）
+
+- 矛盾检测、过时论断、标准化 `log.md`
+- 图谱与编辑并存（选中文档时图谱不独占主区）
+- 前端 Vite 打包 + TypeScript（**不急于**整仓换 React/Vue）
+
+---
+
+## 👤 作者与许可
+
+**四海** · [MIT License](./LICENSE)

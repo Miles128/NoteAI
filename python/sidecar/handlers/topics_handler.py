@@ -19,13 +19,12 @@ from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
 from sidecar.wiki_utils import resolve_wiki_path
 from utils.activity_log import get_entries
-from utils.link_indexer import cleanup_stale_links, get_backlinks
+from utils.link_indexer import load_links
 from utils.logger import logger
 from utils.topic_assigner import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
     auto_assign_topic_for_file,
-    cleanup_stale_pending,
     load_pending,
     move_file_to_notes_topic_folder,
     save_pending,
@@ -35,6 +34,7 @@ from utils.topic_assigner import (
 from utils.topic_assigner import (
     create_topic as wiki_create_topic,
 )
+from utils.topic_manager import TopicManager
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
@@ -435,18 +435,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": str(e)}
 
     def _do_cascade_survey_update(self, topic):
-        try:
-            ensure_topic_folder(topic)
-            notes = collect_topic_notes(topic)
-            if notes:
-                survey_path = get_survey_path(topic)
-                if survey_path and survey_path.exists():
-                    update_existing_survey(topic, notes)
-                else:
-                    generate_new_survey(topic, notes)
-                append_changelog(f"自动更新主题综述: {topic}")
-        except Exception as e:
-            sys.stderr.write(f"[topics_handler] cascade survey update failed: {e}\n")
+        from sidecar.cascade_runner import run_cascade_survey_update
+
+        run_cascade_survey_update(topic, send_response=self._send_response)
 
     def _do_file_added_cascade(self, file_path: Path):
         try:
@@ -459,8 +450,13 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             sys.stderr.write(f"[topics_handler] file_added_cascade error: {e}\n")
 
     def _get_all_pending(self, _params):
-        cleanup_stale_pending()
-        cleanup_stale_links()
+        workspace = config.workspace_path
+        topic_options: list[str] = []
+        if workspace:
+            try:
+                topic_options = TopicManager.collect_topic_labels(workspace)
+            except Exception:
+                topic_options = []
 
         pending_topics = load_pending()
         items = []
@@ -474,8 +470,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             })
 
         try:
-            links_data = get_backlinks("")
-            for link in links_data.get("links", []):
+            for link in load_links().get("links", []):
                 if link.get("status") == "pending":
                     items.append({
                         "type": "link",
@@ -486,7 +481,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception:
             pass
 
-        return {"items": items, "count": len(items)}
+        return {"items": items, "count": len(items), "topic_options": topic_options}
 
     def _resolve_topic(self, params):
         file_path = params.get("file_path", "")

@@ -309,6 +309,7 @@
     flex-direction: column;
     flex: 1;
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
     background: var(--surface);
 }
@@ -407,8 +408,69 @@
 
 .tiptap-editor-content {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
-    padding: 20px;
+    padding: 20px 20px calc(80px * var(--font-scale, 1));
+    scroll-padding-bottom: calc(80px * var(--font-scale, 1));
+}
+
+.tiptap-editor-content.tiptap-fallback-mode {
+    overflow: hidden;
+}
+
+#frontmatter-panel {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+    background: var(--background-secondary);
+}
+
+.frontmatter-details {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.frontmatter-summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 8px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    user-select: none;
+}
+
+.frontmatter-summary::-webkit-details-marker {
+    display: none;
+}
+
+.frontmatter-summary::before {
+    content: '▸';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.15s ease;
+}
+
+.frontmatter-details[open] .frontmatter-summary::before {
+    transform: rotate(90deg);
+}
+
+.frontmatter-textarea {
+    width: 100%;
+    min-height: 120px;
+    max-height: 240px;
+    resize: vertical;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    font: 12px/1.6 'Iosevka Web', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    outline: none;
+}
+
+.frontmatter-textarea:focus {
+    border-color: var(--primary);
 }
 
 .tiptap-prose {
@@ -419,6 +481,41 @@
     line-height: 1.8;
     color: var(--text);
     outline: none;
+    padding-bottom: calc(80px * var(--font-scale, 1));
+}
+
+.tiptap-deferred-mount {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 24px calc(80px * var(--font-scale, 1));
+    color: var(--text-muted);
+    font-size: 14px;
+    text-align: center;
+    user-select: none;
+}
+
+/*
+ * Large-document rendering: hint off-screen block layout skip (not full virtual DOM —
+ * TipTap still owns full doc state; this trims browser layout/paint cost while scrolling).
+ */
+.tiptap-prose.tiptap-prose-large > p,
+.tiptap-prose.tiptap-prose-large > h1,
+.tiptap-prose.tiptap-prose-large > h2,
+.tiptap-prose.tiptap-prose-large > h3,
+.tiptap-prose.tiptap-prose-large > h4,
+.tiptap-prose.tiptap-prose-large > h5,
+.tiptap-prose.tiptap-prose-large > h6,
+.tiptap-prose.tiptap-prose-large > blockquote,
+.tiptap-prose.tiptap-prose-large > pre {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 3rem;
+}
+
+.tiptap-prose.tiptap-prose-large > ul,
+.tiptap-prose.tiptap-prose-large > ol,
+.tiptap-prose.tiptap-prose-large > table,
+.tiptap-prose.tiptap-prose-large > hr {
+    content-visibility: visible;
 }
 
 .tiptap-prose > *:first-child {

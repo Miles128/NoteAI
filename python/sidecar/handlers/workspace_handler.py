@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 from config import config, is_ignored_dir
+from config.constants import ABSTRACT_FOLDER, NOTES_FOLDER, RAW_FOLDER
 from config.settings import workspace_manager
 from sidecar.handlers.base import BaseHandler
 
@@ -15,7 +16,16 @@ FILE_TREE_IGNORED_DIRS = {
     "dist",
     "build",
     ".tauri",
+    ".noteai",
+    ".NoteAI",
+    "Clippings",
+    "rag_index",
+    ".rag_index",
+    ".ai_memory",
+    ".obsidian",
 }
+ALLOWED_ROOT_DIRS = {NOTES_FOLDER, RAW_FOLDER, ABSTRACT_FOLDER}
+PINNED_ROOT_FILES = ("schema.md",)
 
 
 class WorkspaceHandler(BaseHandler):
@@ -39,13 +49,16 @@ class WorkspaceHandler(BaseHandler):
                 self.config.setup_workspace_folders()
                 self._server._setup_watcher(path)
         if path and Path(path).exists():
+            from sidecar.schema_manager import ensure_schema, needs_schema_setup
+            ensure_schema(path)
             self.file_previewer.workspace_path = path
             return {
                 "is_set": True,
                 "workspace_path": path,
-                "notes_folder": str(Path(path) / "Notes"),
-                "organized_folder": str(Path(path) / config.ABSTRACT_FOLDER),
+                "notes_folder": str(Path(path) / NOTES_FOLDER),
+                "organized_folder": str(Path(path) / ABSTRACT_FOLDER),
                 "saved_workspace": True,
+                "needs_schema_setup": needs_schema_setup(path),
             }
         return {"is_set": False, "saved_workspace": False}
 
@@ -72,59 +85,133 @@ class WorkspaceHandler(BaseHandler):
             save_ok, save_msg = self.config.save()
             if not save_ok:
                 return {"success": False, "message": save_msg}
+            from sidecar.schema_manager import ensure_schema
+            ensure_schema(path)
             self.file_previewer.workspace_path = path
             self._server._setup_watcher(path)
             self._server._invalidate_cache()
             workspace_manager.save_workspace(path)
-            return {"success": True, "message": "工作区已设置", "workspace_path": path}
+            from sidecar.schema_manager import needs_schema_setup
+            return {
+                "success": True,
+                "message": "工作区已设置",
+                "workspace_path": path,
+                "needs_schema_setup": needs_schema_setup(path),
+            }
         return {"success": False, "message": "路径无效"}
 
     def _get_workspace_tree(self, _params):
-        return self._cached_or_compute("workspace_tree", self._compute_workspace_tree)
+        return self._compute_workspace_tree()
 
     def _compute_workspace_tree(self):
         workspace = self.config.workspace_path
         if not workspace:
             return []
 
-        def _build_tree(path, prefix=""):
-            items = []
-            try:
-                entries = sorted(Path(path).iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-                for entry in entries:
-                    if entry.name.startswith('.'):
+        ws = Path(workspace)
+        items = []
+        pinned: list[dict] = []
+        root_files: list[dict] = []
+
+        try:
+            for entry in sorted(ws.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                if entry.name.startswith('.'):
+                    continue
+                if entry.is_dir():
+                    if entry.name not in ALLOWED_ROOT_DIRS:
                         continue
-                    if entry.is_dir() and (
-                        entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name)
-                    ):
-                        continue
-                    rel = str(entry.relative_to(workspace))
-                    if entry.is_dir():
-                        children = _build_tree(str(entry), rel)
-                        if children:
-                            items.append({
-                                "name": entry.name,
-                                "path": rel,
-                                "type": "folder",
-                                "children": children,
-                            })
+                    if entry.name == ABSTRACT_FOLDER:
+                        children = self._build_flat_tree(entry, ws)
                     else:
-                        if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
-                            continue
-                        stat = entry.stat()
+                        children = self._build_recursive_tree(entry, ws)
+                    items.append({
+                        "name": entry.name,
+                        "path": str(entry.relative_to(ws)),
+                        "type": "folder",
+                        "children": children,
+                    })
+                else:
+                    if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                        continue
+                    stat = entry.stat()
+                    node = {
+                        "name": entry.name,
+                        "path": str(entry.relative_to(ws)),
+                        "type": "file",
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                    }
+                    if entry.name.lower() in PINNED_ROOT_FILES:
+                        pinned.append(node)
+                    else:
+                        root_files.append(node)
+        except PermissionError as e:
+            sys.stderr.write(f"[workspace_handler] building workspace tree: {e}\n")
+            sys.stderr.flush()
+
+        return pinned + items + root_files
+
+    def _build_flat_tree(self, dir_path: Path, workspace: Path):
+        items = []
+        try:
+            for entry in sorted(dir_path.rglob("*"), key=lambda p: p.name.lower()):
+                if entry.name.startswith('.'):
+                    continue
+                if entry.is_dir():
+                    continue
+                if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                    continue
+                if not entry.exists():
+                    continue
+                rel = str(entry.relative_to(workspace))
+                stat = entry.stat()
+                items.append({
+                    "name": entry.name,
+                    "path": rel,
+                    "type": "file",
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                })
+        except PermissionError as e:
+            sys.stderr.write(f"[workspace_handler] building flat tree: {e}\n")
+            sys.stderr.flush()
+        return items
+
+    def _build_recursive_tree(self, dir_path: Path, workspace: Path):
+        items = []
+        try:
+            for entry in sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                if entry.name.startswith('.'):
+                    continue
+                rel = str(entry.relative_to(workspace))
+                if entry.is_dir():
+                    if entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name):
+                        continue
+                    children = self._build_recursive_tree(entry, workspace)
+                    if children:
                         items.append({
                             "name": entry.name,
                             "path": rel,
-                            "type": "file",
-                            "size": stat.st_size,
-                            "modified": stat.st_mtime,
+                            "type": "folder",
+                            "children": children,
                         })
-            except PermissionError as e:
-                sys.stderr.write(f"[workspace_handler] building workspace tree: {e}\n")
-                sys.stderr.flush()
-            return items
-
-        return _build_tree(workspace)
+                else:
+                    if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                        continue
+                    if not entry.exists():
+                        continue
+                    stat = entry.stat()
+                    items.append({
+                        "name": entry.name,
+                        "path": rel,
+                        "type": "file",
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                    })
+        except PermissionError as e:
+            sys.stderr.write(f"[workspace_handler] building recursive tree: {e}\n")
+            sys.stderr.flush()
+        return items
 
     def _on_file_selected(self, params):
         path = params.get("path", "")

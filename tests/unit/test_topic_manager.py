@@ -51,10 +51,12 @@ class TestParseTopicHierarchy:
         result = TopicManager.parse_topic_hierarchy({})
         assert result == []
 
-    def test_unknown_level1_rejected(self):
-        fm = {"topic": ["不存在的标题"]}
+    def test_any_level1_accepted(self):
+        fm = {"topic": ["任意标题"]}
         result = TopicManager.parse_topic_hierarchy(fm)
-        assert len(result) == 0  # 未知一级标题不会被添加
+        assert len(result) == 1
+        assert result[0]["name"] == "任意标题"
+        assert result[0]["level"] == 1
 
 
 class TestBuildTopicTree:
@@ -231,16 +233,10 @@ class TestAbstractControl:
 
 
 class TestLevel1Topics:
-    """验证预定义 6 个一级标题"""
+    """验证一级标题不再硬编码，由文件系统决定"""
 
-    def test_four_predefined(self):
-        assert len(LEVEL1_TOPICS) == 4
-
-    def test_specific_topics(self):
-        assert "普通人的AI指南" in LEVEL1_TOPICS
-        assert "AI应用开发教程" in LEVEL1_TOPICS
-        assert "AI产品经理之路" in LEVEL1_TOPICS
-        assert "AI使用技巧和信息" in LEVEL1_TOPICS
+    def test_level1_topics_is_empty(self):
+        assert len(LEVEL1_TOPICS) == 0
 
     def test_max_level_is_three(self):
         assert MAX_LEVEL == 3

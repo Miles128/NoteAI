@@ -1,6 +1,8 @@
 """Lightweight JSON-RPC router for noteai sidecar. Supports sync and async handlers."""
 
-import threading
+import sys
+import traceback
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
 from typing import Any
 
@@ -14,11 +16,12 @@ class RpcHandler:
 
 
 class RpcRouter:
-    """Registers RPC method handlers and dispatches incoming requests."""
+    _MAX_WORKERS = 8
 
     def __init__(self, send_response: Callable[[dict], None] | None = None):
         self._handlers: dict[str, RpcHandler] = {}
         self.send_response = send_response
+        self._executor = ThreadPoolExecutor(max_workers=self._MAX_WORKERS)
 
     def register(self, method: str, handler: Callable, *, async_mode: bool = False) -> None:
         self._handlers[method] = RpcHandler(handler, async_mode=async_mode)
@@ -41,14 +44,12 @@ class RpcRouter:
                 except Exception as e:
                     self._send_error(req_id, str(e))
 
-            threading.Thread(target=_run, daemon=True).start()
+            self._executor.submit(_run)
         else:
             try:
                 result = handler.fn(params)
                 self._send_ok(req_id, result)
             except Exception as e:
-                import sys
-                import traceback
                 sys.stderr.write(f"[ERROR] {method}: {e}\n")
                 sys.stderr.write(traceback.format_exc())
                 sys.stderr.flush()

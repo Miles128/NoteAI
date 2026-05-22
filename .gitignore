@@ -32,6 +32,7 @@ node_modules/
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
@@ -49,13 +50,20 @@ Thumbs.db
 logs/
 *.log
 
+# Test / type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
 # Local config
 local_config.py
 config.local.py
 .env
 .env.local
 
-# Project config (contains local paths)
+# Project config (contains local paths) — copy from config.json.example
 config/config.json
 
 # Trae IDE
@@ -72,3 +80,10 @@ webui/lib/*
 
 # Tauri
 src-tauri/target/
+
+# AI-generated wiki content (per-workspace wiki/ is inside workspace, not repo root)
+wiki/
+
+# Workspace runtime artifacts (when created inside repo during dev)
+**/rag_index/
+.milvus/

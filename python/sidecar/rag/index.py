@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 from pymilvus import DataType, MilvusClient
@@ -8,6 +9,7 @@ from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
+_load_lock = threading.Lock()
 
 
 def _db_path(workspace: str) -> str:
@@ -26,6 +28,22 @@ def _get_client(workspace: str) -> MilvusClient:
 
 def _collection_exists(client: MilvusClient) -> bool:
     return client.has_collection(_COLLECTION_NAME)
+
+
+def _ensure_collection_loaded(_workspace: str, client: MilvusClient) -> bool:
+    """Milvus Lite keeps collections 'released' until load(); required before search/query."""
+    if not _collection_exists(client):
+        return False
+    with _load_lock:
+        try:
+            client.load_collection(collection_name=_COLLECTION_NAME)
+            return True
+        except Exception as e:
+            err = str(e).lower()
+            if "already" in err or "loaded" in err:
+                return True
+            logger.warning(f"[rag/index] load_collection failed: {e}\n")
+            return False
 
 
 def _create_collection(client: MilvusClient):
@@ -100,6 +118,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
             progress_callback(min(i + batch_size, total), total, "写入索引")
 
     _save_sparse_index(workspace, chunks, embeddings)
+    _ensure_collection_loaded(workspace, client)
 
     return {"success": True, "chunk_count": total}
 
@@ -143,7 +162,7 @@ def hybrid_search(
 ) -> list[dict]:
     client = _get_client(workspace)
 
-    if not _collection_exists(client):
+    if not _ensure_collection_loaded(workspace, client):
         return []
 
     filter_expr = None
@@ -213,30 +232,51 @@ def hybrid_search(
 
     for chunk_id, sparse_score in sparse_scores.items():
         if chunk_id not in results_map and sparse_score > 0.3:
-            results_map[chunk_id] = {
-                "id": chunk_id,
-                "content": "",
-                "file_path": "",
-                "topic": "",
-                "tags": [],
-                "section_title": "",
-                "dense_score": 0.0,
-                "sparse_score": float(sparse_score),
-                "score": float(0.3 * sparse_score),
-            }
+            try:
+                lookup = client.query(
+                    collection_name=_COLLECTION_NAME,
+                    filter=f'id == "{chunk_id}"',
+                    output_fields=["content", "file_path", "topic", "tags", "section_title"],
+                    limit=1,
+                )
+                if lookup:
+                    hit = lookup[0]
+                    tags_val = hit.get("tags", "[]")
+                    try:
+                        tags_list = json.loads(tags_val) if isinstance(tags_val, str) else tags_val
+                    except Exception:
+                        tags_list = []
+                    results_map[chunk_id] = {
+                        "id": chunk_id,
+                        "content": hit.get("content", ""),
+                        "file_path": hit.get("file_path", ""),
+                        "topic": hit.get("topic", ""),
+                        "tags": tags_list,
+                        "section_title": hit.get("section_title", ""),
+                        "dense_score": 0.0,
+                        "sparse_score": float(sparse_score),
+                        "score": float(0.3 * sparse_score),
+                    }
+            except Exception:
+                pass
 
     sorted_results = sorted(results_map.values(), key=lambda x: x["score"], reverse=True)
     return sorted_results[:top_k]
 
 
+def _escape_filter_value(value: str) -> str:
+    return value.replace('\\', '\\\\').replace('"', '\\"')
+
+
 def _get_chunks_by_file(workspace: str, file_path: str) -> list[dict]:
     client = _get_client(workspace)
-    if not _collection_exists(client):
+    if not _ensure_collection_loaded(workspace, client):
         return []
     try:
+        safe_path = _escape_filter_value(file_path)
         results = client.query(
             collection_name=_COLLECTION_NAME,
-            filter=f'file_path == "{file_path}"',
+            filter=f'file_path == "{safe_path}"',
             output_fields=["id"],
         )
         return results if results else []
@@ -244,19 +284,42 @@ def _get_chunks_by_file(workspace: str, file_path: str) -> list[dict]:
         return []
 
 
+def fetch_chunks_by_file(workspace: str, file_path: str, limit: int = 2) -> list[dict]:
+    """Return chunk payloads for a file (used by backlink context expansion)."""
+    try:
+        client = _get_client(workspace)
+    except Exception as e:
+        logger.warning(f"[rag/index] fetch_chunks_by_file client error: {e}\n")
+        return []
+    if not _ensure_collection_loaded(workspace, client):
+        return []
+    try:
+        safe_path = _escape_filter_value(file_path)
+        rows = client.query(
+            collection_name=_COLLECTION_NAME,
+            filter=f'file_path == "{safe_path}"',
+            output_fields=["id", "content", "file_path", "topic", "section_title"],
+            limit=limit,
+        )
+        return rows if rows else []
+    except Exception as e:
+        logger.warning(f"[rag/index] fetch_chunks_by_file error: {e}\n")
+        return []
+
+
 def delete_by_file(workspace: str, file_path: str):
     client = _get_client(workspace)
-    if not _collection_exists(client):
+    if not _ensure_collection_loaded(workspace, client):
         return
 
-    # 查询要删除的 chunk ID（在 delete 之前查询，避免最终一致性问题）
     chunks_to_check = _get_chunks_by_file(workspace, file_path)
     chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
 
     try:
+        safe_path = _escape_filter_value(file_path)
         client.delete(
             collection_name=_COLLECTION_NAME,
-            filter=f'file_path == "{file_path}"',
+            filter=f'file_path == "{safe_path}"',
         )
     except Exception as e:
         logger.warning(f"[rag/index] delete_by_file error: {e}\n")
@@ -291,12 +354,29 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
 
     if data:
         client.insert(collection_name=_COLLECTION_NAME, data=data)
+        _ensure_collection_loaded(workspace, client)
 
-    sparse_index = _load_sparse_index(workspace)
+    _append_sparse_index(workspace, chunks, embeddings)
+
+
+def _append_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict]):
+    path = _sparse_index_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
     for chunk, emb in zip(chunks, embeddings, strict=False):
         chunk_id = chunk.get("id", "")
         lexical = emb.get("lexical_weights", {})
         if isinstance(lexical, dict):
             str_keys = {str(k): float(v) for k, v in lexical.items()}
-            sparse_index[chunk_id] = str_keys
-    _sparse_index_path(workspace).write_text(json.dumps(sparse_index, ensure_ascii=False), encoding="utf-8")
+            existing[chunk_id] = str_keys
+
+    tmp_path = path.with_suffix('.tmp')
+    tmp_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
+    tmp_path.replace(path)

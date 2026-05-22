@@ -87,7 +87,7 @@ function _countAllFiles(node) {
     return count;
 }
 
-async function loadTopicTree(silent) {
+async function loadTopicTree(silent, forceRefresh) {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
     if (!silent) {
@@ -103,7 +103,7 @@ async function loadTopicTree(silent) {
         }
 
         var dataStr = JSON.stringify(result);
-        if (silent && dataStr === _lastTopicData) return;
+        if (!forceRefresh && silent && dataStr === _lastTopicData) return;
         _lastTopicData = dataStr;
         window.AppState.lastTopicData = dataStr;
 

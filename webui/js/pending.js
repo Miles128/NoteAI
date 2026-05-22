@@ -3,6 +3,7 @@
 var _pendingViewVisible = false;
 var _pendingData = null;
 var _allTopics = [];
+var _pendingLoadSeq = 0;
 
 function togglePendingView() {
     _pendingViewVisible = !_pendingViewVisible;
@@ -36,10 +37,16 @@ function hidePendingView() {
 
     if (window.AppState.selectedFilePath) {
         var contentArea = document.getElementById('content-area');
-        if (contentArea) contentArea.style.display = '';
+        var previewPanel = document.getElementById('preview-panel');
+        var contentPanel = document.getElementById('content-panel');
+        if (contentPanel) contentPanel.style.display = 'none';
+        if (contentArea) contentArea.style.display = 'none';
+        if (previewPanel) previewPanel.style.display = 'flex';
     } else {
         // Default back to knowledge graph
+        var contentPanel = document.getElementById('content-panel');
         var graphPanel = document.getElementById('graph-panel');
+        if (contentPanel) contentPanel.style.display = 'flex';
         if (graphPanel) graphPanel.style.display = 'flex';
         window.updateHomeStats();
         if (window.Graph3Tier && window.Graph3Tier.load) {
@@ -55,14 +62,17 @@ function _loadAllTopics() {
     return window.api.getTopicTree().then(function(result) {
         var topics = (result && result.topics) ? result.topics : [];
         _allTopics = [];
-        topics.forEach(function(t) {
-            _allTopics.push(t.name);
-            if (t.children && t.children.length) {
-                t.children.forEach(function(child) {
-                    _allTopics.push(child.name);
-                });
-            }
-        });
+        function walk(nodes, prefix) {
+            (nodes || []).forEach(function(node) {
+                if (!node.name) return;
+                var name = prefix ? prefix + ' > ' + node.name : node.name;
+                _allTopics.push(name);
+                if (node.children && node.children.length) {
+                    walk(node.children, name);
+                }
+            });
+        }
+        walk(topics, '');
         return _allTopics;
     }).catch(function() {
         _allTopics = [];
@@ -71,60 +81,92 @@ function _loadAllTopics() {
 }
 
 function loadPendingItems() {
+    var seq = ++_pendingLoadSeq;
     var listEl = document.getElementById('pending-view-list');
     var countEl = document.getElementById('pending-view-count');
     if (!listEl) return;
 
     listEl.innerHTML = '<div class="pending-view-empty">加载中...</div>';
 
-    Promise.all([
-        (window.api && window.api.getAllPending) ? window.api.getAllPending() : Promise.resolve({items: [], count: 0}),
-        _loadAllTopics(),
-        (window.api && window.api.getActivityLog) ? window.api.getActivityLog(50) : Promise.resolve({entries: []})
-    ]).then(function(results) {
+    var pendingP = (window.api && window.api.getAllPending)
+        ? window.api.getAllPending()
+        : Promise.resolve({ items: [], count: 0, topic_options: [] });
+    var logP = (window.api && window.api.getActivityLog)
+        ? window.api.getActivityLog(50).catch(function() { return null; })
+        : Promise.resolve({ entries: [] });
+
+    Promise.all([pendingP, logP]).then(function(results) {
+        if (seq !== _pendingLoadSeq) return;
         var result = results[0];
-        var logResult = results[2];
+        var logResult = results[1];
         _pendingData = result;
         var items = (result && result.items) ? result.items : [];
         var count = (result && result.count) ? result.count : items.length;
-        var logEntries = (logResult && logResult.entries) ? logResult.entries : [];
+        var topicOpts = (result && result.topic_options) ? result.topic_options : [];
 
-        if (countEl) countEl.textContent = (count + logEntries.length) + ' 项';
+        if (topicOpts.length) {
+            _allTopics = topicOpts;
+        }
 
-        // Render pending items
-        if (items.length === 0) {
-            listEl.innerHTML = '<div class="pending-view-empty">所有事项已处理完毕 ✓</div>';
-        } else {
-            var html = '';
-            items.forEach(function(item, idx) {
-                if (item.type === 'topic') {
-                    html += renderPendingTopicItem(item, idx);
-                } else if (item.type === 'link') {
-                    html += renderPendingLinkItem(item, idx);
-                }
+        if (countEl) countEl.textContent = count + ' 项';
+
+        renderPendingList(items, listEl);
+
+        if (!topicOpts.length && items.some(function(item) { return item.type === 'topic'; })) {
+            _loadAllTopics().then(function() {
+                if (seq === _pendingLoadSeq) renderPendingList(items, listEl);
             });
-            listEl.innerHTML = html;
         }
 
-        // Render activity log
-        var logEl = document.getElementById('pending-view-log');
-        if (logEl) {
-            if (logEntries.length === 0) {
-                logEl.innerHTML = '<div class="pending-view-empty">暂无操作记录</div>';
-            } else {
-                var logHtml = '';
-                for (var i = logEntries.length - 1; i >= 0; i--) {
-                    var e = logEntries[i];
-                    var d = new Date(e.ts * 1000);
-                    var time = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-                    logHtml += '<div class="pending-log-item"><span class="pending-log-time">' + time + '</span><span class="pending-log-msg">' + window.escapeHtml(e.msg) + '</span></div>';
-                }
-                logEl.innerHTML = logHtml;
-            }
-        }
+        renderPendingActivityLog(seq, logResult, countEl, count);
     }).catch(function(e) {
+        if (seq !== _pendingLoadSeq) return;
         listEl.innerHTML = '<div class="pending-view-empty">加载失败: ' + window.escapeHtml(String(e)) + '</div>';
     });
+}
+
+function renderPendingList(items, listEl) {
+    if (!items || items.length === 0) {
+        listEl.innerHTML = '<div class="pending-view-empty">所有事项已处理完毕 ✓</div>';
+        return;
+    }
+
+    var html = '';
+    items.forEach(function(item, idx) {
+        if (item.type === 'topic') {
+            html += renderPendingTopicItem(item, idx);
+        } else if (item.type === 'link') {
+            html += renderPendingLinkItem(item, idx);
+        }
+    });
+    listEl.innerHTML = html;
+}
+
+function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
+    var logEl = document.getElementById('pending-view-log');
+    if (!logEl) return;
+    if (seq !== _pendingLoadSeq) return;
+
+    if (logResult === null) {
+        logEl.innerHTML = '<div class="pending-view-empty">操作记录加载失败</div>';
+        return;
+    }
+
+    var logEntries = (logResult && logResult.entries) ? logResult.entries : [];
+    if (countEl) countEl.textContent = (pendingCount + logEntries.length) + ' 项';
+
+    if (logEntries.length === 0) {
+        logEl.innerHTML = '<div class="pending-view-empty">暂无操作记录</div>';
+        return;
+    }
+    var logHtml = '';
+    for (var i = logEntries.length - 1; i >= 0; i--) {
+        var e = logEntries[i];
+        var d = new Date(e.ts * 1000);
+        var time = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+        logHtml += '<div class="pending-log-item"><span class="pending-log-time">' + time + '</span><span class="pending-log-msg">' + window.escapeHtml(e.msg) + '</span></div>';
+    }
+    logEl.innerHTML = logHtml;
 }
 
 function renderPendingTopicItem(item, idx) {

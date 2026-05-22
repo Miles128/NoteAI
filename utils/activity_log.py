@@ -1,59 +1,39 @@
-"""Activity log for recording automated actions (file conversion, topic/tag assignment, file moves)."""
-import json
+"""Activity log — writes to unified wiki/log.md via workspace_log."""
+
+from __future__ import annotations
+
 import time
-from pathlib import Path
-from config import config
+from datetime import datetime
 
-_LOG_DIR = ".noteai"
-_LOG_FILE = "activity_log.json"
-_MAX_ENTRIES = 200
+from utils.workspace_log import append_log, parse_log_entries
 
 
-def _log_path():
-    ws = config.workspace_path
-    if not ws:
-        return None
-    p = Path(ws) / _LOG_DIR / _LOG_FILE
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+def add_entry(action_type: str, message: str, detail: str | None = None) -> None:
+    """Record an automated action into wiki/log.md."""
+    append_log(action_type, message, detail or "")
 
 
-def add_entry(action_type, message, detail=None):
-    """Record an automated action."""
-    p = _log_path()
-    if not p:
-        return
-    entry = {
-        "ts": time.time(),
-        "type": action_type,
-        "msg": message,
-        "detail": detail or "",
-    }
-    try:
-        entries = []
-        if p.exists():
-            entries = json.loads(p.read_text(encoding="utf-8"))
-        entries.append(entry)
-        if len(entries) > _MAX_ENTRIES:
-            entries = entries[-_MAX_ENTRIES:]
-        p.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+def get_entries(limit: int = 100) -> list[dict]:
+    """Return recent log entries (compatible shape for UI)."""
+    rows = parse_log_entries(limit)
+    out: list[dict] = []
+    for row in rows:
+        ts_text = f"{row.get('date', '')} {row.get('time', '')}".strip()
+        try:
+            ts = datetime.strptime(ts_text, "%Y-%m-%d %H:%M:%S").timestamp()
+        except ValueError:
+            ts = time.time()
+        out.append({
+            "ts": ts,
+            "type": row.get("type", "event"),
+            "msg": row.get("msg", ""),
+            "detail": row.get("detail", ""),
+        })
+    return out
 
 
-def get_entries(limit=100):
-    """Return recent log entries."""
-    p = _log_path()
-    if not p or not p.exists():
-        return []
-    try:
-        entries = json.loads(p.read_text(encoding="utf-8"))
-        return entries[-limit:]
-    except Exception:
-        return []
-
-
-def clear_log():
-    p = _log_path()
+def clear_log() -> None:
+    from utils.workspace_log import log_path
+    p = log_path()
     if p and p.exists():
         p.unlink(missing_ok=True)

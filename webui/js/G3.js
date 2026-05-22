@@ -2,22 +2,832 @@
 // 知识图谱 (D3 力导向布局 - Obsidian 风格)
 // ================================================================
 
+/** 图谱拖动：收集某主题节点下所有子节点 id */
+function _collectDescendantIds(rootId, childMap) {
+    const seen = new Set();
+    const stack = (childMap[rootId] || []).slice();
+    while (stack.length) {
+        const id = stack.pop();
+        if (seen.has(id)) continue;
+        seen.add(id);
+        (childMap[id] || []).forEach(function(cid) { stack.push(cid); });
+    }
+    return seen;
+}
+
+const _GRAPH_TAU = Math.PI * 2;
+const _GRAPH_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+const GRAPH_LAYOUT_STORAGE_KEY = 'noteai.graphLayout.v1';
+
+/** @type {Record<string, number>} */
+const GRAPH_LAYOUT_DEFAULTS = {
+    l1PackRatio: 0.3,
+    orphanRadiusRatio: 0.12,
+    l1NoteMaxRingRatio: 0.28,
+    l2AnnulusGap: 9,
+    l2InnerFallbackRatio: 0.3,
+    l2OuterRingRatio: 0.92,
+    annulusMinSpan: 12,
+    annulusSingleTopicRatio: 0.55,
+    annulusAngleOffset: 0.9,
+    l3InnerRatio: 0.4,
+    l3InnerMinGap: 6,
+    noteDiskMin: 6,
+    noteDiskMax: 30,
+    noteDiskBase: 3.5,
+    noteDiskSqrtCoef: 2.2,
+    noteSingleRadiusRatio: 0.16,
+    l2RingMin: 32,
+    l2RingMax: 88,
+    l2RingBase: 16,
+    l2RingSqrtL2: 7.5,
+    l2RingSqrtNotes: 1.5,
+    l3RingMin: 10,
+    l3RingMax: 32,
+    l3RingBase: 7,
+    l3RingSqrtL3: 4.5,
+    topicCollidePad: 13,
+    fileCollidePad: 4,
+    chargeL1: -18,
+    chargeTopic: -14,
+    chargeFile: -5,
+    targetStrengthTopic: 0.88,
+    targetStrengthFile: 0.8,
+    clusterRepelDist: 150,
+    clusterRepelForce: 520,
+    collideIterations: 5,
+    simAlpha: 0.55,
+    simAlphaDecay: 0.12,
+    simVelocityDecay: 0.72,
+    radiusL1: 6,
+    radiusOther: 5,
+    fitPad: 60,
+    fitMaxScale: 1.5,
+    clampSideRatio: 0.12,
+    boundsMargin: 52,
+    replayRevealMinMs: 800,
+    replayRevealMaxMs: 3000,
+    replayRevealBudgetMs: 24000,
+};
+
+/** @type {{ key: string, group: string, label: string, min: number, max: number, step: number }[]} */
+const GRAPH_LAYOUT_SCHEMA = [
+    { key: 'l1PackRatio', group: '一级与全局', label: '一级主题间距（× 画布短边）', min: 0.08, max: 0.5, step: 0.01 },
+    { key: 'orphanRadiusRatio', group: '一级与全局', label: '孤立节点环半径（× 画布短边）', min: 0.04, max: 0.25, step: 0.01 },
+    { key: 'l1NoteMaxRingRatio', group: '二级布局', label: '一级笔记盘 / 二级环 最大比例', min: 0.1, max: 0.5, step: 0.01 },
+    { key: 'l2AnnulusGap', group: '二级布局', label: '一级笔记盘与二级环带间距 (px)', min: 0, max: 40, step: 1 },
+    { key: 'l2InnerFallbackRatio', group: '二级布局', label: '无一级笔记时二级环带内径比例', min: 0.1, max: 0.6, step: 0.01 },
+    { key: 'l2OuterRingRatio', group: '二级布局', label: '二级环带外径 / 环半径', min: 0.7, max: 1, step: 0.01 },
+    { key: 'annulusMinSpan', group: '二级布局', label: '环带最小宽度 (px)', min: 4, max: 40, step: 1 },
+    { key: 'annulusSingleTopicRatio', group: '二级布局', label: '单个主题在环带上的半径比例', min: 0.3, max: 0.8, step: 0.01 },
+    { key: 'annulusAngleOffset', group: '二级布局', label: '环带起始角偏移 (rad)', min: 0, max: 3.14, step: 0.05 },
+    { key: 'l3InnerRatio', group: '三级布局', label: '三级主题环带内径比例', min: 0.2, max: 0.7, step: 0.01 },
+    { key: 'l3InnerMinGap', group: '三级布局', label: '三级环带内径最小间隙 (px)', min: 0, max: 20, step: 1 },
+    { key: 'noteDiskMin', group: '笔记散布', label: '笔记盘半径下限 (px)', min: 3, max: 30, step: 1 },
+    { key: 'noteDiskMax', group: '笔记散布', label: '笔记盘半径上限 (px)', min: 15, max: 80, step: 1 },
+    { key: 'noteDiskBase', group: '笔记散布', label: '笔记盘半径基数 (px)', min: 0, max: 20, step: 0.5 },
+    { key: 'noteDiskSqrtCoef', group: '笔记散布', label: '笔记盘半径 √n 系数', min: 0.5, max: 8, step: 0.1 },
+    { key: 'noteSingleRadiusRatio', group: '笔记散布', label: '单篇笔记半径比例', min: 0.05, max: 0.4, step: 0.01 },
+    { key: 'l2RingMin', group: '二级环半径公式', label: '二级环半径下限 (px)', min: 16, max: 80, step: 1 },
+    { key: 'l2RingMax', group: '二级环半径公式', label: '二级环半径上限 (px)', min: 40, max: 160, step: 1 },
+    { key: 'l2RingBase', group: '二级环半径公式', label: '二级环半径基数 (px)', min: 0, max: 40, step: 1 },
+    { key: 'l2RingSqrtL2', group: '二级环半径公式', label: '二级环 √(二级数) 系数', min: 0, max: 20, step: 0.5 },
+    { key: 'l2RingSqrtNotes', group: '二级环半径公式', label: '二级环 √(笔记数) 系数', min: 0, max: 5, step: 0.1 },
+    { key: 'l3RingMin', group: '三级环半径公式', label: '三级环半径下限 (px)', min: 6, max: 40, step: 1 },
+    { key: 'l3RingMax', group: '三级环半径公式', label: '三级环半径上限 (px)', min: 16, max: 80, step: 1 },
+    { key: 'l3RingBase', group: '三级环半径公式', label: '三级环半径基数 (px)', min: 0, max: 30, step: 1 },
+    { key: 'l3RingSqrtL3', group: '三级环半径公式', label: '三级环 √n 系数', min: 0, max: 12, step: 0.5 },
+    { key: 'topicCollidePad', group: '力学模拟', label: '主题碰撞边距 (px)', min: 0, max: 30, step: 1 },
+    { key: 'fileCollidePad', group: '力学模拟', label: '笔记碰撞边距 (px)', min: 0, max: 20, step: 1 },
+    { key: 'chargeL1', group: '力学模拟', label: '一级主题斥力', min: -80, max: -1, step: 1 },
+    { key: 'chargeTopic', group: '力学模拟', label: '二/三级主题斥力', min: -60, max: -1, step: 1 },
+    { key: 'chargeFile', group: '力学模拟', label: '笔记斥力', min: -40, max: 0, step: 1 },
+    { key: 'targetStrengthTopic', group: '力学模拟', label: '主题回拉强度 (0–1)', min: 0.3, max: 1, step: 0.01 },
+    { key: 'targetStrengthFile', group: '力学模拟', label: '笔记回拉强度 (0–1)', min: 0.3, max: 1, step: 0.01 },
+    { key: 'clusterRepelDist', group: '力学模拟', label: '簇间互斥生效距离 (px)', min: 40, max: 300, step: 5 },
+    { key: 'clusterRepelForce', group: '力学模拟', label: '簇间互斥力度', min: 50, max: 1200, step: 10 },
+    { key: 'collideIterations', group: '力学模拟', label: '碰撞迭代次数', min: 1, max: 12, step: 1 },
+    { key: 'simAlpha', group: '力学模拟', label: '模拟初始 alpha', min: 0.1, max: 1, step: 0.05 },
+    { key: 'simAlphaDecay', group: '力学模拟', label: '模拟 alpha 衰减', min: 0.02, max: 0.3, step: 0.01 },
+    { key: 'simVelocityDecay', group: '力学模拟', label: '速度衰减', min: 0.3, max: 0.95, step: 0.01 },
+    { key: 'radiusL1', group: '节点显示', label: '一级主题圆半径 (px)', min: 3, max: 16, step: 1 },
+    { key: 'radiusOther', group: '节点显示', label: '其他节点圆半径 (px)', min: 2, max: 14, step: 1 },
+    { key: 'fitPad', group: '视图', label: '缩放适应边距 (px)', min: 20, max: 120, step: 5 },
+    { key: 'fitMaxScale', group: '视图', label: '最大缩放比例', min: 0.5, max: 3, step: 0.1 },
+    { key: 'clampSideRatio', group: '视图', label: '拖拽边界留白（× 宽）', min: 0.05, max: 0.25, step: 0.01 },
+    { key: 'boundsMargin', group: '视图', label: '包围盒边距 (px)', min: 20, max: 120, step: 4 },
+    { key: 'replayRevealMinMs', group: '重播动画', label: '逐层显示最短间隔 (ms)', min: 200, max: 3000, step: 50 },
+    { key: 'replayRevealMaxMs', group: '重播动画', label: '逐层显示最长间隔 (ms)', min: 500, max: 8000, step: 100 },
+    { key: 'replayRevealBudgetMs', group: '重播动画', label: '重播总时长预算 (ms)', min: 5000, max: 60000, step: 500 },
+];
+
+function _graphLayoutSchemaByKey() {
+    const map = {};
+    GRAPH_LAYOUT_SCHEMA.forEach(function(p) { map[p.key] = p; });
+    return map;
+}
+
+function _formatGraphLayoutValue(v, step) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    if (step >= 1) return String(Math.round(n));
+    if (step >= 0.1) return n.toFixed(1);
+    return n.toFixed(2);
+}
+
+function _snapGraphLayoutValue(v, param) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return param.min;
+    const steps = Math.round((n - param.min) / param.step);
+    const snapped = param.min + steps * param.step;
+    return Math.min(param.max, Math.max(param.min, snapped));
+}
+
+function loadGraphLayoutConfig() {
+    const cfg = Object.assign({}, GRAPH_LAYOUT_DEFAULTS);
+    try {
+        const raw = localStorage.getItem(GRAPH_LAYOUT_STORAGE_KEY);
+        if (!raw) return cfg;
+        const saved = JSON.parse(raw);
+        const schema = _graphLayoutSchemaByKey();
+        Object.keys(saved).forEach(function(key) {
+            if (!schema[key]) return;
+            const v = Number(saved[key]);
+            if (!Number.isFinite(v)) return;
+            const p = schema[key];
+            cfg[key] = Math.min(p.max, Math.max(p.min, v));
+        });
+    } catch (e) { /* ignore */ }
+    return cfg;
+}
+
+function saveGraphLayoutConfig(cfg) {
+    localStorage.setItem(GRAPH_LAYOUT_STORAGE_KEY, JSON.stringify(cfg));
+}
+
+function resetGraphLayoutConfigStorage() {
+    localStorage.removeItem(GRAPH_LAYOUT_STORAGE_KEY);
+}
+
+function _graphCfg() {
+    return (Graph3Tier && Graph3Tier.layoutConfig) ? Graph3Tier.layoutConfig : GRAPH_LAYOUT_DEFAULTS;
+}
+
+function _noteDiskRadius(noteCount) {
+    const c = _graphCfg();
+    const n = Math.max(1, noteCount);
+    return Math.min(c.noteDiskMax, Math.max(c.noteDiskMin, c.noteDiskBase + c.noteDiskSqrtCoef * Math.sqrt(n)));
+}
+
+function _l2RingRadius(l2Count, maxNotesPerL2) {
+    const c = _graphCfg();
+    const n2 = Math.max(1, l2Count);
+    const nf = Math.max(1, maxNotesPerL2);
+    return Math.min(c.l2RingMax, Math.max(c.l2RingMin,
+        c.l2RingBase + c.l2RingSqrtL2 * Math.sqrt(n2) + c.l2RingSqrtNotes * Math.sqrt(nf)));
+}
+
+function _l3TopicDiskRadius(l3Count) {
+    const c = _graphCfg();
+    const n = Math.max(1, l3Count);
+    return Math.min(c.l3RingMax, Math.max(c.l3RingMin, c.l3RingBase + c.l3RingSqrtL3 * Math.sqrt(n)));
+}
+
+/** 在圆盘内均匀散布（非圆周）；itemIds 为节点 id 列表 */
+function _scatterInDisk(ox, oy, itemIds, nodeMap, maxRadius, coordKey, clusterId, depthVal) {
+    const xk = coordKey;
+    const yk = coordKey === '_tx' ? '_ty' : 'ty';
+    const n = itemIds.length;
+    if (!n) return;
+    const c = _graphCfg();
+    const R = Math.max(c.noteDiskMin, maxRadius);
+    itemIds.forEach(function(id, i) {
+        const node = nodeMap[id];
+        if (!node) return;
+        const t = (i + 0.5) / n;
+        const r = n === 1 ? R * c.noteSingleRadiusRatio : R * Math.sqrt(t);
+        const angle = i * _GRAPH_GOLDEN_ANGLE;
+        node[xk] = ox + Math.cos(angle) * r;
+        node[yk] = oy + Math.sin(angle) * r;
+        if (clusterId != null) node._l2Cluster = clusterId;
+        if (depthVal != null) node._depth = depthVal;
+    });
+}
+
+/** 主题节点在环形区域内散布（内圈留给一级直属笔记） */
+function _scatterTopicsInAnnulus(ox, oy, topicIds, nodeMap, rInner, rOuter, coordKey, depthBase, onPlaced) {
+    const xk = coordKey;
+    const yk = coordKey === '_tx' ? '_ty' : 'ty';
+    const n = topicIds.length;
+    if (!n) return;
+    const c = _graphCfg();
+    const ri = Math.max(0, rInner);
+    const ro = Math.max(ri + c.annulusMinSpan, rOuter);
+    const ri2 = ri * ri;
+    const ro2 = ro * ro;
+    const angle0 = c.annulusAngleOffset;
+    topicIds.forEach(function(tid, i) {
+        const node = nodeMap[tid];
+        if (!node) return;
+        const t = (i + 0.5) / n;
+        const r = n === 1 ? (ri + ro) * c.annulusSingleTopicRatio : Math.sqrt(ri2 + t * (ro2 - ri2));
+        const angle = angle0 + i * _GRAPH_GOLDEN_ANGLE;
+        node[xk] = ox + Math.cos(angle) * r;
+        node[yk] = oy + Math.sin(angle) * r;
+        if (depthBase != null) node._depth = depthBase + 1;
+        if (onPlaced) onPlaced(tid, node[xk], node[yk]);
+    });
+}
+
+function _seedGraphPositions(nodes) {
+    nodes.forEach(function(n) {
+        if (n.tx == null || n.ty == null) return;
+        n.x = n.tx;
+        n.y = n.ty;
+        n.fx = null;
+        n.fy = null;
+        n.vx = 0;
+        n.vy = 0;
+    });
+}
+
+function _pinGraphNodes(nodes) {
+    nodes.forEach(function(n) {
+        if (n.tx == null || n.ty == null) return;
+        n.tx = n.x;
+        n.ty = n.y;
+        n.fx = n.x;
+        n.fy = n.y;
+    });
+}
+
+function _graphCollideRadius(d, getRadius) {
+    const c = _graphCfg();
+    if (d.type === 'file') return getRadius(d) + c.fileCollidePad;
+    return getRadius(d) + c.topicCollidePad;
+}
+
+function _graphTargetStrength(d) {
+    const c = _graphCfg();
+    if (d._dragging) return 0;
+    if (d.type === 'topic') return c.targetStrengthTopic;
+    return c.targetStrengthFile;
+}
+
+function _graphChargeStrength(d) {
+    const c = _graphCfg();
+    if (d.type === 'topic' && d.level === 1) return c.chargeL1;
+    if (d.type === 'topic') return c.chargeTopic;
+    return c.chargeFile;
+}
+
+/** 不同一级主题簇之间：仅近距离互斥，避免整图被撑开 */
+function _graphClusterRepelForce(nodes) {
+    const c = _graphCfg();
+    return function(alpha) {
+        for (let i = 0; i < nodes.length; i++) {
+            for (let j = i + 1; j < nodes.length; j++) {
+                const a = nodes[i];
+                const b = nodes[j];
+                if (a._l1Group === b._l1Group) continue;
+                let dx = a.x - b.x;
+                let dy = a.y - b.y;
+                const dist = Math.hypot(dx, dy) || 1;
+                if (dist > c.clusterRepelDist) continue;
+                const force = c.clusterRepelForce * alpha / (dist * dist);
+                a.vx += (dx / dist) * force;
+                a.vy += (dy / dist) * force;
+                b.vx -= (dx / dist) * force;
+                b.vy -= (dy / dist) * force;
+            }
+        }
+    };
+}
+
+function _startGraphRelaxation(nodes, getRadius, onTick, onEnd) {
+    const c = _graphCfg();
+    const sim = d3.forceSimulation(nodes)
+        .force('x', d3.forceX(function(d) { return d.tx; }).strength(_graphTargetStrength))
+        .force('y', d3.forceY(function(d) { return d.ty; }).strength(_graphTargetStrength))
+        .force('charge', d3.forceManyBody().strength(_graphChargeStrength))
+        .force('collide', d3.forceCollide(function(d) { return _graphCollideRadius(d, getRadius); })
+            .iterations(Math.round(c.collideIterations)))
+        .force('clusterRepel', _graphClusterRepelForce(nodes))
+        .alpha(c.simAlpha)
+        .alphaDecay(c.simAlphaDecay)
+        .velocityDecay(c.simVelocityDecay);
+
+    if (onTick) sim.on('tick', onTick);
+    sim.on('end', function() {
+        _pinGraphNodes(nodes);
+        if (onEnd) onEnd();
+    });
+    return sim;
+}
+
+function _layoutTopicFilesAndChildren(topicId, ox, oy, childMap, nodeMap, parentMap, coordKey, depthBase) {
+    const subTopics = (childMap[topicId] || []).filter(function(cid) {
+        return nodeMap[cid] && nodeMap[cid].type === 'topic' && parentMap[cid] === topicId;
+    });
+    const fileIds = (childMap[topicId] || []).filter(function(cid) {
+        return nodeMap[cid] && nodeMap[cid].type === 'file';
+    });
+
+    if (subTopics.length) {
+        const r3 = _l3TopicDiskRadius(subTopics.length);
+        const c = _graphCfg();
+        const r3Inner = Math.min(r3 * c.l3InnerRatio, r3 - c.l3InnerMinGap);
+        _scatterTopicsInAnnulus(ox, oy, subTopics, nodeMap, r3Inner, r3, coordKey, depthBase, function(subId, sx, sy) {
+            const sub = nodeMap[subId];
+            if (sub) sub._l2Cluster = topicId;
+            _layoutTopicFilesAndChildren(subId, sx, sy, childMap, nodeMap, parentMap, coordKey, depthBase + 1);
+        });
+    }
+    if (fileIds.length) {
+        const noteDepth = depthBase != null ? depthBase + (subTopics.length ? 2 : 1) : null;
+        _scatterInDisk(ox, oy, fileIds, nodeMap, _noteDiskRadius(fileIds.length), coordKey, topicId, noteDepth);
+    }
+}
+
+function _layoutL1TopicCluster(l1Id, originX, originY, childMap, nodeMap, parentMap, coordKey, depthBase) {
+    const xk = coordKey;
+    const yk = coordKey === '_tx' ? '_ty' : 'ty';
+    const l1 = nodeMap[l1Id];
+    if (!l1) return;
+
+    l1[xk] = originX;
+    l1[yk] = originY;
+    l1._l1Group = l1Id;
+    if (depthBase != null) l1._depth = depthBase;
+
+    const l2Ids = (childMap[l1Id] || []).filter(function(cid) {
+        return parentMap[cid] === l1Id && nodeMap[cid] && nodeMap[cid].type === 'topic';
+    });
+    const directFiles = (childMap[l1Id] || []).filter(function(cid) {
+        return nodeMap[cid] && nodeMap[cid].type === 'file';
+    });
+
+    let maxFiles = 0;
+    l2Ids.forEach(function(l2id) {
+        const fc = (childMap[l2id] || []).filter(function(c) {
+            return nodeMap[c] && nodeMap[c].type === 'file';
+        }).length;
+        if (fc > maxFiles) maxFiles = fc;
+    });
+
+    const ringR = l2Ids.length ? _l2RingRadius(l2Ids.length, maxFiles) : 0;
+    let l1NoteDiskR = 0;
+
+    if (directFiles.length) {
+        const wantR = _noteDiskRadius(directFiles.length);
+        const cLayout = _graphCfg();
+        l1NoteDiskR = l2Ids.length
+            ? Math.min(wantR, ringR * cLayout.l1NoteMaxRingRatio)
+            : wantR;
+        const l1NoteDepth = depthBase != null ? depthBase + 1 : null;
+        _scatterInDisk(originX, originY, directFiles, nodeMap, l1NoteDiskR, coordKey, l1Id, l1NoteDepth);
+    }
+
+    if (!l2Ids.length) return;
+
+    const cL2 = _graphCfg();
+    const l2Inner = l1NoteDiskR > 0 ? l1NoteDiskR + cL2.l2AnnulusGap : ringR * cL2.l2InnerFallbackRatio;
+    _scatterTopicsInAnnulus(originX, originY, l2Ids, nodeMap, l2Inner, ringR * cL2.l2OuterRingRatio, coordKey, depthBase, function(l2id, lx, ly) {
+        const l2 = nodeMap[l2id];
+        if (!l2) return;
+        l2._l1Group = l1Id;
+        _layoutTopicFilesAndChildren(l2id, lx, ly, childMap, nodeMap, parentMap, coordKey, depthBase + 1);
+    });
+}
+
+function _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, coordKey) {
+    const xk = coordKey || 'tx';
+    const yk = coordKey === '_tx' ? '_ty' : 'ty';
+
+    nodes.forEach(function(n) {
+        n[xk] = undefined;
+        n[yk] = undefined;
+        n._l2Cluster = null;
+        n._l1Group = null;
+    });
+
+    const l1Nodes = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
+    const l1Count = l1Nodes.length;
+    const packR = Math.min(svgW, svgH) * _graphCfg().l1PackRatio;
+
+    l1Nodes.forEach(function(l1, i) {
+        let ox = cx;
+        let oy = cy;
+        if (l1Count > 1) {
+            const angle = _GRAPH_TAU * (i + 0.5) / l1Count - Math.PI / 2;
+            ox = cx + Math.cos(angle) * packR;
+            oy = cy + Math.sin(angle) * packR;
+        }
+        _layoutL1TopicCluster(l1.id, ox, oy, childMap, nodeMap, parentMap, coordKey, coordKey === '_tx' ? 0 : null);
+    });
+
+    const orphans = nodes.filter(function(n) { return n[xk] === undefined; });
+    const orphanCount = orphans.length;
+    const orphanR = Math.min(svgW, svgH) * _graphCfg().orphanRadiusRatio;
+    orphans.forEach(function(n, i) {
+        const angle = orphanCount > 1 ? _GRAPH_TAU * (i + 0.5) / orphanCount : 0;
+        n[xk] = cx + Math.cos(angle) * orphanR;
+        n[yk] = cy + Math.sin(angle) * orphanR;
+        n._l1Group = '__orphan__';
+    });
+
+    nodes.forEach(function(n) {
+        if (n._l1Group) return;
+        let cur = n.id;
+        const seen = new Set();
+        while (cur && !seen.has(cur)) {
+            seen.add(cur);
+            const p = parentMap[cur];
+            if (!p) break;
+            const pNode = nodeMap[p];
+            if (pNode && pNode.type === 'topic' && pNode.level === 1) {
+                n._l1Group = p;
+                break;
+            }
+            cur = p;
+        }
+        if (!n._l1Group) n._l1Group = '__orphan__';
+    });
+}
+
+function _resolveL1ClusterId(d, nodeMap, parentMap) {
+    if (d._l1Group && d._l1Group !== '__orphan__') return d._l1Group;
+    if (d.type === 'topic' && d.level === 1) return d.id;
+    let cur = d.id;
+    const seen = new Set();
+    while (cur && !seen.has(cur)) {
+        seen.add(cur);
+        const n = nodeMap[cur];
+        if (n && n.type === 'topic' && n.level === 1) return n.id;
+        cur = parentMap[cur];
+    }
+    return null;
+}
+
+function _dragGroupForNode(d, childMap, nodeMap, parentMap, nodes) {
+    const l1Id = _resolveL1ClusterId(d, nodeMap, parentMap);
+    if (l1Id) {
+        const desc = _collectDescendantIds(l1Id, childMap);
+        return nodes.filter(function(n) { return n.id === l1Id || desc.has(n.id); });
+    }
+    if (d.type === 'topic') {
+        const desc = _collectDescendantIds(d.id, childMap);
+        return nodes.filter(function(n) { return n.id === d.id || desc.has(n.id); });
+    }
+    return [d];
+}
+
+function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, simulation, self) {
+    return d3.drag()
+        .on('start', function(e, d) {
+            if (simulation && !e.active) simulation.alphaTarget(0.3).restart();
+            const group = _dragGroupForNode(d, childMap, nodeMap, parentMap, nodes);
+            d._dragGroup = group;
+            d._dragAnchorX = d.x;
+            d._dragAnchorY = d.y;
+            group.forEach(function(n) {
+                n._dragging = true;
+                n._dragStartX = n.x;
+                n._dragStartY = n.y;
+                n._dragStartTx = n.tx;
+                n._dragStartTy = n.ty;
+                n.fx = n.x;
+                n.fy = n.y;
+            });
+        })
+        .on('drag', function(e, d) {
+            const dx = e.x - d._dragAnchorX;
+            const dy = e.y - d._dragAnchorY;
+            (d._dragGroup || [d]).forEach(function(n) {
+                n.fx = n._dragStartX + dx;
+                n.fy = n._dragStartY + dy;
+                n.x = n.fx;
+                n.y = n.fy;
+                if (n._dragStartTx != null && n._dragStartTy != null) {
+                    n.tx = n._dragStartTx + dx;
+                    n.ty = n._dragStartTy + dy;
+                }
+            });
+            if (simulation) {
+                simulation.alphaTarget(0.2).restart();
+            } else if (self.g) {
+                self.g.selectAll('.graph-nodes g').attr('transform', function(nd) {
+                    return 'translate(' + nd.x + ',' + nd.y + ')';
+                });
+            }
+        })
+        .on('end', function(e, d) {
+            if (simulation && !e.active) simulation.alphaTarget(0);
+            (d._dragGroup || [d]).forEach(function(n) {
+                n._dragging = false;
+                n.tx = n.x;
+                n.ty = n.y;
+                n.fx = n.x;
+                n.fy = n.y;
+            });
+            d._dragGroup = null;
+        });
+}
+
 const Graph3Tier = {
     data: null,
     svg: null,
     g: null,
     zoom: null,
+    showFilenames: false,
     simulation: null,
     filter: 'topic',
+    layoutConfig: loadGraphLayoutConfig(),
+    _graphBodyResizeObserver: null,
+    _resizePaused: false,
+    _resizePending: false,
+
+    initLayoutConfig() {
+        this.layoutConfig = loadGraphLayoutConfig();
+    },
+
+    reloadLayoutConfig() {
+        this.initLayoutConfig();
+    },
+
+    _buildLayoutSettingsForm() {
+        const form = document.getElementById('graph-settings-form');
+        if (!form) return;
+        form.innerHTML = '';
+        let lastGroup = '';
+        const cfg = this.layoutConfig;
+        const self = this;
+        GRAPH_LAYOUT_SCHEMA.forEach(function(param) {
+            if (param.group !== lastGroup) {
+                lastGroup = param.group;
+                const title = document.createElement('div');
+                title.className = 'graph-settings-group-title';
+                title.textContent = param.group;
+                form.appendChild(title);
+            }
+            const value = _snapGraphLayoutValue(cfg[param.key], param);
+            const row = document.createElement('div');
+            row.className = 'graph-settings-row';
+            const head = document.createElement('div');
+            head.className = 'graph-settings-row-head';
+            const label = document.createElement('span');
+            label.className = 'graph-settings-label';
+            label.textContent = param.label;
+            const valueEl = document.createElement('span');
+            valueEl.className = 'graph-settings-value';
+            valueEl.textContent = _formatGraphLayoutValue(value, param.step);
+            const input = document.createElement('input');
+            input.type = 'range';
+            input.className = 'graph-settings-range';
+            input.dataset.key = param.key;
+            input.min = String(param.min);
+            input.max = String(param.max);
+            input.step = String(param.step);
+            input.value = String(value);
+            input.addEventListener('input', function() {
+                valueEl.textContent = _formatGraphLayoutValue(input.value, param.step);
+                self._scheduleLayoutApply();
+            });
+            input.addEventListener('change', function() {
+                valueEl.textContent = _formatGraphLayoutValue(input.value, param.step);
+                if (self._layoutApplyTimer) {
+                    clearTimeout(self._layoutApplyTimer);
+                    self._layoutApplyTimer = null;
+                }
+                self.applyLayoutSettings(self.readLayoutSettingsFromForm());
+            });
+            head.appendChild(label);
+            head.appendChild(valueEl);
+            row.appendChild(head);
+            row.appendChild(input);
+            form.appendChild(row);
+        });
+    },
+
+    openLayoutSettings() {
+        const panel = document.getElementById('graph-panel');
+        const sidebar = document.getElementById('graph-settings-sidebar');
+        const btn = document.getElementById('graph-layout-settings-btn');
+        if (!panel || !sidebar) return;
+        if (!sidebar.hidden && panel.classList.contains('graph-settings-open')) {
+            this.closeLayoutSettings();
+            return;
+        }
+        this._buildLayoutSettingsForm();
+        sidebar.hidden = false;
+        panel.classList.add('graph-settings-open');
+        if (btn) btn.classList.add('active');
+        const self = this;
+        requestAnimationFrame(function() { self.resize(); });
+    },
+
+    closeLayoutSettings() {
+        const panel = document.getElementById('graph-panel');
+        const sidebar = document.getElementById('graph-settings-sidebar');
+        const btn = document.getElementById('graph-layout-settings-btn');
+        if (this._layoutApplyTimer) {
+            clearTimeout(this._layoutApplyTimer);
+            this._layoutApplyTimer = null;
+        }
+        if (sidebar) sidebar.hidden = true;
+        if (panel) panel.classList.remove('graph-settings-open');
+        if (btn) btn.classList.remove('active');
+        const self = this;
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                if (self.data && self.data.nodes && self.data.nodes.length) {
+                    self.reloadGraphLayout();
+                } else {
+                    self.resize();
+                }
+            });
+        });
+    },
+
+    readLayoutSettingsFromForm() {
+        const cfg = Object.assign({}, this.layoutConfig);
+        const schema = _graphLayoutSchemaByKey();
+        document.querySelectorAll('#graph-settings-form .graph-settings-range').forEach(function(input) {
+            const key = input.dataset.key;
+            if (!key || !schema[key]) return;
+            const p = schema[key];
+            cfg[key] = _snapGraphLayoutValue(input.value, p);
+        });
+        return cfg;
+    },
+
+    _scheduleLayoutApply() {
+        if (this._layoutApplyTimer) clearTimeout(this._layoutApplyTimer);
+        const self = this;
+        this._layoutApplyTimer = setTimeout(function() {
+            self._layoutApplyTimer = null;
+            self.applyLayoutSettings(self.readLayoutSettingsFromForm());
+        }, 100);
+    },
+
+    reloadGraphLayout() {
+        const panel = document.getElementById('graph-panel');
+        if (panel && panel.style.display === 'none') return;
+
+        if (!this.data || !this.data.nodes || !this.data.nodes.length) {
+            this.load(this.filter || 'topic');
+            return;
+        }
+
+        if (this.simulation) this.simulation.stop();
+        this.simulation = null;
+
+        const self = this;
+        const run = function() {
+            self.initD3();
+            if (!self.svg) return;
+            self.render();
+            requestAnimationFrame(function() { self.resize(); });
+        };
+        requestAnimationFrame(function() { requestAnimationFrame(run); });
+    },
+
+    applyLayoutSettings(cfg, options) {
+        const opts = options || {};
+        this.layoutConfig = Object.assign({}, GRAPH_LAYOUT_DEFAULTS, cfg);
+        saveGraphLayoutConfig(this.layoutConfig);
+        if (opts.reload === false) return;
+        this.reloadGraphLayout();
+    },
+
+    resetLayoutSettings() {
+        resetGraphLayoutConfigStorage();
+        this.layoutConfig = loadGraphLayoutConfig();
+        this._buildLayoutSettingsForm();
+        this.applyLayoutSettings(this.layoutConfig);
+    },
+
+    pauseResize() {
+        this._resizePaused = true;
+    },
+
+    resumeResize() {
+        this._resizePaused = false;
+        if (this._resizePending) {
+            this._resizePending = false;
+            this.resize();
+        }
+    },
+
+    _disconnectGraphPanelBodyResize() {
+        if (this._graphBodyResizeObserver) {
+            this._graphBodyResizeObserver.disconnect();
+            this._graphBodyResizeObserver = null;
+        }
+    },
+
+    _observeGraphPanelBodyResize(container) {
+        this._disconnectGraphPanelBodyResize();
+        if (!container || typeof ResizeObserver === 'undefined') return;
+        const self = this;
+        this._graphBodyResizeObserver = new ResizeObserver(() => {
+            if (self._resizePaused) {
+                self._resizePending = true;
+                return;
+            }
+            requestAnimationFrame(function() {
+                self.resize();
+            });
+        });
+        this._graphBodyResizeObserver.observe(container);
+    },
+
+    _clampNodesToView(nodes, w, h, getRadius) {
+        if (!w || !h || !nodes || !nodes.length) return;
+        const sidePad = Math.min(108, Math.max(36, w * this.layoutConfig.clampSideRatio));
+        nodes.forEach(d => {
+            const r = getRadius(d) + 6;
+            const topPad = r + 20;
+            const botPad = r + 14;
+            d.x = Math.max(sidePad, Math.min(w - sidePad, d.x));
+            d.y = Math.max(topPad, Math.min(h - botPad, d.y));
+        });
+    },
+
+    /** Bounds for zoom-to-fit: account for circles + labels (above nodes). */
+    _boundsFromNodes(nodes, w, h, getRadius) {
+        let x1 = Infinity;
+        let y1 = Infinity;
+        let x2 = -Infinity;
+        let y2 = -Infinity;
+        const mx = this.layoutConfig.boundsMargin;
+        nodes.forEach(d => {
+            const r = getRadius(d) + 8;
+            const padTop = r + 22;
+            const padBot = r + 14;
+            x1 = Math.min(x1, d.x - mx);
+            x2 = Math.max(x2, d.x + mx);
+            y1 = Math.min(y1, d.y - padTop);
+            y2 = Math.max(y2, d.y + padBot);
+        });
+        if (!Number.isFinite(x1)) return { x1: 0, y1: 0, x2: w || 800, y2: h || 600 };
+        return { x1, y1, x2, y2 };
+    },
+
+    _fitGraphToBounds(nodes, svgW, svgH, getRadius, duration) {
+        if (!this.svg || !this.zoom || !nodes.length) return;
+        const bounds = this._boundsFromNodes(nodes, svgW, svgH, getRadius);
+        const bw = bounds.x2 - bounds.x1 || 100;
+        const bh = bounds.y2 - bounds.y1 || 100;
+        const pad = this.layoutConfig.fitPad;
+        const scale = Math.min((svgW - pad * 2) / bw, (svgH - pad * 2) / bh, this.layoutConfig.fitMaxScale);
+        const midX = (bounds.x1 + bounds.x2) / 2;
+        const midY = (bounds.y1 + bounds.y2) / 2;
+        const dur = duration == null ? 800 : duration;
+        const tr = d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY);
+        if (dur > 0) {
+            this.svg.transition().duration(dur).call(this.zoom.transform, tr);
+        } else {
+            this.svg.call(this.zoom.transform, tr);
+        }
+    },
+
+    _loadDebounceTimer: null,
+    _lastLoadFilter: null,
+    _lastLoadTime: 0,
+    _lastDataHash: null,
 
     async load(filter) {
         if (filter) this.filter = filter;
+        var panel = document.getElementById('graph-panel');
+        if (panel && panel.style.display === 'none') return;
+        var now = Date.now();
+        var sameFilter = (filter === this._lastLoadFilter);
+        if (sameFilter && now - this._lastLoadTime < 10000) {
+            if (this._loadDebounceTimer) clearTimeout(this._loadDebounceTimer);
+            var self = this;
+            this._loadDebounceTimer = setTimeout(function() {
+                self._loadDebounceTimer = null;
+                self._doLoad();
+            }, 10000 - (now - this._lastLoadTime));
+            return;
+        }
+        this._doLoad();
+    },
+
+    async _doLoad() {
+        this._lastLoadFilter = this.filter;
+        this._lastLoadTime = Date.now();
+        this.initLayoutConfig();
         try {
             this.data = await api.getGraphData(this.filter);
             if (!this.data || !Array.isArray(this.data.nodes) || !Array.isArray(this.data.edges)) {
                 console.error('图谱数据格式异常:', this.data);
                 this.data = { nodes: [], edges: [] };
             }
+            var hash = this.data.nodes.length + ':' + this.data.edges.length;
+            if (hash === this._lastDataHash && this.svg) return;
+            this._lastDataHash = hash;
             this._updateFilterBtns();
             this._updateLegend();
             this._updateStats();
@@ -57,28 +867,17 @@ const Graph3Tier = {
         const topicNodes = (this.data.nodes || []).filter(n => n.type === 'topic').length;
         const tagNodes = (this.data.nodes || []).filter(n => n.type === 'tag').length;
         const fileNodes = (this.data.nodes || []).filter(n => n.type === 'file').length;
-        const edgesCount = (this.data.edges || []).length;
-
-        const footerEl = document.getElementById('graph-stats');
-        if (footerEl) {
-            const parts = [];
-            if (topicNodes) parts.push(`${topicNodes}主题`);
-            if (tagNodes) parts.push(`${tagNodes}标签`);
-            if (fileNodes) parts.push(`${fileNodes}笔记`);
-            footerEl.textContent = parts.join(' · ');
-        }
-
         const gs1 = document.getElementById('graph-stat-notes');
         const gs2 = document.getElementById('graph-stat-topics');
-        const gs3 = document.getElementById('graph-stat-links');
         if (gs1) gs1.textContent = fileNodes;
         if (gs2) gs2.textContent = topicNodes + tagNodes;
-        if (gs3) gs3.textContent = edgesCount;
     },
 
     initD3() {
         const container = document.getElementById('graph-panel-body');
         if (!container) return;
+
+        this._disconnectGraphPanelBodyResize();
 
         const oldSvg = document.getElementById('graph-svg-3tier');
         if (oldSvg) oldSvg.remove();
@@ -93,7 +892,7 @@ const Graph3Tier = {
             .attr('width', w)
             .attr('height', h)
             .style('position', 'absolute').style('top', 0).style('left', 0)
-            .style('z-index', 1)
+            .style('z-index', 0)
             .style('background', 'var(--bg, #fafafa)');
 
         this.g = this.svg.append('g');
@@ -102,6 +901,8 @@ const Graph3Tier = {
             .scaleExtent([0.06, 5])
             .on('zoom', (e) => { this.g.attr('transform', e.transform); });
         this.svg.call(this.zoom);
+
+        this._observeGraphPanelBodyResize(container);
 
         // Prevent zoom on node drag
         this.svg.on('dblclick.zoom', null);
@@ -132,14 +933,10 @@ const Graph3Tier = {
             target: e.target,
         }));
 
+        const lc = this.layoutConfig;
         const getRadius = d => {
-            if (d.type === 'topic') {
-                if (d.level === 1) return 7;
-                if (d.level === 2) return 5;
-                return 4;
-            }
-            if (d.type === 'tag') return 4 + Math.min(d.file_count || 0, 30) * 0.25;
-            return 2.5;
+            if (d.type === 'topic' && d.level === 1) return lc.radiusL1;
+            return lc.radiusOther;
         };
 
         const getColor = d => {
@@ -152,8 +949,7 @@ const Graph3Tier = {
             return '#81c784';
         };
 
-        // ===== Sector-based radial layout: zero crossings, even spread =====
-        // Build adjacency: parent ID → child IDs
+        // ===== Constellation layout: L1 spread out, children cluster around L1 =====
         const childMap = {};
         const parentMap = {};
         edges.forEach(e => {
@@ -167,186 +963,15 @@ const Graph3Tier = {
         const nodeMap = {};
         nodes.forEach(n => { nodeMap[n.id] = n; });
 
-        // Compute subtree file count for each node (used for radius scaling)
-        const fileCounts = {};
-        function computeFileCount(nodeId) {
-            if (fileCounts[nodeId] !== undefined) return fileCounts[nodeId];
-            const children = childMap[nodeId] || [];
-            let count = 0;
-            for (const cid of children) {
-                const child = nodeMap[cid];
-                if (!child) continue;
-                if (child.type === 'file') count += 1;
-                else count += computeFileCount(cid);
+        _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, 'tx');
+        nodes.forEach(function(n) {
+            if (n.tx == null || n.ty == null) {
+                n.tx = cx;
+                n.ty = cy;
             }
-            fileCounts[nodeId] = count;
-            return count;
-        }
-        nodes.forEach(n => { computeFileCount(n.id); });
-        const maxFileCount = Math.max(1, ...Object.values(fileCounts));
-
-        // Count total descendant leaves for sector allocation
-        function countLeaves(nodeId, visited) {
-            if (visited.has(nodeId)) return 0;
-            visited.add(nodeId);
-            const children = childMap[nodeId] || [];
-            if (children.length === 0) return 1;
-            return children.reduce((s, c) => s + countLeaves(c, visited), 0);
-        }
-
-        const maxR = Math.min(svgW, svgH) * 0.43;
-        const rL1    = 18;
-        const rL2Min = maxR * 0.12;
-        const rL2Max = maxR * 0.32;
-        const rL3Min = maxR * 0.28;
-        const rL3Max = maxR * 0.48;
-        const rFileMin = maxR * 0.40;
-        const rFileMax = maxR * 0.72;
-        const rTagMin = maxR * 0.30;
-        const rTagMax = maxR * 0.55;
-
-        function scaleRadius(minR, maxR, parentId) {
-            const fc = fileCounts[parentId] || 0;
-            const t = maxFileCount > 0 ? fc / maxFileCount : 0;
-            return minR + (maxR - minR) * t;
-        }
-
-        // Reset targets
-        nodes.forEach(n => { n.tx = undefined; n.ty = undefined; });
-
-        // ---- crossing reduction: compute subtree barycenter angles ----
-        const barycenterMap = {};
-        function computeBarycenter(nodeId, visited) {
-            if (barycenterMap[nodeId] !== undefined) return barycenterMap[nodeId];
-            if (visited.has(nodeId)) { barycenterMap[nodeId] = 0; return 0; }
-            visited.add(nodeId);
-            const ch = (childMap[nodeId] || []).filter(c => nodeMap[c] && !visited.has(c));
-            if (ch.length === 0) { barycenterMap[nodeId] = 0; return 0; }
-            let sum = 0;
-            ch.forEach(function(c, i) {
-                computeBarycenter(c, new Set(visited));
-                sum += (i / Math.max(1, ch.length - 1)) * 2 - 1; // spread -1..1
-            });
-            barycenterMap[nodeId] = sum / ch.length;
-            return barycenterMap[nodeId];
-        }
-        nodes.forEach(function(n) { computeBarycenter(n.id, new Set()); });
-
-        // Assign positions recursively within an angular sector
-        function assignRadial(parentId, a0, sector, visited) {
-            var children = (childMap[parentId] || []).filter(function(c) { return nodeMap[c] && !visited.has(c); });
-            if (children.length === 0) return;
-
-            // Sort children by barycenter to minimize edge crossings
-            children.sort(function(a, b) {
-                return (barycenterMap[a] || 0) - (barycenterMap[b] || 0);
-            });
-
-            const totalL = children.reduce((s, c) => s + countLeaves(c, new Set([...visited])), 0) || children.length;
-            let a = a0;
-
-            children.forEach(childId => {
-                const child = nodeMap[childId];
-                const childL = countLeaves(childId, new Set([...visited]));
-                const cs = (childL / totalL) * sector;
-                const ca = a + cs / 2;
-
-                let r;
-                if (child.type === 'topic') {
-                    r = child.level === 2
-                        ? scaleRadius(rL2Min, rL2Max, childId)
-                        : scaleRadius(rL3Min, rL3Max, childId);
-                } else if (child.type === 'tag') {
-                    r = scaleRadius(rTagMin, rTagMax, childId);
-                } else {
-                    r = scaleRadius(rFileMin, rFileMax, childId);
-                }
-
-                const tx = cx + Math.cos(ca) * r;
-                const ty = cy + Math.sin(ca) * r;
-                if (child.tx !== undefined) {
-                    child.tx = (child.tx + tx) / 2;
-                    child.ty = (child.ty + ty) / 2;
-                } else {
-                    child.tx = tx;
-                    child.ty = ty;
-                }
-
-                assignRadial(childId, a, cs, new Set([...visited]));
-                a += cs;
-            });
-        }
-
-        // Position L1 topics evenly around center
-        const l1Nodes = nodes.filter(n => n.type === 'topic' && n.level === 1);
-        const l1Count = l1Nodes.length || 1;
-        l1Nodes.forEach((n, i) => {
-            const a = (2 * Math.PI * i) / l1Count - Math.PI / 2;
-            n.tx = cx + Math.cos(a) * rL1;
-            n.ty = cy + Math.sin(a) * rL1;
         });
+        _seedGraphPositions(nodes);
 
-        // Spread L1→children sectors
-        const visited = new Set();
-        l1Nodes.forEach((n, i) => {
-            const a0 = (2 * Math.PI * i) / l1Count - Math.PI / 2;
-            assignRadial(n.id, a0, (2 * Math.PI) / l1Count, visited);
-        });
-
-        // Orphaned / tag-only nodes: spread with file-count-scaled radii
-        const orphanNodes = nodes.filter(n => n.tx === undefined);
-        const orphanCount = orphanNodes.length;
-        orphanNodes.forEach((n, i) => {
-            const a = (orphanCount > 1 ? (i / orphanCount) : 0) * 2 * Math.PI;
-            let r;
-            if (n.type === 'tag') {
-                r = scaleRadius(rTagMin, rTagMax, n.id);
-            } else {
-                r = scaleRadius(rFileMin, rFileMax, n.id);
-            }
-            n.tx = cx + Math.cos(a) * (r + 50);
-            n.ty = cy + Math.sin(a) * (r + 50);
-        });
-
-        const linkForce = d3.forceLink(edges).id(d => d.id)
-            .distance(d => {
-                const st = d.source.type || (typeof d.source === 'string' ? 'file' : '');
-                const tt = d.target.type || (typeof d.target === 'string' ? 'file' : '');
-                if (st === 'topic' && tt === 'topic') return 30;
-                return 50;
-            })
-            .strength(0.05);
-
-        this.simulation = d3.forceSimulation(nodes)
-            .force('link', linkForce)
-            .force('charge', d3.forceManyBody().strength(-150))
-            .force('x', d3.forceX(d => d.tx).strength(d => {
-                if (d.type === 'topic' && d.level === 1) return 0.6;
-                if (d.type === 'topic') return 0.3;
-                if (d.type === 'tag') return 0.2;
-                return 0.15;
-            }))
-            .force('y', d3.forceY(d => d.ty).strength(d => {
-                if (d.type === 'topic' && d.level === 1) return 0.6;
-                if (d.type === 'topic') return 0.3;
-                if (d.type === 'tag') return 0.2;
-                return 0.15;
-            }))
-            .force('collision', d3.forceCollide().radius(d => getRadius(d) + 4))
-            .alphaDecay(0.01)
-            .velocityDecay(0.4);
-
-        // Links
-        const linkGroup = this.g.append('g').attr('class', 'graph-links');
-        const link = linkGroup.selectAll('line')
-            .data(edges)
-            .join('line')
-            .attr('stroke', '#c8c8c8')
-            .attr('stroke-width', 0.3)
-            .attr('opacity', 0.3);
-
-        // Arrowheads for bidirectional display (small dots at both ends)
-        // Nodes
         const nodeGroup = this.g.append('g').attr('class', 'graph-nodes');
         const node = nodeGroup.selectAll('g')
             .data(nodes)
@@ -381,26 +1006,16 @@ const Graph3Tier = {
                 if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
                 return 'var(--text-muted, #777)';
             })
-            .style('pointer-events', 'none');
-
-        // Drag behavior
-        const drag = d3.drag()
-            .on('start', (e, d) => {
-                if (!e.active) self.simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            })
-            .on('drag', (e, d) => {
-                d.fx = e.x;
-                d.fy = e.y;
-            })
-            .on('end', (e, d) => {
-                if (!e.active) self.simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
+            .style('pointer-events', 'none')
+            .style('display', d => {
+                if (d.type === 'topic') return '';
+                if (d.type === 'tag') return '';
+                return self.showFilenames ? '' : 'none';
             });
 
-        node.call(drag);
+        const updateNodePos = function() {
+            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+        };
 
         // Hover effects
         node.on('mouseenter', function(e, d) {
@@ -448,40 +1063,12 @@ const Graph3Tier = {
             }
         });
 
-        // Tick
-        this.simulation.on('tick', () => {
-            link
-                .attr('x1', d => d.source.x)
-                .attr('y1', d => d.source.y)
-                .attr('x2', d => d.target.x)
-                .attr('y2', d => d.target.y);
-
-            node.attr('transform', d => `translate(${d.x},${d.y})`);
+        updateNodePos();
+        const selfRef = this;
+        this.simulation = _startGraphRelaxation(nodes, getRadius, updateNodePos, function() {
+            selfRef._fitGraphToBounds(nodes, svgW, svgH, getRadius, 800);
         });
-
-        // Initial zoom to fit
-        this.simulation.on('end', () => {
-            const bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
-            nodes.forEach(n => {
-                if (n.x < bounds.x1) bounds.x1 = n.x;
-                if (n.y < bounds.y1) bounds.y1 = n.y;
-                if (n.x > bounds.x2) bounds.x2 = n.x;
-                if (n.y > bounds.y2) bounds.y2 = n.y;
-            });
-            const bw = bounds.x2 - bounds.x1 || 100;
-            const bh = bounds.y2 - bounds.y1 || 100;
-            const pad = 60;
-            const scale = Math.min((svgW - pad * 2) / bw, (svgH - pad * 2) / bh, 1.5);
-            const midX = (bounds.x1 + bounds.x2) / 2;
-            const midY = (bounds.y1 + bounds.y2) / 2;
-            self.svg.transition().duration(800).call(
-                self.zoom.transform,
-                d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
-            );
-        });
-
-        // Run simulation
-        this.simulation.alpha(0.6).restart();
+        node.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, this.simulation, self));
 
         // Click background to deselect
         this.svg.on('click', () => {});
@@ -491,8 +1078,12 @@ const Graph3Tier = {
         if (!this.svg || !this.data) return;
         const container = document.getElementById('graph-panel-body');
         if (!container) return;
-        const newW = container.clientWidth || 800;
-        const newH = container.clientHeight || 600;
+        const rawW = container.clientWidth;
+        const rawH = container.clientHeight;
+        if (!rawW || !rawH || rawW < 48 || rawH < 48) return;
+
+        const newW = rawW;
+        const newH = rawH;
         const oldW = +this.svg.attr('width');
         const oldH = +this.svg.attr('height');
 
@@ -507,13 +1098,19 @@ const Graph3Tier = {
         var nodes = this.simulation.nodes();
         if (!nodes || !nodes.length) return;
 
-        var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
-        nodes.forEach(function(n) {
-            if (n.x < bounds.x1) bounds.x1 = n.x;
-            if (n.y < bounds.y1) bounds.y1 = n.y;
-            if (n.x > bounds.x2) bounds.x2 = n.x;
-            if (n.y > bounds.y2) bounds.y2 = n.y;
-        });
+        function getRZ(d) {
+            if (d.type === 'topic') {
+                if (d.level === 1) return 7;
+                if (d.level === 2) return 5;
+                return 4;
+            }
+            if (d.type === 'tag') return 4 + Math.min(d.file_count || 0, 30) * 0.25;
+            return 2.5;
+        }
+
+        this._clampNodesToView(nodes, newW, newH, getRZ);
+
+        var bounds = self._boundsFromNodes(nodes, newW, newH, getRZ);
         var bw = bounds.x2 - bounds.x1 || 100;
         var bh = bounds.y2 - bounds.y1 || 100;
         var scale = Math.min((newW - 120) / bw, (newH - 120) / bh, 1.5);
@@ -553,7 +1150,7 @@ const Graph3Tier = {
         var nodeMap = {};
         nodes.forEach(function(n) { nodeMap[n.id] = n; });
 
-        // ---- compute target positions (radial layout) ----
+        // ---- compute target positions (constellation layout) ----
         var childMap = {};
         var parentMap = {};
         edges.forEach(function(e) {
@@ -562,87 +1159,29 @@ const Graph3Tier = {
             parentMap[e.target] = e.source;
         });
 
-        var fileCounts = {};
-        function countFiles(nid) {
-            if (fileCounts[nid] !== undefined) return fileCounts[nid];
-            var ch = childMap[nid] || [];
-            var c = 0;
-            ch.forEach(function(cid) { var nd = nodeMap[cid]; if (!nd) return; c += nd.type === 'file' ? 1 : countFiles(cid); });
-            fileCounts[nid] = c;
-            return c;
-        }
-        nodes.forEach(function(n) { countFiles(n.id); });
-        var maxFC = Math.max(1, Math.max.apply(null, Object.values(fileCounts)));
-
-        function countLeaves(nid, vis) {
-            if (vis.has(nid)) return 0; vis.add(nid);
-            var ch = childMap[nid] || [];
-            return ch.length === 0 ? 1 : ch.reduce(function(s, c) { return s + countLeaves(c, new Set(vis)); }, 0);
-        }
-
-        var maxR = Math.min(svgW, svgH) * 0.43;
-        function scaleR(minR, maxR2, pid) {
-            return minR + (maxR2 - minR) * ((fileCounts[pid] || 0) / maxFC);
-        }
-
-        function assignRadial(pid, a0, sector, vis) {
-            var ch = (childMap[pid] || []).filter(function(c) { return nodeMap[c] && !vis.has(c); });
-            if (ch.length === 0) return;
-            var totalL = ch.reduce(function(s, c) { return s + countLeaves(c, new Set(vis)); }, 0) || ch.length;
-            var a = a0;
-            ch.forEach(function(cid) {
-                var nd = nodeMap[cid];
-                var cl = countLeaves(cid, new Set(vis));
-                var cs = (cl / totalL) * sector;
-                var ca = a + cs / 2;
-                var r;
-                if (nd.type === 'topic') {
-                    r = nd.level === 2 ? scaleR(maxR * 0.12, maxR * 0.32, cid) : scaleR(maxR * 0.28, maxR * 0.48, cid);
-                } else if (nd.type === 'tag') {
-                    r = scaleR(maxR * 0.30, maxR * 0.55, cid);
-                } else {
-                    r = scaleR(maxR * 0.40, maxR * 0.72, cid);
-                }
-                nd._tx = cx + Math.cos(ca) * r;
-                nd._ty = cy + Math.sin(ca) * r;
-                nd._depth = Math.max(nd._depth || 0, (nodeMap[pid] ? (nodeMap[pid]._depth || 0) + 1 : 1));
-                assignRadial(cid, a, cs, new Set(vis));
-                a += cs;
-            });
-        }
-
-        var l1s = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
-        l1s.forEach(function(n, i) {
-            n._depth = 0;
-            var a = (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2;
-            n._tx = cx + Math.cos(a) * 18;
-            n._ty = cy + Math.sin(a) * 18;
+        _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, '_tx');
+        nodes.forEach(function(n) {
+            if (n._tx == null || n._ty == null) {
+                n._tx = cx;
+                n._ty = cy;
+            }
         });
-        var vis = new Set();
-        l1s.forEach(function(n, i) {
-            assignRadial(n.id, (2 * Math.PI * i) / (l1s.length || 1) - Math.PI / 2, (2 * Math.PI) / (l1s.length || 1), vis);
-        });
+        _seedGraphPositions(nodes);
 
-        var orphans = nodes.filter(function(n) { return n._tx === undefined; });
         var maxD = 0;
-        nodes.forEach(function(n) { if (n._depth > maxD) maxD = n._depth; });
-        orphans.forEach(function(n, i) {
-            n._depth = maxD + 1;
-            var a = ((orphans.length > 1 ? i / orphans.length : 0)) * 2 * Math.PI;
-            var r = n.type === 'tag' ? scaleR(maxR * 0.30, maxR * 0.55, n.id) : scaleR(maxR * 0.40, maxR * 0.72, n.id);
-            n._tx = cx + Math.cos(a) * (r + 50);
-            n._ty = cy + Math.sin(a) * (r + 50);
+        nodes.forEach(function(n) { if ((n._depth || 0) > maxD) maxD = n._depth || 0; });
+        nodes.forEach(function(n) {
+            if (n._depth == null) n._depth = maxD + 1;
         });
-
-        nodes.forEach(function(n) { maxD = Math.max(maxD, n._depth || 0); });
+        nodes.forEach(function(n) { if (n._depth > maxD) maxD = n._depth; });
 
         // ---- build SVG elements ----
         this.g.selectAll('*').remove();
 
+        var lc = self.layoutConfig;
         var getRadius = function(d) {
-            if (d.type === 'topic') return d.level === 1 ? 7 : d.level === 2 ? 5 : 4;
-            if (d.type === 'tag') return 4 + Math.min(d.file_count || 0, 30) * 0.25;
-            return 2.5;
+            if (d.type === 'topic' && d.level === 1) return lc.radiusL1;
+            return lc.radiusOther;
         };
         var getColor = function(d) {
             if (d.type === 'topic') return d.level === 1 ? '#e85d3a' : d.level === 2 ? '#ea8600' : '#f4a930';
@@ -651,14 +1190,12 @@ const Graph3Tier = {
         };
 
         // Create all elements hidden initially
-        var linkGroup = self.g.append('g').attr('class', 'graph-links');
         var nodeGroup = self.g.append('g').attr('class', 'graph-nodes');
 
-        // Add nodes at center, invisible
         var nodeSel = nodeGroup.selectAll('g').data(nodes).join('g')
             .attr('cursor', 'pointer')
             .attr('opacity', 0)
-            .attr('transform', function(d) { d.x = cx; d.y = cy; return 'translate(' + cx + ',' + cy + ')'; });
+            .attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
 
         nodeSel.append('circle')
             .attr('r', function(d) { return getRadius(d); })
@@ -682,95 +1219,57 @@ const Graph3Tier = {
                 if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
                 return 'var(--text-muted, #777)';
             })
-            .style('pointer-events', 'none');
+            .style('pointer-events', 'none')
+            .style('display', function(d) {
+                if (d.type === 'topic') return '';
+                if (d.type === 'tag') return '';
+                return self.showFilenames ? '' : 'none';
+            });
 
-        // Add edges, invisible
-        var linkSel = linkGroup.selectAll('line').data(edges).join('line')
-            .attr('stroke', '#c8c8c8').attr('stroke-width', 0.3).attr('opacity', 0)
-            .attr('x1', cx).attr('y1', cy).attr('x2', cx).attr('y2', cy);
-
-        // ---- force-directed growth animation ----
-        var totalNodes = nodes.length;
-        var depthRevealInterval = Math.max(1200, Math.min(4000, 30000 / (maxD + 1)));
-
-        // All nodes start at center, hidden except L1
-        nodes.forEach(function(n) { n.x = cx; n.y = cy; });
-        nodeSel.attr('transform', function(d) { return 'translate(' + cx + ',' + cy + ')'; });
-        nodeSel.attr('opacity', 0);
-
+        var rc = self.layoutConfig;
+        var depthRevealInterval = Math.max(rc.replayRevealMinMs,
+            Math.min(rc.replayRevealMaxMs, rc.replayRevealBudgetMs / (maxD + 1)));
+        var l1s = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
         var l1Ids = new Set(l1s.map(function(n) { return n.id; }));
-        nodeSel.filter(function(d) { return l1Ids.has(d.id); }).attr('opacity', 1);
-        linkSel.attr('opacity', 0);
-
         var revealed = new Set(l1Ids);
-        var allRevealed = (maxD === 0);
         var currentDepth = 1;
         var revealTimer = null;
 
+        function syncReveal() {
+            nodeSel.attr('opacity', function(d) { return revealed.has(d.id) ? 1 : 0; });
+        }
+
+        syncReveal();
+
+        function updateReplayPos() {
+            nodeSel.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+        }
+
+        self.simulation = _startGraphRelaxation(nodes, getRadius, updateReplayPos, function() {
+            nodeSel.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, self.simulation, self));
+        });
+
         function revealNextDepth() {
             if (currentDepth > maxD) {
-                allRevealed = true;
+                self._fitGraphToBounds(nodes, svgW, svgH, getRadius, 600);
                 return;
             }
-            var batch = nodes.filter(function(n) { return (n._depth || 0) === currentDepth; });
-            batch.forEach(function(n) { revealed.add(n.id); });
-            // Re-heat simulation so new nodes get pushed out
-            sim.alpha(Math.max(sim.alpha(), 0.15));
-            sim.restart();
+            nodes.filter(function(n) { return (n._depth || 0) === currentDepth; })
+                .forEach(function(n) { revealed.add(n.id); });
+            syncReveal();
             currentDepth++;
             if (currentDepth <= maxD) {
                 revealTimer = setTimeout(revealNextDepth, depthRevealInterval);
             } else {
-                allRevealed = true;
+                self._fitGraphToBounds(nodes, svgW, svgH, getRadius, 600);
             }
         }
 
-        var sim = d3.forceSimulation(nodes)
-            .force('link', d3.forceLink(edges).id(function(d) { return d.id; }).distance(45).strength(0.04))
-            .force('charge', d3.forceManyBody().strength(-120))
-            .force('x', d3.forceX(function(d) { return d._tx; }).strength(0.015))
-            .force('y', d3.forceY(function(d) { return d._ty; }).strength(0.015))
-            .force('collision', d3.forceCollide().radius(function(d) { return getRadius(d) + 6; }))
-            .alpha(0.4).alphaDecay(0.0008).velocityDecay(0.5);
-
-        sim.on('tick', function() {
-            nodeSel.attr('opacity', function(d) { return revealed.has(d.id) ? 1 : 0; });
-            linkSel
-                .attr('opacity', function(d) { return (revealed.has(d.source) && revealed.has(d.target)) ? 0.3 : 0; })
-                .attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; })
-                .attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
-            nodeSel.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
-
-            // Stop simulation early only when all nodes are revealed and cooled down
-            if (allRevealed && sim.alpha() < 0.005) {
-                sim.stop();
-            }
-        });
-
-        sim.on('end', function() {
-            if (revealTimer) clearTimeout(revealTimer);
-            var bounds = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
-            nodes.forEach(function(n) {
-                if (n.x < bounds.x1) bounds.x1 = n.x;
-                if (n.y < bounds.y1) bounds.y1 = n.y;
-                if (n.x > bounds.x2) bounds.x2 = n.x;
-                if (n.y > bounds.y2) bounds.y2 = n.y;
-            });
-            var bw = bounds.x2 - bounds.x1 || 100;
-            var bh = bounds.y2 - bounds.y1 || 100;
-            var scale = Math.min((svgW - 120) / bw, (svgH - 120) / bh, 1.2);
-            var midX = (bounds.x1 + bounds.x2) / 2;
-            var midY = (bounds.y1 + bounds.y2) / 2;
-            self.svg.transition().duration(600).call(
-                self.zoom.transform,
-                d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
-            );
-            self.svg.on('click', null);
-            self.simulation = null;
-        });
-
-        // Start depth reveal timer
-        if (maxD >= 1) {
+        if (maxD === 0) {
+            nodes.forEach(function(n) { revealed.add(n.id); });
+            syncReveal();
+            self._fitGraphToBounds(nodes, svgW, svgH, getRadius, 600);
+        } else if (maxD >= 1) {
             revealTimer = setTimeout(revealNextDepth, depthRevealInterval);
         }
     },
@@ -782,12 +1281,43 @@ function graphZoomIn() { Graph3Tier.zoomIn(); }
 function graphZoomOut() { Graph3Tier.zoomOut(); }
 function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
+function graphToggleFilenames() {
+    Graph3Tier.showFilenames = !Graph3Tier.showFilenames;
+    var btn = document.getElementById('graph-toggle-filenames');
+    if (btn) btn.classList.toggle('active', Graph3Tier.showFilenames);
+    if (Graph3Tier.g) {
+        Graph3Tier.g.selectAll('.graph-nodes text').style('display', function(d) {
+            if (d.type === 'topic') return '';
+            if (d.type === 'tag') return '';
+            return Graph3Tier.showFilenames ? '' : 'none';
+        });
+    }
+}
 window.graphZoomIn = graphZoomIn;
 window.graphZoomOut = graphZoomOut;
 window.graphReplay = graphReplay;
 window.loadRelationGraphData = loadRelationGraphData;
+window.graphToggleFilenames = graphToggleFilenames;
+
+function graphOpenLayoutSettings() { Graph3Tier.openLayoutSettings(); }
+function graphCloseLayoutSettings() { Graph3Tier.closeLayoutSettings(); }
+function graphApplyLayoutSettings() {
+    Graph3Tier.applyLayoutSettings(Graph3Tier.readLayoutSettingsFromForm());
+}
+function graphResetLayoutSettings() { Graph3Tier.resetLayoutSettings(); }
+window.graphOpenLayoutSettings = graphOpenLayoutSettings;
+window.graphCloseLayoutSettings = graphCloseLayoutSettings;
+window.graphApplyLayoutSettings = graphApplyLayoutSettings;
+window.graphResetLayoutSettings = graphResetLayoutSettings;
+window.GraphLayoutParams = {
+    defaults: GRAPH_LAYOUT_DEFAULTS,
+    schema: GRAPH_LAYOUT_SCHEMA,
+    load: loadGraphLayoutConfig,
+};
 
 document.addEventListener('DOMContentLoaded', () => {
+    var fnBtn = document.getElementById('graph-toggle-filenames');
+    if (fnBtn) fnBtn.classList.toggle('active', Graph3Tier.showFilenames);
     document.querySelectorAll('#graph-filter-bar .graph-filter-btn').forEach(btn => {
         btn.addEventListener('click', function () {
             const f = this.dataset.filter;

@@ -1,335 +1,344 @@
-# NoteAI PRD — AI 原生个人知识库 v2.0
+# NoteAI PRD — AI 原生个人知识库
 
-## 1. 产品定位与愿景
+**版本**：v2.1  
+**日期**：2026-05-20  
+**状态说明**：本文档以当前代码库（Tauri + Python sidecar + `webui/`）为准，区分「已实现」「部分实现」「规划中」。与 [README.md](../README.md) 路线图一致。
 
-**一句话**：让 LLM 把你的零散信息"编译"成持续增值的结构化知识库，而不是每次提问都从原始文档重新推导。
+---
 
-灵感来自 [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)：
+## 1. 产品定位
+
+**一句话**：本地优先的 AI 知识编译器——把零散资料整理成可检索、可演进、按主题组织的 Markdown 知识库。
+
+灵感来自 Karpathy LLM Wiki：
 
 > Stop re-deriving, start compiling.
 
-NoteAI 在原始资料和最终答案之间插入一个"编译层"——由 AI 主动维护的 Markdown 知识库。与 RAG 的本质区别：RAG 是无状态的检索，NoteAI 是有状态的编译。
+与一次性 RAG 问答的区别：NoteAI 在工作区中持久化 **Notes（源）→ wiki（编译层）→ Raw（归档）**，并由 AI 辅助分类、综述、链接与检索。当前阶段仍以 **批处理 + 事件触发** 为主，尚未达到「全自动持续编译」的理想态。
 
-**目标用户**：深度知识工作者——研究员、产品经理、工程师、写作者，任何需要长期积累和检索知识的人。
+**目标用户**：深度知识工作者——研究员、产品经理、工程师、写作者。
 
----
-
-## 2. 现状评估
-
-### 2.1 已实现（v1.0）
-
-| 模块 | 能力 | 成熟度 |
-|------|------|--------|
-| 📥 采集 | 网页下载、PDF/DOCX/PPTX/TXT→MD 转换、AI 排版 | ★★★☆ |
-| 🗂️ 整理 | 三层主题树、jieba 分词标签、笔记整合（3 种策略）、AI 主题分析 | ★★★☆ |
-| 🔗 链接 | 双向链接发现（粗筛+AI 精判）、Canvas 力导向图、WIKI.md 索引 | ★★☆☆ |
-| ✍️ 编辑 | Tiptap Markdown 编辑、marked.js 预览、AI 改写 | ★★★☆ |
-| 💬 对话 | AI 助手面板、基于知识库的 RAG 问答（Milvus+FlagEmbedding） | ★★☆☆ |
-| 📱 桌面 | Tauri 2 壳、Sidecar 进程架构、watchdog 文件监听 | ★★★☆ |
-
-### 2.2 进行中（LangChain2 分支）
-
-- 三层话题系统重构（topics_3tier）
-- Abstract 综述文件夹方案四（独立于 Notes 的编译产物层）
-- Chunker 改进（代码块/表格识别、重叠窗口）
-- 主题节点综述状态标记和双击预览
-
-### 2.3 结构性债务
-
-- `ORGANIZED_FOLDER` / `ABSTRACT_FOLDER` 混用（已修复）
-- JS API 函数缺失（如 `createTopicFolder`，已修复）
-- 测试覆盖率低（仅 24 个测试用例）
-- 无 CI/CD pipeline
-- 前端代码部分仍在 index.html 内联，模块化未完成
+**运行形态**：桌面应用（Tauri v2），非纯浏览器站点；功能验证须在 `python run.py` / `cargo tauri dev` 下进行。
 
 ---
 
-## 3. Karpathy 理念对齐分析
+## 2. 系统架构
 
-Karpathy 描述的三层架构与 NoteAI 现状的映射：
+### 2.1 技术栈
 
-| Karpathy 概念 | NoteAI 对应物 | 差距 |
-|---------------|--------------|------|
-| **Raw Sources**（不可变源） | `Raw/` 文件夹 | 缺少"源文档不可变"的语义保护 |
-| **Wiki**（LLM 维护的编译层） | `Abstract/` + `Notes/` | 只完成了静态生成，缺少"源入→自动触达 15 个相关页面"的联动 |
-| **Schema**（LLM 行为规范） | `prompts/` 目录 | 缺少 `SCHEMA.md` 类型的主配置文件，prompt 零散 |
-| **Ingest**（源→摘要+索引+交叉引用） | 笔记整合 | 非流式，不自动触发交叉引用更新 |
-| **Query**（搜索→合成→归档） | AI 助手 + RAG | 无法将好的回答归档为 wiki 页面 |
-| **Lint**（矛盾/过时/孤儿检测） | ❌ 不存在 | 完全缺失 |
-| **index.md**（每页一行摘要） | WIKI.md | 结构不同，WIKI.md 更像目录而非摘要索引 |
-| **log.md**（可 grep 的操作日志） | activity_log | 结构不够标准化，不可 grep |
+| 层 | 技术 | 说明 |
+|----|------|------|
+| 桌面壳 | Tauri v2 (Rust) | 加载 `webui/`，`invoke` 转发 RPC |
+| 前端 | HTML / CSS / 原生 JS | IIFE 模块 + 唯一 ES 模块 `main.mjs`；Tiptap、marked、PDF.js、D3 |
+| 后端 | Python 3.10+ sidecar | stdin/stdout **JSON-RPC**，`RpcRouter` 分发 |
+| 向量索引 | Milvus Lite + fastembed | 稠密：`bge-small-zh-v1.5`（512d） |
+| 稀疏检索 | jieba TF-IDF | 与稠密混合权重约 0.7 / 0.3 |
+| 重排 | FlagReranker | `bge-reranker-v2-m3` |
+| LLM | OpenAI 兼容 API | 经 `utils/llm_utils`，并发信号量 4 |
 
-**结论：NoteAI 目前的"编译"是批量的、被动的，而不是增量的、主动的。v2.0 的核心命题是从"批处理知识工具"升级为"持续维护的知识编译器"。**
-
----
-
-## 4. 竞品参考与主流方向（2025-2026）
-
-| 产品 | 核心思路 | 可借鉴点 |
-|------|---------|---------|
-| **Notion AI** | 文档+AI 内嵌 | Q&A 直接引用页面，AI 自动填充属性 |
-| **Obsidian + Copilot** | 本地 MD + 插件生态 | 社区驱动、Canvas、Dataview 查询 |
-| **Mem** | AI 自动组织，无需手动分类 | AI 自动打标签、自动关联、AI Chat 引用记忆 |
-| **Reflect** | 第二大脑，AI 辅助回忆 | 每日笔记 + AI 摘要 + 反向链接自动化 |
-| **Fabric** | 开源 Pattern 库 | YouTube/Podcast→笔记的 Pipeline 模式 |
-| **Granola** | AI 会议笔记 | 结构化会议模板+AI 增强 |
-| **Cogram** | No-code LLM pipeline for docs | 可编程的知识处理管线 |
-| **Rewind AI** | 全量记录+可搜索 | "记录一切"的愿景，但隐私成问题 |
-
-**2025-2026 前沿方向**：
-
-1. **Memory-based AI** — AI 拥有持久记忆，不是每次从零开始；Google Project Mariner、OpenAI Deep Research 都是这个方向
-2. **Agentic Knowledge Base** — 知识库不只是被查询，而是能主动执行任务（"帮我整理本周 AI 论文"→自动搜索→下载→总结→归档）
-3. **Graph RAG / Knowledge Graph RAG** — 从向量检索升级为图+向量混合检索，用实体关系提升检索精度
-4. **Small-to-Big Retrieval** — 先检索句子级，再扩展到段落级，逐级精炼
-5. **Multimodal Knowledge** — 图片、音频、视频作为一等知识载体，不只是文本附件
-6. **Local-first + Privacy** — 数据本地化，AI 本地推理（Ollama/llama.cpp），不依赖云
-7. **Collaborative Knowledge** — 团队共享知识库，AI 辅助知识对齐
-
----
-
-## 5. 功能路线图
-
-### P0 — 补齐 Karpathy 核心闭环（v2.0 必须）
-
-#### 5.1 Schema 系统 — `SCHEMA.md`
-**现状**：prompts/ 目录零散，没有统一的知识库结构规范。
-**方案**：新增 `SCHEMA.md` 作为顶层配置，定义：
-- Wiki 目录结构约定
-- 页面模板（摘要页 / 概念页 / 实体页 / 对比页）
-- 命名规范、Front Matter 字段
-- LLM 维护行为规范（何时更新、更新范围、冲突解决）
-- 与 Karpathy 的 CLAUDE.md 理念一致：人类和 LLM 共同演化这个文件
-
-#### 5.2 Ingest 流式 Pipeline
-**现状**：笔记整合是批处理，手动触发。
-**方案**：新的 Ingest 事件驱动闭环：
-```
-新源进入 → LLM 阅读 → 生成摘要页 → 更新 index.md
-    → 识别提及的实体/概念 → 更新相关页面 → 添加交叉引用
-    → 追加 changelog 到 log.md
-```
-一个源可能触及 10-15 个页面，全自动。进度通过 sidecar event 推送到 UI。
-
-#### 5.3 Lint 健康检查
-**新增功能**，定期/手动触发以下检查：
-- **矛盾检测**：不同页面对同一事实的陈述是否冲突
-- **过时检测**：摘要页是否落后于源文件的更新
-- **孤儿页面**：没有入链的页面（可删除候选）
-- **缺失交叉引用**：页面 A 提到实体 B，但 A 没有链接到 B
-- **数据缺口**：某个主题下文件数量异常少
-
-输出 Lint 报告，用户确认后批量修复。
-
-#### 5.4 Query → Archive 闭环
-**现状**：AI 助手的对话是临时的，好的回答无法沉淀。
-**方案**：在助手面板增加"保存到知识库"按钮，AI 将好的回答格式化为 wiki 页面，自动插入到合适的目录位置并更新索引。
-
-#### 5.5 log.md 标准化
-**现状**：`activity_log.py` 记录了操作但不标准。
-**方案**：按 Karpathy 规范重构为 `log.md`：
-```
-## 2026-05-15
-
-### Ingest `AI Agent 架构设计.md`
-- 源: `Notes/AI Agent 架构设计.md`
-- 摘要: `Abstract/AI Agent 架构/Agent 架构设计.md`
-- 更新: `Abstract/AI Agent 架构/综述.md`、`WIKI.md`
-- 交叉引用: `AI 产品经理之路/Agent 产品设计.md`
-
-### Query "Agent 记忆系统怎么做" → 已归档为 `Abstract/Agent 记忆系统设计.md`
-```
-`grep "Ingest" log.md` 即可查看所有摄入记录。
-
----
-
-### P1 — 知识深度与智能（v2.1）
-
-#### 5.6 自动交叉引用引擎
-**现状**：双向链接发现依赖手动触发。
-**方案**：
-- 文件保存时自动触发交叉引用分析（watchdog 事件驱动）
-- 实体识别（提取人名、术语、工具名）→ 与已有页面匹配 → 自动添加链接
-- 引用强度的可视化（强引用/弱引用/提及）
-
-#### 5.7 Graph RAG 混合检索
-**现状**：纯向量检索（Milvus + FastEmbed）。
-**方案**：
-- 构建知识图谱层（实体-关系-实体），与向量检索并行
-- 查询时：向量检索获取语义相似块 + 图遍历获取关联实体
-- 融合排序后喂给 LLM
-
-#### 5.8 AI 原生编辑器
-**现状**：AI 改写是选中→改写→预览→应用，体验割裂。
-**方案**：
-- `/` 命令菜单（slash commands）：`/summarize` `/展开` `/翻译` `/改写为要点` `/补充案例` `/反问`
-- AI 内联补全（类似 Cursor Tab）：在上下文中自动建议下一句
-- "Continue writing" 按钮，AI 分析上下文后续写
-
-#### 5.9 知识版本化
-**现状**：无版本管理，AI 更新可能覆盖重要人工编辑。
-**方案**：
-- 每个 wiki 页面维护变更历史（存储在 `.noteai/history/` 下）
-- AI 编辑前后自动 diff
-- 支持一键回退，标注"此段落为人工编辑，请勿覆盖"
-
-#### 5.10 主动知识推送
-**现状**：知识库是"拉取"模式（用户主动查询）。
-**方案**：
-- "本周回顾"邮件/通知：本周新增文件摘要、待处理主题、知识库变化概览
-- "你知道吗"式发现：AI 发现两个看似无关的主题存在关联，主动推送给用户
-
----
-
-### P2 — Agent 化与自动化（v2.2）
-
-#### 5.11 Agent 型知识助手
-**现状**：AI 助手是单轮/多轮对话，无自主行动能力。
-**方案**：
-- 助手可以执行操作：搜索文件、创建主题、生成综述、移动文件（类似 Claude Code 的工具调用模式）
-- "帮我整理本周 AI 论文" → Agent 自动：搜索 → 下载 → 分类 → 摘要 → 归档 → 更新索引
-- 支持定时任务（每天早上 9 点整理昨天的 RSS 订阅）
-
-#### 5.12 多源自动采集
-**新功能**：
-- **RSS/Atom 订阅**：监控博客和新闻源，新文章自动下载入库
-- **YouTube 转录**：订阅频道 → 新视频 → Whisper 转文字 → 摘要 → 存档
-- **X/Twitter 书签**：收藏的推文 → 提取内容 → 存档
-- **邮件集成**：转发邮件到指定地址 → 自动提取内容
-- **浏览器扩展**：一键剪藏网页到 NoteAI
-
-#### 5.13 Personal Memory（个人记忆系统）
-**新功能**：Not AI 的通用记忆，而是关于"你"的记忆。
-- AI 助手在对话中自动提取用户偏好、观点、决策理由
-- 存储到用户 Profile（`profile.md`）
-- 每次对话前加载，让 AI 越来越"懂你"
-- 类似 ChatGPT Memory 但本地化、用户可控
-
-#### 5.14 知识复习系统
-**新功能**：
-- **间隔重复（Spaced Repetition）**：AI 从知识库生成卡片，按 SM-2 算法推送复习
-- **每日一问**：AI 根据知识库内容生成一个问题，回答后给出反馈
-- **知识测验**：指定主题范围，AI 生成测验题
-
----
-
-### P3 — 生态与协作（v2.3+）
-
-#### 5.15 Local AI 支持
-- 集成 Ollama / llama.cpp，无云端依赖
-- 自动检测本地模型，提供"轻量本地 / 深度云端"双模式
-- 本地模型处理分类、标签、小文件摘要；云端模型处理复杂综述、交叉引用检测
-
-#### 5.16 移动端
-- iOS/Android 阅读版：只读访问知识库，支持搜索和 AI 提问
-- iCloud/Dropbox/Syncthing 同步
-- 快速捕捉：拍照→OCR→存档、语音→转文字→存档
-
-#### 5.17 发布与分享
-- 一键发布选定页面为公开网页（GitHub Pages 风格）
-- 导出为 PDF、ePub 整书
-- 团队空间：共享知识库，多人协作编辑（基于 Git 合并）
-
-#### 5.18 插件系统
-- Prompt 模板市场（类比 Fabric Patterns）
-- Ingest 插件接口（自定义采集源）
-- Post-process 插件接口（自定义后处理）：翻译、校对、去重、格式转换
-
----
-
-## 6. 架构建议
-
-### 6.1 数据层重构
+**通信链**：
 
 ```
-工作区/
-├── Raw/              # 原始源文件，不可变（由系统保护）
-├── Notes/            # 用户手动笔记 + 下载文章（可编辑）
-├── Abstract/         # AI 编译产物（综述、摘要、概念页）— 方案四
-├── .noteai/          # 系统元数据
-│   ├── history/      # 页面变更历史
-│   ├── embeddings/   # 向量索引（Milvus lite / ChromaDB）
-│   ├── graph/        # 知识图谱（实体-关系）
-│   ├── SCHEMA.md     # LLM 行为规范
-│   ├── index.md      # 每页一行摘要，LLM 维护
-│   ├── log.md        # 结构化操作日志，grep 友好
-│   └── profile.md    # 用户记忆（偏好、观点、决策）
-├── wiki/             # 手动维护的导航结构（WIKI.md）
-└── media/            # 图片、视频、音频文件
+webui (window.api) → Tauri Rust → Python sidecar → Handler → 文件系统 / Milvus / LLM
 ```
 
-### 6.2 Ingest Pipeline 架构
+进度与流式结果通过 RPC `event`（`progress`、`cascade_survey_chunk`、`cascade_done` 等）推送到前端。
+
+### 2.2 Sidecar 模块（已实现 RPC）
+
+| Handler | 职责摘要 |
+|---------|----------|
+| `WorkspaceHandler` | 工作区路径、文件树、选中文件、操作日志刷新 |
+| `TransferHandler` | 网页下载、导入、格式转换、`auto_convert_pending`、笔记整合 |
+| `FilesHandler` | 预览、保存、删除、在 Finder 中显示；保存后可触发级联综述 |
+| `TopicsHandler` | 主题树、自动/批量分类、移动、pending、活动日志、综述开关 |
+| `TagsHandler` | 标签列表、自动打标、TAGS.md 维护 |
+| `LinksHandler` | 双向链接发现、确认/拒绝、统计 |
+| `IntelHandler` | AI 改写（流式）、全文搜索 |
+| `IntelTopicHandler` | 主题分析、综述生成/应用建议 |
+| `RagHandler` | 索引初始化、分块增删、RAG 对话（含 actions 变体）、清空记忆 |
+| `ConfigHandler` | API/UI 配置、主题、用户画像、项目规则 |
+| `CloudSyncHandler` | 多云盘认证、推拉、状态（**实验性**） |
+
+主题三层扩展路由注册在 `TopicsHandler.register_routes_3tier`（`get_topic_tree_3tier`、`get_graph_data` 等）。
+
+### 2.3 工作区数据模型
 
 ```
-IngestManager (事件驱动)
-├── SourceWatcher: watchdog 监听文件新增/修改
-├── IngestPipeline:
-│   ├── 1. Parse (格式识别 → MD)
-│   ├── 2. Understand (LLM 阅读，提取要点)
-│   ├── 3. Classify (主题匹配，置信度判断)
-│   ├── 4. Summarize (生成 Abstract 页面)
-│   ├── 5. CrossLink (实体识别 + 已有页面匹配)
-│   ├── 6. Touch (更新所有相关页面的交叉引用)
-│   └── 7. Index (更新 index.md 和 log.md)
-├── LintScheduler: 定时/手动触发健康检查
-└── ReviewQueue: 不确定项入队等待用户确认
+<工作区>/
+├── Notes/                 # 原始笔记 Markdown（按主题文件夹，最多三级）
+│   └── {一级}/{二级}/{三级}/文章.md
+├── wiki/                  # AI 编译层
+│   ├── WIKI.md            # 主题索引（与 Notes 文件夹结构同步）
+│   ├── log.md             # 级联变更日志（按日分组，见 §3.8）
+│   └── {主题}_综述.md     # 主题综述（叶名命名，平铺在 wiki 或子路径）
+├── Raw/                   # 非 MD 原件归档；自动转换扫描会跳过 Raw/ 内文件
+├── .noteai/               # 工作区运行时（常量 WORKSPACE_APP_FOLDER）
+│   ├── memory/            # RAG 会话记忆
+│   ├── rag_index/         # Milvus Lite 数据
+│   └── log.md             # 自动化操作记录（HTML 注释嵌入 JSON）
+├── .ai_memory/            # 用户画像 JSON、项目规则 Markdown
+│   ├── user_profile.json
+│   └── project_rules.md
+├── .pending_topics.json   # 待确认主题分类
+└── .links.json            # 待确认双向链接
 ```
 
-### 6.3 前端模块化完成
+**系统级配置目录**（非工作区）：`~/Library/Application Support/NoteAI/`（macOS）— `workspace_state.json`、`api_config.json`（Fernet 加密字段）等。
 
-```
-webui/
-├── index.html        # 主壳（< 500 行）
-├── css/
-│   ├── base.css
-│   ├── editor.css
-│   ├── tree.css
-│   └── chat.css
-├── js/
-│   ├── api.js        # 统一 RPC 封装 （已有）
-│   ├── state.js      # 集中状态管理 （待建）
-│   ├── router.js     # 页面路由 （待建）
-│   ├── modules/      # 按功能拆分
-│   │   ├── editor.js
-│   │   ├── tree.js
-│   │   ├── chat.js
-│   │   ├── graph.js
-│   │   └── lint.js
-│   └── lib/          # 第三方库
-└── assets/           # 图标、字体
-```
+**Frontmatter 约定**：`topic: 一级 > 二级 > 三级`（分隔符 ` > `，最多三层）。
+
+**文件监视**：watchdog，约 3s 防抖；忽略 dot 目录、`wiki/`、以及 `IGNORED_DIRS` 中列出的别名；支持 `.md/.txt/.pdf/.docx/.pptx/.html/.doc/.ppt` 等后缀。
+
+> **文档与代码差异**：README 中「NoteAI/」为便于理解的别名；运行时目录名为 **`.noteai`**。用户画像实际路径为 **`<工作区>/.ai_memory/user_profile.json`**，非项目根 `NoteAI/profile.md`。
+
+### 2.4 记忆与规范
+
+| 层级 | 实际路径 | 作用 |
+|------|----------|------|
+| L1 用户画像 | `<工作区>/.ai_memory/user_profile.json` | 身份、偏好、`profile_md`；RAG 可读取 |
+| L2 工作区 Memory | `<工作区>/.noteai/memory/` | 当前工作区对话记忆 |
+| 项目规则 | `<工作区>/.ai_memory/project_rules.md` | 设置中「项目规则」读写 |
+| 提示词 | `prompts/`（Python 常量） | 分类、综述、级联、云同步等；YAML 迁移停滞 |
 
 ---
 
-## 7. 优先级排序
+## 3. 已实现功能（按用户旅程）
 
-| 优先级 | 功能 | 理由 |
-|--------|------|------|
-| **P0** | Schema 系统 | 没有 Schema，LLM 行为不可控 |
-| **P0** | Ingest 流式 Pipeline | Karpathy 闭环的核心——"编译一次，持续增值" |
-| **P0** | Lint 健康检查 | 知识库质量保证，自动化维护的核心 |
-| **P0** | Query→Archive | 让对话产生积累，而不是随风消逝 |
-| **P0** | log.md 标准化 | grep 友好，可审计，可回放 |
-| **P1** | Graph RAG | 检索质量质变，图+向量双引擎 |
-| **P1** | AI 原生编辑器 | 编辑体验从"工具"到"搭档" |
-| **P1** | 知识版本化 | AI 编辑需要保险丝 |
-| **P2** | Agent 型助手 | 从被动到主动的范式转换 |
-| **P2** | 多源采集 | 知识库需要"活水" |
-| **P2** | Personal Memory | 让 AI 越来越懂你 |
-| **P3** | Local AI | 隐私和成本优势 |
-| **P3** | 移动端 | 随时随地访问 |
+### 3.1 工作区与导航
+
+- 首次/切换工作区：创建 `Notes/`、`wiki/`、`Raw/`、`.noteai/{memory,logs,rag_index}`。
+- 侧栏文件树：映射 **Notes / wiki / Raw** 三区。
+- 主题树（扁平 + 三层）、关系图谱（笔记 / 主题 / 标签 / 链接，D3 力导向）。
+- 全文搜索（工作区内标题与正文）。
+- 标题栏 **待办** 视图：聚合 `get_all_pending`（主题 pending + 链接 pending）。
+
+### 3.2 采集与格式转换
+
+| 能力 | 说明 |
+|------|------|
+| 网页下载 | URL → Markdown（`start_web_download`） |
+| 文件导入 | 复制到 `Raw/` 后批量转换（`import_files` + `start_file_conversion`） |
+| **自动转换** | 打开工作区 + 文件变更后调用 `auto_convert_pending`；扫描支持格式，**跳过 `Raw/` 下已有归档** |
+| 笔记整合 | `start_note_integration`（多笔记合并流程） |
+
+支持 PDF / DOCX / PPTX / HTML 等 → Markdown（`modules/file_converter`）。
+
+### 3.3 主题与分类
+
+- AI 单篇 / 批量主题分配（`auto_assign_topic`、`batch_auto_assign_topics`）。
+- 手动创建/重命名/删除主题、移动文件、解析 pending（`resolve_topic`）。
+- 启动时 `sync_wiki_with_files`：WIKI.md 与 `Notes/` 文件夹对齐。
+- 重复主题合并（`merge_duplicate_topics`）。
+- 综述开关与状态（`toggle_survey`、`get_survey_status`）。
+
+不确定分类写入 `.pending_topics.json`，由待办 UI 确认。
+
+### 3.4 标签
+
+- jieba 词频提取 + `auto_tag_files`。
+- `TAGS.md` 维护、创建/重命名/删除标签。
+
+### 3.5 双向链接
+
+- 本地粗筛 + LLM 精判，结果进入 pending。
+- 确认/拒绝单条或全部（`confirm_link`、`reject_link`、`confirm_all_links`）。
+- 反向链接查询、链接统计。
+
+### 3.6 阅读、预览与编辑
+
+| 类型 | 行为 |
+|------|------|
+| `.md` | Tiptap 所见即所得（`tiptap-bundle.js` 须在 `main.mjs` 之前加载）；自动保存 |
+| PDF | PDF.js 分页预览 |
+| DOCX | mammoth → HTML 只读预览；旧 `.doc` 经转换器 |
+| 其他 | 按 `file_preview` 类型回退（文本、图片等） |
+
+**AI 改写**：选中内容流式改写（`llm_rewrite_stream`），对比后应用（`llm_rewrite_apply`）。
+
+### 3.7 小忆助手（RAG）
+
+流水线：
+
+```
+用户提问 → HyDE 查询扩展 → Milvus 混合检索 → 主题/标签过滤
+         → FlagReranker 重排 → MMR 去重 → LLM 流式回答
+```
+
+- 工作区索引：`init_rag_index`、`rag_add_chunks` / `rag_remove_chunks`（与文件监视联动）。
+- `rag_chat` / `rag_chat_with_actions`（后者含 **可执行代码动作**，存在注入风险，见 §5）。
+- `rag_clear_memory` 清空 L2 记忆。
+
+### 3.8 综述与级联更新（部分闭环）
+
+**已实现**：
+
+- 按主题生成/更新 `wiki/*_综述.md`（`ai_topic_survey`、级联模块 `sidecar/cascade.py`）。
+- 触发场景包括：文件保存、主题解析、文件移入主题、手动综述任务等（后台 `cascade_update_*` 任务）。
+- 变更写入 **`wiki/log.md`**（按日期 `## YYYY-MM-DD` + 时间戳条目）。
+- 前端可接收 `cascade_survey_chunk` / `cascade_done` 事件。
+
+**未实现**：Karpathy 式「单源触及 10–15 页」的全自动交叉引用网；Ingest 无统一任务条。
+
+### 3.9 记录与日志
+
+| 文件 | 内容 |
+|------|------|
+| `.noteai/log.md` | 转换、打标、移动等自动化操作（`utils/activity_log`，HTML 注释存 JSON） |
+| `wiki/log.md` | 级联/综述相关变更（`append_changelog`） |
+| UI「记录」 | `get_activity_log` 展示上述自动化记录 |
+
+二者并存，尚未合并为单一 Karpathy 规范 `log.md`。
+
+### 3.10 云盘同步（实验性）
+
+- 提供商：OneDrive、百度、阿里云、腾讯云 COS、123 盘、坚果云 WebDAV、iCloud（`python/sidecar/cloud/providers/`）。
+- RPC：`cloud_sync_*` 系列；前端 **设置 → 云盘同步**（`webui/js/cloud-sync.js`）。
+- **产品状态**：能力在开发中，错误处理与冲突策略未产品化；路线图 P1 决定「正式化或隐藏入口」。
+
+### 3.11 配置与安全
+
+- API Key 优先级：**环境变量 > OS keyring > Fernet 加密 `api_config.json`**。
+- UI 配置、明暗主题、连接测试。
+- CI：`pytest` + GitHub Actions（`main`、`LangChain2` 及 PR）。
 
 ---
 
-## 8. 成功指标
+## 4. 部分实现与已知限制
 
-- **编译覆盖率**：有 Abstract 综述的主题占比 > 80%
-- **交叉引用密度**：平均每页面被引用次数 > 3
-- **Lint 健康度**：知识库矛盾/过时/孤儿页面占比 < 5%
-- **对话归档率**：AI 助手对话中"保存到知识库"操作的占比 > 20%
-- **用户留存**：每周活跃天数 > 4 天
-- **知识增长速度**：周均新增页面 > 10
+| 项 | 现状 |
+|----|------|
+| 编译模式 | 综述/索引多为 **事件触发批处理**，非 7×24 持续 Ingest |
+| WIKI.md | 以 **目录/文件列表** 为主，非「每主题一行摘要」 |
+| Query → Archive | 小忆「保存到 wiki」已支持 |
+| Lint | 入库末尾自动检查；无一键批量修复 |
+| 检索扩展 | 已确认反链 1-hop + 主题综述注入；非 Graph RAG |
+| schema.md | 无顶层 LLM 行为规范文件；`project_rules.md` 仅覆盖部分场景 |
+| 交叉引用 | 链接 pending 存在，**保存时自动建链** 未做 |
+| RAG actions | `rag_chat_with_actions` 可执行 LLM 生成代码 — **安全风险** |
+| 稀疏检索 | 仅稀疏命中时 `content`/`file_path` 可能为空，影响回答质量 |
+| 前端布局 | `body { zoom }` 与 flex 组合可能导致侧栏/预览异常（多字号需 Tauri 回归） |
+| 测试覆盖 | 约十余个测试文件，**无 handler/RAG 单元全覆盖**（~个位数百分比） |
+| 文档别名 | README/AGENTS 中 `NoteAI/`、`NoteAI/profile.md` 与代码路径不一致 |
 
 ---
 
-*PRD 版本: v1.0 | 日期: 2026-05-15 | 基于 NoteAI LangChain2 分支现状*
+## 5. 与 Karpathy 理想模型对照
+
+| 概念 | NoteAI 现状 | 差距 |
+|------|-------------|------|
+| Raw Sources | `Raw/` 归档 | 缺少「不可变」语义与版本策略 |
+| Wiki 编译层 | `wiki/*_综述.md` + 级联更新 | 有触发式更新，无全库联动与交叉引用网 |
+| Schema | `project_rules.md` + `prompts/` | 无统一 `schema.md` |
+| Ingest | 转换 + 分类 + 索引 + 综述 | 步骤分散，无统一进度/可取消流水线 |
+| Query → Archive | RAG 对话 | 未沉淀为 wiki 页 |
+| Lint | — | 未实现 |
+| index 摘要 | WIKI.md | 目录索引，非一行摘要 |
+| log | 双日志（`.noteai` + `wiki`） | 格式未完全 Karpathy 化 |
+
+**结论**：已具备「本地知识库 + AI 整理 + RAG」核心路径；距离「持续自我维护的编译器」仍差 **统一 Ingest、Lint、归档闭环、Schema** 四块。
+
+---
+
+## 6. 功能路线图
+
+与 [README.md §路线图](../README.md) 对齐。
+
+### P0 — 产品闭环（下一版重点）
+
+| 项 | 说明 |
+|----|------|
+| 级联增强 | 新资料入库后可靠刷新所有受影响综述与 WIKI；失败可重试 |
+| Ingest 进度 | 转换 → 分类 → 索引 → 综述 **单一任务条**（可取消、可重试） |
+| Query → Archive | 小忆助手「保存到 wiki / 追加综述」 |
+| Lint 首版 | 断链、孤儿页、源已改综述未更新 |
+| schema.md | 工作区顶层：frontmatter、AI 可写范围、冲突策略 |
+
+### P1 — 体验与智能
+
+| 项 | 说明 |
+|----|------|
+| 保存时交叉引用 | 写入 MD 后异步建议链接，接入 pending |
+| 搜索增强 | 跳转预览、高亮、主题/标签过滤 |
+| WIKI 摘要索引 | 每主题一行摘要 |
+| 转换可感知 | 失败进收件箱；`Raw/` 遗留支持重新转换 |
+| 云盘同步 | 产品化或隐藏实验入口 |
+| 检索扩展 | 向量检索 + 已确认反链 1-hop + 主题综述注入（替代完整 Graph RAG） |
+
+### P2 — Agent 化
+
+- Agent 型助手（搜文件、建主题、跑综述流水线）。
+- RSS / 剪藏 / 转录等多源采集。
+- Personal Memory 从对话自动提炼进 L1。
+
+### P3 — 生态
+
+- 本地模型（Ollama 等）。
+- 移动端只读 + 同步。
+- 发布导出、协作空间。
+
+### 优先级（开发排序）
+
+1. P0：schema.md → Ingest UI → 级联可靠性 → Lint → Query→Archive  
+2. P1：交叉引用、搜索、WIKI 摘要、云同步决策  
+3. P2：Agent、多源采集、Memory 升级  
+4. P3：Local AI、移动端、发布
+
+---
+
+## 7. 非功能需求
+
+| 类别 | 要求 |
+|------|------|
+| 隐私 | 默认本地；API Key 不落库明文；云同步凭证走 keyring/加密配置 |
+| 性能 | LLM 并发上限 4；大文件转换/索引后台任务，不阻塞 RPC 主线程 |
+| 可靠性 | 工作区路径校验；删除主题级联警告；Milvus 删除前先查询 chunk |
+| 可维护性 | 新 RPC 须注册 `src-tauri/src/rpc.rs` 白名单；集成测试见 `tests/integration/test_sidecar_contracts.py` |
+| 兼容性 | macOS 为主开发平台；Windows/Linux 路径与 keyring 行为需单独验证 |
+
+---
+
+## 8. 成功指标（目标态）
+
+| 指标 | 目标 |
+|------|------|
+| 编译覆盖率 | 有综述的活跃主题占比 > 80% |
+| 交叉引用密度 | 平均每篇 Notes 至少 1 条已确认出链 |
+| Lint 健康度 | 断链/过时/孤儿占比 < 5% |
+| 对话归档率 | 满意回答存档操作 > 20%（功能上线后统计） |
+| 周活跃 | 深度用户每周使用 ≥ 4 天 |
+
+当前版本 **不以** 上表作为发布门禁，仅作 v2.x 演进方向。
+
+---
+
+## 9. 附录：关键 RPC 索引
+
+<details>
+<summary>展开 RPC 列表（开发参考）</summary>
+
+**工作区**：`get_workspace_status`, `set_workspace_path`, `get_workspace_tree`, `on_file_selected`, `refresh_log`
+
+**传输**：`start_web_download`, `import_files`, `start_file_conversion`, `auto_convert_pending`, `extract_topics`, `start_note_integration`
+
+**文件**：`get_file_preview`, `save_file_content`, `read_file_raw`, `delete_file`, `reveal_in_finder`
+
+**主题**：`get_topic_tree`, `auto_assign_topic`, `batch_auto_assign_topics`, `move_file_to_topic`, `get_all_pending`, `get_activity_log`, `get_topic_tree_3tier`, `get_graph_data`, …
+
+**标签**：`get_all_tags`, `auto_tag_files`, `create_tag`, `rename_tag`, `delete_tag`
+
+**链接**：`discover_links`, `get_backlinks`, `confirm_link`, `reject_link`, …
+
+**智能**：`llm_rewrite`, `llm_rewrite_stream`, `search_files`, `ai_topic_survey`, …
+
+**RAG**：`init_rag_index`, `rag_chat`, `rag_chat_with_actions`, `rag_clear_memory`
+
+**云同步**：`cloud_sync_list_providers`, `cloud_sync_auth`, `cloud_sync_push`, `cloud_sync_pull`, …
+
+**配置**：`get_api_config`, `save_api_config`, `get_user_profile`, `save_user_profile`, `get_project_rules`, …
+
+</details>
+
+---
+
+*维护说明：实现变更时请同步更新 §2–§4；路线图以 README 与本文 §6 为准，避免三处漂移。*

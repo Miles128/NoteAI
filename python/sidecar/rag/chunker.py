@@ -156,7 +156,7 @@ def _is_code_block(text: str) -> bool:
 
 
 def _make_chunk(content: str, file_path: str, topic, tags, section_title) -> dict:
-    chunk_id = hashlib.md5(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:12]
+    chunk_id = hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]
     return {
         "id": chunk_id,
         "content": content.strip(),

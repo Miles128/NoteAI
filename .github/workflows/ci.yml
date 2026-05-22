@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, LangChain2]
   pull_request:
-    branches: [main]
 
 jobs:
   lint-and-test:

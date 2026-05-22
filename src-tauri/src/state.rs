@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
+use tauri::AppHandle;
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::oneshot;
@@ -10,6 +11,7 @@ pub struct AppState {
     pub pending_requests: StdMutex<HashMap<String, oneshot::Sender<serde_json::Value>>>,
     pub workspace_path: StdMutex<Option<String>>,
     pub python_child: Arc<AsyncMutex<Option<Child>>>,
+    pub app_handle: StdMutex<Option<AppHandle>>,
 }
 
 impl Default for AppState {
@@ -19,7 +21,17 @@ impl Default for AppState {
             pending_requests: StdMutex::new(HashMap::new()),
             workspace_path: StdMutex::new(None),
             python_child: Arc::new(AsyncMutex::new(None)),
+            app_handle: StdMutex::new(None),
         }
+    }
+}
+
+impl AppState {
+    pub fn app_handle(&self) -> Option<AppHandle> {
+        self.app_handle
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
     }
 }
 

@@ -9,10 +9,7 @@ from pathlib import Path
 import yaml
 
 from config import config, is_ignored_dir
-from utils.topic_manager import (
-    LEVEL1_TOPICS,
-    TopicManager,
-)
+from utils.topic_manager import TopicManager
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +77,15 @@ class TopicsMixin:
                 continue
             if is_ignored_dir(l1_dir):
                 continue
-            if l1_dir.name not in LEVEL1_TOPICS:
-                continue
 
             abs_path = str(l1_dir)
+            wiki_dir = Path(workspace) / config.ABSTRACT_FOLDER
+            l1_survey = wiki_dir / f"{l1_dir.name}_综述.md"
             tree[l1_dir.name] = {
                 "name": l1_dir.name, "level": 1, "parent": None,
                 "children": {}, "path": abs_path,
-                "has_abstract": (l1_dir / "综述.md").exists(),
-                "abstract_file": str(l1_dir / "综述.md") if (l1_dir / "综述.md").exists() else None,
+                "has_abstract": l1_survey.exists(),
+                "abstract_file": str(l1_survey) if l1_survey.exists() else None,
                 "file_count": 0,
             }
 
@@ -96,11 +93,12 @@ class TopicsMixin:
                 if not l2_dir.is_dir() or l2_dir.name.startswith("."):
                     continue
                 abs_path2 = str(l2_dir)
+                l2_survey = wiki_dir / f"{l2_dir.name}_综述.md"
                 tree[l1_dir.name]["children"][l2_dir.name] = {
                     "name": l2_dir.name, "level": 2, "parent": l1_dir.name,
                     "children": {}, "path": abs_path2,
-                    "has_abstract": (l2_dir / "综述.md").exists(),
-                    "abstract_file": str(l2_dir / "综述.md") if (l2_dir / "综述.md").exists() else None,
+                    "has_abstract": l2_survey.exists(),
+                    "abstract_file": str(l2_survey) if l2_survey.exists() else None,
                     "file_count": 0,
                 }
 
@@ -289,8 +287,6 @@ class TopicsMixin:
             parent = Path(workspace) / "Notes"
 
         level = TopicManager.determine_folder_level(str(parent), workspace)
-        if level == 1 and folder_name not in LEVEL1_TOPICS:
-            return {"success": False, "message": f"一级必须是: {', '.join(LEVEL1_TOPICS)}"}
 
         new_path = parent / folder_name
         if new_path.exists():
@@ -304,9 +300,6 @@ class TopicsMixin:
     def _delete_topic(self, params):
         topic_name = params.get("topic_name", "")
         level = params.get("level", 2)
-
-        if level == 1 and topic_name in LEVEL1_TOPICS:
-            return {"success": False, "message": "预定义一级不可删除"}
 
         workspace = config.workspace_path
         if not workspace:

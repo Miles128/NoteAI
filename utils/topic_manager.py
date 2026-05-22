@@ -12,26 +12,20 @@ YAML frontmatter 标记规则（横杠缩进）:
       - MCP vs CLI 对比            # 三级（4 空格缩进）
 """
 
-import os
-import json
 import logging
 from pathlib import Path
-from typing import Optional
+
+from config.constants import TOPIC_SEP
 
 logger = logging.getLogger(__name__)
 
 # ============================================================
 # 预定义的 4 个一级标题
 # ============================================================
-LEVEL1_TOPICS = [
-    "普通人的AI指南",
-    "AI应用开发教程",
-    "AI产品经理之路",
-    "AI使用技巧和信息",
-]
+LEVEL1_TOPICS = []
 
 MAX_LEVEL = 3
-LEVEL1_ORDER = {name: i for i, name in enumerate(LEVEL1_TOPICS)}
+LEVEL1_ORDER = {}
 
 
 class TopicManager:
@@ -74,14 +68,10 @@ class TopicManager:
 
         for item in raw:
             if isinstance(item, str):
-                # 一级：普通字符串
                 name = item.strip()
-                if name in LEVEL1_TOPICS:
-                    current_l1 = name
-                    current_l2 = None
-                    topics.append({"name": name, "level": 1, "parent": None})
-                else:
-                    logger.warning(f"[topic] 未知一级标题: {name}")
+                current_l1 = name
+                current_l2 = None
+                topics.append({"name": name, "level": 1, "parent": None})
             elif isinstance(item, dict):
                 for l2_name, l2_children in item.items():
                     l2_name = l2_name.strip()
@@ -170,7 +160,7 @@ class TopicManager:
 
         # 将 children dict 转为 list，并按排序
         result = []
-        for l1_name in sorted(tree.keys(), key=lambda x: LEVEL1_ORDER.get(x, 999)):
+        for l1_name in sorted(tree.keys()):
             l1 = tree[l1_name]
             l1_children = []
             for l2_name in sorted(l1["children"].keys()):
@@ -206,12 +196,10 @@ class TopicManager:
         for i, part in enumerate(parts):
             if i >= MAX_LEVEL:
                 break
-            # 跳过文件本身
             if i == len(parts) - 1 and Path(file_path).is_file():
                 continue
             if i == 0:
-                if part in LEVEL1_TOPICS:
-                    topics.append({"name": part, "level": 1, "parent": None})
+                topics.append({"name": part, "level": 1, "parent": None})
             elif i == 1:
                 parent = topics[0]["name"] if topics else None
                 topics.append({"name": part, "level": 2, "parent": parent})
@@ -229,7 +217,7 @@ class TopicManager:
         """判断新建文件夹应属于哪个层级
 
         规则：
-        - Notes/ 下新建 → 一级（但必须是预定义的 6 个之一）
+        - Notes/ 下新建 → 一级
         - 一级文件夹下新建 → 二级
         - 二级文件夹下新建 → 三级
         - 三级文件夹下新建 → 不再作为标题（普通文件夹）
@@ -241,17 +229,14 @@ class TopicManager:
 
         parts = [p for p in rel.parts if p not in ("Notes", "Organized")]
 
-        # 如果父目录是一级文件夹，则新建的是二级
-        if len(parts) >= 1 and parts[0] in LEVEL1_TOPICS:
-            if len(parts) == 1:
-                return 2  # 在一级文件夹下
-            elif len(parts) == 2:
-                return 3  # 在二级文件夹下
-            else:
-                return -1  # 三级下不再作为标题
-
-        # Notes/ 根目录下
-        return -1  # 一级必须是预定义的，不给自动建
+        if len(parts) == 0:
+            return 1
+        elif len(parts) == 1:
+            return 2
+        elif len(parts) == 2:
+            return 3
+        else:
+            return -1
 
     # ============================================================
     # 删除保护
@@ -357,8 +342,35 @@ class TopicManager:
     # 文件系统扫描
     # ============================================================
     @staticmethod
+    def collect_topic_labels(workspace: str) -> list[str]:
+        """供下拉框使用的主题路径列表（仅目录遍历，不计文件数）。"""
+        notes_dir = Path(workspace) / "Notes"
+        if not notes_dir.exists():
+            return []
+
+        labels: list[str] = []
+        for l1_dir in sorted(notes_dir.iterdir()):
+            if not l1_dir.is_dir() or l1_dir.name.startswith("."):
+                continue
+            l1 = l1_dir.name
+            labels.append(l1)
+
+            for l2_dir in sorted(l1_dir.iterdir()):
+                if not l2_dir.is_dir() or l2_dir.name.startswith("."):
+                    continue
+                l2_path = f"{l1}{TOPIC_SEP}{l2_dir.name}"
+                labels.append(l2_path)
+
+                for l3_dir in sorted(l2_dir.iterdir()):
+                    if not l3_dir.is_dir() or l3_dir.name.startswith("."):
+                        continue
+                    labels.append(f"{l2_path}{TOPIC_SEP}{l3_dir.name}")
+
+        return labels
+
+    @staticmethod
     def build_tree_from_filesystem(workspace: str) -> list[dict]:
-        """从文件系统扫描构建三层主题树"""
+        """从文件系统扫描构建三层主题树（以实际文件夹为准，不依赖预定义列表）"""
         notes_dir = Path(workspace) / "Notes"
         if not notes_dir.exists():
             return []
@@ -366,8 +378,6 @@ class TopicManager:
         entries = []
         for l1_dir in sorted(notes_dir.iterdir()):
             if not l1_dir.is_dir() or l1_dir.name.startswith("."):
-                continue
-            if l1_dir.name not in LEVEL1_TOPICS:
                 continue
             entries.append({"name": l1_dir.name, "level": 1, "parent": None})
 
@@ -383,20 +393,23 @@ class TopicManager:
 
         tree = TopicManager.build_topic_tree(entries)
 
-        # 补充路径和综述信息
+        wiki_dir = Path(workspace) / "wiki"
+
         for l1 in tree:
             l1_path = notes_dir / l1["name"]
             if l1_path.exists():
                 l1["path"] = str(l1_path)
-                l1["has_abstract"] = (l1_path / "综述.md").exists()
-                l1["abstract_file"] = str(l1_path / "综述.md") if l1["has_abstract"] else None
+                survey = wiki_dir / f"{l1['name']}_综述.md"
+                l1["has_abstract"] = survey.exists()
+                l1["abstract_file"] = str(survey) if l1["has_abstract"] else None
                 l1["file_count"] = TopicManager._count_files_in(l1_path)
             for l2 in l1.get("children", []):
                 l2_path = notes_dir / l1["name"] / l2["name"]
                 if l2_path.exists():
                     l2["path"] = str(l2_path)
-                    l2["has_abstract"] = (l2_path / "综述.md").exists()
-                    l2["abstract_file"] = str(l2_path / "综述.md") if l2["has_abstract"] else None
+                    survey = wiki_dir / f"{l2['name']}_综述.md"
+                    l2["has_abstract"] = survey.exists()
+                    l2["abstract_file"] = str(survey) if l2["has_abstract"] else None
                     l2["file_count"] = TopicManager._count_files_in(l2_path)
                 for l3 in l2.get("children", []):
                     l3_path = notes_dir / l1["name"] / l2["name"] / l3["name"]

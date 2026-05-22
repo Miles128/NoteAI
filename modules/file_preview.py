@@ -1,7 +1,5 @@
-import hashlib
 import os
 import base64
-from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from io import BytesIO
 
@@ -40,8 +38,10 @@ class FilePreviewer:
                 return self._preview_text(full_path, file_size)
             elif ext == '.pdf':
                 return self._preview_pdf(full_path, file_size)
-            elif ext in ['.doc', '.docx']:
-                return self._preview_word(full_path, file_size)
+            elif ext == '.docx':
+                return self._preview_docx(full_path, file_size)
+            elif ext == '.doc':
+                return self._preview_doc_legacy(full_path, file_size)
             else:
                 return {
                     'success': False,
@@ -54,30 +54,37 @@ class FilePreviewer:
                 'error': str(e)
             }
 
+    def _utf8_transport(self, content: str) -> Dict[str, Any]:
+        """Encode preview text once as standard base64 (ASCII-safe over JSON-RPC)."""
+        raw = content.encode('utf-8')
+        return {
+            'transport': 'base64_utf8',
+            'content_b64': base64.standard_b64encode(raw).decode('ascii'),
+            'content_byte_length': len(raw),
+        }
+
     def _preview_markdown(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hashlib.sha256(content.encode()).hexdigest()
 
         return {
             'success': True,
             'type': 'markdown',
+            'preview_delivery': 'semantic_b64',
             'file_name': os.path.basename(file_path),
             'file_size': file_size,
-            'content': content,
-            'content_hash': content_hash
+            **self._utf8_transport(content),
         }
 
     def _preview_text(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hashlib.sha256(content.encode()).hexdigest()
 
         return {
             'success': True,
             'type': 'text',
+            'preview_delivery': 'semantic_b64',
             'file_name': os.path.basename(file_path),
             'file_size': file_size,
-            'content': content,
-            'content_hash': content_hash
+            **self._utf8_transport(content),
         }
 
     def _preview_pdf(self, file_path: str, file_size: int) -> Dict[str, Any]:
@@ -178,54 +185,112 @@ class FilePreviewer:
                 "error": f"PDF解析失败: {str(e)}"
             }
 
-    def _preview_word(self, file_path: str, file_size: int) -> Dict[str, Any]:
+    def _preview_docx(self, file_path: str, file_size: int) -> Dict[str, Any]:
+        """DOCX → HTML（mammoth），供前端排版预览。"""
+        try:
+            import mammoth
+        except ImportError:
+            return self._preview_docx_python_docx(file_path, file_size)
+
+        try:
+            with open(file_path, 'rb') as docx_file:
+                result = mammoth.convert_to_html(docx_file)
+            html = (result.value or '').strip()
+            if not html:
+                return self._preview_docx_python_docx(file_path, file_size)
+
+            payload: Dict[str, Any] = {
+                'success': True,
+                'type': 'docx',
+                'content_kind': 'html',
+                'preview_delivery': 'semantic_b64',
+                'file_name': os.path.basename(file_path),
+                'file_size': file_size,
+                **self._utf8_transport(html),
+            }
+            messages = [str(m) for m in getattr(result, 'messages', [])]
+            if messages:
+                payload['warnings'] = messages[:8]
+            return payload
+        except Exception as e:
+            logger.warning(f"DOCX mammoth 预览失败，回退 python-docx: {e}")
+            return self._preview_docx_python_docx(file_path, file_size)
+
+    def _preview_docx_python_docx(self, file_path: str, file_size: int) -> Dict[str, Any]:
         from docx import Document
-        from docx.shared import Pt
-        import re
 
         try:
             doc = Document(file_path)
-            paragraphs_data = []
-
-            for i, para in enumerate(doc.paragraphs):
+            parts: List[str] = []
+            for para in doc.paragraphs:
                 text = para.text.strip()
-                if text:
-                    style_name = para.style.name if para.style else 'Normal'
-                    paragraphs_data.append({
-                        'index': i,
-                        'text': text,
-                        'style': style_name
-                    })
+                if not text:
+                    continue
+                style_name = (para.style.name if para.style else 'Normal') or 'Normal'
+                if style_name.startswith('Heading'):
+                    level = ''.join(c for c in style_name if c.isdigit()) or '1'
+                    parts.append(f'<h{level}>{self._escape_html(text)}</h{level}>')
+                else:
+                    parts.append(f'<p>{self._escape_html(text)}</p>')
 
-            full_text = '\n'.join([p['text'] for p in paragraphs_data])
-
-            tables_data = []
-            for table_idx, table in enumerate(doc.tables):
-                table_rows = []
+            for table in doc.tables:
+                rows_html: List[str] = []
                 for row in table.rows:
-                    row_cells = [cell.text.strip() for cell in row.cells]
-                    table_rows.append(row_cells)
-                if table_rows:
-                    tables_data.append({
-                        'index': table_idx,
-                        'rows': table_rows
-                    })
+                    cells = ''.join(
+                        f'<td>{self._escape_html(cell.text.strip())}</td>'
+                        for cell in row.cells
+                    )
+                    rows_html.append(f'<tr>{cells}</tr>')
+                if rows_html:
+                    parts.append('<table>' + ''.join(rows_html) + '</table>')
 
+            html = ''.join(parts) or '<p>（文档无可见正文）</p>'
             return {
                 'success': True,
-                'type': 'word',
+                'type': 'docx',
+                'content_kind': 'html',
+                'preview_delivery': 'semantic_b64',
                 'file_name': os.path.basename(file_path),
                 'file_size': file_size,
-                'paragraphs': paragraphs_data,
-                'tables': tables_data,
-                'full_text': full_text
+                **self._utf8_transport(html),
             }
         except Exception as e:
-            logger.error(f"Word文档预览失败: {e}")
+            logger.error(f"DOCX 预览失败: {e}")
             return {
                 'success': False,
-                'error': f'Word文档解析失败: {str(e)}'
+                'error': f'Word 文档解析失败: {str(e)}',
             }
+
+    def _preview_doc_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
+        """旧版 .doc：提取为 Markdown 后预览。"""
+        try:
+            from modules.file_converter import LegacyDOCConverter
+
+            markdown_content = LegacyDOCConverter().to_markdown(file_path)
+            return {
+                'success': True,
+                'type': 'docx',
+                'content_kind': 'markdown',
+                'preview_delivery': 'semantic_b64',
+                'file_name': os.path.basename(file_path),
+                'file_size': file_size,
+                **self._utf8_transport(markdown_content or ''),
+            }
+        except Exception as e:
+            logger.error(f"DOC 预览失败: {e}")
+            return {
+                'success': False,
+                'error': f'Word 文档解析失败: {str(e)}',
+            }
+
+    @staticmethod
+    def _escape_html(text: str) -> str:
+        return (
+            text.replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+        )
 
 from utils.helpers import format_file_size  # noqa: E402, F811
 

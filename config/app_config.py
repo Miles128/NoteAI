@@ -18,6 +18,9 @@ from .constants import (
 )
 from .security import _deobfuscate, _restrict_file_permissions
 
+import logging
+_logger = logging.getLogger("NoteAI")
+
 
 @dataclass
 class AppConfig:
@@ -189,9 +192,9 @@ class AppConfig:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     file_data = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
-                print(f"加载配置失败: {e}, 使用默认配置")
+                _logger.warning("加载配置失败: %s, 使用默认配置", e)
             except Exception as e:
-                print(f"加载配置时发生未知错误: {e}, 使用默认配置")
+                _logger.warning("加载配置时发生未知错误: %s, 使用默认配置", e)
 
         api_data = {}
         api_key_from_file = None
@@ -202,9 +205,9 @@ class AppConfig:
                 if 'api_key' in api_data and api_data['api_key']:
                     api_key_from_file = _deobfuscate(api_data['api_key'])
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
-                print(f"加载API配置失败: {e}")
+                _logger.warning("加载API配置失败: %s", e)
             except Exception as e:
-                print(f"加载API配置时发生未知错误: {e}")
+                _logger.warning("加载API配置时发生未知错误: %s", e)
 
         import importlib.util
         try:
@@ -286,14 +289,14 @@ class AppConfig:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)
 
-            print(f"配置已保存到: {config_path}")
+            _logger.info("配置已保存到: %s", config_path)
         except PermissionError:
             error_msg = "保存配置失败：没有写入权限"
-            print(error_msg)
+            _logger.error(error_msg)
             return False, error_msg
         except Exception as e:
             error_msg = f"保存配置失败：{e}"
-            print(error_msg)
+            _logger.error(error_msg)
             return False, error_msg
 
         api_save_ok = True
@@ -311,13 +314,13 @@ class AppConfig:
                     json.dump(api_config, f, ensure_ascii=False, indent=2)
 
                 _restrict_file_permissions(API_CONFIG_FILE)
-            print(f"API配置已保存到: {API_CONFIG_FILE}")
+            _logger.info("API配置已保存到: %s", API_CONFIG_FILE)
         except PermissionError:
             api_save_ok = False
-            print("保存API配置到系统目录失败：没有写入权限")
+            _logger.error("保存API配置到系统目录失败：没有写入权限")
         except Exception as e:
             api_save_ok = False
-            print(f"保存API配置到系统目录失败：{e}")
+            _logger.error("保存API配置到系统目录失败: %s", e)
 
         if not api_save_ok:
             return True, "主配置已保存，但API配置保存失败"

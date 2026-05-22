@@ -1,6 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.) when working with this repository.
+
+> **CLAUDE.md was merged into this file** — both Claude Code and other agents use `AGENTS.md`.
 
 ## Build & Test
 

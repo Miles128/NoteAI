@@ -11,6 +11,9 @@
     <link rel="stylesheet" href="css/tree.css">
     <link rel="stylesheet" href="css/editor.css">
     <link rel="stylesheet" href="css/preview.css">
+    <link rel="stylesheet" href="css/cloud-sync.css">
+    <link rel="stylesheet" href="css/ingest.css">
+    <link rel="stylesheet" href="css/schema-wizard.css">
 
     <script src="d3.min.js"></script>
     <script src="marked.min.js"></script>
@@ -21,11 +24,15 @@
     <script src="highlight.min.js"></script>
 
     <script src="pdfjs-legacy.min.js"></script>
+    <!-- 须在 main.mjs 之前加载，否则打开笔记时会落入纯文本/静态预览简易模式 -->
+    <script src="lib/tiptap-bundle.js"></script>
 
     <script type="module" src="js/main.mjs"></script>
     <link rel="stylesheet" href="css/topic-3tier.css">
 </head>
 <body>
+    <!-- 早于模块脚本：避免首屏点在 HTML onclick 上对 toggleSidebar 等产生 ReferenceError -->
+    <script>window.toggleSidebar = window.toggleSidebar || function(){ };</script>
     <div class="custom-titlebar" data-tauri-drag-region>
         <div class="titlebar-left" data-tauri-drag-region>
             <button class="titlebar-btn tab-btn" onclick="switchTab(0)" data-tab="web" title="网页下载">
@@ -92,11 +99,11 @@
         </div>
         <div class="titlebar-right">
             <button class="titlebar-btn" id="titlebar-pending-btn" onclick="togglePendingView()" title="待办事项">
-                <svg class="pending-icon-normal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <svg class="pending-icon-normal" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                <svg class="pending-icon-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                <svg class="pending-icon-alert" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                     <line x1="12" y1="9" x2="12" y2="13"></line>
                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
@@ -154,45 +161,55 @@
             </svg>
         </button>
         <div class="sidebar sidebar-left" id="sidebar">
-            <div class="file-tree-container" id="file-tree">
-                <div class="tree-empty">暂无工作区</div>
+            <div class="sidebar-main" id="sidebar-main">
+                <div class="sidebar-pane is-active" id="sidebar-pane-tree" data-sidebar-pane="tree">
+                    <div class="file-tree-container" id="file-tree">
+                        <div class="tree-empty">暂无工作区</div>
+                    </div>
+                </div>
+                <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
+                    <div class="sidebar-view-container" id="sidebar-tags"></div>
+                    <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
+                        <input type="text" class="topic-input" id="tag-input-field" placeholder="输入标签名称...">
+                        <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" title="取消">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                        <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" title="确认创建标签">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-pane" id="sidebar-pane-graph" data-sidebar-pane="graph" hidden>
+                    <div class="sidebar-view-container" id="sidebar-graph"></div>
+                </div>
             </div>
-            <div class="sidebar-footer" id="sidebar-footer-tree">
-                <button class="sidebar-footer-btn" onclick="toggleSidebar()" title="收起侧边栏">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                    </svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-add-topic-filetree" onclick="onAddTopicFromFileTree()" title="添加主题：创建新的主题文件夹">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>
-            </div>
-            <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
-            <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
-            <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
-                <input type="text" class="topic-input" id="tag-input-field" placeholder="输入标签名称...">
-                <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" title="取消">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-                <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" title="确认创建标签">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-tags" style="display: none;">
-                <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" title="自动匹配标签：扫描文件标题匹配已有标签">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" title="新加标签：创建新的标签分类">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-tags">0 个标签</span>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-graph" style="display: none;">
-                <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" title="发现链接：AI 分析文章关联">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-graph">0 个链接</span>
+            <div class="sidebar-dock" id="sidebar-dock">
+                <div class="sidebar-footer sidebar-dock-panel is-active" id="sidebar-footer-tree" data-sidebar-dock="tree">
+                    <button class="sidebar-footer-btn" onclick="toggleSidebar()" title="收起侧边栏">
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <button class="sidebar-footer-btn" id="btn-add-topic-filetree" onclick="onAddTopicFromFileTree()" title="添加主题：创建新的主题文件夹">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>
+                </div>
+                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-tags" data-sidebar-dock="tags" hidden>
+                    <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" title="自动匹配标签：扫描文件标题匹配已有标签">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    </button>
+                    <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" title="新加标签：创建新的标签分类">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-tags">0 个标签</span>
+                </div>
+                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
+                    <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" title="发现链接：AI 分析文章关联">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-graph">0 个链接</span>
+                </div>
             </div>
         </div>
 
@@ -207,13 +224,28 @@
                     </div>
                     <div class="pending-view-sections">
                         <div class="pending-section">
-                            <div class="pending-section-title">🔴 待办</div>
+                            <div class="pending-section-title">
+                                <svg class="pending-section-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M9 11l3 3L22 4"></path>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                </svg>
+                                <span class="pending-section-label">待办</span>
+                            </div>
                             <div class="pending-view-list" id="pending-view-list">
                                 <div class="pending-view-empty">没有待处理的事项</div>
                             </div>
                         </div>
                         <div class="pending-section">
-                            <div class="pending-section-title">📋 记录</div>
+                            <div class="pending-section-title">
+                                <svg class="pending-section-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    <line x1="10" y1="9" x2="8" y2="9"></line>
+                                </svg>
+                                <span class="pending-section-label">记录</span>
+                            </div>
                             <div class="pending-view-log" id="pending-view-log">
                                 <div class="pending-view-empty">暂无操作记录</div>
                             </div>
@@ -263,21 +295,22 @@
                 </div>
                 <div class="graph-panel" id="graph-panel" style="display: none;">
                     <div class="graph-panel-header">
-                        <div class="graph-header-center">
+                        <div class="graph-header-toolbar">
                             <div class="graph-stats-bar">
-                                <span class="graph-stats-title">NoteAI</span>
-                                <span class="graph-stats-sep">|</span>
                                 <span class="graph-stats-item"><span id="graph-stat-notes">0</span> 笔记</span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
                                 <span class="graph-stats-item"><span id="graph-stat-topics">0</span> 主题</span>
-                                <span class="graph-stats-item"><span id="graph-stat-links">0</span> 链接</span>
                             </div>
-                            <div class="graph-header-row">
+                            <div class="graph-header-controls">
                                 <div class="graph-filter-bar" id="graph-filter-bar">
                                     <button class="graph-filter-btn active" data-filter="topic">主题</button>
                                     <button class="graph-filter-btn" data-filter="tag">标签</button>
                                     <button class="graph-filter-btn" data-filter="all">全部</button>
                                 </div>
                                 <div class="graph-toolbar">
+                                    <button class="graph-toolbar-btn" id="graph-toggle-filenames" onclick="graphToggleFilenames()" title="显示/隐藏文件名">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                    </button>
                                     <button class="graph-toolbar-btn" onclick="graphZoomIn()" title="放大">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
                                     </button>
@@ -290,25 +323,39 @@
                                     <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" title="刷新图谱">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                                     </button>
+                                    <button class="graph-toolbar-btn" id="graph-layout-settings-btn" onclick="graphOpenLayoutSettings()" title="布局参数">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                        <div class="graph-header-right">
-                            <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            </button>
-                        </div>
+                        <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
                     </div>
-                    <div class="graph-panel-body" id="graph-panel-body">
-                        <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
-                        <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
+                    <div class="graph-panel-main">
+                        <div class="graph-panel-body" id="graph-panel-body">
+                            <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
+                            <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
+                        </div>
+                        <aside id="graph-settings-sidebar" class="graph-settings-sidebar" hidden aria-labelledby="graph-settings-title">
+                            <div class="graph-settings-header">
+                                <h3 id="graph-settings-title">布局参数</h3>
+                                <button type="button" class="graph-panel-close" onclick="graphCloseLayoutSettings()" title="收起">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                </button>
+                            </div>
+                            <div class="graph-settings-scroll" id="graph-settings-form"></div>
+                            <div class="graph-settings-footer">
+                                <button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()">恢复默认</button>
+                                <button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()">应用</button>
+                            </div>
+                        </aside>
                     </div>
                     <div class="graph-panel-footer">
-                        <span class="graph-stats" id="graph-stats"></span>
                         <div class="graph-legend" id="graph-legend"></div>
                     </div>
                 </div>
-            </div>
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
             <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
@@ -328,6 +375,8 @@
             </div>
 
             <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
+
+            </div>
 
             <div class="preview-panel" id="preview-panel" style="display: none;">
                 <div class="preview-resizer" id="preview-resizer"></div>
@@ -458,12 +507,13 @@
                 </div>
             </div>
 
-        <div class="ai-panel" id="ai-panel" style="display: none;">
+        <div class="ai-panel" id="ai-panel">
+            <div class="ai-panel-top-resizer" id="ai-resizer-top"></div>
             <div class="ai-resizer ai-resizer-left" id="ai-resizer-left"></div>
             <div class="ai-panel-inner">
                 <div class="ai-panel-header">
                     <span class="ai-panel-header-dot"></span>
-                    <span class="ai-panel-header-title">AI ASSISTANT</span>
+                    <span class="ai-panel-header-title">小忆助手</span>
                     <button class="ai-panel-close-btn" onclick="toggleAIPanel()" title="关闭">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
@@ -473,7 +523,7 @@
                     </div>
                 </div>
                 <div class="ai-panel-input">
-                    <input type="text" id="ai-input" placeholder="问我关于知识库的任何事...">
+                    <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
                     <button class="ai-panel-send" id="ai-send-btn" title="发送">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
@@ -512,6 +562,10 @@
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                             <span>关于</span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="cloud-sync">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                            <span>云盘同步</span>
                         </button>
                     </div>
                     <div class="settings-content">
@@ -615,6 +669,9 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="settings-tab" id="tab-cloud-sync">
+                            <div id="cloud-sync-providers"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -675,6 +732,109 @@
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
 
+    <div class="modal-overlay" id="schema-wizard-modal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>配置工作区 Schema</h3>
+            </div>
+            <div class="modal-body">
+                <div class="schema-wizard-progress" aria-hidden="true">
+                    <div class="schema-wizard-dot active"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                </div>
+
+                <div class="schema-wizard-step active" data-step="0">
+                    <h4>这个工作区主要做什么？</h4>
+                    <p class="hint">决定目录说明与整理语气的默认表述。</p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-purpose" value="personal" checked>
+                            <span>个人知识库 — 长期积累、学习笔记</span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-purpose" value="project">
+                            <span>项目文档库 — 围绕单一产品/课题</span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-purpose" value="research">
+                            <span>研究资料库 — 论文、报告、摘录为主</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="1">
+                    <h4>关注哪些知识领域？</h4>
+                    <p class="hint">可多选，将生成一级主题示例（可在 project_rules 中再改）。</p>
+                    <div class="schema-option-grid">
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="agent" checked> AI Agent</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="rag" checked> RAG 与检索</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="product" checked> AI 产品</label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="llm"> 大模型应用</label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="tools"> 工具与效率</label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="career"> 职业成长</label>
+                    </div>
+                    <div class="schema-wizard-custom">
+                        <input type="text" id="schema-wizard-custom-domains" class="form-input" placeholder="其他一级主题，逗号分隔，如：产品设计, 开源社区">
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="2">
+                    <h4>主题层级与语言</h4>
+                    <p class="hint">对应 `Notes/` 文件夹深度与命名习惯。</p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-depth" value="2">
+                            <span>以两级为主（一级 &gt; 二级）</span>
+                        </label>
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-depth" value="3" checked>
+                            <span>标准三级（一级 &gt; 二级 &gt; 三级）</span>
+                        </label>
+                    </div>
+                    <div class="schema-option-list" style="margin-top:12px">
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-language" value="zh" checked>
+                            <span>中文优先（文件名、标签、主题）</span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-language" value="mixed">
+                            <span>中英混合（专有名词保留英文）</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="3">
+                    <h4>整理习惯</h4>
+                    <p class="hint">写入 schema.md，约束 AI 自动整理行为。</p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="folder_truth" checked> 文件夹路径是主题唯一依据</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="pending" checked> 不确定分类 → 待办，不硬塞</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="survey_only" checked> 级联只更新综述，不改笔记正文</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="auto_convert" checked> 自动转换 PDF/DOCX 等</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="tags_cn" checked> 标签 2～5 个，中文优先</label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="4">
+                    <h4>确认生成的 schema.md</h4>
+                    <p class="hint">将保存到工作区根目录，并同步生成 project_rules.md。</p>
+                    <textarea id="schema-wizard-preview" class="form-input form-textarea"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer schema-wizard-footer">
+                <button type="button" class="btn btn-secondary" id="schema-wizard-use-default">使用推荐默认</button>
+                <div class="right">
+                    <button type="button" class="btn btn-secondary" id="schema-wizard-back">上一步</button>
+                    <button type="button" class="btn btn-primary" id="schema-wizard-next">下一步</button>
+                    <button type="button" class="btn btn-primary" id="schema-wizard-save" style="display:none">完成并保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="project-rules-modal" style="display:none;">
         <div class="modal-dialog">
             <div class="modal-header">
@@ -707,6 +867,13 @@
         </div>
     </div>
 
+    <div id="ingest-pipeline-bar" role="status" aria-live="polite">
+        <span class="ingest-label" id="ingest-pipeline-stage">入库</span>
+        <div class="ingest-track"><div class="ingest-fill" id="ingest-pipeline-fill"></div></div>
+        <span class="ingest-message" id="ingest-pipeline-message"></span>
+        <button type="button" id="ingest-pipeline-cancel" title="取消入库">取消</button>
+    </div>
+
     <div id="js-error-panel" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow:auto;background:#1a0000;color:#ff6b6b;font:12px monospace;padding:10px;z-index:99999;display:none;border-top:2px solid #ff0000;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
             <b style="color:#ff0000">JS Errors (click to dismiss)</b>
@@ -714,61 +881,8 @@
         </div>
         <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
     </div>
-    <script>
-    (function() {
-        var el = document.getElementById('js-error-panel');
-        var log = document.getElementById('js-error-log');
-        var errors = [];
-        function showErrors() {
-            if (errors.length === 0) return;
-            el.style.display = 'block';
-            log.textContent = errors.join('\n\n---\n\n');
-        }
-        window.onerror = function(msg, url, line, col, err) {
-            var info = (err && err.stack) ? err.stack : (msg + ' at ' + url + ':' + line + ':' + col);
-            errors.push(info);
-            showErrors();
-        };
-        window.addEventListener('unhandledrejection', function(e) {
-            var info = 'Promise rejection: ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
-            errors.push(info);
-            showErrors();
-        });
-        // Also hook console.error
-        var origError = console.error;
-        console.error = function() {
-            var args = Array.prototype.slice.call(arguments);
-            errors.push('[console.error] ' + args.map(function(a) { try { return typeof a === 'object' ? JSON.stringify(a) : String(a); } catch(_) { return String(a); } }).join(' '));
-            showErrors();
-            return origError.apply(console, arguments);
-        };
-    })();
-
-    window._customConfirm = function(message) {
-        return new Promise(function(resolve) {
-            var overlay = document.getElementById('custom-confirm-overlay');
-            var msgEl = document.getElementById('custom-confirm-message');
-            var okBtn = document.getElementById('custom-confirm-ok');
-            var cancelBtn = document.getElementById('custom-confirm-cancel');
-            if (!overlay) { resolve(window.confirm(message)); return; }
-            msgEl.textContent = message;
-            overlay.style.display = 'flex';
-            okBtn.focus();
-            function cleanup(result) {
-                overlay.style.display = 'none';
-                okBtn.removeEventListener('click', onOk);
-                cancelBtn.removeEventListener('click', onCancel);
-                resolve(result);
-            }
-            function onOk() { cleanup(true); }
-            function onCancel() { cleanup(false); }
-            okBtn.addEventListener('click', onOk);
-            cancelBtn.addEventListener('click', onCancel);
-        });
-    };
-    </script>
+    <script src="js/error-handler.js"></script>
     <script src="js/topic-tree-3tier.js"></script>
     <script src="js/G3.js"></script>
-    <script src="lib/tiptap-bundle.js"></script>
 </body>
 </html>

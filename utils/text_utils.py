@@ -2,6 +2,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 try:
     import jieba
     JIEBA_AVAILABLE = True
@@ -383,3 +385,16 @@ def _is_meaningful_tag(tag: str) -> bool:
     if has_english:
         return tag.lower() not in TOP_COMMON_ENGLISH_WORDS
     return False
+
+
+def parse_frontmatter(text: str):
+    m = re.match(r"^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---", text.lstrip("\ufeff"))
+    if not m:
+        return None, text
+    try:
+        meta = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError:
+        meta = {}
+    body_start = m.end()
+    body = text.lstrip("\ufeff")[body_start:]
+    return meta, body

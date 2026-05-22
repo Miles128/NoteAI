@@ -9,6 +9,9 @@ from .tags_handler import TagsHandler
 from .topics_handler import TopicsHandler
 from .transfer_handler import TransferHandler
 from .workspace_handler import WorkspaceHandler
+from .cloud_sync_handler import CloudSyncHandler
+from .ingest_handler import IngestHandler
+from .kb_handler import KbHandler
 
 __all__ = [
     'BaseHandler',
@@ -22,4 +25,7 @@ __all__ = [
     'IntelHandler',
     'IntelTopicHandler',
     'RagHandler',
+    'CloudSyncHandler',
+    'IngestHandler',
+    'KbHandler',
 ]

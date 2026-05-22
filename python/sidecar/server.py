@@ -2,7 +2,6 @@
 
 import importlib
 import json
-import re
 import sys
 import threading
 from pathlib import Path
@@ -14,8 +13,11 @@ from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
+    CloudSyncHandler,
     ConfigHandler,
     FilesHandler,
+    IngestHandler,
+    KbHandler,
     IntelHandler,
     IntelTopicHandler,
     LinksHandler,
@@ -25,6 +27,8 @@ from sidecar.handlers import (
     TransferHandler,
     WorkspaceHandler,
 )
+from sidecar.schema_manager import ensure_schema
+from sidecar.textutils import parse_frontmatter
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
@@ -37,6 +41,7 @@ from utils.topic_assigner import (
     move_file_to_notes_topic_folder,
     sync_wiki_with_files,
 )
+from utils.wiki_manager import _write_file_topic_from_folder, topic_from_notes_path
 from utils.ttl_cache import TTLCache
 
 WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
@@ -57,6 +62,7 @@ class SidecarServer(PathHelpersMixin):
         self._stdout_lock = threading.Lock()
         self._watcher_observer = None
         self._watcher_debounce_timer = None
+        self._watcher_needs_wiki_sync = False
         self._watcher_debounce_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
@@ -73,8 +79,12 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler = IntelHandler(self)
         self._intel_topic_handler = IntelTopicHandler(self)
         self._rag_handler = RagHandler(self)
+        self._cloud_sync_handler = CloudSyncHandler(self)
+        self._ingest_handler = IngestHandler(self)
+        self._kb_handler = KbHandler(self)
         self._build_router()
         self._start_workspace_watcher()
+        self._startup_sync()
 
     def _build_router(self):
         self._config_handler.register_routes(self._router)
@@ -88,6 +98,9 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler.register_routes(self._router)
         self._intel_topic_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
+        self._cloud_sync_handler.register_routes(self._router)
+        self._ingest_handler.register_routes(self._router)
+        self._kb_handler.register_routes(self._router)
 
     def _send_response(self, resp):
         with self._stdout_lock:
@@ -127,6 +140,26 @@ class SidecarServer(PathHelpersMixin):
         workspace = config.workspace_path
         if workspace and Path(workspace).exists():
             self._setup_watcher(workspace)
+
+    def _startup_sync(self):
+        workspace = config.workspace_path
+        if not workspace or not Path(workspace).exists():
+            return
+        try:
+            ensure_schema(workspace)
+            from sidecar.schema_manager import needs_schema_setup
+            if not needs_schema_setup(workspace):
+                from utils.wiki_manager import sync_wiki_with_files
+                sync_wiki_with_files()
+                logger.info("[startup] WIKI.md synced with workspace")
+            else:
+                logger.info("[startup] schema setup pending, skip WIKI sync")
+        except Exception as e:
+            logger.warning(f"[startup] sync failed: {e}")
+        self._send_response({
+            "id": "event",
+            "result": {"type": "workspace_files_changed"},
+        })
 
     def _setup_watcher(self, workspace_path):
         try:
@@ -222,6 +255,29 @@ class SidecarServer(PathHelpersMixin):
             return True
         return path.suffix.lower() in WATCHED_WORKSPACE_SUFFIXES
 
+    def _workspace_change_affects_wiki(self, change_type, file_path, src_path=None, is_directory=False):
+        if change_type not in ("created", "deleted", "moved"):
+            return False
+
+        workspace = config.workspace_path
+        for changed_path in (file_path, src_path):
+            if not changed_path:
+                continue
+            path = Path(changed_path)
+            try:
+                rel_parts = path.relative_to(workspace).parts if workspace else path.parts
+            except ValueError:
+                continue
+            if not rel_parts or rel_parts[0] != NOTES_FOLDER:
+                continue
+            if any(part.startswith(".") for part in rel_parts):
+                continue
+            if any(is_ignored_dir(part) for part in rel_parts):
+                continue
+            if is_directory or path.suffix.lower() == ".md":
+                return True
+        return False
+
     def _on_workspace_file_changed(self, change_type, file_path, src_path=None, is_directory=False):
         if not self._is_relevant_workspace_change(file_path, is_directory=is_directory) and (
             not src_path or not self._is_relevant_workspace_change(src_path, is_directory=is_directory)
@@ -244,6 +300,8 @@ class SidecarServer(PathHelpersMixin):
                 logger.warning(f"[watcher] path outside workspace: {file_path}\n")
 
         with self._watcher_debounce_lock:
+            if self._workspace_change_affects_wiki(change_type, file_path, src_path, is_directory=is_directory):
+                self._watcher_needs_wiki_sync = True
             if self._watcher_debounce_timer:
                 try:
                     self._watcher_debounce_timer.cancel()
@@ -253,16 +311,32 @@ class SidecarServer(PathHelpersMixin):
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):  # noqa: PLR0912
+        path = Path(file_path)
         try:
-            text = Path(file_path).read_text(encoding='utf-8')
+            text = path.read_text(encoding='utf-8')
         except Exception as e:
             logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
             return
 
-        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-        yaml_text = m.group(1) if m else ""
+        meta, body = parse_frontmatter(text)
 
-        if not m or _check_topic_needs_processing(yaml_text):
+        folder_topic = topic_from_notes_path(path)
+        if folder_topic:
+            file_topic = meta.get("topic") if meta else None
+            if isinstance(file_topic, list):
+                file_topic = file_topic[0] if len(file_topic) == 1 else None
+            if isinstance(file_topic, str):
+                file_topic = file_topic.strip() or None
+            if meta is None or _check_topic_needs_processing(meta) or file_topic != folder_topic:
+                try:
+                    if _write_file_topic_from_folder(path, folder_topic):
+                        with self._watcher_debounce_lock:
+                            self._watcher_needs_wiki_sync = True
+                except Exception as e:
+                    logger.warning(f"[watcher] align topic from folder failed for {file_path}: {e}\n")
+            return
+
+        if meta is None or _check_topic_needs_processing(meta):
             try:
                 result = auto_assign_topic_for_file(file_path)
                 if result and result.get("status") == "auto_assigned" and result.get("topic"):
@@ -279,16 +353,9 @@ class SidecarServer(PathHelpersMixin):
                 logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
             return
 
-        file_topic = None
-        for line in yaml_text.split('\n'):
-            idx = line.find(':')
-            if idx < 0:
-                continue
-            key = line[:idx].strip()
-            val = line[idx + 1:].strip()
-            if key == 'topic' and val:
-                file_topic = val.strip().strip("'\"")
-                break
+        file_topic = meta.get('topic') if meta else None
+        if isinstance(file_topic, list):
+            file_topic = file_topic[0] if len(file_topic) == 1 else None
 
         if not file_topic:
             return
@@ -324,6 +391,15 @@ class SidecarServer(PathHelpersMixin):
 
     def _emit_workspace_change(self):
         self._invalidate_cache()
+        needs_wiki_sync = False
+        with self._watcher_debounce_lock:
+            needs_wiki_sync = self._watcher_needs_wiki_sync
+            self._watcher_needs_wiki_sync = False
+        if needs_wiki_sync:
+            try:
+                sync_wiki_with_files()
+            except Exception as e:
+                logger.warning(f"[watcher] syncing WIKI after workspace change: {e}\n")
         self._send_response({"id": "event", "result": {"type": "workspace_files_changed"}})
 
     def handle_request(self, request):

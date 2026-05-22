@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 
 from config import config, is_ignored_dir
-from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _is_generic_word, _normalize_for_match
+from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _is_generic_word, _normalize_for_match, parse_frontmatter
 from utils.logger import logger
 
 
@@ -90,22 +90,14 @@ def cleanup_stale_links() -> int:
 def _read_file_topic(file_path: Path) -> str:
     try:
         text = file_path.read_text(encoding='utf-8')
-        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-        if not m:
+        meta, _ = parse_frontmatter(text)
+        if not meta:
             return ""
-        for line in m.group(1).split('\n'):
-            idx = line.find(':')
-            if idx < 0:
-                continue
-            key = line[:idx].strip()
-            val = line[idx + 1:].strip()
-            if key == 'topic' and val:
-                if val.startswith('['):
-                    items = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                    if len(items) == 1:
-                        return items[0]
-                    return ""
-                return val.strip().strip("'\"")
+        topic = meta.get('topic')
+        if isinstance(topic, list):
+            return str(topic[0]).strip() if len(topic) == 1 else ""
+        if isinstance(topic, str) and topic.strip():
+            return topic.strip()
     except Exception as e:
         sys.stderr.write(f"[_read_file_topic] read failed: {e}\n"); sys.stderr.flush()
     return ""
@@ -130,35 +122,31 @@ def _iter_md_files(workspace: Path) -> List[Path]:
 
 
 def _parse_file_meta(md_file: Path) -> Dict[str, Any]:
-    """提取文件的标题、标签、topic、前 500 字摘要"""
     try:
         text = md_file.read_text(encoding='utf-8')
     except Exception as e:
         logger.warning(f"[link_indexer] 无法读取文件 {md_file.name}: {e}")
         return None
 
-    m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('﻿'))
+    meta, body = parse_frontmatter(text)
     title = md_file.stem
     tags = []
     topic = None
 
-    if m:
-        yaml_text = m.group(1)
-        body = text[m.end():].strip() if not text.startswith('﻿') else text[m.end() + 1:].strip()
-        for line in yaml_text.split('\n'):
-            idx = line.find(':')
-            if idx < 0:
-                continue
-            key = line[:idx].strip()
-            val = line[idx + 1:].strip()
-            if key == 'title':
-                title = val.strip().strip("'\"")
-            elif key == 'tags' and val.startswith('[') and val.endswith(']'):
-                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-            elif key == 'topic':
-                topic = val.strip().strip("'\"")
+    if meta:
+        t = meta.get('title')
+        if t and isinstance(t, str):
+            title = t
+        raw_tags = meta.get('tags', [])
+        if isinstance(raw_tags, list):
+            tags = [str(t).strip() for t in raw_tags if t]
+        elif isinstance(raw_tags, str) and raw_tags.strip():
+            tags = [raw_tags.strip()]
+        raw_topic = meta.get('topic')
+        if isinstance(raw_topic, str) and raw_topic.strip():
+            topic = raw_topic.strip()
     else:
-        body = text.strip()
+        body = text
 
     summary = body[:500].replace('\n', ' ').strip()
     rel_path = str(md_file.relative_to(Path(config.workspace_path)))

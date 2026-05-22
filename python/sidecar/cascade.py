@@ -44,11 +44,13 @@ def get_organized_topic_dir(topic: str) -> Path | None:
 
 
 def get_survey_path(topic: str) -> Path | None:
-    topic_dir = get_organized_topic_dir(topic)
-    if not topic_dir:
+    if not topic:
+        return None
+    workspace = config.workspace_path
+    if not workspace:
         return None
     leaf_name = _safe_topic_segment(topic.rsplit(TOPIC_SEP, maxsplit=1)[-1])
-    return topic_dir / f"{leaf_name}_综述.md"
+    return Path(workspace) / config.ABSTRACT_FOLDER / f"{leaf_name}_综述.md"
 
 
 def ensure_topic_folder(topic: str) -> dict:
@@ -61,17 +63,17 @@ def ensure_topic_folder(topic: str) -> dict:
         return {"success": False, "message": "未设置工作区"}
 
     notes_dir = Path(workspace) / config.NOTES_FOLDER / safe_topic
-    organized_dir = Path(workspace) / config.ABSTRACT_FOLDER / safe_topic
+    wiki_dir = Path(workspace) / config.ABSTRACT_FOLDER
 
-    is_new = not notes_dir.exists() and not organized_dir.exists()
+    is_new = not notes_dir.exists()
 
     notes_dir.mkdir(parents=True, exist_ok=True)
-    organized_dir.mkdir(parents=True, exist_ok=True)
+    wiki_dir.mkdir(parents=True, exist_ok=True)
 
     if is_new:
-        append_changelog(f"创建主题文件夹: Notes/{safe_topic}/, {config.ABSTRACT_FOLDER}/{safe_topic}/")
+        append_changelog(f"创建主题文件夹: Notes/{safe_topic}/")
 
-    return {"success": True, "topic_dir": str(notes_dir), "organized_dir": str(organized_dir), "is_new": is_new}
+    return {"success": True, "topic_dir": str(notes_dir), "organized_dir": str(wiki_dir), "is_new": is_new}
 
 
 def move_file_to_topic_folder(file_path: str, topic: str) -> dict:
@@ -451,46 +453,9 @@ def cascade_on_topic_resolved(file_path: str, topic: str, on_chunk=None) -> dict
 
 
 def append_changelog(message: str):
+    from utils.workspace_log import append_log
     with _changelog_lock:
-        workspace = config.workspace_path
-        if not workspace:
-            return
-
-        log_path = Path(workspace) / "wiki" / "log.md"
-
-        if not log_path.parent.exists():
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        if not log_path.exists():
-            header = "# 知识库变更日志\n\n"
-            log_path.write_text(header, encoding='utf-8')
-
-        try:
-            content = log_path.read_text(encoding='utf-8')
-        except Exception:
-            content = ""
-
-        today = datetime.now().strftime('%Y-%m-%d')
-        day_header = f"\n## {today}\n"
-
-        if day_header.strip() not in content:
-            if not content.endswith('\n'):
-                content += '\n'
-            content += day_header
-
-        entry = f"- `{timestamp}` {message}\n"
-
-        lines = content.split('\n')
-        insert_idx = len(lines)
-        for i, line in enumerate(lines):
-            if line.strip() == day_header.strip():
-                insert_idx = i + 1
-                break
-
-        lines.insert(insert_idx, entry.rstrip('\n'))
-        log_path.write_text('\n'.join(lines), encoding='utf-8')
+        append_log("cascade", message)
 
 
 def get_changelog(limit: int = 50) -> list[dict]:
@@ -509,7 +474,10 @@ def get_changelog(limit: int = 50) -> list[dict]:
 
     entries = []
     for line in content.split('\n'):
-        m = re.match(r'^-\s+`(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`\s+(.+)$', line.strip())
+        m = re.match(
+            r'^-\s+`(\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`\s+(?:\*\*[A-Z_]+\*\*\s+)?(.+)$',
+            line.strip(),
+        )
         if m:
             entries.append({
                 "timestamp": m.group(1),

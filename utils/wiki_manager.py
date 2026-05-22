@@ -997,6 +997,30 @@ def _is_hidden_path(path: Path) -> bool:
     return any(part.startswith('.') for part in path.parts)
 
 
+def topic_from_notes_path(file_path: str | Path) -> str | None:
+    """从 Notes/ 下的路径推导 topic（文件夹为准）；Notes 根目录或非 Notes 返回 None。"""
+    workspace = config.workspace_path
+    if not workspace:
+        return None
+    path = Path(file_path)
+    notes_root = Path(workspace) / config.NOTES_FOLDER
+    try:
+        rel = path.relative_to(notes_root)
+    except ValueError:
+        return None
+    if path.suffix.lower() != ".md":
+        return None
+    parts = rel.parts
+    if len(parts) < 2:
+        return None
+    dir_parts = parts[:-1]
+    if not dir_parts:
+        return None
+    if len(dir_parts) > 3:
+        dir_parts = dir_parts[:3]
+    return TOPIC_SEP.join(dir_parts)
+
+
 def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
     """Rebuild WIKI.md from the Notes folder hierarchy and align file frontmatter.
 

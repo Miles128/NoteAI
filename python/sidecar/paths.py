@@ -40,6 +40,16 @@ def find_file_by_name_in_workspace(path: str) -> str | None:
         return None
     try:
         workspace_abs = Path(workspace).resolve()
+        notes_abs = workspace_abs / "Notes"
+        if notes_abs.exists():
+            for match in notes_abs.rglob(filename):
+                if match.is_file() and match.suffix.lower() == Path(filename).suffix.lower():
+                    match_abs = match.resolve()
+                    try:
+                        match_abs.relative_to(workspace_abs)
+                        return str(match_abs)
+                    except ValueError:
+                        continue
         for match in workspace_abs.rglob(filename):
             if match.is_file() and match.suffix.lower() == Path(filename).suffix.lower():
                 match_abs = match.resolve()

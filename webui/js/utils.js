@@ -64,6 +64,11 @@ window.formatFileSizeForTree = formatFileSizeForTree;
 window.Path_stem = Path_stem;
 window.getTauriEventAPI = getTauriEventAPI;
 
+/** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（sidebar.js 会覆盖） */
+if (typeof window.toggleSidebar !== 'function') {
+    window.toggleSidebar = function _toggleSidebarEarly() {};
+}
+
 window.utils = {
     escapeHtml: escapeHtml,
     escapeAttr: escapeAttr,

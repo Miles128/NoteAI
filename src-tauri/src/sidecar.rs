@@ -193,10 +193,8 @@ fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
     ];
 
     for candidate in candidates {
-        if let Some(path) = candidate.canonicalize().ok() {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Ok(path) = candidate.canonicalize() {
+            return Ok(path);
         }
     }
 

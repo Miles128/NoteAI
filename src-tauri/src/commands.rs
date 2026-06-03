@@ -141,7 +141,7 @@ pub async fn open_file_in_new_window(
     .title_bar_style(tauri::TitleBarStyle::Overlay)
     .hidden_title(true)
     .traffic_light_position(LogicalPosition::new(14.0, 22.0))
-    .initialization_script(&format!(
+    .initialization_script(format!(
         "window.__PREVIEW_FILE_PATH__ = {}; window.__IS_PREVIEW_WINDOW__ = true;",
         serde_json::to_string(&safe_path).unwrap_or_else(|_| "\"\"".to_string())
     ))

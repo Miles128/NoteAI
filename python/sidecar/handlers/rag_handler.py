@@ -30,7 +30,14 @@ class RagHandler(BaseHandler):
     _rag_chat_lock = threading.Lock()
     _rag_build_lock = threading.Lock()
 
+    @staticmethod
+    def _rag_disabled_message() -> str:
+        return "向量 RAG 未启用。请在 设置 → 小忆助手 中开启「向量 RAG 检索」"
+
     def _init_rag_index(self, params):
+        if not config.rag_enabled:
+            return {"success": False, "message": self._rag_disabled_message()}
+
         from sidecar.rag.chunker import chunk_file
         from sidecar.rag.embedder import encode_documents
         from sidecar.rag.index import build_index
@@ -128,6 +135,9 @@ class RagHandler(BaseHandler):
                 encoding="utf-8")
 
     def _rag_add_chunks(self, params):
+        if not config.rag_enabled:
+            return {"success": False, "message": self._rag_disabled_message()}
+
         file_path = params.get("file_path", "")
         if not file_path:
             return {"success": False, "message": "未指定文件路径"}
@@ -156,6 +166,9 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def _rag_remove_chunks(self, params):
+        if not config.rag_enabled:
+            return {"success": True}
+
         file_path = params.get("file_path", "")
         if not file_path:
             return {"success": False, "message": "未指定文件路径"}
@@ -184,8 +197,12 @@ class RagHandler(BaseHandler):
     def _rag_chat(self, params):
         from prompts.rag_assistant import RAG_CHAT_PROMPT
         from sidecar.rag.memory import load_short_memory, save_short_memory
-        from sidecar.rag.retriever import retrieve
         from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
+
+        if config.rag_enabled:
+            from sidecar.rag.retriever import retrieve as search_fn
+        else:
+            from sidecar.classic_retriever import retrieve as search_fn
 
         question = (params.get("question") or "").strip()
         if not question:
@@ -197,8 +214,9 @@ class RagHandler(BaseHandler):
         def _worker() -> None:
             try:
                 result = self._do_rag_chat_inner(
-                    params, retrieve, load_short_memory, save_short_memory,
+                    params, search_fn, load_short_memory, save_short_memory,
                     call_llm_raw_stream, check_api_config, APIConfigError, RAG_CHAT_PROMPT,
+                    use_vector_rag=config.rag_enabled,
                 )
                 if isinstance(result, dict) and not result.get("success", True):
                     if not result.get("error_emitted"):
@@ -219,7 +237,7 @@ class RagHandler(BaseHandler):
 
     def _do_rag_chat_inner(self, params, search_fn, load_memory_fn, save_memory_fn,
                            call_llm_raw_stream, check_api_config, APIConfigError,
-                           RAG_CHAT_PROMPT):
+                           RAG_CHAT_PROMPT, *, use_vector_rag: bool = True):
         question = params.get("question", "").strip()
         if not question:
             return {"success": False, "message": "问题不能为空"}
@@ -243,19 +261,34 @@ class RagHandler(BaseHandler):
         tags = params.get("tags") or None
 
         try:
-            hyde_question = self._generate_hyde(question)
-            search_results = search_fn(hyde_question, topics=topics, tags=tags)
-            if not search_results:
+            if use_vector_rag:
+                hyde_question = self._generate_hyde(question)
+                search_results = search_fn(hyde_question, topics=topics, tags=tags)
+                if not search_results:
+                    search_results = search_fn(question, topics=topics, tags=tags)
+            else:
                 search_results = search_fn(question, topics=topics, tags=tags)
         except Exception as e:
             RagHandler._record_error(f"检索失败: {e}")
             return self._fail_rag(f"检索失败: {e}")
 
+        def _send_tool_event(payload: dict) -> None:
+            self._send_response({"id": "event", "result": payload})
+
+        from sidecar.agent_runner import run_readonly_tool_prefetch
+
+        tool_context = run_readonly_tool_prefetch(question, send_event=_send_tool_event)
+
         context_parts = []
-        for i, r in enumerate(search_results):
+        for r in search_results:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
             label = r.get("source_label") or r.get("file_name") or r.get("file_path", "")
-            context_parts.append(f"[{i + 1}] {label}\n{r.get('content', '')}")
+            context_parts.append(f"[{len(context_parts) + 1}] {label}\n{body}")
         context = "\n\n".join(context_parts)
+        if tool_context:
+            context = (context + "\n\n" + tool_context).strip() if context else tool_context
 
         history = load_memory_fn() or ""
         compressed = self._extractive_compress(history)
@@ -304,6 +337,12 @@ class RagHandler(BaseHandler):
             else f"用户: {question}\n助手: {display_answer}"
         )
         save_memory_fn(updated_history)
+
+        from sidecar.rag.memory import update_long_memory
+        try:
+            update_long_memory(question)
+        except Exception:
+            pass
 
         self._send_response({
             "id": "event",
@@ -381,7 +420,6 @@ class RagHandler(BaseHandler):
     # _execute_single_action removed — LLM-generated code execution is a security risk
 
     def _rag_chat_with_actions(self, params):
-        """Alias for _rag_chat — kept for backward-compatible RPC route."""
         return self._rag_chat(params)
 
     def _rag_rebuild_index(self, params):

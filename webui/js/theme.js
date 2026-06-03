@@ -248,33 +248,33 @@ function initPreviewResizer() {
 function showAboutPanel() {
     const aboutContent = `
         <h2>NoteAI</h2>
-        <p class="about-version">版本 1.0.0</p>
-        <p class="about-desc">AI 驱动的 Markdown 笔记知识库管理工具</p>
+        <p class="about-version">${window.t('about.version')}</p>
+        <p class="about-desc">${window.t('about.desc')}</p>
         <div class="about-features">
-            <h3>核心功能</h3>
+            <h3>${window.t('about.coreFeatures')}</h3>
             <ul>
-                <li>Markdown 笔记管理与编辑</li>
-                <li>AI 智能主题分析与归类</li>
-                <li>AI 主题综述自动撰写</li>
-                <li>标签管理与自动匹配</li>
-                <li>双向链接发现与可视化</li>
-                <li>网络文章批量下载与转换</li>
-                <li>多格式文件导入与整合</li>
-                <li>AI 改写与格式化</li>
+                <li>${window.t('about.feature1')}</li>
+                <li>${window.t('about.feature2')}</li>
+                <li>${window.t('about.feature3')}</li>
+                <li>${window.t('about.feature4')}</li>
+                <li>${window.t('about.feature5')}</li>
+                <li>${window.t('about.feature6')}</li>
+                <li>${window.t('about.feature7')}</li>
+                <li>${window.t('about.feature8')}</li>
             </ul>
         </div>
         <div class="about-features">
-            <h3>技术架构</h3>
+            <h3>${window.t('about.techArchitecture')}</h3>
             <ul>
-                <li>前端：Tauri v2 + HTML / CSS / JS</li>
-                <li>后端：Python sidecar</li>
-                <li>编辑器：Tiptap</li>
-                <li>大模型：LangChain + ChatOpenAI</li>
+                <li>${window.t('about.techFrontend')}</li>
+                <li>${window.t('about.techBackend')}</li>
+                <li>${window.t('about.techEditor')}</li>
+                <li>${window.t('about.techLlm')}</li>
             </ul>
         </div>
-        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">作者：四海</p>
+        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">${window.t('about.author')}</p>
         <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">myx28@qq.com</p>
-        <p class="about-tech" style="margin-top: 4px;">开源项目 · GitHub: Miles128/NoteAI</p>
+        <p class="about-tech" style="margin-top: 4px;">${window.t('about.opensource')}</p>
     `;
 
     document.getElementById('about-panel-content').innerHTML = aboutContent;

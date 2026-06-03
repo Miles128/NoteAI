@@ -34,7 +34,8 @@ def test_run_ingest_creates_schema_and_completes(workspace: Path) -> None:
     with patch("sidecar.ingest_pipeline.run_cascade_for_topics", return_value={"updated": 0, "failed": []}), \
          patch("sidecar.ingest_pipeline.retry_failed_cascades", return_value={"updated": 0}), \
          patch("sidecar.ingest_pipeline.sync_wiki_with_files"), \
-         patch("sidecar.ingest_pipeline._index_markdown_files", return_value=0):
+         patch("utils.note_compiler.compile_notes_batch", return_value=(0, [])), \
+         patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(0, [])):
         result = run_ingest(mode="full", send_progress=on_progress, send_event=on_event)
 
     assert result["success"] is True
@@ -58,3 +59,12 @@ def test_run_ingest_respects_cancel(workspace: Path) -> None:
     assert result.get("cancelled") is True
     assert load_ingest_state()["status"] == "cancelled"
     clear_cancel()
+
+
+def test_scan_index_pending_finds_changed_notes(workspace: Path) -> None:
+    from sidecar.ingest_pipeline import _scan_index_pending
+
+    md = workspace / "Notes" / "changed.md"
+    md.write_text("# hello", encoding="utf-8")
+    pending = _scan_index_pending(str(workspace))
+    assert md in pending

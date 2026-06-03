@@ -112,30 +112,36 @@ Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
 
 ## 两层记忆体系
 
-NoteAI 有两层 Memory，分别存储在不同位置：
+NoteAI 有两层 Memory，均与工作区绑定（切换工作区即切换画像与对话记忆）：
 
-### L1：长期用户画像（跨工作区）
+### L1：用户画像（工作区级）
 
-位置：`NoteAI项目根目录/NoteAI/profile.md`
+位置：`<工作区>/.ai_memory/user_profile.json`（含 `profile_md` 字段）
 
 - 用户身份、偏好、知识背景
-- 所有工作区共享
-- 由设置界面的"用户画像"功能维护
+- 由设置界面的「用户画像」功能维护
+- RAG 对话可读取并用于查询改写
 
-### L2：工作区 Memory（工作区专属）
+### L2：工作区 Memory（RAG 会话）
 
-位置：`<工作区>/NoteAI/memory/`
+位置：`<工作区>/.noteai/memory/`
 
 - 该工作区的 RAG 对话记忆
 - 工作区特定的 AI 运行时数据
-- 与笔记内容相关但不修改笔记本身
 
-### 工作区 NoteAI 目录完整结构
+### 工作区运行时目录
 
 ```
-<工作区>/NoteAI/
-├── GUIDE.md          # 工作区主题归类规则
-├── memory/           # 工作区 Memory
-├── logs/             # NoteAI 操作日志
-└── rag_index/        # RAG 向量索引数据
+<工作区>/
+├── .noteai/
+│   ├── memory/       # RAG 会话记忆（L2）
+│   ├── rag_index/    # Milvus Lite 向量索引
+│   └── ingest_state.json 等
+├── .ai_memory/
+│   ├── user_profile.json   # 用户画像（L1）
+│   └── project_rules.md    # 项目规则
+└── wiki/
+    └── log.md        # 统一变更日志（入库/级联/Lint/归档）
 ```
+
+> 旧文档中的 `NoteAI/`、`NoteAI/profile.md` 为别名，请以 `.noteai`、`.ai_memory` 为准。

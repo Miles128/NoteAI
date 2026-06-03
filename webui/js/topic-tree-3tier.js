@@ -218,7 +218,7 @@ const TopicTree3Tier = {
             console.error('加载文件列表失败:', e);
             const panel = document.getElementById('topic-files-panel');
             if (panel) {
-                panel.innerHTML = `<h4>${name}</h4><p>加载失败: ${e.message || '未知错误'}</p>`;
+                panel.innerHTML = `<h4>${name}</h4><p>加载失败: ${e.message || window.t('common.unknownError')}</p>`;
             }
         }
     },
@@ -262,7 +262,7 @@ const TopicTree3Tier = {
                 alert(r.message);
                 this.load();  // 刷新
             } else {
-                alert('创建失败: ' + r.message);
+                alert(window.t('topicTree.auto.topicTree_auto_topicTree_auto_创建失败') + r.message);
             }
         });
     },
@@ -293,7 +293,7 @@ const TopicTree3Tier = {
                 alert(r.message);
                 this.load();
             } else {
-                alert('删除失败: ' + r.message);
+                alert(window.t('topicTree.auto.topicTree_auto_topicTree_auto_删除失败') + r.message);
             }
         });
     },

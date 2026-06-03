@@ -72,6 +72,10 @@ class AppConfig:
     integration_strategy: str = "ml"
     auto_topic: bool = True
     topic_list: str = ""
+    cloud_sync_experimental: bool = False
+    assistant_agent_mode: bool = False
+    rag_enabled: bool = False
+    locale: str = "zh-CN"
 
     def __post_init__(self):
         self._lock = threading.Lock()
@@ -139,6 +143,9 @@ class AppConfig:
             (noteai_folder / "memory").mkdir(parents=True, exist_ok=True)
             (noteai_folder / "logs").mkdir(parents=True, exist_ok=True)
             (noteai_folder / RAG_INDEX_FOLDER).mkdir(parents=True, exist_ok=True)
+
+            from utils.workspace_log import migrate_legacy_logs
+            migrate_legacy_logs(str(workspace))
 
             return True, f"工作文件夹已设置: {self.workspace_path}"
         except PermissionError:

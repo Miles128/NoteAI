@@ -64,8 +64,17 @@ class LinksHandler(BaseHandler):
     def _confirm_all_links(self, _params):
         return confirm_all_links()
 
+    def _discover_cross_refs_for_file(self, params):
+        file_path = params.get("file_path", "")
+        if not file_path:
+            return {"success": False, "message": "未指定文件"}
+        from utils.link_indexer import discover_cross_refs_for_file
+
+        return discover_cross_refs_for_file(file_path)
+
     def register_routes(self, router):
         router.register("discover_links", self._discover_links)
+        router.register("discover_cross_refs_for_file", self._discover_cross_refs_for_file)
         router.register("get_backlinks", self._get_backlinks)
         router.register("get_link_stats", self._get_link_stats)
         router.register("confirm_link", self._confirm_link)

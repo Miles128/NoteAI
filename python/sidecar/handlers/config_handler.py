@@ -76,6 +76,10 @@ class ConfigHandler(BaseHandler):
             "auto_topic": self.config.auto_topic,
             "topic_list": self.config.topic_list,
             "font_size": self.config.font_size,
+            "cloud_sync_experimental": self.config.cloud_sync_experimental,
+            "assistant_agent_mode": self.config.assistant_agent_mode,
+            "rag_enabled": self.config.rag_enabled,
+            "locale": self.config.locale,
         }
 
     def _save_ui_config(self, params):
@@ -93,6 +97,15 @@ class ConfigHandler(BaseHandler):
             self.config.topic_list = params["topic_list"]
         if "font_size" in params:
             self.config.font_size = params["font_size"]
+        if "cloud_sync_experimental" in params:
+            self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
+        if "assistant_agent_mode" in params:
+            self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
+        if "rag_enabled" in params:
+            self.config.rag_enabled = bool(params["rag_enabled"])
+        if "locale" in params:
+            loc = str(params["locale"]).strip()
+            self.config.locale = "en" if loc == "en" else "zh-CN"
         save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}

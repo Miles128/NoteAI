@@ -66,21 +66,21 @@ function formatModifiedTime(modified) {
     if (isNaN(d.getTime())) return '';
     var now = new Date();
     var diff = now - d;
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-    if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+    if (diff < 60000) return window.t('common.timeJustNow');
+    if (diff < 3600000) return window.t('common.timeMinutesAgo', { count: Math.floor(diff / 60000) });
+    if (diff < 86400000) return window.t('common.timeHoursAgo', { count: Math.floor(diff / 3600000) });
+    if (diff < 604800000) return window.t('common.timeDaysAgo', { count: Math.floor(diff / 86400000) });
     var m = d.getMonth() + 1;
     var day = d.getDate();
     if (d.getFullYear() === now.getFullYear()) {
-        return m + '月' + day + '日';
+        return window.t('common.timeMonthDay', { month: m, day: day });
     }
     return d.getFullYear() + '/' + m + '/' + day;
 }
 
 function renderFileTree(treeData, container) {
     if (!treeData || treeData.length === 0) {
-        container.innerHTML = '<div class="tree-empty">暂无工作区</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
     }
 
@@ -168,14 +168,14 @@ function showTreeContextMenu(e, itemEl) {
     var items = [];
 
     items.push({
-        label: '在访达中显示',
+        label: window.t('tree.revealInFinder'),
         icon: window.Icons.get('folder'),
         action: function() { revealInFinder(path); }
     });
 
     if (!isFolder) {
         items.push({
-            label: '在新窗口打开',
+            label: window.t('tree.openInNewWindow'),
             icon: window.Icons.get('folderOpen'),
             action: function() {
                 if (window.api && window.api.openFileInNewWindow) {
@@ -187,14 +187,14 @@ function showTreeContextMenu(e, itemEl) {
 
     if (isFolder) {
         items.push({
-            label: '删除主题',
+            label: window.t('tree.deleteTopic'),
             icon: window.Icons.get('trash'),
             action: function() { showTopicDeleteConfirm(itemEl, path, name); }
         });
     }
 
     items.push({
-        label: isFolder ? '删除文件夹' : '删除',
+        label: isFolder ? window.t('tree.deleteFolder') : window.t('tree.delete'),
         icon: window.Icons.get('trash'),
         action: function() { showDeleteConfirm(itemEl, path, name); }
     });
@@ -230,9 +230,9 @@ function showTopicDeleteConfirm(itemEl, path, name) {
 
     var bar = document.createElement('div');
     bar.className = 'delete-confirm-bar';
-    bar.innerHTML = '<span class="delete-confirm-text">删除主题「' + escapeHtml(name) + '」？文件将移至 Notes 根目录</span>' +
-        '<button class="delete-confirm-yes" title="确认删除主题">' + window.Icons.get('check', 16) + '</button>' +
-        '<button class="delete-confirm-no" title="取消">' + window.Icons.get('close', 16) + '</button>';
+    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteTopicConfirm', { name: escapeHtml(name) }) + '</span>' +
+        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDeleteTopic') + '">' + window.Icons.get('check', 16) + '</button>' +
+        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
 
     itemEl.style.position = 'relative';
     itemEl.appendChild(bar);
@@ -263,15 +263,15 @@ async function doDeleteTopic(topicName, confirmBar) {
         if (result && result.success) {
             window.TreeModule.loadFileTree();
         } else {
-            alert('删除主题失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            alert(window.t('topic.deleteTopicFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert('删除主题出错：' + (e.message || e));
+        alert(window.t('tree.deleteTopicError') + (e.message || e));
     }
 }
 
 function onAddTopicFromFileTree() {
-    var topicName = prompt('请输入新主题名称：\n\n将创建对应的主题文件夹，并自动匹配相关文件。');
+    var topicName = prompt(window.t('tree.enterTopicName'));
     if (!topicName || !topicName.trim()) return;
     topicName = topicName.trim();
 
@@ -292,10 +292,10 @@ function onAddTopicFromFileTree() {
                     }).catch(function() {});
                 }
             } else {
-                alert('创建主题失败：' + (result ? result.message : '未知错误'));
+                alert(window.t('tree.createTopicFailed') + (result ? result.message : window.t('common.unknownError')));
             }
         }).catch(function(e) {
-            alert('创建主题出错：' + (e.message || e));
+            alert(window.t('tree.createTopicError') + (e.message || e));
         });
     }
 }
@@ -311,9 +311,9 @@ function showDeleteConfirm(itemEl, path, name) {
 
     var bar = document.createElement('div');
     bar.className = 'delete-confirm-bar';
-    bar.innerHTML = '<span class="delete-confirm-text">删除 ' + escapeHtml(name) + '？</span>' +
-        '<button class="delete-confirm-yes" title="确认删除">' + window.Icons.get('check', 16) + '</button>' +
-        '<button class="delete-confirm-no" title="取消">' + window.Icons.get('close', 16) + '</button>';
+    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteConfirm', { name: escapeHtml(name) }) + '</span>' +
+        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDelete') + '">' + window.Icons.get('check', 16) + '</button>' +
+        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
 
     itemEl.style.position = 'relative';
     itemEl.appendChild(bar);
@@ -347,10 +347,10 @@ async function doDeleteFile(path, name, confirmBar) {
             }
             window.TreeModule.loadFileTree();
         } else {
-            alert('删除失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert('删除出错：' + (e.message || e));
+        alert(window.t('tree.deleteError') + (e.message || e));
     }
 }
 
@@ -361,13 +361,13 @@ function revealInFinder(path) {
 }
 
 async function deleteFile(path, name) {
-    if (!(await window._customConfirm('确定要删除 "' + name + '" 吗？'))) return;
+    if (!(await window._customConfirm(window.t('tree.confirmDeleteItem', { name: name })))) return;
     if (window.api && window.api.invoke) {
         window.api.invoke('delete_file', { path: path }).then(function(result) {
             if (result && result.success) {
                 window.TreeModule.loadFileTree();
             } else {
-                alert('删除失败：' + (result ? result.message || '未知错误' : '未知错误'));
+                alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
             }
         });
     }
@@ -389,7 +389,7 @@ function setupFileTreeDragDrop(container) {
         if (!filePath) return;
 
         _fileTreeDragData.filePath = filePath;
-        _fileTreeDragData.fileName = itemEl.getAttribute('data-name') || '文件';
+        _fileTreeDragData.fileName = itemEl.getAttribute('data-name') || window.t('common.file');
         _fileTreeDragData.isFolder = itemEl.classList.contains('folder');
         itemEl.classList.add('dragging');
 
@@ -456,11 +456,11 @@ function setupFileTreeDragDrop(container) {
                 if (result && result.success) {
                     await window.TreeModule.loadFileTree();
                 } else {
-                    alert('移动失败：' + (result ? result.message : '未知错误'));
+                    alert(window.t('topic.moveFailed') + (result ? result.message : window.t('common.unknownError')));
                 }
             } catch (err) {
                 console.error('[FileTree] move error:', err);
-                alert('移动失败：' + (err.message || '发生错误'));
+                alert(window.t('topic.moveFailed') + (err.message || window.t('common.errorOccurred')));
             }
         }
 
@@ -517,7 +517,7 @@ function flattenVisibleNodes(treeData) {
 
 function renderVirtualTree(container) {
     if (!_flatVisibleNodes || _flatVisibleNodes.length === 0) {
-        container.innerHTML = '<div class="tree-empty">暂无工作区</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
     }
 
@@ -617,7 +617,7 @@ var FILE_TREE_LOAD_TIMEOUT_MS = 15000;
 var _loadFileTreeInFlight = null;
 
 function _describeTreeLoadError(error) {
-    if (!error) return '未知错误';
+    if (!error) return window.t('common.unknownError');
     if (typeof error === 'string') return error;
     if (error.message) return error.message;
     try {
@@ -644,18 +644,18 @@ async function _loadFileTreeOnce(force) {
     if (!container) return;
 
     if (!window.api) {
-        container.innerHTML = '<div class="tree-empty">工作区未设置</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('tree.workspaceNotSet') + '</div>';
         return;
     }
 
     try {
         var treeData = await Promise.race([
             window.api.getWorkspaceTree(),
-            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, FILE_TREE_LOAD_TIMEOUT_MS); })
+            new Promise(function(_, reject) { setTimeout(function() { reject(new Error(window.t('tree.loadTimeout'))); }, FILE_TREE_LOAD_TIMEOUT_MS); })
         ]);
 
         if (!Array.isArray(treeData)) {
-            throw new Error('文件树返回格式错误: ' + _describeTreeLoadError(treeData));
+            throw new Error(window.t('tree.invalidFormat', { detail: _describeTreeLoadError(treeData) }));
         }
 
         var newFileSet = extractFileSet(treeData);
@@ -667,7 +667,7 @@ async function _loadFileTreeOnce(force) {
         window.AppState.lastFileTreeData = treeData;
 
         if (Array.isArray(treeData) && treeData.length === 0) {
-            container.innerHTML = '<div class="tree-empty">工作区为空</div>';
+            container.innerHTML = '<div class="tree-empty">' + window.t('tree.workspaceEmpty') + '</div>';
         } else {
             loadTreeState();
             _flatVisibleNodes = flattenVisibleNodes(treeData);
@@ -676,7 +676,7 @@ async function _loadFileTreeOnce(force) {
     } catch (e) {
         console.warn('[Tree] Load skipped:', _describeTreeLoadError(e), e);
         if (!_lastTreeData) {
-            container.innerHTML = '<div class="tree-empty">暂时无法加载文件树</div>';
+            container.innerHTML = '<div class="tree-empty">' + window.t('tree.loadFailed') + '</div>';
         }
     }
 
@@ -719,7 +719,7 @@ function selectFile(path, fileName) {
         }
     } else if (window._rewritingFilePath && path === window._rewritingFilePath) {
         if (container) container.classList.add('rewriting');
-        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = 'LLM 正在改写文档...'; }
+        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = window.t('app.llmRewriting'); }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(false);
         }

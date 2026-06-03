@@ -158,10 +158,12 @@ def _optimize_file_format(full_path, text, meta=None, body=None):
 def _remove_empty_dir(dir_path):
     import shutil
     dir_path = Path(dir_path)
-    if not dir_path.exists():
+    if not dir_path.exists() or not dir_path.is_dir():
         return
     try:
-        shutil.rmtree(str(dir_path))
+        has_files = any(dir_path.rglob('*'))
+        if not has_files:
+            dir_path.rmdir()
     except Exception as e:
         sys.stderr.write(f"[delete_topic] remove dir failed: {dir_path} - {e}\n")
         sys.stderr.flush()

@@ -247,7 +247,7 @@
                 return true;
             }
 
-            editorEl.innerHTML = '<div class="tiptap-deferred-mount" aria-busy="true">解析排版…</div>';
+            editorEl.innerHTML = window.t('tiptapeditor.auto.tiptapeditor_auto_div_class_tiptap_deferred_moun');
             updateSaveStatus('', '解析排版…');
 
             this._scheduleHeavyIdle(function() {

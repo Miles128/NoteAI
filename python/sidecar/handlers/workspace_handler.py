@@ -37,6 +37,12 @@ class WorkspaceHandler(BaseHandler):
         router.register("get_workspace_tree", self._get_workspace_tree)
         router.register("on_file_selected", self._on_file_selected)
         router.register("refresh_log", self._refresh_log)
+        router.register("get_kb_health", self._get_kb_health)
+
+    def _get_kb_health(self, _params):
+        from sidecar.kb_health import compute_kb_health
+
+        return compute_kb_health(self.config.workspace_path)
 
     def _get_workspace_status(self, _params):
         path = self.config.workspace_path
@@ -188,13 +194,12 @@ class WorkspaceHandler(BaseHandler):
                     if entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name):
                         continue
                     children = self._build_recursive_tree(entry, workspace)
-                    if children:
-                        items.append({
-                            "name": entry.name,
-                            "path": rel,
-                            "type": "folder",
-                            "children": children,
-                        })
+                    items.append({
+                        "name": entry.name,
+                        "path": rel,
+                        "type": "folder",
+                        "children": children,
+                    })
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
                         continue

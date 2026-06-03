@@ -13,6 +13,7 @@ from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
+    AgentHandler,
     CloudSyncHandler,
     ConfigHandler,
     FilesHandler,
@@ -63,6 +64,7 @@ class SidecarServer(PathHelpersMixin):
         self._watcher_observer = None
         self._watcher_debounce_timer = None
         self._watcher_needs_wiki_sync = False
+        self._watcher_changed_paths: set[str] = set()
         self._watcher_debounce_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
@@ -82,6 +84,7 @@ class SidecarServer(PathHelpersMixin):
         self._cloud_sync_handler = CloudSyncHandler(self)
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
+        self._agent_handler = AgentHandler(self)
         self._build_router()
         self._start_workspace_watcher()
         self._startup_sync()
@@ -101,6 +104,7 @@ class SidecarServer(PathHelpersMixin):
         self._cloud_sync_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
+        self._agent_handler.register_routes(self._router)
 
     def _send_response(self, resp):
         with self._stdout_lock:
@@ -278,11 +282,33 @@ class SidecarServer(PathHelpersMixin):
                 return True
         return False
 
+    def _track_watcher_path(self, file_path: str | None) -> None:
+        workspace = config.workspace_path
+        if not workspace or not file_path:
+            return
+        path = Path(file_path)
+        if not path.is_file() or path.suffix.lower() != ".md":
+            return
+        try:
+            rel = str(path.relative_to(workspace))
+        except ValueError:
+            return
+        if "wiki" in Path(rel).parts or any(part.startswith(".") for part in Path(rel).parts):
+            return
+        with self._watcher_debounce_lock:
+            self._watcher_changed_paths.add(rel)
+
     def _on_workspace_file_changed(self, change_type, file_path, src_path=None, is_directory=False):
         if not self._is_relevant_workspace_change(file_path, is_directory=is_directory) and (
             not src_path or not self._is_relevant_workspace_change(src_path, is_directory=is_directory)
         ):
             return
+
+        if not is_directory:
+            if change_type in ("created", "modified", "moved"):
+                self._track_watcher_path(file_path)
+            if change_type == "moved" and src_path:
+                self._track_watcher_path(src_path)
 
         path = Path(file_path)
         workspace = config.workspace_path
@@ -307,7 +333,7 @@ class SidecarServer(PathHelpersMixin):
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
                     logger.warning("[watcher] debounce timer already cancelled")
-            self._watcher_debounce_timer = threading.Timer(3.0, self._emit_workspace_change)
+            self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):  # noqa: PLR0912
@@ -392,15 +418,24 @@ class SidecarServer(PathHelpersMixin):
     def _emit_workspace_change(self):
         self._invalidate_cache()
         needs_wiki_sync = False
+        changed_paths: list[str] = []
         with self._watcher_debounce_lock:
             needs_wiki_sync = self._watcher_needs_wiki_sync
             self._watcher_needs_wiki_sync = False
+            changed_paths = sorted(self._watcher_changed_paths)
+            self._watcher_changed_paths.clear()
         if needs_wiki_sync:
             try:
                 sync_wiki_with_files()
             except Exception as e:
                 logger.warning(f"[watcher] syncing WIKI after workspace change: {e}\n")
-        self._send_response({"id": "event", "result": {"type": "workspace_files_changed"}})
+        self._send_response({
+            "id": "event",
+            "result": {
+                "type": "workspace_files_changed",
+                "file_paths": changed_paths,
+            },
+        })
 
     def handle_request(self, request):
         self._router.handle(request)

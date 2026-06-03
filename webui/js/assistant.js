@@ -263,7 +263,7 @@ window.AssistantModule = (function() {
                 setTimeout(function() {
                     if (_isStreaming && _currentStreamEl === assistantEl && !assistantEl.textContent) {
                         _isStreaming = false;
-                        assistantEl.textContent = '响应超时，请检查 API 配置或稍后重试';
+                        assistantEl.textContent = window.t('assistant.timeout');
                         assistantEl.classList.remove('ai-typing');
                         _currentStreamEl = null;
                     }
@@ -272,13 +272,13 @@ window.AssistantModule = (function() {
             }
             if (result && result.success === false) {
                 _isStreaming = false;
-                assistantEl.textContent = result.message || '请求失败';
+                assistantEl.textContent = result.message || window.t('assistant.requestFailed');
                 assistantEl.classList.remove('ai-typing');
             }
         }).catch(function(err) {
             _isStreaming = false;
-            var msg = (err && err.message) ? err.message : String(err || '未知错误');
-            assistantEl.textContent = '请求失败: ' + msg;
+            var msg = (err && err.message) ? err.message : String(err || window.t('common.unknownError'));
+            assistantEl.textContent = window.t('assistant.requestFailedMsg', { message: msg });
             assistantEl.classList.remove('ai-typing');
         });
     }
@@ -350,7 +350,7 @@ window.AssistantModule = (function() {
             .replace(/url\(#dog-metal\)/g, 'url(#dog-metal-' + uid + ')');
         var avatar = document.createElement('div');
         avatar.className = 'ai-avatar ai-avatar-' + type;
-        avatar.setAttribute('title', type === 'bot' ? '小忆' : '机器狗');
+        avatar.setAttribute('title', type === 'bot' ? window.t('assistant.name') : window.t('assistant.userAvatar'));
         avatar.innerHTML = svg;
         return avatar;
     }
@@ -395,7 +395,7 @@ window.AssistantModule = (function() {
         div.className = 'ai-msg ai-system';
         var label = document.createElement('div');
         label.className = 'ai-msg-label';
-        label.textContent = '系统';
+        label.textContent = window.t('assistant.system');
         var content = document.createElement('div');
         content.textContent = text;
         div.appendChild(label);
@@ -436,24 +436,24 @@ window.AssistantModule = (function() {
         } else if (eventData.type === 'rag_error') {
             _isStreaming = false;
             if (_currentStreamEl) {
-                _currentStreamEl.textContent = eventData.message || '请求失败';
+                _currentStreamEl.textContent = eventData.message || window.t('assistant.requestFailed');
                 _currentStreamEl.classList.remove('ai-typing');
             }
             _currentStreamEl = null;
         } else if (eventData.type === 'rag_index_built') {
             _indexBuilt = eventData.data && eventData.data.success;
             if (_indexBuilt) {
-                addSystemMessage('知识库索引构建完成，共 ' + (eventData.data.chunk_count || 0) + ' 个片段');
+                addSystemMessage(window.t('assistant.indexBuildDone', { count: eventData.data.chunk_count || 0 }));
             } else {
-                addSystemMessage('索引构建失败: ' + (eventData.data.message || '未知错误'));
+                addSystemMessage(window.t('assistant.indexBuildFailed', { message: eventData.data.message || window.t('common.unknownError') }));
             }
         }
     }
 
     function rebuildIndex() {
-        addSystemMessage('正在构建知识库索引…（手动全量重建，日常入库不会重复跑）');
+        addSystemMessage(window.t('assistant.indexBuilding'));
         window.api.ragRebuildIndex().catch(function(err) {
-            addSystemMessage('索引构建请求失败: ' + err.message);
+            addSystemMessage(window.t('assistant.indexRequestFailed', { message: err.message }));
         });
     }
 
@@ -467,36 +467,36 @@ window.AssistantModule = (function() {
 
         var hint = document.createElement('p');
         hint.className = 'ai-save-note-hint';
-        hint.textContent = '小忆觉得这段回答有洞见，可以单独存成笔记哦～';
+        hint.textContent = window.t('assistant.insightHint');
         actions.appendChild(hint);
 
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'ai-save-note-btn';
-        btn.textContent = '保存为笔记';
+        btn.textContent = window.t('assistant.saveAsNote');
         btn.addEventListener('click', function() {
             if (!window.api || !window.api.archiveChatAnswer) return;
             btn.disabled = true;
-            btn.textContent = '保存中…';
+            btn.textContent = window.t('assistant.saving');
             window.api.archiveChatAnswer({
                 question: archive.question,
                 answer: archive.answer
             }).then(function(res) {
                 if (res && res.success) {
-                    btn.textContent = '已保存';
-                    hint.textContent = '已保存到 Notes/小忆对话/';
+                    btn.textContent = window.t('common.saved');
+                    hint.textContent = window.t('assistant.savedToNotes');
                     if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
                         window.refreshWorkspaceViewsAfterChange();
                     }
                 } else {
                     btn.disabled = false;
-                    btn.textContent = '保存为笔记';
-                    addSystemMessage('保存失败: ' + ((res && res.message) || '未知错误'));
+                    btn.textContent = window.t('assistant.saveAsNote');
+                    addSystemMessage(window.t('assistant.saveFailed', { message: (res && res.message) || window.t('common.unknownError') }));
                 }
             }).catch(function(err) {
                 btn.disabled = false;
-                btn.textContent = '保存为笔记';
-                addSystemMessage('保存失败: ' + (err.message || String(err)));
+                btn.textContent = window.t('assistant.saveAsNote');
+                addSystemMessage(window.t('assistant.saveFailed', { message: err.message || String(err) }));
             });
         });
         actions.appendChild(btn);

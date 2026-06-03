@@ -1,13 +1,13 @@
 (function() { 'use strict';
 
 var STAGE_LABELS = {
-    schema: '规范',
-    convert: '转换',
-    classify: '分类',
-    index: '向量索引',
-    cascade: '综述',
-    lint: '健康检查',
-    sync: '同步'
+    schema: window.t('ingest.stage.schema'),
+    convert: window.t('ingest.stage.convert'),
+    classify: window.t('ingest.stage.classify'),
+    index: window.t('ingest.stage.index'),
+    cascade: window.t('ingest.stage.cascade'),
+    lint: window.t('ingest.stage.lint'),
+    sync: window.t('ingest.stage.sync')
 };
 
 function showBar() {
@@ -26,10 +26,10 @@ function updateBar(stage, progress, message) {
     var label = document.getElementById('ingest-pipeline-stage');
     var msg = document.getElementById('ingest-pipeline-message');
     if (fill) fill.style.width = Math.round((progress || 0) * 100) + '%';
-    if (label) label.textContent = STAGE_LABELS[stage] || stage || '入库';
+    if (label) label.textContent = STAGE_LABELS[stage] || stage || window.t('ingest.label');
     if (msg) msg.textContent = message || '';
     if (typeof window.updateStatus === 'function') {
-        window.updateStatus(message || '入库流水线…');
+        window.updateStatus(message || window.t('ingest.pipelineRunning'));
     }
 }
 
@@ -37,24 +37,24 @@ function onIngestComplete(data) {
     hideBar();
     if (data.cancelled) {
         if (typeof window.updateStatus === 'function') {
-            window.updateStatus('入库已取消');
+            window.updateStatus(window.t('ingest.cancelled'));
         }
         return;
     }
     if (data.success) {
         var stats = data.stats || {};
         var parts = [];
-        if (stats.converted) parts.push('转换 ' + stats.converted);
-        if (stats.classified) parts.push('分类 ' + stats.classified);
-        if (stats.indexed_files) parts.push('索引 ' + stats.indexed_files);
-        if (stats.cascade_updated) parts.push('综述 ' + stats.cascade_updated);
+        if (stats.converted) parts.push(window.t('ingest.statConverted', { count: stats.converted }));
+        if (stats.classified) parts.push(window.t('ingest.statClassified', { count: stats.classified }));
+        if (stats.indexed_files) parts.push(window.t('ingest.statIndexed', { count: stats.indexed_files }));
+        if (stats.cascade_updated) parts.push(window.t('ingest.statCascade', { count: stats.cascade_updated }));
         if (stats.lint && stats.lint.total) parts.push('Lint ' + stats.lint.total);
         if (typeof window.updateStatus === 'function') {
-            window.updateStatus('入库完成' + (parts.length ? ' — ' + parts.join('，') : ''));
+            window.updateStatus(window.t('ingest.done') + (parts.length ? ' — ' + parts.join('，') : ''));
         }
     } else {
         if (typeof window.updateStatus === 'function') {
-            window.updateStatus('入库失败: ' + (data.error || '未知错误'));
+            window.updateStatus(window.t('ingest.failed') + (data.error || window.t('common.unknownError')));
         }
     }
     if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
@@ -77,7 +77,7 @@ function handleEvent(data) {
 async function startIngest(mode, filePaths) {
     if (!window.api || !window.api.startIngest) return { success: false };
     showBar();
-    updateBar('schema', 0, '启动入库流水线…');
+    updateBar('schema', 0, window.t('ingest.starting'));
     return window.api.startIngest({
         mode: mode || 'full',
         file_paths: filePaths || []

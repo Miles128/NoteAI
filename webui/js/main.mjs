@@ -3,8 +3,12 @@ async function loadModules() {
         import('./utils.js'),
         import('./api.js'),
         import('./state.js'),
-        import('./assistant.js'),
     ]);
+
+    await import('./i18n.js');
+    await window.I18nModule.initI18n();
+
+    await import('./assistant.js');
 
     await import('./theme.js');
     const ThemeModule = window.ThemeModule;

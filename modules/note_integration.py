@@ -150,21 +150,12 @@ class NoteIntegration:
             report_progress("阶段3/3: 生成 WIKI.md 索引...")
 
             wiki_content = self._generate_wiki_md(topic_results)
-            
-            wiki_path = None
-            if config.workspace_path and Path(config.workspace_path).exists():
-                wiki_dir = Path(config.workspace_path) / "wiki"
-                wiki_dir.mkdir(parents=True, exist_ok=True)
-                wiki_path = wiki_dir / "WIKI.md"
+
+            from sidecar.wiki_utils import write_wiki_text
+            if write_wiki_text(wiki_content):
+                logger.info("WIKI.md 已生成")
             else:
-                wiki_path = save_dir / "WIKI.md"
-            
-            try:
-                with open(wiki_path, 'w', encoding='utf-8') as f:
-                    f.write(wiki_content)
-                logger.info(f"WIKI.md 已生成: {wiki_path}")
-            except Exception as e:
-                logger.error(f"写入 WIKI.md 失败: {e}")
+                logger.error("写入 WIKI.md 失败")
 
             report_progress(f"阶段3/3: 完成，共 {len(output_files)} 个文件")
 

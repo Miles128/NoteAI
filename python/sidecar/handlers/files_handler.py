@@ -118,10 +118,29 @@ class FilesHandler(BaseHandler):
         if not full_path:
             return {"success": False, "message": "路径无效"}
         try:
-            Path(full_path).write_text(params.get("content", ""), encoding="utf-8")
+            full = Path(full_path)
+            rel_path = ""
+            workspace = self.config.workspace_path
+            if workspace:
+                try:
+                    rel_path = str(full.relative_to(Path(workspace)))
+                except ValueError:
+                    rel_path = str(full_path)
+            full.write_text(params.get("content", ""), encoding="utf-8")
+            if rel_path.lower().endswith(".md"):
+                self._start_task(
+                    f"suggest_links_{Path(rel_path).stem}",
+                    self._do_suggest_links_for_file,
+                    args=(rel_path,),
+                )
             return {"success": True, "message": "文件已保存"}
         except Exception as e:
             return {"success": False, "message": str(e)}
+
+    def _do_suggest_links_for_file(self, rel_path: str) -> None:
+        from utils.link_indexer import discover_cross_refs_for_file
+
+        discover_cross_refs_for_file(rel_path)
 
     def _read_file_raw(self, params):
         path = params.get("path", "")
@@ -202,11 +221,71 @@ class FilesHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def _create_note(self, params):
+        from config.constants import TOPIC_SEP
+        from config.settings import NOTES_FOLDER
+        from sidecar.schema_validator import require_topic
+        from utils.helpers import sanitize_filename
+
+        title = (params.get("title") or "").strip()
+        topic = (params.get("topic") or "").strip()
+        if not title:
+            return {"success": False, "message": "标题不能为空"}
+
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        if topic:
+            ok, err = require_topic(topic)
+            if not ok:
+                return {"success": False, "message": err}
+
+        ws = Path(workspace)
+        notes_root = ws / NOTES_FOLDER
+        if topic:
+            parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+            target_dir = notes_root
+            for part in parts:
+                target_dir = target_dir / part
+        else:
+            target_dir = notes_root / "_未分类"
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        stem = sanitize_filename(title) or "未命名"
+        candidate = target_dir / f"{stem}.md"
+        if candidate.exists():
+            n = 2
+            while candidate.exists():
+                candidate = target_dir / f"{stem}_{n}.md"
+                n += 1
+
+        fm_lines = ["---"]
+        if topic:
+            fm_lines.append(f"topic: {topic}")
+        fm_lines.append("---")
+        body = f"# {title}\n\n"
+        candidate.write_text("\n".join(fm_lines) + "\n\n" + body, encoding="utf-8")
+        rel = str(candidate.relative_to(ws))
+
+        from sidecar.cascade import append_changelog
+
+        append_changelog(f"新建笔记: {rel}" + (f"（{topic}）" if topic else ""))
+
+        return {
+            "success": True,
+            "path": rel,
+            "title": title,
+            "topic": topic,
+            "message": f"已创建 {rel}",
+        }
+
     def register_routes(self, router):
         router.register("get_file_preview", self._get_file_preview)
         router.register("read_preview_raw_slice", self._read_preview_raw_slice)
         router.register("can_preview_file", self._can_preview_file)
         router.register("save_file_content", self._save_file_content)
+        router.register("create_note", self._create_note)
         router.register("read_file_raw", self._read_file_raw)
         router.register("reveal_in_finder", self._reveal_in_finder)
         router.register("delete_file", self._delete_file)

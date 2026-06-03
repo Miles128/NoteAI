@@ -7,6 +7,12 @@ import yaml
 from config import config
 from config.constants import TOPIC_SEP
 from sidecar.handlers.base import BaseHandler
+from sidecar.wiki_utils import (
+    ensure_wiki_exists,
+    read_wiki_text,
+    resolve_wiki_path,
+    write_wiki_text,
+)
 from utils.logger import logger
 
 
@@ -235,9 +241,7 @@ class IntelTopicHandler(BaseHandler):
         stype = suggestion.get("type", "")
 
         workspace_path = Path(workspace)
-        wiki_path = workspace_path / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            wiki_path = workspace_path / "WIKI.md"
+        wiki_path = resolve_wiki_path(workspace)
 
         try:
             if stype == "new_topic":
@@ -257,55 +261,14 @@ class IntelTopicHandler(BaseHandler):
 
     def _apply_new_topic(self, suggestion, workspace_path, wiki_path):
         from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic_wiki_manager import add_file_to_wiki_topic, create_topic
 
         topic_name = suggestion.get("topic", "").strip()
         files = suggestion.get("files", [])
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
 
-        wiki_text = ""
-        if wiki_path.exists():
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-
-        if '## ' + topic_name not in wiki_text:
-            wiki_text += f'\n## {topic_name}\n'
-
-        wiki_lines = wiki_text.split('\n')
-        topic_idx = -1
-        for i, line in enumerate(wiki_lines):
-            if line.strip() == f'## {topic_name}':
-                topic_idx = i
-                break
-
-        existing_files = set()
-        if topic_idx >= 0:
-            for line in wiki_lines[topic_idx + 1:]:
-                if line.strip().startswith('## '):
-                    break
-                if line.strip().startswith('### '):
-                    existing_files.add(line.strip()[4:].strip())
-
-        insert_pos = topic_idx + 1
-        for i in range(topic_idx + 1, len(wiki_lines)):
-            if wiki_lines[i].strip().startswith('## '):
-                insert_pos = i
-                break
-        else:
-            insert_pos = len(wiki_lines)
-
-        new_entries = []
-        for fname in files:
-            fn = fname.strip()
-            if fn and fn not in existing_files:
-                new_entries.append(f'### {fn}')
-
-        for j, entry in enumerate(new_entries):
-            wiki_lines.insert(insert_pos + j, entry)
-
-        wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
-
-        notes_topic_dir = workspace_path / config.NOTES_FOLDER / topic_name
-        notes_topic_dir.mkdir(parents=True, exist_ok=True)
+        create_topic(topic_name)
 
         for fname in files:
             fn = fname.strip()
@@ -315,6 +278,7 @@ class IntelTopicHandler(BaseHandler):
                 if md_file.is_file() and md_file.name == fn:
                     write_topic_to_file(str(md_file), topic_name)
                     move_file_to_notes_topic_folder(str(md_file), topic_name)
+                    add_file_to_wiki_topic(str(md_file), topic_name, Path(fn).stem)
 
         from sidecar.cascade import append_changelog, collect_topic_notes, ensure_topic_folder, generate_new_survey
         ensure_topic_folder(topic_name)
@@ -326,6 +290,7 @@ class IntelTopicHandler(BaseHandler):
 
     def _apply_change_topic(self, suggestion, workspace_path, wiki_path):
         from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic_wiki_manager import add_file_to_wiki_topic, remove_file_from_wiki_topic
 
         fname = suggestion.get("file", "").strip()
         new_topic = suggestion.get("suggested_topic", "").strip()
@@ -333,62 +298,18 @@ class IntelTopicHandler(BaseHandler):
         if not fname or not new_topic:
             return {"success": False, "message": "文件名或主题名不能为空"}
 
-        wiki_text = ""
-        if wiki_path.exists():
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-
-        if '## ' + new_topic not in wiki_text:
-            wiki_text += f'\n## {new_topic}\n'
-
-        wiki_lines = wiki_text.split('\n')
-
         if old_topic:
-            old_idx = -1
-            for i, line in enumerate(wiki_lines):
-                if line.strip() == f'## {old_topic}':
-                    old_idx = i
+            for md_file in workspace_path.rglob("*.md"):
+                if md_file.is_file() and md_file.name == fname:
+                    remove_file_from_wiki_topic(str(md_file))
                     break
-            if old_idx >= 0:
-                for j in range(old_idx + 1, len(wiki_lines)):
-                    if wiki_lines[j].strip().startswith('## '):
-                        break
-                    if wiki_lines[j].strip() == f'### {fname}':
-                        wiki_lines.pop(j)
-                        break
-
-        new_idx = -1
-        for i, line in enumerate(wiki_lines):
-            if line.strip() == f'## {new_topic}':
-                new_idx = i
-                break
-
-        if new_idx >= 0:
-            already_exists = False
-            for line in wiki_lines[new_idx + 1:]:
-                if line.strip().startswith('## '):
-                    break
-                if line.strip() == f'### {fname}':
-                    already_exists = True
-                    break
-            if not already_exists:
-                insert_pos = new_idx + 1
-                for i in range(new_idx + 1, len(wiki_lines)):
-                    if wiki_lines[i].strip().startswith('## '):
-                        insert_pos = i
-                        break
-                else:
-                    insert_pos = len(wiki_lines)
-                wiki_lines.insert(insert_pos, f'### {fname}')
-
-        wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
-
-        notes_topic_dir = workspace_path / config.NOTES_FOLDER / new_topic
-        notes_topic_dir.mkdir(parents=True, exist_ok=True)
 
         for md_file in workspace_path.rglob("*.md"):
             if md_file.is_file() and md_file.name == fname:
                 write_topic_to_file(str(md_file), new_topic)
                 move_file_to_notes_topic_folder(str(md_file), new_topic)
+                add_file_to_wiki_topic(str(md_file), new_topic, Path(fname).stem)
+                break
 
         from sidecar.cascade import (
             append_changelog,
@@ -414,54 +335,19 @@ class IntelTopicHandler(BaseHandler):
 
     def _apply_assign_topic(self, suggestion, workspace_path, wiki_path):
         from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic_wiki_manager import add_file_to_wiki_topic
 
         fname = suggestion.get("file", "").strip()
         topic_name = suggestion.get("topic", "").strip()
         if not fname or not topic_name:
             return {"success": False, "message": "文件名或主题名不能为空"}
 
-        wiki_text = ""
-        if wiki_path.exists():
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-
-        if '## ' + topic_name not in wiki_text:
-            wiki_text += f'\n## {topic_name}\n'
-
-        wiki_lines = wiki_text.split('\n')
-        topic_idx = -1
-        for i, line in enumerate(wiki_lines):
-            if line.strip() == f'## {topic_name}':
-                topic_idx = i
-                break
-
-        already_exists = False
-        if topic_idx >= 0:
-            for line in wiki_lines[topic_idx + 1:]:
-                if line.strip().startswith('## '):
-                    break
-                if line.strip() == f'### {fname}':
-                    already_exists = True
-                    break
-
-        if not already_exists:
-            insert_pos = topic_idx + 1
-            for i in range(topic_idx + 1, len(wiki_lines)):
-                if wiki_lines[i].strip().startswith('## '):
-                    insert_pos = i
-                    break
-            else:
-                insert_pos = len(wiki_lines)
-            wiki_lines.insert(insert_pos, f'### {fname}')
-
-        wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
-
-        notes_topic_dir = workspace_path / config.NOTES_FOLDER / topic_name
-        notes_topic_dir.mkdir(parents=True, exist_ok=True)
-
         for md_file in workspace_path.rglob("*.md"):
             if md_file.is_file() and md_file.name == fname:
                 write_topic_to_file(str(md_file), topic_name)
                 move_file_to_notes_topic_folder(str(md_file), topic_name)
+                add_file_to_wiki_topic(str(md_file), topic_name, Path(fname).stem)
+                break
 
         from sidecar.cascade import (
             append_changelog,
@@ -486,89 +372,35 @@ class IntelTopicHandler(BaseHandler):
         return None
 
     def _apply_merge_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import move_file_to_notes_topic_folder
+        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic_wiki_manager import add_file_to_wiki_topic, remove_file_from_wiki_topic
 
         source = suggestion.get("source_topic", "").strip()
         target = suggestion.get("target_topic", "").strip()
         if not source or not target:
             return {"success": False, "message": "主题名不能为空"}
 
-        wiki_text = ""
-        if wiki_path.exists():
-            wiki_text = wiki_path.read_text(encoding='utf-8')
-
-        lines = wiki_text.split('\n')
-        new_lines = []
-        moved_files = []
-        in_source = False
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith('## '):
-                heading = stripped[3:].strip()
-                if heading == source:
-                    in_source = True
-                    continue
-                in_source = False
-            if in_source:
-                if stripped.startswith('### '):
-                    moved_files.append(stripped[4:].strip())
-                continue
-            new_lines.append(line)
-
-        wiki_text = '\n'.join(new_lines)
-
-        target_idx = -1
-        for i, line in enumerate(wiki_text.split('\n')):
-            if line.strip() == f'## {target}':
-                target_idx = i
-                break
-
-        if target_idx == -1:
-            wiki_text += f'\n## {target}\n'
-            for fname in moved_files:
-                wiki_text += f'\n### {fname}\n'
-        else:
-            target_section_lines = wiki_text.split('\n')
-            existing_files = set()
-            for line in target_section_lines[target_idx + 1:]:
-                if line.strip().startswith('## '):
-                    break
-                if line.strip().startswith('### '):
-                    existing_files.add(line.strip()[4:].strip())
-            insert_pos = target_idx + 1
-            for i in range(target_idx + 1, len(target_section_lines)):
-                if target_section_lines[i].strip().startswith('## '):
-                    insert_pos = i
-                    break
-            else:
-                insert_pos = len(target_section_lines)
-            new_entries = []
-            for fname in moved_files:
-                if fname not in existing_files:
-                    new_entries.append(f'### {fname}')
-            for j, entry in enumerate(new_entries):
-                target_section_lines.insert(insert_pos + j, entry)
-            wiki_text = '\n'.join(target_section_lines)
-
-        wiki_path.write_text(wiki_text, encoding='utf-8')
-
-        notes_target_dir = workspace_path / config.NOTES_FOLDER / target
-        notes_target_dir.mkdir(parents=True, exist_ok=True)
-
-        for md_file in workspace_path.rglob('*.md'):
-            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+        source_files = []
+        for md_file in workspace_path.rglob("*.md"):
+            if md_file.name.startswith(".") or "wiki" in md_file.parts:
                 continue
             try:
-                text = md_file.read_text(encoding='utf-8')
+                text = md_file.read_text(encoding="utf-8")
                 fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get('topics'), list) and source in fm['topics']:
-                    fm['topics'] = [target if t == source else t for t in fm['topics']]
-                    new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-                    new_content = '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
-                    md_file.write_text(new_content, encoding='utf-8')
-                    move_file_to_notes_topic_folder(str(md_file), target)
+                if fm and isinstance(fm.get("topics"), list) and source in fm["topics"]:
+                    source_files.append((md_file, fm, body))
             except Exception:
                 continue
+
+        for md_file, fm, body in source_files:
+            fm["topics"] = [target if t == source else t for t in fm["topics"]]
+            new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
+            new_content = "---\n" + new_fm + "\n---\n" + body.lstrip("\n")
+            md_file.write_text(new_content, encoding="utf-8")
+            remove_file_from_wiki_topic(str(md_file))
+            move_file_to_notes_topic_folder(str(md_file), target)
+            add_file_to_wiki_topic(str(md_file), target, md_file.stem)
+
         return None
 
     def register_routes(self, router):

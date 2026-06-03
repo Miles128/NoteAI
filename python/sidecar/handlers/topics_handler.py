@@ -17,7 +17,13 @@ from sidecar.cascade import (
 )
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
-from sidecar.wiki_utils import resolve_wiki_path
+from sidecar.wiki_utils import (
+    get_all_topic_names,
+    get_survey_status,
+    parse_wiki_headings,
+    resolve_wiki_path,
+    toggle_survey,
+)
 from utils.activity_log import get_entries
 from utils.link_indexer import load_links
 from utils.logger import logger
@@ -65,27 +71,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return self._get_topic_tree_3tier(params)
 
     def _parse_wiki_headings(self):
-        workspace = config.workspace_path
-        if not workspace:
-            return []
-        wiki_path = resolve_wiki_path(workspace)
-        if not wiki_path.exists():
-            return []
-        try:
-            text = wiki_path.read_text(encoding='utf-8')
-            headings = []
-            for line in text.split('\n'):
-                stripped = line.rstrip()
-                if stripped.startswith('## '):
-                    name = stripped[3:].strip()
-                    headings.append({"name": name, "level": 2})
-                elif stripped.startswith('### '):
-                    name = stripped[4:].strip()
-                    headings.append({"name": name, "level": 3})
-            return headings
-        except Exception as e:
-            logger.warning(f"[topics_handler] reading wiki headings: {e}\n")
-            return []
+        return parse_wiki_headings()
 
     def _auto_assign_topic(self, params):  # noqa: PLR0911
         path = params.get("path", "")
@@ -173,6 +159,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
+        from sidecar.schema_validator import require_topic
+
+        ok, err = require_topic(topic)
+        if not ok:
+            return {"success": False, "message": err}
         try:
             write_topic_to_file(str(full_path), topic)
             move_file_to_notes_topic_folder(str(full_path), topic)
@@ -188,6 +179,13 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
         topic_full = TOPIC_SEP.join([parent, topic_name]) if parent else topic_name
+
+        from sidecar.schema_validator import require_topic
+
+        ok, err = require_topic(topic_full)
+        if not ok:
+            return {"success": False, "message": err}
+
         workspace = config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
@@ -329,25 +327,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": f"删除失败: {str(e)}"}
 
     def _get_all_topic_names(self, _params):
-        wiki_path = resolve_wiki_path()
-        if not wiki_path.exists():
-            return {"success": True, "topics": []}
-        try:
-            text = wiki_path.read_text(encoding='utf-8')
-            topics = []
-            current_parent = ''
-            for line in text.split('\n'):
-                stripped = line.rstrip()
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-                    topics.append(current_parent)
-                elif stripped.startswith('### '):
-                    child = stripped[4:].strip()
-                    full = f"{current_parent}{TOPIC_SEP}{child}" if current_parent else child
-                    topics.append(full)
-            return {"success": True, "topics": topics}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
+        topics = get_all_topic_names()
+        return {"success": True, "topics": topics}
 
     def _get_file_topics(self, params):
         path = params.get("path", "")
@@ -458,29 +439,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             except Exception:
                 topic_options = []
 
-        pending_topics = load_pending()
-        items = []
-        for p in pending_topics:
-            items.append({
-                "type": "topic",
-                "file": p.get("file", ""),
-                "title": p.get("title", ""),
-                "candidates": p.get("candidates", []),
-                "source": p.get("source", ""),
-            })
+        from sidecar.pending_items import collect_pending_items
 
-        try:
-            for link in load_links().get("links", []):
-                if link.get("status") == "pending":
-                    items.append({
-                        "type": "link",
-                        "source": link.get("from", ""),
-                        "target": link.get("to", ""),
-                        "context": link.get("reason", ""),
-                    })
-        except Exception:
-            pass
-
+        items = collect_pending_items(workspace)
         return {"items": items, "count": len(items), "topic_options": topic_options}
 
     def _resolve_topic(self, params):
@@ -488,6 +449,13 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         topic = params.get("topic", "").strip()
         if not file_path or not topic:
             return {"success": False, "message": "参数缺失"}
+
+        from sidecar.schema_validator import require_topic
+
+        ok, err = require_topic(topic)
+        if not ok:
+            return {"success": False, "message": err}
+
         full_path = self._resolve_path(file_path)
         if not full_path:
             return {"success": False, "message": "路径无效"}
@@ -544,115 +512,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("toggle_survey", self._toggle_survey)
 
     def _get_survey_status(self, _params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
-        wiki_path = resolve_wiki_path(workspace)
-        if not wiki_path.exists():
-            return {"success": True, "surveys": {}}
-        try:
-            text = wiki_path.read_text(encoding='utf-8')
-            lines = text.split('\n')
-            surveys = {}
-            current_parent = ''
-            i = 0
-            while i < len(lines):
-                stripped = lines[i].strip()
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-                    is_off = False
-                    if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                        is_off = True
-                    surveys[current_parent] = not is_off
-                elif stripped.startswith('### ') and current_parent:
-                    child = stripped[4:].strip()
-                    full = f"{current_parent}{TOPIC_SEP}{child}"
-                    parent_on = surveys.get(current_parent, True)
-                    if parent_on:
-                        surveys[full] = False
-                    else:
-                        is_off = False
-                        if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                            is_off = True
-                        surveys[full] = not is_off
-                i += 1
-            return {"success": True, "surveys": surveys}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
+        surveys = get_survey_status()
+        return {"success": True, "surveys": surveys}
 
-    def _toggle_survey(self, params):  # noqa: PLR0912, PLR0915
+    def _toggle_survey(self, params):
         topic_name = params.get("topic", "").strip()
         if not topic_name:
             return {"success": False, "message": "未指定主题"}
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
-        wiki_path = resolve_wiki_path(workspace)
-        if not wiki_path.exists():
-            return {"success": False, "message": "WIKI.md 不存在"}
-
-        try:
-            text = wiki_path.read_text(encoding='utf-8')
-            lines = text.split('\n')
-            new_lines = []
-            current_parent = ''
-            is_parent = TOPIC_SEP not in topic_name
-            i = 0
-
-            while i < len(lines):
-                stripped = lines[i].strip()
-                new_lines.append(lines[i])
-
-                if stripped.startswith('## '):
-                    current_parent = stripped[3:].strip()
-
-                    if is_parent and current_parent == topic_name:
-                        if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                            i += 1
-                        else:
-                            new_lines.append('> 综述: off')
-                            i += 1
-                        i += 1
-                        while i < len(lines):
-                            s = lines[i].strip()
-                            if s.startswith('## '):
-                                new_lines.append(lines[i])
-                                i += 1
-                                break
-                            if s.startswith('### ') and current_parent:
-                                child = s[4:].strip()
-                                full = f"{current_parent}{TOPIC_SEP}{child}"
-                                new_lines.append(lines[i])
-                                i += 1
-                                if i < len(lines) and lines[i].strip() == '> 综述: off':
-                                    i += 1
-                                while i < len(lines):
-                                    ns = lines[i].strip()
-                                    if ns.startswith('## ') or ns.startswith('### '):
-                                        break
-                                    new_lines.append(lines[i])
-                                    i += 1
-                            else:
-                                new_lines.append(lines[i])
-                                i += 1
-                                if s.startswith('## '):
-                                    break
-                        continue
-                elif stripped.startswith('### ') and current_parent and not is_parent:
-                    child = stripped[4:].strip()
-                    full = f"{current_parent}{TOPIC_SEP}{child}"
-                    if full == topic_name:
-                        if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                            i += 1
-                        else:
-                            new_lines.append('> 综述: off')
-                            i += 1
-                        i += 1
-                        continue
-
-                i += 1
-
-            wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
-            return {"success": True, "message": "已切换综述状态"}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
+        return toggle_survey(topic_name)

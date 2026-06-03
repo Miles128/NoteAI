@@ -18,7 +18,7 @@ _TEMPLATE_PATH = Path(__file__).resolve().parent.parent.parent / "docs" / "schem
 # Compact fallback when docs/schema.template.md is missing
 _DEFAULT_SCHEMA_FALLBACK = """# NoteAI 工作区 Schema — 四海
 
-> 本工作区知识库宪法。跨工作区个人偏好见项目根 `NoteAI/profile.md`。
+> 本工作区知识库宪法。个人画像见 `.ai_memory/user_profile.json`（设置 → 用户画像）。
 
 ## 1. 定位
 

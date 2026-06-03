@@ -103,19 +103,23 @@ function updateSidebarStats() {
     var el = document.getElementById('sidebar-status-tree');
     if (el) {
         var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
-        el.textContent = fileCount + ' 篇笔记';
+        el.textContent = window.t('common.notesCount', { count: fileCount });
     }
     var tagsEl = document.getElementById('sidebar-status-tags');
     if (tagsEl) {
         var tagCount = document.querySelectorAll('#sidebar-tags .sidebar-tag-group[data-tag-name]').length;
-        tagsEl.textContent = tagCount + ' 个标签';
+        tagsEl.textContent = window.t('common.tagsCount', { count: tagCount });
     }
     var graphEl = document.getElementById('sidebar-status-graph');
     if (graphEl) {
         var linkCount = document.querySelectorAll('#sidebar-graph .link-card.link-confirmed').length;
-        graphEl.textContent = linkCount + ' 个链接';
+        graphEl.textContent = window.t('common.linksCount', { count: linkCount });
     }
 }
+
+document.addEventListener('localechange', function() {
+    updateSidebarStats();
+});
 
 function setSidebarStatus(view, text, isActive) {
     var el = document.getElementById('sidebar-status-' + view);

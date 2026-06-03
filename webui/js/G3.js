@@ -70,55 +70,55 @@ const GRAPH_LAYOUT_DEFAULTS = {
     replayRevealBudgetMs: 24000,
 };
 
-/** @type {{ key: string, group: string, label: string, min: number, max: number, step: number }[]} */
+/** @type {{ key: string, groupKey: string, min: number, max: number, step: number }[]} */
 const GRAPH_LAYOUT_SCHEMA = [
-    { key: 'l1PackRatio', group: '一级与全局', label: '一级主题间距（× 画布短边）', min: 0.08, max: 0.5, step: 0.01 },
-    { key: 'orphanRadiusRatio', group: '一级与全局', label: '孤立节点环半径（× 画布短边）', min: 0.04, max: 0.25, step: 0.01 },
-    { key: 'l1NoteMaxRingRatio', group: '二级布局', label: '一级笔记盘 / 二级环 最大比例', min: 0.1, max: 0.5, step: 0.01 },
-    { key: 'l2AnnulusGap', group: '二级布局', label: '一级笔记盘与二级环带间距 (px)', min: 0, max: 40, step: 1 },
-    { key: 'l2InnerFallbackRatio', group: '二级布局', label: '无一级笔记时二级环带内径比例', min: 0.1, max: 0.6, step: 0.01 },
-    { key: 'l2OuterRingRatio', group: '二级布局', label: '二级环带外径 / 环半径', min: 0.7, max: 1, step: 0.01 },
-    { key: 'annulusMinSpan', group: '二级布局', label: '环带最小宽度 (px)', min: 4, max: 40, step: 1 },
-    { key: 'annulusSingleTopicRatio', group: '二级布局', label: '单个主题在环带上的半径比例', min: 0.3, max: 0.8, step: 0.01 },
-    { key: 'annulusAngleOffset', group: '二级布局', label: '环带起始角偏移 (rad)', min: 0, max: 3.14, step: 0.05 },
-    { key: 'l3InnerRatio', group: '三级布局', label: '三级主题环带内径比例', min: 0.2, max: 0.7, step: 0.01 },
-    { key: 'l3InnerMinGap', group: '三级布局', label: '三级环带内径最小间隙 (px)', min: 0, max: 20, step: 1 },
-    { key: 'noteDiskMin', group: '笔记散布', label: '笔记盘半径下限 (px)', min: 3, max: 30, step: 1 },
-    { key: 'noteDiskMax', group: '笔记散布', label: '笔记盘半径上限 (px)', min: 15, max: 80, step: 1 },
-    { key: 'noteDiskBase', group: '笔记散布', label: '笔记盘半径基数 (px)', min: 0, max: 20, step: 0.5 },
-    { key: 'noteDiskSqrtCoef', group: '笔记散布', label: '笔记盘半径 √n 系数', min: 0.5, max: 8, step: 0.1 },
-    { key: 'noteSingleRadiusRatio', group: '笔记散布', label: '单篇笔记半径比例', min: 0.05, max: 0.4, step: 0.01 },
-    { key: 'l2RingMin', group: '二级环半径公式', label: '二级环半径下限 (px)', min: 16, max: 80, step: 1 },
-    { key: 'l2RingMax', group: '二级环半径公式', label: '二级环半径上限 (px)', min: 40, max: 160, step: 1 },
-    { key: 'l2RingBase', group: '二级环半径公式', label: '二级环半径基数 (px)', min: 0, max: 40, step: 1 },
-    { key: 'l2RingSqrtL2', group: '二级环半径公式', label: '二级环 √(二级数) 系数', min: 0, max: 20, step: 0.5 },
-    { key: 'l2RingSqrtNotes', group: '二级环半径公式', label: '二级环 √(笔记数) 系数', min: 0, max: 5, step: 0.1 },
-    { key: 'l3RingMin', group: '三级环半径公式', label: '三级环半径下限 (px)', min: 6, max: 40, step: 1 },
-    { key: 'l3RingMax', group: '三级环半径公式', label: '三级环半径上限 (px)', min: 16, max: 80, step: 1 },
-    { key: 'l3RingBase', group: '三级环半径公式', label: '三级环半径基数 (px)', min: 0, max: 30, step: 1 },
-    { key: 'l3RingSqrtL3', group: '三级环半径公式', label: '三级环 √n 系数', min: 0, max: 12, step: 0.5 },
-    { key: 'topicCollidePad', group: '力学模拟', label: '主题碰撞边距 (px)', min: 0, max: 30, step: 1 },
-    { key: 'fileCollidePad', group: '力学模拟', label: '笔记碰撞边距 (px)', min: 0, max: 20, step: 1 },
-    { key: 'chargeL1', group: '力学模拟', label: '一级主题斥力', min: -80, max: -1, step: 1 },
-    { key: 'chargeTopic', group: '力学模拟', label: '二/三级主题斥力', min: -60, max: -1, step: 1 },
-    { key: 'chargeFile', group: '力学模拟', label: '笔记斥力', min: -40, max: 0, step: 1 },
-    { key: 'targetStrengthTopic', group: '力学模拟', label: '主题回拉强度 (0–1)', min: 0.3, max: 1, step: 0.01 },
-    { key: 'targetStrengthFile', group: '力学模拟', label: '笔记回拉强度 (0–1)', min: 0.3, max: 1, step: 0.01 },
-    { key: 'clusterRepelDist', group: '力学模拟', label: '簇间互斥生效距离 (px)', min: 40, max: 300, step: 5 },
-    { key: 'clusterRepelForce', group: '力学模拟', label: '簇间互斥力度', min: 50, max: 1200, step: 10 },
-    { key: 'collideIterations', group: '力学模拟', label: '碰撞迭代次数', min: 1, max: 12, step: 1 },
-    { key: 'simAlpha', group: '力学模拟', label: '模拟初始 alpha', min: 0.1, max: 1, step: 0.05 },
-    { key: 'simAlphaDecay', group: '力学模拟', label: '模拟 alpha 衰减', min: 0.02, max: 0.3, step: 0.01 },
-    { key: 'simVelocityDecay', group: '力学模拟', label: '速度衰减', min: 0.3, max: 0.95, step: 0.01 },
-    { key: 'radiusL1', group: '节点显示', label: '一级主题圆半径 (px)', min: 3, max: 16, step: 1 },
-    { key: 'radiusOther', group: '节点显示', label: '其他节点圆半径 (px)', min: 2, max: 14, step: 1 },
-    { key: 'fitPad', group: '视图', label: '缩放适应边距 (px)', min: 20, max: 120, step: 5 },
-    { key: 'fitMaxScale', group: '视图', label: '最大缩放比例', min: 0.5, max: 3, step: 0.1 },
-    { key: 'clampSideRatio', group: '视图', label: '拖拽边界留白（× 宽）', min: 0.05, max: 0.25, step: 0.01 },
-    { key: 'boundsMargin', group: '视图', label: '包围盒边距 (px)', min: 20, max: 120, step: 4 },
-    { key: 'replayRevealMinMs', group: '重播动画', label: '逐层显示最短间隔 (ms)', min: 200, max: 3000, step: 50 },
-    { key: 'replayRevealMaxMs', group: '重播动画', label: '逐层显示最长间隔 (ms)', min: 500, max: 8000, step: 100 },
-    { key: 'replayRevealBudgetMs', group: '重播动画', label: '重播总时长预算 (ms)', min: 5000, max: 60000, step: 500 },
+    { key: 'l1PackRatio', groupKey: 'l1Global', min: 0.08, max: 0.5, step: 0.01 },
+    { key: 'orphanRadiusRatio', groupKey: 'l1Global', min: 0.04, max: 0.25, step: 0.01 },
+    { key: 'l1NoteMaxRingRatio', groupKey: 'l2Layout', min: 0.1, max: 0.5, step: 0.01 },
+    { key: 'l2AnnulusGap', groupKey: 'l2Layout', min: 0, max: 40, step: 1 },
+    { key: 'l2InnerFallbackRatio', groupKey: 'l2Layout', min: 0.1, max: 0.6, step: 0.01 },
+    { key: 'l2OuterRingRatio', groupKey: 'l2Layout', min: 0.7, max: 1, step: 0.01 },
+    { key: 'annulusMinSpan', groupKey: 'l2Layout', min: 4, max: 40, step: 1 },
+    { key: 'annulusSingleTopicRatio', groupKey: 'l2Layout', min: 0.3, max: 0.8, step: 0.01 },
+    { key: 'annulusAngleOffset', groupKey: 'l2Layout', min: 0, max: 3.14, step: 0.05 },
+    { key: 'l3InnerRatio', groupKey: 'l3Layout', min: 0.2, max: 0.7, step: 0.01 },
+    { key: 'l3InnerMinGap', groupKey: 'l3Layout', min: 0, max: 20, step: 1 },
+    { key: 'noteDiskMin', groupKey: 'noteScatter', min: 3, max: 30, step: 1 },
+    { key: 'noteDiskMax', groupKey: 'noteScatter', min: 15, max: 80, step: 1 },
+    { key: 'noteDiskBase', groupKey: 'noteScatter', min: 0, max: 20, step: 0.5 },
+    { key: 'noteDiskSqrtCoef', groupKey: 'noteScatter', min: 0.5, max: 8, step: 0.1 },
+    { key: 'noteSingleRadiusRatio', groupKey: 'noteScatter', min: 0.05, max: 0.4, step: 0.01 },
+    { key: 'l2RingMin', groupKey: 'l2RingFormula', min: 16, max: 80, step: 1 },
+    { key: 'l2RingMax', groupKey: 'l2RingFormula', min: 40, max: 160, step: 1 },
+    { key: 'l2RingBase', groupKey: 'l2RingFormula', min: 0, max: 40, step: 1 },
+    { key: 'l2RingSqrtL2', groupKey: 'l2RingFormula', min: 0, max: 20, step: 0.5 },
+    { key: 'l2RingSqrtNotes', groupKey: 'l2RingFormula', min: 0, max: 5, step: 0.1 },
+    { key: 'l3RingMin', groupKey: 'l3RingFormula', min: 6, max: 40, step: 1 },
+    { key: 'l3RingMax', groupKey: 'l3RingFormula', min: 16, max: 80, step: 1 },
+    { key: 'l3RingBase', groupKey: 'l3RingFormula', min: 0, max: 30, step: 1 },
+    { key: 'l3RingSqrtL3', groupKey: 'l3RingFormula', min: 0, max: 12, step: 0.5 },
+    { key: 'topicCollidePad', groupKey: 'simulation', min: 0, max: 30, step: 1 },
+    { key: 'fileCollidePad', groupKey: 'simulation', min: 0, max: 20, step: 1 },
+    { key: 'chargeL1', groupKey: 'simulation', min: -80, max: -1, step: 1 },
+    { key: 'chargeTopic', groupKey: 'simulation', min: -60, max: -1, step: 1 },
+    { key: 'chargeFile', groupKey: 'simulation', min: -40, max: 0, step: 1 },
+    { key: 'targetStrengthTopic', groupKey: 'simulation', min: 0.3, max: 1, step: 0.01 },
+    { key: 'targetStrengthFile', groupKey: 'simulation', min: 0.3, max: 1, step: 0.01 },
+    { key: 'clusterRepelDist', groupKey: 'simulation', min: 40, max: 300, step: 5 },
+    { key: 'clusterRepelForce', groupKey: 'simulation', min: 50, max: 1200, step: 10 },
+    { key: 'collideIterations', groupKey: 'simulation', min: 1, max: 12, step: 1 },
+    { key: 'simAlpha', groupKey: 'simulation', min: 0.1, max: 1, step: 0.05 },
+    { key: 'simAlphaDecay', groupKey: 'simulation', min: 0.02, max: 0.3, step: 0.01 },
+    { key: 'simVelocityDecay', groupKey: 'simulation', min: 0.3, max: 0.95, step: 0.01 },
+    { key: 'radiusL1', groupKey: 'nodeDisplay', min: 3, max: 16, step: 1 },
+    { key: 'radiusOther', groupKey: 'nodeDisplay', min: 2, max: 14, step: 1 },
+    { key: 'fitPad', groupKey: 'view', min: 20, max: 120, step: 5 },
+    { key: 'fitMaxScale', groupKey: 'view', min: 0.5, max: 3, step: 0.1 },
+    { key: 'clampSideRatio', groupKey: 'view', min: 0.05, max: 0.25, step: 0.01 },
+    { key: 'boundsMargin', groupKey: 'view', min: 20, max: 120, step: 4 },
+    { key: 'replayRevealMinMs', groupKey: 'replay', min: 200, max: 3000, step: 50 },
+    { key: 'replayRevealMaxMs', groupKey: 'replay', min: 500, max: 8000, step: 100 },
+    { key: 'replayRevealBudgetMs', groupKey: 'replay', min: 5000, max: 60000, step: 500 },
 ];
 
 function _graphLayoutSchemaByKey() {
@@ -304,7 +304,7 @@ function _graphClusterRepelForce(nodes) {
     };
 }
 
-function _startGraphRelaxation(nodes, getRadius, onTick, onEnd) {
+function _startGraphRelaxation(nodes, edges, getRadius, onTick, onEnd) {
     const c = _graphCfg();
     const sim = d3.forceSimulation(nodes)
         .force('x', d3.forceX(function(d) { return d.tx; }).strength(_graphTargetStrength))
@@ -482,7 +482,7 @@ function _dragGroupForNode(d, childMap, nodeMap, parentMap, nodes) {
     return [d];
 }
 
-function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, simulation, self) {
+function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simulation, self) {
     return d3.drag()
         .on('start', function(e, d) {
             if (simulation && !e.active) simulation.alphaTarget(0.3).restart();
@@ -496,14 +496,27 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, simulation,
                 n._dragStartY = n.y;
                 n._dragStartTx = n.tx;
                 n._dragStartTy = n.ty;
-                n.fx = n.x;
-                n.fy = n.y;
             });
+            nodes.forEach(function(n) {
+                if (!n._dragging) {
+                    n._dragStartTx = n.tx;
+                    n._dragStartTy = n.ty;
+                }
+            });
+            d.fx = d.x;
+            d.fy = d.y;
         })
         .on('drag', function(e, d) {
             const dx = e.x - d._dragAnchorX;
             const dy = e.y - d._dragAnchorY;
+            d.fx = d._dragStartX + dx;
+            d.fy = d._dragStartY + dy;
+            d.x = d.fx;
+            d.y = d.fy;
+            d.tx = d.x;
+            d.ty = d.y;
             (d._dragGroup || [d]).forEach(function(n) {
+                if (n === d) return;
                 n.fx = n._dragStartX + dx;
                 n.fy = n._dragStartY + dy;
                 n.x = n.fx;
@@ -513,8 +526,19 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, simulation,
                     n.ty = n._dragStartTy + dy;
                 }
             });
+            var draggedIds = new Set((d._dragGroup || [d]).map(function(n) { return n.id; }));
+            nodes.forEach(function(n) {
+                if (n._dragging || draggedIds.has(n.id)) return;
+                var parentId = parentMap[n.id];
+                if (parentId && draggedIds.has(parentId)) {
+                    n.tx = (n._dragStartTx != null ? n._dragStartTx : n.tx) + dx;
+                    n.ty = (n._dragStartTy != null ? n._dragStartTy : n.ty) + dy;
+                    n.fx = null;
+                    n.fy = null;
+                }
+            });
             if (simulation) {
-                simulation.alphaTarget(0.2).restart();
+                simulation.alpha(Math.max(simulation.alpha(), 0.15)).restart();
             } else if (self.g) {
                 self.g.selectAll('.graph-nodes g').attr('transform', function(nd) {
                     return 'translate(' + nd.x + ',' + nd.y + ')';
@@ -529,6 +553,14 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, simulation,
                 n.ty = n.y;
                 n.fx = n.x;
                 n.fy = n.y;
+            });
+            nodes.forEach(function(n) {
+                if (!d._dragGroup || !d._dragGroup.includes(n)) {
+                    if (!n._dragging) {
+                        n.tx = n.x;
+                        n.ty = n.y;
+                    }
+                }
             });
             d._dragGroup = null;
         });
@@ -563,11 +595,11 @@ const Graph3Tier = {
         const cfg = this.layoutConfig;
         const self = this;
         GRAPH_LAYOUT_SCHEMA.forEach(function(param) {
-            if (param.group !== lastGroup) {
-                lastGroup = param.group;
+            if (param.groupKey !== lastGroup) {
+                lastGroup = param.groupKey;
                 const title = document.createElement('div');
                 title.className = 'graph-settings-group-title';
-                title.textContent = param.group;
+                title.textContent = window.t('graph.paramGroup.' + param.groupKey);
                 form.appendChild(title);
             }
             const value = _snapGraphLayoutValue(cfg[param.key], param);
@@ -577,7 +609,7 @@ const Graph3Tier = {
             head.className = 'graph-settings-row-head';
             const label = document.createElement('span');
             label.className = 'graph-settings-label';
-            label.textContent = param.label;
+            label.textContent = window.t('graph.param.' + param.key);
             const valueEl = document.createElement('span');
             valueEl.className = 'graph-settings-value';
             valueEl.textContent = _formatGraphLayoutValue(value, param.step);
@@ -797,10 +829,14 @@ const Graph3Tier = {
     _lastLoadTime: 0,
     _lastDataHash: null,
 
-    async load(filter) {
+    async load(filter, force) {
         if (filter) this.filter = filter;
         var panel = document.getElementById('graph-panel');
         if (panel && panel.style.display === 'none') return;
+        if (force) {
+            this._lastLoadTime = 0;
+            this._lastDataHash = null;
+        }
         var now = Date.now();
         var sameFilter = (filter === this._lastLoadFilter);
         if (sameFilter && now - this._lastLoadTime < 10000) {
@@ -845,21 +881,19 @@ const Graph3Tier = {
         });
     },
 
+    _legendItem(color, size, labelKey) {
+        return '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:inline-block;"></span>' + window.t(labelKey) + '</span>';
+    },
+
     _updateLegend() {
         const el = document.getElementById('graph-legend');
         if (!el) return;
         if (this.filter === 'tag') {
-            el.innerHTML = '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#7c4dff;width:8px;height:8px;border-radius:50%;display:inline-block;"></span>标签</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#81c784;width:6px;height:6px;border-radius:50%;display:inline-block;"></span>笔记</span>';
+            el.innerHTML = this._legendItem('#7c4dff', 8, 'graph.legend.tags') + this._legendItem('#81c784', 6, 'graph.legend.notes');
         } else if (this.filter === 'all') {
-            el.innerHTML = '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#e85d3a;width:8px;height:8px;border-radius:50%;display:inline-block;"></span>主题</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#7c4dff;width:8px;height:8px;border-radius:50%;display:inline-block;"></span>标签</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#81c784;width:6px;height:6px;border-radius:50%;display:inline-block;"></span>笔记</span>';
+            el.innerHTML = this._legendItem('#7c4dff', 8, 'graph.legend.tags') + this._legendItem('#81c784', 6, 'graph.legend.notes');
         } else {
-            el.innerHTML = '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#e85d3a;width:8px;height:8px;border-radius:50%;display:inline-block;"></span>一级</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#ea8600;width:6px;height:6px;border-radius:50%;display:inline-block;"></span>二级</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#f4a930;width:5px;height:5px;border-radius:50%;display:inline-block;"></span>三级</span>'
-                + '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#81c784;width:4px;height:4px;border-radius:50%;display:inline-block;"></span>笔记</span>';
+            el.innerHTML = this._legendItem('#ea8600', 6, 'graph.legend.l2') + this._legendItem('#f4a930', 5, 'graph.legend.l3') + this._legendItem('#81c784', 4, 'graph.legend.notes');
         }
     },
 
@@ -911,7 +945,7 @@ const Graph3Tier = {
         const loadingEl = document.getElementById('graph-loading');
         if (loadingEl) loadingEl.style.display = 'none';
         if (!this.data || !this.data.nodes || this.data.nodes.length === 0) {
-            if (emptyEl) { emptyEl.textContent = '暂无数据'; emptyEl.style.display = ''; }
+            if (emptyEl) { emptyEl.textContent = window.t('graph.empty'); emptyEl.style.display = ''; }
             return;
         }
         if (emptyEl) emptyEl.style.display = 'none';
@@ -1032,7 +1066,7 @@ const Graph3Tier = {
         node.on('dblclick', (e, d) => {
             e.stopPropagation();
             if (d.type === 'topic' && d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
-                showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' 综述' });
+                showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' ' + window.t('graph.stats.survey') });
             }
         });
 
@@ -1043,7 +1077,7 @@ const Graph3Tier = {
                 showPreview({ path: d.full_path, name: d.name });
             } else if (d.type === 'topic') {
                 if (d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
-                    showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' 综述' });
+                    showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' ' + window.t('graph.stats.survey') });
                 } else {
                     // Center and zoom on this node
                     const node = self.svg.node();
@@ -1065,10 +1099,10 @@ const Graph3Tier = {
 
         updateNodePos();
         const selfRef = this;
-        this.simulation = _startGraphRelaxation(nodes, getRadius, updateNodePos, function() {
+        this.simulation = _startGraphRelaxation(nodes, edges, getRadius, updateNodePos, function() {
             selfRef._fitGraphToBounds(nodes, svgW, svgH, getRadius, 800);
         });
-        node.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, this.simulation, self));
+        node.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, this.simulation, self));
 
         // Click background to deselect
         this.svg.on('click', () => {});
@@ -1245,8 +1279,8 @@ const Graph3Tier = {
             nodeSel.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
         }
 
-        self.simulation = _startGraphRelaxation(nodes, getRadius, updateReplayPos, function() {
-            nodeSel.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, self.simulation, self));
+        self.simulation = _startGraphRelaxation(nodes, edges, getRadius, updateReplayPos, function() {
+            nodeSel.call(_makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, self.simulation, self));
         });
 
         function revealNextDepth() {

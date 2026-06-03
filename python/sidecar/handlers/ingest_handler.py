@@ -6,8 +6,8 @@ import traceback
 
 from sidecar.handlers.base import BaseHandler
 from sidecar.ingest_pipeline import (
-    clear_cancel,
-    load_ingest_state,
+    normalize_ingest_state,
+    prepare_auto_ingest,
     request_cancel,
     run_ingest,
 )
@@ -32,9 +32,44 @@ class IngestHandler(BaseHandler):
         router.register("needs_schema_setup", self._needs_schema_setup)
         router.register("get_schema_template", self._get_schema_template)
         router.register("start_ingest", self._start_ingest)
+        router.register("ensure_ingest", self._ensure_ingest)
+        router.register("request_full_ingest", self._request_full_ingest)
         router.register("cancel_ingest", self._cancel_ingest)
         router.register("retry_ingest", self._retry_ingest)
         router.register("get_ingest_status", self._get_ingest_status)
+
+    def ensure_running(self, file_paths: list | None = None) -> dict:
+        """Start ingest when needed; safe to call on every app/workspace open."""
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "请先设置工作区", "started": False}
+
+        plan = prepare_auto_ingest(workspace, file_paths=file_paths)
+        if plan.get("action") != "start":
+            return {"success": True, "started": False, **plan}
+
+        mode = plan.get("mode", "incremental")
+        paths = plan.get("file_paths") or []
+        resume = bool(plan.get("resume"))
+        if self._start_task("ingest_pipeline", self._do_ingest, args=(mode, paths, resume)):
+            return {
+                "success": True,
+                "started": True,
+                "mode": mode,
+                "resume": resume,
+                "message": "入库流水线已自动启动",
+            }
+        return {"success": True, "started": False, "reason": "already_running"}
+
+    def _ensure_ingest(self, params):
+        file_paths = params.get("file_paths") or []
+        return self.ensure_running(file_paths=file_paths or None)
+
+    def _request_full_ingest(self, _params):
+        from sidecar.ingest_pipeline import request_full_ingest
+
+        request_full_ingest()
+        return {"success": True, "message": "已标记下次全量入库"}
 
     def _ensure_schema(self, _params):
         path = ensure_schema()
@@ -70,12 +105,13 @@ class IngestHandler(BaseHandler):
 
         mode = params.get("mode", "full")
         file_paths = params.get("file_paths") or []
-        if not self._start_task("ingest_pipeline", self._do_ingest, args=(mode, file_paths)):
+        resume = bool(params.get("resume"))
+        if not self._start_task("ingest_pipeline", self._do_ingest, args=(mode, file_paths, resume)):
             return {"success": False, "message": "入库流水线正在运行中"}
 
         return {"success": True, "message": "入库流水线已开始", "mode": mode}
 
-    def _do_ingest(self, mode: str, file_paths: list) -> None:
+    def _do_ingest(self, mode: str, file_paths: list, resume: bool = False) -> None:
         def send_progress(stage: str, progress: float, message: str, extra: dict | None = None) -> None:
             payload = {
                 "type": "ingest_progress",
@@ -96,6 +132,7 @@ class IngestHandler(BaseHandler):
                 file_paths=file_paths or None,
                 send_progress=send_progress,
                 send_event=send_event,
+                resume=resume,
             )
         except Exception as e:
             logger.warning(f"[ingest] pipeline error: {e}\n{traceback.format_exc()}")
@@ -109,24 +146,20 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "已请求取消"}
 
     def _retry_ingest(self, params):
-        state = load_ingest_state()
-        if state.get("status") == "running":
-            return {"success": False, "message": "流水线正在运行"}
-        clear_cancel()
-        mode = params.get("mode", state.get("mode", "full"))
-        file_paths = params.get("file_paths") or []
-        if not self._start_task("ingest_pipeline", self._do_ingest, args=(mode, file_paths)):
-            return {"success": False, "message": "无法启动重试"}
-        return {"success": True, "message": "已重新开始入库"}
+        normalize_ingest_state()
+        return self.ensure_running(file_paths=params.get("file_paths") or None)
 
     def _get_ingest_status(self, _params):
-        state = load_ingest_state()
+        state = normalize_ingest_state()
+        status = state.get("status", "idle")
         return {
             "success": True,
-            "status": state.get("status", "idle"),
+            "status": status,
             "stage": state.get("stage", ""),
+            "progress": state.get("progress", 0),
             "message": state.get("message", ""),
             "stats": state.get("stats", {}),
-            "running": state.get("status") == "running",
-            "can_retry": state.get("status") in ("failed", "cancelled", "complete"),
+            "running": status == "running",
+            "needs_resume": status in ("interrupted", "failed"),
+            "can_retry": status in ("failed", "cancelled", "interrupted", "complete"),
         }

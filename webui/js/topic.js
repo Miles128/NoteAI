@@ -60,7 +60,7 @@ function _renderTopicTree(node, expandedTopics, depth) {
         if (hasFiles) {
             html += '<div class="sidebar-tag-files">';
             child.files.forEach(function(f) {
-                var display = f.title || '未命名';
+                var display = f.title || window.t('download.unnamed');
                 var path = f.path || '';
                 if (path) {
                     html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + escapeAttr(path) + '" onclick="window.TreeModule.selectFile(\'' + escapeAttr(path) + '\', \'' + escapeAttr(display) + '\')" style="padding-left:' + (24 + indent) + 'px">';
@@ -91,14 +91,14 @@ async function loadTopicTree(silent, forceRefresh) {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
     if (!silent) {
-        container.innerHTML = '<div class="sidebar-view-loading">加载主题...</div>';
+        container.innerHTML = '<div class="sidebar-view-loading">' + window.t('topic.loading') + '</div>';
     }
 
     try {
         var result = await window.api.getTopicTree();
 
         if (!result || typeof result !== 'object') {
-            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">API 返回异常</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty">' + window.t('topic.invalidResponse') + '</div>';
             return;
         }
 
@@ -108,7 +108,7 @@ async function loadTopicTree(silent, forceRefresh) {
         window.AppState.lastTopicData = dataStr;
 
         if (result.success === false) {
-            container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(result.message || '后端错误') + '</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(result.message || window.t('common.backendError')) + '</span></div>';
             return;
         }
 
@@ -116,7 +116,7 @@ async function loadTopicTree(silent, forceRefresh) {
         var hasTopics = topics.length > 0;
 
         if (!hasTopics) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无已确认主题</div>';
+            container.innerHTML = '<div class="sidebar-view-empty">' + window.t('topic.noTopics') + '</div>';
             return;
         }
 
@@ -133,7 +133,7 @@ async function loadTopicTree(silent, forceRefresh) {
         html += '</div>';
 
         html += '<div class="topic-context-menu" id="topic-context-menu" style="display:none;">';
-        html += '<div class="topic-menu-item" data-action="rename">重命名</div>';
+        html += '<div class="topic-menu-item" data-action="rename">' + window.t('topic.rename') + '</div>';
         html += '</div>';
 
         container.innerHTML = html;
@@ -143,7 +143,7 @@ async function loadTopicTree(silent, forceRefresh) {
         window.updateSidebarStats();
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
-        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
+                container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(e.message || window.t('common.unknownError')) + '</span></div>';
     }
 }
 
@@ -164,7 +164,7 @@ function setupTopicDragDrop(container) {
         var srcTopic = srcGroup ? srcGroup.getAttribute('data-topic-name') : null;
 
         dragData.filePath = filePath;
-        dragData.fileName = fileEl.querySelector('.tree-name')?.textContent || '文件';
+        dragData.fileName = fileEl.querySelector('.tree-name')?.textContent || window.t('common.file');
         dragData.srcTopic = srcTopic;
         fileEl.classList.add('dragging');
 
@@ -253,11 +253,11 @@ function setupTopicDragDrop(container) {
                     pendingCard.classList.add('resolved');
                     animateCardOut(pendingCard);
                 } else {
-                    alert('确认主题失败：' + (result ? result.message : '未知错误'));
+                    alert(window.t('topic.confirmTopicFailed') + (result ? result.message : window.t('common.unknownError')));
                 }
             } catch (err) {
                 console.error('[Topic] resolve via drag error:', err);
-                alert('确认主题失败：' + (err.message || '发生错误'));
+                alert(window.t('topic.confirmTopicFailed') + (err.message || window.t('common.errorOccurred')));
             }
 
             cleanupDragState(container);
@@ -291,11 +291,11 @@ function setupTopicDragDrop(container) {
                 await loadTopicTree();
             } else {
                 console.error('[Topic] move failed:', result2);
-                alert('移动失败：' + (result2 ? result2.message : '未知错误'));
+                alert(window.t('topic.moveFailed') + (result2 ? result2.message : window.t('common.unknownError')));
             }
         } catch (err) {
             console.error('[Topic] move error:', err);
-            alert('移动失败：' + (err.message || '发生错误'));
+            alert(window.t('topic.moveFailed') + (err.message || window.t('common.errorOccurred')));
         }
 
         cleanupDragState(container);
@@ -339,7 +339,7 @@ function showTopicContextMenu(e, rowEl) {
     var items = [];
 
     items.push({
-        label: '更改名称',
+        label: window.t('topic.changeName'),
         icon: window.Icons.get('fileEdit'),
         action: function() {
             if (tagNameEl) {
@@ -349,7 +349,7 @@ function showTopicContextMenu(e, rowEl) {
     });
 
     items.push({
-        label: '添加子主题',
+        label: window.t('topic.addSubTopic'),
         icon: window.Icons.get('plus'),
         action: function() {
             onAddSubTopic(topicName);
@@ -357,7 +357,7 @@ function showTopicContextMenu(e, rowEl) {
     });
 
     items.push({
-        label: '删除主题',
+        label: window.t('tree.deleteTopic'),
         icon: window.Icons.get('trash'),
         action: function() {
             onDeleteTopic(topicName);
@@ -393,7 +393,7 @@ function showTopicFileContextMenu(e, fileEl) {
     hideTreeContextMenu();
 
     var path = fileEl.getAttribute('data-file-path');
-    var name = fileEl.querySelector('.tree-name')?.textContent || '文件';
+    var name = fileEl.querySelector('.tree-name')?.textContent || window.t('common.file');
 
     var menu = document.createElement('div');
     menu.className = 'tree-context-menu';
@@ -402,13 +402,13 @@ function showTopicFileContextMenu(e, fileEl) {
     var items = [];
 
     items.push({
-        label: '在访达中显示',
+        label: window.t('tree.revealInFinder'),
         icon: window.Icons.get('folder'),
         action: function() { revealInFinder(path); }
     });
 
     items.push({
-        label: '在新窗口打开',
+        label: window.t('tree.openInNewWindow'),
         icon: window.Icons.get('folderOpen'),
         action: function() {
             if (window.api && window.api.openFileInNewWindow) {
@@ -518,7 +518,7 @@ function startTopicRename(tagNameEl, oldTopicName) {
 }
 
 function onAddSubTopic(parentTopic) {
-    var subName = prompt('请输入子主题名称：\n\n将添加到「' + parentTopic + '」下');
+    var subName = prompt(window.t('topic.enterSubTopicName', { parent: parentTopic }));
     if (!subName || !subName.trim()) return;
     subName = subName.trim();
 
@@ -528,16 +528,16 @@ function onAddSubTopic(parentTopic) {
         if (result && result.success) {
             loadTopicTree();
         } else {
-            alert('创建子主题失败：' + (result ? result.message : '未知错误'));
+            alert(window.t('topic.createSubTopicFailed') + (result ? result.message : window.t('common.unknownError')));
         }
     }).catch(function(e) {
         console.error('[Topic] add sub-topic error:', e);
-        alert('创建子主题出错');
+        alert(window.t('topic.createSubTopicError'));
     });
 }
 
 async function onDeleteTopic(topicName) {
-    var confirmed = await window._customConfirm('确定要删除主题「' + topicName + '」吗？\n\n该主题下的文件将从 WIKI.md 中移除，文件的 topic 标签也会被删除，之后会重新尝试自动匹配主题。');
+    var confirmed = await window._customConfirm(window.t('topic.confirmDeleteTopic', { name: topicName }));
     if (!confirmed) return;
 
     window.api.deleteTopic(topicName).then(function(result) {
@@ -552,11 +552,11 @@ async function onDeleteTopic(topicName) {
                 if (pendingPanel) pendingPanel.style.display = '';
             }
         } else {
-            alert('删除主题失败：' + (result && result.message ? result.message : '未知错误'));
+            alert(window.t('topic.deleteTopicFailed') + (result && result.message ? result.message : window.t('common.unknownError')));
         }
     }).catch(function(e) {
         console.error('[Topic] delete error:', e);
-        alert('删除主题出错');
+        alert(window.t('topic.deleteTopicError'));
     });
 }
 
@@ -573,10 +573,12 @@ async function onBatchAutoAssignTopics() {
         console.log('[Topic] Sync result:', syncResult);
 
         if (syncResult && syncResult.success) {
-            var syncMsg = '同步完成：移动 ' + syncResult.moved +
-                '，新增 ' + syncResult.added +
-                '，移除 ' + syncResult.removed +
-                '，删除空主题 ' + syncResult.deleted_topics;
+            var syncMsg = window.t('topic.syncDone', {
+                moved: syncResult.moved,
+                added: syncResult.added,
+                removed: syncResult.removed,
+                deleted: syncResult.deleted_topics
+            });
             console.log('[Topic] ' + syncMsg);
         }
 
@@ -598,15 +600,17 @@ async function onBatchAutoAssignTopics() {
                 if (pendingPanel) pendingPanel.style.display = '';
             }
 
-            var msg = '扫描完成：共 ' + result.total + ' 个文件';
-            msg += '，自动分配 ' + result.auto_assigned + ' 个';
-            msg += '，待确认 ' + result.need_confirm + ' 个';
-            msg += '，跳过 ' + result.skipped + ' 个';
+            var msg = window.t('topic.scanDone', {
+                total: result.total,
+                assigned: result.auto_assigned,
+                pending: result.need_confirm,
+                skipped: result.skipped
+            });
             console.log('[Topic] ' + msg);
         } else {
-            var errMsg = result && result.message ? result.message : '未知错误';
+            var errMsg = result && result.message ? result.message : window.t('common.unknownError');
             console.error('[Topic] batch failed:', result);
-            alert('自动分配主题失败：' + errMsg);
+            alert(window.t('topic.autoAssignFailed') + errMsg);
         }
     } catch (e) {
         console.error('[Topic] batch error:', e);
@@ -627,8 +631,8 @@ function showAISuggestionPanel() {
 
     var header = document.createElement('div');
     header.className = 'ai-suggestion-header';
-    header.innerHTML = '<span class="ai-suggestion-title">AI 主题建议</span>' +
-        '<button class="ai-suggestion-close" onclick="closeAISuggestionPanel()" title="关闭">' +
+    header.innerHTML = '<span class="ai-suggestion-title">' + window.t('topic.aiSuggestionTitle') + '</span>' +
+        '<button class="ai-suggestion-close" onclick="closeAISuggestionPanel()" title="' + window.t('common.close') + '">' +
         window.Icons.get('close', 14) + '</button>';
     panel.appendChild(header);
 
@@ -647,7 +651,12 @@ function showAISuggestionPanel() {
         card.className = 'ai-suggestion-card';
         card.dataset.index = i;
 
-        var typeLabel = { 'new_topic': '新建主题', 'assign_topic': '归档文件', 'merge_topic': '合并主题', 'change_topic': '变更主题' }[s.type] || s.type;
+        var typeLabel = {
+            'new_topic': window.t('topic.typeNewTopic'),
+            'assign_topic': window.t('topic.typeAssignTopic'),
+            'merge_topic': window.t('topic.typeMergeTopic'),
+            'change_topic': window.t('topic.typeChangeTopic')
+        }[s.type] || s.type;
 
         var body = '';
         if (s.type === 'change_topic') {
@@ -655,19 +664,19 @@ function showAISuggestionPanel() {
             var suggestedTopic = s.suggested_topic || '';
             var isExisting = existingSet[suggestedTopic.toLowerCase()] === true;
             var topicTag = isExisting
-                ? '<span class="ai-sg-topic-tag existing">已有主题</span>'
-                : '<span class="ai-sg-topic-tag new">全新主题</span>';
+                ? '<span class="ai-sg-topic-tag existing">' + window.t('topic.existingTopic') + '</span>'
+                : '<span class="ai-sg-topic-tag new">' + window.t('topic.newTopicTag') + '</span>';
 
             body = '<div class="ai-sg-change-detail">' +
-                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">文件</span><span class="ai-sg-change-value">' + escapeHtml(s.file || '') + '</span></div>' +
-                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">原始主题</span>' +
-                (currentTopic ? '<span class="ai-sg-change-value">' + escapeHtml(currentTopic) + '</span>' : '<span class="ai-sg-change-value empty">当前没有主题</span>') +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelFile') + '</span><span class="ai-sg-change-value">' + escapeHtml(s.file || '') + '</span></div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelOriginalTopic') + '</span>' +
+                (currentTopic ? '<span class="ai-sg-change-value">' + escapeHtml(currentTopic) + '</span>' : '<span class="ai-sg-change-value empty">' + window.t('topic.noCurrentTopic') + '</span>') +
                 '</div>' +
-                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">建议主题</span><span class="ai-sg-change-value">' + escapeHtml(suggestedTopic) + topicTag + '</span></div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelSuggestedTopic') + '</span><span class="ai-sg-change-value">' + escapeHtml(suggestedTopic) + topicTag + '</span></div>' +
                 '</div>' +
                 '<div class="ai-sg-topic-select-area">' +
                 '<select class="ai-sg-topic-select" data-card-index="' + i + '">' +
-                '<option value="">-- 选择已有主题 --</option>';
+                '<option value="">' + window.t('topic.selectExistingTopic') + '</option>';
 
             for (var ti = 0; ti < _existingTopics.length; ti++) {
                 var tname = _existingTopics[ti];
@@ -676,22 +685,32 @@ function showAISuggestionPanel() {
             }
 
             body += '</select>' +
-                '<input type="text" class="ai-sg-topic-input" placeholder="或输入新主题..." data-card-index="' + i + '" value="">' +
+                '<input type="text" class="ai-sg-topic-input" data-card-index="' + i + '" placeholder="' + window.t('topic.suggestionTopicPlaceholder') + '" value="">' +
                 '</div>';
         } else if (s.type === 'new_topic') {
-            body = '<div class="ai-sg-body">创建主题 <b>' + escapeHtml(s.topic) + '</b>' +
-                (s.files && s.files.length > 0 ? '，包含 ' + s.files.map(function(f) { return escapeHtml(f); }).join('、') : '') + '</div>';
+            body = '<div class="ai-sg-body">' + window.t('topic.createTopicBody', {
+                topic: '<b>' + escapeHtml(s.topic) + '</b>',
+                files: (s.files && s.files.length > 0)
+                    ? window.t('topic.includesFiles', { files: s.files.map(function(f) { return escapeHtml(f); }).join('、') })
+                    : ''
+            }) + '</div>';
         } else if (s.type === 'assign_topic') {
-            body = '<div class="ai-sg-body">将 <b>' + escapeHtml(s.file) + '</b> 归入主题 <b>' + escapeHtml(s.topic) + '</b></div>';
+            body = '<div class="ai-sg-body">' + window.t('topic.assignFileBody', {
+                file: '<b>' + escapeHtml(s.file) + '</b>',
+                topic: '<b>' + escapeHtml(s.topic) + '</b>'
+            }) + '</div>';
         } else if (s.type === 'merge_topic') {
-            body = '<div class="ai-sg-body">将 <b>' + escapeHtml(s.source_topic) + '</b> 合并到 <b>' + escapeHtml(s.target_topic) + '</b></div>';
+            body = '<div class="ai-sg-body">' + window.t('topic.mergeTopicBody', {
+                source: '<b>' + escapeHtml(s.source_topic) + '</b>',
+                target: '<b>' + escapeHtml(s.target_topic) + '</b>'
+            }) + '</div>';
         }
 
         card.innerHTML = '<div class="ai-sg-header">' +
             '<span class="ai-sg-type ai-sg-type-' + s.type + '">' + typeLabel + '</span>' +
             '<div class="ai-sg-actions">' +
-            '<button class="ai-sg-yes" data-action="accept" title="采纳">' + window.Icons.get('check', 14) + '</button>' +
-            '<button class="ai-sg-no" data-action="reject" title="忽略">' + window.Icons.get('close', 14) + '</button>' +
+            '<button class="ai-sg-yes" data-action="accept" title="' + window.t('topic.acceptSuggestion') + '">' + window.Icons.get('check', 14) + '</button>' +
+            '<button class="ai-sg-no" data-action="reject" title="' + window.t('topic.rejectSuggestion') + '">' + window.Icons.get('close', 14) + '</button>' +
             '</div></div>' +
             body +
             (s.reason ? '<div class="ai-sg-reason">' + escapeHtml(s.reason) + '</div>' : '');
@@ -731,7 +750,7 @@ async function applyAISuggestion(idx, cardEl) {
         var selectedTopic = selectEl ? selectEl.value : '';
         var finalTopic = customTopic || selectedTopic || suggestion.suggested_topic;
         if (!finalTopic) {
-            alert('请选择或输入一个主题');
+            alert(window.t('topic.selectOrEnterTopic'));
             return;
         }
         suggestion = Object.assign({}, suggestion, { suggested_topic: finalTopic });
@@ -747,11 +766,11 @@ async function applyAISuggestion(idx, cardEl) {
             checkAllSuggestionsDone();
             loadTopicView();
         } else {
-            alert('应用失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            alert(window.t('topic.applyFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
             cardEl.style.opacity = '1';
         }
     } catch (e) {
-        alert('应用出错：' + (e.message || e));
+        alert(window.t('topic.applyError') + (e.message || e));
         cardEl.style.opacity = '1';
     }
 }
@@ -760,7 +779,7 @@ function checkAllSuggestionsDone() {
     var remaining = _aiSuggestions.filter(function(s) { return s !== null; });
     if (remaining.length === 0) {
         closeAISuggestionPanel();
-        updateStatus('所有建议已处理');
+        updateStatus(window.t('topic.allSuggestionsProcessed'));
     }
 }
 
@@ -772,8 +791,8 @@ function closeAISuggestionPanel() {
 async function onAITopicAnalyze() {
     var btn = document.getElementById('btn-ai-analyze');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
-    window.setSidebarStatus('topic', '正在扫描文件...', true);
-    updateStatus('AI 正在扫描全量文件分析主题...');
+    window.setSidebarStatus('topic', window.t('integrator.scanningFiles'), true);
+    updateStatus(window.t('topic.aiScanning'));
 
     try {
         try {
@@ -785,25 +804,25 @@ async function onAITopicAnalyze() {
             _existingTopics = [];
         }
 
-        window.setSidebarStatus('topic', '正在连接大模型...', true);
+        window.setSidebarStatus('topic', window.t('topic.connectingLlm'), true);
         var result = await window.api.aiTopicAnalyze();
         if (result && result.success && result.suggestions && result.suggestions.length > 0) {
             _aiSuggestions = result.suggestions;
             showAISuggestionPanel();
-            window.setSidebarStatus('topic', result.suggestions.length + ' 条建议');
-            updateStatus('AI 分析完成，共 ' + result.suggestions.length + ' 条建议');
+            window.setSidebarStatus('topic', window.t('topic.suggestionsCount', { count: result.suggestions.length }));
+            updateStatus(window.t('topic.aiAnalysisDone', { count: result.suggestions.length }));
         } else if (result && result.success) {
-            window.setSidebarStatus('topic', '主题分配合理');
-            updateStatus('AI 分析完成，所有文件主题分配合理');
+            window.setSidebarStatus('topic', window.t('topic.topicsOk'));
+            updateStatus(window.t('topic.aiAnalysisAllOk'));
             _aiSuggestions = [];
         } else {
-            window.setSidebarStatus('topic', result && result.message ? result.message : '分析失败');
-            updateStatus(result && result.message ? result.message : 'AI 分析未返回结果');
+            window.setSidebarStatus('topic', result && result.message ? result.message : window.t('topic.analysisFailed'));
+            updateStatus(result && result.message ? result.message : window.t('topic.aiNoResult'));
             _aiSuggestions = [];
         }
     } catch (e) {
-        window.setSidebarStatus('topic', '分析出错');
-        updateStatus('AI 分析出错: ' + (e.message || e));
+        window.setSidebarStatus('topic', window.t('topic.analysisError'));
+        updateStatus(window.t('topic.aiAnalysisError') + (e.message || e));
     } finally {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         setTimeout(window.updateSidebarStats, 2000);
@@ -854,25 +873,25 @@ async function onAITopicSurvey() {
         console.error('[Survey] get topics failed:', e);
     }
     if (headings.length === 0) {
-        alert('当前没有主题，请先创建主题');
+        alert(window.t('topic.noTopicsYet'));
         return;
     }
 
-    var topic = prompt('请输入要撰写综述的主题：\n\n现有主题：' + headings.join('、'));
+    var topic = prompt(window.t('topic.enterSurveyTopic', { topics: headings.join('、') }));
     if (!topic || !topic.trim()) return;
     topic = topic.trim();
 
     var btn = document.getElementById('btn-ai-survey');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
-    window.setSidebarStatus('topic', '正在连接大模型...', true);
-    updateStatus('AI 正在撰写「' + topic + '」综述...');
+    window.setSidebarStatus('topic', window.t('topic.connectingLlm'), true);
+    updateStatus(window.t('topic.aiWritingSurvey', { topic: topic }));
 
     window._surveyStreamText = '';
     window._surveyBuffer = '';
     window._surveyDisplayText = '';
 
     if (window.TiptapEditor && window.TiptapEditor.instance) {
-        window.TiptapEditor.instance.commands.setContent('<p>正在撰写综述...</p>', false);
+        window.TiptapEditor.instance.commands.setContent('<p>' + window.t('topic.writingSurvey') + '</p>', false);
         window.TiptapEditor.instance.setEditable(false);
     }
 
@@ -908,12 +927,12 @@ async function onAITopicSurvey() {
                     window._surveyStreamUnlisten = null;
                 }
                 if (data.success) {
-                    updateStatus('综述撰写完成，已保存为 ' + data.file_path);
-                    window.setSidebarStatus('topic', '综述已保存');
+                    updateStatus(window.t('topic.surveyDone', { path: data.file_path }));
+                    window.setSidebarStatus('topic', window.t('topic.surveySaved'));
                 } else {
-                    alert('撰写失败：' + (data.message || '未知错误'));
-                    updateStatus('综述撰写失败');
-                    window.setSidebarStatus('topic', '撰写失败');
+                    alert(window.t('topic.writeFailed') + (data.message || window.t('common.unknownError')));
+                    updateStatus(window.t('topic.surveyWriteFailed'));
+                    window.setSidebarStatus('topic', window.t('topic.writeFailedShort'));
                 }
                 if (window.TiptapEditor && window.TiptapEditor.instance) {
                     window.TiptapEditor.instance.setEditable(true);
@@ -926,8 +945,8 @@ async function onAITopicSurvey() {
     try {
         await window.api.aiTopicSurvey(topic);
     } catch (e) {
-        alert('撰写出错：' + (e.message || e));
-        updateStatus('综述撰写出错');
+        alert(window.t('topic.writeError') + (e.message || e));
+        updateStatus(window.t('topic.surveyWriteError'));
     } finally {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         if (window._surveyFlushTimer) {
@@ -1012,7 +1031,7 @@ async function onConfirmTopic() {
     try {
         var createResult = await window.api.createTopic(topicName);
         if (!createResult || !createResult.success) {
-            alert(createResult ? createResult.message : '创建主题失败');
+            alert(createResult ? createResult.message : window.t('topic.createTopicFailed'));
             if (inputField) inputField.focus();
             return;
         }
@@ -1036,9 +1055,11 @@ async function onConfirmTopic() {
                 if (pendingPanel) pendingPanel.style.display = '';
             }
 
-            var msg = '主题「' + topicName + '」创建成功。扫描完成：';
-            msg += '自动分配 ' + batchResult.auto_assigned + ' 个';
-            msg += '，待确认 ' + batchResult.need_confirm + ' 个';
+            var msg = window.t('topic.topicCreatedScan', {
+                name: topicName,
+                assigned: batchResult.auto_assigned,
+                pending: batchResult.need_confirm
+            });
             console.log('[Topic] ' + msg);
         } else {
             console.error('[Topic] batch after create failed:', batchResult);
@@ -1101,7 +1122,7 @@ async function loadTopicView() {
         console.log('[Topic] API result:', result);
     } catch (e) {
         console.error('[Topic] loadTopicView error:', e);
-        container.innerHTML = '<div class="sidebar-view-empty">加载主题失败<br><span style="font-size: 12px;color:var(--text-muted)">' + escapeHtml(e.message || '未知错误') + '</span></div>';
+                container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(e.message || window.t('common.unknownError')) + '</span></div>';
         return;
     }
 
@@ -1123,7 +1144,7 @@ function loadTopicPendingPanel(pending, topicNames) {
         return;
     }
 
-    var html = '<div class="topic-pending-header">待确认主题 <span class="topic-pending-count">' + pending.length + '</span></div>';
+    var html = '<div class="topic-pending-header">' + window.t('topic.pendingHeader') + ' <span class="topic-pending-count">' + pending.length + '</span></div>';
     html += '<div class="topic-pending-list">';
 
     pending.forEach(function(p, i) {
@@ -1137,14 +1158,14 @@ function loadTopicPendingPanel(pending, topicNames) {
         html += '<div class="topic-assign-row">';
         if (topicNames.length > 0) {
             html += '<select class="topic-select" data-file="' + escapeAttr(p.file) + '" onchange="onTopicSelectChange(this)">';
-            html += '<option value="">-- 选择已有主题 --</option>';
+            html += '<option value="">' + window.t('topic.selectExistingTopic') + '</option>';
             topicNames.forEach(function(name) {
                 html += '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
             });
             html += '</select>';
         }
-        html += '<input type="text" class="topic-custom-input" placeholder="自定义主题..." data-file="' + escapeAttr(p.file) + '">';
-        html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">确定</button>';
+        html += '<input type="text" class="topic-custom-input" data-file="' + escapeAttr(p.file) + '" placeholder="' + window.t('topic.customTopicPlaceholder') + '">';
+        html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">' + window.t('common.ok') + '</button>';
         html += '</div>';
         html += '</div>';
     });
@@ -1286,7 +1307,7 @@ function doConfirmTopic(cardEl) {
             if (input) input.disabled = false;
             if (selectEl) selectEl.disabled = false;
             if (customBtn) customBtn.disabled = false;
-            alert('确认主题失败：' + (result ? result.message : '未知错误'));
+            alert(window.t('topic.confirmTopicFailed') + (result ? result.message : window.t('common.unknownError')));
         }
     }).catch(function(e) {
         console.error('[Topic] resolve error:', e);
@@ -1295,7 +1316,7 @@ function doConfirmTopic(cardEl) {
         if (input) input.disabled = false;
         if (selectEl) selectEl.disabled = false;
         if (customBtn) customBtn.disabled = false;
-        alert('确认主题失败：' + (e.message || '发生错误'));
+        alert(window.t('topic.confirmTopicFailed') + (e.message || window.t('common.errorOccurred')));
     });
 }
 

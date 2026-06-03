@@ -76,7 +76,7 @@ function initCodeMirrorEditor(content, filePath) {
     window.mdEditor.filePath = filePath;
     window.mdEditor.isActive = true;
 
-    updateSaveStatus('saved', '加载中...');
+    updateSaveStatus('saved', window.t('editor.saveLoading'));
 
     if (!window.EditorBridge || !window.EditorBridge.isReady) {
         console.warn('[Editor] EditorBridge not ready, waiting 5s...');
@@ -150,7 +150,7 @@ function createCodeMirrorInstance(content, filePath, container) {
     });
 
     updateMarkdownPreview(content);
-    updateSaveStatus('saved', '已保存');
+    updateSaveStatus('saved', window.t('editor.saveSaved'));
     initPreviewScrollListener();
 
     console.log('[Editor] CodeMirror initialized for:', filePath, 'content length:', content.length);
@@ -168,7 +168,7 @@ function createTextareaFallback(content, filePath, container) {
     container.appendChild(textarea);
 
     updateMarkdownPreview(content);
-    updateSaveStatus('saved', '已保存(简易模式)');
+    updateSaveStatus('saved', window.t('editor.saveSavedSimple'));
     initPreviewScrollListener();
 
     window.mdEditor.getFallbackContent = () => textarea.value;
@@ -254,7 +254,7 @@ function updateMarkdownPreview(content) {
             previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
-            previewEl.innerHTML = '<p class="preview-error">解析失败</p>';
+            previewEl.innerHTML = '<p class="preview-error">' + window.t('editor.previewParseError') + '</p>';
         }
     } else {
         previewEl.innerHTML = '<pre>' + window.escapeHtml(content) + '</pre>';
@@ -269,7 +269,7 @@ function renderMarkdownPreview(content) {
             return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
-            return '<p class="preview-error">解析失败</p>';
+            return '<p class="preview-error">' + window.t('editor.parseFailed') + '</p>';
         }
     }
     return '<pre>' + window.escapeHtml(content) + '</pre>';
@@ -284,7 +284,7 @@ function processAbstractLinks(content) {
     result = result.replace(/\{\{abstract:([^}]+)\}\}/g, function(match, topicName) {
         var trimmed = topicName.trim();
         var absPath = buildAbstractPath(trimmed);
-        return `<span class="abstract-embed" data-topic="${escapeHtml(trimmed)}" data-path="${escapeHtml(absPath)}">📄 ${trimmed} 综述</span>`;
+        return `<span class="abstract-embed" data-topic="${escapeHtml(trimmed)}" data-path="${escapeHtml(absPath)}">${window.t('editor.surveyEmbed', { topic: trimmed })}</span>`;
     });
 
     // 处理 [[主题名|显示文本]] 带显示文本的链接
@@ -350,19 +350,19 @@ async function performSave(content) {
     }
 
     _savePromise = (async () => {
-        updateSaveStatus('saving', '保存中...');
+        updateSaveStatus('saving', window.t('editor.saving'));
 
         try {
             const result = await window.api.saveFileContent(window.mdEditor.filePath, content);
 
             if (result && result.success) {
                 window.mdEditor.originalContent = content;
-                updateSaveStatus('saved', '已保存');
+                updateSaveStatus('saved', window.t('editor.saveSaved'));
             } else {
-                updateSaveStatus('error', '保存失败');
+                updateSaveStatus('error', window.t('editor.saveFailed'));
             }
         } catch (e) {
-            updateSaveStatus('error', '保存失败');
+            updateSaveStatus('error', window.t('editor.saveFailed'));
         } finally {
             _savePromise = null;
         }

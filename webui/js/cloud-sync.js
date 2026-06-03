@@ -47,7 +47,7 @@ function renderProviderCard(providerName) {
         '<span class="cloud-sync-provider-name">' + escapeHtml(info.name) + '</span>' +
         '</div>' +
         '<span class="cloud-sync-status-badge ' + (connected ? 'connected' : 'disconnected') + '">' +
-        (connected ? '已连接' : '未连接') + '</span>' +
+        (connected ? window.t('cloudSync.connected') : window.t('cloudSync.disconnected')) + '</span>' +
         '</div>';
 
     var authHtml = '<div class="cloud-sync-auth-fields" data-provider="' + providerName + '">';
@@ -67,13 +67,13 @@ function renderProviderCard(providerName) {
 
     var actionsHtml = '<div class="cloud-sync-actions">' +
         '<button class="btn btn-primary cloud-sync-btn-auth" data-provider="' + providerName + '">' +
-        (connected ? '保存配置' : '授权登录') + '</button>' +
+        (connected ? window.t('settings.saveConfig') : window.t('cloudSync.authLogin')) + '</button>' +
         '<button class="btn btn-secondary cloud-sync-btn-push" data-provider="' + providerName + '"' +
-        (connected ? '' : ' disabled') + '>↑ 推送</button>' +
+        (connected ? '' : ' disabled') + '>' + window.t('cloudSync.push') + '</button>' +
         '<button class="btn btn-secondary cloud-sync-btn-pull" data-provider="' + providerName + '"' +
-        (connected ? '' : ' disabled') + '>↓ 拉取</button>' +
+        (connected ? '' : ' disabled') + '>' + window.t('cloudSync.pull') + '</button>' +
         '<button class="btn btn-secondary cloud-sync-btn-disconnect" data-provider="' + providerName + '"' +
-        (connected ? '' : ' disabled') + '>断开</button>' +
+        (connected ? '' : ' disabled') + '>' + window.t('cloudSync.disconnect') + '</button>' +
         '</div>';
 
     var syncInfoHtml = '<div class="cloud-sync-meta">' +
@@ -123,12 +123,12 @@ function updateProviderCard(providerName, status) {
     var badge = card.querySelector('.cloud-sync-status-badge');
     if (badge) {
         badge.className = 'cloud-sync-status-badge ' + (connected ? 'connected' : 'disconnected');
-        badge.textContent = connected ? '已连接' : '未连接';
+        badge.textContent = connected ? window.t('cloudSync.connected') : window.t('cloudSync.disconnected');
     }
 
     var authBtn = card.querySelector('.cloud-sync-btn-auth');
     if (authBtn) {
-        authBtn.textContent = connected ? '保存配置' : '授权登录';
+        authBtn.textContent = connected ? window.t('settings.saveConfig') : window.t('cloudSync.authLogin');
     }
 
     var pushBtn = card.querySelector('.cloud-sync-btn-push');
@@ -143,7 +143,7 @@ function updateProviderCard(providerName, status) {
     var lastTimeEl = card.querySelector('.cloud-sync-last-time');
     if (lastTimeEl) {
         var lastSync = status.last_push || status.last_pull || '';
-        lastTimeEl.textContent = lastSync ? '上次同步：' + new Date(lastSync * 1000).toLocaleString() : '尚未同步';
+        lastTimeEl.textContent = lastSync ? window.t('cloudSync.lastSync', { time: new Date(lastSync * 1000).toLocaleString() }) : window.t('cloudSync.neverSynced');
     }
 
     var authContainer = card.querySelector('.cloud-sync-auth-fields');
@@ -183,24 +183,24 @@ async function handleAuth(providerName) {
     var btn = card.querySelector('.cloud-sync-btn-auth');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '授权中...';
+        btn.textContent = window.t('cloudSync.authing');
     }
 
     try {
         var result = await window.api.cloudSyncAuth(providerName, credentials);
         if (result && result.success) {
-            showProviderProgress(providerName, '授权成功', 'success');
+            showProviderProgress(providerName, window.t('cloudSync.authSuccess'), 'success');
             await loadProviderStatus();
         } else {
-            showProviderProgress(providerName, (result && result.message) || '授权失败', 'error');
+            showProviderProgress(providerName, (result && result.message) || window.t('cloudSync.authFailed'), 'error');
         }
     } catch (e) {
-        showProviderProgress(providerName, '授权失败：' + e.message, 'error');
+        showProviderProgress(providerName, window.t('cloudSync.authFailedMsg', { message: e.message }), 'error');
     } finally {
         if (btn) {
             var status = _providerStatus[providerName];
             btn.disabled = false;
-            btn.textContent = (status && status.connected) ? '保存配置' : '授权登录';
+            btn.textContent = (status && status.connected) ? window.t('settings.saveConfig') : window.t('cloudSync.authLogin');
         }
     }
 }
@@ -209,24 +209,24 @@ async function handlePush(providerName) {
     var btn = document.querySelector('.cloud-sync-btn-push[data-provider="' + providerName + '"]');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '推送中...';
+        btn.textContent = window.t('cloudSync.pushing');
     }
-    showProviderProgress(providerName, '正在推送...', 'info');
+    showProviderProgress(providerName, window.t('cloudSync.pushingStatus'), 'info');
 
     try {
         var result = await window.api.cloudSyncPush(providerName);
         if (result && result.success) {
-            showProviderProgress(providerName, '推送完成', 'success');
+            showProviderProgress(providerName, window.t('cloudSync.pushDone'), 'success');
             await loadProviderStatus();
         } else {
-            showProviderProgress(providerName, (result && result.message) || '推送失败', 'error');
+            showProviderProgress(providerName, (result && result.message) || window.t('cloudSync.pushFailed'), 'error');
         }
     } catch (e) {
-        showProviderProgress(providerName, '推送失败：' + e.message, 'error');
+        showProviderProgress(providerName, window.t('cloudSync.pushFailedMsg', { message: e.message }), 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '↑ 推送';
+            btn.textContent = window.t('cloudSync.push');
         }
     }
 }
@@ -235,24 +235,24 @@ async function handlePull(providerName) {
     var btn = document.querySelector('.cloud-sync-btn-pull[data-provider="' + providerName + '"]');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '拉取中...';
+        btn.textContent = window.t('cloudSync.pulling');
     }
-    showProviderProgress(providerName, '正在拉取...', 'info');
+    showProviderProgress(providerName, window.t('cloudSync.pullingStatus'), 'info');
 
     try {
         var result = await window.api.cloudSyncPull(providerName);
         if (result && result.success) {
-            showProviderProgress(providerName, '拉取完成', 'success');
+            showProviderProgress(providerName, window.t('cloudSync.pullDone'), 'success');
             await loadProviderStatus();
         } else {
-            showProviderProgress(providerName, (result && result.message) || '拉取失败', 'error');
+            showProviderProgress(providerName, (result && result.message) || window.t('cloudSync.pullFailed'), 'error');
         }
     } catch (e) {
-        showProviderProgress(providerName, '拉取失败：' + e.message, 'error');
+        showProviderProgress(providerName, window.t('cloudSync.pullFailedMsg', { message: e.message }), 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '↓ 拉取';
+            btn.textContent = window.t('cloudSync.pull');
         }
     }
 }
@@ -266,17 +266,17 @@ async function handleDisconnect(providerName) {
     try {
         var result = await window.api.cloudSyncDisconnect(providerName);
         if (result && result.success) {
-            showProviderProgress(providerName, '已断开连接', 'success');
+            showProviderProgress(providerName, window.t('cloudSync.disconnectDone'), 'success');
             await loadProviderStatus();
         } else {
-            showProviderProgress(providerName, (result && result.message) || '断开失败', 'error');
+            showProviderProgress(providerName, (result && result.message) || window.t('cloudSync.disconnectFailed'), 'error');
         }
     } catch (e) {
-        showProviderProgress(providerName, '断开失败：' + e.message, 'error');
+        showProviderProgress(providerName, window.t('cloudSync.disconnectFailedMsg', { message: e.message }), 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '断开';
+            btn.textContent = window.t('cloudSync.disconnect');
         }
     }
 }

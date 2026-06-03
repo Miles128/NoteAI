@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 from datetime import datetime
 from pathlib import Path
 
 from config import config
+from config.settings import WORKSPACE_APP_FOLDER
 
 _LOCK = threading.Lock()
 _LOG_REL = Path("wiki") / "log.md"
+_LEGACY_JSON = Path(WORKSPACE_APP_FOLDER) / "activity_log.json"
+_LEGACY_MD = Path(WORKSPACE_APP_FOLDER) / "log.md"
 _MAX_LINES_PER_DAY = 200
 
 
@@ -114,3 +118,135 @@ def parse_log_entries(limit: int = 100, workspace: str | None = None) -> list[di
             "detail": detail.strip(),
         })
     return entries[-limit:]
+
+
+def _legacy_json_path(workspace: str | None = None) -> Path | None:
+    ws = workspace or config.workspace_path
+    if not ws:
+        return None
+    return Path(ws) / _LEGACY_JSON
+
+
+def _legacy_md_path(workspace: str | None = None) -> Path | None:
+    ws = workspace or config.workspace_path
+    if not ws:
+        return None
+    return Path(ws) / _LEGACY_MD
+
+
+def _parse_legacy_json_entries(path: Path) -> list[dict]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        ts = item.get("ts")
+        try:
+            dt = datetime.fromtimestamp(float(ts))
+        except (TypeError, ValueError, OSError):
+            dt = datetime.now()
+        out.append({
+            "date": dt.strftime("%Y-%m-%d"),
+            "time": dt.strftime("%H:%M:%S"),
+            "type": str(item.get("type") or "event").lower(),
+            "msg": str(item.get("msg") or "").strip(),
+            "detail": str(item.get("detail") or "").strip(),
+        })
+    return out
+
+
+def _parse_legacy_md_entries(path: Path) -> list[dict]:
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    entries: list[dict] = []
+    for raw in content.splitlines():
+        stripped = raw.strip()
+        if not stripped.startswith("- "):
+            continue
+        m = re.match(
+            r"^-\s+`(?P<time>[^`]+)`\s+(?:\*\*(?P<type>[A-Z_]+)\*\*\s+)?(?P<msg>.+)$",
+            stripped,
+        )
+        if not m:
+            continue
+        ts_raw = m.group("time").strip()
+        date = datetime.now().strftime("%Y-%m-%d")
+        time_part = ts_raw
+        if " " in ts_raw:
+            date, _, time_part = ts_raw.partition(" ")
+        entries.append({
+            "date": date,
+            "time": time_part,
+            "type": (m.group("type") or "event").lower(),
+            "msg": m.group("msg").strip(),
+            "detail": "",
+        })
+    return entries
+
+
+def _append_parsed_entries(entries: list[dict]) -> int:
+    if not entries:
+        return 0
+    path = log_path()
+    if not path:
+        return 0
+    try:
+        content = path.read_text(encoding="utf-8") if path.exists() else ""
+    except OSError:
+        content = ""
+    content = _ensure_header(content)
+    lines = content.split("\n") if content else []
+    added = 0
+    for entry in entries:
+        day_header = f"## {entry.get('date', datetime.now().strftime('%Y-%m-%d'))}"
+        if day_header not in lines:
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.append(day_header)
+        type_upper = str(entry.get("type") or "event").upper()
+        msg = str(entry.get("msg") or "").strip()
+        if not msg:
+            continue
+        line = f"- `{entry.get('time', '00:00:00')}` **{type_upper}** {msg}"
+        detail = str(entry.get("detail") or "").strip()
+        if detail:
+            line += f" — {detail}"
+        lines.append(line)
+        added += 1
+    if added:
+        path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return added
+
+
+def migrate_legacy_logs(workspace: str | None = None) -> dict:
+    """Merge legacy `.noteai/activity_log.json` and `.noteai/log.md` into wiki/log.md."""
+    ws = workspace or config.workspace_path
+    if not ws:
+        return {"success": False, "migrated": 0}
+
+    migrated = 0
+    json_path = _legacy_json_path(ws)
+    if json_path and json_path.exists():
+        migrated += _append_parsed_entries(_parse_legacy_json_entries(json_path))
+        try:
+            json_path.rename(json_path.with_suffix(".json.migrated"))
+        except OSError:
+            pass
+
+    md_path = _legacy_md_path(ws)
+    wiki_log = log_path(ws)
+    if md_path and md_path.exists() and wiki_log and md_path.resolve() != wiki_log.resolve():
+        migrated += _append_parsed_entries(_parse_legacy_md_entries(md_path))
+        try:
+            md_path.rename(md_path.with_name("log.md.migrated"))
+        except OSError:
+            pass
+
+    return {"success": True, "migrated": migrated}

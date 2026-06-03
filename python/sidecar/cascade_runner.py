@@ -18,7 +18,7 @@ from sidecar.cascade import (
     get_survey_path,
     update_existing_survey,
 )
-from sidecar.schema_manager import allows_wiki_edit
+from sidecar.schema_validator import check_wiki_writable
 
 MAX_RETRIES = 3
 RETRY_DELAY_SEC = 2.0
@@ -77,8 +77,8 @@ def run_cascade_survey_update(
     if not topic or not config.workspace_path:
         return {"success": False, "message": "未设置工作区或主题为空"}
 
-    if not allows_wiki_edit():
-        msg = "schema.md 禁止 AI 修改 wiki"
+    ok, msg = check_wiki_writable("更新主题综述")
+    if not ok:
         _emit_done(send_response, topic, False, msg)
         return {"success": False, "message": msg}
 

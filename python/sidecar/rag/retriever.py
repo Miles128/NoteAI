@@ -24,12 +24,11 @@ _RERANKER_LOCK = threading.Lock()
 
 
 def _reranker_enabled() -> bool:
-    """Reranker pulls torch + second OpenMP runtime; on macOS default off unless opted in."""
     if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
         return False
     if os.environ.get("NOTEAI_ENABLE_RERANKER", "").lower() in ("1", "true", "yes"):
         return True
-    return sys.platform != "darwin"
+    return True
 
 
 def _get_reranker():
@@ -78,7 +77,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     from sidecar.rag.profile import rewrite_query_with_profile
     profile_query = rewrite_query_with_profile(query)
 
-    from sidecar.rag.index import hybrid_search
+    from sidecar.rag.index import filter_usable_chunks, hybrid_search
     top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
     results = hybrid_search(
         workspace,
@@ -121,10 +120,11 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     if len(results) >= 2:
         results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=DEFAULT_TOP_K)
 
-    results = results[:DEFAULT_TOP_K]
+    results = filter_usable_chunks(results)[:DEFAULT_TOP_K]
 
     from sidecar.rag.context_expand import expand_retrieval_context
-    return expand_retrieval_context(results, topics=topics, workspace=workspace)
+    expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
+    return filter_usable_chunks(expanded)
 
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:

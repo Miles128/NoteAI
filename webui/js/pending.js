@@ -86,7 +86,7 @@ function loadPendingItems() {
     var countEl = document.getElementById('pending-view-count');
     if (!listEl) return;
 
-    listEl.innerHTML = '<div class="pending-view-empty">加载中...</div>';
+    listEl.innerHTML = '<div class="pending-view-empty">' + window.t('common.loading') + '</div>';
 
     var pendingP = (window.api && window.api.getAllPending)
         ? window.api.getAllPending()
@@ -108,7 +108,7 @@ function loadPendingItems() {
             _allTopics = topicOpts;
         }
 
-        if (countEl) countEl.textContent = count + ' 项';
+        if (countEl) countEl.textContent = window.t('common.pendingCount', { count: count });
 
         renderPendingList(items, listEl);
 
@@ -121,13 +121,13 @@ function loadPendingItems() {
         renderPendingActivityLog(seq, logResult, countEl, count);
     }).catch(function(e) {
         if (seq !== _pendingLoadSeq) return;
-        listEl.innerHTML = '<div class="pending-view-empty">加载失败: ' + window.escapeHtml(String(e)) + '</div>';
+        listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.loadFailed', { error: String(e) }) + '</div>';
     });
 }
 
 function renderPendingList(items, listEl) {
     if (!items || items.length === 0) {
-        listEl.innerHTML = '<div class="pending-view-empty">所有事项已处理完毕 ✓</div>';
+        listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
         return;
     }
 
@@ -148,15 +148,15 @@ function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
     if (seq !== _pendingLoadSeq) return;
 
     if (logResult === null) {
-        logEl.innerHTML = '<div class="pending-view-empty">操作记录加载失败</div>';
+        logEl.innerHTML = '<div class="pending-view-empty">' + window.t('common.loading') + '</div>';
         return;
     }
 
     var logEntries = (logResult && logResult.entries) ? logResult.entries : [];
-    if (countEl) countEl.textContent = (pendingCount + logEntries.length) + ' 项';
+    if (countEl) countEl.textContent = window.t('common.pendingCount', { count: pendingCount + logEntries.length });
 
     if (logEntries.length === 0) {
-        logEl.innerHTML = '<div class="pending-view-empty">暂无操作记录</div>';
+        logEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.logEmpty') + '</div>';
         return;
     }
     var logHtml = '';
@@ -173,19 +173,19 @@ function renderPendingTopicItem(item, idx) {
     var title = window.escapeHtml(item.title || window.Path_stem(item.file));
 
     var html = '<div class="pending-item" data-pending-idx="' + idx + '" data-file="' + encodeURIComponent(item.file || '') + '">';
-    html += '<span class="pending-item-type type-topic">主题确认</span>';
+    html += '<span class="pending-item-type type-topic">' + window.t('pending.typeTopic') + '</span>';
     html += '<div class="pending-item-title">' + title + '</div>';
 
     html += '<div class="pending-item-assign">';
     html += '<select class="pending-topic-select" data-action="select-topic">';
-    html += '<option value="">选择主题...</option>';
+    html += '<option value="">' + window.t('pending.selectTopic') + '</option>';
     _allTopics.forEach(function(t) {
         html += '<option value="' + window.escapeAttr(t) + '">' + window.escapeHtml(t) + '</option>';
     });
     html += '</select>';
-    html += '<span class="pending-assign-or">或</span>';
-    html += '<input type="text" class="pending-custom-input" id="pending-custom-input-' + idx + '" placeholder="自定义主题...">';
-    html += '<button class="pending-assign-btn" data-action="resolve-topic">确认</button>';
+    html += '<span class="pending-assign-or">' + window.t('common.or') + '</span>';
+    html += '<input type="text" class="pending-custom-input" id="pending-custom-input-' + idx + '" placeholder="' + window.t('pending.customTopicPlaceholder') + '">';
+    html += '<button class="pending-assign-btn" data-action="resolve-topic">' + window.t('common.confirm') + '</button>';
     html += '</div>';
 
     html += '</div>';
@@ -198,14 +198,14 @@ function renderPendingLinkItem(item, idx) {
     var context = window.escapeHtml(item.context || '');
 
     var html = '<div class="pending-item" data-pending-idx="' + idx + '" data-source="' + encodeURIComponent(item.source || '') + '" data-target="' + encodeURIComponent(item.target || '') + '">';
-    html += '<span class="pending-item-type type-link">链接确认</span>';
+    html += '<span class="pending-item-type type-link">' + window.t('pending.typeLink') + '</span>';
     html += '<div class="pending-item-title">' + source + ' → ' + target + '</div>';
     if (context) {
         html += '<div class="pending-item-path">' + context + '</div>';
     }
     html += '<div class="pending-item-actions">';
-    html += '<button data-action="confirm-link">确认链接</button>';
-    html += '<button class="btn-reject" data-action="reject-link">拒绝</button>';
+    html += '<button data-action="confirm-link">' + window.t('pending.confirmLink') + '</button>';
+    html += '<button class="btn-reject" data-action="reject-link">' + window.t('pending.rejectLink') + '</button>';
     html += '</div>';
     html += '</div>';
     return html;
@@ -254,7 +254,7 @@ function resolvePendingTopicItem(filePath, topic, idx) {
         if (result && result.success) {
             removePendingItem(idx);
         } else {
-            var msg = (result && result.message) ? result.message : '操作失败';
+            var msg = (result && result.message) ? result.message : window.t('pending.operationFailed');
             if (typeof window.updateStatus === 'function') window.updateStatus(msg);
             loadPendingItems();
         }
@@ -270,7 +270,7 @@ function confirmPendingLink(fromPath, toPath, idx) {
         if (result && result.success) {
             removePendingItem(idx);
         } else {
-            var msg = (result && result.message) ? result.message : '操作失败';
+            var msg = (result && result.message) ? result.message : window.t('pending.operationFailed');
             if (typeof window.updateStatus === 'function') window.updateStatus(msg);
             loadPendingItems();
         }
@@ -314,10 +314,10 @@ function removePendingItem(idx) {
 function updatePendingCount() {
     var remaining = document.querySelectorAll('.pending-item').length;
     var countEl = document.getElementById('pending-view-count');
-    if (countEl) countEl.textContent = remaining + ' 项待处理';
+    if (countEl) countEl.textContent = window.t('common.pendingRemaining', { count: remaining });
     if (remaining === 0) {
         var listEl = document.getElementById('pending-view-list');
-        if (listEl) listEl.innerHTML = '<div class="pending-view-empty">所有事项已处理完毕 🎉</div>';
+        if (listEl) listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.allDoneCelebration') + '</div>';
     }
 }
 
@@ -330,14 +330,14 @@ function refreshPendingBtnState() {
             var badge = btn.querySelector('.pending-badge');
             if (count > 0) {
                 btn.classList.add('has-pending');
-                btn.title = '待办事项 (' + count + ')';
+                btn.title = window.t('pending.todoBadge', { count: count });
                 if (badge) {
                     badge.textContent = count > 99 ? '99+' : count;
                     badge.style.display = '';
                 }
             } else {
                 btn.classList.remove('has-pending');
-                btn.title = '待办事项';
+                btn.title = window.t('pending.todoBadgeEmpty');
                 if (badge) badge.style.display = 'none';
             }
         }

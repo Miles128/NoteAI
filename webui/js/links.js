@@ -9,7 +9,7 @@ window.LinksModule = (function() {
 
         var html = '<div class="link-view">';
         html += '<div class="link-view-header">';
-        html += '<span class="link-view-title">双向链接</span>';
+        html += '<span class="link-view-title">' + window.t('links.title') + '</span>';
         html += '</div>';
 
         html += '<div class="link-progress" id="link-progress" style="display:none;">';
@@ -33,7 +33,7 @@ window.LinksModule = (function() {
         var selPath = window.AppState ? window.AppState.selectedFilePath : null;
         var result = await window.api.getBacklinks(selPath || '');
         if (!result || !result.success) {
-            if (emptyEl) emptyEl.textContent = '无法加载链接数据';
+            if (emptyEl) emptyEl.textContent = window.t('links.loadFailed');
             return;
         }
 
@@ -42,7 +42,7 @@ window.LinksModule = (function() {
 
         if (confirmedLinks.length === 0) {
             if (emptyEl) emptyEl.style.display = '';
-            if (emptyEl) emptyEl.textContent = '暂无链接';
+            if (emptyEl) emptyEl.textContent = window.t('links.empty');
             listEl.innerHTML = '';
         } else {
             if (emptyEl) emptyEl.style.display = 'none';
@@ -89,36 +89,36 @@ window.LinksModule = (function() {
         try {
             var apiCfg = await window.api.getApiConfig();
             if (!apiCfg || !apiCfg.api_key) {
-                alert('请先在设置中配置 API Key');
+                alert(window.t('links.configureApiKey'));
                 return;
             }
         } catch (e) {
-            alert('无法获取 API 配置: ' + (e.message || e));
+            alert(window.t('links.apiConfigFailed') + (e.message || e));
             return;
         }
 
-        if (btn) { btn.disabled = true; btn.title = '检查中...'; }
+        if (btn) { btn.disabled = true; btn.title = window.t('links.checking'); }
         if (progressEl) progressEl.style.display = '';
         if (progressFill) progressFill.style.width = '5%';
-        if (progressText) progressText.textContent = '正在测试 API 连接...';
+        if (progressText) progressText.textContent = window.t('links.testingApi');
         if (emptyEl) emptyEl.style.display = 'none';
 
         try {
             var connResult = await window.api.invoke('test_api_connection', {});
             if (!connResult || !connResult.success) {
-                if (progressText) progressText.textContent = 'API 连接失败: ' + ((connResult && connResult.message) || '未知错误');
-                if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
+                if (progressText) progressText.textContent = window.t('links.apiFailed') + ((connResult && connResult.message) || window.t('common.unknownError'));
+                if (btn) { btn.disabled = false; btn.title = window.t('sidebar.discoverLinksTitle'); }
                 return;
             }
         } catch (e) {
-            if (progressText) progressText.textContent = 'API 连接测试出错: ' + (e.message || e);
-            if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
+            if (progressText) progressText.textContent = window.t('links.apiTestError') + (e.message || e);
+            if (btn) { btn.disabled = false; btn.title = window.t('sidebar.discoverLinksTitle'); }
             return;
         }
 
-        if (btn) btn.title = '分析中...';
+        if (btn) btn.title = window.t('links.analyzing');
         if (progressFill) progressFill.style.width = '10%';
-        if (progressText) progressText.textContent = '正在读取文件并构建候选对...';
+        if (progressText) progressText.textContent = window.t('links.buildingPairs');
 
         if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
         var _isTauri = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -144,18 +144,13 @@ window.LinksModule = (function() {
                             if (progressFill) progressFill.style.width = '100%';
                             if (progressText) {
                                 if (result.success) {
-                                    var msg = '完成：扫描 ' + (result.files_scanned || '?') + ' 个文件';
-                                    if (result.new_links > 0) {
-                                        msg += '，发现 ' + result.new_links + ' 个新关联';
-                                    } else {
-                                        msg += '，未发现新关联';
-                                    }
+                                    var msg = result.new_links > 0 ? window.t('links.discoverDone', { files: result.files_scanned || '?', count: result.new_links }) : window.t('links.discoverNone', { files: result.files_scanned || '?' });
                                     progressText.textContent = msg;
                                 } else {
-                                    progressText.textContent = result.message || '发现失败';
+                                    progressText.textContent = result.message || window.t('links.discoverFailed');
                                 }
                             }
-                            if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
+                            if (btn) { btn.disabled = false; btn.title = window.t('sidebar.discoverLinksTitle'); }
                             setTimeout(function() {
                                 if (progressEl) progressEl.style.display = 'none';
                                 loadGraphView();
@@ -172,13 +167,13 @@ window.LinksModule = (function() {
             var startResult = await window.api.discoverLinks();
             if (!startResult || !startResult.success) {
                 if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
-                if (progressText) progressText.textContent = (startResult && startResult.message) || '启动失败';
-                if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
+                if (progressText) progressText.textContent = (startResult && startResult.message) || window.t('links.startFailed');
+                if (btn) { btn.disabled = false; btn.title = window.t('sidebar.discoverLinksTitle'); }
             }
         } catch (e) {
             if (_linkDiscoveryUnlisten) { _linkDiscoveryUnlisten(); _linkDiscoveryUnlisten = null; }
-            if (progressText) progressText.textContent = '错误: ' + (e.message || e);
-            if (btn) { btn.disabled = false; btn.title = '发现链接：AI 分析文章关联'; }
+            if (progressText) progressText.textContent = window.t('app.errorPrefix') + (e.message || e);
+            if (btn) { btn.disabled = false; btn.title = window.t('sidebar.discoverLinksTitle'); }
         }
     }
 

@@ -252,7 +252,7 @@ async function saveWizardResult() {
     var schema = $('schema-wizard-preview');
     var content = schema ? schema.value : buildSchemaMarkdown();
     if (!window.api || !window.api.saveSchema) {
-        throw new Error('saveSchema 不可用');
+        throw new Error(window.t('schemaWizard.saveUnavailable'));
     }
     await window.api.saveSchema(content);
     if (window.api.saveProjectRules) {
@@ -265,7 +265,7 @@ async function finishWizard() {
         await saveWizardResult();
         hideModal();
         if (typeof window.updateStatus === 'function') {
-            window.updateStatus('工作区 Schema 已保存');
+            window.updateStatus(window.t('schemaWizard.saved'));
         }
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             await window.TreeModule.loadFileTree(true);
@@ -277,7 +277,7 @@ async function finishWizard() {
     } catch (e) {
         console.error('[SchemaWizard] save failed:', e);
         if (typeof window.updateStatus === 'function') {
-            window.updateStatus('保存 Schema 失败: ' + e.message);
+            window.updateStatus(window.t('schemaWizard.saveFailed', { message: e.message }));
         }
     }
 }
@@ -317,7 +317,7 @@ function initSchemaWizard() {
             readStateFromDom();
             if (_currentStep === 1 && !state.domains.length && !state.customDomains) {
                 if (typeof window.updateStatus === 'function') {
-                    window.updateStatus('请至少选择一个知识领域');
+                    window.updateStatus(window.t('schemaWizard.selectDomain'));
                 }
                 return;
             }

@@ -12,6 +12,16 @@ _DENSE_DIM = 512
 _load_lock = threading.Lock()
 
 
+def is_usable_chunk(result: dict) -> bool:
+    """Drop hits with no body text — sparse-only Milvus rows can be metadata-only."""
+    content = (result.get("content") or "").strip()
+    return bool(content)
+
+
+def filter_usable_chunks(results: list[dict]) -> list[dict]:
+    return [r for r in results if is_usable_chunk(r)]
+
+
 def _db_path(workspace: str) -> str:
     p = _rag_index_dir(workspace) / "milvus_lite.db"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -152,6 +162,24 @@ def _load_sparse_index(workspace: str) -> dict:
         return {}
 
 
+def _purge_stale_sparse_ids(workspace: str, stale_ids: list[str]):
+    path = _sparse_index_path(workspace)
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        changed = False
+        for cid in stale_ids:
+            if cid in data:
+                del data[cid]
+                changed = True
+        if changed:
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            logger.debug("Purged %d stale sparse index entries", len(stale_ids))
+    except Exception:
+        pass
+
+
 def hybrid_search(
     workspace: str,
     query_dense: list[float],
@@ -230,6 +258,7 @@ def hybrid_search(
             "score": float(combined),
         }
 
+    stale_ids = []
     for chunk_id, sparse_score in sparse_scores.items():
         if chunk_id not in results_map and sparse_score > 0.3:
             try:
@@ -241,6 +270,10 @@ def hybrid_search(
                 )
                 if lookup:
                     hit = lookup[0]
+                    content = (hit.get("content") or "").strip()
+                    if not content:
+                        stale_ids.append(chunk_id)
+                        continue
                     tags_val = hit.get("tags", "[]")
                     try:
                         tags_list = json.loads(tags_val) if isinstance(tags_val, str) else tags_val
@@ -248,7 +281,7 @@ def hybrid_search(
                         tags_list = []
                     results_map[chunk_id] = {
                         "id": chunk_id,
-                        "content": hit.get("content", ""),
+                        "content": content,
                         "file_path": hit.get("file_path", ""),
                         "topic": hit.get("topic", ""),
                         "tags": tags_list,
@@ -257,11 +290,16 @@ def hybrid_search(
                         "sparse_score": float(sparse_score),
                         "score": float(0.3 * sparse_score),
                     }
+                else:
+                    stale_ids.append(chunk_id)
             except Exception:
                 pass
 
+    if stale_ids:
+        _purge_stale_sparse_ids(workspace, stale_ids)
+
     sorted_results = sorted(results_map.values(), key=lambda x: x["score"], reverse=True)
-    return sorted_results[:top_k]
+    return filter_usable_chunks(sorted_results)[:top_k]
 
 
 def _escape_filter_value(value: str) -> str:

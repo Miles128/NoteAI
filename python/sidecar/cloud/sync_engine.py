@@ -15,7 +15,7 @@ class SyncEngine:
     def __init__(self, workspace_path: str, provider: CloudProvider):
         self._workspace = workspace_path
         self._provider = provider
-        self._noteai_dir = os.path.join(workspace_path, "NoteAI")
+        self._noteai_dir = os.path.join(workspace_path, ".noteai")
         self._state_path = os.path.join(self._noteai_dir, STATE_FILE)
         self._config_path = os.path.join(self._noteai_dir, CONFIG_FILE)
 

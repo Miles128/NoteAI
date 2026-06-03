@@ -459,32 +459,16 @@ def append_changelog(message: str):
 
 
 def get_changelog(limit: int = 50) -> list[dict]:
-    workspace = config.workspace_path
-    if not workspace:
-        return []
+    from utils.workspace_log import parse_log_entries
 
-    log_path = Path(workspace) / "wiki" / "log.md"
-    if not log_path.exists():
-        return []
-
-    try:
-        content = log_path.read_text(encoding='utf-8')
-    except Exception:
-        return []
-
-    entries = []
-    for line in content.split('\n'):
-        m = re.match(
-            r'^-\s+`(\d{2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})`\s+(?:\*\*[A-Z_]+\*\*\s+)?(.+)$',
-            line.strip(),
-        )
-        if m:
-            entries.append({
-                "timestamp": m.group(1),
-                "message": m.group(2),
-            })
-
-    return entries[-limit:]
+    rows = parse_log_entries(limit)
+    return [
+        {
+            "timestamp": f"{row.get('date', '')} {row.get('time', '')}".strip(),
+            "message": row.get("msg", ""),
+        }
+        for row in rows
+    ]
 
 
 def check_and_generate_surveys(on_progress=None) -> dict:
@@ -557,37 +541,5 @@ def check_and_generate_surveys(on_progress=None) -> dict:
 
 
 def _read_survey_status_from_wiki() -> dict:
-    workspace = config.workspace_path
-    if not workspace:
-        return {}
-    from sidecar.wiki_utils import resolve_wiki_path
-    wiki_path = resolve_wiki_path(workspace)
-    if not wiki_path.exists():
-        return {}
-    try:
-        text = wiki_path.read_text(encoding='utf-8')
-        lines = text.split('\n')
-        surveys = {}
-        current_parent = ''
-        for i in range(len(lines)):
-            stripped = lines[i].strip()
-            if stripped.startswith('## '):
-                current_parent = stripped[3:].strip()
-                is_off = False
-                if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                    is_off = True
-                surveys[current_parent] = not is_off
-            elif stripped.startswith('### ') and current_parent:
-                child = stripped[4:].strip()
-                full = TOPIC_SEP.join([current_parent, child])
-                parent_on = surveys.get(current_parent, True)
-                if parent_on:
-                    surveys[full] = False
-                else:
-                    is_off = False
-                    if i + 1 < len(lines) and lines[i + 1].strip() == '> 综述: off':
-                        is_off = True
-                    surveys[full] = not is_off
-        return surveys
-    except Exception:
-        return {}
+    from sidecar.wiki_utils import get_survey_status
+    return get_survey_status()

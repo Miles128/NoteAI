@@ -220,6 +220,9 @@ function showSettings() {
     if (window.SettingsModule && window.SettingsModule.loadUserProfile) {
         window.SettingsModule.loadUserProfile();
     }
+    if (window.SettingsModule && window.SettingsModule.loadUiConfigToForm) {
+        window.SettingsModule.loadUiConfigToForm();
+    }
     if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
         window.SettingsModule.switchSettingsTab('model');
     }

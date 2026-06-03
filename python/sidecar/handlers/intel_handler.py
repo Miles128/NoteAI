@@ -143,6 +143,8 @@ class IntelHandler(BaseHandler):
 
     def _search_files(self, params):
         query = params.get("query", "").strip()
+        topic_filter = (params.get("topic") or "").strip()
+        tag_filter = (params.get("tag") or "").strip()
         if not query:
             return {"success": True, "results": [], "query": "", "count": 0}
 
@@ -155,6 +157,7 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": "工作区不存在"}
 
         from utils.fulltext_index import fulltext_index
+        from sidecar.textutils import parse_frontmatter as sidecar_parse_fm
 
         raw_results = fulltext_index.search(query)
         results = []
@@ -163,6 +166,23 @@ class IntelHandler(BaseHandler):
                 fpath = workspace_path / item["path"]
                 text = fpath.read_text(encoding="utf-8")
             except Exception:
+                continue
+
+            fm, _ = sidecar_parse_fm(text)
+            fm = fm or {}
+            file_topic = fm.get("topic", "")
+            if isinstance(file_topic, list):
+                file_topic = file_topic[0] if file_topic else ""
+            file_topic = str(file_topic or "").strip()
+            if topic_filter and topic_filter not in file_topic:
+                continue
+            raw_tags = fm.get("tags", [])
+            tags: list[str] = []
+            if isinstance(raw_tags, list):
+                tags = [str(t).strip() for t in raw_tags if t]
+            elif isinstance(raw_tags, str) and raw_tags.strip():
+                tags = [raw_tags.strip()]
+            if tag_filter and tag_filter not in tags:
                 continue
 
             title = Path(item["path"]).stem
@@ -178,6 +198,8 @@ class IntelHandler(BaseHandler):
                 "snippet": item.get("snippet", ""),
                 "name": Path(item["path"]).name,
                 "matches": item.get("score", 0),
+                "topic": file_topic,
+                "tags": tags,
             })
 
         return {
@@ -185,6 +207,7 @@ class IntelHandler(BaseHandler):
             "results": results,
             "query": query,
             "count": len(results),
+            "filters": {"topic": topic_filter, "tag": tag_filter},
         }
 
     def register_routes(self, router):

@@ -87,6 +87,356 @@ def cleanup_stale_links() -> int:
     return changed
 
 
+def _title_mentioned_in_text(title: str, body: str) -> bool:
+    if not title or not body:
+        return False
+    norm_title = _normalize_for_match(title)
+    if len(norm_title) < 2:
+        return False
+    norm_body = _normalize_for_match(body)
+    return norm_title in norm_body
+
+
+def _link_key(from_path: str, to_path: str) -> tuple[str, str]:
+    return tuple(sorted([from_path, to_path]))
+
+
+def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[str, Any]:
+    """After save: local heuristics → pending links (same topic / title mention)."""
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区", "added": 0}
+
+    ws = Path(workspace)
+    full = ws / file_path if not Path(file_path).is_absolute() else Path(file_path)
+    if not full.exists() or full.suffix.lower() != ".md":
+        return {"success": False, "message": "非 Markdown 文件", "added": 0}
+
+    rel = str(full.relative_to(ws))
+    source = _parse_file_meta(full)
+    if not source:
+        return {"success": False, "message": "无法解析文件", "added": 0}
+
+    try:
+        _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
+    except OSError:
+        body = ""
+
+    existing = load_links()
+    existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])}
+    suggestions: list[tuple[dict, int, str]] = []
+
+    for md in _iter_md_files(ws):
+        other_rel = str(md.relative_to(ws))
+        if other_rel == rel:
+            continue
+        other = _parse_file_meta(md)
+        if not other:
+            continue
+        key = _link_key(rel, other_rel)
+        if key in existing_keys:
+            continue
+
+        reason = ""
+        priority = 0
+        if source.get("topic") and source["topic"] == other.get("topic"):
+            priority = 1
+            reason = f"同主题「{source['topic']}」"
+        elif _title_mentioned_in_text(other.get("title", ""), body):
+            priority = 2
+            reason = f"正文提及「{other['title']}」"
+        elif _title_mentioned_in_text(source.get("title", ""), other.get("summary", "")):
+            priority = 3
+            reason = f"对方摘要提及「{source['title']}」"
+
+        if priority:
+            suggestions.append((other, priority, reason))
+
+    suggestions.sort(key=lambda x: x[1])
+    merged = list(existing.get("links", []))
+    added = 0
+    for other, _prio, reason in suggestions[:max_suggestions]:
+        key = _link_key(rel, other["path"])
+        if key in existing_keys:
+            continue
+        merged.append({
+            "from": rel,
+            "to": other["path"],
+            "reason": reason,
+            "status": "pending",
+        })
+        existing_keys.add(key)
+        added += 1
+
+    if added:
+        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+
+    return {
+        "success": True,
+        "added": added,
+        "file": rel,
+        "message": f"建议 {added} 条待确认链接" if added else "无新链接建议",
+    }
+
+
+CROSS_REF_MIN = 0
+CROSS_REF_MAX = 25  # soft cap when ranking very long candidate lists
+
+
+def _vector_search_candidates(
+    source_meta: dict[str, Any],
+    body: str,
+    exclude_rel: str,
+    *,
+    limit: int = 30,
+) -> list[tuple[str, float, str]]:
+    """RAG hybrid search → candidate rel_paths with scores."""
+    workspace = config.workspace_path
+    if not workspace:
+        return []
+
+    query = f"{source_meta.get('title', '')}\n{body[:800]}".strip()
+    if not query:
+        return []
+
+    try:
+        from sidecar.rag.embedder import encode_query
+        from sidecar.rag.index import hybrid_search
+
+        qemb = encode_query(query)
+        if not qemb.get("dense_vec"):
+            return []
+        hits = hybrid_search(
+            workspace,
+            qemb["dense_vec"],
+            qemb.get("lexical_weights") or {},
+            top_k=limit + 5,
+        )
+    except Exception as e:
+        logger.warning(f"[link_indexer] vector search failed: {e}")
+        return []
+
+    out: list[tuple[str, float, str]] = []
+    seen: set[str] = set()
+    for hit in hits:
+        rel = hit.get("file_path", "")
+        if not rel or rel == exclude_rel or rel in seen:
+            continue
+        seen.add(rel)
+        score = float(hit.get("score") or hit.get("dense_score") or 0.0)
+        out.append((rel, score, "语义相关"))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _one_hop_neighbors(rel_path: str, links: list[dict]) -> list[tuple[str, str]]:
+    """Confirmed links → 1-hop neighbor paths."""
+    neighbors: list[tuple[str, str]] = []
+    for link in links:
+        if link.get("status") != "confirmed":
+            continue
+        other = ""
+        if link.get("from") == rel_path:
+            other = link.get("to", "")
+        elif link.get("to") == rel_path:
+            other = link.get("from", "")
+        if other:
+            neighbors.append((other, "已确认链接的邻居"))
+    return neighbors
+
+
+def _llm_pick_cross_refs(
+    source_meta: dict[str, Any],
+    body_excerpt: str,
+    candidates: list[dict[str, Any]],
+    *,
+    max_links: int,
+) -> list[dict[str, Any]]:
+    if not candidates:
+        return []
+
+    from utils.llm_utils import call_llm_raw, check_api_config
+
+    ok, msg = check_api_config()
+    if not ok:
+        logger.warning(f"[link_indexer] cross-ref LLM skipped: {msg}")
+        return candidates[:max_links] if max_links > 0 else candidates
+
+    lines = []
+    idx_map: dict[int, dict[str, Any]] = {}
+    for i, c in enumerate(candidates[:40], start=1):
+        idx_map[i] = c
+        lines.append(
+            f"[{i}] 《{c.get('title', '')}》 topic={c.get('topic') or '-'} "
+            f"tags={','.join(c.get('tags') or [])}\n    {c.get('summary', '')[:200]}"
+        )
+
+    prompt = f"""你是知识库双向链接编辑。源文章：
+《{source_meta.get('title', '')}》
+摘要：{body_excerpt[:400]}
+
+从下列候选中选出**所有**与源文章有实质关联的笔记（概念重叠、补充、前置知识均可）。数量不设下限或上限，只排除弱相关。
+返回 JSON 数组，每项 {{"id": 编号, "reason": "10字内原因"}}。只返回 JSON。
+
+候选：
+{chr(10).join(lines)}"""
+
+    try:
+        response = call_llm_raw(prompt, temperature=0.2)
+        json_match = re.search(r"\[[\s\S]*\]", response)
+        if not json_match:
+            return candidates[:max_links] if max_links > 0 else candidates
+        picked = json.loads(json_match.group(0))
+        out: list[dict[str, Any]] = []
+        for item in picked:
+            idx = item.get("id")
+            if idx in idx_map:
+                row = dict(idx_map[idx])
+                row["reason"] = item.get("reason") or row.get("reason", "相关")
+                out.append(row)
+            if max_links > 0 and len(out) >= max_links:
+                break
+        return out if out else (candidates[:max_links] if max_links > 0 else candidates)
+    except Exception as e:
+        logger.warning(f"[link_indexer] cross-ref LLM error: {e}")
+        return candidates[:max_links] if max_links > 0 else candidates
+
+
+def discover_cross_refs_for_file(
+    file_path: str,
+    *,
+    min_links: int = CROSS_REF_MIN,
+    max_links: int = CROSS_REF_MAX,
+    use_llm: bool = True,
+) -> dict[str, Any]:
+    """
+    Suggest outgoing links for one note → stored in workspace/.links.json.
+
+    These are **directional** link records (from → to). Backlinks are derived
+    when querying the graph; the engine does not auto-insert [[wikilinks]] into
+    note bodies. Link count is quality-driven, not forced to a minimum.
+    """
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区", "added": 0}
+
+    ws = Path(workspace)
+    full = ws / file_path if not Path(file_path).is_absolute() else Path(file_path)
+    if not full.exists() or full.suffix.lower() != ".md":
+        return {"success": False, "message": "非 Markdown 文件", "added": 0}
+
+    rel = str(full.relative_to(ws))
+    source = _parse_file_meta(full)
+    if not source:
+        return {"success": False, "message": "无法解析文件", "added": 0}
+
+    try:
+        _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
+    except OSError:
+        body = ""
+
+    existing = load_links()
+    existing_links = existing.get("links", [])
+    existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links}
+
+    all_metas: dict[str, dict[str, Any]] = {}
+    for md in _iter_md_files(ws):
+        meta = _parse_file_meta(md)
+        if meta:
+            all_metas[meta["path"]] = meta
+
+    scored: dict[str, dict[str, Any]] = {}
+
+    def _add(path: str, score: float, reason: str, auto_confirm: bool) -> None:
+        if path == rel or path not in all_metas:
+            return
+        key = _link_key(rel, path)
+        if key in existing_keys:
+            return
+        prev = scored.get(path)
+        if prev and prev["score"] >= score:
+            return
+        scored[path] = {
+            "path": path,
+            "title": all_metas[path]["title"],
+            "topic": all_metas[path].get("topic"),
+            "tags": all_metas[path].get("tags") or [],
+            "summary": all_metas[path].get("summary", ""),
+            "score": score,
+            "reason": reason,
+            "auto_confirm": auto_confirm,
+        }
+
+    if source.get("topic"):
+        for path, meta in all_metas.items():
+            if meta.get("topic") == source["topic"]:
+                _add(path, 100.0, f"同主题「{source['topic']}」", True)
+
+    for path, meta in all_metas.items():
+        if _title_mentioned_in_text(meta.get("title", ""), body):
+            _add(path, 85.0, f"正文提及「{meta['title']}」", False)
+        elif _title_mentioned_in_text(source.get("title", ""), meta.get("summary", "")):
+            _add(path, 75.0, f"对方摘要提及「{source['title']}」", False)
+
+    src_tags = set(source.get("tags") or [])
+    if src_tags:
+        for path, meta in all_metas.items():
+            shared = src_tags & set(meta.get("tags") or [])
+            if shared:
+                _add(path, 65.0, f"共享标签「{next(iter(shared))}」", False)
+
+    for path, _score, reason in _vector_search_candidates(source, body, rel):
+        _add(path, 60.0 + min(_score, 1.0) * 20.0, reason, False)
+
+    for path, reason in _one_hop_neighbors(rel, existing_links):
+        _add(path, 55.0, reason, False)
+
+    ranked = sorted(scored.values(), key=lambda x: x["score"], reverse=True)
+    if use_llm and len(ranked) > 3:
+        picked = _llm_pick_cross_refs(source, body, ranked, max_links=max_links)
+    else:
+        picked = ranked[:max_links] if max_links > 0 else ranked
+
+    merged = list(existing_links)
+    added = 0
+    confirmed = 0
+    pending = 0
+    for row in picked:
+        key = _link_key(rel, row["path"])
+        if key in existing_keys:
+            continue
+        auto = bool(row.get("auto_confirm") or row.get("score", 0) >= 90.0)
+        if use_llm:
+            auto = True
+        status = "confirmed" if auto else "pending"
+        merged.append({
+            "from": rel,
+            "to": row["path"],
+            "reason": row.get("reason", "交叉引用"),
+            "status": status,
+        })
+        existing_keys.add(key)
+        added += 1
+        if status == "confirmed":
+            confirmed += 1
+        else:
+            pending += 1
+
+    if added:
+        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+
+    return {
+        "success": True,
+        "added": added,
+        "confirmed": confirmed,
+        "pending": pending,
+        "file": rel,
+        "candidates": len(ranked),
+        "message": f"交叉引用 {added} 条（确认 {confirmed}，待办 {pending}）" if added else "无新交叉引用",
+    }
+
+
 def _read_file_topic(file_path: Path) -> str:
     try:
         text = file_path.read_text(encoding='utf-8')

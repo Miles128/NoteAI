@@ -108,7 +108,7 @@ async function loadFilePreview(path, fileName) {
     previewContent.innerHTML = `
         <div class="preview-loading">
             <div class="preview-spinner"></div>
-            <div>加载中...</div>
+            <div>${window.t('preview.loading')}</div>
         </div>
     `;
 
@@ -141,7 +141,7 @@ async function loadFilePreview(path, fileName) {
                 content: result.content || result.full_text || '',
                 contentKind: result.content_kind || 'text',
                 metadata: result.metadata || {
-                    type: isDocx ? 'Word 文档' : undefined,
+                    type: isDocx ? window.t('preview.typeWord') : undefined,
                     size: result.file_size,
                 },
                 pdfData: result
@@ -216,12 +216,12 @@ async function loadFilePreview(path, fileName) {
                 renderPreviewContent(currentPreviewData);
             }
         } else {
-            showPreviewError('加载失败', result?.error || result?.message || '无法读取文件');
+            showPreviewError(window.t('preview.loadFailed'), result?.error || result?.message || window.t('preview.cannotRead'));
         }
     } catch (e) {
         console.error('[Preview] Load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPreviewError('加载失败', e.message);
+            showPreviewError(window.t('preview.loadFailed'), e.message);
         }
     }
 }
@@ -237,18 +237,18 @@ async function loadPdfViewer(path, fileName, requestId) {
                     <span class="pdf-file-name">${escapeHtml(fileName)}</span>
                 </div>
                 <div class="pdf-toolbar-center">
-                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="上一页">
+                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="${window.t('preview.prevPage')}">
                         ${window.Icons.get('chevronLeft', 16)}
                     </button>
                     <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
-                    <button class="pdf-nav-btn" id="pdf-next-btn" title="下一页">
+                    <button class="pdf-nav-btn" id="pdf-next-btn" title="${window.t('preview.nextPage')}">
                         ${window.Icons.get('chevronRight', 16)}
                     </button>
                 </div>
                 <div class="pdf-toolbar-right">
-                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="缩小">−</button>
+                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="${window.t('preview.zoomOut')}">−</button>
                     <span class="pdf-zoom-level" id="pdf-zoom-level">100%</span>
-                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="放大">+</button>
+                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="${window.t('preview.zoomIn')}">+</button>
                 </div>
             </div>
             <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
@@ -267,7 +267,7 @@ async function loadPdfViewer(path, fileName, requestId) {
         if (requestId !== currentLoadRequestId) return;
 
         if (!rawResult || !rawResult.success) {
-            showPdfError('加载失败', rawResult ? rawResult.message : '无法读取文件');
+            showPdfError(window.t('preview.loadFailed'), rawResult ? rawResult.message : window.t('preview.cannotRead'));
             return;
         }
 
@@ -279,7 +279,7 @@ async function loadPdfViewer(path, fileName, requestId) {
         }
 
         if (typeof pdfjsLib === 'undefined') {
-            showPdfError('PDF 查看器未加载', 'pdf.js 库不可用，请检查网络连接');
+            showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
             return;
         }
 
@@ -371,7 +371,7 @@ async function loadPdfViewer(path, fileName, requestId) {
     } catch (e) {
         console.error('[Preview] PDF load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPdfError('PDF 加载失败', e.message || '未知错误');
+            showPdfError(window.t('preview.pdfLoadFailed'), e.message || window.t('common.unknownError'));
         }
     }
 }
@@ -426,18 +426,18 @@ function renderPreviewContent(previewData) {
         previewHtml += `
             <div class="preview-file-info">
                 <div class="preview-file-info-row">
-                    <span class="preview-file-info-label">类型:</span>
-                    <span class="preview-file-info-value">${metadata.type || '未知'}</span>
+                    <span class="preview-file-info-label">${window.t('preview.typeLabel')}</span>
+                    <span class="preview-file-info-value">${metadata.type || window.t('preview.unknownType')}</span>
                 </div>
                 ${metadata.size ? `
                     <div class="preview-file-info-row">
-                        <span class="preview-file-info-label">大小:</span>
+                        <span class="preview-file-info-label">${window.t('preview.sizeLabel')}</span>
                         <span class="preview-file-info-value">${formatFileSize(metadata.size)}</span>
                     </div>
                 ` : ''}
                 ${metadata.modified ? `
                     <div class="preview-file-info-row">
-                        <span class="preview-file-info-label">修改时间:</span>
+                        <span class="preview-file-info-label">${window.t('preview.modifiedLabel')}</span>
                         <span class="preview-file-info-value">${formatModifiedTime(metadata.modified)}</span>
                     </div>
                 ` : ''}
@@ -479,7 +479,7 @@ function renderPreviewContent(previewData) {
 function renderDocxPreviewHtml(content, contentKind) {
     const body = content || '';
     if (!body.trim()) {
-        return '<div class="preview-content docx-preview"><p class="docx-preview-empty">（文档无可见正文）</p></div>';
+        return '<div class="preview-content docx-preview"><p class="docx-preview-empty">' + window.t('preview.docxEmpty') + '</p></div>';
     }
     if (contentKind === 'html') {
         const safe = typeof DOMPurify !== 'undefined'
@@ -547,7 +547,7 @@ function closePreview() {
         previewContent.innerHTML = `
             <div class="preview-empty">
                 ${window.Icons.get('fileDoc', 48)}
-                <div>选择一个文件查看预览</div>
+                <div>${window.t('preview.selectFile')}</div>
             </div>
         `;
     }
@@ -598,7 +598,7 @@ window.showPreview = function(options) {
         return;
     }
     const path = options.path;
-    const name = options.name || path.split('/').pop() || '预览';
+    const name = options.name || path.split('/').pop() || window.t('preview.defaultName');
     window.PreviewModule.loadFilePreview(path, name);
 };
 

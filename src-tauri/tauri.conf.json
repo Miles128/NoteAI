@@ -5,8 +5,8 @@
   "identifier": "com.noteai.app",
   "build": {
     "frontendDist": "../webui",
-    "beforeDevCommand": "npm run build:tiptap",
-    "beforeBuildCommand": "npm run build:tiptap"
+    "beforeDevCommand": "npm --prefix .. run build:tiptap",
+    "beforeBuildCommand": ""
   },
   "app": {
     "withGlobalTauri": true,

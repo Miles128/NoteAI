@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use tauri::LogicalPosition;
 use tauri::Manager;
 
@@ -129,24 +130,31 @@ pub async fn open_file_in_new_window(
     let state = app.state::<AppState>();
     let safe_path = validate_workspace_path(&state, &path)?;
 
-    tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         window_label,
-        WebviewUrl::App("index.html".into())
+        WebviewUrl::App("index.html".into()),
     )
     .title(window_title)
     .inner_size(1000.0, 700.0)
     .min_inner_size(800.0, 600.0)
-    .decorations(true)
-    .title_bar_style(tauri::TitleBarStyle::Overlay)
-    .hidden_title(true)
-    .traffic_light_position(LogicalPosition::new(14.0, 22.0))
-    .initialization_script(format!(
-        "window.__PREVIEW_FILE_PATH__ = {}; window.__IS_PREVIEW_WINDOW__ = true;",
-        serde_json::to_string(&safe_path).unwrap_or_else(|_| "\"\"".to_string())
-    ))
-    .build()
-    .map_err(|e| format!("Failed to create window: {}", e))?;
+    .decorations(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .traffic_light_position(LogicalPosition::new(14.0, 22.0));
+    }
+
+    builder
+        .initialization_script(format!(
+            "window.__PREVIEW_FILE_PATH__ = {}; window.__IS_PREVIEW_WINDOW__ = true;",
+            serde_json::to_string(&safe_path).unwrap_or_else(|_| "\"\"".to_string())
+        ))
+        .build()
+        .map_err(|e| format!("Failed to create window: {}", e))?;
 
     Ok(())
 }

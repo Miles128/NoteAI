@@ -8,25 +8,35 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      PYTHONUTF8: "1"
+      NOTEAI_DISABLE_RERANKER: "1"
+      LANGCHAIN_TRACING_V2: "false"
+      LANGSMITH_TRACING: "false"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
-      - name: Install Python
-        run: uv python install 3.10
-
-      - name: Install dependencies
+      - name: Install Python and dependencies
         run: |
-          uv sync
-          uv sync --extra dev
+          uv python install 3.10
+          uv sync --python 3.10 --extra dev
 
       - name: Tests
-        run: uv run pytest -q
+        run: uv run pytest --tb=short -p no:langsmith
 
   rust-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -34,14 +44,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            pkg-config \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
+            libxdo-dev \
             patchelf
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -50,7 +69,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-clippy-
 
       - name: Cargo clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings

@@ -89,6 +89,8 @@ indent-style = "space"
 [tool.pytest.ini_options]
 pythonpath = [".", "python"]
 testpaths = ["tests/unit", "tests/integration"]
+# langsmith pytest plugin (from langchain) can break headless CI without API keys
+addopts = ["-p", "no:langsmith"]
 filterwarnings = [
     # jieba 仍依赖 pkg_resources；在项目侧无法改第三方实现
     "ignore:pkg_resources is deprecated:UserWarning:jieba._compat",

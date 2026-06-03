@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use tauri::path::BaseDirectory;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -105,7 +106,25 @@ pub async fn restart_python_sidecar(app: &AppHandle) -> Result<(), String> {
     result
 }
 
+fn python_ok(candidate: &Path) -> bool {
+    if !candidate.exists() {
+        return false;
+    }
+    let Ok(output) = std::process::Command::new(candidate).arg("--version").output() else {
+        return false;
+    };
+    let ver = String::from_utf8_lossy(&output.stdout);
+    !ver.contains("Python 2")
+}
+
 pub fn find_python() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("NOTEAI_PYTHON") {
+        let p = PathBuf::from(explicit);
+        if python_ok(&p) {
+            return Ok(p);
+        }
+    }
+
     let exe_dir = std::env::current_exe()
         .map_err(|e| e.to_string())?
         .parent()
@@ -113,6 +132,17 @@ pub fn find_python() -> Result<PathBuf, String> {
         .to_path_buf();
 
     let mut candidates: Vec<PathBuf> = vec![];
+
+    let resources = exe_dir.join("../Resources");
+    for name in ["sidecar-python/bin/python3", "sidecar-python/bin/python"] {
+        candidates.push(resources.join(name));
+    }
+
+    if let Ok(manifest) = std::env::var("CARGO_MANIFEST_DIR") {
+        let base = PathBuf::from(manifest).join("resources/sidecar-python/bin");
+        candidates.push(base.join("python3"));
+        candidates.push(base.join("python"));
+    }
 
     let mut dir = exe_dir.clone();
     for _ in 0..6 {
@@ -131,56 +161,52 @@ pub fn find_python() -> Result<PathBuf, String> {
     }
 
     for candidate in candidates {
-        if candidate.exists() {
-            if let Ok(output) = std::process::Command::new(&candidate)
-                .arg("--version")
-                .output()
-            {
-                let ver = String::from_utf8_lossy(&output.stdout);
-                if ver.contains("Python 2") {
-                    continue;
-                }
-            }
+        if python_ok(&candidate) {
             return Ok(candidate);
         }
     }
 
-    Err("Python not found. Please install Python 3.".into())
+    Err(
+        "Python not found. Install Python 3, set NOTEAI_PYTHON, or run scripts/bundle_sidecar_python.sh before release build.".into(),
+    )
+}
+
+fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Ok(path) = app.path().resolve("python/main.py", BaseDirectory::Resource) {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| e.to_string())?
+        .parent()
+        .ok_or("No parent dir")?
+        .to_path_buf();
+
+    let candidates = vec![
+        exe_dir.join("../Resources/python/main.py"),
+        exe_dir.join("..").join("python").join("main.py"),
+        exe_dir.join("..").join("..").join("python").join("main.py"),
+        exe_dir.join("..").join("..").join("..").join("python").join("main.py"),
+        PathBuf::from("python/main.py"),
+    ];
+
+    for candidate in candidates {
+        if let Some(path) = candidate.canonicalize().ok() {
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+    }
+
+    Err("Python sidecar main.py not found".into())
 }
 
 pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     let python_path = find_python()?;
 
-    let script_path = {
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| e.to_string())?
-            .parent()
-            .ok_or("No parent dir")?
-            .to_path_buf();
-
-        let candidates = vec![
-            exe_dir.join("..").join("python").join("main.py"),
-            exe_dir.join("..").join("..").join("python").join("main.py"),
-            exe_dir.join("..").join("..").join("..").join("python").join("main.py"),
-            std::path::PathBuf::from("python/main.py"),
-        ];
-
-        let mut found = None;
-        for candidate in candidates {
-            let canonicalized = candidate.canonicalize().ok();
-            if let Some(ref path) = canonicalized {
-                if path.exists() {
-                    found = Some(path.clone());
-                    break;
-                }
-            }
-        }
-
-        match found {
-            Some(p) => p,
-            None => return Err("Python sidecar main.py not found".into()),
-        }
-    };
+    let script_path = resolve_sidecar_script(&app)?;
 
     let hf_cache = hf_cache_dir();
     let hf_cache_str = hf_cache.to_string_lossy().to_string();

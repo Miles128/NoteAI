@@ -46,8 +46,8 @@ Tauri v2 shell (src-tauri/)
 - **`modules/abstract_generator.py`**: f-strings now use real `\n` (were literal `\\n` before fix — verify if regenerating surveys).
 - **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; Milvus eventual consistency could lose track of sparse index entries).
 - **`rag/retriever.py:_rerank()`**: no longer overwrites `score` with `rerank_score` — both fields preserved. Sort post-rerank uses `rerank_score`.
-- **`rag_handler.py:_execute_single_action()`** (line 374): lets LLM generate and execute arbitrary code. This is a security risk — any prompt injection can escape.
-- **`rag/index.py:hybrid_search()`** lines 212-224: sparse-only results get empty `content`/`file_path` — these reach the LLM with no usable text.
+- **`rag_chat_with_actions`**: aliases `rag_chat` only; LLM code execution path removed.
+- **`rag/index.py:hybrid_search()`**: sparse-only hits query Milvus for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
 - **Embedder module import** (`rag/embedder.py:7-11`): sets `os.environ["HF_ENDPOINT"]` and `NO_PROXY` at import time — affects entire process. Uses hf-mirror.com.
 - **`topic_assigner.py`** is 2100+ lines — mixes AI classification, wiki management, file operations, and dedup. Split pending.
 - **`IGNORED_DIRS`** (constants.py): lowercased match on `{"ai", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`.
@@ -59,8 +59,10 @@ Tauri v2 shell (src-tauri/)
 
 - **`webui/js/`**: vanilla JS IIFE modules on `window.*`, no bundler, no virtual DOM. State in `window.AppState` and `window.state`. `main.mjs` is the only ES module.
 - **Tauri sidecar**: configured in `src-tauri/tauri.conf.json`. Python binary resolved via `python/main.py` → `sidecar.server.main()`.
-- **Test coverage**: ~3-5% overall. No tests for any handler, RAG component, or business module. `tests/integration/test_sidecar_contracts.py` is the only integration test.
-- **Prompts** live in `prompts/` as Python module constants. YAML migration in `prompts/yaml/` is stalled at ~4%.
+- **Test coverage**: ~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
+- **Prompts**: Python constants in `prompts/` with parallel `prompts/yaml/` (loader supports both).
+- **Sidecar Python**: dev uses project `.venv`; release can bundle `src-tauri/resources/sidecar-python` via `scripts/bundle_sidecar_python.sh`, or set `NOTEAI_PYTHON`.
+- **`rag_enabled`**: default `false` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
 
 
 ---

@@ -25,6 +25,7 @@ venv/
 ENV/
 env/
 .venv/
+src-tauri/resources/sidecar-python/
 
 # JavaScript dependencies
 node_modules/

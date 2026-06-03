@@ -16,7 +16,7 @@ jobs:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       PYTHONUTF8: "1"
-      NOTEAI_LOG_DIR: ${{ runner.temp }}/noteai-logs
+      NOTEAI_LOG_DIR: /tmp/noteai-logs
       NOTEAI_DISABLE_RERANKER: "1"
       LANGCHAIN_TRACING_V2: "false"
       LANGSMITH_TRACING: "false"

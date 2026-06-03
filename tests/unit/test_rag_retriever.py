@@ -71,6 +71,12 @@ class TestRerankerEnabled:
 
 
 class TestGetReranker:
+    @pytest.fixture(autouse=True)
+    def _reranker_enabled_unless_test_sets_disable(self, monkeypatch):
+        """Job-level NOTEAI_DISABLE_RERANKER=1 in CI must not leak into enable tests."""
+        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
+        monkeypatch.delenv("NOTEAI_ENABLE_RERANKER", raising=False)
+
     def test_returns_none_when_disabled(self, monkeypatch):
         monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
         assert _mod._get_reranker() is None
@@ -80,8 +86,7 @@ class TestGetReranker:
         _mod._RERANKER_DISABLED = True
         assert _mod._get_reranker() is None
 
-    def test_returns_cached_reranker(self, monkeypatch):
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
+    def test_returns_cached_reranker(self):
         sentinel = object()
         _mod._RERANKER = sentinel
         assert _mod._get_reranker() is sentinel

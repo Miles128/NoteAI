@@ -81,6 +81,7 @@ class TestGetReranker:
         assert _mod._get_reranker() is None
 
     def test_returns_cached_reranker(self, monkeypatch):
+        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         sentinel = object()
         _mod._RERANKER = sentinel
         assert _mod._get_reranker() is sentinel

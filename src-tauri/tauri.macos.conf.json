@@ -1,0 +1,12 @@
+{
+  "app": {
+    "windows": [
+      {
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "acceptFirstMouse": true,
+        "trafficLightPosition": { "x": 14, "y": 22 }
+      }
+    ]
+  }
+}

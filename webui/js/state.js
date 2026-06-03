@@ -42,12 +42,13 @@
     }
 
     function getState() {
-        return {
-            apiConfig: _state.apiConfig ? Object.assign({}, _state.apiConfig) : null,
-            uiConfig: _state.uiConfig ? Object.assign({}, _state.uiConfig) : null,
+        var snapshot = {
+            apiConfig: _state.apiConfig,
+            uiConfig: _state.uiConfig,
             themePreference: _state.themePreference,
             workspacePath: _state.workspacePath
         };
+        return JSON.parse(JSON.stringify(snapshot));
     }
 
     function getUi(key) {
@@ -58,6 +59,7 @@
     function setUi(key, value) {
         if (_ui.hasOwnProperty(key)) {
             _ui[key] = value;
+            notify();
         }
     }
 
@@ -135,6 +137,9 @@
         try {
             await window.api.saveThemePreference(theme);
             _state.themePreference = theme;
+            try {
+                localStorage.setItem('noteai_theme', theme);
+            } catch (_e) { /* noop */ }
             notify();
         } catch (e) {
             console.error('保存主题偏好失败:', e);
@@ -180,7 +185,13 @@
         configurable: true
     });
 
-    window.AppState = _ui;
+    window.AppState = new Proxy(_ui, {
+        set: function(target, property, value) {
+            target[property] = value;
+            notify();
+            return true;
+        }
+    });
 
     window.subscribeToState = subscribe;
     window.notifyStateChange = notify;

@@ -11,7 +11,11 @@
     <link rel="stylesheet" href="css/tree.css">
     <link rel="stylesheet" href="css/editor.css">
     <link rel="stylesheet" href="css/preview.css">
+    <link rel="stylesheet" href="css/cloud-sync.css">
+    <link rel="stylesheet" href="css/ingest.css">
+    <link rel="stylesheet" href="css/schema-wizard.css">
 
+    <script src="d3.min.js"></script>
     <script src="marked.min.js"></script>
     <script src="purify.min.js"></script>
 
@@ -20,51 +24,33 @@
     <script src="highlight.min.js"></script>
 
     <script src="pdfjs-legacy.min.js"></script>
+    <!-- 须在 main.mjs 之前加载，否则打开笔记时会落入纯文本/静态预览简易模式 -->
+    <script src="lib/tiptap-bundle.js"></script>
 
-    <script src="js/utils.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/state.js"></script>
-    <script src="js/icons.js"></script>
-    <script src="js/toast.js"></script>
-    <script src="js/tabs.js"></script>
-    <script src="js/theme.js"></script>
-    <script src="js/sidebar.js"></script>
-    <script src="js/pending.js"></script>
-    <script src="js/tree.js"></script>
-    <script src="js/topic.js"></script>
-    <script src="js/tags.js"></script>
-    <script src="js/links.js"></script>
-    <script src="js/graph.js"></script>
-    <script src="js/assistant.js"></script>
-    <script src="js/preview.js"></script>
-    <script src="js/editor.js"></script>
-    <script src="js/tiptap-editor.js"></script>
-    <script src="js/workspace.js"></script>
-    <script src="js/downloader.js"></script>
-    <script src="js/converter.js"></script>
-    <script src="js/integrator.js"></script>
-    <script src="js/settings.js"></script>
-    <script src="js/search.js"></script>
-    <script src="js/app.js"></script>
+    <script type="module" src="js/main.mjs"></script>
+    <link rel="stylesheet" href="css/topic-3tier.css">
 </head>
 <body>
+    <!-- 早于模块脚本：避免首屏点在 HTML onclick 上对 toggleSidebar 等产生 ReferenceError -->
+    <script>window.toggleSidebar = window.toggleSidebar || function(){ };</script>
+    <div id="app-scale-root">
     <div class="custom-titlebar" data-tauri-drag-region>
         <div class="titlebar-left" data-tauri-drag-region>
-            <button class="titlebar-btn tab-btn" onclick="switchTab(0)" data-tab="web" title="网页下载">
+            <button class="titlebar-btn tab-btn" onclick="switchTab(0)" data-tab="web" data-i18n-title="titlebar.webDownload">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                     <polyline points="8 10 12 14 16 10"></polyline>
                     <path d="M12 14V3"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn" onclick="importFiles()" data-tab="file" title="导入文件">
+            <button class="titlebar-btn tab-btn" onclick="importFiles()" data-tab="file" data-i18n-title="titlebar.importFiles">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                     <line x1="12" y1="11" x2="12" y2="17"></line>
                     <polyline points="9 14 12 17 15 14"></polyline>
                 </svg>
             </button>
-            <button class="titlebar-btn workspace-btn" onclick="openWorkspace()" title="打开工作区">
+            <button class="titlebar-btn workspace-btn" onclick="openWorkspace()" data-i18n-title="titlebar.openWorkspace">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m20 20-2-2V8l-4-4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2l2 2Z"></path>
                     <path d="M7 9h10"></path>
@@ -72,7 +58,7 @@
                 </svg>
                 <span id="workspace-name-display"></span>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn active" data-sidebar="tree" onclick="switchSidebarView('tree')" title="目录树">
+            <button class="titlebar-btn tab-btn sidebar-view-btn active" data-sidebar="tree" onclick="switchSidebarView('tree')" data-i18n-title="titlebar.tree">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M3 3h7v7H3z"></path>
                     <path d="M14 3h7v7h-7z"></path>
@@ -84,13 +70,13 @@
                     <path d="M6.5 10v4"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="tags" onclick="switchSidebarView('tags')" title="标签">
+            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="tags" onclick="switchSidebarView('tags')" data-i18n-title="titlebar.tags">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path>
                     <path d="M7 7h.01"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="graph" onclick="switchSidebarView('graph')" title="双向链接">
+            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="graph" onclick="switchSidebarView('graph')" data-i18n-title="titlebar.links">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="8" cy="6" r="2.5"></circle>
                     <circle cx="16" cy="18" r="2.5"></circle>
@@ -100,11 +86,11 @@
                     <polyline points="8.5 20 13.5 18 8.5 16"></polyline>
                 </svg>
             </button>
-        </div>
+            </div>
         <div class="titlebar-center" data-tauri-drag-region>
             <div class="titlebar-file-name-wrapper">
                 <div class="titlebar-file-name" id="titlebar-file-name"></div>
-                <button class="titlebar-btn titlebar-close-preview" id="titlebar-close-preview-btn" onclick="closePreviewPanel()" title="关闭预览" style="display: none;">
+                <button class="titlebar-btn titlebar-close-preview" id="titlebar-close-preview-btn" onclick="closePreviewPanel()" data-i18n-title="titlebar.closePreview" style="display: none;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"></path>
                         <path d="m6 6 12 12"></path>
@@ -113,18 +99,19 @@
             </div>
         </div>
         <div class="titlebar-right">
-            <button class="titlebar-btn" id="titlebar-pending-btn" onclick="togglePendingView()" title="待办事项">
-                <svg class="pending-icon-normal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <button class="titlebar-btn" id="titlebar-pending-btn" onclick="togglePendingView()" data-i18n-title="titlebar.pending">
+                <svg class="pending-icon-normal" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                     <polyline points="22 4 12 14.01 9 11.01"></polyline>
                 </svg>
-                <svg class="pending-icon-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+                <svg class="pending-icon-alert" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                     <line x1="12" y1="9" x2="12" y2="13"></line>
                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
                 </svg>
+                <span class="pending-badge" style="display:none;"></span>
             </button>
-            <button class="titlebar-btn" id="titlebar-ai-toggle-btn" onclick="toggleAIPanel()" title="AI 助手">
+            <button class="titlebar-btn" id="titlebar-ai-toggle-btn" onclick="toggleAIPanel()" data-i18n-title="titlebar.aiAssistant">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="5" y="8" width="14" height="10" rx="3"></rect>
                     <circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle>
@@ -135,13 +122,13 @@
                     <line x1="16" y1="18" x2="16" y2="20"></line>
                 </svg>
             </button>
-            <button class="titlebar-btn" id="titlebar-split-btn" onclick="toggleEditMode()" title="编辑" style="display: none;">
+            <button class="titlebar-btn" id="titlebar-split-btn" onclick="toggleEditMode()" data-i18n-title="titlebar.edit" style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
                     <path d="m15 5 4 4"></path>
                 </svg>
             </button>
-            <button class="titlebar-btn" id="titlebar-graph-btn" onclick="toggleGraphPanel()" title="关系图谱">
+            <button class="titlebar-btn" id="titlebar-graph-btn" onclick="toggleGraphPanel()" data-i18n-title="titlebar.relationGraph">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="2"></circle>
                     <circle cx="4" cy="6" r="2"></circle>
@@ -154,20 +141,13 @@
                     <line x1="12" y1="14" x2="18.5" y2="16.5"></line>
                 </svg>
             </button>
-            <button class="titlebar-btn" id="titlebar-search-btn" onclick="toggleSearchModal()" title="搜索 (Cmd+K)">
+            <button class="titlebar-btn" id="titlebar-search-btn" onclick="toggleSearchModal()" data-i18n-title="titlebar.search">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="11" cy="11" r="8"></circle>
                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                 </svg>
             </button>
-            <button class="titlebar-btn" onclick="showAbout()" title="关于">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="16" x2="12" y2="12"></line>
-                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                </svg>
-            </button>
-            <button class="titlebar-btn" onclick="showSettings()" title="设置">
+            <button class="titlebar-btn" onclick="showSettings()" data-i18n-title="titlebar.settings">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43-.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
@@ -176,48 +156,64 @@
         </div>
     </div>
     <div class="app-container">
-        <button class="sidebar-expand-btn" id="sidebar-expand-btn" onclick="toggleSidebar()" title="展开侧边栏" style="display: none;">
+        <button class="sidebar-expand-btn" id="sidebar-expand-btn" onclick="toggleSidebar()" data-i18n-title="titlebar.expandSidebar" style="display: none;">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
         </button>
         <div class="sidebar sidebar-left" id="sidebar">
-            <div class="sidebar-collapse-btn" onclick="toggleSidebar()" title="收起侧边栏">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
+            <div class="sidebar-main" id="sidebar-main">
+                <div class="sidebar-pane is-active" id="sidebar-pane-tree" data-sidebar-pane="tree">
+                    <div class="file-tree-container" id="file-tree">
+                        <div class="tree-empty" data-i18n="common.noWorkspace"></div>
+                    </div>
+                </div>
+                <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
+                    <div class="sidebar-view-container" id="sidebar-tags"></div>
+                    <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
+                        <input type="text" class="topic-input" id="tag-input-field" data-i18n-placeholder="sidebar.tagPlaceholder">
+                        <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" data-i18n-title="common.cancel">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                        <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" data-i18n-title="sidebar.confirmCreateTag">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-pane" id="sidebar-pane-graph" data-sidebar-pane="graph" hidden>
+                    <div class="sidebar-view-container" id="sidebar-graph"></div>
+                </div>
             </div>
-            <div class="file-tree-container" id="file-tree">
-                <div class="tree-empty">暂无工作区</div>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-tree">
-                <span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>
-            </div>
-            <div class="sidebar-view-container" id="sidebar-tags" style="display: none;"></div>
-            <div class="sidebar-view-container" id="sidebar-graph" style="display: none;"></div>
-            <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
-                <input type="text" class="topic-input" id="tag-input-field" placeholder="输入标签名称...">
-                <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" title="取消">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-                <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" title="确认创建标签">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-tags" style="display: none;">
-                <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" title="自动匹配标签：扫描文件标题匹配已有标签">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                </button>
-                <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" title="新加标签：创建新的标签分类">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-tags">0 个标签</span>
-            </div>
-            <div class="sidebar-footer" id="sidebar-footer-graph" style="display: none;">
-                <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" title="发现链接：AI 分析文章关联">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-graph">0 个链接</span>
+            <div class="sidebar-dock" id="sidebar-dock">
+                <div class="sidebar-footer sidebar-dock-panel is-active" id="sidebar-footer-tree" data-sidebar-dock="tree">
+                    <button class="sidebar-footer-btn" onclick="toggleSidebar()" data-i18n-title="sidebar.collapse">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <button class="sidebar-footer-btn" id="btn-add-topic-filetree" onclick="openQuickCreate('topic')" data-i18n-title="sidebar.newTopic">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                    </button>
+                    <button class="sidebar-footer-btn" id="btn-add-note-filetree" onclick="openQuickCreate('note')" data-i18n-title="sidebar.newNote">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>
+                </div>
+                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-tags" data-sidebar-dock="tags" hidden>
+                    <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" data-i18n-title="sidebar.autoTagTitle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    </button>
+                    <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" data-i18n-title="sidebar.addTagTitle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>
+                </div>
+                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
+                    <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" data-i18n-title="sidebar.discoverLinksTitle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>
+                </div>
             </div>
         </div>
 
@@ -227,31 +223,23 @@
             <div class="content-panel" id="content-panel">
                 <div class="pending-view" id="pending-view" style="display:none;">
                     <div class="pending-view-header">
-                        <h2>待办事项</h2>
-                        <span class="pending-view-count" id="pending-view-count">0 项待处理</span>
+                        <h2 data-i18n="pending.title"></h2>
+                        <span class="pending-view-count" id="pending-view-count" data-i18n="common.pendingCount" data-i18n-count="0"></span>
+                        <div class="pending-header-actions">
+                            <button type="button" class="pending-header-btn" id="pending-lint-run-btn" data-i18n="pending.healthCheck" data-i18n-title="pending.healthCheck"></button>
+                            <button type="button" class="pending-header-btn" id="pending-cascade-retry-all-btn" data-i18n="pending.retryAllSurveys" data-i18n-title="pending.retryAllSurveys"></button>
+                        </div>
                     </div>
-                    <div class="pending-view-list" id="pending-view-list">
-                        <div class="pending-view-empty">没有待处理的事项</div>
-                    </div>
-                </div>
-                <div class="graph-home-view" id="graph-home-view">
-                    <canvas id="graph-home-canvas"></canvas>
-                    <div class="graph-home-overlay">
-                        <div class="graph-home-title">NoteAI</div>
-                        <div class="graph-home-subtitle">AI 驱动的知识库</div>
-                        <div class="graph-home-stats">
-                            <div class="graph-home-stat">
-                                <div class="graph-home-stat-value" id="home-stat-notes">0</div>
-                                <div class="graph-home-stat-label">笔记</div>
+                    <p class="pending-view-hint" data-i18n="pending.hint"></p>
+                    <div class="pending-view-sections">
+                        <div class="pending-section">
+                            <div class="pending-view-list" id="pending-view-list">
+                                <div class="pending-view-empty" data-i18n="pending.empty"></div>
                             </div>
-                            <div class="graph-home-stat">
-                                <div class="graph-home-stat-value" id="home-stat-topics">0</div>
-                                <div class="graph-home-stat-label">主题</div>
-                            </div>
-                            <div class="graph-home-stat">
-                                <div class="graph-home-stat-value" id="home-stat-links">0</div>
-                                <div class="graph-home-stat-label">链接</div>
-                            </div>
+                        </div>
+                        <div class="pending-section" id="pending-cascade-section" style="display:none;" hidden>
+                            <div class="pending-cascade-list" id="pending-cascade-list"></div>
+                            <span class="pending-cascade-count" id="pending-cascade-count" hidden></span>
                         </div>
                     </div>
                 </div>
@@ -261,28 +249,28 @@
 
                     <div class="tab-content" id="tab-1">
                         <div class="card">
-                            <div class="card-title">笔记整合</div>
+                            <div class="card-title" data-i18n="integrator.cardTitle"></div>
                             <div class="ai-status-box">
                                 <span class="status-dot"></span>
-                                <span class="status-text">从Notes文件夹读取markdown文件，整合输出到Abstract文件夹</span>
+                                <span class="status-text" data-i18n="integrator.statusLine"></span>
                             </div>
                         </div>
 
                         <div class="card" id="topic-card">
-                            <div class="card-title">主题设置</div>
+                            <div class="card-title" data-i18n="integrator.topicSettings"></div>
                             <div class="form-group form-row">
                                 <div class="form-row-item">
-                                    <div class="form-label">主题个数（留空则自动选择）</div>
-                                    <input type="number" id="topic-count" class="form-input form-input-full" placeholder="例如：5" min="2">
+                                    <div class="form-label" data-i18n="integrator.topicCount"></div>
+                                    <input type="number" id="topic-count" class="form-input form-input-full" data-i18n-placeholder="integrator.topicCountPlaceholder" min="2">
                                 </div>
                             </div>
                             <div class="form-group">
-                                <div class="form-label">点击提取主题，或手动输入（每行一个）</div>
-                                <textarea id="topic-list" class="form-input form-textarea" placeholder="主题1&#10;主题2&#10;主题3" oninput="updateIntegrateBtnState()"></textarea>
+                                <div class="form-label" data-i18n="integrator.topicListHint"></div>
+                                <textarea id="topic-list" class="form-input form-textarea" data-i18n-placeholder="integrator.topicListPlaceholder" oninput="updateIntegrateBtnState()"></textarea>
                             </div>
                             <div class="btn-group btn-group-spacing">
-                                <button class="btn btn-secondary btn-flex" id="extract-topics-btn" onclick="extractTopics()" title="提取主题：从网页内容中提取关键主题">提取主题</button>
-                                <button class="btn btn-primary btn-flex" id="integrate-btn" onclick="startNoteIntegration()" disabled title="开始整合：将内容整合到笔记中">开始整合</button>
+                                <button class="btn btn-secondary btn-flex" id="extract-topics-btn" onclick="extractTopics()" data-i18n-title="integrator.extractTopicsHint" data-i18n="integrator.extractTopics"></button>
+                                <button class="btn btn-primary btn-flex" id="integrate-btn" onclick="startNoteIntegration()" disabled data-i18n-title="integrator.startHint" data-i18n="integrator.start"></button>
                             </div>
                         </div>
 
@@ -298,69 +286,94 @@
                 </div>
                 <div class="graph-panel" id="graph-panel" style="display: none;">
                     <div class="graph-panel-header">
-                        <div class="graph-header-left">
-                            <div class="graph-filter-bar">
-                                <button class="graph-filter-btn active" data-gfilter="all" onclick="onGraphFilter('all')" title="显示全部关系">全部</button>
-                                <button class="graph-filter-btn" data-gfilter="topic" onclick="onGraphFilter('topic')" title="只显示主题关系">主题</button>
-                                <button class="graph-filter-btn" data-gfilter="tag" onclick="onGraphFilter('tag')" title="只显示标签关系">标签</button>
-                                <button class="graph-filter-btn" data-gfilter="link" onclick="onGraphFilter('link')" title="只显示双向链接关系">链接</button>
+                        <div class="graph-header-toolbar">
+                            <div class="graph-stats-bar">
+                                <span class="graph-stats-item"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
+                                <span class="graph-stats-item"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
+                                <span class="graph-stats-item" data-i18n-title="graph.stats.surveyHint"><span data-i18n="graph.stats.surveyLabel"></span><span id="graph-stat-survey">—</span></span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
+                                <span class="graph-stats-item" data-i18n-title="graph.stats.avgLinksHint"><span data-i18n="graph.stats.avgLinksLabel"></span><span id="graph-stat-links-avg">—</span></span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
+                                <span class="graph-stats-item" data-i18n-title="graph.stats.lintHint">Lint <span id="graph-stat-lint">—</span></span>
+                            </div>
+                            <div class="graph-header-controls">
+                                <div class="graph-filter-bar" id="graph-filter-bar">
+                                    <button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic"></button>
+                                    <button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag"></button>
+                                    <button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all"></button>
+                                </div>
+                                <div class="graph-toolbar">
+                                    <button class="graph-toolbar-btn" id="graph-toggle-filenames" onclick="graphToggleFilenames()" data-i18n-title="graph.toggleFilenames">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                    </button>
+                                    <button class="graph-toolbar-btn" onclick="graphZoomIn()" data-i18n-title="graph.zoomIn">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                    </button>
+                                    <button class="graph-toolbar-btn" onclick="graphZoomOut()" data-i18n-title="graph.zoomOut">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                                    </button>
+                                    <button class="graph-toolbar-btn" onclick="graphReplay()" data-i18n-title="graph.replay">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                    </button>
+                                    <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" data-i18n-title="graph.refresh">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                    </button>
+                                    <button class="graph-toolbar-btn" id="graph-layout-settings-btn" onclick="graphOpenLayoutSettings()" data-i18n-title="graph.layoutSettings">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div class="graph-header-center">
-                            <div class="graph-toolbar">
-                                <button class="graph-toolbar-btn" onclick="graphZoomIn()" title="放大">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                                </button>
-                                <button class="graph-toolbar-btn" onclick="graphZoomOut()" title="缩小">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                                </button>
-                                <button class="graph-toolbar-btn" id="graph-evolve-btn" onclick="graphToggleEvolve()" title="演变：重新启动力模拟动画">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                </button>
-                                <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" title="刷新图谱">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="graph-header-right">
-                            <button class="graph-panel-close" onclick="toggleGraphPanel()" title="关闭图谱">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            </button>
-                        </div>
+                        <button class="graph-panel-close" onclick="toggleGraphPanel()" data-i18n-title="graph.close">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
                     </div>
-                    <div class="graph-panel-body" id="graph-panel-body">
-                        <div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>
-                        <div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>
-                        <canvas id="graph-canvas" style="display:none;"></canvas>
+                    <div class="graph-panel-main">
+                        <div class="graph-panel-body" id="graph-panel-body">
+                            <div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>
+                            <div class="graph-empty" id="graph-empty" style="display:none;" data-i18n="graph.empty"></div>
+                        </div>
+                        <aside id="graph-settings-sidebar" class="graph-settings-sidebar" hidden aria-labelledby="graph-settings-title">
+                            <div class="graph-settings-header">
+                                <h3 id="graph-settings-title" data-i18n="graph.layoutSettings"></h3>
+                                <button type="button" class="graph-panel-close" onclick="graphCloseLayoutSettings()" data-i18n-title="common.collapse">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                </button>
+                            </div>
+                            <div class="graph-settings-scroll" id="graph-settings-form"></div>
+                            <div class="graph-settings-footer">
+                                <button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()" data-i18n="common.resetDefault"></button>
+                                <button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()" data-i18n="common.apply"></button>
+                            </div>
+                        </aside>
                     </div>
                     <div class="graph-panel-footer">
-                        <div class="graph-legend">
-                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-file"></span>文件</span>
-                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-topic"></span>主题</span>
-                            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-dot-tag"></span>标签</span>
-                        </div>
+                        <div class="graph-legend" id="graph-legend"></div>
                     </div>
-                    <div class="graph-tooltip" id="graph-tooltip" style="display:none;"></div>
                 </div>
-            </div>
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
+            <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
 
             <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
                 <div class="pending-links-header">
-                    <span class="pending-links-title">待确认链接</span>
-                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" title="一键确认所有待确认链接">全部确认</button>
-                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" title="关闭">
+                    <span class="pending-links-title" data-i18n="links.pendingTitle"></span>
+                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>
+                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                 </div>
                 <div class="pending-links-body" id="pending-links-body">
-                    <div class="pending-links-empty" id="pending-links-empty">暂无待确认链接</div>
+                    <div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>
                     <div class="pending-links-list" id="pending-links-list"></div>
                 </div>
             </div>
 
             <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
+
+            </div>
 
             <div class="preview-panel" id="preview-panel" style="display: none;">
                 <div class="preview-resizer" id="preview-resizer"></div>
@@ -371,42 +384,42 @@
                                 <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
                                 <polyline points="14 2 14 8 20 8"></polyline>
                             </svg>
-                            <div>选择文件以预览</div>
+                            <div data-i18n="preview.selectFile"></div>
                         </div>
                     </div>
 
                     <div class="tiptap-editor-container" id="tiptap-editor-container" style="display: none;">
                         <div class="tiptap-toolbar" id="tiptap-toolbar" style="display: none;">
-                            <button class="tiptap-btn" data-action="bold" title="加粗">
+                            <button class="tiptap-btn" data-action="bold" data-i18n-title="editor.bold">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
                                     <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="italic" title="斜体">
+                            <button class="tiptap-btn" data-action="italic" data-i18n-title="editor.italic">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="19" y1="4" x2="10" y2="4"></line>
                                     <line x1="14" y1="20" x2="5" y2="20"></line>
                                     <line x1="15" y1="4" x2="9" y2="20"></line>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="strike" title="删除线">
+                            <button class="tiptap-btn" data-action="strike" data-i18n-title="editor.strike">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M17.3 4.9c-1.2-.9-2.8-1.4-4.8-1.4-3.1 0-5.5.8-7.1 2.3-1.6 1.6-2.4 3.6-2.4 6.2s.8 4.6 2.4 6.2c1.6 1.6 4 2.3 7.1 2.3 2.7 0 4.6-.7 6-2.1.7-.7 1.2-1.6 1.4-2.7.2-1 .1-2-.1-2.8h-8"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="code" title="行内代码">
+                            <button class="tiptap-btn" data-action="code" data-i18n-title="editor.inlineCode">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <polyline points="16 18 22 12 16 6"></polyline>
                                     <polyline points="8 6 2 12 8 18"></polyline>
                                 </svg>
                             </button>
                             <div class="tiptap-separator"></div>
-                            <button class="tiptap-btn" data-action="heading" data-level="1" title="标题 1">H1</button>
-                            <button class="tiptap-btn" data-action="heading" data-level="2" title="标题 2">H2</button>
-                            <button class="tiptap-btn" data-action="heading" data-level="3" title="标题 3">H3</button>
+                            <button class="tiptap-btn" data-action="heading" data-level="1" data-i18n-title="editor.heading1">H1</button>
+                            <button class="tiptap-btn" data-action="heading" data-level="2" data-i18n-title="editor.heading2">H2</button>
+                            <button class="tiptap-btn" data-action="heading" data-level="3" data-i18n-title="editor.heading3">H3</button>
                             <div class="tiptap-separator"></div>
-                            <button class="tiptap-btn" data-action="bulletList" title="无序列表">
+                            <button class="tiptap-btn" data-action="bulletList" data-i18n-title="editor.bulletList">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="8" y1="6" x2="21" y2="6"></line>
                                     <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -416,7 +429,7 @@
                                     <line x1="3" y1="18" x2="3.01" y2="18"></line>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="orderedList" title="有序列表">
+                            <button class="tiptap-btn" data-action="orderedList" data-i18n-title="editor.orderedList">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="10" y1="6" x2="21" y2="6"></line>
                                     <line x1="10" y1="12" x2="21" y2="12"></line>
@@ -427,31 +440,31 @@
                                     <path d="M4 16h4"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="taskList" title="任务列表">
+                            <button class="tiptap-btn" data-action="taskList" data-i18n-title="editor.taskList">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M9 11l3 3L22 4"></path>
                                     <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
                                 </svg>
                             </button>
                             <div class="tiptap-separator"></div>
-                            <button class="tiptap-btn" data-action="blockquote" title="引用">
+                            <button class="tiptap-btn" data-action="blockquote" data-i18n-title="editor.blockquote">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972zM14 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972z"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="codeBlock" title="代码块">
+                            <button class="tiptap-btn" data-action="codeBlock" data-i18n-title="editor.codeBlock">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <polyline points="16 18 22 12 16 6"></polyline>
                                     <polyline points="8 6 2 12 8 18"></polyline>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="link" title="链接">
+                            <button class="tiptap-btn" data-action="link" data-i18n-title="editor.link">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
                                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="image" title="图片">
+                            <button class="tiptap-btn" data-action="image" data-i18n-title="editor.image">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
                                     <circle cx="8.5" cy="8.5" r="1.5"></circle>
@@ -459,20 +472,20 @@
                                 </svg>
                             </button>
                             <div class="tiptap-separator"></div>
-                            <button class="tiptap-btn" data-action="undo" title="撤销">
+                            <button class="tiptap-btn" data-action="undo" data-i18n-title="editor.undo">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M3 7v6h6"></path>
                                     <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
                                 </svg>
                             </button>
-                            <button class="tiptap-btn" data-action="redo" title="重做">
+                            <button class="tiptap-btn" data-action="redo" data-i18n-title="editor.redo">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                                     <path d="M21 7v6h-6"></path>
                                     <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
                                 </svg>
                             </button>
                             <div class="tiptap-spacer"></div>
-                            <button class="tiptap-btn tiptap-btn-rewrite" id="tiptap-rewrite-btn" onclick="onLLMRewrite()" title="LLM 改写：用中立客观风格重写文档">
+                            <button class="tiptap-btn tiptap-btn-rewrite" id="tiptap-rewrite-btn" onclick="onLLMRewrite()" data-i18n-title="editor.llmRewrite">
                                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 20h9"></path>
                                     <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
@@ -491,13 +504,15 @@
                 </div>
             </div>
 
-        <div class="ai-panel" id="ai-panel" style="display: none;">
+        <div class="ai-panel" id="ai-panel">
+            <div class="ai-panel-top-resizer" id="ai-resizer-top"></div>
             <div class="ai-resizer ai-resizer-left" id="ai-resizer-left"></div>
             <div class="ai-panel-inner">
                 <div class="ai-panel-header">
                     <span class="ai-panel-header-dot"></span>
-                    <span class="ai-panel-header-title">AI ASSISTANT</span>
-                    <button class="ai-panel-close-btn" onclick="toggleAIPanel()" title="关闭">
+                    <span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>
+                    <span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>
+                    <button class="ai-panel-close-btn" onclick="toggleAIPanel()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
@@ -506,8 +521,8 @@
                     </div>
                 </div>
                 <div class="ai-panel-input">
-                    <input type="text" id="ai-input" placeholder="问我关于知识库的任何事...">
-                    <button class="ai-panel-send" id="ai-send-btn" title="发送">
+                    <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
+                    <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
                 </div>
@@ -520,115 +535,243 @@
         </div>
 
         <div class="about-panel-overlay" id="settings-panel">
-            <div class="settings-layout" id="settings-panel-content">
-                <button class="about-panel-close" onclick="closeSettingsPanel()" title="关闭">
+            <div class="settings-layout">
+                <button class="about-panel-close" onclick="closeSettingsPanel()" data-i18n-title="common.close">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"></path>
                         <path d="m6 6 12 12"></path>
                     </svg>
                 </button>
-                <h2>设置</h2>
+                <h2 data-i18n="settings.title"></h2>
                 <div class="settings-body">
-                    <div class="settings-left">
-                        <div class="card theme-card">
-                            <div class="card-title">主题</div>
-                            <div class="theme-options">
-                                <label class="theme-option">
-                                    <input type="radio" name="theme-popup" value="light" onchange="setTheme('light')">
-                                    <div class="theme-preview light-preview">
-                                        <div class="theme-preview-header"></div>
-                                        <div class="theme-preview-content"></div>
-                                    </div>
-                                    <span>浅色</span>
-                                </label>
-                                <label class="theme-option">
-                                    <input type="radio" name="theme-popup" value="dark" onchange="setTheme('dark')">
-                                    <div class="theme-preview dark-preview">
-                                        <div class="theme-preview-header"></div>
-                                        <div class="theme-preview-content"></div>
-                                    </div>
-                                    <span>深色</span>
-                                </label>
-                                <label class="theme-option">
-                                    <input type="radio" name="theme-popup" value="system" onchange="setTheme('system')">
-                                    <div class="theme-preview system-preview">
-                                        <div class="theme-preview-header"></div>
-                                        <div class="theme-preview-content"></div>
-                                    </div>
-                                    <span>跟随系统</span>
-                                </label>
+                    <div class="settings-nav" id="settings-nav">
+                        <button class="settings-nav-btn active" data-tab="model">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3V5a3 3 0 0 0-3-3Z"/><path d="M19 10a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2 2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2Z"/><path d="M5 10a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2 2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2Z"/><path d="M8 18a3 3 0 0 0-3 3v1h14v-1a3 3 0 0 0-3-3Z"/></svg>
+                            <span data-i18n="settings.nav.model"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="ui">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                            <span data-i18n="settings.nav.ui"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="assistant">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                            <span data-i18n="settings.nav.assistant"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="activity-log">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                            <span data-i18n="settings.nav.activityLog"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="schema">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+                            <span data-i18n="settings.nav.schema"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="about">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            <span data-i18n="settings.nav.about"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="cloud-sync" id="settings-nav-cloud-sync" style="display:none;">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                            <span data-i18n="settings.nav.cloudSync"></span>
+                        </button>
+                    </div>
+                    <div class="settings-content">
+                        <div class="settings-tab active" id="tab-model">
+                            <div class="card">
+                                <div class="card-title">LLM API</div>
+                                <div class="form-group">
+                                    <div class="form-field"><div class="form-label">API Key</div><input type="password" id="api-key" class="form-input" placeholder=""></div>
+                                </div>
+                                <div class="form-group">
+                                    <div class="form-field"><div class="form-label">API Base</div><input type="text" id="api-base" class="form-input" placeholder="https://api.openai.com/v1"></div>
+                                </div>
+                                <div class="form-group form-row">
+                                    <div class="form-field flex-1"><div class="form-label" data-i18n="settings.modelLabel"></div><input type="text" id="model-name" class="form-input" placeholder="gpt-4"></div>
+                                    <div class="form-field" style="width:100px"><div class="form-label">Temperature</div><input type="number" id="temperature" class="form-input" step="0.1" min="0" max="2" value="0.7"></div>
+                                    <div class="form-field" style="width:110px"><div class="form-label" data-i18n="settings.maxTokens"></div><input type="number" id="max-tokens" class="form-input" min="100" max="128000" value="32000"></div>
+                                </div>
+                                <div class="form-group form-row">
+                                    <div class="form-field" style="width:110px"><div class="form-label" data-i18n="settings.maxContext"></div><input type="number" id="max-context" class="form-input" min="1000" max="1000000" value="128000"></div>
+                                    <div class="form-field"><div class="form-label" data-i18n="settings.thinkingChain"></div><label class="switch-container" style="margin-top:4px"><input type="checkbox" id="disable-thinking" class="switch-input"><span class="switch-slider"></span></label></div>
+                                </div>
+                                <button class="btn btn-primary" onclick="saveApiConfig()" data-i18n="settings.saveConfig"></button>
+                                <div id="api-config-status-popup" class="settings-hint" style="display: none;"></div>
                             </div>
                         </div>
-                        <div class="card">
-                            <div class="card-title">LLM API</div>
-                            <div class="form-group">
-                                <div class="form-field">
-                                    <div class="form-label">API Key</div>
-                                    <input type="password" id="api-key" class="form-input" placeholder="">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="form-field">
-                                    <div class="form-label">API Base</div>
-                                    <input type="text" id="api-base" class="form-input" placeholder="https://api.openai.com/v1">
-                                </div>
-                            </div>
-                            <div class="form-group form-row">
-                                <div class="form-field flex-1">
-                                    <div class="form-label">模型</div>
-                                    <input type="text" id="model-name" class="form-input" placeholder="gpt-4">
-                                </div>
-                                <div class="form-field" style="width:100px">
-                                    <div class="form-label">Temperature</div>
-                                    <input type="number" id="temperature" class="form-input" step="0.1" min="0" max="2" value="0.7">
-                                </div>
-                                <div class="form-field" style="width:110px">
-                                    <div class="form-label">最大 Tokens</div>
-                                    <input type="number" id="max-tokens" class="form-input" min="100" max="128000" value="32000">
-                                </div>
-                            </div>
-                            <div class="form-group form-row">
-                                <div class="form-field" style="width:110px">
-                                    <div class="form-label">最大上下文</div>
-                                    <input type="number" id="max-context" class="form-input" min="1000" max="1000000" value="128000">
-                                </div>
-                                <div class="form-field">
-                                    <div class="form-label">思考链</div>
-                                    <label class="switch-container" style="margin-top:4px">
-                                        <input type="checkbox" id="disable-thinking" class="switch-input">
-                                        <span class="switch-slider"></span>
+                        <div class="settings-tab" id="tab-ui">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.theme"></div>
+                                <div class="theme-options">
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme-popup" value="light" onchange="setTheme('light')">
+                                        <div class="theme-preview light-preview"><div class="theme-preview-header"></div><div class="theme-preview-content"></div></div>
+                                        <span data-i18n="settings.themeLight"></span>
+                                    </label>
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme-popup" value="dark" onchange="setTheme('dark')">
+                                        <div class="theme-preview dark-preview"><div class="theme-preview-header"></div><div class="theme-preview-content"></div></div>
+                                        <span data-i18n="settings.themeDark"></span>
+                                    </label>
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme-popup" value="paper" onchange="setTheme('paper')">
+                                        <div class="theme-preview paper-preview"><div class="theme-preview-header"></div><div class="theme-preview-content"></div></div>
+                                        <span data-i18n="settings.themePaper"></span>
+                                    </label>
+                                    <label class="theme-option">
+                                        <input type="radio" name="theme-popup" value="system" onchange="setTheme('system')">
+                                        <div class="theme-preview system-preview"><div class="theme-preview-header"></div><div class="theme-preview-content"></div></div>
+                                        <span data-i18n="settings.themeSystem"></span>
                                     </label>
                                 </div>
                             </div>
-                            <button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button>
-                            <div id="api-config-status-popup" class="settings-hint" style="display: none;"></div>
-                        </div>
-                    </div>
-                    <div class="settings-right">
-                        <div class="card settings-profile-card">
-                            <div class="card-title">用户画像</div>
-                            <div class="form-group" style="flex:1;display:flex;flex-direction:column">
-                                <div class="form-field" style="flex:1;display:flex;flex-direction:column">
-                                    <div class="form-label">用 Markdown 描述你的画像，AI 会参考此内容调整回答风格</div>
-                                    <textarea id="profile-md" class="form-input form-textarea" style="flex:1" placeholder="## 关于我&#10;&#10;- 职业：AI产品经理&#10;- 专业领域：NLP, RAG&#10;- 兴趣：大语言模型, AI Agent&#10;- 学习目标：深入理解 RAG 架构&#10;&#10;## 偏好&#10;&#10;- 回答风格：简洁&#10;- 回答深度：技术向"></textarea>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.language"></div>
+                                <div class="form-group">
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                        <input type="radio" name="ui-locale" value="zh-CN" onchange="setLocale('zh-CN')">
+                                        <span data-i18n="settings.languageZh"></span>
+                                    </label>
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                        <input type="radio" name="ui-locale" value="en" onchange="setLocale('en')">
+                                        <span data-i18n="settings.languageEn"></span>
+                                    </label>
                                 </div>
                             </div>
-                            <button class="btn btn-primary" onclick="saveUserProfile()">保存画像</button>
-                            <div id="profile-status" class="settings-hint" style="display: none;"></div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.fontSize"></div>
+                                <div class="form-group">
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                        <input type="radio" name="font-size" value="small" onchange="setFontSize('small')">
+                                        <span data-i18n="settings.fontSmall"></span>
+                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontSmallHint"></span>
+                                    </label>
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                        <input type="radio" name="font-size" value="medium" onchange="setFontSize('medium')">
+                                        <span data-i18n="settings.fontMedium"></span>
+                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontMediumHint"></span>
+                                    </label>
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                        <input type="radio" name="font-size" value="large" onchange="setFontSize('large')">
+                                        <span data-i18n="settings.fontLarge"></span>
+                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.experimental"></div>
+                                <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
+                                    <input type="checkbox" id="cloud-sync-experimental" onchange="saveCloudSyncExperimental(this.checked)">
+                                    <span data-i18n="settings.cloudSyncExperimental"></span>
+                                </label>
+                                <p class="settings-hint" data-i18n="settings.cloudSyncExperimentalHint"></p>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-schema">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.schemaTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.schemaHint"></p>
+                                <div class="btn-group btn-group-spacing" style="margin-bottom:12px">
+                                    <button type="button" class="btn btn-secondary" id="settings-schema-wizard-btn" data-i18n="settings.schemaWizardBtn"></button>
+                                    <button type="button" class="btn btn-secondary" id="settings-schema-reload-btn" data-i18n="settings.schemaReloadBtn"></button>
+                                </div>
+                                <textarea id="settings-schema-editor" class="form-input form-textarea" style="min-height:280px;font-family:var(--font-mono,monospace);font-size:12px" data-i18n-placeholder="settings.schemaEditorPlaceholder"></textarea>
+                                <button type="button" class="btn btn-primary" id="settings-schema-save-btn" style="margin-top:12px" data-i18n="settings.schemaSaveBtn"></button>
+                                <div id="settings-schema-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.maintenanceTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.maintenanceHint"></p>
+                                <button type="button" class="btn btn-secondary" id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>
+                                <div id="settings-raw-convert-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-assistant">
+                            <div class="card settings-assistant-intro">
+                                <div class="card-title" data-i18n="settings.assistantIntroTitle"></div>
+                                <p class="settings-hint" data-i18n-html="settings.assistantIntro1"></p>
+                                <p class="settings-hint" style="margin-top:8px" data-i18n-html="settings.assistantIntro2"></p>
+                                <ul class="settings-assistant-capabilities">
+                                    <li data-i18n-html="settings.assistantCap1"></li>
+                                    <li data-i18n-html="settings.assistantCap2"></li>
+                                    <li data-i18n-html="settings.assistantCap3"></li>
+                                    <li data-i18n-html="settings.assistantCap4"></li>
+                                </ul>
+                                <p class="settings-hint" data-i18n="settings.assistantIntro3"></p>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.ragModeTitle"></div>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.ragModeLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.ragModeDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-assistant-rag-enabled" class="switch-input">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.agentModeTitle"></div>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.agentModeLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.agentModeDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-assistant-agent-mode" class="switch-input">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                                <div id="settings-assistant-agent-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card settings-profile-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.profileTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.profileHint"></p>
+                                <div class="form-group" style="flex:1;display:flex;flex-direction:column">
+                                    <div class="form-field" style="flex:1;display:flex;flex-direction:column">
+                                        <textarea id="profile-md" class="form-input form-textarea settings-assistant-profile" data-i18n-placeholder="settings.profilePlaceholder"></textarea>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>
+                                <div id="profile-status" class="settings-hint" style="display: none;"></div>
+                            </div>
+                            <div class="card" id="settings-assistant-rag-index-card" style="margin-top:16px;display:none">
+                                <div class="card-title" data-i18n="settings.indexTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.indexHint"></p>
+                                <button type="button" class="btn btn-secondary" id="settings-assistant-rebuild-index-btn" data-i18n="settings.rebuildIndexBtn"></button>
+                                <div id="settings-assistant-rebuild-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-activity-log">
+                            <div class="card settings-activity-log-card">
+                                <div class="card-title" data-i18n="settings.activityLogTitle"></div>
+                                <p class="settings-hint settings-activity-log-hint" data-i18n="settings.activityLogHint"></p>
+                                <div class="settings-activity-log" id="settings-activity-log">
+                                    <div class="settings-activity-log-empty" data-i18n="settings.activityLogLoading"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-about">
+                            <div class="card" style="text-align:center;padding:40px">
+                                <div style="font-size:32px;font-weight:700;color:var(--primary);margin-bottom:8px">NoteAI</div>
+                                <div style="font-size:13px;color:var(--text-muted);margin-bottom:24px">v1.0.0</div>
+                                <div style="font-size:13px;color:var(--text-secondary);line-height:1.8;text-align:left">
+                                    <p data-i18n="settings.aboutDesc"></p>
+                                    <p style="margin-top:12px"><strong data-i18n="settings.aboutFeatures"></strong></p>
+                                    <ul style="margin:8px 0 0 20px">
+                                        <li data-i18n="settings.aboutFeature1"></li>
+                                        <li data-i18n="settings.aboutFeature2"></li>
+                                        <li data-i18n="settings.aboutFeature3"></li>
+                                        <li data-i18n="settings.aboutFeature4"></li>
+                                    </ul>
+                                    <p style="margin-top:16px"><strong data-i18n="settings.aboutTech"></strong> <span data-i18n="settings.aboutTechLine"></span></p>
+                                    <p style="margin-top:8px" data-i18n="settings.aboutTechDesc"></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-cloud-sync">
+                            <div id="cloud-sync-providers"></div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="about-panel-overlay" id="about-panel">
-            <button class="about-panel-close" onclick="closeAboutPanel()" title="关闭">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 6 6 18"></path>
-                    <path d="m6 6 12 12"></path>
-                </svg>
-            </button>
-            <div class="about-panel" id="about-panel-content"></div>
         </div>
 
         <div class="search-modal-overlay" id="search-modal" style="display: none;">
@@ -638,13 +781,17 @@
                         <circle cx="11" cy="11" r="8"></circle>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <input type="text" class="search-input" id="search-input" placeholder="搜索笔记..." autocomplete="off">
-                    <button class="search-close-btn" onclick="closeSearchModal()" title="关闭">
+                    <input type="text" class="search-input" id="search-input" data-i18n-placeholder="search.placeholder" autocomplete="off">
+                    <button class="search-close-btn" onclick="closeSearchModal()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6 6 18"></path>
                             <path d="m6 6 12 12"></path>
                         </svg>
                     </button>
+                </div>
+                <div class="search-filters" id="search-filters">
+                    <input type="text" class="search-filter-input" id="search-filter-topic" data-i18n-placeholder="search.filterTopic">
+                    <input type="text" class="search-filter-input" id="search-filter-tag" data-i18n-placeholder="search.filterTag">
                 </div>
                 <div class="search-results" id="search-results">
                 </div>
@@ -654,8 +801,8 @@
         <div class="download-modal-overlay" id="download-modal">
             <div class="download-modal" id="download-modal-content">
                 <div class="download-modal-header" id="download-modal-header">
-                    <div class="download-modal-title">下载</div>
-                    <button class="download-modal-close" onclick="closeDownloadModal()" title="关闭">
+                    <div class="download-modal-title" data-i18n="download.title"></div>
+                    <button class="download-modal-close" onclick="closeDownloadModal()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 6 6 18"></path>
                             <path d="m6 6 12 12"></path>
@@ -663,7 +810,28 @@
                     </button>
                 </div>
                 <div class="download-modal-body">
-                    <textarea id="modal-urls" class="form-input form-textarea modal-url-textarea" placeholder=""></textarea>
+                    <div class="multi-source-tabs">
+                        <button type="button" class="multi-source-tab active" data-ms-tab="url" data-i18n="download.tabWeb"></button>
+                        <button type="button" class="multi-source-tab" data-ms-tab="rss" data-i18n="download.tabRss"></button>
+                        <button type="button" class="multi-source-tab" data-ms-tab="transcript" data-i18n="download.tabTranscript"></button>
+                    </div>
+                    <div class="multi-source-pane active" id="ms-pane-url">
+                        <textarea id="modal-urls" class="form-input form-textarea modal-url-textarea" data-i18n-placeholder="download.urlsPlaceholder"></textarea>
+                    </div>
+                    <div class="multi-source-pane" id="ms-pane-rss" hidden>
+                        <input type="url" id="ms-rss-url" class="form-input form-input-full" data-i18n-placeholder="download.rssPlaceholder">
+                        <div class="form-row" style="margin-top:8px;gap:8px;align-items:center;">
+                            <label><span data-i18n="download.rssCount"></span> <input type="number" id="ms-rss-max" class="form-input" value="10" min="1" max="30" style="width:4em"></label>
+                            <label><input type="checkbox" id="ms-rss-fetch" checked> <span data-i18n="download.rssFetch"></span></label>
+                            <button type="button" class="btn btn-secondary" id="ms-rss-import-btn" data-i18n="download.importRss"></button>
+                        </div>
+                    </div>
+                    <div class="multi-source-pane" id="ms-pane-transcript" hidden>
+                        <input type="text" id="ms-transcript-title" class="form-input form-input-full" data-i18n-placeholder="download.transcriptTitle">
+                        <input type="text" id="ms-transcript-source" class="form-input form-input-full" data-i18n-placeholder="download.transcriptSource" style="margin-top:8px">
+                        <textarea id="ms-transcript-content" class="form-input form-textarea" data-i18n-placeholder="download.transcriptContent" style="margin-top:8px;min-height:120px"></textarea>
+                        <button type="button" class="btn btn-secondary" id="ms-transcript-import-btn" style="margin-top:8px" data-i18n="download.saveTranscript"></button>
+                    </div>
                     <div class="url-hint-text"></div>
                     <div class="modal-progress-container" id="modal-progress-container" style="display: none;">
                         <div class="progress-bar">
@@ -677,19 +845,122 @@
                         <input type="checkbox" id="modal-web-include-images" class="switch-input">
                         <span class="switch-slider"></span>
                     </label>
-                    <span class="switch-label">包含图片的外部 URL 链接</span>
-                    <button class="btn btn-primary" id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>
+                    <span class="switch-label" data-i18n="download.includeImages"></span>
+                    <button class="btn btn-primary" id="modal-download-btn" onclick="startDownloadFromModal()" data-i18n="download.start"></button>
                 </div>
             </div>
         </div>
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
 
+    <div class="modal-overlay" id="schema-wizard-modal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 data-i18n="schemaWizard.modalTitle"></h3>
+            </div>
+            <div class="modal-body">
+                <div class="schema-wizard-progress" aria-hidden="true">
+                    <div class="schema-wizard-dot active"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                    <div class="schema-wizard-dot"></div>
+                </div>
+
+                <div class="schema-wizard-step active" data-step="0">
+                    <h4 data-i18n="schemaWizard.stepPurpose"></h4>
+                    <p class="hint" data-i18n="schemaWizard.stepPurposeHint"></p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-purpose" value="personal" checked>
+                            <span data-i18n="schemaWizard.purposePersonal"></span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-purpose" value="project">
+                            <span data-i18n="schemaWizard.purposeProject"></span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-purpose" value="research">
+                            <span data-i18n="schemaWizard.purposeResearch"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="1">
+                    <h4 data-i18n="schemaWizard.stepDomains"></h4>
+                    <p class="hint" data-i18n="schemaWizard.stepDomainsHint"></p>
+                    <div class="schema-option-grid">
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="agent" checked> AI Agent</label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="rag" checked> <span data-i18n="schemaWizard.domainRag"></span></label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="product" checked> <span data-i18n="schemaWizard.domainProduct"></span></label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="llm"> <span data-i18n="schemaWizard.domainLlm"></span></label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="tools"> <span data-i18n="schemaWizard.domainTools"></span></label>
+                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="career"> <span data-i18n="schemaWizard.domainCareer"></span></label>
+                    </div>
+                    <div class="schema-wizard-custom">
+                        <input type="text" id="schema-wizard-custom-domains" class="form-input" data-i18n-placeholder="schemaWizard.customDomainsPlaceholder">
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="2">
+                    <h4 data-i18n="schemaWizard.stepDepth"></h4>
+                    <p class="hint" data-i18n="schemaWizard.stepDepthHint"></p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-depth" value="2">
+                            <span data-i18n="schemaWizard.depth2"></span>
+                        </label>
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-depth" value="3" checked>
+                            <span data-i18n="schemaWizard.depth3"></span>
+                        </label>
+                    </div>
+                    <div class="schema-option-list" style="margin-top:12px">
+                        <label class="schema-option-card selected">
+                            <input type="radio" name="schema-language" value="zh" checked>
+                            <span data-i18n="schemaWizard.langZh"></span>
+                        </label>
+                        <label class="schema-option-card">
+                            <input type="radio" name="schema-language" value="mixed">
+                            <span data-i18n="schemaWizard.langMixed"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="3">
+                    <h4 data-i18n="schemaWizard.stepHabits"></h4>
+                    <p class="hint" data-i18n="schemaWizard.stepHabitsHint"></p>
+                    <div class="schema-option-list">
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="folder_truth" checked> <span data-i18n="schemaWizard.habitFolderTruth"></span></label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="pending" checked> <span data-i18n="schemaWizard.habitPending"></span></label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="survey_only" checked> <span data-i18n="schemaWizard.habitSurveyOnly"></span></label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="auto_convert" checked> <span data-i18n="schemaWizard.habitAutoConvert"></span></label>
+                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="tags_cn" checked> <span data-i18n="schemaWizard.habitTagsCn"></span></label>
+                    </div>
+                </div>
+
+                <div class="schema-wizard-step" data-step="4">
+                    <h4 data-i18n="schemaWizard.stepConfirm"></h4>
+                    <p class="hint" data-i18n="schemaWizard.stepConfirmHint"></p>
+                    <textarea id="schema-wizard-preview" class="form-input form-textarea"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer schema-wizard-footer">
+                <button type="button" class="btn btn-secondary" id="schema-wizard-use-default" data-i18n="schemaWizard.useDefault"></button>
+                <div class="right">
+                    <button type="button" class="btn btn-secondary" id="schema-wizard-back" data-i18n="schemaWizard.back"></button>
+                    <button type="button" class="btn btn-primary" id="schema-wizard-next" data-i18n="schemaWizard.next"></button>
+                    <button type="button" class="btn btn-primary" id="schema-wizard-save" style="display:none" data-i18n="schemaWizard.finish"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="project-rules-modal" style="display:none;">
         <div class="modal-dialog">
             <div class="modal-header">
-                <h3>项目规则</h3>
-                <button class="modal-close-btn" onclick="closeProjectRulesModal()" title="关闭">
+                <h3 data-i18n="projectRules.title"></h3>
+                <button class="modal-close-btn" onclick="closeProjectRulesModal()" data-i18n-title="common.close">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 6 6 18"></path>
                         <path d="m6 6 12 12"></path>
@@ -697,14 +968,76 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p class="modal-desc">定义此工作区的项目规则，AI 在回答问题时会参考这些规则。</p>
-                <textarea id="project-rules-input" class="form-input form-textarea" rows="12" placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库&#10;- 所有笔记使用中文&#10;- 代码示例使用 Python&#10;- 优先使用简洁的技术文档风格"></textarea>
+                <p class="modal-desc" data-i18n="projectRules.desc"></p>
+                <textarea id="project-rules-input" class="form-input form-textarea" rows="12" data-i18n-placeholder="projectRules.placeholder" placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库&#10;- 所有笔记使用中文&#10;- 代码示例使用 Python&#10;- 优先使用简洁的技术文档风格"></textarea>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeProjectRulesModal()">跳过</button>
-                <button class="btn btn-primary" onclick="saveProjectRulesModal()">保存规则</button>
+                <button class="btn btn-secondary" onclick="closeProjectRulesModal()" data-i18n="common.skip"></button>
+                <button class="btn btn-primary" onclick="saveProjectRulesModal()" data-i18n="projectRules.save"></button>
             </div>
         </div>
     </div>
+
+    <div id="quick-create-overlay" class="quick-create-overlay" style="display:none">
+        <div class="quick-create-dialog" role="dialog" aria-labelledby="quick-create-title">
+            <div class="quick-create-header">
+                <span id="quick-create-title" data-i18n="quickCreate.title"></span>
+                <button type="button" class="quick-create-close" onclick="QuickCreateModule.close()" data-i18n-title="common.close">&times;</button>
+            </div>
+            <div class="quick-create-tabs">
+                <button type="button" class="qc-tab active" data-qc-tab="note" data-i18n="quickCreate.tabNote"></button>
+                <button type="button" class="qc-tab" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>
+            </div>
+            <div class="qc-pane" data-qc-pane="note">
+                <label class="qc-label" data-i18n="quickCreate.noteTitle"></label>
+                <input type="text" id="qc-note-title" class="form-input form-input-full" data-i18n-placeholder="quickCreate.noteTitlePlaceholder">
+                <label class="qc-label" data-i18n="quickCreate.noteTopic"></label>
+                <select id="qc-note-topic" class="form-input form-input-full"></select>
+                <p class="qc-hint" data-i18n="quickCreate.noteUncategorizedHint"></p>
+                <button type="button" class="btn btn-primary qc-submit" id="qc-note-submit" data-i18n="quickCreate.createAndOpen"></button>
+            </div>
+            <div class="qc-pane" data-qc-pane="topic" hidden>
+                <label class="qc-label" data-i18n="quickCreate.topicName"></label>
+                <input type="text" id="qc-topic-name" class="form-input form-input-full" data-i18n-placeholder="quickCreate.topicNamePlaceholder">
+                <label class="qc-label" data-i18n="quickCreate.topicParent"></label>
+                <select id="qc-topic-parent" class="form-input form-input-full"></select>
+                <p class="qc-hint" data-i18n="quickCreate.topicParentHint"></p>
+                <button type="button" class="btn btn-primary qc-submit" id="qc-topic-submit" data-i18n="quickCreate.createTopic"></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-confirm-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:100000;display:none;justify-content:center;align-items:center">
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+            <p id="custom-confirm-message" style="margin:0 0 20px 0;color:var(--text);font-size:14px;line-height:1.6;white-space:pre-wrap"></p>
+            <div style="display:flex;justify-content:flex-end;gap:10px">
+                <button id="custom-confirm-cancel" data-i18n="confirm.cancel" style="background:var(--bg-hover);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:7px 18px;cursor:pointer;font-size:13px"></button>
+                <button id="custom-confirm-ok" data-i18n="confirm.ok" style="background:#4A90D9;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:13px"></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ingest-pipeline-bar" role="status" aria-live="polite">
+        <span class="ingest-label" id="ingest-pipeline-stage" data-i18n="ingest.label"></span>
+        <div class="ingest-track"><div class="ingest-fill" id="ingest-pipeline-fill"></div></div>
+        <span class="ingest-message" id="ingest-pipeline-message"></span>
+        <button type="button" id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle" data-i18n="ingest.retry"></button>
+        <button type="button" id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle" data-i18n="common.cancel"></button>
+    </div>
+
+    </div><!-- #app-scale-root -->
+
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <div id="js-error-panel" style="position:fixed;bottom:0;left:0;right:0;max-height:40vh;overflow:auto;background:#1a0000;color:#ff6b6b;font:12px monospace;padding:10px;z-index:99999;display:none;border-top:2px solid #ff0000;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <b style="color:#ff0000">JS Errors (click to dismiss)</b>
+            <button onclick="document.getElementById('js-error-panel').style.display='none'" style="background:#333;color:#fff;border:none;padding:2px 8px;cursor:pointer">X</button>
+        </div>
+        <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
+    </div>
+    <script src="js/error-handler.js"></script>
+    <script src="js/topic-tree-3tier.js"></script>
+    <script src="js/G3.js"></script>
 </body>
 </html>

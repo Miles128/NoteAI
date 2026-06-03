@@ -25,10 +25,15 @@ venv/
 ENV/
 env/
 .venv/
+src-tauri/resources/sidecar-python/
+
+# JavaScript dependencies
+node_modules/
 
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
 *~
@@ -46,20 +51,40 @@ Thumbs.db
 logs/
 *.log
 
+# Test / type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
 # Local config
 local_config.py
 config.local.py
 .env
 .env.local
 
-# Project config (contains local paths)
+# Project config (contains local paths) — copy from config.json.example
 config/config.json
 
 # Trae IDE
 .trae/
 
+# CodeGraph
+.codegraph/
+
 # Downloaded bundles
 codemirror-bundle.mjs
+!webui/lib/
+webui/lib/*
+!webui/lib/tiptap-bundle.js
 
 # Tauri
 src-tauri/target/
+
+# AI-generated wiki content (per-workspace wiki/ is inside workspace, not repo root)
+wiki/
+
+# Workspace runtime artifacts (when created inside repo during dev)
+**/rag_index/
+.milvus/

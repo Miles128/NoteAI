@@ -1,13 +1,16 @@
 .preview-panel {
     display: flex;
     flex-direction: row;
-    flex: 1;
+    flex: 1 1 auto;
     width: 100%;
     min-width: 0;
+    min-height: 0;
+    height: 100%;
     max-width: none;
     background: var(--article-bg);
     overflow: hidden;
     position: relative;
+    align-self: stretch;
 }
 
 .preview-panel.active {
@@ -21,8 +24,19 @@
     max-width: none;
 }
 
+.preview-panel.editor-active .preview-content-wrapper {
+    flex: 1;
+    min-height: 0;
+}
+
+.preview-panel.editor-active .tiptap-editor-container {
+    flex: 1;
+    min-height: 0;
+}
+
 .preview-resizer {
-    width: 4px;
+    width: 6px;
+    min-width: 6px;
     height: 100%;
     cursor: col-resize;
     background: var(--border);
@@ -37,8 +51,8 @@
     content: '';
     position: absolute;
     top: 0;
-    left: -6px;
-    right: -6px;
+    left: -3px;
+    right: -3px;
     bottom: 0;
     z-index: 10;
 }
@@ -52,7 +66,25 @@
     flex-direction: column;
     flex: 1;
     min-width: 0;
+    min-height: 0;
     overflow: hidden;
+}
+
+.preview-content-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 3px;
+}
+
+.preview-content-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
 }
 
 .preview-header {
@@ -134,7 +166,86 @@
 .preview-content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 16px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar) transparent;
+}
+
+.preview-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.preview-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.preview-content::-webkit-scrollbar-thumb {
+    background: var(--scrollbar);
+    border-radius: 3px;
+}
+
+.preview-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
+
+/* Word / DOCX 排版预览（mammoth HTML） */
+.docx-preview {
+    max-width: 900px;
+    margin: 0 auto;
+    line-height: 1.75;
+    color: var(--text);
+    font-size: 15px;
+}
+
+.docx-preview h1,
+.docx-preview h2,
+.docx-preview h3,
+.docx-preview h4 {
+    margin: 1.2em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.docx-preview p {
+    margin: 0.65em 0;
+}
+
+.docx-preview ul,
+.docx-preview ol {
+    margin: 0.65em 0;
+    padding-left: 1.5em;
+}
+
+.docx-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-size: 14px;
+}
+
+.docx-preview table th,
+.docx-preview table td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    vertical-align: top;
+}
+
+.docx-preview table th {
+    background: var(--bg-hover);
+    font-weight: 600;
+}
+
+.docx-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+}
+
+.docx-preview-empty {
+    color: var(--text-muted);
+    text-align: center;
+    padding: 48px 16px;
 }
 
 .preview-content > *:not(.preview-file-info) {

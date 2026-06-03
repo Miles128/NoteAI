@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _searchVisible = false;
 var _searchDebounceTimer = null;
 
@@ -49,12 +51,12 @@ function doSearch(query) {
 
     if (!window.api || !window.api.invoke) {
         resultsEl.innerHTML =
-            '<div class="search-empty">搜索不可用</div>';
+            '<div class="search-empty">' + window.t('search.unavailable') + '</div>';
         return;
     }
 
     resultsEl.innerHTML =
-        '<div class="search-loading">搜索中...</div>';
+        '<div class="search-loading">' + window.t('search.loading') + '</div>';
 
     window.api.invoke('search_files', { query: query.trim() })
         .then(function (result) {
@@ -64,14 +66,14 @@ function doSearch(query) {
             } else {
                 resultsEl.innerHTML =
                     '<div class="search-empty">' +
-                    (result ? escapeHtml(result.message || '搜索失败') : '搜索失败') +
+                    (result ? escapeHtml(result.message || window.t('search.failed')) : window.t('search.failed')) +
                     '</div>';
             }
         })
         .catch(function (e) {
             console.error('[Search] error:', e);
             resultsEl.innerHTML =
-                '<div class="search-empty">搜索出错: ' + escapeHtml(e.message || e || '未知错误') + '</div>';
+                '<div class="search-empty">' + window.t('search.error', { message: escapeHtml(e.message || e || window.t('common.unknownError')) }) + '</div>';
         });
 }
 
@@ -84,14 +86,13 @@ function renderSearchResults(result) {
 
     if (results.length === 0) {
         resultsEl.innerHTML =
-            '<div class="search-empty">未找到匹配 "<strong>' +
-            escapeHtml(query) + '</strong>" 的笔记</div>';
+            '<div class="search-empty">' + window.t('search.noResults', { query: '<strong>' + escapeHtml(query) + '</strong>' }) + '</div>';
         return;
     }
 
-    var countText = results.length + ' 个结果';
+    var countText = window.t('search.resultCount', { count: results.length });
     if (result.count > 50) {
-        countText = '前 50 个结果（共 ' + result.count + ' 个）';
+        countText = window.t('search.resultTruncated', { total: result.count });
     }
 
     var html = '<div class="search-count">' + countText + '</div>';
@@ -200,3 +201,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+window.toggleSearchModal = toggleSearchModal;
+window.closeSearchModal = closeSearchModal;
+window.onSearchResultClick = onSearchResultClick;
+
+})();
+

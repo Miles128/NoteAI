@@ -1,6 +1,5 @@
 import os
 import base64
-from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 from io import BytesIO
 
@@ -39,8 +38,10 @@ class FilePreviewer:
                 return self._preview_text(full_path, file_size)
             elif ext == '.pdf':
                 return self._preview_pdf(full_path, file_size)
-            elif ext in ['.doc', '.docx']:
-                return self._preview_word(full_path, file_size)
+            elif ext == '.docx':
+                return self._preview_docx(full_path, file_size)
+            elif ext == '.doc':
+                return self._preview_doc_legacy(full_path, file_size)
             else:
                 return {
                     'success': False,
@@ -53,30 +54,37 @@ class FilePreviewer:
                 'error': str(e)
             }
 
+    def _utf8_transport(self, content: str) -> Dict[str, Any]:
+        """Encode preview text once as standard base64 (ASCII-safe over JSON-RPC)."""
+        raw = content.encode('utf-8')
+        return {
+            'transport': 'base64_utf8',
+            'content_b64': base64.standard_b64encode(raw).decode('ascii'),
+            'content_byte_length': len(raw),
+        }
+
     def _preview_markdown(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hash(content)
 
         return {
             'success': True,
             'type': 'markdown',
+            'preview_delivery': 'semantic_b64',
             'file_name': os.path.basename(file_path),
             'file_size': file_size,
-            'content': content,
-            'content_hash': content_hash
+            **self._utf8_transport(content),
         }
 
     def _preview_text(self, file_path: str, file_size: int) -> Dict[str, Any]:
         content = read_file_with_encoding(file_path)
-        content_hash = hash(content)
 
         return {
             'success': True,
             'type': 'text',
+            'preview_delivery': 'semantic_b64',
             'file_name': os.path.basename(file_path),
             'file_size': file_size,
-            'content': content,
-            'content_hash': content_hash
+            **self._utf8_transport(content),
         }
 
     def _preview_pdf(self, file_path: str, file_size: int) -> Dict[str, Any]:
@@ -89,7 +97,11 @@ class FilePreviewer:
         total_pages = 0
         full_text = ""
         MAX_PREVIEW_PAGES = 50
+        MAX_PAGE_PIXELS = 3000 * 3000  # 单页最大像素限制，防止超大页面导致内存耗尽
+        MAX_TOTAL_IMAGE_SIZE = 200 * 1024 * 1024  # 总图片数据上限 200MB
+        total_image_size = 0
 
+        doc = None
         try:
             doc = fitz.open(file_path)
             total_pages = len(doc)
@@ -101,8 +113,20 @@ class FilePreviewer:
                 text = page.get_text("text") or ""
 
                 mat = fitz.Matrix(1.5, 1.5)
+                # 检查页面像素尺寸，防止恶意超大 PDF 导致内存耗尽
+                page_rect = page.rect
+                page_width_px = int(page_rect.width * 1.5)
+                page_height_px = int(page_rect.height * 1.5)
+                if page_width_px * page_height_px > MAX_PAGE_PIXELS:
+                    # 缩小渲染比例
+                    scale = (MAX_PAGE_PIXELS / (page_rect.width * page_rect.height)) ** 0.5
+                    mat = fitz.Matrix(scale, scale)
+
                 pix = page.get_pixmap(matrix=mat, alpha=False)
                 img_bytes = pix.tobytes("png")
+                total_image_size += len(img_bytes)
+                if total_image_size > MAX_TOTAL_IMAGE_SIZE:
+                    break
                 img_base64 = base64.b64encode(img_bytes).decode("utf-8")
 
                 pages_data.append({
@@ -114,8 +138,6 @@ class FilePreviewer:
                 })
 
                 full_text += text + "\n\n"
-
-            doc.close()
 
             return {
                 "success": True,
@@ -130,6 +152,9 @@ class FilePreviewer:
         except Exception as e:
             logger.error(f"PDF预览失败 (PyMuPDF): {e}")
             return self._preview_pdf_legacy(file_path, file_size)
+        finally:
+            if doc is not None:
+                doc.close()
 
     def _preview_pdf_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
         try:
@@ -160,63 +185,114 @@ class FilePreviewer:
                 "error": f"PDF解析失败: {str(e)}"
             }
 
-    def _preview_word(self, file_path: str, file_size: int) -> Dict[str, Any]:
+    def _preview_docx(self, file_path: str, file_size: int) -> Dict[str, Any]:
+        """DOCX → HTML（mammoth），供前端排版预览。"""
+        try:
+            import mammoth
+        except ImportError:
+            return self._preview_docx_python_docx(file_path, file_size)
+
+        try:
+            with open(file_path, 'rb') as docx_file:
+                result = mammoth.convert_to_html(docx_file)
+            html = (result.value or '').strip()
+            if not html:
+                return self._preview_docx_python_docx(file_path, file_size)
+
+            payload: Dict[str, Any] = {
+                'success': True,
+                'type': 'docx',
+                'content_kind': 'html',
+                'preview_delivery': 'semantic_b64',
+                'file_name': os.path.basename(file_path),
+                'file_size': file_size,
+                **self._utf8_transport(html),
+            }
+            messages = [str(m) for m in getattr(result, 'messages', [])]
+            if messages:
+                payload['warnings'] = messages[:8]
+            return payload
+        except Exception as e:
+            logger.warning(f"DOCX mammoth 预览失败，回退 python-docx: {e}")
+            return self._preview_docx_python_docx(file_path, file_size)
+
+    def _preview_docx_python_docx(self, file_path: str, file_size: int) -> Dict[str, Any]:
         from docx import Document
-        from docx.shared import Pt
-        import re
 
         try:
             doc = Document(file_path)
-            paragraphs_data = []
-
-            for i, para in enumerate(doc.paragraphs):
+            parts: List[str] = []
+            for para in doc.paragraphs:
                 text = para.text.strip()
-                if text:
-                    style_name = para.style.name if para.style else 'Normal'
-                    paragraphs_data.append({
-                        'index': i,
-                        'text': text,
-                        'style': style_name
-                    })
+                if not text:
+                    continue
+                style_name = (para.style.name if para.style else 'Normal') or 'Normal'
+                if style_name.startswith('Heading'):
+                    level = ''.join(c for c in style_name if c.isdigit()) or '1'
+                    parts.append(f'<h{level}>{self._escape_html(text)}</h{level}>')
+                else:
+                    parts.append(f'<p>{self._escape_html(text)}</p>')
 
-            full_text = '\n'.join([p['text'] for p in paragraphs_data])
-
-            tables_data = []
-            for table_idx, table in enumerate(doc.tables):
-                table_rows = []
+            for table in doc.tables:
+                rows_html: List[str] = []
                 for row in table.rows:
-                    row_cells = [cell.text.strip() for cell in row.cells]
-                    table_rows.append(row_cells)
-                if table_rows:
-                    tables_data.append({
-                        'index': table_idx,
-                        'rows': table_rows
-                    })
+                    cells = ''.join(
+                        f'<td>{self._escape_html(cell.text.strip())}</td>'
+                        for cell in row.cells
+                    )
+                    rows_html.append(f'<tr>{cells}</tr>')
+                if rows_html:
+                    parts.append('<table>' + ''.join(rows_html) + '</table>')
 
+            html = ''.join(parts) or '<p>（文档无可见正文）</p>'
             return {
                 'success': True,
-                'type': 'word',
+                'type': 'docx',
+                'content_kind': 'html',
+                'preview_delivery': 'semantic_b64',
                 'file_name': os.path.basename(file_path),
                 'file_size': file_size,
-                'paragraphs': paragraphs_data,
-                'tables': tables_data,
-                'full_text': full_text
+                **self._utf8_transport(html),
             }
         except Exception as e:
-            logger.error(f"Word文档预览失败: {e}")
+            logger.error(f"DOCX 预览失败: {e}")
             return {
                 'success': False,
-                'error': f'Word文档解析失败: {str(e)}'
+                'error': f'Word 文档解析失败: {str(e)}',
             }
 
+    def _preview_doc_legacy(self, file_path: str, file_size: int) -> Dict[str, Any]:
+        """旧版 .doc：提取为 Markdown 后预览。"""
+        try:
+            from modules.file_converter import LegacyDOCConverter
 
-def format_file_size(size_bytes: int) -> str:
-    if size_bytes < 1024:
-        return f"{size_bytes} B"
-    elif size_bytes < 1024 * 1024:
-        return f"{size_bytes / 1024:.1f} KB"
-    else:
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
+            markdown_content = LegacyDOCConverter().to_markdown(file_path)
+            return {
+                'success': True,
+                'type': 'docx',
+                'content_kind': 'markdown',
+                'preview_delivery': 'semantic_b64',
+                'file_name': os.path.basename(file_path),
+                'file_size': file_size,
+                **self._utf8_transport(markdown_content or ''),
+            }
+        except Exception as e:
+            logger.error(f"DOC 预览失败: {e}")
+            return {
+                'success': False,
+                'error': f'Word 文档解析失败: {str(e)}',
+            }
+
+    @staticmethod
+    def _escape_html(text: str) -> str:
+        return (
+            text.replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+        )
+
+from utils.helpers import format_file_size  # noqa: E402, F811
 
 
 def get_file_type_display_name(ext: str) -> str:

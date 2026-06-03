@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _lastTagsData = null;
 var _tagsDragData = { filePath: null, fileName: null };
 
@@ -5,12 +7,12 @@ async function loadTagsView(silent) {
     var container = document.getElementById('sidebar-tags');
     if (!container) return;
     if (!silent) {
-        container.innerHTML = '<div class="sidebar-view-loading">加载标签...</div>';
+        container.innerHTML = window.t('tags.auto.tags_auto_tags_auto_div_class_sidebar_view_loadi');
     }
 
     try {
-        await window.api.ensure_tags_md();
-        var result = await window.api.get_all_tags();
+        await window.api.ensureTagsMd();
+        var result = await window.api.getAllTags();
 
         var dataStr = JSON.stringify(result);
         if (silent && dataStr === _lastTagsData) return;
@@ -18,7 +20,7 @@ async function loadTagsView(silent) {
         window.AppState.lastTagsData = dataStr;
 
         if (!result || !result.tags || result.tags.length === 0) {
-            container.innerHTML = '<div class="sidebar-view-empty">暂无标签</div>';
+            container.innerHTML = window.t('tags.auto.tags_auto_tags_auto_div_class_sidebar_view_empty');
         } else {
             var expandedTags = {};
             container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el) {
@@ -54,7 +56,7 @@ async function loadTagsView(silent) {
             updateSidebarStats();
         }
     } catch (e) {
-        container.innerHTML = '<div class="sidebar-view-empty">加载标签失败</div>';
+        container.innerHTML = window.t('tags.auto.tags_auto_tags_auto_div_class_sidebar_view_empty_2');
     }
 }
 
@@ -70,7 +72,7 @@ function setupTagsDragDrop(container) {
         if (!filePath) return;
 
         _tagsDragData.filePath = filePath;
-        _tagsDragData.fileName = fileEl.getAttribute('data-file-name') || '文件';
+        _tagsDragData.fileName = fileEl.getAttribute('data-file-name') || window.t('common.file');
         fileEl.classList.add('dragging');
 
         e.dataTransfer.effectAllowed = 'move';
@@ -141,15 +143,15 @@ function setupTagsDragDrop(container) {
         }
 
         try {
-            var result = await window.api.add_tag_to_file(_tagsDragData.filePath, targetTag);
+            var result = await window.api.addTagToFile(_tagsDragData.filePath, targetTag);
             if (result && result.success) {
                 await loadTagsView();
             } else {
-                alert('添加标签失败：' + (result ? result.message : '未知错误'));
+                alert(window.t('tags.addFailed') + (result ? result.message : window.t('common.unknownError')));
             }
         } catch (err) {
             console.error('[Tags] add tag error:', err);
-            alert('添加标签失败：' + (err.message || '发生错误'));
+            alert(window.t('tags.addFailed') + (err.message || window.t('common.errorOccurred')));
         }
 
         container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
@@ -189,7 +191,7 @@ function showTagRowContextMenu(e, rowEl) {
     var items = [];
 
     items.push({
-        label: '更改名称',
+        label: window.t('tags.changeName'),
         icon: window.Icons.get('fileEdit'),
         action: function() {
             if (tagNameEl) {
@@ -199,7 +201,7 @@ function showTagRowContextMenu(e, rowEl) {
     });
 
     items.push({
-        label: '删除标签',
+        label: window.t('tags.deleteTag'),
         icon: window.Icons.get('trash'),
         action: function() {
             onDeleteTag(tagName);
@@ -261,11 +263,11 @@ function startTagRename(tagNameEl, oldTagName) {
             return;
         }
 
-        window.api.rename_tag(oldTagName, newName).then(function(result) {
+        window.api.renameTag(oldTagName, newName).then(function(result) {
             if (result && result.success) {
                 loadTagsView(true);
             } else {
-                alert('重命名标签失败：' + (result && result.message ? result.message : '未知错误'));
+                alert(window.t('tags.renameFailed') + (result && result.message ? result.message : window.t('common.unknownError')));
             }
         }).catch(function(e) {
             console.error('[Tag] rename error:', e);
@@ -291,19 +293,19 @@ function startTagRename(tagNameEl, oldTagName) {
     });
 }
 
-function onDeleteTag(tagName) {
-    var confirmed = confirm('确定要删除标签「' + tagName + '」吗？\n\n该标签将从所有文件的 YAML tags 中移除，同时更新 WIKI.md。');
+async function onDeleteTag(tagName) {
+    var confirmed = await window._customConfirm(window.t('tags.confirmDelete', { name: tagName }));
     if (!confirmed) return;
 
-    window.api.delete_tag(tagName).then(function(result) {
+    window.api.deleteTag(tagName).then(function(result) {
         if (result && result.success) {
             loadTagsView(true);
         } else {
-            alert('删除标签失败：' + (result && result.message ? result.message : '未知错误'));
+            alert(window.t('tags.deleteFailed') + (result && result.message ? result.message : window.t('common.unknownError')));
         }
     }).catch(function(e) {
         console.error('[Tag] delete error:', e);
-        alert('删除标签出错');
+        alert(window.t('tags.deleteError'));
     });
 }
 
@@ -320,13 +322,13 @@ function showTagsContextMenu(e, fileEl) {
     var items = [];
 
     items.push({
-        label: '在访达中显示',
+        label: window.t('tree.revealInFinder'),
         icon: window.Icons.get('folder'),
         action: function() { revealInFinder(path); }
     });
 
     items.push({
-        label: '在新窗口打开',
+        label: window.t('tree.openInNewWindow'),
         icon: window.Icons.get('folderOpen'),
         action: function() {
             if (window.api && window.api.openFileInNewWindow) {
@@ -367,7 +369,7 @@ async function doAutoTag() {
         btn.style.opacity = '0.5';
     }
     try {
-        var result = await window.api.auto_tag_files();
+        var result = await window.api.autoTagFiles();
         if (result && result.success) {
             setTimeout(function() { loadTagsView(); }, 1000);
         }
@@ -414,15 +416,15 @@ async function onConfirmTag() {
     if (!tagName) return;
 
     try {
-        var result = await window.api.create_tag(tagName);
+        var result = await window.api.createTag(tagName);
         if (result && result.success) {
             onHideTagInput();
             loadTagsView();
         } else {
-            alert('创建标签失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            alert(window.t('tags.createFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert('创建标签出错：' + (e.message || e));
+        alert(window.t('tags.createError') + (e.message || e));
     }
 }
 
@@ -462,3 +464,6 @@ function setupTagInputEvents() {
 window.doAutoTag = doAutoTag;
 window.onShowAddTagInput = onShowAddTagInput;
 window.loadTagsView = loadTagsView;
+
+})();
+

@@ -1,3 +1,19 @@
+(function() { 'use strict';
+
+var THEME_STORAGE_KEY = 'noteai_theme';
+
+function persistThemeLocal(theme) {
+    try {
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch (_e) { /* noop */ }
+}
+
+function syncThemeRadioInputs(theme) {
+    document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(function(radio) {
+        radio.checked = radio.value === theme;
+    });
+}
+
 function toggleTheme() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
@@ -14,8 +30,12 @@ function toggleTheme() {
         darkIcon.style.display = 'none';
     }
 
+    var next = html.getAttribute('data-theme') || 'dark';
+    persistThemeLocal(next);
     if (window.api) {
-        window.api.save_theme_preference(html.getAttribute('data-theme') || 'system');
+        window.api.saveThemePreference(next).catch(function(err) {
+            console.warn('[Theme] saveThemePreference failed:', err);
+        });
     }
 }
 
@@ -29,12 +49,13 @@ function setTheme(theme) {
         html.setAttribute('data-theme', theme);
     }
 
-    document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(radio => {
-        radio.checked = radio.value === theme;
-    });
+    syncThemeRadioInputs(theme);
+    persistThemeLocal(theme);
 
     if (window.api) {
-        window.api.save_theme_preference(theme);
+        window.api.saveThemePreference(theme).catch(function(err) {
+            console.warn('[Theme] saveThemePreference failed:', err);
+        });
     }
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
@@ -59,11 +80,39 @@ function applySystemTheme() {
 
 function initSystemThemeListener() {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        const currentTheme = localStorage.getItem('noteai_theme') || 'system';
+        var currentTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
         if (currentTheme === 'system') {
             applySystemTheme();
         }
     });
+}
+
+async function applyThemeBootstrap() {
+    var pref = null;
+    try {
+        if (window.api && typeof window.api.getThemePreference === 'function') {
+            pref = await window.api.getThemePreference();
+        }
+    } catch (e) {
+        console.warn('[Theme] getThemePreference failed:', e);
+    }
+    if (pref === null || pref === undefined || String(pref).trim() === '') {
+        pref = localStorage.getItem(THEME_STORAGE_KEY);
+    }
+    pref = pref || 'system';
+
+    persistThemeLocal(pref);
+    syncThemeRadioInputs(pref);
+
+    if (pref === 'system') {
+        applySystemTheme();
+    } else {
+        applyTheme(pref);
+    }
+
+    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
+        window.EditorModule.updateEditorTheme();
+    }
 }
 
 function applyTheme(theme) {
@@ -131,6 +180,7 @@ function initResizer() {
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
+        if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
         e.preventDefault();
         e.stopPropagation();
     });
@@ -154,6 +204,7 @@ function initResizer() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         localStorage.setItem('sidebar-width', sidebar.offsetWidth);
+        if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
     });
 }
 
@@ -197,32 +248,33 @@ function initPreviewResizer() {
 function showAboutPanel() {
     const aboutContent = `
         <h2>NoteAI</h2>
-        <p class="about-version">版本 1.0.0</p>
-        <p class="about-desc">AI 驱动的 Markdown 笔记知识库管理工具</p>
+        <p class="about-version">${window.t('about.version')}</p>
+        <p class="about-desc">${window.t('about.desc')}</p>
         <div class="about-features">
-            <h3>核心功能</h3>
+            <h3>${window.t('about.coreFeatures')}</h3>
             <ul>
-                <li>Markdown 笔记管理与编辑</li>
-                <li>AI 智能主题分析与归类</li>
-                <li>AI 主题综述自动撰写</li>
-                <li>标签管理与自动匹配</li>
-                <li>双向链接发现与可视化</li>
-                <li>网络文章批量下载与转换</li>
-                <li>多格式文件导入与整合</li>
-                <li>AI 改写与格式化</li>
+                <li>${window.t('about.feature1')}</li>
+                <li>${window.t('about.feature2')}</li>
+                <li>${window.t('about.feature3')}</li>
+                <li>${window.t('about.feature4')}</li>
+                <li>${window.t('about.feature5')}</li>
+                <li>${window.t('about.feature6')}</li>
+                <li>${window.t('about.feature7')}</li>
+                <li>${window.t('about.feature8')}</li>
             </ul>
         </div>
         <div class="about-features">
-            <h3>技术架构</h3>
+            <h3>${window.t('about.techArchitecture')}</h3>
             <ul>
-                <li>前端：Tauri v2 + HTML / CSS / JS</li>
-                <li>后端：Python sidecar</li>
-                <li>编辑器：Tiptap</li>
-                <li>大模型：LangChain + ChatOpenAI</li>
+                <li>${window.t('about.techFrontend')}</li>
+                <li>${window.t('about.techBackend')}</li>
+                <li>${window.t('about.techEditor')}</li>
+                <li>${window.t('about.techLlm')}</li>
             </ul>
         </div>
-        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">作者：四海</p>
-        <p class="about-tech" style="margin-top: 4px;">开源项目 · GitHub: Miles128/NoteAI</p>
+        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">${window.t('about.author')}</p>
+        <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">myx28@qq.com</p>
+        <p class="about-tech" style="margin-top: 4px;">${window.t('about.opensource')}</p>
     `;
 
     document.getElementById('about-panel-content').innerHTML = aboutContent;
@@ -233,15 +285,49 @@ function hideAboutPanel() {
     document.getElementById('about-panel').classList.remove('active');
 }
 
+window.setTheme = setTheme;
+window.setFontSize = applyFontSize;
+
+var FONT_SCALE_MAP = { small: 1, medium: 1.15, large: 1.3 };
+
+function setFontSize(size) {
+    var scale = FONT_SCALE_MAP[size] || 1;
+    document.documentElement.style.setProperty('--font-scale', scale);
+    document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+        radio.checked = radio.value === size;
+    });
+}
+
+function applyFontSize(size) {
+    setFontSize(size);
+    localStorage.setItem('noteai_font_size', size);
+    if (window.SettingsModule && window.SettingsModule.saveFontSize) {
+        window.SettingsModule.saveFontSize(size);
+    }
+}
+
+function restoreFontSize() {
+    var saved = localStorage.getItem('noteai_font_size') || 'small';
+    setFontSize(saved);
+}
+
 window.ThemeModule = {
     toggleTheme,
     setTheme,
     applySystemTheme,
     initSystemThemeListener,
     applyTheme,
+    syncThemeRadioInputs,
+    persistThemeLocal,
+    applyThemeBootstrap,
+    setFontSize: applyFontSize,
+    restoreFontSize,
     restoreSidebarWidth,
     initResizer,
     initPreviewResizer,
     showAboutPanel,
     hideAboutPanel
 };
+
+})();
+

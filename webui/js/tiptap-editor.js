@@ -1,662 +1,559 @@
-window.TiptapEditor = {
-    instance: null,
-    filePath: null,
-    saveTimer: null,
-    isActive: false,
-    originalContent: null,
-    modules: {},
-    modulesReady: false,
-    initPromise: null,
-    toolbarBound: false,
-    destroying: false,
-    allTags: []
-};
+// ================================================================
+// Tiptap 编辑器 - Markdown WYSIWYG
+// 依赖: webui/lib/tiptap-bundle.js (通过 esbuild 从 npm 打包, 导出 window.TiptapModules)
+// ================================================================
 
-window.TiptapEditor.initPromise = new Promise((resolve) => {
-    window.TiptapEditor.resolveInit = resolve;
-});
+;(function() {
+    'use strict';
 
-function initTiptapModules() {
-    if (window.TiptapEditor.modulesReady) {
-        return window.TiptapEditor.initPromise;
+    var SAVE_DELAY_MS = 1000;
+    /** Idle-defer TipTap markdown parse above this size (chars or lines). */
+    var DEFER_EDITOR_PARSE_CHARS = 16000;
+    var DEFER_EDITOR_PARSE_LINES = 280;
+    /** Apply CSS content-visibility hints on block nodes for long docs. */
+    var VIRT_SCROLL_CHARS = 9000;
+    var VIRT_SCROLL_LINES = 160;
+
+    function updateSaveStatus(status, text) {
+        var statusEl = document.getElementById('editor-status-bar');
+        if (!statusEl) return;
+        statusEl.className = 'editor-status-bar ' + (status || '');
+        statusEl.textContent = text || '';
     }
 
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.textContent = `
-        (async () => {
-            console.log('[Tiptap] Starting module load...');
-            try {
-                const [
-                    { Editor },
-                    { default: StarterKit },
-                    { Markdown }
-                ] = await Promise.all([
-                    import('https://esm.sh/@tiptap/core@2.6.6'),
-                    import('https://esm.sh/@tiptap/starter-kit@2.6.6'),
-                    import('https://esm.sh/tiptap-markdown@0.8.0')
-                ]);
+    function getActiveFilePath() {
+        return TiptapEditor.filePath || null;
+    }
 
-                console.log('[Tiptap] Core modules loaded');
-
-                window.TiptapEditor.modules = {
-                    Editor,
-                    StarterKit,
-                    Markdown
-                };
-
-                window.TiptapEditor.modulesReady = true;
-                window.TiptapEditor.resolveInit(true);
-                window.dispatchEvent(new CustomEvent('tiptap-ready'));
-                console.log('[Tiptap] All modules loaded successfully');
-            } catch (e) {
-                console.error('[Tiptap] Failed to load modules:', e);
-                window.TiptapEditor.resolveInit(false);
-            }
-        })();
-    `;
-    document.head.appendChild(script);
-
-    return window.TiptapEditor.initPromise;
-}
-
-function bindTiptapToolbarEvents() {
-    if (window.TiptapEditor.toolbarBound) return;
-
-    const toolbar = document.getElementById('tiptap-toolbar');
-    if (!toolbar) return;
-
-    toolbar.addEventListener('click', (e) => {
-        const btn = e.target.closest('.tiptap-btn[data-action]');
-        if (!btn || btn.disabled) return;
-
-        const action = btn.dataset.action;
-        const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
-        executeTiptapAction(action, level);
-    });
-
-    window.TiptapEditor.toolbarBound = true;
-}
-
-function executeTiptapAction(action, level) {
-    const editor = window.TiptapEditor.instance;
-    if (!editor || window.TiptapEditor.destroying) return;
-
-    try {
-        switch (action) {
-            case 'bold':
-                editor.chain().focus().toggleBold().run();
-                break;
-            case 'italic':
-                editor.chain().focus().toggleItalic().run();
-                break;
-            case 'strike':
-                editor.chain().focus().toggleStrike().run();
-                break;
-            case 'code':
-                editor.chain().focus().toggleCode().run();
-                break;
-            case 'heading':
-                if (level) {
-                    editor.chain().focus().toggleHeading({ level }).run();
-                }
-                break;
-            case 'bulletList':
-                editor.chain().focus().toggleBulletList().run();
-                break;
-            case 'orderedList':
-                editor.chain().focus().toggleOrderedList().run();
-                break;
-            case 'blockquote':
-                editor.chain().focus().toggleBlockquote().run();
-                break;
-            case 'codeBlock':
-                editor.chain().focus().toggleCodeBlock().run();
-                break;
-            case 'undo':
-                editor.chain().focus().undo().run();
-                break;
-            case 'redo':
-                editor.chain().focus().redo().run();
-                break;
+    function refreshPreviewState(content) {
+        if (window.PreviewModule && window.PreviewModule.currentPreviewData) {
+            window.PreviewModule.currentPreviewData.content = content;
         }
-    } catch (e) {
-        console.error('[Tiptap] Action error:', action, e);
     }
 
-    updateTiptapToolbarState();
-}
+    function splitFrontmatter(content) {
+        var text = String(content || '');
+        var match = text.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/);
+        if (!match) {
+            return { yaml: '', body: text };
+        }
+        return {
+            yaml: match[1] || '',
+            body: text.slice(match[0].length),
+        };
+    }
 
-function updateTiptapToolbarState() {
-    const editor = window.TiptapEditor.instance;
-    if (!editor || window.TiptapEditor.destroying) return;
+    function composeMarkdown(yaml, body) {
+        var cleanYaml = String(yaml || '').trim();
+        if (!cleanYaml) {
+            return body || '';
+        }
+        return '---\n' + cleanYaml + '\n---\n' + (body || '');
+    }
 
-    const toolbar = document.getElementById('tiptap-toolbar');
-    if (!toolbar) return;
+    var TiptapEditor = {
+        editor: null,
+        instance: null,
+        filePath: null,
+        originalContent: '',
+        saveTimer: null,
+        savePromise: null,
+        fallbackTextarea: null,
+        isActive: false,
+        userEdited: false,
+        frontmatterText: '',
+        _heavyIdleHandle: null,
+        _heavyIdleKind: null,
+        _heavyInitGen: 0,
 
-    try {
-        const buttons = toolbar.querySelectorAll('.tiptap-btn[data-action]');
-        buttons.forEach(btn => {
-            const action = btn.dataset.action;
-            const level = btn.dataset.level ? parseInt(btn.dataset.level) : null;
-
-            if (action === 'undo') {
-                try { btn.disabled = !editor.can().undo(); } catch (e) { btn.disabled = false; }
-            } else if (action === 'redo') {
-                try { btn.disabled = !editor.can().redo(); } catch (e) { btn.disabled = false; }
+        _cancelHeavyIdle: function() {
+            if (this._heavyIdleHandle == null) return;
+            if (this._heavyIdleKind === 'idle' && typeof cancelIdleCallback === 'function') {
+                cancelIdleCallback(this._heavyIdleHandle);
             } else {
-                btn.disabled = false;
+                clearTimeout(this._heavyIdleHandle);
             }
+            this._heavyIdleHandle = null;
+            this._heavyIdleKind = null;
+        },
 
-            let isActive = false;
-            try {
-                if (action === 'heading' && level) isActive = editor.isActive('heading', { level });
-                else if (action === 'bulletList') isActive = editor.isActive('bulletList');
-                else if (action === 'orderedList') isActive = editor.isActive('orderedList');
-                else if (action === 'blockquote') isActive = editor.isActive('blockquote');
-                else if (action === 'codeBlock') isActive = editor.isActive('codeBlock');
-                else if (action === 'bold') isActive = editor.isActive('bold');
-                else if (action === 'italic') isActive = editor.isActive('italic');
-                else if (action === 'strike') isActive = editor.isActive('strike');
-                else if (action === 'code') isActive = editor.isActive('code');
-            } catch (e) {}
-
-            if (isActive) btn.classList.add('active');
-            else btn.classList.remove('active');
-        });
-    } catch (e) {}
-}
-
-function parseYamlFrontmatter(content) {
-    var trimmed = content.replace(/^\uFEFF/, '');
-    var match = trimmed.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/);
-    if (!match) return { frontmatter: null, body: content };
-    var yaml = match[1];
-    var body = trimmed.slice(match[0].length);
-    var props = {};
-    var currentKey = null;
-    var currentArr = null;
-    yaml.split('\n').forEach(function(line) {
-        if (line.match(/^\s+-\s+/)) {
-            if (currentKey && currentArr) {
-                currentArr.push(line.replace(/^\s+-\s+/, '').trim().replace(/^['"]|['"]$/g, ''));
-            }
-            return;
-        }
-        if (currentKey && currentArr) {
-            props[currentKey] = currentArr;
-            currentKey = null;
-            currentArr = null;
-        }
-        var idx = line.indexOf(':');
-        if (idx < 0) return;
-        var key = line.slice(0, idx).trim();
-        var val = line.slice(idx + 1).trim();
-        if (!val) {
-            currentKey = key;
-            currentArr = [];
-            return;
-        }
-        if (val.startsWith('[') && val.endsWith(']')) {
-            val = val.slice(1, -1).split(',').map(function(s) { return s.trim().replace(/^['"]|['"]$/g, ''); });
-        }
-        props[key] = val;
-    });
-    if (currentKey && currentArr) {
-        props[currentKey] = currentArr;
-    }
-    return { frontmatter: props, body: body };
-}
-
-function renderFrontmatterPanel(frontmatter) {
-    if (!frontmatter) return '';
-    var hideKeys = ['title'];
-    var keys = Object.keys(frontmatter).filter(function(k) { return hideKeys.indexOf(k) < 0; });
-    if (!keys.length) return '';
-    var html = '<div class="obsidian-properties">';
-    keys.forEach(function(key) {
-        var val = frontmatter[key];
-        var safeKey = key.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-        html += '<div class="obsidian-prop-row">';
-        html += '<span class="obsidian-prop-key">' + safeKey + '</span>';
-        if (key === 'topic' && typeof val === 'string' && val.indexOf('/') >= 0) {
-            var parts = val.split('/');
-            html += '<span class="obsidian-prop-val obsidian-topic-breadcrumb">';
-            parts.forEach(function(part, idx) {
-                if (idx > 0) html += '<span class="topic-breadcrumb-sep"> &gt; </span>';
-                html += '<span class="topic-breadcrumb-item">' + part.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</span>';
-            });
-            html += '</span>';
-        } else if (Array.isArray(val) && val.length > 0) {
-            html += '<span class="obsidian-prop-val obsidian-prop-tags">';
-            val.forEach(function(item) {
-                html += '<span class="obsidian-tag-chip">' + String(item).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') + '</span>';
-            });
-            html += '</span>';
-        } else {
-            var displayVal = (val != null) ? String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
-            html += '<span class="obsidian-prop-val" contenteditable="true" data-fm-key="' + safeKey + '">' + displayVal + '</span>';
-        }
-        html += '</div>';
-    });
-    html += '</div>';
-    return html;
-}
-
-function createTiptapEditor(markdownContent, filePath) {
-    const container = document.getElementById('tiptap-editor');
-    if (!container) return false;
-
-    if (window.TiptapEditor.instance) {
-        destroyTiptapEditor();
-    }
-
-    const M = window.TiptapEditor.modules;
-    if (!M.Editor || !M.StarterKit || !M.Markdown) return false;
-
-    container.innerHTML = '';
-
-    var parsed = parseYamlFrontmatter(markdownContent);
-    var fmHtml = renderFrontmatterPanel(parsed.frontmatter);
-
-    var fmContainer = document.getElementById('frontmatter-panel');
-    if (fmContainer) {
-        fmContainer.innerHTML = fmHtml;
-        fmContainer.style.display = fmHtml ? 'block' : 'none';
-        fmContainer.querySelectorAll('.obsidian-prop-val[contenteditable]').forEach(function(el) {
-            el.addEventListener('blur', function() {
-                var key = this.getAttribute('data-fm-key');
-                var newVal = this.textContent.trim();
-                if (key && window.TiptapEditor.frontmatterData) {
-                    var origVal = window.TiptapEditor.frontmatterData[key];
-                    if (Array.isArray(origVal)) {
-                        window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        _scheduleHeavyIdle: function(onIdle) {
+            var self = this;
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    if (typeof requestIdleCallback === 'function') {
+                        self._heavyIdleKind = 'idle';
+                        self._heavyIdleHandle = requestIdleCallback(function() {
+                            self._heavyIdleHandle = null;
+                            self._heavyIdleKind = null;
+                            onIdle();
+                        }, { timeout: 900 });
                     } else {
-                        window.TiptapEditor.frontmatterData[key] = newVal;
-                    }
-                    saveTiptapContent();
-                }
-            });
-            el.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.blur();
-                }
-            });
-        });
-
-        fmContainer.querySelectorAll('.obsidian-prop-tags').forEach(function(el) {
-            el.addEventListener('dblclick', function() {
-                var key = el.previousElementSibling;
-                var keyName = key ? key.textContent.trim() : '';
-                if (!keyName || !window.TiptapEditor.frontmatterData) return;
-                var origVal = window.TiptapEditor.frontmatterData[keyName];
-                if (!Array.isArray(origVal)) return;
-                el.innerHTML = '';
-                el.textContent = origVal.join(', ');
-                el.classList.remove('obsidian-prop-tags');
-                el.setAttribute('contenteditable', 'true');
-                el.setAttribute('data-fm-key', keyName);
-                el.focus();
-                var range = document.createRange();
-                range.selectNodeContents(el);
-                var sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                setupTagAutocomplete(el, keyName);
-            });
-            el.addEventListener('blur', function() {
-                var key = this.getAttribute('data-fm-key');
-                var newVal = this.textContent.trim();
-                if (key && window.TiptapEditor.frontmatterData) {
-                    var origVal = window.TiptapEditor.frontmatterData[key];
-                    if (Array.isArray(origVal)) {
-                        window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-                    } else {
-                        window.TiptapEditor.frontmatterData[key] = newVal;
-                    }
-                    saveTiptapContent();
-                    var fmContainer = document.getElementById('frontmatter-panel');
-                    if (fmContainer) {
-                        fmContainer.innerHTML = renderFrontmatterPanel(window.TiptapEditor.frontmatterData);
-                        fmContainer.style.display = fmContainer.innerHTML ? 'block' : 'none';
-                        bindFrontmatterEvents(fmContainer);
-                    }
-                }
-            });
-        });
-    }
-
-    window.TiptapEditor.filePath = filePath;
-    window.TiptapEditor.originalContent = markdownContent;
-    window.TiptapEditor.frontmatterData = parsed.frontmatter;
-    window.TiptapEditor.isActive = true;
-    window.TiptapEditor.destroying = false;
-
-    try {
-        const extensions = [
-            M.StarterKit.configure({
-                heading: { levels: [1, 2, 3, 4, 5, 6] }
-            }),
-            M.Markdown.configure({
-                html: true,
-                tightLists: true,
-                bulletListMarker: '-',
-                linkify: false,
-                breaks: true
-            })
-        ];
-
-        window.TiptapEditor.instance = new M.Editor({
-            element: container,
-            extensions: extensions,
-            content: parsed.body || '',
-            editorProps: {
-                attributes: {
-                    class: 'tiptap-prose',
-                    spellcheck: 'true'
-                }
-            },
-            onUpdate: ({ editor }) => {
-                if (window.TiptapEditor.destroying) return;
-                if (window.TiptapEditor.saveTimer) {
-                    clearTimeout(window.TiptapEditor.saveTimer);
-                }
-                window.TiptapEditor.saveTimer = setTimeout(() => {
-                    saveTiptapContent();
-                }, 1000);
-            },
-            onSelectionUpdate: () => {
-                if (!window.TiptapEditor.destroying) {
-                    updateTiptapToolbarState();
-                }
-            }
-        });
-
-        bindTiptapToolbarEvents();
-        updateTiptapToolbarState();
-
-        console.log('[Tiptap] Editor created for:', filePath);
-        return true;
-    } catch (e) {
-        console.error('[Tiptap] Failed to create editor:', e);
-        window.TiptapEditor.isActive = false;
-        return false;
-    }
-}
-
-async function saveTiptapContent() {
-    if (!window.TiptapEditor.instance || !window.TiptapEditor.filePath || window.TiptapEditor.destroying) {
-        return;
-    }
-
-    try {
-        var markdown = window.TiptapEditor.instance.storage.markdown.getMarkdown();
-        var fmContainer = document.getElementById('frontmatter-panel');
-        if (fmContainer && fmContainer.style.display !== 'none') {
-            var fmData = window.TiptapEditor.frontmatterData;
-            if (fmData && Object.keys(fmData).length > 0) {
-                var yaml = '---\n';
-                Object.keys(fmData).forEach(function(key) {
-                    var val = fmData[key];
-                    if (Array.isArray(val)) {
-                        yaml += key + ':\n';
-                        val.forEach(function(item) { yaml += '  - ' + item + '\n'; });
-                    } else {
-                        yaml += key + ': ' + val + '\n';
+                        self._heavyIdleKind = 'timeout';
+                        self._heavyIdleHandle = setTimeout(function() {
+                            self._heavyIdleHandle = null;
+                            self._heavyIdleKind = null;
+                            onIdle();
+                        }, 72);
                     }
                 });
-                yaml += '---\n';
-                markdown = yaml + markdown;
-            }
-        }
-        const result = await window.api.save_note_file(window.TiptapEditor.filePath, markdown);
-
-        if (result && result.success) {
-            window.TiptapEditor.originalContent = markdown;
-        }
-    } catch (e) {
-        console.error('[Tiptap] Save error:', e);
-    }
-}
-
-async function destroyTiptapEditor() {
-    if (window.TiptapEditor.destroying) return;
-    window.TiptapEditor.destroying = true;
-
-    if (window.TiptapEditor.saveTimer) {
-        clearTimeout(window.TiptapEditor.saveTimer);
-        window.TiptapEditor.saveTimer = null;
-    }
-
-    if (window.TiptapEditor.instance && window.TiptapEditor.filePath) {
-        try {
-            await saveTiptapContent();
-        } catch (e) {
-            console.error('[Tiptap] Final save error:', e);
-        }
-    }
-
-    if (window.TiptapEditor.instance) {
-        try {
-            window.TiptapEditor.instance.destroy();
-        } catch (e) {
-            console.error('[Tiptap] Destroy error:', e);
-        }
-        window.TiptapEditor.instance = null;
-    }
-
-    window.TiptapEditor.filePath = null;
-    window.TiptapEditor.originalContent = null;
-    window.TiptapEditor.isActive = false;
-    window.TiptapEditor.destroying = false;
-
-    const container = document.getElementById('tiptap-editor');
-    if (container) {
-        container.innerHTML = '';
-    }
-}
-
-function showEditorUI() {
-    const previewContent = document.getElementById('preview-content');
-    const tiptapContainer = document.getElementById('tiptap-editor-container');
-    const toolbar = document.getElementById('tiptap-toolbar');
-
-    if (previewContent) previewContent.style.display = 'none';
-    if (tiptapContainer) tiptapContainer.style.display = 'flex';
-    if (toolbar) toolbar.style.display = 'flex';
-}
-
-function hideEditorUI() {
-    destroyTiptapEditor();
-
-    const previewContent = document.getElementById('preview-content');
-    const tiptapContainer = document.getElementById('tiptap-editor-container');
-    const toolbar = document.getElementById('tiptap-toolbar');
-
-    if (previewContent) previewContent.style.display = 'block';
-    if (tiptapContainer) tiptapContainer.style.display = 'none';
-    if (toolbar) toolbar.style.display = 'none';
-}
-
-async function openMarkdownInEditor(content, filePath) {
-    const modulesReady = await initTiptapModules();
-
-    if (!modulesReady) {
-        console.error('[Tiptap] Failed to load Tiptap modules');
-        return false;
-    }
-
-    showEditorUI();
-    return createTiptapEditor(content, filePath);
-}
-
-function setupTagAutocomplete(el, keyName) {
-    if (keyName !== 'tags') return;
-
-    loadAllTags();
-
-    var dropdown = document.createElement('div');
-    dropdown.className = 'tag-autocomplete-dropdown';
-    dropdown.style.display = 'none';
-    el.parentNode.style.position = 'relative';
-    el.parentNode.appendChild(dropdown);
-
-    function updateDropdown() {
-        var text = el.textContent.trim();
-        var parts = text.split(',').map(function(s) { return s.trim(); });
-        var currentPart = parts[parts.length - 1].toLowerCase();
-
-        if (!currentPart) {
-            dropdown.style.display = 'none';
-            return;
-        }
-
-        var existing = parts.slice(0, -1).map(function(s) { return s.toLowerCase(); });
-        var matches = window.TiptapEditor.allTags.filter(function(tag) {
-            return tag.toLowerCase().indexOf(currentPart) >= 0 &&
-                existing.indexOf(tag.toLowerCase()) < 0;
-        }).slice(0, 8);
-
-        if (matches.length === 0) {
-            dropdown.style.display = 'none';
-            return;
-        }
-
-        dropdown.innerHTML = matches.map(function(tag) {
-            return '<div class="tag-autocomplete-item" data-tag="' + tag.replace(/"/g, '&quot;') + '">' + tag.replace(/</g, '&lt;') + '</div>';
-        }).join('');
-        dropdown.style.display = 'block';
-
-        dropdown.querySelectorAll('.tag-autocomplete-item').forEach(function(item) {
-            item.addEventListener('mousedown', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                var selectedTag = this.getAttribute('data-tag');
-                parts[parts.length - 1] = selectedTag;
-                el.textContent = parts.join(', ') + ', ';
-                dropdown.style.display = 'none';
-                var range = document.createRange();
-                range.selectNodeContents(el);
-                range.collapse(false);
-                var sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
             });
-        });
-    }
+        },
 
-    el.addEventListener('input', updateDropdown);
-
-    el.addEventListener('keydown', function(e) {
-        if (e.key === 'Tab' && dropdown.style.display !== 'none') {
-            e.preventDefault();
-            var first = dropdown.querySelector('.tag-autocomplete-item');
-            if (first) {
-                first.dispatchEvent(new MouseEvent('mousedown'));
+        getModules: function() {
+            if (window.TiptapModules) {
+                return {
+                    Editor: window.TiptapModules.Editor,
+                    StarterKit: window.TiptapModules.StarterKit,
+                    Markdown: window.TiptapModules.Markdown,
+                };
             }
-        }
-    });
-
-    el.addEventListener('blur', function() {
-        setTimeout(function() { dropdown.remove(); }, 200);
-    });
-}
-
-async function loadAllTags() {
-    if (window.TiptapEditor.allTags.length > 0) return;
-    try {
-        var result = await window.api.get_all_tags();
-        if (result && result.tags) {
-            window.TiptapEditor.allTags = result.tags.map(function(t) { return t.name; });
-        }
-    } catch (e) {
-        console.error('[Tiptap] load tags error:', e);
-    }
-}
-
-function bindFrontmatterEvents(fmContainer) {
-    fmContainer.querySelectorAll('.obsidian-prop-val[contenteditable]').forEach(function(el) {
-        el.addEventListener('blur', function() {
-            var key = this.getAttribute('data-fm-key');
-            var newVal = this.textContent.trim();
-            if (key && window.TiptapEditor.frontmatterData) {
-                var origVal = window.TiptapEditor.frontmatterData[key];
-                if (Array.isArray(origVal)) {
-                    window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-                } else {
-                    window.TiptapEditor.frontmatterData[key] = newVal;
-                }
-                saveTiptapContent();
-            }
-        });
-        el.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this.blur();
-            }
-        });
-    });
-
-    fmContainer.querySelectorAll('.obsidian-prop-tags').forEach(function(el) {
-        el.addEventListener('dblclick', function() {
-            var key = el.previousElementSibling;
-            var keyName = key ? key.textContent.trim() : '';
-            if (!keyName || !window.TiptapEditor.frontmatterData) return;
-            var origVal = window.TiptapEditor.frontmatterData[keyName];
-            if (!Array.isArray(origVal)) return;
-            el.innerHTML = '';
-            el.textContent = origVal.join(', ');
-            el.classList.remove('obsidian-prop-tags');
-            el.setAttribute('contenteditable', 'true');
-            el.setAttribute('data-fm-key', keyName);
-            el.focus();
-            var range = document.createRange();
-            range.selectNodeContents(el);
-            var sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-            setupTagAutocomplete(el, keyName);
-        });
-        el.addEventListener('blur', function() {
-            var key = this.getAttribute('data-fm-key');
-            var newVal = this.textContent.trim();
-            if (key && window.TiptapEditor.frontmatterData) {
-                var origVal = window.TiptapEditor.frontmatterData[key];
-                if (Array.isArray(origVal)) {
-                    window.TiptapEditor.frontmatterData[key] = newVal.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-                } else {
-                    window.TiptapEditor.frontmatterData[key] = newVal;
-                }
-                saveTiptapContent();
-                var fmC = document.getElementById('frontmatter-panel');
-                if (fmC) {
-                    fmC.innerHTML = renderFrontmatterPanel(window.TiptapEditor.frontmatterData);
-                    fmC.style.display = fmC.innerHTML ? 'block' : 'none';
-                    bindFrontmatterEvents(fmC);
-                }
-            }
-        });
-    });
-}
-
-window.TiptapEditorModule = {
-    initTiptapModules,
-    createTiptapEditor,
-    destroyTiptapEditor,
-    saveTiptapContent,
-    openMarkdownInEditor,
-    showEditorUI,
-    hideEditorUI,
-    preloadModules: function() {
-        initTiptapModules();
-    },
-    getTiptapMarkdown: function() {
-        if (!window.TiptapEditor.instance) return null;
-        try {
-            return window.TiptapEditor.instance.storage.markdown.getMarkdown();
-        } catch (e) {
             return null;
-        }
-    }
-};
+        },
+
+        /** Wait until tiptap-bundle.js has registered window.TiptapModules. */
+        whenModulesReady: function(timeoutMs) {
+            var limit = typeof timeoutMs === 'number' ? timeoutMs : 10000;
+            return new Promise(function(resolve) {
+                if (window.TiptapModules) {
+                    resolve(true);
+                    return;
+                }
+                var elapsed = 0;
+                var step = 40;
+                var timer = setInterval(function() {
+                    elapsed += step;
+                    if (window.TiptapModules) {
+                        clearInterval(timer);
+                        resolve(true);
+                    } else if (elapsed >= limit) {
+                        clearInterval(timer);
+                        resolve(false);
+                    }
+                }, step);
+            });
+        },
+
+        init: function(editorEl, content, filePath, callback) {
+            var self = this;
+            if (!editorEl) {
+                console.error('[Tiptap] No editor element provided');
+                return false;
+            }
+
+            this._heavyInitGen += 1;
+            var gen = this._heavyInitGen;
+            this._cancelHeavyIdle();
+
+            var parts = splitFrontmatter(content || '');
+            this.filePath = filePath || null;
+            this.frontmatterText = parts.yaml;
+            this.originalContent = composeMarkdown(this.frontmatterText, parts.body);
+            this.fallbackTextarea = null;
+            this.userEdited = false;
+
+            if (this.editor) {
+                this.editor.destroy();
+                this.editor = null;
+                this.instance = null;
+            }
+            editorEl.innerHTML = '';
+            editorEl.classList.remove('tiptap-fallback-mode');
+            this.renderFrontmatterPanel();
+
+            var modules = this.getModules();
+            if (!modules) {
+                console.error('[Tiptap] Failed to load modules: TiptapModules not found');
+                this._createTextareaFallback(editorEl, parts.body);
+                return true;
+            }
+
+            var bodyStr = String(parts.body || '');
+            var bodyLines = bodyStr.split(/\r?\n/).length;
+            var deferHeavy = bodyStr.length >= DEFER_EDITOR_PARSE_CHARS || bodyLines >= DEFER_EDITOR_PARSE_LINES;
+            var virtLarge = bodyStr.length >= VIRT_SCROLL_CHARS || bodyLines >= VIRT_SCROLL_LINES;
+            var proseClass = virtLarge ? 'tiptap-prose tiptap-prose-large' : 'tiptap-prose';
+
+            function mountEditor(syncParse) {
+                if (gen !== self._heavyInitGen || !editorEl.isConnected) return;
+
+                editorEl.innerHTML = '';
+
+                try {
+                    self.editor = new modules.Editor({
+                        element: editorEl,
+                        extensions: [
+                            modules.StarterKit.configure({
+                                codeBlock: {
+                                    HTMLAttributes: { class: 'language-javascript' },
+                                },
+                            }),
+                            modules.Markdown.configure({
+                                html: true,
+                            }),
+                        ],
+                        content: syncParse ? parts.body : '',
+                        autofocus: false,
+                        editorProps: {
+                            attributes: {
+                                class: proseClass,
+                            },
+                            handleDOMEvents: {
+                                beforeinput: function() { self.userEdited = true; return false; },
+                                paste: function() { self.userEdited = true; return false; },
+                                drop: function() { self.userEdited = true; return false; },
+                                cut: function() { self.userEdited = true; return false; },
+                            },
+                        },
+                        onUpdate: function(_ref) {
+                            var md = self.getContent();
+                            if (self.userEdited && !window._rewritingFilePath) {
+                                self.scheduleAutoSave(md || '');
+                            }
+                            if (callback) {
+                                callback(md || '');
+                            }
+                        },
+                        onSelectionUpdate: function() {
+                            self.updateToolbarState();
+                        },
+                        onFocus: function() {
+                            self.updateToolbarState();
+                        },
+                    });
+                    self.instance = self.editor;
+                    self.isActive = true;
+
+                    if (!syncParse && parts.body) {
+                        try {
+                            self.editor.commands.setContent(parts.body);
+                        } catch (setErr) {
+                            console.warn('[Tiptap] deferred setContent failed:', setErr);
+                        }
+                    }
+                } catch (e) {
+                    console.error('[Tiptap] Init error:', e.message || e);
+                    self._createTextareaFallback(editorEl, parts.body);
+                    return;
+                }
+
+                self.bindToolbar();
+                self.updateToolbarState();
+                updateSaveStatus('saved', '已保存');
+            }
+
+            if (!deferHeavy) {
+                mountEditor(true);
+                return true;
+            }
+
+            editorEl.innerHTML = window.t('tiptapeditor.auto.tiptapeditor_auto_div_class_tiptap_deferred_moun');
+            updateSaveStatus('', '解析排版…');
+
+            this._scheduleHeavyIdle(function() {
+                mountEditor(false);
+            });
+
+            return true;
+        },
+
+        getContent: function() {
+            if (this.editor) {
+                try {
+                    if (this.editor.storage && this.editor.storage.markdown) {
+                        return this.editor.storage.markdown.getMarkdown();
+                    }
+                } catch (e) {
+                    console.warn('[Tiptap] getContent error:', e);
+                }
+            }
+            if (this.fallbackTextarea) {
+                return this.fallbackTextarea.value;
+            }
+            return null;
+        },
+
+        setContent: function(content) {
+            if (this.editor) {
+                try {
+                    this.editor.commands.setContent(content);
+                } catch (e) {
+                    console.warn('[Tiptap] setContent error:', e);
+                }
+            } else if (this.fallbackTextarea) {
+                this.fallbackTextarea.value = content || '';
+            }
+        },
+
+        setEditable: function(editable) {
+            if (this.editor) {
+                this.editor.setEditable(editable);
+            } else if (this.fallbackTextarea) {
+                this.fallbackTextarea.disabled = !editable;
+            }
+        },
+
+        focus: function() {
+            if (this.editor) {
+                this.editor.commands.focus();
+            } else if (this.fallbackTextarea) {
+                this.fallbackTextarea.focus();
+            }
+        },
+
+        destroy: async function() {
+            this._heavyInitGen += 1;
+            this._cancelHeavyIdle();
+            await this.flushSave();
+            if (this.editor) {
+                this.editor.destroy();
+                this.editor = null;
+                this.instance = null;
+            }
+            this.fallbackTextarea = null;
+            this.filePath = null;
+            this.originalContent = '';
+            this.frontmatterText = '';
+            this.userEdited = false;
+            this.isActive = false;
+            this.clearFrontmatterPanel();
+
+            var staleEl = document.getElementById('tiptap-editor');
+            if (staleEl && !this.editor && !this.fallbackTextarea) {
+                staleEl.innerHTML = '';
+            }
+        },
+
+        getFullContent: function(body) {
+            return composeMarkdown(this.frontmatterText, body || '');
+        },
+
+        renderFrontmatterPanel: function() {
+            var panel = document.getElementById('frontmatter-panel');
+            if (!panel) return;
+            if (!this.frontmatterText.trim()) {
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+                return;
+            }
+            panel.style.display = 'block';
+            panel.innerHTML = ''
+                + '<details class="frontmatter-details">'
+                + '<summary class="frontmatter-summary">元数据</summary>'
+                + '<textarea class="frontmatter-textarea" spellcheck="false"></textarea>'
+                + '</details>';
+            var textarea = panel.querySelector('.frontmatter-textarea');
+            if (!textarea) return;
+            var self = this;
+            textarea.value = this.frontmatterText;
+            textarea.addEventListener('input', function() {
+                self.frontmatterText = textarea.value;
+                self.userEdited = true;
+                self.scheduleAutoSave(self.getContent() || '');
+            });
+        },
+
+        clearFrontmatterPanel: function() {
+            var panel = document.getElementById('frontmatter-panel');
+            if (!panel) return;
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+        },
+
+        _createTextareaFallback: function(editorEl, content) {
+            var self = this;
+            var ta = document.createElement('textarea');
+            ta.className = 'tiptap-fallback';
+            ta.value = content || '';
+            ta.style.cssText = 'width:100%;height:100%;border:none;padding:12px 12px calc(80px * var(--font-scale, 1));font-family:monospace;font-size:14px;line-height:1.7;resize:none;background:var(--bg, #fff);color:var(--text, #333);overflow-y:auto;';
+            ta.addEventListener('input', function() {
+                self.userEdited = true;
+                self.scheduleAutoSave(ta.value);
+            });
+            editorEl.innerHTML = '';
+            editorEl.classList.add('tiptap-fallback-mode');
+            editorEl.appendChild(ta);
+            this.fallbackTextarea = ta;
+            this.isActive = true;
+            updateSaveStatus('error', '编辑器未加载，请重启应用');
+        },
+
+        scheduleAutoSave: function(content) {
+            var self = this;
+            if (this.saveTimer) {
+                clearTimeout(this.saveTimer);
+            }
+            updateSaveStatus('saving', '有未保存更改...');
+            this.saveTimer = setTimeout(function() {
+                self.performSave(content);
+            }, SAVE_DELAY_MS);
+        },
+
+        flushSave: async function() {
+            if (this.saveTimer) {
+                clearTimeout(this.saveTimer);
+                this.saveTimer = null;
+            }
+            if (!this.userEdited) {
+                if (this.savePromise) {
+                    await this.savePromise;
+                }
+                return;
+            }
+            var content = this.getContent();
+            var fullContent = content === null ? null : this.getFullContent(content);
+            if (fullContent !== null && fullContent !== this.originalContent) {
+                await this.performSave(content);
+            } else if (this.savePromise) {
+                await this.savePromise;
+            }
+        },
+
+        performSave: async function(content) {
+            var filePath = getActiveFilePath();
+            if (!filePath || !window.api || !window.api.saveFileContent) return;
+
+            while (this.savePromise) {
+                await this.savePromise;
+            }
+
+            var self = this;
+            this.savePromise = (async function() {
+                updateSaveStatus('saving', '保存中...');
+                try {
+                    var fullContent = self.getFullContent(content);
+                    var result = await window.api.saveFileContent(filePath, fullContent);
+                    if (result && result.success) {
+                        self.originalContent = fullContent;
+                        refreshPreviewState(fullContent);
+                        updateSaveStatus('saved', '已保存');
+                    } else {
+                        updateSaveStatus('error', '保存失败');
+                    }
+                } catch (e) {
+                    updateSaveStatus('error', '保存失败');
+                } finally {
+                    self.savePromise = null;
+                }
+            })();
+
+            await this.savePromise;
+        },
+
+        bindToolbar: function() {
+            var self = this;
+            var toolbar = document.getElementById('tiptap-toolbar');
+            if (!toolbar || toolbar.dataset.bound === 'true') return;
+            toolbar.dataset.bound = 'true';
+            toolbar.addEventListener('click', function(event) {
+                var btn = event.target.closest('.tiptap-btn[data-action]');
+                if (!btn || btn.disabled) return;
+                event.preventDefault();
+                self.runToolbarAction(btn);
+            });
+        },
+
+        runToolbarAction: function(btn) {
+            if (!this.editor) return;
+            this.userEdited = true;
+            var action = btn.dataset.action;
+            var level = parseInt(btn.dataset.level || '0', 10);
+            var chain = this.editor.chain().focus();
+
+            try {
+                if (action === 'bold') chain.toggleBold().run();
+                else if (action === 'italic') chain.toggleItalic().run();
+                else if (action === 'strike') chain.toggleStrike().run();
+                else if (action === 'code') chain.toggleCode().run();
+                else if (action === 'heading') chain.toggleHeading({ level: level || 1 }).run();
+                else if (action === 'bulletList') chain.toggleBulletList().run();
+                else if (action === 'orderedList') chain.toggleOrderedList().run();
+                else if (action === 'blockquote') chain.toggleBlockquote().run();
+                else if (action === 'codeBlock') chain.toggleCodeBlock().run();
+                else if (action === 'undo') chain.undo().run();
+                else if (action === 'redo') chain.redo().run();
+            } catch (e) {
+                console.warn('[Tiptap] toolbar action failed:', action, e);
+            }
+            this.updateToolbarState();
+        },
+
+        updateToolbarState: function() {
+            if (!this.editor) return;
+            var self = this;
+            var unsupported = { taskList: true, link: true, image: true };
+            document.querySelectorAll('#tiptap-toolbar .tiptap-btn[data-action]').forEach(function(btn) {
+                var action = btn.dataset.action;
+                var level = parseInt(btn.dataset.level || '0', 10);
+                btn.disabled = !!unsupported[action];
+                btn.classList.remove('active');
+                if (action === 'bold' && self.editor.isActive('bold')) btn.classList.add('active');
+                if (action === 'italic' && self.editor.isActive('italic')) btn.classList.add('active');
+                if (action === 'strike' && self.editor.isActive('strike')) btn.classList.add('active');
+                if (action === 'code' && self.editor.isActive('code')) btn.classList.add('active');
+                if (action === 'heading' && self.editor.isActive('heading', { level: level || 1 })) btn.classList.add('active');
+                if (action === 'bulletList' && self.editor.isActive('bulletList')) btn.classList.add('active');
+                if (action === 'orderedList' && self.editor.isActive('orderedList')) btn.classList.add('active');
+                if (action === 'blockquote' && self.editor.isActive('blockquote')) btn.classList.add('active');
+                if (action === 'codeBlock' && self.editor.isActive('codeBlock')) btn.classList.add('active');
+            });
+        },
+    };
+
+    var TiptapEditorModule = {
+        openMarkdownInEditor: async function(content, path) {
+            var tiptapContainer = document.getElementById('tiptap-editor-container');
+            var toolbar = document.getElementById('tiptap-toolbar');
+            var previewContent = document.getElementById('preview-content');
+            var previewPanel = document.getElementById('preview-panel');
+            var splitBtn = document.getElementById('titlebar-split-btn');
+            var editorEl = document.getElementById('tiptap-editor');
+
+            await TiptapEditor.whenModulesReady(12000);
+
+            await TiptapEditor.destroy();
+
+            if (tiptapContainer) tiptapContainer.style.display = 'flex';
+            if (toolbar) toolbar.style.display = 'flex';
+            if (previewContent) previewContent.style.display = 'none';
+            if (previewPanel) previewPanel.classList.add('editor-active');
+            if (splitBtn) splitBtn.classList.add('active');
+
+            if (!editorEl) {
+                return false;
+            }
+
+            return new Promise(function(resolve) {
+                requestAnimationFrame(function() {
+                    var ok = TiptapEditor.init(editorEl, content, path, function() {});
+                    resolve(!!ok && !TiptapEditor.fallbackTextarea);
+                });
+            });
+        },
+
+        hideEditorUI: async function() {
+            await TiptapEditor.destroy();
+
+            var tiptapContainer = document.getElementById('tiptap-editor-container');
+            var toolbar = document.getElementById('tiptap-toolbar');
+            var previewContent = document.getElementById('preview-content');
+            var previewPanel = document.getElementById('preview-panel');
+
+            if (tiptapContainer) tiptapContainer.style.display = 'none';
+            if (toolbar) toolbar.style.display = 'none';
+            if (previewContent) previewContent.style.display = 'block';
+            if (previewPanel) previewPanel.classList.remove('editor-active');
+        },
+
+        preloadModules: function() {
+            return TiptapEditor.whenModulesReady(15000);
+        },
+
+        flushSave: async function() {
+            await TiptapEditor.flushSave();
+        },
+    };
+
+    window.TiptapEditor = TiptapEditor;
+    window.TiptapEditorModule = TiptapEditorModule;
+})();

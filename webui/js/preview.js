@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 let currentPreviewData = null;
 let isPreviewActive = false;
 let currentLoadRequestId = 0;
@@ -15,10 +17,13 @@ function showContentView() {
     const titlebarSplitBtn = document.getElementById('titlebar-split-btn');
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
     const graphPanel = document.getElementById('graph-panel');
+    const pendingView = document.getElementById('pending-view');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
     if (graphPanel) graphPanel.style.display = 'none';
+    if (pendingView) pendingView.style.display = 'none';
+    if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
     if (titlebarFileName) {
         titlebarFileName.style.display = 'none';
         titlebarFileName.textContent = '';
@@ -34,16 +39,19 @@ function showContentView() {
     } else {
         if (graphHome) graphHome.style.display = '';
         if (contentArea) contentArea.style.display = 'none';
-        if (typeof updateHomeStats === 'function') updateHomeStats();
+        if (typeof window.updateHomeStats === 'function') window.updateHomeStats();
     }
 }
 
 function showPreviewView() {
     const contentPanel = document.getElementById('content-panel');
     const previewPanel = document.getElementById('preview-panel');
+    const pendingView = document.getElementById('pending-view');
 
     if (contentPanel) contentPanel.style.display = 'none';
     if (previewPanel) previewPanel.style.display = 'flex';
+    if (pendingView) pendingView.style.display = 'none';
+    if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
 }
 
 function updateTitlebarFileName(fileName, isMarkdown) {
@@ -84,12 +92,6 @@ async function loadFilePreview(path, fileName) {
         return;
     }
 
-    if (window.TiptapEditor && window.TiptapEditor.isActive) {
-        if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-            window.TiptapEditorModule.hideEditorUI();
-        }
-    }
-
     if (window.mdEditor && window.mdEditor.isActive) {
         if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
             window.EditorModule.destroyCodeMirrorEditor();
@@ -106,7 +108,7 @@ async function loadFilePreview(path, fileName) {
     previewContent.innerHTML = `
         <div class="preview-loading">
             <div class="preview-spinner"></div>
-            <div>加载中...</div>
+            <div>${window.t('preview.loading')}</div>
         </div>
     `;
 
@@ -119,7 +121,7 @@ async function loadFilePreview(path, fileName) {
     showPreviewView();
 
     try {
-        const result = await window.api.read_note_file(path);
+        const result = await window.api.getFilePreview(path);
         
         if (requestId !== currentLoadRequestId) {
             return;
@@ -129,38 +131,67 @@ async function loadFilePreview(path, fileName) {
             const fileType = result.type || 'markdown';
             const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
             const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
+            const isDocx = fileType === 'docx' || fileType === 'word'
+                || /\.docx?$/i.test(fileName);
             
             currentPreviewData = {
                 path: path,
                 name: fileName,
-                type: fileType,
-                content: result.content,
-                metadata: result.metadata,
+                type: isDocx ? 'docx' : fileType,
+                content: result.content || result.full_text || '',
+                contentKind: result.content_kind || 'text',
+                metadata: result.metadata || {
+                    type: isDocx ? window.t('preview.typeWord') : undefined,
+                    size: result.file_size,
+                },
                 pdfData: result
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
             
             if (isPdf) {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
                 showEditButton(false);
                 await loadPdfViewer(path, fileName, requestId);
+            } else if (isDocx) {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
+                showEditButton(false);
+                renderPreviewContent(currentPreviewData);
             } else if (isMarkdown) {
                 if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
                     try {
-                        const editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                        let editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
                             result.content,
                             path
                         );
+
+                        if (!editorReady && window.TiptapEditor && window.TiptapEditor.whenModulesReady) {
+                            const modulesOk = await window.TiptapEditor.whenModulesReady(8000);
+                            if (modulesOk && requestId === currentLoadRequestId) {
+                                if (window.TiptapEditorModule.hideEditorUI) {
+                                    await window.TiptapEditorModule.hideEditorUI();
+                                }
+                                editorReady = await window.TiptapEditorModule.openMarkdownInEditor(
+                                    result.content,
+                                    path
+                                );
+                            }
+                        }
                         
                         if (requestId !== currentLoadRequestId) {
                             if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-                                window.TiptapEditorModule.hideEditorUI();
+                                await window.TiptapEditorModule.hideEditorUI();
                             }
                             return;
                         }
                         
                         if (!editorReady) {
                             showEditButton(false);
+                            console.warn('[Preview] WYSIWYG editor unavailable, showing read-only preview');
                             renderPreviewContent(currentPreviewData);
                         } else {
                             showEditButton(false);
@@ -171,20 +202,26 @@ async function loadFilePreview(path, fileName) {
                         renderPreviewContent(currentPreviewData);
                     }
                 } else {
+                    if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                        await window.TiptapEditorModule.hideEditorUI();
+                    }
                     showEditButton(false);
                     renderPreviewContent(currentPreviewData);
                 }
             } else {
+                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+                    await window.TiptapEditorModule.hideEditorUI();
+                }
                 showEditButton(false);
                 renderPreviewContent(currentPreviewData);
             }
         } else {
-            showPreviewError('加载失败', result?.error || result?.message || '无法读取文件');
+            showPreviewError(window.t('preview.loadFailed'), result?.error || result?.message || window.t('preview.cannotRead'));
         }
     } catch (e) {
         console.error('[Preview] Load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPreviewError('加载失败', e.message);
+            showPreviewError(window.t('preview.loadFailed'), e.message);
         }
     }
 }
@@ -200,18 +237,18 @@ async function loadPdfViewer(path, fileName, requestId) {
                     <span class="pdf-file-name">${escapeHtml(fileName)}</span>
                 </div>
                 <div class="pdf-toolbar-center">
-                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="上一页">
+                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="${window.t('preview.prevPage')}">
                         ${window.Icons.get('chevronLeft', 16)}
                     </button>
                     <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
-                    <button class="pdf-nav-btn" id="pdf-next-btn" title="下一页">
+                    <button class="pdf-nav-btn" id="pdf-next-btn" title="${window.t('preview.nextPage')}">
                         ${window.Icons.get('chevronRight', 16)}
                     </button>
                 </div>
                 <div class="pdf-toolbar-right">
-                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="缩小">−</button>
+                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="${window.t('preview.zoomOut')}">−</button>
                     <span class="pdf-zoom-level" id="pdf-zoom-level">100%</span>
-                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="放大">+</button>
+                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="${window.t('preview.zoomIn')}">+</button>
                 </div>
             </div>
             <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
@@ -226,11 +263,11 @@ async function loadPdfViewer(path, fileName, requestId) {
     previewContent.style.overflow = 'hidden';
 
     try {
-        var rawResult = await window.api.read_file_raw(path);
+        var rawResult = await window.api.readFileRaw(path);
         if (requestId !== currentLoadRequestId) return;
 
         if (!rawResult || !rawResult.success) {
-            showPdfError('加载失败', rawResult ? rawResult.message : '无法读取文件');
+            showPdfError(window.t('preview.loadFailed'), rawResult ? rawResult.message : window.t('preview.cannotRead'));
             return;
         }
 
@@ -242,7 +279,7 @@ async function loadPdfViewer(path, fileName, requestId) {
         }
 
         if (typeof pdfjsLib === 'undefined') {
-            showPdfError('PDF 查看器未加载', 'pdf.js 库不可用，请检查网络连接');
+            showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
             return;
         }
 
@@ -334,7 +371,7 @@ async function loadPdfViewer(path, fileName, requestId) {
     } catch (e) {
         console.error('[Preview] PDF load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPdfError('PDF 加载失败', e.message || '未知错误');
+            showPdfError(window.t('preview.pdfLoadFailed'), e.message || window.t('common.unknownError'));
         }
     }
 }
@@ -389,18 +426,18 @@ function renderPreviewContent(previewData) {
         previewHtml += `
             <div class="preview-file-info">
                 <div class="preview-file-info-row">
-                    <span class="preview-file-info-label">类型:</span>
-                    <span class="preview-file-info-value">${metadata.type || '未知'}</span>
+                    <span class="preview-file-info-label">${window.t('preview.typeLabel')}</span>
+                    <span class="preview-file-info-value">${metadata.type || window.t('preview.unknownType')}</span>
                 </div>
                 ${metadata.size ? `
                     <div class="preview-file-info-row">
-                        <span class="preview-file-info-label">大小:</span>
+                        <span class="preview-file-info-label">${window.t('preview.sizeLabel')}</span>
                         <span class="preview-file-info-value">${formatFileSize(metadata.size)}</span>
                     </div>
                 ` : ''}
                 ${metadata.modified ? `
                     <div class="preview-file-info-row">
-                        <span class="preview-file-info-label">修改时间:</span>
+                        <span class="preview-file-info-label">${window.t('preview.modifiedLabel')}</span>
                         <span class="preview-file-info-value">${formatModifiedTime(metadata.modified)}</span>
                     </div>
                 ` : ''}
@@ -414,6 +451,8 @@ function renderPreviewContent(previewData) {
         } else {
             previewHtml += `<div class="preview-content"><pre>${escapeHtml(content)}</pre></div>`;
         }
+    } else if (type === 'docx' || type === 'word') {
+        previewHtml += renderDocxPreviewHtml(content, previewData.contentKind);
     } else if (type === 'image') {
         previewHtml += `
             <div class="preview-content" style="display: flex; justify-content: center; align-items: center; padding: 20px;">
@@ -435,6 +474,23 @@ function renderPreviewContent(previewData) {
             hljs.highlightElement(block);
         });
     }
+}
+
+function renderDocxPreviewHtml(content, contentKind) {
+    const body = content || '';
+    if (!body.trim()) {
+        return '<div class="preview-content docx-preview"><p class="docx-preview-empty">' + window.t('preview.docxEmpty') + '</p></div>';
+    }
+    if (contentKind === 'html') {
+        const safe = typeof DOMPurify !== 'undefined'
+            ? DOMPurify.sanitize(body, { USE_PROFILES: { html: true } })
+            : escapeHtml(body);
+        return `<article class="preview-content docx-preview">${safe}</article>`;
+    }
+    if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
+        return `<div class="preview-content docx-preview">${window.EditorModule.renderMarkdownPreview(body)}</div>`;
+    }
+    return `<div class="preview-content docx-preview"><pre>${escapeHtml(body)}</pre></div>`;
 }
 
 function showPreviewError(title, message) {
@@ -491,7 +547,7 @@ function closePreview() {
         previewContent.innerHTML = `
             <div class="preview-empty">
                 ${window.Icons.get('fileDoc', 48)}
-                <div>选择一个文件查看预览</div>
+                <div>${window.t('preview.selectFile')}</div>
             </div>
         `;
     }
@@ -531,3 +587,20 @@ window.PreviewModule = {
 };
 
 window.showTagsView = function() { window.switchSidebarView('tags'); };
+
+window.closePreview = closePreview;
+window.closePreviewPanel = closePreviewPanel;
+window.backToContent = backToContent;
+
+window.showPreview = function(options) {
+    if (!options || !options.path) {
+        console.error('[showPreview] Missing path parameter');
+        return;
+    }
+    const path = options.path;
+    const name = options.name || path.split('/').pop() || window.t('preview.defaultName');
+    window.PreviewModule.loadFilePreview(path, name);
+};
+
+})();
+

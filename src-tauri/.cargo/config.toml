@@ -1,0 +1,17 @@
+# 限制 Rust 编译产物体积
+# 参考: https://doc.rust-lang.org/cargo/reference/profiles.html
+
+[profile.dev]
+# 保留增量编译 — 改一行代码只需重编几个文件，别关
+incremental = true
+
+# 对第三方依赖做轻度优化（默认 debug 完全不优化）
+# 能缩小 deps/ 体积约 30-50%，编译时间影响很小
+[profile.dev.package."*"]
+opt-level = 1
+
+# 注意：
+# - deps/（依赖编译产物）是一次性的，Cargo.lock 不变就不变
+# - incremental/（增量缓存）会随时间增长，手动清理方法：
+#     定期跑: rm -rf src-tauri/target/debug/incremental
+#     大扫除: cargo clean（释放所有，下次全量重编）

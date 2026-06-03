@@ -3,6 +3,7 @@
 import re
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Tuple, Callable
 
 from utils.logger import logger
@@ -23,8 +24,21 @@ class LLMRateLimitError(Exception):
     pass
 
 
-# 全局信号量，限制并发 LLM 调用数
-_LLM_SEMAPHORE = threading.BoundedSemaphore(4)
+# 全局信号量，限制并发 LLM 调用数（Semaphore 而非 BoundedSemaphore，
+# 防止超时场景下后台线程释放时抛 ValueError 导致级联崩溃）
+_LLM_SEMAPHORE = threading.Semaphore(4)
+
+_LLM_EXECUTOR = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _get_executor():
+    global _LLM_EXECUTOR
+    if _LLM_EXECUTOR is None:
+        with _EXECUTOR_LOCK:
+            if _LLM_EXECUTOR is None:
+                _LLM_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+    return _LLM_EXECUTOR
 
 
 def _retry_with_backoff(
@@ -37,8 +51,13 @@ def _retry_with_backoff(
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            with _LLM_SEMAPHORE:
+            acquired = _LLM_SEMAPHORE.acquire(timeout=60)
+            if not acquired:
+                raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
+            try:
                 return fn()
+            finally:
+                _LLM_SEMAPHORE.release()
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
@@ -100,8 +119,9 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
         "request_timeout": 60,
     }
 
-    if getattr(config, 'disable_thinking', True):
-        kwargs["model_kwargs"] = {"extra_body": {"thinking": {"type": "disabled"}}}
+    if getattr(config, "disable_thinking", True):
+        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning
+        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
     return ChatOpenAI(**kwargs)
 
@@ -142,27 +162,77 @@ def call_llm_raw(
     max_tokens: Optional[int] = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+    from concurrent.futures import TimeoutError as FutureTimeout
 
     def _invoke():
         llm = _create_llm(temperature, max_tokens)
         return llm.invoke(prompt_text)
 
     def _invoke_with_timeout():
-        executor = ThreadPoolExecutor(max_workers=1)
+        executor = _get_executor()
         future = executor.submit(_invoke)
         try:
             return future.result(timeout=90)
         except FutureTimeout:
             future.cancel()
             raise RuntimeError("LLM 调用超时（90秒）")
-        finally:
-            executor.shutdown(wait=False)
 
     response = _retry_with_backoff(_invoke_with_timeout)
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
+
+
+def call_llm_raw_stream(
+    prompt_text: str,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    chunk_callback=None,
+) -> str:
+    """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。带重试。"""
+    is_valid, error_msg = check_api_config()
+    if not is_valid:
+        raise RuntimeError(error_msg)
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            return _do_stream(prompt_text, temperature, max_tokens, chunk_callback)
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            retryable = any(kw in error_str for kw in (
+                '429', 'rate limit', 'too many', '503', '502', '504',
+                'timeout', 'timed out', 'connection', 'reset', 'overloaded'
+            ))
+            if not retryable or attempt >= 2:
+                break
+            delay = min(2.0 * (2 ** attempt), 30.0)
+            logger.warning(f"LLM stream 失败 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试: {e}")
+            time.sleep(delay)
+    raise last_error
+
+
+def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+    acquired = _LLM_SEMAPHORE.acquire(timeout=60)
+    if not acquired:
+        raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
+    try:
+        logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+        llm = _create_llm(temperature, max_tokens)
+        full_text = ""
+        for chunk in llm.stream(prompt_text):
+            token = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_text += token
+            if chunk_callback:
+                chunk_callback(token)
+        logger.info(f"LLM stream done, response length: {len(full_text)}")
+        return full_text.strip()
+    except Exception as e:
+        logger.warning(f"[llm_utils] stream error: {e}\n")
+        raise
+    finally:
+        _LLM_SEMAPHORE.release()
 
 
 def check_api_config() -> Tuple[bool, str]:
@@ -495,6 +565,5 @@ def reformat_markdown_with_llm(content: str) -> str:
         return content
     except Exception as e:
         import sys
-        sys.stderr.write(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
         return content

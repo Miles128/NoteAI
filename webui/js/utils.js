@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 function escapeHtml(text) {
     if (!text) return '';
     var div = document.createElement('div');
@@ -54,6 +56,19 @@ function getTauriEventAPI() {
     return null;
 }
 
+window.escapeHtml = escapeHtml;
+window.escapeAttr = escapeAttr;
+window.formatFileSize = formatFileSize;
+window.formatModifiedTime = formatModifiedTime;
+window.formatFileSizeForTree = formatFileSizeForTree;
+window.Path_stem = Path_stem;
+window.getTauriEventAPI = getTauriEventAPI;
+
+/** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（sidebar.js 会覆盖） */
+if (typeof window.toggleSidebar !== 'function') {
+    window.toggleSidebar = function _toggleSidebarEarly() {};
+}
+
 window.utils = {
     escapeHtml: escapeHtml,
     escapeAttr: escapeAttr,
@@ -63,3 +78,5 @@ window.utils = {
     Path_stem: Path_stem,
     getTauriEventAPI: getTauriEventAPI
 };
+
+})();

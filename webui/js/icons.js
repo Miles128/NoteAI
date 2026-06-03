@@ -51,3 +51,4 @@
         all: function() { return Object.assign({}, _icons); }
     };
 })();
+

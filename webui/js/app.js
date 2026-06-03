@@ -1,11 +1,14 @@
+(function() { 'use strict';
+
 document.addEventListener('DOMContentLoaded', async function() {
     initMarked();
-    
-    initSystemThemeListener();
-    
-    const savedTheme = localStorage.getItem('noteai_theme') || 'dark';
-    applyTheme(savedTheme);
-    
+
+    // 主题已由 main.mjs 中 applyThemeBootstrap（服务端偏好 + localStorage）应用，此处不再覆盖
+
+    if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+        window.ThemeModule.restoreFontSize();
+    }
+
     initResizer();
     initPreviewResizer();
     initWindowDrag();
@@ -15,10 +18,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     initCustomTooltip();
     
     if (window.TiptapEditorModule && window.TiptapEditorModule.preloadModules) {
-        window.TiptapEditorModule.preloadModules();
+        await window.TiptapEditorModule.preloadModules();
     }
     
-    updateStatus('正在加载...');
+    updateStatus(window.t('app.loading'));
     
     try {
         await checkWorkspaceStatus();
@@ -27,8 +30,16 @@ document.addEventListener('DOMContentLoaded', async function() {
             await window.TreeModule.loadFileTree();
         }
         
-        if (typeof showGraphHomeView === 'function') {
-            showGraphHomeView();
+        // Default: show knowledge graph (full right panel, no splits)
+        var ca = document.getElementById('content-area');
+        var gp = document.getElementById('graph-panel');
+        var cp = document.getElementById('content-panel');
+        if (ca) ca.style.display = 'none';
+        if (cp) cp.style.display = 'flex';
+        if (gp) gp.style.display = 'flex';
+        window.updateHomeStats();
+        if (window.Graph3Tier && window.Graph3Tier.load) {
+            window.Graph3Tier.load();
         }
         
         if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {
@@ -39,35 +50,24 @@ document.addEventListener('DOMContentLoaded', async function() {
             window.ConverterModule.loadSavedConvConfig();
         }
         
-        if (window.api && window.api.auto_convert_pending) {
-            window.api.auto_convert_pending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+        if (typeof window.runPostWorkspaceSetup === 'function') {
+            /* ingest deferred until schema wizard completes, if needed */
         }
-
-        setTimeout(function() {
-            if (window.api && window.api.batch_auto_assign_topics) {
-                window.api.batch_auto_assign_topics().then(function(result) {
-                    if (result && result.success) {
-                        if (result.format_optimized > 0 || result.auto_assigned > 0 || result.need_confirm > 0) {
-                            var parts = [];
-                            if (result.auto_assigned > 0) parts.push('分配 ' + result.auto_assigned + ' 个主题');
-                            if (result.need_confirm > 0) parts.push(result.need_confirm + ' 个待确认');
-                            if (result.format_optimized > 0) parts.push('优化 ' + result.format_optimized + ' 个格式');
-                            updateStatus('主题处理完成 - ' + parts.join('，'));
-                        } else {
-                            updateStatus('所有文件主题已分配');
-                        }
-                    }
-                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
-                }).catch(function(e) { console.warn('[App] batch_auto_assign_topics failed:', e); });
-            }
-
-            if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
-        }, 5000);
         
-        updateStatus('就绪');
+            setTimeout(function() {
+                if (window.api && window.api.mergeDuplicateTopics) {
+                    window.api.mergeDuplicateTopics().then(function(result) {
+                        if (result && result.success && result.merged_topics > 0) {
+                            console.log('[App] 合并重复主题: ' + result.merged_topics + ' 个, 去重文件: ' + result.deduplicated_files + ' 个');
+                        }
+                    }).catch(function(e) { console.warn('[App] merge_duplicate_topics failed:', e); });
+                }
+            }, 8000);
+        
+        updateStatus(window.t('app.ready'));
     } catch (e) {
         console.error('[App] Initialization error:', e);
-        updateStatus('初始化完成');
+        updateStatus(window.t('app.initDone'));
     }
 
     initWorkspaceFileWatcher();
@@ -184,9 +184,9 @@ async function importFiles() {
         if (!result || result.cancelled) return;
 
         if (result && result.success) {
-            updateStatus('正在导入 ' + (result.file_count || '') + ' 个文件...');
+            updateStatus(window.t('app.importing', { count: result.file_count || 0 }));
 
-            if (typeof getTauriEventAPI === 'function') {
+            if (typeof window.getTauriEventAPI === 'function') {
                 var eventAPI = getTauriEventAPI();
                 if (eventAPI) {
                     if (_fileImportUnlisten) {
@@ -197,13 +197,10 @@ async function importFiles() {
                         if (!data) return;
 
                         if (data.type === 'progress' && data.element_id === 'import-progress') {
-                            updateStatus(data.message || '导入中...');
+                            updateStatus(data.message || window.t('app.importProgress'));
                         } else if (data.type === 'file_import_complete') {
                             var d = data.data || {};
-                            var msg = '导入完成：' + (d.imported || 0) + ' 个文件';
-                            if (d.failed > 0) {
-                                msg += '，' + d.failed + ' 个失败';
-                            }
+                            var msg = d.failed > 0 ? window.t('app.importDoneWithFailed', { imported: d.imported || 0, failed: d.failed }) : window.t('app.importDone', { imported: d.imported || 0 })
                             updateStatus(msg);
                             if (window.TreeModule && window.TreeModule.loadFileTree) {
                                 window.TreeModule.loadFileTree();
@@ -213,7 +210,7 @@ async function importFiles() {
                                 _fileImportUnlisten = null;
                             }
                         } else if (data.type === 'file_import_error') {
-                            updateStatus('导入失败：' + (data.error || '未知错误'));
+                            updateStatus(window.t('app.importFailed', { message: data.error || window.t('common.unknownError') }));
                             if (_fileImportUnlisten) {
                                 _fileImportUnlisten();
                                 _fileImportUnlisten = null;
@@ -223,11 +220,11 @@ async function importFiles() {
                 }
             }
         } else {
-            updateStatus('导入失败：' + (result?.message || '未知错误'));
+            updateStatus(window.t('app.importFailed', { message: result?.message || window.t('common.unknownError') }));
         }
     } catch (e) {
         console.error('[App] Import error:', e);
-        updateStatus('导入失败');
+        updateStatus(window.t('app.importFailedGeneric'));
     }
 }
 
@@ -247,7 +244,7 @@ function setEditorRewriting(filePath, isRewriting) {
         window._rewritingFilePath = filePath;
         container.classList.add('rewriting');
         statusBar.classList.add('rewriting');
-        statusBar.textContent = 'LLM 正在改写文档...';
+        statusBar.textContent = window.t('app.llmRewriting');
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(false);
         }
@@ -279,11 +276,12 @@ function _flushRewriteBuffer() {
     window._rewriteDisplayText += take;
     var statusBar = document.getElementById('editor-status-bar');
     if (statusBar) {
-        statusBar.textContent = 'LLM 正在改写... (' + window._rewriteDisplayText.length + ' 字)';
+        statusBar.textContent = window.t('app.rewritingChars', { count: window._rewriteDisplayText.length });
     }
     if (window.TiptapEditor && window.TiptapEditor.instance) {
         if (window.marked) {
             var html = window.marked.parse(window._rewriteDisplayText);
+            if (typeof DOMPurify !== 'undefined') { html = DOMPurify.sanitize(html); }
             window.TiptapEditor.instance.commands.setContent(html, false);
         }
     }
@@ -340,8 +338,8 @@ function _finishRewriteStream(data) {
         window._rewritePendingText = data.rewritten_text || window._rewriteStreamText;
         _showRewriteDiffView();
     } else if (data) {
-        alert('改写失败：' + (data.message || '未知错误'));
-        updateStatus('改写失败');
+        alert(window.t('app.rewriteFailed', { message: data.message || window.t('common.unknownError') }));
+        updateStatus(window.t('app.rewriteFailedShort'));
         _cleanupRewriteState();
     }
 }
@@ -366,19 +364,24 @@ function _showRewriteDiffView() {
     var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + escapeHtml(oldText) + '</pre>';
     var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + escapeHtml(newText) + '</pre>';
 
+    if (typeof DOMPurify !== 'undefined') {
+        oldHtml = DOMPurify.sanitize(oldHtml);
+        newHtml = DOMPurify.sanitize(newHtml);
+    }
+
     diffPanel.innerHTML = '<div class="rewrite-diff-header">' +
-        '<span class="rewrite-diff-title">改写对比</span>' +
-        '<button class="rewrite-diff-btn rewrite-confirm-btn" onclick="onRewriteConfirm()">✓ 采用新版本</button>' +
-        '<button class="rewrite-diff-btn rewrite-cancel-btn" onclick="onRewriteCancel()">✕ 保留原版本</button>' +
+        '<span class="rewrite-diff-title">' + window.t('app.rewriteDiffTitle') + '</span>' +
+        '<button class="rewrite-diff-btn rewrite-confirm-btn" onclick="onRewriteConfirm()">' + window.t('app.rewriteAccept') + '</button>' +
+        '<button class="rewrite-diff-btn rewrite-cancel-btn" onclick="onRewriteCancel()">' + window.t('app.rewriteKeepOriginal') + '</button>' +
         '</div>' +
         '<div class="rewrite-diff-body">' +
-        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">原文</div><div class="rewrite-diff-pane-content prose-preview">' + oldHtml + '</div></div>' +
+        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">' + window.t('app.rewriteOriginal') + '</div><div class="rewrite-diff-pane-content prose-preview">' + oldHtml + '</div></div>' +
         '<div class="rewrite-diff-divider"></div>' +
-        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">改写后</div><div class="rewrite-diff-pane-content prose-preview">' + newHtml + '</div></div>' +
+        '<div class="rewrite-diff-pane"><div class="rewrite-diff-pane-label">' + window.t('app.rewriteResult') + '</div><div class="rewrite-diff-pane-content prose-preview">' + newHtml + '</div></div>' +
         '</div>';
 
     diffPanel.style.display = 'flex';
-    updateStatus('改写完成，请确认是否采用新版本');
+    updateStatus(window.t('app.rewriteDoneConfirm'));
 }
 
 async function onRewriteConfirm() {
@@ -386,23 +389,23 @@ async function onRewriteConfirm() {
     var rewrittenText = window._rewritePendingText;
     if (!filePath || !rewrittenText) return;
 
-    updateStatus('正在保存...');
+    updateStatus(window.t('app.saving'));
     try {
-        var result = await window.api.llm_rewrite_apply(filePath, rewrittenText);
+        var result = await window.api.llmRewriteApply(filePath, rewrittenText);
         if (result && result.success) {
-            updateStatus('已保存');
+            updateStatus(window.t('common.saved'));
             var statusBar = document.getElementById('editor-status-bar');
             if (statusBar) {
-                statusBar.textContent = '已保存';
+                statusBar.textContent = window.t('common.saved');
                 setTimeout(function() { statusBar.textContent = ''; }, 3000);
             }
         } else {
-            alert('保存失败：' + (result ? result.message || '未知错误' : '未知错误'));
-            updateStatus('保存失败');
+            alert(window.t('app.saveFailed', { message: result ? result.message || window.t('common.unknownError') : window.t('common.unknownError') }));
+            updateStatus(window.t('app.rewriteFailedShort'));
         }
     } catch (e) {
-        alert('保存出错：' + (e.message || e));
-        updateStatus('保存出错');
+        alert(window.t('app.saveError', { message: e.message || e }));
+        updateStatus(window.t('app.saveError', { message: e.message || e }));
     } finally {
         window._rewritePendingFilePath = null;
         window._rewritePendingText = null;
@@ -418,10 +421,10 @@ function onRewriteCancel() {
     window._rewritePendingText = null;
     var statusBar = document.getElementById('editor-status-bar');
     if (statusBar) {
-        statusBar.textContent = '已放弃改写';
+        statusBar.textContent = window.t('app.rewriteCancelled');
         setTimeout(function() { statusBar.textContent = ''; }, 3000);
     }
-    updateStatus('已放弃改写');
+    updateStatus(window.t('app.rewriteCancelled'));
     _cleanupRewriteState();
     if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
@@ -442,17 +445,17 @@ function _updateRewriteStreamEditor(token) {
 async function onLLMRewrite() {
     var curPath = window.AppState.selectedFilePath;
     if (!curPath) {
-        alert('请先选择一个文件');
+        alert(window.t('app.selectFileFirst'));
         return;
     }
 
     var btn = document.getElementById('tiptap-rewrite-btn');
-    if (!confirm('确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。')) return;
+    if (!(await window._customConfirm(window.t('app.rewriteConfirm')))) return;
 
     var rewritePath = curPath;
 
     try {
-        var rawResult = await window.api.read_file_raw(rewritePath);
+        var rawResult = await window.api.readFileRaw(rewritePath);
         window._rewriteOriginalText = (rawResult && rawResult.content) ? rawResult.content : '';
     } catch (e) {
         window._rewriteOriginalText = '';
@@ -462,7 +465,7 @@ async function onLLMRewrite() {
         btn.disabled = true;
         btn.style.opacity = '0.5';
     }
-    updateStatus('正在改写文档...');
+    updateStatus(window.t('app.rewritingDoc'));
     setEditorRewriting(rewritePath, true);
     window._rewriteStreamText = '';
     window._rewriteBuffer = '';
@@ -489,13 +492,13 @@ async function onLLMRewrite() {
     }
 
     try {
-        await window.api.llm_rewrite_stream(rewritePath);
+        await window.api.llmRewriteStream(rewritePath);
     } catch (e) {
-        alert('改写出错：' + (e.message || e));
-        updateStatus('改写出错');
+        alert(window.t('app.rewriteError', { message: e.message || e }));
+        updateStatus(window.t('app.rewriteError', { message: e.message || e }));
         var statusBar3 = document.getElementById('editor-status-bar');
         if (statusBar3) {
-            statusBar3.textContent = '改写出错';
+            statusBar3.textContent = window.t('app.rewriteError', { message: e.message || e });
             statusBar3.classList.remove('rewriting');
             setTimeout(function() { statusBar3.textContent = ''; }, 3000);
         }
@@ -541,21 +544,36 @@ function initWorkspaceFileWatcher() {
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
-        if (!data || data.type !== 'workspace_files_changed') return;
+        if (!data || !data.type) return;
+
+        if (data.type === 'auto_topic_assigned') {
+            updateStatus('✓ ' + (data.topic ? window.t('app.autoAssignedTo', { topic: data.topic }) : window.t('app.autoAssignedTopic')));
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
+            refreshWorkspaceViewsAfterChange();
+            return;
+        }
+
+        if (data.type === 'auto_file_moved') {
+            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            refreshWorkspaceViewsAfterChange();
+            return;
+        }
+
+        if (data.type !== 'workspace_files_changed') return;
 
         if (_workspaceWatcherDebounce) {
             clearTimeout(_workspaceWatcherDebounce);
         }
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
-            refreshCurrentSidebarView();
-            if (window.api && window.api.batch_auto_assign_topics) {
-                window.api.batch_auto_assign_topics().then(function(result) {
-                    if (result && result.success && result.need_confirm > 0) {
-                        updateStatus('发现 ' + result.need_confirm + ' 个文件需要确认主题');
-                    }
-                    if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
-                }).catch(function(e) { console.warn('[App] watcher batch_auto_assign_topics failed:', e); });
+            refreshWorkspaceViewsAfterChange();
+            if (window.IngestModule && window.IngestModule.startIngest) {
+                window.IngestModule.startIngest('incremental').catch(function(e) {
+                    console.warn('[App] watcher incremental ingest failed:', e);
+                });
+            } else if (window.api && window.api.autoConvertPending) {
+                window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
             }
         }, 3000);
     }).then(function(unlisten) {
@@ -563,11 +581,30 @@ function initWorkspaceFileWatcher() {
     });
 }
 
-function refreshCurrentSidebarView() {
+function refreshWorkspaceViewsAfterChange() {
+    var treeLoad = null;
+    if (window.TreeModule && window.TreeModule.loadFileTree) {
+        treeLoad = window.TreeModule.loadFileTree(true);
+    }
+
+    if (typeof window.loadTopicTree === 'function') {
+        window.loadTopicTree(true, true);
+    }
+    refreshCurrentSidebarView(true);
+    refreshKnowledgeGraph();
+
+    if (treeLoad && typeof window.updateHomeStats === 'function') {
+        Promise.resolve(treeLoad)
+            .then(function() { window.updateHomeStats(); })
+            .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+    }
+}
+
+function refreshCurrentSidebarView(forceRefresh) {
     var activeView = document.querySelector('.sidebar-view-btn.active');
     if (!activeView) {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
+            window.TreeModule.loadFileTree(!!forceRefresh);
         }
         return;
     }
@@ -575,28 +612,53 @@ function refreshCurrentSidebarView() {
     var view = activeView.getAttribute('data-sidebar');
     if (view === 'tree') {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree();
-        }
-    } else if (view === 'topic') {
-        if (typeof loadTopicTree === 'function') {
-            loadTopicTree(true);
+            window.TreeModule.loadFileTree(!!forceRefresh);
         }
     } else if (view === 'tags') {
-        if (typeof loadTagsView === 'function') {
-            loadTagsView(true);
+        if (typeof window.loadTagsView === 'function') {
+            window.loadTagsView(true);
         }
     } else if (view === 'graph') {
         if (window.LinksModule && typeof window.LinksModule.loadLinksData === 'function') {
             window.LinksModule.loadLinksData();
         }
     } else if (view === 'relation') {
-        if (typeof loadRelationGraphData === 'function') {
-            loadRelationGraphData();
+        if (typeof window.loadRelationGraphData === 'function') {
+            window.loadRelationGraphData();
         }
     }
 }
 
+function refreshKnowledgeGraph() {
+    if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
+        window.Graph3Tier.load(null, true);
+    }
+    if (typeof window.updateHomeStats === 'function') {
+        window.updateHomeStats();
+    }
+}
+
 var _tooltipTimer = null;
+
+async function runPostWorkspaceSetup() {
+    if (window.api && window.api.needsSchemaSetup) {
+        try {
+            var st = await window.api.needsSchemaSetup();
+            if (st && st.needs_setup) return;
+        } catch (e) {
+            console.warn('[App] needs_schema_setup check:', e);
+        }
+    }
+    if (window.IngestModule && window.IngestModule.startIngest) {
+        window.IngestModule.startIngest('incremental').catch(function(e) {
+            console.warn('[App] start_ingest failed:', e);
+        });
+    } else if (window.api && window.api.autoConvertPending) {
+        window.api.autoConvertPending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+    }
+}
+
+window.runPostWorkspaceSetup = runPostWorkspaceSetup;
 
 function initSidecarErrorListener() {
     var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
@@ -609,18 +671,26 @@ function initSidecarErrorListener() {
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
         if (!data) return;
-        if (data.type === 'sidecar_error') {
-            var msg = data.message || 'Python 后端启动失败';
+        if (data.type === 'sidecar_died') {
+            var diedMsg = data.message || window.t('app.backendExited');
+            console.error('[App] Sidecar died:', diedMsg);
+            if (typeof window.updateStatus === 'function') {
+                window.updateStatus(diedMsg);
+            }
+        } else if (data.type === 'sidecar_ready') {
+            if (typeof window.updateStatus === 'function') {
+                window.updateStatus(data.message || window.t('app.backendRecovered'));
+            }
+        } else if (data.type === 'sidecar_error') {
+            var msg = data.message || window.t('app.backendStartFailed');
             console.error('[App] Sidecar error:', msg);
-            updateStatus('错误: ' + msg);
-            alert('NoteAI 启动失败\n\n' + msg + '\n\n请检查 Python 环境和依赖是否正确安装。');
+            updateStatus(window.t('app.errorPrefix') + msg);
+            alert(window.t('app.startFailedAlert', { message: msg }));
         } else if (data.type === 'auto_convert_complete') {
             var info = data.data || {};
             if (info.converted > 0) {
-                updateStatus('自动转换完成: ' + info.converted + '/' + info.total + ' 个文件');
-                if (window.TreeModule && window.TreeModule.loadFileTree) {
-                    window.TreeModule.loadFileTree();
-                }
+                updateStatus(window.t('app.autoConvertDone', { done: info.converted, total: info.total }));
+                refreshWorkspaceViewsAfterChange();
             }
         } else if (data.type === 'auto_convert_error') {
             console.error('[App] Auto convert error:', data.error);
@@ -640,10 +710,11 @@ function initRagEventListener() {
         var data = event.payload;
         if (!data) return;
         if (data.type === 'progress' && data.element_id === 'rag-index') {
-            updateStatus(data.message || '索引构建中...');
+            updateStatus(data.message || window.t('app.indexBuilding'));
         } else if (data.type === 'progress' && data.element_id === 'survey_check') {
-            updateStatus(data.message || '检查综述中...');
-        } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done' || data.type === 'rag_index_built') {
+            updateStatus(data.message || window.t('app.checkingSurveys'));
+        } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done'
+            || data.type === 'rag_error' || data.type === 'rag_index_built') {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {
                 window.AssistantModule.handleEvent(data);
             }
@@ -651,18 +722,22 @@ function initRagEventListener() {
                 if (data.data && data.data.success) {
                     updateStatus('RAG Ready');
                 } else {
-                    updateStatus('RAG 索引构建失败');
+                    updateStatus(window.t('app.ragIndexFailed'));
                 }
             }
+        } else if (data.type === 'ingest_progress' || data.type === 'ingest_complete') {
+            if (window.IngestModule && window.IngestModule.handleEvent) {
+                window.IngestModule.handleEvent(data);
+            }
         } else if (data.type === 'cascade_survey_chunk') {
-            updateStatus('正在更新综述: ' + (data.topic || ''));
+            updateStatus(window.t('app.updatingSurvey', { topic: data.topic || '' }));
         } else if (data.type === 'cascade_done') {
             var d = data.data || {};
             if (d.success) {
-                var msg = d.is_new_topic ? '新主题已创建并生成综述' : '综述已更新';
+                var msg = d.is_new_topic ? window.t('app.surveyNewTopic') : window.t('app.surveyUpdated');
                 updateStatus(msg + ': ' + (data.topic || ''));
             } else {
-                updateStatus('级联更新失败: ' + (data.topic || ''));
+                updateStatus(window.t('app.cascadeFailed', { topic: data.topic || '' }));
             }
             if (window.TreeModule && window.TreeModule.loadFileTree) {
                 window.TreeModule.loadFileTree();
@@ -722,3 +797,8 @@ function initCustomTooltip() {
         tip.classList.remove('visible');
     });
 }
+
+window.importFiles = importFiles;
+
+})();
+

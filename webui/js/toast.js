@@ -28,3 +28,4 @@
     window.updateStatus = updateStatus;
     window.updateProgress = updateProgress;
 })();
+

@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var treeExpandedState = window.AppState.treeExpandedState;
 var selectedFilePath = null;
 var selectedFileName = null;
@@ -64,21 +66,21 @@ function formatModifiedTime(modified) {
     if (isNaN(d.getTime())) return '';
     var now = new Date();
     var diff = now - d;
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-    if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+    if (diff < 60000) return window.t('common.timeJustNow');
+    if (diff < 3600000) return window.t('common.timeMinutesAgo', { count: Math.floor(diff / 60000) });
+    if (diff < 86400000) return window.t('common.timeHoursAgo', { count: Math.floor(diff / 3600000) });
+    if (diff < 604800000) return window.t('common.timeDaysAgo', { count: Math.floor(diff / 86400000) });
     var m = d.getMonth() + 1;
     var day = d.getDate();
     if (d.getFullYear() === now.getFullYear()) {
-        return m + '月' + day + '日';
+        return window.t('common.timeMonthDay', { month: m, day: day });
     }
     return d.getFullYear() + '/' + m + '/' + day;
 }
 
 function renderFileTree(treeData, container) {
     if (!treeData || treeData.length === 0) {
-        container.innerHTML = '<div class="tree-empty">暂无工作区</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
     }
 
@@ -166,14 +168,14 @@ function showTreeContextMenu(e, itemEl) {
     var items = [];
 
     items.push({
-        label: '在访达中显示',
+        label: window.t('tree.revealInFinder'),
         icon: window.Icons.get('folder'),
         action: function() { revealInFinder(path); }
     });
 
     if (!isFolder) {
         items.push({
-            label: '在新窗口打开',
+            label: window.t('tree.openInNewWindow'),
             icon: window.Icons.get('folderOpen'),
             action: function() {
                 if (window.api && window.api.openFileInNewWindow) {
@@ -183,8 +185,16 @@ function showTreeContextMenu(e, itemEl) {
         });
     }
 
+    if (isFolder) {
+        items.push({
+            label: window.t('tree.deleteTopic'),
+            icon: window.Icons.get('trash'),
+            action: function() { showTopicDeleteConfirm(itemEl, path, name); }
+        });
+    }
+
     items.push({
-        label: '删除',
+        label: isFolder ? window.t('tree.deleteFolder') : window.t('tree.delete'),
         icon: window.Icons.get('trash'),
         action: function() { showDeleteConfirm(itemEl, path, name); }
     });
@@ -214,6 +224,82 @@ function showTreeContextMenu(e, itemEl) {
     menu.style.top = y + 'px';
 }
 
+function showTopicDeleteConfirm(itemEl, path, name) {
+    var existingConfirm = itemEl.querySelector('.delete-confirm-bar');
+    if (existingConfirm) return;
+
+    var bar = document.createElement('div');
+    bar.className = 'delete-confirm-bar';
+    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteTopicConfirm', { name: escapeHtml(name) }) + '</span>' +
+        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDeleteTopic') + '">' + window.Icons.get('check', 16) + '</button>' +
+        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
+
+    itemEl.style.position = 'relative';
+    itemEl.appendChild(bar);
+
+    bar.querySelector('.delete-confirm-yes').addEventListener('click', function(e) {
+        e.stopPropagation();
+        doDeleteTopic(name, bar);
+    });
+
+    bar.querySelector('.delete-confirm-no').addEventListener('click', function(e) {
+        e.stopPropagation();
+        bar.remove();
+    });
+
+    var outsideClick = function(e) {
+        if (!bar.contains(e.target) && e.target !== itemEl) {
+            bar.remove();
+            document.removeEventListener('click', outsideClick);
+        }
+    };
+    setTimeout(function() { document.addEventListener('click', outsideClick); }, 10);
+}
+
+async function doDeleteTopic(topicName, confirmBar) {
+    if (confirmBar) confirmBar.remove();
+    try {
+        var result = await window.api.deleteTopic(topicName);
+        if (result && result.success) {
+            window.TreeModule.loadFileTree();
+        } else {
+            alert(window.t('topic.deleteTopicFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
+        }
+    } catch (e) {
+        alert(window.t('tree.deleteTopicError') + (e.message || e));
+    }
+}
+
+function onAddTopicFromFileTree() {
+    var topicName = prompt(window.t('tree.enterTopicName'));
+    if (!topicName || !topicName.trim()) return;
+    topicName = topicName.trim();
+
+    if (window.api && window.api.createTopic) {
+        window.api.createTopic(topicName).then(function(result) {
+            if (result && result.success) {
+                window.TreeModule.loadFileTree();
+                if (window.api && window.api.batchAutoAssignTopics) {
+                    window.api.batchAutoAssignTopics().then(function(r) {
+                        if (r && r.success && r.need_confirm > 0) {
+                            if (typeof window.loadTopicPendingPanel === 'function') {
+                                var topicNames = [];
+                                window.loadTopicPendingPanel(r.pending, topicNames);
+                                var panel = document.getElementById('topic-pending-panel');
+                                if (panel) panel.style.display = '';
+                            }
+                        }
+                    }).catch(function() {});
+                }
+            } else {
+                alert(window.t('tree.createTopicFailed') + (result ? result.message : window.t('common.unknownError')));
+            }
+        }).catch(function(e) {
+            alert(window.t('tree.createTopicError') + (e.message || e));
+        });
+    }
+}
+
 function hideTreeContextMenu() {
     var existing = document.getElementById('tree-ctx-menu');
     if (existing) existing.remove();
@@ -225,9 +311,9 @@ function showDeleteConfirm(itemEl, path, name) {
 
     var bar = document.createElement('div');
     bar.className = 'delete-confirm-bar';
-    bar.innerHTML = '<span class="delete-confirm-text">删除 ' + escapeHtml(name) + '？</span>' +
-        '<button class="delete-confirm-yes" title="确认删除">' + window.Icons.get('check', 16) + '</button>' +
-        '<button class="delete-confirm-no" title="取消">' + window.Icons.get('close', 16) + '</button>';
+    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteConfirm', { name: escapeHtml(name) }) + '</span>' +
+        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDelete') + '">' + window.Icons.get('check', 16) + '</button>' +
+        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
 
     itemEl.style.position = 'relative';
     itemEl.appendChild(bar);
@@ -261,10 +347,10 @@ async function doDeleteFile(path, name, confirmBar) {
             }
             window.TreeModule.loadFileTree();
         } else {
-            alert('删除失败：' + (result ? result.message || '未知错误' : '未知错误'));
+            alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert('删除出错：' + (e.message || e));
+        alert(window.t('tree.deleteError') + (e.message || e));
     }
 }
 
@@ -274,14 +360,14 @@ function revealInFinder(path) {
     }
 }
 
-function deleteFile(path, name) {
-    if (!confirm('确定要删除 "' + name + '" 吗？')) return;
+async function deleteFile(path, name) {
+    if (!(await window._customConfirm(window.t('tree.confirmDeleteItem', { name: name })))) return;
     if (window.api && window.api.invoke) {
         window.api.invoke('delete_file', { path: path }).then(function(result) {
             if (result && result.success) {
                 window.TreeModule.loadFileTree();
             } else {
-                alert('删除失败：' + (result ? result.message || '未知错误' : '未知错误'));
+                alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
             }
         });
     }
@@ -303,7 +389,7 @@ function setupFileTreeDragDrop(container) {
         if (!filePath) return;
 
         _fileTreeDragData.filePath = filePath;
-        _fileTreeDragData.fileName = itemEl.getAttribute('data-name') || '文件';
+        _fileTreeDragData.fileName = itemEl.getAttribute('data-name') || window.t('common.file');
         _fileTreeDragData.isFolder = itemEl.classList.contains('folder');
         itemEl.classList.add('dragging');
 
@@ -366,15 +452,15 @@ function setupFileTreeDragDrop(container) {
             if (_fileTreeDragData.isFolder && targetPath.startsWith(srcPath + '/')) return;
 
             try {
-                var result = await window.api.move_file(srcPath, targetPath);
+                var result = await window.api.moveFile(srcPath, targetPath);
                 if (result && result.success) {
                     await window.TreeModule.loadFileTree();
                 } else {
-                    alert('移动失败：' + (result ? result.message : '未知错误'));
+                    alert(window.t('topic.moveFailed') + (result ? result.message : window.t('common.unknownError')));
                 }
             } catch (err) {
                 console.error('[FileTree] move error:', err);
-                alert('移动失败：' + (err.message || '发生错误'));
+                alert(window.t('topic.moveFailed') + (err.message || window.t('common.errorOccurred')));
             }
         }
 
@@ -431,7 +517,7 @@ function flattenVisibleNodes(treeData) {
 
 function renderVirtualTree(container) {
     if (!_flatVisibleNodes || _flatVisibleNodes.length === 0) {
-        container.innerHTML = '<div class="tree-empty">暂无工作区</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
     }
 
@@ -473,28 +559,34 @@ function renderVirtualTree(container) {
 
     container.innerHTML = html;
 
-    container.querySelectorAll('.tree-item').forEach(function(item) {
-        item.addEventListener('click', function(e) {
-            var path = this.getAttribute('data-path');
-            var name = this.getAttribute('data-name');
-            if (this.classList.contains('folder')) {
+    if (!container._treeDelegated) {
+        container.addEventListener('click', function(e) {
+            var item = e.target.closest('.tree-item');
+            if (!item) return;
+            var path = item.getAttribute('data-path');
+            var name = item.getAttribute('data-name');
+            if (item.classList.contains('folder')) {
                 var currentExpanded = treeExpandedState.hasOwnProperty(path) ? treeExpandedState[path] : true;
                 treeExpandedState[path] = !currentExpanded;
                 saveTreeState();
                 _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
                 renderVirtualTree(container);
             } else {
-                setActiveTreeItem(this);
+                setActiveTreeItem(item);
                 window.TreeModule.selectFile(path, name);
             }
         });
 
-        item.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            showTreeContextMenu(e, this);
+        container.addEventListener('contextmenu', function(e) {
+            var item = e.target.closest('.tree-item');
+            if (item) {
+                e.preventDefault();
+                e.stopPropagation();
+                showTreeContextMenu(e, item);
+            }
         });
-    });
+        container._treeDelegated = true;
+    }
 
     setupFileTreeDragDrop(container);
 
@@ -521,42 +613,82 @@ function extractFileSet(treeData) {
 }
 
 var _lastFileSet = null;
+var FILE_TREE_LOAD_TIMEOUT_MS = 15000;
+var _loadFileTreeInFlight = null;
 
-async function loadFileTree() {
+function _describeTreeLoadError(error) {
+    if (!error) return window.t('common.unknownError');
+    if (typeof error === 'string') return error;
+    if (error.message) return error.message;
+    try {
+        return JSON.stringify(error);
+    } catch (_) {
+        return String(error);
+    }
+}
+
+async function loadFileTree(force) {
+    if (_loadFileTreeInFlight) {
+        return _loadFileTreeInFlight;
+    }
+    _loadFileTreeInFlight = _loadFileTreeOnce(!!force);
+    try {
+        return await _loadFileTreeInFlight;
+    } finally {
+        _loadFileTreeInFlight = null;
+    }
+}
+
+async function _loadFileTreeOnce(force) {
     var container = document.getElementById('file-tree');
     if (!container) return;
 
     if (!window.api) {
-        container.innerHTML = '<div class="tree-empty">工作区未设置</div>';
+        container.innerHTML = '<div class="tree-empty">' + window.t('tree.workspaceNotSet') + '</div>';
         return;
     }
 
     try {
         var treeData = await Promise.race([
-            window.api.get_workspace_tree(),
-            new Promise(function(_, reject) { setTimeout(function() { reject(new Error('加载超时')); }, 5000); })
+            window.api.getWorkspaceTree(),
+            new Promise(function(_, reject) { setTimeout(function() { reject(new Error(window.t('tree.loadTimeout'))); }, FILE_TREE_LOAD_TIMEOUT_MS); })
         ]);
+
+        if (!Array.isArray(treeData)) {
+            throw new Error(window.t('tree.invalidFormat', { detail: _describeTreeLoadError(treeData) }));
+        }
 
         var newFileSet = extractFileSet(treeData);
         var newSetStr = JSON.stringify(newFileSet);
 
-        if (newSetStr === _lastFileSet) return;
+        if (!force && newSetStr === _lastFileSet) return;
         _lastFileSet = newSetStr;
         _lastTreeData = treeData;
         window.AppState.lastFileTreeData = treeData;
 
         if (Array.isArray(treeData) && treeData.length === 0) {
-            container.innerHTML = '<div class="tree-empty">工作区为空</div>';
+            container.innerHTML = '<div class="tree-empty">' + window.t('tree.workspaceEmpty') + '</div>';
         } else {
             loadTreeState();
             _flatVisibleNodes = flattenVisibleNodes(treeData);
             renderVirtualTree(container);
         }
-        updateSidebarStats();
-        if (typeof refreshPendingBtnState === 'function') refreshPendingBtnState();
     } catch (e) {
-        console.error('[Tree] Load failed:', e);
-        container.innerHTML = '<div class="tree-empty">加载失败</div>';
+        console.warn('[Tree] Load skipped:', _describeTreeLoadError(e), e);
+        if (!_lastTreeData) {
+            container.innerHTML = '<div class="tree-empty">' + window.t('tree.loadFailed') + '</div>';
+        }
+    }
+
+    try {
+        if (typeof window.updateSidebarStats === 'function') window.updateSidebarStats();
+    } catch (e) {
+        console.warn('[Tree] updateSidebarStats failed:', _describeTreeLoadError(e), e);
+    }
+    try {
+        if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+    } catch (e) {
+        console.warn('[Tree] refreshPendingBtnState failed:', _describeTreeLoadError(e), e);
     }
 }
 
@@ -564,15 +696,17 @@ function selectFile(path, fileName) {
     setSelectedFile(path, fileName);
 
     var graphHome = document.getElementById('graph-home-view');
+    var graphPanel = document.getElementById('graph-panel');
     var contentArea = document.getElementById('content-area');
     var pendingView = document.getElementById('pending-view');
     if (graphHome) graphHome.style.display = 'none';
+    if (graphPanel) graphPanel.style.display = 'none';
     if (contentArea) contentArea.style.display = '';
     if (pendingView) pendingView.style.display = 'none';
-    if (typeof _deactivatePendingBtn === 'function') _deactivatePendingBtn();
+    if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
 
     if (window.api) {
-        window.api.on_file_selected(path).catch(function() {});
+        window.api.onFileSelected(path).catch(function() {});
     }
 
     var container = document.getElementById('tiptap-editor-container');
@@ -585,14 +719,14 @@ function selectFile(path, fileName) {
         }
     } else if (window._rewritingFilePath && path === window._rewritingFilePath) {
         if (container) container.classList.add('rewriting');
-        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = 'LLM 正在改写文档...'; }
+        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = window.t('app.llmRewriting'); }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(false);
         }
     }
 
-    var graphPanel = document.getElementById('graph-panel');
-    if (graphPanel && graphPanel.style.display !== 'none') {
+    var selectGraphPanel = document.getElementById('graph-panel');
+    if (selectGraphPanel && selectGraphPanel.style.display !== 'none') {
         graphPanel.style.display = 'none';
         var graphBtn = document.getElementById('titlebar-graph-btn');
         if (graphBtn) graphBtn.classList.remove('active');
@@ -631,40 +765,58 @@ window.TreeModule = {
     updateConvAIStatus: function() {}
 };
 
-window.switchSidebarView = switchSidebarView;
+window.switchSidebarView = window.switchSidebarView;
 window.toggleGraphPanel = function() {
     var panel = document.getElementById('graph-panel');
     if (!panel) return;
     if (panel.style.display === 'none') {
         var contentPanel = document.getElementById('content-panel');
         var previewPanel = document.getElementById('preview-panel');
+        var pendingView = document.getElementById('pending-view');
         if (contentPanel) contentPanel.style.display = 'flex';
         if (previewPanel) previewPanel.style.display = 'none';
+        if (pendingView) pendingView.style.display = 'none';
+        if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
         panel.style.display = 'flex';
         var graphHome = document.getElementById('graph-home-view');
         var contentArea = document.getElementById('content-area');
         if (graphHome) graphHome.style.display = 'none';
         if (contentArea) contentArea.style.display = 'none';
-        if (window.GraphModule && window.GraphModule.loadData) {
-            window.GraphModule.loadData();
+        if (window.Graph3Tier && window.Graph3Tier.load) {
+            window.Graph3Tier.load();
         }
     } else {
+        // Closing graph — go to pending/log panel
         panel.style.display = 'none';
         if (window.AppState.selectedFilePath) {
             var contentArea = document.getElementById('content-area');
             if (contentArea) contentArea.style.display = '';
         } else {
-            var graphHome = document.getElementById('graph-home-view');
-            if (graphHome) graphHome.style.display = '';
+            if (typeof window.togglePendingView === 'function') window.togglePendingView();
         }
     }
 };
 window.togglePendingLinksPanel = function() { window.LinksModule && window.LinksModule.togglePendingLinksPanel(); };
-window.onGraphFilter = function(f) { window.GraphModule && window.GraphModule.onFilter(f); };
-window.loadRelationGraphData = function() { window.GraphModule && window.GraphModule.loadData(); };
-window.graphZoomIn = function() { window.GraphModule && window.GraphModule.zoomIn(); };
-window.graphZoomOut = function() { window.GraphModule && window.GraphModule.zoomOut(); };
-window.graphToggleEvolve = function() { window.GraphModule && window.GraphModule.toggleEvolve(); };
+window.loadRelationGraphData = function() {
+    if (window.Graph3Tier && window.Graph3Tier.load) {
+        window.Graph3Tier.load();
+    }
+};
+window.graphZoomIn = function() {
+    if (window.Graph3Tier && window.Graph3Tier.zoomIn) window.Graph3Tier.zoomIn();
+};
+window.graphZoomOut = function() {
+    if (window.Graph3Tier && window.Graph3Tier.zoomOut) window.Graph3Tier.zoomOut();
+};
 window.onDiscoverLinks = function() { window.LinksModule && window.LinksModule.onDiscoverLinks(); };
 window.onConfirmLink = function(f, t) { window.LinksModule && window.LinksModule.onConfirmLink(f, t); };
 window.onRejectLink = function(f, t) { window.LinksModule && window.LinksModule.onRejectLink(f, t); };
+
+window.hideTreeContextMenu = hideTreeContextMenu;
+window.revealInFinder = revealInFinder;
+window.showTreeContextMenu = showTreeContextMenu;
+window.onAddTopicFromFileTree = onAddTopicFromFileTree;
+window.doDeleteTopic = doDeleteTopic;
+
+})();
+

@@ -1,22 +1,24 @@
+(function() { 'use strict';
+
 var _fileConversionUnlisten = null;
 
 async function startFileConversion() {
     const btn = document.querySelector('#tab-1 .btn-primary');
-    const originalText = btn ? btn.textContent : '开始转换';
+    const originalText = btn ? btn.textContent : window.t('converter.auto.converter_auto_converter_auto_开始转换');
     
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '转换中...';
+        btn.textContent = window.t('converter.auto.converter_auto_converter_auto_转换中');
     }
 
     try {
         const aiToggleEl = document.getElementById('conv-ai-toggle');
         const aiAssist = aiToggleEl ? aiToggleEl.checked : false;
 
-        updateStatus('正在转换...');
+        updateStatus(window.t('converter.auto.converter_auto_converter_auto_正在转换'));
         updateProgress('conv-progress', 0, '正在准备转换...');
 
-        if (typeof getTauriEventAPI === 'function') {
+        if (typeof window.getTauriEventAPI === 'function') {
             var eventAPI = getTauriEventAPI();
             if (eventAPI) {
                 if (_fileConversionUnlisten) {
@@ -28,10 +30,10 @@ async function startFileConversion() {
 
                     if (data.type === 'progress' && data.element_id === 'conv-progress') {
                         updateProgress('conv-progress', data.progress || 0, data.message || '');
-                        updateStatus(data.message || '转换中...');
+                        updateStatus(data.message || window.t('converter.auto.converter_auto_converter_auto_转换中'));
                     } else if (data.type === 'file_conversion_complete') {
                         updateProgress('conv-progress', 1, '转换完成');
-                        updateStatus('转换完成');
+                        updateStatus(window.t('converter.auto.converter_auto_converter_auto_转换完成'));
                         if (btn) {
                             btn.disabled = false;
                             btn.textContent = originalText;
@@ -45,7 +47,7 @@ async function startFileConversion() {
                         }
                     } else if (data.type === 'file_conversion_error') {
                         updateProgress('conv-progress', 0, '转换失败：' + (data.error || '未知错误'));
-                        updateStatus('转换失败：' + (data.error || '未知错误'));
+                        updateStatus(window.t('converter.auto.converter_auto_converter_auto_转换失败') + (data.error || window.t('common.unknownError')));
                         if (btn) {
                             btn.disabled = false;
                             btn.textContent = originalText;
@@ -59,12 +61,12 @@ async function startFileConversion() {
             }
         }
 
-        const result = await window.api.start_file_conversion(aiAssist);
+        const result = await window.api.startFileConversion(aiAssist);
         
         if (result && result.success) {
-            updateStatus('正在转换，请稍候...');
+            updateStatus(window.t('converter.auto.converter_auto_converter_auto_正在转换_请稍候'));
         } else {
-            updateStatus('转换失败: ' + (result?.message || '未知错误'));
+            updateStatus(window.t('converter.auto.converter_auto_converter_auto_转换失败_2') + (result?.message || window.t('common.unknownError')));
             updateProgress('conv-progress', 0, '转换失败: ' + (result?.message || '未知错误'));
             if (btn) {
                 btn.disabled = false;
@@ -73,7 +75,7 @@ async function startFileConversion() {
         }
     } catch (e) {
         console.error('[Converter] Conversion error:', e);
-        updateStatus('转换失败: ' + e.message);
+        updateStatus(window.t('converter.auto.converter_auto_converter_auto_转换失败_2') + e.message);
         updateProgress('conv-progress', 0, '转换失败: ' + e.message);
         if (btn) {
             btn.disabled = false;
@@ -125,3 +127,8 @@ window.ConverterModule = {
     autoSaveConvConfig,
     loadSavedConvConfig
 };
+
+window.startFileConversion = startFileConversion;
+
+})();
+

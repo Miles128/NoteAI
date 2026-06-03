@@ -1,0 +1,72 @@
+#ingest-pipeline-bar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 9000;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface, #161f2e);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    font-size: 13px;
+}
+
+#ingest-pipeline-bar.visible {
+    display: flex;
+}
+
+[data-theme="light"] #ingest-pipeline-bar {
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+}
+
+#ingest-pipeline-bar .ingest-track {
+    flex: 1;
+    min-width: 120px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#ingest-pipeline-bar .ingest-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4a90d9, #6ab0f3);
+    transition: width 0.25s ease;
+}
+
+#ingest-pipeline-bar .ingest-label {
+    color: var(--text-muted, #aaa);
+    white-space: nowrap;
+    min-width: 4.5em;
+}
+
+#ingest-pipeline-bar .ingest-message {
+    flex: 2;
+    color: var(--text, #eee);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#ingest-pipeline-bar button {
+    background: transparent;
+    color: var(--text-muted, #aaa);
+    border: 1px solid var(--border, #444);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+#ingest-pipeline-bar button:hover {
+    color: var(--text, #fff);
+    border-color: var(--text-muted, #888);
+}

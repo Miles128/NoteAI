@@ -1,111 +1,161 @@
+(function() { 'use strict';
+
 window.AssistantModule = (function() {
     var _chatHistory = [];
     var _isStreaming = false;
     var _indexBuilt = false;
     var _panelVisible = false;
+    /** 打开 AI 侧栏收窄等 {@link _thawAILayout} */
+    var _aiLayoutSnap = null;
+    var _AI_PANEL_DEFAULT_W = 300;
 
-    function init() {
+    /**
+     * 打开前：侧栏若为展开则缩至约 75%；AI 列宽约等于让出的宽幅。#content-panel 不再写死宽度，避免溢出被裁剪。
+     */
+    function _freezeForAIPanel(panel) {
+        var sidebar = document.getElementById('sidebar');
+        var snap = {};
+
+        if (sidebar) snap.prevSidebarWidthStyle = sidebar.style.width || '';
+
+        /* 不把 content-panel 设为 flex:0（会导致总宽超限 + right-area overflow:hidden 裁掉整列 AI）；
+         * 仅靠侧栏收窄 + AI 弹性宽度，中间区主要由 flex 自然分配。 */
+
+        if (!panel) {
+            _aiLayoutSnap = snap;
+            return;
+        }
+
+        if (!sidebar || sidebar.classList.contains('collapsed') || sidebar.offsetWidth < 40) {
+            panel.style.width = _AI_PANEL_DEFAULT_W + 'px';
+            _aiLayoutSnap = snap;
+            return;
+        }
+
+        var sw = sidebar.offsetWidth;
+        var newSw = Math.max(180, Math.round(sw * 0.75));
+        var freed = Math.max(0, sw - newSw);
+
+        sidebar.style.width = newSw + 'px';
+        snap.didShrinkSidebar = true;
+        var baseW = freed > 0 ? freed : Math.round(sw * 0.25);
+        panel.style.width = Math.min(420, Math.max(260, baseW)) + 'px';
+
+        _aiLayoutSnap = snap;
+    }
+
+    /** 关闭时还原侧栏与 AI 列内联宽度 */
+    function _thawAILayout(panel) {
+        var snap = _aiLayoutSnap;
+        _aiLayoutSnap = null;
+        var sidebar = document.getElementById('sidebar');
+
+        if (snap && snap.didShrinkSidebar && sidebar) {
+            if (snap.prevSidebarWidthStyle) {
+                sidebar.style.width = snap.prevSidebarWidthStyle;
+            } else {
+                sidebar.style.removeProperty('width');
+            }
+        }
+
+        if (panel) panel.style.removeProperty('width');
+
+    }
+
+    function _setRightAreaAiOpen(open) {
+        var ra = document.getElementById('right-area');
+        if (!ra) return;
+        if (open) ra.classList.add('ai-panel-open');
+        else ra.classList.remove('ai-panel-open');
+    }
+
+    var _aiBindingsDone = false;
+    var _resizersInstalled = false;
+
+    function ensureAiBindings() {
+        if (_aiBindingsDone) return true;
+
         var input = document.getElementById('ai-input');
         var sendBtn = document.getElementById('ai-send-btn');
-        if (!input || !sendBtn) return;
+        if (!input || !sendBtn) {
+            console.warn('[Assistant] ai-input / ai-send-btn missing; will retry next open');
+            return false;
+        }
 
         input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
+            if (e.key !== 'Enter') return;
+            if (e.shiftKey) return;
+            e.preventDefault();
+            sendMessage();
         });
 
         sendBtn.addEventListener('click', function() {
             sendMessage();
         });
 
-        _setupResizers();
+        _ensureResizersInstalled();
+        _aiBindingsDone = true;
+        return true;
     }
 
-    var _sidebarOriginalWidth = null;
-    var _windowExpanded = false;
-
-    function _resizeWindow(deltaWidth) {
-        var win = (typeof getTauriWindow === 'function') ? getTauriWindow() : null;
-        if (!win) return;
-        win.isMaximized().then(function(maximized) {
-            if (maximized) {
-                win.unmaximize();
-            }
-            Promise.all([win.innerSize(), win.scaleFactor()]).then(function(results) {
-                var size = results[0];
-                var sf = results[1];
-                var LogicalSize = window.__TAURI__.window.LogicalSize
-                    || (window.__TAURI__.dpi && window.__TAURI__.dpi.LogicalSize);
-                var logicalWidth = size.width / sf + deltaWidth;
-                var logicalHeight = size.height / sf;
-                if (LogicalSize) {
-                    win.setSize(new LogicalSize(logicalWidth, logicalHeight));
-                } else {
-                    win.setSize({ type: 'Logical', width: logicalWidth, height: logicalHeight });
-                }
-            });
-        });
+    function init() {
+        ensureAiBindings();
     }
 
     function toggle() {
         var panel = document.getElementById('ai-panel');
         if (!panel) return;
 
+        ensureAiBindings();
+
         _panelVisible = !_panelVisible;
         if (_panelVisible) {
-            panel.style.display = 'flex';
-            panel.style.width = '480px';
+            _freezeForAIPanel(panel);
+            panel.classList.add('ai-panel-visible');
+            _setRightAreaAiOpen(true);
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
             if (toggleBtn) toggleBtn.classList.add('active');
-            if (_chatHistory.length === 0) {
-                addSystemMessage('嗨，我是小忆，你的贴心个人助理～有什么可以帮你的吗？');
-            }
             _scrollToBottom();
-
-            var sidebar = document.getElementById('sidebar');
-            if (sidebar && _sidebarOriginalWidth === null) {
-                _sidebarOriginalWidth = sidebar.offsetWidth;
-                var newSidebarWidth = Math.max(180, _sidebarOriginalWidth - 160);
-                sidebar.style.width = newSidebarWidth + 'px';
-            }
-
-            if (!_windowExpanded) {
-                _resizeWindow(320);
-                _windowExpanded = true;
-            }
+            window.requestAnimationFrame(function() {
+                var el = document.getElementById('ai-input');
+                if (!el) return;
+                try {
+                    el.focus({ preventScroll: true });
+                } catch (_err) {
+                    el.focus();
+                }
+            });
         } else {
-            panel.style.display = 'none';
+            _thawAILayout(panel);
+            panel.classList.remove('ai-panel-visible');
+            _setRightAreaAiOpen(false);
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
             if (toggleBtn) toggleBtn.classList.remove('active');
-
-            var sidebar = document.getElementById('sidebar');
-            if (sidebar && _sidebarOriginalWidth !== null) {
-                sidebar.style.width = _sidebarOriginalWidth + 'px';
-                _sidebarOriginalWidth = null;
-            }
-
-            if (_windowExpanded) {
-                _resizeWindow(-320);
-                _windowExpanded = false;
-            }
         }
     }
 
-    function _setupResizers() {
+    function _ensureResizersInstalled() {
+        if (_resizersInstalled) return;
+
         var panel = document.getElementById('ai-panel');
         if (!panel) return;
 
         var leftResizer = document.getElementById('ai-resizer-left');
         var rightResizer = document.getElementById('ai-resizer-right');
+        var topResizer = document.getElementById('ai-resizer-top');
 
-        if (leftResizer) {
+        if (leftResizer && !leftResizer.dataset.aiResizeBound) {
             _initResizer(leftResizer, panel, 'left');
+            leftResizer.dataset.aiResizeBound = '1';
         }
-        if (rightResizer) {
-            rightResizer.style.display = 'none';
+        if (rightResizer) rightResizer.style.display = 'none';
+
+        if (topResizer && !topResizer.dataset.aiResizeBound) {
+            _initTopResizer(topResizer, panel);
+            topResizer.dataset.aiResizeBound = '1';
         }
+
+        _resizersInstalled = true;
     }
 
     function _initResizer(resizerEl, panel, side) {
@@ -120,6 +170,7 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
+            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
         }
 
         function onMouseMove(e) {
@@ -130,15 +181,8 @@ window.AssistantModule = (function() {
             } else {
                 newWidth = startWidth + dx;
             }
-            newWidth = Math.max(280, Math.min(700, newWidth));
+            newWidth = Math.max(260, Math.min(520, newWidth));
             panel.style.width = newWidth + 'px';
-
-            if (side === 'left') {
-                var widthDiff = newWidth - startWidth;
-                _resizeWindow(widthDiff);
-                startX = e.clientX;
-                startWidth = newWidth;
-            }
         }
 
         function onMouseUp() {
@@ -147,12 +191,51 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
+            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+        }
+
+        resizerEl.addEventListener('mousedown', onMouseDown);
+    }
+
+    function _initTopResizer(resizerEl, panel) {
+        var startY, startHeight;
+
+        function onMouseDown(e) {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = panel.offsetHeight;
+            resizerEl.classList.add('ai-resizer-active');
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+        }
+
+        function onMouseMove(e) {
+            var dy = e.clientY - startY;
+            var newHeight = startHeight - dy;
+            var minH = 280;
+            var maxH = window.innerHeight - panel.offsetTop;
+            newHeight = Math.max(minH, Math.min(maxH, newHeight));
+            panel.style.height = newHeight + 'px';
+            panel.style.bottom = 'auto';
+        }
+
+        function onMouseUp() {
+            resizerEl.classList.remove('ai-resizer-active');
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
     }
 
     var _currentStreamEl = null;
+    var _lastArchive = null;
 
     function sendMessage() {
         if (_isStreaming) return;
@@ -165,6 +248,7 @@ window.AssistantModule = (function() {
         input.value = '';
         addUserMessage(question);
         _chatHistory.push({ role: 'user', content: question });
+        _lastArchive = { question: question, answer: '', rowEl: null };
 
         _isStreaming = true;
         var assistantEl = addAssistantMessage();
@@ -172,11 +256,29 @@ window.AssistantModule = (function() {
 
         var topics = _extractTopics();
         var tags = _extractTags();
+        var currentFile = _extractCurrentFile();
 
-        window.api.rag_chat(question, topics, tags).catch(function(err) {
+        window.api.ragChat(question, topics, tags, currentFile).then(function(result) {
+            if (result && result.started) {
+                setTimeout(function() {
+                    if (_isStreaming && _currentStreamEl === assistantEl && !assistantEl.textContent) {
+                        _isStreaming = false;
+                        assistantEl.textContent = window.t('assistant.timeout');
+                        assistantEl.classList.remove('ai-typing');
+                        _currentStreamEl = null;
+                    }
+                }, 180000);
+                return;
+            }
+            if (result && result.success === false) {
+                _isStreaming = false;
+                assistantEl.textContent = result.message || window.t('assistant.requestFailed');
+                assistantEl.classList.remove('ai-typing');
+            }
+        }).catch(function(err) {
             _isStreaming = false;
-            var msg = (err && err.message) ? err.message : String(err || '未知错误');
-            assistantEl.textContent = '请求失败: ' + msg;
+            var msg = (err && err.message) ? err.message : String(err || window.t('common.unknownError'));
+            assistantEl.textContent = window.t('assistant.requestFailedMsg', { message: msg });
             assistantEl.classList.remove('ai-typing');
         });
     }
@@ -195,14 +297,61 @@ window.AssistantModule = (function() {
         return data.tags.map(function(t) { return t.name; });
     }
 
+    function _extractCurrentFile() {
+        if (!window.AppState || !window.AppState.selectedFilePath) return "";
+        return window.AppState.selectedFilePath;
+    }
+
+    /* 小忆：萌妹子半身像 */
+    var _BOT_AVATAR_SVG = '<svg class="ai-avatar-svg" viewBox="0 0 48 48" aria-hidden="true">'
+        + '<defs><linearGradient id="xy-hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5b3d7a"/><stop offset="100%" stop-color="#3d2858"/></linearGradient></defs>'
+        + '<path d="M8 22 C8 10 16 4 24 4 C32 4 40 10 40 22 L40 30 C40 38 34 44 24 44 C14 44 8 38 8 30 Z" fill="url(#xy-hair)"/>'
+        + '<path d="M12 18 C12 12 17 8 24 8 C31 8 36 12 36 18 L36 26 C36 32 31 36 24 36 C17 36 12 32 12 26 Z" fill="#ffe8dc"/>'
+        + '<ellipse cx="17" cy="22" rx="3.2" ry="4" fill="#2d1f3d"/>'
+        + '<ellipse cx="31" cy="22" rx="3.2" ry="4" fill="#2d1f3d"/>'
+        + '<circle cx="18" cy="20.5" r="1.3" fill="#fff"/>'
+        + '<circle cx="32" cy="20.5" r="1.3" fill="#fff"/>'
+        + '<circle cx="18.8" cy="21.2" r="0.5" fill="#f9a8d4"/>'
+        + '<circle cx="32.8" cy="21.2" r="0.5" fill="#f9a8d4"/>'
+        + '<ellipse cx="14" cy="26" rx="2.2" ry="1.2" fill="#fda4c8" opacity="0.75"/>'
+        + '<ellipse cx="34" cy="26" rx="2.2" ry="1.2" fill="#fda4c8" opacity="0.75"/>'
+        + '<path d="M21 28 Q24 30.5 27 28" stroke="#d9468f" stroke-width="1.2" fill="none" stroke-linecap="round"/>'
+        + '<path d="M10 14 Q24 6 38 14" fill="url(#xy-hair)"/>'
+        + '<path d="M6 20 L10 16 L12 22 Z" fill="#7c5cbf"/>'
+        + '<path d="M42 20 L38 16 L36 22 Z" fill="#7c5cbf"/>'
+        + '<ellipse cx="24" cy="10" rx="4" ry="2.5" fill="#f472b6" opacity="0.9"/>'
+        + '</svg>';
+
+    /* 用户：机器狗 */
+    var _USER_AVATAR_SVG = '<svg class="ai-avatar-svg" viewBox="0 0 48 48" aria-hidden="true">'
+        + '<defs><linearGradient id="dog-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#64748b"/></linearGradient></defs>'
+        + '<rect x="10" y="14" width="28" height="24" rx="8" fill="url(#dog-metal)" stroke="#475569" stroke-width="1"/>'
+        + '<path d="M8 18 L4 10 L12 16 Z" fill="#64748b" stroke="#475569" stroke-width="0.8"/>'
+        + '<path d="M40 18 L44 10 L36 16 Z" fill="#64748b" stroke="#475569" stroke-width="0.8"/>'
+        + '<line x1="24" y1="8" x2="24" y2="14" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>'
+        + '<circle cx="24" cy="6" r="2.5" fill="#38bdf8" stroke="#0ea5e9" stroke-width="0.8"/>'
+        + '<rect x="15" y="20" width="7" height="6" rx="2" fill="#0f172a"/>'
+        + '<rect x="26" y="20" width="7" height="6" rx="2" fill="#0f172a"/>'
+        + '<circle cx="18.5" cy="23" r="1.8" fill="#22d3ee"/>'
+        + '<circle cx="29.5" cy="23" r="1.8" fill="#22d3ee"/>'
+        + '<rect x="20" y="30" width="8" height="4" rx="2" fill="#334155"/>'
+        + '<circle cx="24" cy="32" r="1.2" fill="#f97316"/>'
+        + '<path d="M14 36 L18 40 M34 36 L30 40" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>'
+        + '<rect x="6" y="34" width="6" height="3" rx="1" fill="#94a3b8"/>'
+        + '<rect x="36" y="34" width="6" height="3" rx="1" fill="#94a3b8"/>'
+        + '</svg>';
+
     function _createAvatar(type) {
+        var uid = 'av' + String(Math.random()).slice(2, 8);
+        var svg = type === 'bot' ? _BOT_AVATAR_SVG : _USER_AVATAR_SVG;
+        svg = svg.replace(/id="xy-hair"/g, 'id="xy-hair-' + uid + '"')
+            .replace(/url\(#xy-hair\)/g, 'url(#xy-hair-' + uid + ')')
+            .replace(/id="dog-metal"/g, 'id="dog-metal-' + uid + '"')
+            .replace(/url\(#dog-metal\)/g, 'url(#dog-metal-' + uid + ')');
         var avatar = document.createElement('div');
         avatar.className = 'ai-avatar ai-avatar-' + type;
-        if (type === 'bot') {
-            avatar.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="8" width="14" height="10" rx="3"/><circle cx="9.5" cy="13" r="1.2" fill="currentColor"/><circle cx="14.5" cy="13" r="1.2" fill="currentColor"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="12" cy="3.5" r="1.2" fill="currentColor"/><line x1="8" y1="18" x2="8" y2="20"/><line x1="16" y1="18" x2="16" y2="20"/></svg>';
-        } else {
-            avatar.textContent = '你';
-        }
+        avatar.setAttribute('title', type === 'bot' ? window.t('assistant.name') : window.t('assistant.userAvatar'));
+        avatar.innerHTML = svg;
         return avatar;
     }
 
@@ -246,7 +395,7 @@ window.AssistantModule = (function() {
         div.className = 'ai-msg ai-system';
         var label = document.createElement('div');
         label.className = 'ai-msg-label';
-        label.textContent = '系统';
+        label.textContent = window.t('assistant.system');
         var content = document.createElement('div');
         content.textContent = text;
         div.appendChild(label);
@@ -256,8 +405,9 @@ window.AssistantModule = (function() {
     }
 
     function _scrollToBottom() {
-        var container = document.getElementById('ai-panel-messages');
-        if (container) container.scrollTop = container.scrollHeight;
+        /* 实际滚动容器是 .ai-panel-body（overflow-y:auto），不是 .ai-panel-messages */
+        var sc = document.querySelector('#ai-panel .ai-panel-body');
+        if (sc) sc.scrollTop = sc.scrollHeight;
     }
 
     function handleEvent(eventData) {
@@ -272,24 +422,86 @@ window.AssistantModule = (function() {
             _isStreaming = false;
             if (_currentStreamEl) {
                 _currentStreamEl.classList.remove('ai-typing');
-                _chatHistory.push({ role: 'assistant', content: _currentStreamEl.textContent });
+                var answerText = eventData.answer || _currentStreamEl.textContent || '';
+                _currentStreamEl.textContent = answerText;
+                _chatHistory.push({ role: 'assistant', content: answerText });
+                if (_lastArchive) {
+                    _lastArchive.answer = answerText;
+                    if (eventData.suggest_save_note) {
+                        _attachSaveNoteActions(_currentStreamEl, _lastArchive);
+                    }
+                }
+            }
+            _currentStreamEl = null;
+        } else if (eventData.type === 'rag_error') {
+            _isStreaming = false;
+            if (_currentStreamEl) {
+                _currentStreamEl.textContent = eventData.message || window.t('assistant.requestFailed');
+                _currentStreamEl.classList.remove('ai-typing');
             }
             _currentStreamEl = null;
         } else if (eventData.type === 'rag_index_built') {
             _indexBuilt = eventData.data && eventData.data.success;
             if (_indexBuilt) {
-                addSystemMessage('知识库索引构建完成，共 ' + (eventData.data.chunk_count || 0) + ' 个片段');
+                addSystemMessage(window.t('assistant.indexBuildDone', { count: eventData.data.chunk_count || 0 }));
             } else {
-                addSystemMessage('索引构建失败: ' + (eventData.data.message || '未知错误'));
+                addSystemMessage(window.t('assistant.indexBuildFailed', { message: eventData.data.message || window.t('common.unknownError') }));
             }
         }
     }
 
     function rebuildIndex() {
-        addSystemMessage('正在构建知识库索引...');
-        window.api.rag_rebuild_index().catch(function(err) {
-            addSystemMessage('索引构建请求失败: ' + err.message);
+        addSystemMessage(window.t('assistant.indexBuilding'));
+        window.api.ragRebuildIndex().catch(function(err) {
+            addSystemMessage(window.t('assistant.indexRequestFailed', { message: err.message }));
         });
+    }
+
+    function _attachSaveNoteActions(contentEl, archive) {
+        if (!contentEl || !archive || !archive.answer) return;
+        var bubble = contentEl.closest('.ai-msg');
+        if (!bubble || bubble.querySelector('.ai-msg-actions')) return;
+
+        var actions = document.createElement('div');
+        actions.className = 'ai-msg-actions';
+
+        var hint = document.createElement('p');
+        hint.className = 'ai-save-note-hint';
+        hint.textContent = window.t('assistant.insightHint');
+        actions.appendChild(hint);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ai-save-note-btn';
+        btn.textContent = window.t('assistant.saveAsNote');
+        btn.addEventListener('click', function() {
+            if (!window.api || !window.api.archiveChatAnswer) return;
+            btn.disabled = true;
+            btn.textContent = window.t('assistant.saving');
+            window.api.archiveChatAnswer({
+                question: archive.question,
+                answer: archive.answer
+            }).then(function(res) {
+                if (res && res.success) {
+                    btn.textContent = window.t('common.saved');
+                    hint.textContent = window.t('assistant.savedToNotes');
+                    if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
+                        window.refreshWorkspaceViewsAfterChange();
+                    }
+                } else {
+                    btn.disabled = false;
+                    btn.textContent = window.t('assistant.saveAsNote');
+                    addSystemMessage(window.t('assistant.saveFailed', { message: (res && res.message) || window.t('common.unknownError') }));
+                }
+            }).catch(function(err) {
+                btn.disabled = false;
+                btn.textContent = window.t('assistant.saveAsNote');
+                addSystemMessage(window.t('assistant.saveFailed', { message: err.message || String(err) }));
+            });
+        });
+        actions.appendChild(btn);
+        bubble.appendChild(actions);
+        archive.rowEl = bubble;
     }
 
     return {
@@ -303,3 +515,7 @@ window.AssistantModule = (function() {
 function toggleAIPanel() {
     if (window.AssistantModule) window.AssistantModule.toggle();
 }
+
+window.toggleAIPanel = toggleAIPanel;
+
+})();

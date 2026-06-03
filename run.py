@@ -18,33 +18,51 @@ sys.path.insert(0, str(project_root))
 
 
 def check_dependencies():
-    dependencies = [
-        ("langchain_openai", "langchain-openai"),
-        ("langchain_core", "langchain-core"),
-        ("requests", "requests"),
-        ("bs4", "beautifulsoup4"),
-        ("readability", "readability-lxml"),
-        ("docx", "python-docx"),
-        ("fitz", "PyMuPDF"),
-        ("mammoth", "mammoth"),
-        ("validators", "validators"),
-        ("pydantic", "pydantic"),
-        ("tiktoken", "tiktoken"),
-        ("markdownify", "markdownify"),
-        ("yaml", "PyYAML"),
-        ("markdown", "markdown"),
-        ("jieba", "jieba"),
-        ("PIL", "pillow"),
-        ("html2text", "html2text"),
-        ("watchdog", "watchdog"),
-    ]
+    """从 pyproject.toml 读取依赖列表并检查是否已安装"""
+    proj_root = Path(__file__).parent
+    toml_path = proj_root / "pyproject.toml"
+    if not toml_path.exists():
+        print("未找到 pyproject.toml，跳过依赖检查")
+        return True
 
-    missing = []
-    for module_name, package_name in dependencies:
+    # 尝试用 tomllib (Python 3.11+) 或 tomli 解析
+    try:
+        import tomllib
+    except ImportError:
         try:
-            __import__(module_name)
+            import tomli as tomllib
         except ImportError:
-            missing.append(package_name)
+            print("未安装 tomllib/tomli，跳过依赖检查")
+            print("请手动执行: uv sync")
+            return True
+
+    try:
+        with open(toml_path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception:
+        print("解析 pyproject.toml 失败，跳过依赖检查")
+        return True
+
+    dependencies = data.get("project", {}).get("dependencies", [])
+    if not dependencies:
+        print("pyproject.toml 中未找到依赖列表")
+        return True
+
+    # 解析包名：从 "pkg>=1.0" 或 "pkg[extra]>=1.0" 等格式中提取包名
+    import re
+    missing = []
+    for dep_str in dependencies:
+        dep_str = dep_str.strip()
+        if not dep_str or dep_str.startswith("#"):
+            continue
+        # 提取包名（去掉版本约束和 extras）
+        pkg_name = re.split(r'[<>=!~;\[]', dep_str)[0].strip()
+        # 映射 PyPI 包名到 import 模块名
+        import_name = pkg_name.replace("-", "_")
+        try:
+            __import__(import_name)
+        except ImportError:
+            missing.append(pkg_name)
 
     if missing:
         print("缺少以下依赖包，请先安装：")

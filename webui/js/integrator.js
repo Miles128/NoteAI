@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 let topicsReady = false;
 var _noteIntegrationUnlisten = null;
 
@@ -11,7 +13,7 @@ function updateIntegrateBtnState() {
     btn.disabled = !(topicsReady && hasTopics);
     
     if (hint) {
-        hint.textContent = (topicsReady && hasTopics) ? '' : '请先点击提取主题按钮';
+        hint.textContent = (topicsReady && hasTopics) ? '' : window.t('integrator.extractTopicsFirst');
     }
 }
 
@@ -23,14 +25,14 @@ async function extractTopics() {
     if (!btn) return;
 
     btn.disabled = true;
-    btn.textContent = '提取中...';
+    btn.textContent = window.t('integrator.extracting');
     if (progressFill) progressFill.style.width = '5%';
-    if (progressText) progressText.textContent = '正在扫描文件...';
-    updateStatus('正在提取主题...');
+    if (progressText) progressText.textContent = window.t('integrator.scanningFiles');
+    updateStatus(window.t('integrator.extractingTopics'));
 
     try {
         if (progressFill) progressFill.style.width = '15%';
-        if (progressText) progressText.textContent = '正在读取文件列表...';
+        if (progressText) progressText.textContent = window.t('integrator.readingFileList');
 
         const topicCountInput = document.getElementById('topic-count');
         let topicCount = null;
@@ -41,11 +43,11 @@ async function extractTopics() {
             }
         }
 
-        const result = await window.api.extract_topics(topicCount);
+        const result = await window.api.extractTopics(topicCount);
 
         if (result && result.success) {
             if (progressFill) progressFill.style.width = '90%';
-            if (progressText) progressText.textContent = '正在写入主题列表...';
+            if (progressText) progressText.textContent = window.t('integrator.writingTopics');
 
             const topicList = document.getElementById('topic-list');
             if (topicList) {
@@ -61,8 +63,8 @@ async function extractTopics() {
                     
                     const progressPercent = 0.9 + (0.1 * (i + 1) / result.topics.length);
                     if (progressFill) progressFill.style.width = (progressPercent * 100) + '%';
-                    if (progressText) progressText.textContent = `显示主题 ${i + 1}/${result.topics.length}: ${topic}`;
-                    updateStatus(`显示主题 ${i + 1}/${result.topics.length}: ${topic}`);
+                    if (progressText) progressText.textContent = window.t('integrator.showTopic', { current: i + 1, total: result.topics.length, topic: topic });
+                    updateStatus(window.t('integrator.showTopic', { current: i + 1, total: result.topics.length, topic: topic }));
                     
                     await new Promise(resolve => setTimeout(resolve, 200));
                 }
@@ -72,22 +74,22 @@ async function extractTopics() {
             updateIntegrateBtnState();
 
             if (progressFill) progressFill.style.width = '100%';
-            if (progressText) progressText.textContent = `提取完成，共 ${result.topics.length} 个主题`;
-            updateStatus(`主题提取完成，共 ${result.topics.length} 个主题`);
+            if (progressText) progressText.textContent = window.t('integrator.extractDone', { count: result.topics.length });
+            updateStatus(window.t('integrator.extractDone', { count: result.topics.length }));
         } else {
             if (progressFill) progressFill.style.width = '0%';
-            if (progressText) progressText.textContent = '提取失败';
-            alert('提取主题失败: ' + (result?.error || result?.message || '未知错误'));
+            if (progressText) progressText.textContent = window.t('integrator.extractFailed');
+            alert(window.t('integrator.extractTopicsFailed') + (result?.error || result?.message || window.t('common.unknownError')));
         }
     } catch (e) {
         if (progressFill) progressFill.style.width = '0%';
-        if (progressText) progressText.textContent = '提取失败';
+        if (progressText) progressText.textContent = window.t('integrator.extractFailed');
         console.error('[Integrator] Extract topics error:', e);
-        alert('提取主题失败: ' + e.message);
+        alert(window.t('integrator.extractTopicsFailed') + e.message);
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '提取主题';
+            btn.textContent = window.t('integrator.extractTopics');
         }
     }
 }
@@ -101,17 +103,17 @@ async function startNoteIntegration() {
     const btn = document.getElementById('integrate-btn');
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '整合中...';
+        btn.textContent = window.t('integrator.integrating');
     }
     
     try {
         const topicList = document.getElementById('topic-list');
         const topics = topicList ? topicList.value.split('\n').map(t => t.trim()).filter(t => t) : [];
         
-        updateStatus('正在整合...');
-        updateProgress('integration-progress', 0, '正在准备整合...');
+        updateStatus(window.t('integrator.integratingStatus'));
+        updateProgress('integration-progress', 0, window.t('integrator.preparing'));
 
-        if (typeof getTauriEventAPI === 'function') {
+        if (typeof window.getTauriEventAPI === 'function') {
             var eventAPI = getTauriEventAPI();
             if (eventAPI) {
                 if (_noteIntegrationUnlisten) {
@@ -123,13 +125,13 @@ async function startNoteIntegration() {
 
                     if (data.type === 'progress' && data.element_id === 'integration-progress') {
                         updateProgress('integration-progress', data.progress || 0, data.message || '');
-                        updateStatus(data.message || '整合中...');
+                        updateStatus(data.message || window.t('integrator.integrating'));
                     } else if (data.type === 'note_integration_complete') {
-                        updateProgress('integration-progress', 1, '整合完成');
-                        updateStatus('整合完成');
+                        updateProgress('integration-progress', 1, window.t('integrator.integrateDone'));
+                        updateStatus(window.t('integrator.integrateDone'));
                         if (btn) {
                             btn.disabled = false;
-                            btn.textContent = '开始整合';
+                            btn.textContent = window.t('integrator.start');
                         }
                         if (window.TreeModule && window.TreeModule.loadFileTree) {
                             window.TreeModule.loadFileTree();
@@ -139,11 +141,11 @@ async function startNoteIntegration() {
                             _noteIntegrationUnlisten = null;
                         }
                     } else if (data.type === 'note_integration_error') {
-                        updateProgress('integration-progress', 0, '整合失败：' + (data.error || '未知错误'));
-                        updateStatus('整合失败：' + (data.error || '未知错误'));
+                        updateProgress('integration-progress', 0, window.t('integrator.integrateFailed', { message: data.error || window.t('common.unknownError') }));
+                        updateStatus(window.t('integrator.integrateFailedShort') + (data.error || window.t('common.unknownError')));
                         if (btn) {
                             btn.disabled = false;
-                            btn.textContent = '开始整合';
+                            btn.textContent = window.t('integrator.start');
                         }
                         if (_noteIntegrationUnlisten) {
                             _noteIntegrationUnlisten();
@@ -154,25 +156,25 @@ async function startNoteIntegration() {
             }
         }
 
-        const result = await window.api.start_note_integration(false, topics);
+        const result = await window.api.startNoteIntegration(false, topics);
         
         if (result && result.success) {
-            updateStatus('正在整合，请稍候...');
+            updateStatus(window.t('integrator.integratingWait'));
         } else {
-            updateStatus('整合失败: ' + (result?.message || '未知错误'));
-            updateProgress('integration-progress', 0, '整合失败: ' + (result?.message || '未知错误'));
+            updateStatus(window.t('integrator.integrateFailedShort') + (result?.message || window.t('common.unknownError')));
+            updateProgress('integration-progress', 0, window.t('integrator.integrateFailed', { message: result?.message || window.t('common.unknownError') }));
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = '开始整合';
+                btn.textContent = window.t('integrator.start');
             }
         }
     } catch (e) {
         console.error('[Integrator] Integration error:', e);
-        updateStatus('整合失败: ' + e.message);
-        updateProgress('integration-progress', 0, '整合失败: ' + e.message);
+        updateStatus(window.t('integrator.integrateFailedShort') + e.message);
+        updateProgress('integration-progress', 0, window.t('integrator.integrateFailed', { message: e.message }));
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '开始整合';
+            btn.textContent = window.t('integrator.start');
         }
     }
 }
@@ -186,6 +188,8 @@ function clearTopicList() {
     updateIntegrateBtnState();
 }
 
+window.updateIntegrateBtnState = updateIntegrateBtnState;
+
 window.IntegratorModule = {
     get topicsReady() { return topicsReady; },
     set topicsReady(v) { topicsReady = v; },
@@ -194,3 +198,9 @@ window.IntegratorModule = {
     startNoteIntegration,
     clearTopicList
 };
+
+window.extractTopics = extractTopics;
+window.startNoteIntegration = startNoteIntegration;
+
+})();
+

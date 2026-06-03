@@ -1,7 +1,4 @@
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g,'&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+(function() { 'use strict';
 
 function toggleSidebar() {
     var sidebar = document.getElementById('sidebar');
@@ -19,79 +16,63 @@ function toggleSidebar() {
     }
 }
 
-function escapeAttr(str) {
-    if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function _deactivatePendingBtn() {
-    if (typeof _pendingViewVisible !== 'undefined') {
+    if (typeof window._pendingViewVisible !== 'undefined') {
         _pendingViewVisible = false;
     }
     var btn = document.getElementById('titlebar-pending-btn');
     if (btn) btn.classList.remove('active');
+    var pendingView = document.getElementById('pending-view');
+    if (pendingView) pendingView.style.display = 'none';
 }
 
 function showGraphHomeView() {
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
-    var graphHome = document.getElementById('graph-home-view');
     var contentArea = document.getElementById('content-area');
     var graphPanel = document.getElementById('graph-panel');
     var pendingView = document.getElementById('pending-view');
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
-    if (graphPanel) graphPanel.style.display = 'none';
-    if (graphHome) graphHome.style.display = '';
+    if (graphPanel) graphPanel.style.display = 'flex';
     if (contentArea) contentArea.style.display = 'none';
     if (pendingView) pendingView.style.display = 'none';
+    var gh = document.getElementById('graph-home-view');
+    if (gh) gh.style.display = 'none';
     _deactivatePendingBtn();
     updateHomeStats();
+    if (window.Graph3Tier && window.Graph3Tier.load) {
+        window.Graph3Tier.load();
+    }
 }
 
 function updateHomeStats() {
     var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
+    var topicCount = window.AppState.lastFileTreeData ? _countTopicFolders(window.AppState.lastFileTreeData) : 0;
+
+    // Home overlay stats
     var el1 = document.getElementById('home-stat-notes');
     var el2 = document.getElementById('home-stat-topics');
     var el3 = document.getElementById('home-stat-links');
     if (el1) el1.textContent = fileCount;
+    if (el2) el2.textContent = topicCount;
 
-    if (window.api && window.api.get_topic_tree) {
-        window.api.get_topic_tree().then(function(result) {
-            if (result && result.topics) {
-                var count = 0;
-                function countTopics(nodes) {
-                    if (!nodes) return;
-                    for (var i = 0; i < nodes.length; i++) {
-                        count++;
-                        if (nodes[i].children) countTopics(nodes[i].children);
-                    }
-                }
-                countTopics(result.topics);
-                if (el2) el2.textContent = count;
-            }
-        }).catch(function() {});
-    }
+    // Graph header stats
+    var gs1 = document.getElementById('graph-stat-notes');
+    var gs2 = document.getElementById('graph-stat-topics');
+    var gs3 = document.getElementById('graph-stat-links');
+    if (gs1) gs1.textContent = fileCount;
+    if (gs2) gs2.textContent = topicCount;
 
-    if (window.api && window.api.get_relation_graph) {
-        window.api.get_relation_graph().then(function(result) {
-            if (result && result.edges) {
-                var linkCount = 0;
-                for (var i = 0; i < result.edges.length; i++) {
-                    if (result.edges[i].type === 'link') linkCount++;
-                }
+    if (window.api && window.api.getLinkStats) {
+        window.api.getLinkStats().then(function(result) {
+            if (result && result.success) {
+                var linkCount = result.confirmed || 0;
                 if (el3) el3.textContent = linkCount;
+                if (gs3) gs3.textContent = linkCount;
             }
         }).catch(function() {});
     }
-}
-
-function Path_stem(p) {
-    if (!p) return p;
-    var parts = p.split('/');
-    var name = parts[parts.length - 1];
-    var dotIdx = name.lastIndexOf('.');
-    return dotIdx > 0 ? name.substring(0, dotIdx) : name;
 }
 
 function _countFiles(nodes) {
@@ -104,23 +85,41 @@ function _countFiles(nodes) {
     return count;
 }
 
+function _countTopicFolders(nodes) {
+    if (!nodes) return 0;
+    var count = 0;
+    for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].type === 'folder') {
+            var depth = (nodes[i].path.match(/\//g) || []).length;
+            // Count only folders that are topic-like (inside Notes/ directory, depth >= 1)
+            if (nodes[i].path.indexOf('Notes/') >= 0) count++;
+        }
+        if (nodes[i].children) count += _countTopicFolders(nodes[i].children);
+    }
+    return count;
+}
+
 function updateSidebarStats() {
     var el = document.getElementById('sidebar-status-tree');
     if (el) {
         var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
-        el.textContent = fileCount + ' 篇笔记';
+        el.textContent = window.t('common.notesCount', { count: fileCount });
     }
     var tagsEl = document.getElementById('sidebar-status-tags');
     if (tagsEl) {
         var tagCount = document.querySelectorAll('#sidebar-tags .sidebar-tag-group[data-tag-name]').length;
-        tagsEl.textContent = tagCount + ' 个标签';
+        tagsEl.textContent = window.t('common.tagsCount', { count: tagCount });
     }
     var graphEl = document.getElementById('sidebar-status-graph');
     if (graphEl) {
         var linkCount = document.querySelectorAll('#sidebar-graph .link-card.link-confirmed').length;
-        graphEl.textContent = linkCount + ' 个链接';
+        graphEl.textContent = window.t('common.linksCount', { count: linkCount });
     }
 }
+
+document.addEventListener('localechange', function() {
+    updateSidebarStats();
+});
 
 function setSidebarStatus(view, text, isActive) {
     var el = document.getElementById('sidebar-status-' + view);
@@ -137,46 +136,46 @@ function setSidebarStatus(view, text, isActive) {
 function switchSidebarView(view) {
     window.AppState.currentSidebarView = view;
 
-    var fileTree = document.getElementById('file-tree');
-    var sidebarTags = document.getElementById('sidebar-tags');
-    var sidebarGraph = document.getElementById('sidebar-graph');
     var sidebar = document.querySelector('.sidebar-left');
     var resizer = document.getElementById('sidebar-resizer');
-
-    var footerTree = document.getElementById('sidebar-footer-tree');
-    var footerTags = document.getElementById('sidebar-footer-tags');
-    var footerGraph = document.getElementById('sidebar-footer-graph');
-
     var tagInput = document.getElementById('sidebar-tag-input');
 
-    var views = [fileTree, sidebarTags, sidebarGraph];
-    var footers = [footerTree, footerTags, footerGraph];
-
-    views.forEach(function(v) { if (v) v.style.display = 'none'; });
-    footers.forEach(function(f) { if (f) f.style.display = 'none'; });
+    document.querySelectorAll('.sidebar-pane').forEach(function(pane) {
+        pane.classList.remove('is-active');
+        pane.hidden = true;
+    });
+    document.querySelectorAll('.sidebar-dock-panel').forEach(function(dock) {
+        dock.classList.remove('is-active');
+        dock.hidden = true;
+    });
     if (tagInput) tagInput.style.display = 'none';
 
+    var activePane = document.getElementById('sidebar-pane-' + view);
+    if (activePane) {
+        activePane.classList.add('is-active');
+        activePane.hidden = false;
+    }
+    var activeDock = document.querySelector('.sidebar-dock-panel[data-sidebar-dock="' + view + '"]');
+    if (activeDock) {
+        activeDock.classList.add('is-active');
+        activeDock.hidden = false;
+    }
+
     if (view === 'tree') {
-        if (fileTree) fileTree.style.display = '';
-        if (footerTree) footerTree.style.display = '';
         if (sidebar) sidebar.classList.remove('sidebar-narrow');
         if (resizer) resizer.style.display = '';
     } else if (view === 'tags') {
-        if (sidebarTags) sidebarTags.style.display = '';
-        if (footerTags) footerTags.style.display = '';
         if (sidebar) sidebar.classList.add('sidebar-narrow');
         if (resizer) resizer.style.display = 'none';
     } else if (view === 'graph') {
-        if (sidebarGraph) sidebarGraph.style.display = '';
-        if (footerGraph) footerGraph.style.display = '';
         if (sidebar) sidebar.classList.add('sidebar-narrow');
         if (resizer) resizer.style.display = 'none';
     }
 
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
-    var graphHome = document.getElementById('graph-home-view');
     var contentArea = document.getElementById('content-area');
+    var graphPanel = document.getElementById('graph-panel');
 
     var isPreviewShowing = previewPanel && previewPanel.style.display !== 'none';
 
@@ -185,16 +184,26 @@ function switchSidebarView(view) {
     } else {
         if (contentPanel) contentPanel.style.display = 'flex';
         if (window.AppState.selectedFilePath) {
-            if (graphHome) graphHome.style.display = 'none';
+            if (graphPanel) graphPanel.style.display = 'none';
             if (contentArea) contentArea.style.display = '';
         } else {
-            if (graphHome) graphHome.style.display = '';
             if (contentArea) contentArea.style.display = 'none';
         }
     }
 
     if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); }).catch(function() {});
     if (view === 'graph' && window.LinksModule) { window.LinksModule.loadGraphView(); setTimeout(updateSidebarStats, 500); }
+
+    // 联动知识图谱过滤
+    if (window.Graph3Tier && window.Graph3Tier.load) {
+        if (view === 'tags') {
+            window.Graph3Tier.load('tag');
+        } else if (view === 'graph') {
+            window.Graph3Tier.load('all');
+        } else if (view === 'tree') {
+            window.Graph3Tier.load('topic');
+        }
+    }
     updateSidebarStats();
 }
 
@@ -203,3 +212,20 @@ window.updateSidebarStats = updateSidebarStats;
 window.setSidebarStatus = setSidebarStatus;
 window.showGraphHomeView = showGraphHomeView;
 window.updateHomeStats = updateHomeStats;
+
+window.toggleSidebar = toggleSidebar;
+window._deactivatePendingBtn = _deactivatePendingBtn;
+
+function _initSidebarDock() {
+    var view = window.AppState.currentSidebarView || 'tree';
+    switchSidebarView(view);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _initSidebarDock);
+} else {
+    _initSidebarDock();
+}
+
+})();
+

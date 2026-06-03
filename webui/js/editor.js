@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 window.mdEditor = {
     view: null,
     filePath: null,
@@ -13,7 +15,11 @@ function initMarked() {
     if (typeof marked !== 'undefined') {
         var renderer = new marked.Renderer();
         renderer.html = function(html) {
-            return html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'code', 'br', 'span', 'sub', 'sup', 'mark', 'abbr', 'kbd'] });
+            }
+            // fallback: strip all tags except safe inline ones
+            return html.replace(/<(?!\/?(?:b|i|em|strong|code|br|span|sub|sup|mark|abbr|kbd)\b)[^>]*>/gi, '');
         };
         marked.setOptions({
             gfm: true,
@@ -70,7 +76,7 @@ function initCodeMirrorEditor(content, filePath) {
     window.mdEditor.filePath = filePath;
     window.mdEditor.isActive = true;
 
-    updateSaveStatus('saved', '加载中...');
+    updateSaveStatus('saved', window.t('editor.saveLoading'));
 
     if (!window.EditorBridge || !window.EditorBridge.isReady) {
         console.warn('[Editor] EditorBridge not ready, waiting 5s...');
@@ -144,7 +150,7 @@ function createCodeMirrorInstance(content, filePath, container) {
     });
 
     updateMarkdownPreview(content);
-    updateSaveStatus('saved', '已保存');
+    updateSaveStatus('saved', window.t('editor.saveSaved'));
     initPreviewScrollListener();
 
     console.log('[Editor] CodeMirror initialized for:', filePath, 'content length:', content.length);
@@ -162,7 +168,7 @@ function createTextareaFallback(content, filePath, container) {
     container.appendChild(textarea);
 
     updateMarkdownPreview(content);
-    updateSaveStatus('saved', '已保存(简易模式)');
+    updateSaveStatus('saved', window.t('editor.saveSavedSimple'));
     initPreviewScrollListener();
 
     window.mdEditor.getFallbackContent = () => textarea.value;
@@ -191,16 +197,16 @@ function destroyCodeMirrorEditor() {
 
 function updateEditorTheme() {
     if (!window.mdEditor.view || !window.EditorBridge || !window.EditorBridge.isReady) return;
-    
+
     const M = window.EditorBridge.modules;
     const isDark = getEffectiveTheme() === 'dark';
     const theme = isDark ? M.oneDark : M.oneLight;
-    
+
     const currentDoc = window.mdEditor.view.state.doc;
     const container = window.mdEditor.view.dom.parentElement;
-    
+
     window.mdEditor.view.destroy();
-    
+
     const updateListener = M.EditorView.updateListener.of((v) => {
         if (v.docChanged) {
             const newContent = v.state.doc.toString();
@@ -233,7 +239,7 @@ function updateEditorTheme() {
         state: state,
         parent: container
     });
-    
+
     updateHljsTheme();
     console.log('[Editor] Theme updated to:', isDark ? 'dark' : 'light');
 }
@@ -241,38 +247,77 @@ function updateEditorTheme() {
 function updateMarkdownPreview(content) {
     const previewEl = document.getElementById('editor-preview-scroll');
     if (!previewEl) return;
-    
+
     if (typeof marked !== 'undefined') {
         try {
             var rawHtml = marked.parse(content);
-            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
+            previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
-            previewEl.innerHTML = '<p class="preview-error">解析失败</p>';
+            previewEl.innerHTML = '<p class="preview-error">' + window.t('editor.previewParseError') + '</p>';
         }
     } else {
-        previewEl.innerHTML = '<pre>' + escapeHtml(content) + '</pre>';
+        previewEl.innerHTML = '<pre>' + window.escapeHtml(content) + '</pre>';
     }
 }
 
 function renderMarkdownPreview(content) {
     if (typeof marked !== 'undefined') {
         try {
-            var rawHtml = marked.parse(content);
-            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : escapeHtml(content);
+            var processedContent = processAbstractLinks(content);
+            var rawHtml = marked.parse(processedContent);
+            return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
-            return '<p class="preview-error">解析失败</p>';
+            return '<p class="preview-error">' + window.t('editor.parseFailed') + '</p>';
         }
     }
-    return '<pre>' + escapeHtml(content) + '</pre>';
+    return '<pre>' + window.escapeHtml(content) + '</pre>';
+}
+
+function processAbstractLinks(content) {
+    if (!content) return content;
+
+    var result = content;
+
+    // 处理 {{abstract:主题名}} 嵌入语法
+    result = result.replace(/\{\{abstract:([^}]+)\}\}/g, function(match, topicName) {
+        var trimmed = topicName.trim();
+        var absPath = buildAbstractPath(trimmed);
+        return `<span class="abstract-embed" data-topic="${escapeHtml(trimmed)}" data-path="${escapeHtml(absPath)}">${window.t('editor.surveyEmbed', { topic: trimmed })}</span>`;
+    });
+
+    // 处理 [[主题名|显示文本]] 带显示文本的链接
+    result = result.replace(/\[\[([^\|]+)\|([^\]]+)\]\]/g, function(match, topicName, displayText) {
+        var trimmedTopic = topicName.trim();
+        var display = displayText.trim();
+        var absPath = buildAbstractPath(trimmedTopic);
+        return `[${display}](notes://${encodeURIComponent(absPath)})`;
+    });
+
+    // 处理 [[主题名]] 简单链接
+    result = result.replace(/\[\[([^\]]+)\]\]/g, function(match, topicName) {
+        var trimmed = topicName.trim();
+        var absPath = buildAbstractPath(trimmed);
+        return `[${trimmed}](notes://${encodeURIComponent(absPath)})`;
+    });
+
+    return result;
+}
+
+function buildAbstractPath(topicName) {
+    if (topicName.includes(' > ')) {
+        var parts = topicName.split(' > ');
+        return `wiki/${parts[0]}/${parts[parts.length - 1]}.md`;
+    }
+    return `wiki/${topicName}.md`;
 }
 
 function scheduleAutoSave(content) {
     if (window.mdEditor.saveTimer) {
         clearTimeout(window.mdEditor.saveTimer);
     }
-    
+
     window.mdEditor.saveTimer = setTimeout(() => {
         performSave(content);
     }, 1000);
@@ -287,7 +332,7 @@ function performImmediateSave() {
     } else {
         return;
     }
-    
+
     if (window.mdEditor.saveTimer) {
         clearTimeout(window.mdEditor.saveTimer);
         window.mdEditor.saveTimer = null;
@@ -299,31 +344,30 @@ var _savePromise = null;
 
 async function performSave(content) {
     if (!window.mdEditor.filePath) return;
-    
-    if (_savePromise) {
+
+    while (_savePromise) {
         await _savePromise;
     }
-    
-    var saveId = Date.now();
+
     _savePromise = (async () => {
-        updateSaveStatus('saving', '保存中...');
-        
+        updateSaveStatus('saving', window.t('editor.saving'));
+
         try {
-            const result = await window.api.save_note_file(window.mdEditor.filePath, content);
-            
+            const result = await window.api.saveFileContent(window.mdEditor.filePath, content);
+
             if (result && result.success) {
                 window.mdEditor.originalContent = content;
-                updateSaveStatus('saved', '已保存');
+                updateSaveStatus('saved', window.t('editor.saveSaved'));
             } else {
-                updateSaveStatus('error', '保存失败');
+                updateSaveStatus('error', window.t('editor.saveFailed'));
             }
         } catch (e) {
-            updateSaveStatus('error', '保存失败');
+            updateSaveStatus('error', window.t('editor.saveFailed'));
         } finally {
             _savePromise = null;
         }
     })();
-    
+
     await _savePromise;
 }
 
@@ -333,7 +377,7 @@ function initPreviewScrollListener() {
     const previewScroll = document.getElementById('editor-preview-scroll');
     if (!previewScroll || _previewScrollBound) return;
     _previewScrollBound = true;
-    
+
     previewScroll.addEventListener('scroll', () => {
         if (window.mdEditor.isScrollSyncing) return;
         syncScrollFromPreview(previewScroll);
@@ -343,22 +387,22 @@ function initPreviewScrollListener() {
 function syncScrollFromEditor(view) {
     const previewScroll = document.getElementById('editor-preview-scroll');
     if (!previewScroll) return;
-    
+
     window.mdEditor.isScrollSyncing = true;
-    
+
     const editorScrollTop = view.scrollDOM.scrollTop;
     const editorScrollHeight = view.scrollDOM.scrollHeight;
     const editorClientHeight = view.scrollDOM.clientHeight;
-    
+
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
-    
+
     const editorMaxScroll = editorScrollHeight - editorClientHeight;
     const scrollRatio = editorMaxScroll > 0 ? editorScrollTop / editorMaxScroll : 0;
     const previewScrollTop = scrollRatio * (previewScrollHeight - previewClientHeight);
-    
+
     previewScroll.scrollTop = previewScrollTop;
-    
+
     setTimeout(() => {
         window.mdEditor.isScrollSyncing = false;
     }, 50);
@@ -366,23 +410,23 @@ function syncScrollFromEditor(view) {
 
 function syncScrollFromPreview(previewScroll) {
     if (!window.mdEditor.view) return;
-    
+
     window.mdEditor.isScrollSyncing = true;
-    
+
     const previewScrollTop = previewScroll.scrollTop;
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
-    
+
     const editorScrollDOM = window.mdEditor.view.scrollDOM;
     const editorScrollHeight = editorScrollDOM.scrollHeight;
     const editorClientHeight = editorScrollDOM.clientHeight;
-    
+
     const previewMaxScroll = previewScrollHeight - previewClientHeight;
     const scrollRatio = previewMaxScroll > 0 ? previewScrollTop / previewMaxScroll : 0;
     const editorScrollTop = scrollRatio * (editorScrollHeight - editorClientHeight);
-    
+
     editorScrollDOM.scrollTop = editorScrollTop;
-    
+
     setTimeout(() => {
         window.mdEditor.isScrollSyncing = false;
     }, 50);
@@ -420,7 +464,7 @@ function exitEditMode() {
 
 async function toggleEditMode() {
     const splitBtn = document.getElementById('titlebar-split-btn');
-    
+
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         exitEditMode();
         var pd = window.PreviewModule ? window.PreviewModule.currentPreviewData : null;
@@ -459,6 +503,8 @@ function initEditorInnerResizer() {
 function initWindowDrag() {
 }
 
+window.toggleEditMode = toggleEditMode;
+
 window.EditorModule = {
     mdEditor: window.mdEditor,
     initMarked,
@@ -484,3 +530,6 @@ window.EditorModule = {
     initEditorInnerResizer,
     initWindowDrag
 };
+
+})();
+

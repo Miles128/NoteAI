@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from config.settings import config
 from utils.logger import logger
-from utils.helpers import check_api_config
+from utils.llm_utils import check_api_config
 from prompts.topic_extraction import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
     TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
@@ -131,9 +131,9 @@ class TopicExtractor:
             organized_count = len(organized_filenames)
 
             if notes_count == 0 and organized_count == 0:
-                return {"success": False, "error": "Notes 和 Abstract 文件夹中都没有 Markdown 文件"}
+                return {"success": False, "error": "Notes 和 wiki 文件夹中都没有 Markdown 文件"}
 
-            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 Abstract 文件")
+            self._update_progress(2, 10, f"找到 {notes_count} 个 Notes 文件，{organized_count} 个 wiki 文件")
 
             # 计算主题个数范围
             if specified_topic_count is None or specified_topic_count <= 0:
@@ -175,7 +175,7 @@ class TopicExtractor:
             )
 
             # 调用大模型
-            from utils.helpers import call_llm_raw
+            from utils.llm_utils import call_llm_raw
 
             content = call_llm_raw(final_prompt, temperature=0.5)
 

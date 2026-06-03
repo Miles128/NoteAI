@@ -1,6 +1,5 @@
 import re
 import sys
-import math
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
@@ -16,6 +15,7 @@ from utils.text_utils import (
     _count_tag_occurrence,
     _normalize_for_match,
     _is_generic_word,
+    parse_frontmatter,
 )
 
 try:
@@ -194,8 +194,7 @@ def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
                 add_yaml_frontmatter_to_file(fp, tags=tags)
                 results[fp] = tags
         except Exception as e:
-            sys.stderr.write(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
     
     return results
 
@@ -256,12 +255,12 @@ def _parse_yaml_value_simple(value: str) -> Any:
     
     try:
         return int(value)
-    except ValueError:
-        pass
+    except ValueError as e:
+        sys.stderr.write(f"[_parse_yaml] int conversion failed: {e}\n"); sys.stderr.flush()
     try:
         return float(value)
-    except ValueError:
-        pass
+    except ValueError as e:
+        sys.stderr.write(f"[_parse_yaml] float conversion failed: {e}\n"); sys.stderr.flush()
     
     return value
 
@@ -401,7 +400,7 @@ def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     frontmatter = {}
     body = content
     
-    if not content.startswith('---\n'):
+    if not content.startswith(('---\n', '---\r\n')):
         return frontmatter, body
     
     lines = content.split('\n')
@@ -510,7 +509,8 @@ def add_yaml_frontmatter_to_file(
         )
         p.write_text(new_content, encoding='utf-8')
         return True
-    except Exception:
+    except (OSError, ValueError) as e:
+        logger.warning(f"[tag_extractor] add_yaml_frontmatter_to_file failed: {e}\n")
         return False
 
 
@@ -564,9 +564,10 @@ def process_and_tag_file_with_yaml(
         result['success'] = True
         result['tags'] = tags
         result['title'] = title
-        
+
         return result
-    except Exception:
+    except (OSError, ValueError, UnicodeError) as e:
+        logger.warning(f"[tag_extractor] process_and_tag_file_with_yaml failed: {e}\n")
         return result
 
 
@@ -588,59 +589,26 @@ def save_tags_md(workspace_path: str) -> dict:
                 if entry.is_dir():
                     if is_ignored_dir(entry.name):
                         continue
+                    if entry.name == 'wiki':
+                        continue
                     _scan(str(entry))
-                elif entry.suffix.lower() == '.md' and entry.name.lower() != 'wiki.md' and entry.name.lower() != 'tags.md':
+                elif entry.suffix.lower() == '.md':
                     try:
                         text = entry.read_text(encoding='utf-8')
-                        m = re.match(r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---', text.lstrip('\ufeff'))
-                        if not m:
+                        meta, _ = parse_frontmatter(text)
+                        if meta is None:
                             continue
-                        yaml_text = m.group(1)
                         rel = str(entry.relative_to(workspace))
-                        current_tags_key = False
-                        current_tags_arr = []
-                        for line in yaml_text.split('\n'):
-                            stripped = line.strip()
-                            if current_tags_key and stripped.startswith('- '):
-                                current_tags_arr.append(stripped[2:].strip().strip("'\""))
-                                continue
-                            if current_tags_key and current_tags_arr:
-                                for tag in current_tags_arr:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                                current_tags_arr = []
-                            idx = line.find(':')
-                            if idx < 0:
-                                continue
-                            key = line[:idx].strip()
-                            val = line[idx + 1:].strip()
-                            if key != 'tags':
-                                current_tags_key = False
-                                continue
-                            if val.startswith('[') and val.endswith(']'):
-                                tags = [t.strip().strip("'\"") for t in val[1:-1].split(',') if t.strip()]
-                                for tag in tags:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                            elif not val:
-                                current_tags_key = True
-                                current_tags_arr = []
-                            else:
-                                tag = val.strip().strip("'\"")
-                                if tag:
-                                    if tag not in tag_map:
-                                        tag_map[tag] = []
-                                    tag_map[tag].append(rel)
-                                current_tags_key = False
-                        if current_tags_key and current_tags_arr:
-                            for tag in current_tags_arr:
-                                if tag not in tag_map:
-                                    tag_map[tag] = []
-                                tag_map[tag].append(rel)
+                        raw_tags = meta.get('tags', [])
+                        tags = []
+                        if isinstance(raw_tags, list):
+                            tags = [str(t).strip() for t in raw_tags if t]
+                        elif isinstance(raw_tags, str) and raw_tags.strip():
+                            tags = [raw_tags.strip()]
+                        for tag in tags:
+                            if tag not in tag_map:
+                                tag_map[tag] = []
+                            tag_map[tag].append(rel)
                     except Exception as e:
                         logger.warning(f"[save_tags_md] 跳过解析失败的文件 {entry.name}: {e}")
                         continue
@@ -650,7 +618,7 @@ def save_tags_md(workspace_path: str) -> dict:
     _scan(str(workspace))
 
     existing_tags = set()
-    tags_md_path = workspace / 'tags.md'
+    tags_md_path = workspace / 'wiki' / 'tags.md'
     if tags_md_path.exists():
         try:
             text = tags_md_path.read_text(encoding='utf-8')
@@ -676,7 +644,8 @@ def save_tags_md(workspace_path: str) -> dict:
             lines.append('- [[' + fname + ']]')
         lines.append('')
 
-    tags_md_path = workspace / 'tags.md'
+    tags_md_path = workspace / 'wiki' / 'tags.md'
+    tags_md_path.parent.mkdir(parents=True, exist_ok=True)
     tags_md_path.write_text('\n'.join(lines), encoding='utf-8')
 
     return {"success": True, "count": len(sorted_tags)}

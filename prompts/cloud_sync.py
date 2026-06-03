@@ -1,0 +1,25 @@
+CLOUD_SYNC_CONFLICT_NOTICE_PROMPT = """云同步冲突通知
+
+以下文件在云端有更新版本，与本地版本存在冲突：
+{conflict_files}
+
+冲突处理策略：本地文件保持不变，云端版本已保存为带 _cloud_ 后缀的文件。
+请手动对比两个版本，决定保留哪个内容。"""
+
+CLOUD_SYNC_PUSH_SUMMARY_PROMPT = """推送完成摘要
+
+已将工作区文件推送到 {provider_name}：
+- 上传成功：{uploaded} 个文件
+- 上传失败：{failed} 个文件
+- 无需更新：{skipped} 个文件
+
+同步目录：Notes/、wiki/"""
+
+CLOUD_SYNC_PULL_SUMMARY_PROMPT = """拉取完成摘要
+
+已从 {provider_name} 拉取文件到工作区：
+- 下载成功：{downloaded} 个文件
+- 冲突保留：{conflicts} 个文件（云端版本以 _cloud_ 后缀保存）
+- 下载失败：{failed} 个文件
+
+同步目录：Notes/、wiki/"""

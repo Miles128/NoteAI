@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 async function saveApiConfig() {
     const apiKeyEl = document.getElementById('api-key');
     const apiBaseEl = document.getElementById('api-base');
@@ -36,23 +38,23 @@ async function saveApiConfig() {
         if (popupStatusEl) popupStatusEl.style.display = 'none';
     };
 
-    showStatus('正在测试连接...');
+    showStatus(window.t('settings.testingConnection'));
     try {
-        const result = await window.api.save_api_config(config);
+        const result = await window.api.saveApiConfig(config);
         if (result && result.success) {
-            showStatus('配置已保存');
+            showStatus(window.t('settings.configSaved'));
             setTimeout(hideStatus, 3000);
         } else {
-            showStatus(result?.message || '保存失败', true);
+            showStatus(result?.message || window.t('settings.saveFailed'), true);
         }
     } catch (e) {
-        showStatus('保存失败: ' + e.message, true);
+        showStatus(window.t('settings.saveFailed') + ': ' + e.message, true);
     }
 }
 
 async function loadApiConfigToForm() {
     try {
-        const apiConfig = await window.api.get_api_config();
+        const apiConfig = await window.api.getApiConfig();
         if (apiConfig) {
             const apiKeyEl = document.getElementById('api-key');
             const apiBaseEl = document.getElementById('api-base');
@@ -80,9 +82,9 @@ async function loadApiConfigToForm() {
 
 async function refreshLog() {
     try {
-        const result = await window.api.refresh_log();
+        const result = await window.api.refreshLog();
         if (result && result.success) {
-            updateStatus('日志已刷新');
+            updateStatus(window.t('settings.logRefreshed'));
         }
     } catch (e) {
         console.error('[Settings] Refresh log error:', e);
@@ -103,10 +105,15 @@ function closeLogPanel() {
     }
 }
 
-function closeAboutPanel() {
-    const aboutPanel = document.getElementById('about-panel');
-    if (aboutPanel) {
-        aboutPanel.classList.remove('active');
+function switchSettingsTab(tabName) {
+    document.querySelectorAll('.settings-nav-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.settings-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.id === 'tab-' + tabName);
+    });
+    if (tabName === 'profile') {
+        loadUserProfile();
     }
 }
 
@@ -117,12 +124,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (e.target === settingsPanel) closeSettingsPanel();
         });
     }
-    var aboutPanel = document.getElementById('about-panel');
-    if (aboutPanel) {
-        aboutPanel.addEventListener('click', function(e) {
-            if (e.target === aboutPanel) closeAboutPanel();
+
+    var settingsNav = document.getElementById('settings-nav');
+    if (settingsNav) {
+        settingsNav.addEventListener('click', function(e) {
+            var btn = e.target.closest('.settings-nav-btn');
+            if (btn && btn.dataset.tab) {
+                switchSettingsTab(btn.dataset.tab);
+            }
         });
     }
+
+    initAssistantSettings();
 });
 
 async function autoSaveConfig() {
@@ -139,11 +152,11 @@ async function autoSaveConfig() {
             topic_list: document.getElementById('topic-list')?.value || ''
         };
 
-        const result = await window.api.save_ui_config(uiConfig);
+        const result = await window.api.saveUiConfig(uiConfig);
         if (result && result.success) {
-            updateStatus('配置已自动保存');
+            updateStatus(window.t('settings.autoSaved'));
         } else {
-            updateStatus('配置保存失败: ' + (result?.message || '未知错误'));
+            updateStatus(window.t('settings.autoSaveFailed', { message: result?.message || window.t('common.unknownError') }));
         }
     } catch (e) {
         console.error('[Settings] Auto save config error:', e);
@@ -164,18 +177,146 @@ function resetApiConfig() {
     if (maxContextEl) maxContextEl.value = 128000;
 }
 
+async function saveFontSize(size) {
+    try {
+        var result = await window.api.saveUiConfig({ font_size: size });
+        if (!result || !result.success) {
+            console.error('[Settings] save font_size failed:', result);
+        }
+    } catch (e) {
+        console.error('[Settings] save font_size error:', e);
+    }
+}
+
+async function setLocale(locale) {
+    if (!window.I18nModule || !window.I18nModule.setLocale) return;
+    try {
+        await window.I18nModule.setLocale(locale);
+        if (typeof window.updateSidebarStats === 'function') {
+            window.updateSidebarStats();
+        }
+        if (window.I18nModule.applyDomI18n) {
+            window.I18nModule.applyDomI18n(document.getElementById('settings-panel'));
+        }
+    } catch (e) {
+        console.error('[Settings] setLocale error:', e);
+    }
+}
+
+async function loadUiConfigToForm() {
+    try {
+        var uiConfig = await window.api.getUiConfig();
+        if (uiConfig) {
+            var savedFontSize = uiConfig.font_size || 'small';
+            if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+                window.ThemeModule.setFontSize(savedFontSize);
+            }
+            document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+                radio.checked = radio.value === savedFontSize;
+            });
+            var loc = uiConfig.locale === 'en' ? 'en' : 'zh-CN';
+            document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
+                radio.checked = radio.value === loc;
+            });
+            applyAssistantSettingsToForm(uiConfig);
+        }
+    } catch (e) {
+        console.error('[Settings] Load UI config error:', e);
+    }
+}
+
+function applyAssistantSettingsToForm(uiConfig) {
+    var ragEl = document.getElementById('settings-assistant-rag-enabled');
+    if (ragEl) {
+        ragEl.checked = uiConfig.rag_enabled === true;
+    }
+    var agentEl = document.getElementById('settings-assistant-agent-mode');
+    if (agentEl) {
+        agentEl.checked = uiConfig.assistant_agent_mode === true;
+    }
+    updateRagIndexCardVisibility(uiConfig.rag_enabled === true);
+}
+
+function updateRagIndexCardVisibility(ragEnabled) {
+    var card = document.getElementById('settings-assistant-rag-index-card');
+    if (card) {
+        card.style.display = ragEnabled ? '' : 'none';
+    }
+}
+
+async function saveAssistantUiConfig(partial) {
+    try {
+        var result = await window.api.saveUiConfig(partial);
+        if (result && result.success) {
+            updateStatus(window.t('settings.autoSaved'));
+        } else {
+            updateStatus(window.t('settings.autoSaveFailed', {
+                message: (result && result.message) || window.t('common.unknownError'),
+            }));
+        }
+        return result;
+    } catch (e) {
+        console.error('[Settings] save assistant config error:', e);
+        return null;
+    }
+}
+
+function initAssistantSettings() {
+    var ragEl = document.getElementById('settings-assistant-rag-enabled');
+    if (ragEl && !ragEl.dataset.bound) {
+        ragEl.dataset.bound = '1';
+        ragEl.addEventListener('change', function() {
+            var enabled = ragEl.checked;
+            updateRagIndexCardVisibility(enabled);
+            saveAssistantUiConfig({ rag_enabled: enabled });
+        });
+    }
+
+    var agentEl = document.getElementById('settings-assistant-agent-mode');
+    if (agentEl && !agentEl.dataset.bound) {
+        agentEl.dataset.bound = '1';
+        agentEl.addEventListener('change', function() {
+            saveAssistantUiConfig({ assistant_agent_mode: agentEl.checked });
+        });
+    }
+
+    var rebuildBtn = document.getElementById('settings-assistant-rebuild-index-btn');
+    if (rebuildBtn && !rebuildBtn.dataset.bound) {
+        rebuildBtn.dataset.bound = '1';
+        rebuildBtn.addEventListener('click', function() {
+            var statusEl = document.getElementById('settings-assistant-rebuild-status');
+            if (statusEl) {
+                statusEl.textContent = window.t('assistant.indexBuilding');
+                statusEl.style.display = 'block';
+            }
+            if (window.AssistantModule && window.AssistantModule.rebuildIndex) {
+                window.AssistantModule.rebuildIndex();
+            } else if (window.api && window.api.ragRebuildIndex) {
+                window.api.ragRebuildIndex();
+            }
+        });
+    }
+}
+
 window.SettingsModule = {
     saveApiConfig,
     loadApiConfigToForm,
     refreshLog,
     closeSettingsPanel,
     closeLogPanel,
-    closeAboutPanel,
+    switchSettingsTab,
     autoSaveConfig,
     resetApiConfig,
     saveUserProfile,
-    loadUserProfile
+    loadUserProfile,
+    saveFontSize,
+    loadUiConfigToForm,
+    setLocale,
+    initAssistantSettings,
+    applyAssistantSettingsToForm,
 };
+
+window.setLocale = setLocale;
 
 async function saveUserProfile() {
     var profileMd = document.getElementById('profile-md')?.value || '';
@@ -186,11 +327,17 @@ async function saveUserProfile() {
 
     var statusEl = document.getElementById('profile-status');
     try {
-        var result = await window.api.save_user_profile(data);
+        var result = await window.api.saveUserProfile(data);
         if (result && result.success) {
-            if (statusEl) { statusEl.innerHTML = '<span style="color: #38a169;">画像已保存</span>'; statusEl.style.display = 'block'; }
+            if (statusEl) {
+                statusEl.innerHTML = '<span style="color: #38a169;">' + escapeHtml(window.t('settings.profileSaved')) + '</span>';
+                statusEl.style.display = 'block';
+            }
         } else {
-            if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">保存失败</span>'; statusEl.style.display = 'block'; }
+            if (statusEl) {
+                statusEl.innerHTML = '<span style="color: #e53e3e;">' + escapeHtml(window.t('settings.saveFailed')) + '</span>';
+                statusEl.style.display = 'block';
+            }
         }
     } catch (e) {
         if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">' + escapeHtml(e.message) + '</span>'; statusEl.style.display = 'block'; }
@@ -200,7 +347,7 @@ async function saveUserProfile() {
 
 async function loadUserProfile() {
     try {
-        var result = await window.api.get_user_profile();
+        var result = await window.api.getUserProfile();
         if (result && result.success && result.profile) {
             var profileMd = result.profile.profile_md || '';
 
@@ -229,3 +376,13 @@ async function loadUserProfile() {
         console.error('[Settings] Load user profile error:', e);
     }
 }
+
+window.saveApiConfig = saveApiConfig;
+window.refreshLog = refreshLog;
+window.closeSettingsPanel = closeSettingsPanel;
+window.closeLogPanel = closeLogPanel;
+window.resetApiConfig = resetApiConfig;
+window.saveUserProfile = saveUserProfile;
+
+})();
+

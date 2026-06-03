@@ -1,10 +1,12 @@
 .file-tree-container {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 4px 0;
     user-select: none;
 }
+
 
 .tree-empty {
     padding: 32px 16px;
@@ -19,7 +21,7 @@
     height: 22px;
     padding: 0 8px 0 0;
     margin: 0;
-    font-size: 14px;
+    font-size: 1em;
     color: var(--text-muted);
     font-weight: 300;
     cursor: pointer;
@@ -210,8 +212,6 @@
 
 .toast {
     background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border: 0.5px solid var(--border);
     border-radius: 8px;
     padding: 12px 16px;
@@ -260,10 +260,21 @@
 .toast-close:hover { background: var(--surface-hover); color: var(--text); }
 .toast-close svg { width: 14px; height: 14px; }
 
+.toast-action {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--primary);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+}
+.toast-action:hover { text-decoration: underline; }
+
 .status-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 6px 16px; background: var(--topbar-bg);
-    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
     border-top: 0.5px solid var(--border); font-size: 12px; color: var(--text-muted); flex-shrink: 0;
 }
 
@@ -286,15 +297,13 @@
 
 .modal-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.4);
     display: none; align-items: center; justify-content: center; z-index: 2000;
 }
 .modal-overlay.active { display: flex; }
 
 .modal {
-    background: var(--surface); backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
+    background: var(--surface);
     border: 0.5px solid var(--border); border-radius: 12px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
     max-width: 500px; width: 90%; max-height: 80vh; overflow: hidden;
@@ -378,4 +387,92 @@
 .delete-confirm-no:hover {
     background: var(--border);
     color: var(--text);
+}
+
+.quick-create-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100001;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.quick-create-dialog {
+    width: min(420px, 92vw);
+    background: var(--modal-bg, var(--surface));
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius, 12px);
+    box-shadow: var(--card-shadow);
+    padding: 16px 18px 18px;
+}
+
+.quick-create-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.quick-create-close {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.quick-create-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+
+.qc-tab {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.qc-tab.active {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--background-modifier-hover);
+}
+
+.qc-pane[hidden] {
+    display: none !important;
+}
+
+.qc-label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 8px 0 4px;
+}
+
+.qc-label:first-child {
+    margin-top: 0;
+}
+
+.qc-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 8px 0 12px;
+}
+
+.qc-submit {
+    width: 100%;
+    margin-top: 4px;
 }

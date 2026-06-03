@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _webDownloadUnlisten = null;
 var _modalDragState = {
     isDragging: false,
@@ -17,20 +19,27 @@ var _downloadState = {
     currentMessage: ''
 };
 
+var _downloadEventRetries = 0;
+var _downloadEventMaxRetries = 20;
+
 function initDownloadEventListener() {
     console.log('[Downloader] Initializing event listener...');
     
     var eventAPI = getTauriEventAPI();
     if (eventAPI) {
+        _downloadEventRetries = 0;
         eventAPI.listen('python-event', handleGlobalDownloadEvent).then(function(unlisten) {
             _webDownloadUnlisten = unlisten;
             console.log('[Downloader] Event listener initialized successfully');
         }).catch(function(err) {
             console.error('[Downloader] Failed to initialize event listener:', err);
         });
-    } else {
-        console.warn('[Downloader] Tauri event API not ready, retrying in 500ms...');
+    } else if (_downloadEventRetries < _downloadEventMaxRetries) {
+        _downloadEventRetries++;
+        console.warn('[Downloader] Tauri event API not ready, retrying in 500ms... (' + _downloadEventRetries + '/' + _downloadEventMaxRetries + ')');
         setTimeout(initDownloadEventListener, 500);
+    } else {
+        console.error('[Downloader] Tauri event API not available after max retries');
     }
 }
 
@@ -76,13 +85,13 @@ function handleDownloadCompleteEvent(data) {
     
     _downloadState.isDownloading = false;
     _downloadState.currentProgress = 1;
-    _downloadState.currentMessage = '下载完成：' + successCount + '/' + total + ' 篇成功';
+    _downloadState.currentMessage = window.t('download.done', { success: successCount, total: total });
     _downloadState.completedUrls = results.filter(function(r) { return r.success; });
     _downloadState.failedUrls = results.filter(function(r) { return !r.success; });
     _downloadState.currentIndex = total;
     
-    updateProgress('web-progress', 1, '下载完成：' + successCount + '/' + total + ' 篇成功');
-    updateStatus('下载完成：' + successCount + '/' + total + ' 篇成功');
+    updateProgress('web-progress', 1, window.t('download.done', { success: successCount, total: total }));
+    updateStatus(window.t('download.done', { success: successCount, total: total }));
     updateModalProgressDisplay();
     
     if (window.TreeModule && window.TreeModule.loadFileTree) {
@@ -94,15 +103,15 @@ function handleDownloadCompleteEvent(data) {
 }
 
 function handleDownloadErrorEvent(data) {
-    var errorMsg = data.error || '未知错误';
+    var errorMsg = data.error || window.t('common.unknownError');
     
     _downloadState.isDownloading = false;
     
-    updateProgress('web-progress', 0, '下载失败：' + errorMsg);
-    updateStatus('下载失败：' + errorMsg);
+    updateProgress('web-progress', 0, window.t('download.failed', { message: errorMsg }));
+    updateStatus(window.t('download.failed', { message: errorMsg }));
     
     resetDownloadButtonState();
-    alert('下载失败：' + errorMsg);
+    alert(window.t('download.failed', { message: errorMsg }));
 }
 
 function updateModalProgressDisplay() {
@@ -128,9 +137,9 @@ function showDownloadResultsModal(successCount, total, results) {
     }
     
     if (statusEl) {
-        var statusText = '下载完成：' + successCount + '/' + total + ' 篇成功';
+        var statusText = window.t('download.done', { success: successCount, total: total });
         if (_downloadState.failedUrls.length > 0) {
-            statusText += '，' + _downloadState.failedUrls.length + ' 篇失败';
+            statusText += ' (' + _downloadState.failedUrls.length + ' failed)';
         }
         statusEl.textContent = statusText;
     }
@@ -138,14 +147,14 @@ function showDownloadResultsModal(successCount, total, results) {
     var urlInput = document.getElementById('modal-urls');
     if (urlInput) {
         var summaryLines = [];
-        summaryLines.push('═══ 下载结果 ═══');
-        summaryLines.push('成功: ' + successCount + '/' + total + ' 篇');
+        summaryLines.push('=== Download results ===');
+        summaryLines.push('OK: ' + successCount + '/' + total);
         
         if (_downloadState.completedUrls.length > 0) {
             summaryLines.push('');
-            summaryLines.push('── 已保存 ──');
+            summaryLines.push('-- Saved --');
             _downloadState.completedUrls.forEach(function(result, index) {
-                summaryLines.push((index + 1) + '. ' + (result.title || '未命名'));
+                summaryLines.push((index + 1) + '. ' + (result.title || window.t('download.unnamed')));
                 if (result.file_path) {
                     summaryLines.push('   → ' + result.file_path);
                 }
@@ -154,10 +163,10 @@ function showDownloadResultsModal(successCount, total, results) {
         
         if (_downloadState.failedUrls.length > 0) {
             summaryLines.push('');
-            summaryLines.push('── 失败 ──');
+            summaryLines.push('-- Failed --');
             _downloadState.failedUrls.forEach(function(result, index) {
                 summaryLines.push((index + 1) + '. ' + (result.url || ''));
-                summaryLines.push('   原因: ' + (result.error || '未知错误'));
+                summaryLines.push(window.t('download.reasonPrefix') + (result.error || window.t('common.unknownError')));
             });
         }
         
@@ -295,7 +304,7 @@ async function startDownloadFromModal() {
     const urls = urlsEl ? urlsEl.value.split('\n').map(u => u.trim()).filter(u => u) : [];
     
     if (urls.length === 0) {
-        alert('请输入至少一个 URL');
+        alert(window.t('download.enterUrl'));
         return;
     }
     
@@ -307,7 +316,7 @@ async function startDownloadFromModal() {
     const switchLabel = document.querySelector('.switch-label');
     
     if (_downloadState.isDownloading) {
-        alert('下载任务正在进行中，请稍后');
+        alert(window.t('download.taskRunning'));
         return;
     }
     
@@ -331,46 +340,46 @@ async function startDownloadFromModal() {
     try {
         console.log('[Downloader] Starting download with', urls.length, 'URLs');
         
-        updateProgress('web-progress', 0, '正在准备下载...');
+        updateProgress('web-progress', 0, window.t('download.preparing'));
         
         try {
             console.log('[Downloader] Calling start_web_download with urls:', urls);
-            const result = await window.api.start_web_download(urls, false, includeImagesVal);
+            const result = await window.api.startWebDownload(urls, false, includeImagesVal);
             console.log('[Downloader] API result:', result);
             
             if (result && result.success) {
-                updateProgress('web-progress', 0, '正在下载第 1/' + _downloadState.totalUrls + ' 篇...');
+                updateProgress('web-progress', 0, window.t('download.progress', { current: 1, total: _downloadState.totalUrls }));
             } else {
-                const errMsg = result?.message || '未知错误';
-                updateProgress('web-progress', 0, '下载失败: ' + errMsg);
+                const errMsg = result?.message || window.t('common.unknownError');
+                updateProgress('web-progress', 0, window.t('download.failed', { message: errMsg }));
                 resetDownloadButtonState();
                 _downloadState.isDownloading = false;
-                alert('下载失败: ' + errMsg);
+                alert(window.t('download.failed', { message: '' }).replace(': ', '') + errMsg);
             }
         } catch (apiError) {
             throw apiError;
         }
     } catch (e) {
         console.error('[Downloader] Download error:', e);
-        updateProgress('web-progress', 0, '下载失败: ' + e.message);
+        updateProgress('web-progress', 0, window.t('download.failed', { message: e.message }));
         resetDownloadButtonState();
         _downloadState.isDownloading = false;
-        alert('下载出错: ' + e.message);
+        alert(window.t('download.error', { message: e.message }));
     }
 }
 
 async function startWebDownload() {
     const btn = document.querySelector('#tab-0 .btn-primary');
-    const originalText = btn ? btn.textContent : '开始下载';
+    const originalText = btn ? btn.textContent : window.t('download.start');
     
     if (_downloadState.isDownloading) {
-        alert('下载任务正在进行中，请稍后');
+        alert(window.t('download.taskRunning'));
         return;
     }
     
     if (btn) {
         btn.disabled = true;
-        btn.textContent = '下载中...';
+        btn.textContent = window.t('download.downloading');
     }
 
     try {
@@ -383,7 +392,7 @@ async function startWebDownload() {
         const includeImages = includeImagesEl ? includeImagesEl.checked : false;
 
         if (urls.length === 0) {
-            alert('请输入要下载的URL');
+            alert(window.t('download.enterUrlSingle'));
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = originalText;
@@ -397,16 +406,16 @@ async function startWebDownload() {
         _downloadState.completedUrls = [];
         _downloadState.failedUrls = [];
 
-        updateStatus('正在下载...');
-        updateProgress('web-progress', 0, '正在准备下载...');
+        updateStatus(window.t('download.downloading'));
+        updateProgress('web-progress', 0, window.t('download.preparing'));
 
-        const result = await window.api.start_web_download(urls, aiAssist, includeImages);
+        const result = await window.api.startWebDownload(urls, aiAssist, includeImages);
         
         if (result && result.success) {
-            updateStatus('正在下载，请稍候...');
+            updateStatus(window.t('download.waiting'));
         } else {
-            updateStatus('下载失败: ' + (result?.message || '未知错误'));
-            updateProgress('web-progress', 0, '下载失败: ' + (result?.message || '未知错误'));
+            updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (result?.message || window.t('common.unknownError')));
+            updateProgress('web-progress', 0, window.t('download.failed', { message: result?.message || window.t('common.unknownError') }));
             _downloadState.isDownloading = false;
             if (btn) {
                 btn.disabled = false;
@@ -415,8 +424,8 @@ async function startWebDownload() {
         }
     } catch (e) {
         console.error('[Downloader] Download error:', e);
-        updateStatus('下载失败: ' + e.message);
-        updateProgress('web-progress', 0, '下载失败: ' + e.message);
+        updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + e.message);
+        updateProgress('web-progress', 0, window.t('download.failed', { message: e.message }));
         _downloadState.isDownloading = false;
         if (btn) {
             btn.disabled = false;
@@ -492,3 +501,9 @@ window.DownloaderModule = {
     startDownloadFromModal,
     getDownloadState: function() { return _downloadState; }
 };
+
+window.closeDownloadModal = closeDownloadModal;
+window.startDownloadFromModal = startDownloadFromModal;
+
+})();
+

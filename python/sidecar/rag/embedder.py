@@ -1,14 +1,46 @@
-import os
-import sys
 import math
+import os
+import shutil
+import sys
 import threading
+from pathlib import Path
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import numpy as np
 
-os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
-if not os.environ.get("NO_PROXY"):
-    os.environ["NO_PROXY"] = "huggingface.co,hf-mirror.com"
-elif "huggingface.co" not in os.environ.get("NO_PROXY", ""):
-    os.environ["NO_PROXY"] = os.environ["NO_PROXY"] + ",huggingface.co,hf-mirror.com"
+_HF_ENV_CONFIGURED = False
+
+
+def _ensure_hf_env():
+    global _HF_ENV_CONFIGURED
+    if _HF_ENV_CONFIGURED:
+        return
+    from config.constants import SYSTEM_APP_DATA_DIR
+
+    hf_home = SYSTEM_APP_DATA_DIR / "hf_hub"
+    hf_home.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("HF_HOME", str(hf_home))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hf_home))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(hf_home))
+    os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+    if not os.environ.get("NO_PROXY"):
+        os.environ["NO_PROXY"] = "huggingface.co,hf-mirror.com"
+    elif "huggingface.co" not in os.environ.get("NO_PROXY", ""):
+        os.environ["NO_PROXY"] = os.environ["NO_PROXY"] + ",huggingface.co,hf-mirror.com"
+    _HF_ENV_CONFIGURED = True
+
+
+def _fastembed_cache_root() -> Path:
+    from config.constants import SYSTEM_APP_DATA_DIR
+
+    root = SYSTEM_APP_DATA_DIR / "fastembed_cache"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+_FASTEMBED_CACHE = _fastembed_cache_root()
+os.environ["FASTEMBED_CACHE_PATH"] = str(_FASTEMBED_CACHE)
 
 from fastembed import TextEmbedding
 
@@ -18,28 +50,79 @@ _DENSE_MODEL_LOCK = threading.Lock()
 DENSE_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 DENSE_DIM = 512
 
+# HF hub 缓存目录名 fastembed：Qdrant/bge-small-zh-v1.5
+_FF_MODEL_FOLDER = "models--Qdrant--bge-small-zh-v1.5"
+
 import jieba
+
 jieba.setLogLevel(jieba.logging.INFO)
 
-_STOP_WORDS = set(
-    "的 了 在 是 我 有 和 就 不 人 都 一 一个 上 也 很 到 说 要 去 你 会 着 没有 看 好 自己 这".split()
-)
+_STOP_WORDS = {"的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这"}
+
+
+def _onnx_inference_threads() -> int | None:
+    n = os.cpu_count()
+    if not n:
+        return None
+    return min(8, max(1, n))
+
+
+def _purge_bge_zh_snapshot(cache_root: Path) -> None:
+    doomed = cache_root / _FF_MODEL_FOLDER
+    if doomed.is_dir():
+        shutil.rmtree(doomed, ignore_errors=True)
+        sys.stderr.write(f"[rag/embedder] Removed incomplete embedding cache dir: {doomed}\n")
+        sys.stderr.flush()
+
+
+def _is_recoverable_embed_load_err(err: BaseException) -> bool:
+    s = str(err).lower()
+    return any(
+        k in s
+        for k in (
+            "no_suchfile",
+            "onnxruntimeerror",
+            "failed to load model",
+            "doesn't exist",
+            "does not exist",
+            "no such file",
+            "errno 2",
+        )
+    )
 
 
 def _get_dense_model(download_callback=None):
     global _DENSE_MODEL
+    _ensure_hf_env()
     with _DENSE_MODEL_LOCK:
         if _DENSE_MODEL is not None:
             return _DENSE_MODEL
-        try:
-            if download_callback:
-                download_callback("正在加载 Embedding 模型...")
-            _DENSE_MODEL = TextEmbedding(DENSE_MODEL_NAME)
-            return _DENSE_MODEL
-        except Exception as e:
-            sys.stderr.write(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}\n")
-            sys.stderr.flush()
-            raise
+        for attempt in range(2):
+            try:
+                if download_callback:
+                    download_callback(
+                        "正在加载 Embedding 模型…"
+                        if attempt == 0
+                        else "正在重新下载 Embedding 模型…"
+                    )
+                _dense = TextEmbedding(
+                    DENSE_MODEL_NAME,
+                    cache_dir=str(_FASTEMBED_CACHE),
+                    threads=_onnx_inference_threads(),
+                )
+                _DENSE_MODEL = _dense
+                return _DENSE_MODEL
+            except Exception as e:
+                if attempt == 0 and _is_recoverable_embed_load_err(e):
+                    sys.stderr.write(
+                        f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry.\n"
+                    )
+                    sys.stderr.flush()
+                    _purge_bge_zh_snapshot(_FASTEMBED_CACHE)
+                    continue
+                sys.stderr.write(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}\n")
+                sys.stderr.flush()
+                raise
 
 
 def _bge_prefix(texts: list[str], is_query: bool = False) -> list[str]:

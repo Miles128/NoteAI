@@ -1,11 +1,12 @@
 import ipaddress
-import sys
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import quote_plus, unquote_plus, urlparse, parse_qs, urljoin
+from urllib.parse import parse_qs, quote_plus, unquote_plus, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+from utils.logger import logger
 
 MAX_RESULTS = 5
 MAX_CONTENT_CHARS = 2000
@@ -64,8 +65,7 @@ def duckduckgo_search(query: str) -> list:
 
         return results
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] DuckDuckGo search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] DuckDuckGo search error: {e}\n")
         return []
 
 
@@ -113,12 +113,9 @@ def baidu_search(query: str) -> list:
                         urljoin("https://www.baidu.com", href),
                         headers=_HEADERS, timeout=3, allow_redirects=True,
                     )
-                    if _is_safe_url(head_resp.url):
-                        href = str(head_resp.url)
-                    else:
-                        href = ""
-                except Exception:
-                    pass
+                    href = str(head_resp.url) if _is_safe_url(head_resp.url) else ""
+                except Exception as e:
+                    logger.warning(f"[rag/web_search] resolve url {href} error: {e}\n")
 
             if title and href:
                 results.append({
@@ -132,8 +129,7 @@ def baidu_search(query: str) -> list:
 
         return results
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] Baidu search error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] Baidu search error: {e}\n")
         return []
 
 
@@ -142,8 +138,7 @@ def web_search(query: str) -> list:
     if results:
         return results
 
-    sys.stderr.write("[rag/web_search] DuckDuckGo returned no results, trying Baidu\n")
-    sys.stderr.flush()
+    logger.warning("[rag/web_search] DuckDuckGo returned no results, trying Baidu")
     return baidu_search(query)
 
 
@@ -159,11 +154,9 @@ def _is_safe_url(url: str) -> bool:
             ip = ipaddress.ip_address(hostname)
             if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
                 return False
-        except ValueError:
-            pass
-        if parsed.scheme not in ("http", "https"):
-            return False
-        return True
+        except ValueError as e:
+            logger.warning(f"[rag/web_search] parse ip error: {e}\n")
+        return parsed.scheme in ("http", "https")
     except Exception:
         return False
 
@@ -172,8 +165,8 @@ def fetch_page_content(url: str) -> str:
     if not _is_safe_url(url):
         return ""
     try:
-        from readability import Document
         from markdownify import markdownify as md
+        from readability import Document
 
         resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
         if not _is_safe_url(resp.url):
@@ -193,8 +186,7 @@ def fetch_page_content(url: str) -> str:
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text[:MAX_CONTENT_CHARS]
     except Exception as e:
-        sys.stderr.write(f"[rag/web_search] fetch {url} error: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/web_search] fetch {url} error: {e}\n")
         return ""
 
 

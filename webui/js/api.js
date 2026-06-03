@@ -1,3 +1,5 @@
+(function() { 'use strict';
+
 var _isTauri = null;
 var _isTauriChecked = false;
 
@@ -40,6 +42,80 @@ async function pyCall(method, params) {
     throw new Error('Not running in Tauri');
 }
 
+var PREVIEW_RAW_SLICE_CHUNK_BYTES = 384 * 1024;
+
+function b64Utf8Decode(b64) {
+    if (!b64) return '';
+    var bin = typeof atob === 'function' ? atob(b64) : '';
+    var out = new Uint8Array(bin.length);
+    var i = 0;
+    for (; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return new TextDecoder('utf-8').decode(out);
+}
+
+function concatUint8(chunks) {
+    var len = 0;
+    chunks.forEach(function(chunk) {
+        len += chunk.length;
+    });
+    var out = new Uint8Array(len);
+    var off = 0;
+    chunks.forEach(function(chunk) {
+        out.set(chunk, off);
+        off += chunk.length;
+    });
+    return out;
+}
+
+function hydrateSemanticPreviewRpc(result) {
+    if (!result || !result.success) return result;
+    if (
+        result.preview_delivery === 'semantic_b64'
+        || (result.transport === 'base64_utf8' && result.content_b64)
+    ) {
+        result.content = b64Utf8Decode(result.content_b64);
+        return result;
+    }
+    return result;
+}
+
+async function assembleRawSlicesAsUtf8Preview(path, totalByteSize) {
+    var total = typeof totalByteSize === 'number' ? totalByteSize : 0;
+    if (total < 1) return '';
+    var parts = [];
+    var off = 0;
+    while (off < total) {
+        var want = Math.min(PREVIEW_RAW_SLICE_CHUNK_BYTES, total - off);
+        var slice = await pyCall('read_preview_raw_slice', {
+            path: path,
+            byte_offset: off,
+            byte_limit: want
+        });
+        if (!slice || !slice.success) {
+            throw new Error((slice && (slice.message || slice.error)) || '分页预览读取失败');
+        }
+        parts.push(sliceChunkToUint8(slice.chunk_b64 || ''));
+        off = typeof slice.next_byte_offset === 'number' ? slice.next_byte_offset : off + parts[parts.length - 1].length;
+        if (slice.done) break;
+        if (off >= total) break;
+    }
+    var merged = concatUint8(parts);
+    return new TextDecoder('utf-8').decode(merged);
+}
+
+function sliceChunkToUint8(b64) {
+    if (!b64) return new Uint8Array(0);
+    var bin = typeof atob === 'function' ? atob(b64) : '';
+    var out = new Uint8Array(bin.length);
+    var i = 0;
+    for (; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return out;
+}
+
 async function openWorkspace() {
     if (checkIsTauri()) {
         var invoke = getTauriInvoke();
@@ -61,6 +137,7 @@ async function getWorkspaceStatus() {
     if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
+        pyCall('fix_survey_topics', {}).catch(function(err) { console.warn('[fix_survey_topics]', err); });
     }
     return result;
 }
@@ -97,6 +174,10 @@ async function createTopic(name) {
     return pyCall('create_topic', { name: name });
 }
 
+async function createTopicFolder(name, parentPath, level) {
+    return pyCall('create_topic_folder', { name: name, parent_path: parentPath || '', level: level || 0 });
+}
+
 async function createTag(name) {
     return pyCall('create_tag', { name: name });
 }
@@ -109,8 +190,16 @@ async function getAllPending() {
     return pyCall('get_all_pending');
 }
 
+async function getActivityLog(limit) {
+    return pyCall('get_activity_log', { limit: limit || 50 });
+}
+
 async function resolveTopic(filePath, topic) {
     return pyCall('resolve_topic', { file_path: filePath, topic: topic });
+}
+
+async function mergeDuplicateTopics() {
+    return pyCall('merge_duplicate_topics', {});
 }
 
 async function renameTopic(oldTopic, newTopic) {
@@ -213,6 +302,50 @@ async function autoConvertPending() {
     return pyCall('auto_convert_pending', {});
 }
 
+async function ensureSchema() {
+    return pyCall('ensure_schema', {});
+}
+
+async function getSchema() {
+    return pyCall('get_schema', {});
+}
+
+async function needsSchemaSetup() {
+    return pyCall('needs_schema_setup', {});
+}
+
+async function getSchemaTemplate() {
+    return pyCall('get_schema_template', {});
+}
+
+async function saveSchema(content) {
+    return pyCall('save_schema', { content: content });
+}
+
+async function startIngest(options) {
+    var opts = options || {};
+    return pyCall('start_ingest', {
+        mode: opts.mode || 'full',
+        file_paths: opts.file_paths || []
+    });
+}
+
+async function cancelIngest() {
+    return pyCall('cancel_ingest', {});
+}
+
+async function retryIngest(options) {
+    var opts = options || {};
+    return pyCall('retry_ingest', {
+        mode: opts.mode || 'full',
+        file_paths: opts.file_paths || []
+    });
+}
+
+async function getIngestStatus() {
+    return pyCall('get_ingest_status', {});
+}
+
 async function extractTopics(topicCount) {
     return pyCall('extract_topics', { topic_count: topicCount });
 }
@@ -233,7 +366,29 @@ async function onFileSelected(path) {
 }
 
 async function getFilePreview(path) {
-    return pyCall('get_file_preview', { path: path });
+    var raw = await pyCall('get_file_preview', { path: path });
+    if (!raw || !raw.success) return raw;
+
+    if (raw.preview_delivery === 'raw_slices') {
+        try {
+            var total = raw.total_byte_size != null ? raw.total_byte_size : raw.file_size;
+            var text = await assembleRawSlicesAsUtf8Preview(path, total);
+            return {
+                success: true,
+                type: raw.type || 'markdown',
+                preview_delivery: 'semantic_b64',
+                file_name: raw.file_name,
+                file_size: typeof total === 'number' ? total : undefined,
+                content: text
+            };
+        } catch (e) {
+            console.error('[API] chunk preview failed, falling back:', e);
+            var fallback = await pyCall('get_file_preview', { path: path, force_semantic_preview: true });
+            return hydrateSemanticPreviewRpc(fallback);
+        }
+    }
+
+    return hydrateSemanticPreviewRpc(raw);
 }
 
 async function canPreviewFile(path) {
@@ -256,8 +411,12 @@ async function getBacklinks(filePath) {
     return pyCall('get_backlinks', { file_path: filePath });
 }
 
-async function getRelationGraph() {
-    return pyCall('get_relation_graph', {});
+async function getLinkStats() {
+    return pyCall('get_link_stats', {});
+}
+
+async function getGraphData(filter) {
+    return pyCall('get_graph_data', { filter: filter || 'topic' });
 }
 
 async function confirmLink(fromPath, toPath) {
@@ -274,6 +433,14 @@ async function confirmAllLinks() {
 
 async function syncWikiWithFiles() {
     return pyCall('sync_wiki_with_files', {});
+}
+
+async function getTopicFiles(topicName, level) {
+    return pyCall('get_topic_files', { topic_name: topicName, level: level });
+}
+
+async function generateAbstract(topicName, level) {
+    return pyCall('generate_abstract', { topic_name: topicName, level: level });
 }
 
 async function llmRewrite(filePath) {
@@ -300,12 +467,20 @@ async function applyTopicSuggestion(suggestion) {
     return pyCall('apply_topic_suggestion', { suggestion: suggestion });
 }
 
-async function ragChat(question, topics, tags) {
-    return pyCall('rag_chat', { question: question, topics: topics || null, tags: tags || null });
+async function ragChat(question, topics, tags, currentFile) {
+    return pyCall('rag_chat', { question, topics: topics || null, tags: tags || null, current_file: currentFile || null });
 }
 
 async function ragRebuildIndex() {
     return pyCall('rag_rebuild_index', {});
+}
+
+async function archiveChatAnswer(payload) {
+    return pyCall('archive_chat_answer', payload || {});
+}
+
+async function runKbLint() {
+    return pyCall('run_kb_lint', {});
 }
 
 async function getChangelog(limit) {
@@ -393,6 +568,15 @@ async function openFileInNewWindow(path, name) {
     throw new Error('Not running in Tauri');
 }
 
+async function cloudSyncListProviders() { return pyCall('cloud_sync_list_providers'); }
+async function cloudSyncAuth(provider, credentials) { return pyCall('cloud_sync_auth', { provider_name: provider, credentials: credentials }); }
+async function cloudSyncPush(provider) { return pyCall('cloud_sync_push', { provider_name: provider }); }
+async function cloudSyncPull(provider) { return pyCall('cloud_sync_pull', { provider_name: provider }); }
+async function cloudSyncStatus(provider) { return pyCall('cloud_sync_status', { provider_name: provider }); }
+async function cloudSyncSaveConfig(provider, config) { return pyCall('cloud_sync_save_config', { provider_name: provider, config: config }); }
+async function cloudSyncLoadConfig(provider) { return pyCall('cloud_sync_load_config', { provider_name: provider }); }
+async function cloudSyncDisconnect(provider) { return pyCall('cloud_sync_disconnect', { provider_name: provider }); }
+
 window.api = {
     invoke: pyCall,
     getApiPort: function() { return 0; },
@@ -404,9 +588,17 @@ window.api = {
     getTopicTree: getTopicTree,
     autoTagFiles: autoTagFiles,
     saveTagsMd: saveTagsMd,
+    ensureTagsMd: ensureTagsMd,
     autoAssignTopic: autoAssignTopic,
+    batchAutoAssignTopics: batchAutoAssignTopics,
+    createTopic: createTopic,
+    createTopicFolder: createTopicFolder,
+    createTag: createTag,
     getPendingTopics: getPendingTopics,
+    getAllPending: getAllPending,
+    getActivityLog: getActivityLog,
     resolveTopic: resolveTopic,
+    mergeDuplicateTopics: mergeDuplicateTopics,
     renameTopic: renameTopic,
     deleteTopic: deleteTopic,
     renameTag: renameTag,
@@ -433,7 +625,10 @@ window.api = {
     getFilePreview: getFilePreview,
     canPreviewFile: canPreviewFile,
     saveFileContent: saveFileContent,
+    readFileRaw: readFileRaw,
     syncWikiWithFiles: syncWikiWithFiles,
+    getTopicFiles: getTopicFiles,
+    generateAbstract: generateAbstract,
 
     moveWindow: moveWindow,
     minimizeWindow: minimizeWindow,
@@ -441,75 +636,50 @@ window.api = {
     closeWindow: closeWindow,
     openFileInNewWindow: openFileInNewWindow,
 
-    open_workspace: openWorkspace,
-    get_workspace_status: getWorkspaceStatus,
-    get_workspace_tree: getWorkspaceTree,
-    get_all_tags: getAllTags,
-    get_topic_tree: getTopicTree,
-    auto_tag_files: autoTagFiles,
-    save_tags_md: saveTagsMd,
-    ensure_tags_md: ensureTagsMd,
-    auto_assign_topic: autoAssignTopic,
-    batch_auto_assign_topics: batchAutoAssignTopics,
-    create_topic: createTopic,
-    create_tag: createTag,
-    get_pending_topics: getPendingTopics,
-    get_all_pending: getAllPending,
-    resolve_topic: resolveTopic,
-    rename_topic: renameTopic,
-    delete_topic: deleteTopic,
-    rename_tag: renameTag,
-    delete_tag: deleteTag,
-    move_file_to_topic: moveFileToTopic,
-    move_file: moveFile,
-    add_tag_to_file: addTagToFile,
-    get_api_config: getApiConfig,
-    save_api_config: saveApiConfig,
-    get_ui_config: getUiConfig,
-    save_ui_config: saveUiConfig,
-    get_theme_preference: getThemePreference,
-    save_theme_preference: saveThemePreference,
-    add_files: addFiles,
-    browse_folder: browseFolder,
-    start_web_download: startWebDownload,
-    start_file_conversion: startFileConversion,
-    auto_convert_pending: autoConvertPending,
-    extract_topics: extractTopics,
-    start_note_integration: startNoteIntegration,
-    refresh_log: refreshLog,
-    on_file_selected: onFileSelected,
-    get_file_preview: getFilePreview,
-    can_preview_file: canPreviewFile,
-    save_file_content: saveFileContent,
-    read_file_raw: readFileRaw,
-    read_note_file: getFilePreview,
-    save_note_file: saveFileContent,
+    discoverLinks: discoverLinks,
+    getBacklinks: getBacklinks,
+    getLinkStats: getLinkStats,
+    getGraphData: getGraphData,
+    confirmLink: confirmLink,
+    rejectLink: rejectLink,
+    confirmAllLinks: confirmAllLinks,
+    llmRewrite: llmRewrite,
+    llmRewriteStream: llmRewriteStream,
+    llmRewriteApply: llmRewriteApply,
+    aiTopicAnalyze: aiTopicAnalyze,
+    aiTopicSurvey: aiTopicSurvey,
+    applyTopicSuggestion: applyTopicSuggestion,
+    ragChat: ragChat,
+    ragRebuildIndex: ragRebuildIndex,
+    archiveChatAnswer: archiveChatAnswer,
+    runKbLint: runKbLint,
+    getChangelog: getChangelog,
+    checkAndGenerateSurveys: checkAndGenerateSurveys,
+    getUserProfile: getUserProfile,
+    saveUserProfile: saveUserProfile,
+    getProjectRules: getProjectRules,
+    saveProjectRules: saveProjectRules,
 
-    move_window: moveWindow,
-    minimize_window: minimizeWindow,
-    maximize_window: maximizeWindow,
-    close_window: closeWindow,
-    open_file_in_new_window: openFileInNewWindow,
+    cloudSyncListProviders: cloudSyncListProviders,
+    cloudSyncAuth: cloudSyncAuth,
+    cloudSyncPush: cloudSyncPush,
+    cloudSyncPull: cloudSyncPull,
+    cloudSyncStatus: cloudSyncStatus,
+    cloudSyncSaveConfig: cloudSyncSaveConfig,
+    cloudSyncLoadConfig: cloudSyncLoadConfig,
+    cloudSyncDisconnect: cloudSyncDisconnect,
 
-    discover_links: discoverLinks,
-    get_backlinks: getBacklinks,
-    get_relation_graph: getRelationGraph,
-    confirm_link: confirmLink,
-    reject_link: rejectLink,
-    confirm_all_links: confirmAllLinks,
-    sync_wiki_with_files: syncWikiWithFiles,
-    llm_rewrite: llmRewrite,
-    llm_rewrite_stream: llmRewriteStream,
-    llm_rewrite_apply: llmRewriteApply,
-    ai_topic_analyze: aiTopicAnalyze,
-    ai_topic_survey: aiTopicSurvey,
-    apply_topic_suggestion: applyTopicSuggestion,
-    rag_chat: ragChat,
-    rag_rebuild_index: ragRebuildIndex,
-    get_changelog: getChangelog,
-    check_and_generate_surveys: checkAndGenerateSurveys,
-    get_user_profile: getUserProfile,
-    save_user_profile: saveUserProfile,
-    get_project_rules: getProjectRules,
-    save_project_rules: saveProjectRules
+    ensureSchema: ensureSchema,
+    getSchema: getSchema,
+    saveSchema: saveSchema,
+    needsSchemaSetup: needsSchemaSetup,
+    getSchemaTemplate: getSchemaTemplate,
+    startIngest: startIngest,
+    cancelIngest: cancelIngest,
+    retryIngest: retryIngest,
+    getIngestStatus: getIngestStatus
 };
+
+})();
+
+const api = window.api;

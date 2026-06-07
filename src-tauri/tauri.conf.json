@@ -5,7 +5,7 @@
   "identifier": "com.noteai.app",
   "build": {
     "frontendDist": "../webui",
-    "beforeDevCommand": "npm --prefix .. run build:tiptap",
+    "beforeDevCommand": "npm run build:tiptap",
     "beforeBuildCommand": ""
   },
   "app": {

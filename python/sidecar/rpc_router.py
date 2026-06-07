@@ -1,10 +1,11 @@
 """Lightweight JSON-RPC router for noteai sidecar. Supports sync and async handlers."""
 
-import sys
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
 from typing import Any
+
+from utils.logger import logger
 
 
 class RpcHandler:
@@ -50,9 +51,7 @@ class RpcRouter:
                 result = handler.fn(params)
                 self._send_ok(req_id, result)
             except Exception as e:
-                sys.stderr.write(f"[ERROR] {method}: {e}\n")
-                sys.stderr.write(traceback.format_exc())
-                sys.stderr.flush()
+                logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
                 self._send_error(req_id, str(e))
 
     def _send_ok(self, req_id: str, result: Any) -> None:

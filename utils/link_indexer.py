@@ -10,7 +10,6 @@
 
 import json
 import re
-import sys
 import time
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
@@ -449,7 +448,7 @@ def _read_file_topic(file_path: Path) -> str:
         if isinstance(topic, str) and topic.strip():
             return topic.strip()
     except Exception as e:
-        sys.stderr.write(f"[_read_file_topic] read failed: {e}\n"); sys.stderr.flush()
+        logger.error(f"[_read_file_topic] read failed: {e}")
     return ""
 
 

@@ -9,7 +9,7 @@ from markdownify import markdownify as md
 from bs4 import BeautifulSoup
 from readability import Document
 
-from config.settings import config
+from config import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,

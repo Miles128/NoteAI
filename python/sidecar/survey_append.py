@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from config import config
-from prompts.cascade import SURVEY_CHAT_APPEND_PROMPT
+from prompts import SURVEY_CHAT_APPEND_PROMPT
 from sidecar.cascade import _add_survey_frontmatter, append_changelog, get_survey_path
 from sidecar.schema_validator import check_wiki_writable, require_topic
 from sidecar.textutils import parse_frontmatter

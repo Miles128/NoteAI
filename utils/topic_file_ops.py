@@ -1,11 +1,9 @@
-import re
-import sys
 from pathlib import Path
 
 from config.constants import TOPIC_SEP
-from config.settings import config
+from config import config
+from sidecar.textutils import parse_frontmatter, write_frontmatter
 from utils.logger import logger
-from utils.text_utils import parse_frontmatter
 from utils.topic_classifier import _norm_topic
 
 
@@ -13,36 +11,16 @@ def write_topic_to_file(file_path, topic):
     topic = _norm_topic(topic)
     try:
         text = Path(file_path).read_text(encoding='utf-8')
-        bom = '\ufeff' if text.startswith('\ufeff') else ''
-        clean = text.lstrip('\ufeff')
-        m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
-        if not m:
-            import yaml
-            frontmatter = '---\ntopic: ' + yaml.dump(topic, allow_unicode=True, default_flow_style=True).strip() + '\n---\n'
-            Path(file_path).write_text(bom + frontmatter + clean, encoding='utf-8')
-            return {"success": True}
-        yaml_text = m.group(2)
-        lines = yaml_text.split('\n')
-        found = False
-        for i, line in enumerate(lines):
-            idx = line.find(':')
-            if idx < 0:
-                continue
-            key = line[:idx].strip()
-            if key == 'topic':
-                import yaml
-                lines[i] = 'topic: ' + yaml.dump(topic, allow_unicode=True, default_flow_style=True).strip()
-                found = True
-                break
-        if not found:
-            lines.append(f'topic: {topic}')
-        new_yaml = '\n'.join(lines)
-        new_text = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
+        had_bom = text.startswith('\ufeff')
+        meta, body = parse_frontmatter(text)
+        if meta is None:
+            meta = {}
+        meta['topic'] = topic
+        new_text = write_frontmatter(meta, body, had_bom=had_bom)
         Path(file_path).write_text(new_text, encoding='utf-8')
         return {"success": True}
     except Exception as e:
-        sys.stderr.write(f"[write_topic] failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[write_topic] failed: {e}")
         return {"success": False, "message": str(e)}
 
 
@@ -139,19 +117,14 @@ def _optimize_file_format(full_path, text, meta=None, body=None):
     if optimized_body == body:
         return False
 
-    if meta:
-        import yaml as _yaml
-        fm_str = _yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-        new_content = '---\n' + fm_str + '\n---\n' + optimized_body
-    else:
-        new_content = optimized_body
+    had_bom = text.startswith('\ufeff') if text else False
+    new_content = write_frontmatter(meta, optimized_body, had_bom=had_bom)
 
     try:
         full_path.write_text(new_content, encoding='utf-8')
         return True
     except (OSError, ValueError) as e:
-        sys.stderr.write(f"[topic_assigner] _optimize_file_format write failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[topic_assigner] _optimize_file_format write failed: {e}")
         return False
 
 
@@ -165,32 +138,18 @@ def _remove_empty_dir(dir_path):
         if not has_files:
             dir_path.rmdir()
     except Exception as e:
-        sys.stderr.write(f"[delete_topic] remove dir failed: {dir_path} - {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[delete_topic] remove dir failed: {dir_path} - {e}")
 
 
 def _clear_topic_in_file(file_path):
     text = Path(file_path).read_text(encoding='utf-8')
-    bom = '\ufeff' if text.startswith('\ufeff') else ''
-    clean = text.lstrip('\ufeff')
-    m = re.match(r'^(\s*---[ \t]*\r?\n)([\s\S]*?)(\r?\n---)', clean)
-    if not m:
+    had_bom = text.startswith('\ufeff')
+    meta, body = parse_frontmatter(text)
+    if meta is None:
         return
-
-    yaml_text = m.group(2)
-    lines = yaml_text.split('\n')
-    new_lines = []
-    for line in lines:
-        idx = line.find(':')
-        if idx >= 0:
-            key = line[:idx].strip()
-            if key == 'topic':
-                continue
-        new_lines.append(line)
-
-    new_yaml = '\n'.join(new_lines)
-    new_content = bom + m.group(1) + new_yaml + m.group(3) + clean[m.end():]
-    Path(file_path).write_text(new_content, encoding='utf-8')
+    meta.pop('topic', None)
+    new_text = write_frontmatter(meta if meta else None, body, had_bom=had_bom)
+    Path(file_path).write_text(new_text, encoding='utf-8')
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):
@@ -246,8 +205,7 @@ def _read_topic_from_file(file_path):
             return _norm_topic(topic.strip())
         return None
     except Exception as e:
-        sys.stderr.write(f"[_read_topic] failed: {e}\n")
-        sys.stderr.flush()
+        logger.warning(f"[_read_topic] failed: {e}")
         return None
 
 

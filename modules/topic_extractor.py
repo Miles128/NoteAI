@@ -5,10 +5,10 @@
 
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from config.settings import config
+from config import config
 from utils.logger import logger
 from utils.llm_utils import check_api_config
-from prompts.topic_extraction import (
+from prompts import (
     TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
     TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
     OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT,

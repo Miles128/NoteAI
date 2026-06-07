@@ -5,11 +5,11 @@ WIKI.md 的 CRUD 操作见 utils.topic_wiki_manager
 """
 
 import re
-import sys
 from pathlib import Path
 
 from config.constants import TOPIC_SEP
-from config.settings import config
+from config import config
+from utils.logger import logger
 
 
 def _get_wiki_path():
@@ -71,8 +71,7 @@ def parse_wiki_structure():
     try:
         text = wiki_path.read_text(encoding='utf-8')
     except Exception as e:
-        sys.stderr.write(f"[parse_wiki] read failed: {e}\n")
-        sys.stderr.flush()
+        logger.error(f"[parse_wiki] read failed: {e}")
         return []
 
     topics = []
@@ -144,26 +143,71 @@ def _renumber_wiki_files(lines):
     lines[:] = result
 
 
-_LAZY_EXPORTS = {
-    "_remove_empty_topic_sections": "utils.topic_dedup",
-    "_merge_duplicate_topics_in_wiki": "utils.topic_dedup",
-    "_deduplicate_files_in_wiki": "utils.topic_dedup",
-    "add_file_to_wiki_topic": "utils.topic_wiki_manager",
-    "remove_file_from_wiki_topic": "utils.topic_wiki_manager",
-    "rename_wiki_topic": "utils.topic_wiki_manager",
-    "_remove_topic_from_wiki": "utils.topic_wiki_manager",
-    "create_topic": "utils.topic_wiki_manager",
-    "rename_topic": "utils.topic_wiki_manager",
-    "delete_topic": "utils.topic_wiki_manager",
-    "sync_wiki_with_files": "utils.topic_wiki_manager",
-    "_write_file_topic_from_folder": "utils.topic_wiki_manager",
-    "topic_from_notes_path": "utils.topic_wiki_manager",
-}
+# --- Re-exported functions from topic_dedup and topic_wiki_manager ---
+# Imports are deferred to function bodies to avoid circular imports
+# (topic_dedup / wiki_crud / wiki_sync all import from this module).
 
 
-def __getattr__(name):
-    if name in _LAZY_EXPORTS:
-        import importlib
-        mod = importlib.import_module(_LAZY_EXPORTS[name])
-        return getattr(mod, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+def _remove_empty_topic_sections(topic_name_lower):
+    from utils.topic_dedup import _remove_empty_topic_sections as _impl
+    return _impl(topic_name_lower)
+
+
+def _merge_duplicate_topics_in_wiki():
+    from utils.topic_dedup import _merge_duplicate_topics_in_wiki as _impl
+    return _impl()
+
+
+def _deduplicate_files_in_wiki():
+    from utils.topic_dedup import _deduplicate_files_in_wiki as _impl
+    return _impl()
+
+
+def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
+    from utils.topic_wiki_manager import add_file_to_wiki_topic as _impl
+    return _impl(file_rel_path, topic, file_title=file_title)
+
+
+def remove_file_from_wiki_topic(file_rel_path):
+    from utils.topic_wiki_manager import remove_file_from_wiki_topic as _impl
+    return _impl(file_rel_path)
+
+
+def rename_wiki_topic(old_topic, new_topic):
+    from utils.topic_wiki_manager import rename_wiki_topic as _impl
+    return _impl(old_topic, new_topic)
+
+
+def _remove_topic_from_wiki(topic_name):
+    from utils.topic_wiki_manager import _remove_topic_from_wiki as _impl
+    return _impl(topic_name)
+
+
+def create_topic(topic_name):
+    from utils.topic_wiki_manager import create_topic as _impl
+    return _impl(topic_name)
+
+
+def rename_topic(old_topic, new_topic):
+    from utils.topic_wiki_manager import rename_topic as _impl
+    return _impl(old_topic, new_topic)
+
+
+def delete_topic(topic_name):
+    from utils.topic_wiki_manager import delete_topic as _impl
+    return _impl(topic_name)
+
+
+def sync_wiki_with_files():
+    from utils.topic_wiki_manager import sync_wiki_with_files as _impl
+    return _impl()
+
+
+def _write_file_topic_from_folder(file_path, topic):
+    from utils.topic_wiki_manager import _write_file_topic_from_folder as _impl
+    return _impl(file_path, topic)
+
+
+def topic_from_notes_path(file_path):
+    from utils.topic_wiki_manager import topic_from_notes_path as _impl
+    return _impl(file_path)

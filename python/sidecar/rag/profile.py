@@ -1,10 +1,10 @@
 import json
-import sys
 import threading
 from datetime import datetime
 from pathlib import Path
 
 from config import config
+from utils.logger import logger
 
 _LOCK = threading.Lock()
 
@@ -64,7 +64,7 @@ def save_profile(profile: dict):
 
 
 def extract_structured_info(message: str) -> dict | None:
-    from prompts.profile import PROFILE_EXTRACT_PROMPT
+    from prompts import PROFILE_EXTRACT_PROMPT
     from utils.llm_utils import create_llm
 
     prompt = PROFILE_EXTRACT_PROMPT.format(message=message)
@@ -80,8 +80,7 @@ def extract_structured_info(message: str) -> dict | None:
             text = text.strip()
         return json.loads(text)
     except Exception as e:
-        sys.stderr.write(f"[profile] extract_structured_info error: {e}\n")
-        sys.stderr.flush()
+        logger.error(f"[profile] extract_structured_info error: {e}")
         return None
 
 

@@ -44,6 +44,8 @@ os.environ["FASTEMBED_CACHE_PATH"] = str(_FASTEMBED_CACHE)
 
 from fastembed import TextEmbedding
 
+from utils.logger import logger
+
 _DENSE_MODEL = None
 _DENSE_MODEL_LOCK = threading.Lock()
 
@@ -71,8 +73,7 @@ def _purge_bge_zh_snapshot(cache_root: Path) -> None:
     doomed = cache_root / _FF_MODEL_FOLDER
     if doomed.is_dir():
         shutil.rmtree(doomed, ignore_errors=True)
-        sys.stderr.write(f"[rag/embedder] Removed incomplete embedding cache dir: {doomed}\n")
-        sys.stderr.flush()
+        logger.warning(f"[rag/embedder] Removed incomplete embedding cache dir: {doomed}")
 
 
 def _is_recoverable_embed_load_err(err: BaseException) -> bool:
@@ -114,14 +115,12 @@ def _get_dense_model(download_callback=None):
                 return _DENSE_MODEL
             except Exception as e:
                 if attempt == 0 and _is_recoverable_embed_load_err(e):
-                    sys.stderr.write(
-                        f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry.\n"
+                    logger.warning(
+                        f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry."
                     )
-                    sys.stderr.flush()
                     _purge_bge_zh_snapshot(_FASTEMBED_CACHE)
                     continue
-                sys.stderr.write(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}\n")
-                sys.stderr.flush()
+                logger.error(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}")
                 raise
 
 

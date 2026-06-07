@@ -882,7 +882,10 @@ const Graph3Tier = {
     },
 
     _legendItem(color, size, labelKey) {
-        return '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:inline-block;"></span>' + window.t(labelKey) + '</span>';
+        var label = window.t(labelKey);
+        return '<span class="graph-legend-item" title="' + label.replace(/"/g, '&quot;') + '">' +
+            '<span class="graph-legend-dot" style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:inline-block;"></span>' +
+            '<span class="graph-legend-label">' + label + '</span></span>';
     },
 
     _updateLegend() {

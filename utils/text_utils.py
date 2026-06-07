@@ -1,8 +1,7 @@
 import re
-import sys
 from pathlib import Path
 
-import yaml
+from utils.logger import logger
 
 try:
     import jieba
@@ -28,10 +27,25 @@ GENERIC_WORDS = {
     "summary", "intro", "getting-started", "howto", "cheatsheet",
     "reference", "manual", "handbook", "setup", "config",
     "v1", "v2", "v3", "v4", "v5",
+    # 英文泛词 — 冠词/代词
+    "a", "an", "the",
+    "i", "me", "my", "mine", "myself",
+    "you", "your", "yours", "yourself", "yourselves",
+    "he", "him", "his", "himself",
+    "she", "her", "hers", "herself",
+    "it", "its", "itself",
+    "we", "us", "our", "ours", "ourselves",
+    "they", "them", "their", "theirs", "themselves",
+    "who", "whom", "whose", "which", "what", "that", "this", "these", "those",
+    "someone", "something", "anyone", "anything",
+    "everyone", "everything", "nobody", "nothing",
+    # 英文泛词 — be/do 动词
+    "am", "is", "are", "was", "were", "be", "been", "being",
+    "do", "does", "did", "doing", "done",
     # 英文泛词 — 常见动词
-    "make", "made", "making", "take", "taken", "taking",
+    "make", "made", "making", "take", "taken", "taking", "took",
     "give", "given", "giving", "come", "came", "coming",
-    "go", "going", "gone", "get", "got", "getting",
+    "go", "going", "gone", "went", "get", "got", "getting", "gotten",
     "put", "putting", "set", "setting", "run", "running",
     "use", "used", "using", "try", "tried", "trying",
     "need", "needed", "needing", "want", "wanted", "wanting",
@@ -71,6 +85,7 @@ GENERIC_WORDS = {
     "sell", "sold", "selling", "require", "required", "requiring",
     "report", "reported", "reporting", "decide", "decided", "deciding",
     "pull", "pulled", "pulling", "develop", "developed", "developing",
+    "become", "feel", "help", "leave", "mean", "open", "say", "said", "seem", "walk",
     # 英文泛词 — 常见形容词/副词
     "good", "great", "best", "better", "well", "bad", "worse", "worst",
     "new", "old", "big", "small", "large", "little", "long", "short",
@@ -90,6 +105,7 @@ GENERIC_WORDS = {
     "hot", "cold", "warm", "cool", "dry", "wet",
     "clean", "dirty", "safe", "dangerous", "quiet", "loud",
     "happy", "sad", "angry", "afraid", "alone", "alive",
+    "left", "particular",
     "also", "very", "really", "just", "still", "already",
     "always", "never", "often", "sometimes", "usually",
     "here", "there", "where", "when", "how", "why",
@@ -97,7 +113,7 @@ GENERIC_WORDS = {
     "again", "away", "back", "down", "up", "out",
     "only", "even", "almost", "enough", "much", "more", "most",
     "less", "least", "quite", "rather", "too",
-    # 英文泛词 — 常见名词/代词/介词/连词
+    # 英文泛词 — 常见名词
     "thing", "things", "way", "ways", "part", "parts",
     "point", "points", "case", "cases", "fact", "facts",
     "time", "times", "day", "days", "year", "years",
@@ -114,18 +130,29 @@ GENERIC_WORDS = {
     "data", "info", "information", "detail", "details",
     "item", "items", "element", "elements", "feature", "features",
     "version", "versions", "update", "updates",
-    "the", "this", "that", "these", "those",
-    "which", "what", "who", "whom", "whose",
-    "each", "every", "all", "some", "any", "no",
-    "not", "and", "but", "or", "nor", "for", "yet", "so",
+    "age", "air", "art", "body", "book", "boy", "business",
+    "car", "child", "children", "city", "community", "company",
+    "door", "education", "eye", "face", "father", "foot",
+    "force", "friend", "game", "girl", "government", "guy",
+    "health", "history", "home", "hour", "house", "issue",
+    "job", "law", "line", "lot", "market", "member",
+    "minute", "moment", "money", "month", "morning", "mother",
+    "music", "night", "office", "others", "parent", "party",
+    "policy", "power", "president", "program", "research",
+    "room", "sense", "service", "story", "study", "system",
+    "teacher", "team", "war", "water", "week", "word",
+    # 英文泛词 — 介词/连词
+    "and", "but", "or", "nor", "not", "so", "yet", "for",
+    "if", "else",
     "with", "from", "into", "about", "between", "through",
     "during", "before", "after", "above", "below",
     "under", "over", "without", "within", "along",
     "against", "upon", "toward", "towards",
+    "of", "in", "to", "at", "by", "on", "off", "near", "past", "beyond",
     "both", "either", "neither", "whether",
     "while", "because", "although", "though", "unless",
     "until", "since", "once", "than", "as",
-    "should", "would", "could", "might", "must", "shall",
+    "should", "would", "could", "might", "must", "shall", "may",
     "can", "will", "does", "did", "has", "have", "had",
     "been", "being", "doing", "having",
     "own", "other", "another", "such",
@@ -252,7 +279,7 @@ def tokenize(text: str) -> list:
             tokens = jieba.lcut(text)
             return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
         except Exception as e:
-            sys.stderr.write(f"[tokenize] jieba lcut failed: {e}\n"); sys.stderr.flush()
+            logger.warning(f"[tokenize] jieba lcut failed: {e}")
 
     text = re.sub(r'[（(].*?[）)]', '', text)
     parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', text)
@@ -279,95 +306,18 @@ def _count_tag_occurrence(tag: str, filenames: list, case_insensitive: bool = Tr
 
 
 def _is_generic_word(word: str) -> bool:
-    """检查词是否为泛词（不表达主题区分度）"""
+    """检查词是否为泛词（不表达主题区分度）
+
+    统一使用 GENERIC_WORDS 集合，涵盖中文泛词、英文冠词/代词/常见动词/常见名词/介词/连词等。
+    """
     return word.lower() in GENERIC_WORDS
 
-
-TOP_COMMON_ENGLISH_WORDS = {
-    "a", "an", "the",
-    "i", "me", "my", "mine", "myself",
-    "you", "your", "yours", "yourself", "yourselves",
-    "he", "him", "his", "himself",
-    "she", "her", "hers", "herself",
-    "it", "its", "itself",
-    "we", "us", "our", "ours", "ourselves",
-    "they", "them", "their", "theirs", "themselves",
-    "who", "whom", "whose", "which", "what", "that", "this", "these", "those",
-    "am", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "having",
-    "do", "does", "did", "doing", "done",
-    "will", "would", "shall", "should", "can", "could", "may", "might", "must",
-    "and", "but", "or", "nor", "not", "so", "yet", "for",
-    "if", "then", "else", "when", "while", "as", "than",
-    "because", "since", "although", "though", "unless", "until",
-    "of", "in", "to", "with", "at", "by", "from", "on", "up", "out",
-    "about", "into", "over", "after", "under", "between", "through",
-    "during", "before", "without", "within", "along", "against",
-    "among", "around", "across", "behind", "below", "above",
-    "beside", "beyond", "toward", "towards", "upon", "onto",
-    "off", "down", "near", "past", "upon",
-    "all", "each", "every", "both", "few", "more", "most",
-    "other", "some", "such", "no", "nor", "only", "own",
-    "same", "any", "many", "much", "several", "enough",
-    "also", "very", "too", "quite", "rather", "really",
-    "just", "still", "already", "even", "only", "almost",
-    "never", "always", "often", "sometimes", "usually",
-    "here", "there", "where", "how", "why", "when",
-    "now", "then", "today", "tomorrow", "yesterday",
-    "again", "away", "back", "down", "up", "out",
-    "one", "two", "three", "four", "five", "six",
-    "seven", "eight", "nine", "ten", "first", "second",
-    "third", "last", "next", "new", "old", "good", "bad",
-    "great", "big", "small", "long", "short", "high", "low",
-    "well", "better", "best", "right", "left", "true", "false",
-    "say", "said", "go", "went", "gone", "get", "got", "gotten",
-    "make", "made", "know", "knew", "known", "think", "thought",
-    "take", "took", "taken", "see", "saw", "seen",
-    "come", "came", "want", "look", "use", "used", "find", "found",
-    "give", "gave", "tell", "told", "work", "call", "try", "ask",
-    "need", "feel", "become", "leave", "put", "mean", "keep", "let",
-    "begin", "seem", "help", "show", "hear", "play", "run", "move",
-    "live", "believe", "hold", "bring", "happen", "write", "provide",
-    "sit", "stand", "lose", "pay", "meet", "include", "continue",
-    "set", "learn", "change", "lead", "understand", "watch", "follow",
-    "stop", "create", "speak", "read", "allow", "add", "spend",
-    "grow", "open", "walk", "win", "offer", "remember", "consider",
-    "appear", "buy", "wait", "serve", "die", "send", "expect",
-    "build", "stay", "fall", "cut", "reach", "kill", "remain",
-    "suggest", "raise", "pass", "sell", "require", "report",
-    "decide", "pull", "develop",
-    "time", "year", "years", "people", "way", "day", "days",
-    "man", "men", "woman", "women", "child", "children",
-    "world", "life", "hand", "part", "place", "case", "week",
-    "company", "system", "program", "question", "work",
-    "government", "number", "night", "point", "home", "water",
-    "room", "mother", "area", "money", "story", "fact", "month",
-    "lot", "right", "study", "book", "eye", "job", "word",
-    "business", "issue", "side", "kind", "head", "house",
-    "service", "friend", "father", "power", "hour", "game",
-    "line", "end", "member", "law", "car", "city", "community",
-    "name", "president", "team", "minute", "idea", "body",
-    "information", "back", "parent", "face", "others", "level",
-    "office", "door", "health", "person", "art", "war", "history",
-    "party", "result", "change", "morning", "reason", "research",
-    "girl", "guy", "moment", "air", "teacher", "force", "education",
-    "foot", "boy", "age", "policy", "process", "music", "market",
-    "sense", "thing", "things", "nothing", "everything", "something",
-    "anything", "someone", "anyone", "everyone", "nobody",
-    "every", "all", "some", "any", "no",
-    "much", "little", "lot", "few", "less", "least",
-    "able", "free", "full", "sure", "hard", "simple", "clear",
-    "different", "important", "possible", "public", "real",
-    "whole", "special", "easy", "strong", "common", "general",
-    "certain", "main", "major", "basic", "normal", "natural",
-    "particular", "current", "local", "social", "physical",
-}
 
 def _is_meaningful_tag(tag: str) -> bool:
     """检查 tag 是否足够有意义
 
     纯中文：> 2 汉字
-    纯英文：不在常见英文词列表中（介词/连词/冠词/前500常见词）
+    纯英文：不在泛词列表中（GENERIC_WORDS，含冠词/代词/介词/连词/常见动词等）
     中英混合：> 8 字节 且 ≥ 2 个分词
     """
     if not tag or len(tag) < 2:
@@ -383,18 +333,11 @@ def _is_meaningful_tag(tag: str) -> bool:
     if has_chinese:
         return len(chinese_chars) > 2
     if has_english:
-        return tag.lower() not in TOP_COMMON_ENGLISH_WORDS
+        return tag.lower() not in GENERIC_WORDS
     return False
 
 
 def parse_frontmatter(text: str):
-    m = re.match(r"^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---", text.lstrip("\ufeff"))
-    if not m:
-        return None, text
-    try:
-        meta = yaml.safe_load(m.group(1)) or {}
-    except yaml.YAMLError:
-        meta = {}
-    body_start = m.end()
-    body = text.lstrip("\ufeff")[body_start:]
-    return meta, body
+    from sidecar.textutils import parse_frontmatter as _parse_frontmatter
+
+    return _parse_frontmatter(text)

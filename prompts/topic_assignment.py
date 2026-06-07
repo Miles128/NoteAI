@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/topic_assignment.yaml 优先加载，本文件中的常量仅作备用参考
 TOPIC_SUGGESTION_PROMPT = """你是一个文档分类专家。请根据以下文章标题和标签，为它推荐 2-4 个合适的主题分类。
 
 要求：

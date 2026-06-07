@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/unified.yaml 优先加载，本文件中的常量仅作备用参考
 # 统一的内容处理提示词模板
 
 

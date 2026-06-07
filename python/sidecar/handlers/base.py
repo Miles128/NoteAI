@@ -1,17 +1,5 @@
 
-import warnings
-
 from sidecar.pending_topics import load_pending_topics, save_pending_topics
-
-_PROXY_ALLOWED = {
-    '_send_response', '_send_progress', '_start_task', '_resolve_path',
-    '_start_workspace_watcher', '_stop_watcher', '_invalidate_cache',
-    '_cached_or_compute', '_auto_process_md_file',
-    '_do_cascade_survey_update', '_batch_auto_assign_topics',
-    '_do_file_added_cascade',
-    'web_downloader', 'file_converter', 'file_previewer', 'topic_extractor',
-    'note_integration',
-}
 
 
 class BaseHandler:
@@ -97,19 +85,6 @@ class BaseHandler:
     @property
     def note_integration(self):
         return self._server.note_integration
-
-    def __getattr__(self, name):
-        if name.startswith('_') and name not in _PROXY_ALLOWED:
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-        if name in _PROXY_ALLOWED:
-            warnings.warn(
-                f"Accessing '{name}' via __getattr__ proxy is deprecated; "
-                f"use the explicit property on {type(self).__name__} instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            return getattr(self._server, name)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
     @staticmethod
     def _parse_frontmatter(md_text: str) -> dict:

@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-from config.settings import config
+from config import config
 
 class AppLogger:
     """应用日志管理器（线程安全单例）"""

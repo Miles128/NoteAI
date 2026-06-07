@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/abstract.yaml 优先加载，本文件中的常量仅作备用参考
 ABSTRACT_PROMPT = """你是一个知识管理助手。请根据以下文章列表，生成一份简洁的结构化综述。
 
 要求：

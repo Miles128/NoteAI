@@ -1,9 +1,9 @@
 import json
-import sys
 import threading
 from pathlib import Path
 
 from config import config
+from utils.logger import logger
 
 _LOCK = threading.Lock()
 _MAX_LONG_MEMORY_CHARS = 1500
@@ -65,7 +65,7 @@ def save_short_memory(content):
 
 
 def extract_user_info_sync(message):
-    from prompts.rag_assistant import USER_INFO_EXTRACT_PROMPT
+    from prompts import USER_INFO_EXTRACT_PROMPT
     from utils.llm_utils import create_llm
 
     prompt = USER_INFO_EXTRACT_PROMPT.format(message=message)
@@ -77,8 +77,7 @@ def extract_user_info_sync(message):
         if text and text != "无":
             return text
     except Exception as e:
-        sys.stderr.write(f"[rag/memory] extract_user_info_sync error: {e}\n")
-        sys.stderr.flush()
+        logger.error(f"[rag/memory] extract_user_info_sync error: {e}")
     return ""
 
 
@@ -107,7 +106,7 @@ def update_long_memory(user_message):
         combined = current + "\n" + new_info if current else new_info
 
         if len(combined) > _MAX_LONG_MEMORY_CHARS:
-            from prompts.rag_assistant import LONG_MEMORY_COMPRESS_PROMPT
+            from prompts import LONG_MEMORY_COMPRESS_PROMPT
             combined = compress_text_sync(combined, LONG_MEMORY_COMPRESS_PROMPT)
 
         save_long_memory(combined)
@@ -128,7 +127,7 @@ def update_short_memory(chat_history):
                 lines.append(f"助手: {content}")
         full_text = "\n".join(lines)
 
-        from prompts.rag_assistant import MEMORY_COMPRESS_PROMPT
+        from prompts import MEMORY_COMPRESS_PROMPT
         compressed = compress_text_sync(full_text, MEMORY_COMPRESS_PROMPT)
         save_short_memory(compressed)
 

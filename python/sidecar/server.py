@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from config import config, is_ignored_dir
-from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER
+from config.settings import NOTES_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
@@ -20,7 +20,6 @@ from sidecar.handlers import (
     IngestHandler,
     KbHandler,
     IntelHandler,
-    IntelTopicHandler,
     LinksHandler,
     RagHandler,
     TagsHandler,
@@ -29,7 +28,6 @@ from sidecar.handlers import (
     WorkspaceHandler,
 )
 from sidecar.schema_manager import ensure_schema
-from sidecar.textutils import parse_frontmatter
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
@@ -37,12 +35,11 @@ from sidecar.service_context import ServiceContext
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger
 from utils.topic_assigner import (
-    _check_topic_needs_processing,
-    auto_assign_topic_for_file,
-    move_file_to_notes_topic_folder,
+    auto_process_md_file,
+)
+from sidecar.wiki_utils import (
     sync_wiki_with_files,
 )
-from utils.wiki_manager import _write_file_topic_from_folder, topic_from_notes_path
 from utils.ttl_cache import TTLCache
 
 WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
@@ -79,7 +76,6 @@ class SidecarServer(PathHelpersMixin):
         self._topics_handler = TopicsHandler(self)
         self._links_handler = LinksHandler(self)
         self._intel_handler = IntelHandler(self)
-        self._intel_topic_handler = IntelTopicHandler(self)
         self._rag_handler = RagHandler(self)
         self._cloud_sync_handler = CloudSyncHandler(self)
         self._ingest_handler = IngestHandler(self)
@@ -99,7 +95,6 @@ class SidecarServer(PathHelpersMixin):
         self._topics_handler.register_routes_3tier(self._router)
         self._links_handler.register_routes(self._router)
         self._intel_handler.register_routes(self._router)
-        self._intel_topic_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
         self._cloud_sync_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
@@ -153,7 +148,6 @@ class SidecarServer(PathHelpersMixin):
             ensure_schema(workspace)
             from sidecar.schema_manager import needs_schema_setup
             if not needs_schema_setup(workspace):
-                from utils.wiki_manager import sync_wiki_with_files
                 sync_wiki_with_files()
                 logger.info("[startup] WIKI.md synced with workspace")
             else:
@@ -174,11 +168,10 @@ class SidecarServer(PathHelpersMixin):
         except ImportError:
             if not SidecarServer._watchdog_missing_logged:
                 SidecarServer._watchdog_missing_logged = True
-                sys.stderr.write(
+                logger.warning(
                     "[sidecar] watchdog 未安装，工作区文件变更不会触发 UI 自动刷新。"
-                    " 请安装项目依赖（含 watchdog）：uv sync 或 pip install -e .\n"
+                    " 请安装项目依赖（含 watchdog）：uv sync 或 pip install -e ."
                 )
-                sys.stderr.flush()
             return
 
         self._stop_watcher()
@@ -336,84 +329,15 @@ class SidecarServer(PathHelpersMixin):
             self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change)
             self._watcher_debounce_timer.start()
 
-    def _auto_process_md_file(self, file_path):  # noqa: PLR0912
-        path = Path(file_path)
-        try:
-            text = path.read_text(encoding='utf-8')
-        except Exception as e:
-            logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
-            return
+    def _auto_process_md_file(self, file_path):
+        def _send_event(event_dict):
+            self._send_response({"id": "event", "result": event_dict})
 
-        meta, body = parse_frontmatter(text)
+        def _mark_wiki_sync():
+            with self._watcher_debounce_lock:
+                self._watcher_needs_wiki_sync = True
 
-        folder_topic = topic_from_notes_path(path)
-        if folder_topic:
-            file_topic = meta.get("topic") if meta else None
-            if isinstance(file_topic, list):
-                file_topic = file_topic[0] if len(file_topic) == 1 else None
-            if isinstance(file_topic, str):
-                file_topic = file_topic.strip() or None
-            if meta is None or _check_topic_needs_processing(meta) or file_topic != folder_topic:
-                try:
-                    if _write_file_topic_from_folder(path, folder_topic):
-                        with self._watcher_debounce_lock:
-                            self._watcher_needs_wiki_sync = True
-                except Exception as e:
-                    logger.warning(f"[watcher] align topic from folder failed for {file_path}: {e}\n")
-            return
-
-        if meta is None or _check_topic_needs_processing(meta):
-            try:
-                result = auto_assign_topic_for_file(file_path)
-                if result and result.get("status") == "auto_assigned" and result.get("topic"):
-                    sync_wiki_with_files()
-                    self._send_response({
-                        "id": "event",
-                        "result": {
-                            "type": "auto_topic_assigned",
-                            "file": file_path,
-                            "topic": result["topic"],
-                        },
-                    })
-            except Exception as e:
-                logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
-            return
-
-        file_topic = meta.get('topic') if meta else None
-        if isinstance(file_topic, list):
-            file_topic = file_topic[0] if len(file_topic) == 1 else None
-
-        if not file_topic:
-            return
-
-        workspace = config.workspace_path
-        filename = Path(file_path).stem
-
-        is_survey = filename.endswith('综述') or filename.endswith('_综述')
-        if is_survey:
-            expected_dir = Path(workspace) / ABSTRACT_FOLDER / file_topic
-        else:
-            expected_dir = Path(workspace) / NOTES_FOLDER / file_topic
-
-        try:
-            in_correct_folder = Path(file_path).is_relative_to(expected_dir)
-        except AttributeError:
-            in_correct_folder = str(Path(file_path)).startswith(str(expected_dir))
-
-        if not in_correct_folder and not is_survey:
-            move_result = move_file_to_notes_topic_folder(file_path, file_topic)
-            if move_result.get("success"):
-                new_path = move_result.get("new_path", "")
-                sync_wiki_with_files()
-                self._send_response({
-                    "id": "event",
-                    "result": {
-                        "type": "auto_file_moved",
-                        "file": file_path,
-                        "topic": file_topic,
-                        "new_path": new_path,
-                    },
-                })
+        auto_process_md_file(file_path, send_event=_send_event, mark_wiki_sync=_mark_wiki_sync)
 
     def _emit_workspace_change(self):
         self._invalidate_cache()

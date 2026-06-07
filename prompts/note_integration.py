@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/note_integration.yaml 优先加载，本文件中的常量仅作备用参考
 TOPIC_NOTE_GENERATION_PROMPT = """你是一位专业的知识整理专家。请基于以下内容，为主题「{topic_name}」撰写一篇结构清晰、内容详实的Markdown笔记。
 
 原始内容：

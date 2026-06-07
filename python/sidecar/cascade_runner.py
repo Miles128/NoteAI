@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -19,6 +18,7 @@ from sidecar.cascade import (
     update_existing_survey,
 )
 from sidecar.schema_validator import check_wiki_writable
+from utils.logger import logger
 
 MAX_RETRIES = 3
 RETRY_DELAY_SEC = 2.0
@@ -129,7 +129,7 @@ def run_cascade_survey_update(
             last_error = result.get("message", "综述更新失败")
         except Exception as e:
             last_error = str(e)
-            sys.stderr.write(f"[cascade_runner] attempt {attempt} failed for {topic}: {e}\n")
+            logger.error(f"[cascade_runner] attempt {attempt} failed for {topic}: {e}")
 
         if attempt < MAX_RETRIES:
             time.sleep(RETRY_DELAY_SEC)

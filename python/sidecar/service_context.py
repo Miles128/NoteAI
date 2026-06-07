@@ -11,16 +11,8 @@ class ServiceContext:
     whatever they need without relying on module-level globals.
     """
 
-    __slots__ = ("config", "logger", "cache", "services")
+    __slots__ = ("config", "logger")
 
     def __init__(self, config: Any, logger: Any):
         self.config = config
         self.logger = logger
-        self.cache: dict = {}
-        self.services: dict = {}
-
-    def register_service(self, name: str, instance: Any) -> None:
-        self.services[name] = instance
-
-    def get_service(self, name: str) -> Any:
-        return self.services.get(name)

@@ -28,7 +28,6 @@
     <script src="lib/tiptap-bundle.js"></script>
 
     <script type="module" src="js/main.mjs"></script>
-    <link rel="stylesheet" href="css/topic-3tier.css">
 </head>
 <body>
     <!-- 早于模块脚本：避免首屏点在 HTML onclick 上对 toggleSidebar 等产生 ReferenceError -->
@@ -286,55 +285,39 @@
                 </div>
                 <div class="graph-panel" id="graph-panel" style="display: none;">
                     <div class="graph-panel-header">
-                        <div class="graph-header-toolbar">
-                            <div class="graph-stats-bar">
-                                <span class="graph-stats-item"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>
-                                <span class="graph-stats-sep" aria-hidden="true">·</span>
-                                <span class="graph-stats-item"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
-                                <span class="graph-stats-sep" aria-hidden="true">·</span>
-                                <span class="graph-stats-item" data-i18n-title="graph.stats.surveyHint"><span data-i18n="graph.stats.surveyLabel"></span><span id="graph-stat-survey">—</span></span>
-                                <span class="graph-stats-sep" aria-hidden="true">·</span>
-                                <span class="graph-stats-item" data-i18n-title="graph.stats.avgLinksHint"><span data-i18n="graph.stats.avgLinksLabel"></span><span id="graph-stat-links-avg">—</span></span>
-                                <span class="graph-stats-sep" aria-hidden="true">·</span>
-                                <span class="graph-stats-item" data-i18n-title="graph.stats.lintHint">Lint <span id="graph-stat-lint">—</span></span>
+                        <div class="graph-stats-bar">
+                            <span class="graph-stat-chip"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>
+                            <span class="graph-stats-sep" aria-hidden="true">·</span>
+                            <span class="graph-stat-chip"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
+                        </div>
+                        <div class="graph-header-controls">
+                            <div class="graph-filter-bar" id="graph-filter-bar">
+                                <button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic" data-i18n-title="graph.filter.topic"></button>
+                                <button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag" data-i18n-title="graph.filter.tag"></button>
+                                <button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all" data-i18n-title="graph.filter.all"></button>
                             </div>
-                            <div class="graph-header-controls">
-                                <div class="graph-filter-bar" id="graph-filter-bar">
-                                    <button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic"></button>
-                                    <button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag"></button>
-                                    <button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all"></button>
-                                </div>
-                                <div class="graph-toolbar">
-                                    <button class="graph-toolbar-btn" id="graph-toggle-filenames" onclick="graphToggleFilenames()" data-i18n-title="graph.toggleFilenames">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                    </button>
-                                    <button class="graph-toolbar-btn" onclick="graphZoomIn()" data-i18n-title="graph.zoomIn">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                                    </button>
-                                    <button class="graph-toolbar-btn" onclick="graphZoomOut()" data-i18n-title="graph.zoomOut">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                                    </button>
-                                    <button class="graph-toolbar-btn" onclick="graphReplay()" data-i18n-title="graph.replay">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                    </button>
-                                    <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" data-i18n-title="graph.refresh">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                                    </button>
-                                    <button class="graph-toolbar-btn" id="graph-layout-settings-btn" onclick="graphOpenLayoutSettings()" data-i18n-title="graph.layoutSettings">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-                                    </button>
-                                </div>
+                            <div class="graph-toolbar">
+                                <button class="graph-toolbar-btn" id="graph-toggle-filenames" onclick="graphToggleFilenames()" data-i18n-title="graph.toggleFilenames">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" onclick="graphReplay()" data-i18n-title="graph.replay">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" data-i18n-title="graph.refresh">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                </button>
+                                <button class="graph-toolbar-btn" id="graph-layout-settings-btn" onclick="graphOpenLayoutSettings()" data-i18n-title="graph.layoutSettings">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                                </button>
                             </div>
                         </div>
-                        <button class="graph-panel-close" onclick="toggleGraphPanel()" data-i18n-title="graph.close">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
                     </div>
                     <div class="graph-panel-main">
                         <div class="graph-panel-body" id="graph-panel-body">
                             <div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>
                             <div class="graph-empty" id="graph-empty" style="display:none;" data-i18n="graph.empty"></div>
                         </div>
+                        <div class="graph-legend-float" id="graph-legend" aria-label="Legend"></div>
                         <aside id="graph-settings-sidebar" class="graph-settings-sidebar" hidden aria-labelledby="graph-settings-title">
                             <div class="graph-settings-header">
                                 <h3 id="graph-settings-title" data-i18n="graph.layoutSettings"></h3>
@@ -348,9 +331,6 @@
                                 <button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()" data-i18n="common.apply"></button>
                             </div>
                         </aside>
-                    </div>
-                    <div class="graph-panel-footer">
-                        <div class="graph-legend" id="graph-legend"></div>
                     </div>
                 </div>
 
@@ -1037,7 +1017,6 @@
         <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
     </div>
     <script src="js/error-handler.js"></script>
-    <script src="js/topic-tree-3tier.js"></script>
     <script src="js/G3.js"></script>
 </body>
 </html>

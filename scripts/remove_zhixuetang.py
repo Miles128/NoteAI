@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import config, is_ignored_dir
+from config import config
+from config.settings import is_ignored_dir
 
 
 def remove_zhixuetang(text):

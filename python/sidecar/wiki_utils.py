@@ -45,6 +45,54 @@ def parse_wiki_structure() -> list:
     return _parse_wiki_structure_full()
 
 
+def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
+    from utils.topic_wiki_manager import add_file_to_wiki_topic as _impl
+
+    return _impl(file_rel_path, topic, file_title)
+
+
+def remove_file_from_wiki_topic(file_rel_path):
+    from utils.topic_wiki_manager import remove_file_from_wiki_topic as _impl
+
+    return _impl(file_rel_path)
+
+
+def create_topic(topic_name):
+    from utils.topic_wiki_manager import create_topic as _impl
+
+    return _impl(topic_name)
+
+
+def rename_topic(old_topic, new_topic):
+    from utils.topic_wiki_manager import rename_topic as _impl
+
+    return _impl(old_topic, new_topic)
+
+
+def delete_topic(topic_name):
+    from utils.topic_wiki_manager import delete_topic as _impl
+
+    return _impl(topic_name)
+
+
+def sync_wiki_with_files():
+    from utils.topic_wiki_manager import sync_wiki_with_files as _impl
+
+    return _impl()
+
+
+def write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
+    from utils.topic_wiki_manager import _write_file_topic_from_folder as _impl
+
+    return _impl(file_path, topic)
+
+
+def topic_from_notes_path(file_path: str | Path) -> str | None:
+    from utils.topic_wiki_manager import topic_from_notes_path as _impl
+
+    return _impl(file_path)
+
+
 def read_wiki_text(workspace_str: str | Path | None = None) -> str | None:
     wiki_path = resolve_wiki_path(workspace_str)
     if not wiki_path.exists():

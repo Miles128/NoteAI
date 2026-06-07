@@ -311,7 +311,7 @@ def fix_existing_survey_topics() -> dict:
 
 
 def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
-    from prompts.cascade import CASCADE_SURVEY_NEW_PROMPT
+    from prompts import CASCADE_SURVEY_NEW_PROMPT
     from utils.llm_utils import APIConfigError, check_api_config, create_llm
 
     try:
@@ -360,7 +360,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
 
 def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> dict:
-    from prompts.cascade import CASCADE_SURVEY_UPDATE_PROMPT
+    from prompts import CASCADE_SURVEY_UPDATE_PROMPT
     from utils.llm_utils import APIConfigError, check_api_config, create_llm
 
     survey_path = get_survey_path(topic)

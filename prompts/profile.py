@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/profile.yaml 优先加载，本文件中的常量仅作备用参考
 PROFILE_EXTRACT_PROMPT = """从用户消息中提取结构化的个人信息。输出 JSON 格式，没有相关信息时对应字段为 null 或空数组。
 
 ```json

@@ -10,7 +10,7 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.textutils import parse_frontmatter
+from sidecar.textutils import parse_frontmatter, write_frontmatter
 from utils.wiki_manager import topic_from_notes_path
 
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
@@ -69,13 +69,10 @@ def _wikilink_target_exists(target: str, names: set[str]) -> bool:
 
 def _write_preserving_frontmatter(path: Path, new_body: str) -> None:
     text = path.read_text(encoding="utf-8")
-    bom = "\ufeff" if text.startswith("\ufeff") else ""
-    raw = text[1:] if bom else text
-    match = re.match(r"^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---", raw)
-    if match:
-        path.write_text(bom + raw[: match.end()] + new_body, encoding="utf-8")
-    else:
-        path.write_text(bom + new_body, encoding="utf-8")
+    had_bom = text.startswith("\ufeff")
+    meta, _ = parse_frontmatter(text)
+    new_text = write_frontmatter(meta, new_body, had_bom=had_bom)
+    path.write_text(new_text, encoding="utf-8")
 
 
 def _remove_broken_wikilinks(body: str, names: set[str]) -> tuple[str, list[str]]:

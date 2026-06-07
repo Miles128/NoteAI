@@ -500,7 +500,7 @@ def smart_format_markdown(content: str, title: str = "") -> str:
     if h2_count >= 2:
         return content
 
-    from config.settings import config
+    from config import config
     if config.api_key:
         result = reformat_markdown_with_llm(content)
         if result != content:

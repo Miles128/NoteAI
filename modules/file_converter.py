@@ -6,7 +6,8 @@ from typing import Optional, Callable, Dict, List
 from pathlib import Path
 from abc import ABC, abstractmethod
 
-from config.settings import config, RAW_FOLDER
+from config import config
+from config.settings import RAW_FOLDER
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, remove_images_from_markdown,
@@ -596,7 +597,7 @@ class FileConverterManager:
                     from utils.llm_utils import check_api_config, call_llm_raw
                     ok, msg = check_api_config()
                     if ok:
-                        from prompts.unified import GENERAL_CONTENT_TO_MARKDOWN_PROMPT
+                        from prompts import GENERAL_CONTENT_TO_MARKDOWN_PROMPT
                         prompt = GENERAL_CONTENT_TO_MARKDOWN_PROMPT.format(source_type=ext, content=markdown_content[:6000])
                         rewritten = call_llm_raw(prompt, temperature=0.3)
                         if rewritten and len(rewritten.strip()) > len(markdown_content.strip()) * 0.3:

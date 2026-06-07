@@ -1,6 +1,7 @@
 async function loadModules() {
     await Promise.all([
         import('./utils.js'),
+        import('./window.js'),
         import('./api.js'),
         import('./state.js'),
     ]);
@@ -155,12 +156,20 @@ async function loadModules() {
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
+    await import('./rewrite.js');
+    const { RewriteManager } = window;
+    window.RewriteManager = RewriteManager;
+    window.onLLMRewrite = RewriteManager.onLLMRewrite;
+    window.onRewriteConfirm = RewriteManager.onRewriteConfirm;
+    window.onRewriteCancel = RewriteManager.onRewriteCancel;
+
+    await import('./event-listeners.js');
+    const { EventListeners } = window;
+    window.EventListeners = EventListeners;
+
     await import('./app.js');
-    const { App, onLLMRewrite, onRewriteConfirm, onRewriteCancel, importFiles } = window;
+    const { App, importFiles } = window;
     window.App = App;
-    window.onLLMRewrite = onLLMRewrite;
-    window.onRewriteConfirm = onRewriteConfirm;
-    window.onRewriteCancel = onRewriteCancel;
     window.importFiles = importFiles;
 
     document.dispatchEvent(new Event('DOMContentLoaded'));

@@ -1,7 +1,6 @@
-import sys
-
 from config.constants import TOPIC_SEP
 from config.settings import config
+from utils.logger import logger
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
 
 
@@ -77,7 +76,7 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
         return []
 
     from utils.llm_utils import call_llm
-    from prompts.topic_assignment import TOPIC_SUGGESTION_PROMPT
+    from prompts import TOPIC_SUGGESTION_PROMPT
 
     tags_str = ", ".join(tags) if tags else "无"
     topic_list_str = "\n".join(f"- {t}" for t in topic_names)
@@ -110,8 +109,7 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
                     suggested.append(line)
         return suggested[:4]
     except Exception as e:
-        sys.stderr.write(f"[llm_suggest_topic] failed: {e}\n")
-        sys.stderr.flush()
+        logger.error(f"[llm_suggest_topic] failed: {e}")
         return []
 
 

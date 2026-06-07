@@ -10,7 +10,7 @@ from typing import Any
 
 from config import config
 from config.constants import TOPIC_SEP
-from prompts.agent import (
+from prompts import (
     AGENT_SYSTEM_PROMPT,
     AGENT_TOOL_RESULT_PROMPT,
     ASSISTANT_READONLY_PROMPT,
@@ -221,7 +221,7 @@ def _tool_list_topics(_args: dict[str, Any]) -> dict[str, Any]:
 def _tool_create_topic(args: dict[str, Any]) -> dict[str, Any]:
     from sidecar.cascade import ensure_topic_folder
     from sidecar.schema_validator import require_topic
-    from utils.wiki_manager import create_topic as wiki_create_topic
+    from sidecar.wiki_utils import create_topic as wiki_create_topic
 
     name = (args.get("name") or "").strip()
     parent = (args.get("parent") or "").strip()

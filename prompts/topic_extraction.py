@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/topic_extraction.yaml 优先加载，本文件中的常量仅作备用参考
 TOPIC_EXTRACTION_BY_FILENAMES_PROMPT = """你是一位专业的知识整理专家。以下是多个 Markdown 文档的文件名列表，这些文件来自两个文件夹：
 - [Abstract]：已经整理好的文件
 - [Notes]：需要整理的新文件

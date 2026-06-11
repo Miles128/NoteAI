@@ -2,6 +2,7 @@ window.EventListeners = (function() { 'use strict';
 
 var _workspaceWatcherUnlisten = null;
 var _workspaceWatcherDebounce = null;
+var _hasRunInitialIngest = false;
 
 function initWorkspaceFileWatcher() {
     var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
@@ -43,17 +44,14 @@ function initWorkspaceFileWatcher() {
         _workspaceWatcherDebounce = setTimeout(function() {
             _workspaceWatcherDebounce = null;
             refreshWorkspaceViewsAfterChange();
-            if (window.IngestModule && window.IngestModule.startIngest) {
-                window.IngestModule.startIngest('incremental').catch(function(e) {
-                    console.warn('[App] watcher incremental ingest failed:', e);
-                });
-            } else if (window.api && window.api.autoConvertPending) {
-                window.api.autoConvertPending().catch(function(e) { console.warn('[App] watcher auto_convert_pending failed:', e); });
-            }
         }, 3000);
     }).then(function(unlisten) {
         _workspaceWatcherUnlisten = unlisten;
     });
+}
+
+function markInitialIngestDone() {
+    _hasRunInitialIngest = true;
 }
 
 function refreshWorkspaceViewsAfterChange() {
@@ -106,7 +104,7 @@ function refreshCurrentSidebarView(forceRefresh) {
 
 function refreshKnowledgeGraph() {
     if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
-        window.Graph3Tier.load(null, true);
+        window.Graph3Tier.load(null, false);
     }
     if (typeof window.updateHomeStats === 'function') {
         window.updateHomeStats();
@@ -234,7 +232,8 @@ return {
     initRagEventListener: initRagEventListener,
     refreshWorkspaceViewsAfterChange: refreshWorkspaceViewsAfterChange,
     refreshCurrentSidebarView: refreshCurrentSidebarView,
-    refreshKnowledgeGraph: refreshKnowledgeGraph
+    refreshKnowledgeGraph: refreshKnowledgeGraph,
+    markInitialIngestDone: markInitialIngestDone
 };
 
 })();

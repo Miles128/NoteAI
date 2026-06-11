@@ -240,11 +240,19 @@ async function runPostWorkspaceSetup() {
         }
     }
     if (window.IngestModule && window.IngestModule.startIngest) {
-        window.IngestModule.startIngest('incremental').catch(function(e) {
+        window.IngestModule.startIngest('incremental').then(function() {
+            if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
+                window.EventListeners.markInitialIngestDone();
+            }
+        }).catch(function(e) {
             console.warn('[App] start_ingest failed:', e);
         });
     } else if (window.api && window.api.autoConvertPending) {
-        window.api.autoConvertPending().catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
+        window.api.autoConvertPending().then(function() {
+            if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
+                window.EventListeners.markInitialIngestDone();
+            }
+        }).catch(function(e) { console.warn('[App] auto_convert_pending failed:', e); });
     }
 }
 

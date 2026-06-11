@@ -130,7 +130,7 @@ pub async fn open_file_in_new_window(
     let state = app.state::<AppState>();
     let safe_path = validate_workspace_path(&state, &path)?;
 
-    let builder = tauri::WebviewWindowBuilder::new(
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         window_label,
         WebviewUrl::App("index.html".into()),

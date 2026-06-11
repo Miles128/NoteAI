@@ -166,7 +166,9 @@ function initRagEventListener() {
         if (!data) return;
         if (data.type === 'progress' && data.element_id === 'rag-index') {
             if (typeof window.updateStatus === 'function') {
-                window.updateStatus(data.message || window.t('app.indexBuilding'));
+                var pct = Math.round((data.progress || 0) * 100);
+                var msg = data.message || window.t('app.indexBuilding');
+                window.updateStatus(pct > 0 ? msg + ' (' + pct + '%)' : msg);
             }
         } else if (data.type === 'progress' && data.element_id === 'survey_check') {
             if (typeof window.updateStatus === 'function') {

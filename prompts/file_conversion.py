@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/file_conversion.yaml 优先加载，本文件中的常量仅作备用参考
 PDF_TO_MARKDOWN_PROMPT = """你是一个专业的文档转换专家。请将PDF内容转换为格式规范的Markdown文档。
 
 转换要求：

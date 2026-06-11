@@ -1,9 +1,8 @@
 import json
-import sys
 import threading
 from pathlib import Path
 
-from config.settings import config
+from config import config
 from utils.logger import logger
 from utils.text_utils import parse_frontmatter
 from utils.topic_file_ops import _check_topic_needs_processing
@@ -18,6 +17,10 @@ def _get_pending_path():
     return Path(workspace) / ".pending_topics.json"
 
 
+def get_pending_path():
+    return _get_pending_path()
+
+
 def load_pending():
     with _pending_lock:
         path = _get_pending_path()
@@ -26,8 +29,7 @@ def load_pending():
         try:
             return json.loads(path.read_text(encoding='utf-8'))
         except (OSError, json.JSONDecodeError, ValueError) as e:
-            sys.stderr.write(f"[topic_assigner] load_pending failed: {e}\n")
-            sys.stderr.flush()
+            logger.error(f"[topic_assigner] load_pending failed: {e}")
             return []
 
 
@@ -77,7 +79,7 @@ def cleanup_stale_pending():
                 logger.info(f"[topic_assigner] 清理已处理待办: {file_path} 已有主题")
                 continue
         except Exception as e:
-            sys.stderr.write(f"[cleanup_stale] read failed: {e}\n"); sys.stderr.flush()
+            logger.error(f"[cleanup_stale] read failed: {e}")
         valid.append(p)
     removed = original_count - len(valid)
     if removed > 0:

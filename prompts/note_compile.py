@@ -1,4 +1,7 @@
-"""Ingest pipeline: compile converted notes into clean, objective Markdown."""
+"""Ingest pipeline: compile converted notes into clean, objective Markdown.
+
+NOTE: 运行时由 prompts/yaml/note_compile.yaml 优先加载，本文件中的常量仅作备用参考
+"""
 
 INGEST_NOTE_COMPILE_PROMPT = """你是一位专业的知识库笔记编译专家。请将以下 Markdown 正文整理为完整、可长期查阅的笔记。
 

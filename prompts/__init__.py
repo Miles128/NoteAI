@@ -1,9 +1,31 @@
+"""Prompts package — dual-track loading with clear precedence.
+
+Loading priority (resolved by prompts/loader.py):
+  1. YAML files (prompts/yaml/*.yaml) — preferred, always used when present
+  2. Python constants (prompts/*.py) — fallback, only used when no YAML match
+
+All prompts currently have both YAML and Python versions.
+At runtime, the YAML version takes precedence; the Python constant serves as
+a backup and editable reference. Edits to Python constants will NOT take effect
+if a corresponding YAML key exists.
+
+To add a new prompt:
+  - Add the key to the appropriate YAML file in prompts/yaml/
+  - Optionally mirror it as a Python constant in the matching prompts/*.py module
+"""
+
 from .loader import load_prompt, get_prompt
+
+ASSISTANT_READONLY_PROMPT = get_prompt("agent", "ASSISTANT_READONLY_PROMPT")
+AGENT_SYSTEM_PROMPT = get_prompt("agent", "AGENT_SYSTEM_PROMPT")
+AGENT_TOOL_RESULT_PROMPT = get_prompt("agent", "AGENT_TOOL_RESULT_PROMPT")
+ASSISTANT_READONLY_TOOL_RESULT_PROMPT = get_prompt("agent", "ASSISTANT_READONLY_TOOL_RESULT_PROMPT")
 
 TOPIC_NOTE_GENERATION_PROMPT = get_prompt("note_integration", "TOPIC_NOTE_GENERATION_PROMPT")
 CONTENT_SUMMARIZE_PROMPT = get_prompt("note_integration", "CONTENT_SUMMARIZE_PROMPT")
 CONTENT_COMPRESS_PROMPT = get_prompt("note_integration", "CONTENT_COMPRESS_PROMPT")
 DOC_TOPIC_MAPPING_PROMPT = get_prompt("note_integration", "DOC_TOPIC_MAPPING_PROMPT")
+INGEST_NOTE_COMPILE_PROMPT = get_prompt("note_compile", "INGEST_NOTE_COMPILE_PROMPT")
 
 TOPIC_EXTRACTION_BY_FILENAMES_PROMPT = get_prompt("topic_extraction", "TOPIC_EXTRACTION_BY_FILENAMES_PROMPT")
 TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT = get_prompt("topic_extraction", "TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT")
@@ -22,6 +44,8 @@ HYDE_PROMPT = get_prompt("rag_assistant", "HYDE_PROMPT")
 RAG_ASSISTANT_PROMPT = get_prompt("rag_assistant", "RAG_ASSISTANT_PROMPT")
 RAG_ASSISTANT_WEB_PROMPT = get_prompt("rag_assistant", "RAG_ASSISTANT_WEB_PROMPT")
 RAG_ASSISTANT_NO_CONTEXT_PROMPT = get_prompt("rag_assistant", "RAG_ASSISTANT_NO_CONTEXT_PROMPT")
+RAG_CHAT_PROMPT = get_prompt("rag_assistant", "RAG_CHAT_PROMPT")
+RAG_HYDE_PROMPT = get_prompt("rag_assistant", "RAG_HYDE_PROMPT")
 MEMORY_COMPRESS_PROMPT = get_prompt("rag_assistant", "MEMORY_COMPRESS_PROMPT")
 LONG_MEMORY_COMPRESS_PROMPT = get_prompt("rag_assistant", "LONG_MEMORY_COMPRESS_PROMPT")
 USER_INFO_EXTRACT_PROMPT = get_prompt("rag_assistant", "USER_INFO_EXTRACT_PROMPT")
@@ -30,6 +54,7 @@ FILE_OPERATION_PROMPT = get_prompt("rag_assistant", "FILE_OPERATION_PROMPT")
 
 CASCADE_SURVEY_NEW_PROMPT = get_prompt("cascade", "CASCADE_SURVEY_NEW_PROMPT")
 CASCADE_SURVEY_UPDATE_PROMPT = get_prompt("cascade", "CASCADE_SURVEY_UPDATE_PROMPT")
+SURVEY_CHAT_APPEND_PROMPT = get_prompt("cascade", "SURVEY_CHAT_APPEND_PROMPT")
 
 PROFILE_EXTRACT_PROMPT = get_prompt("profile", "PROFILE_EXTRACT_PROMPT")
 PROFILE_INFERENCE_PROMPT = get_prompt("profile", "PROFILE_INFERENCE_PROMPT")
@@ -60,10 +85,15 @@ CLOUD_SYNC_PULL_SUMMARY_PROMPT = get_prompt("cloud_sync", "CLOUD_SYNC_PULL_SUMMA
 __all__ = [
     'load_prompt',
     'get_prompt',
+    'ASSISTANT_READONLY_PROMPT',
+    'AGENT_SYSTEM_PROMPT',
+    'AGENT_TOOL_RESULT_PROMPT',
+    'ASSISTANT_READONLY_TOOL_RESULT_PROMPT',
     'TOPIC_NOTE_GENERATION_PROMPT',
     'CONTENT_SUMMARIZE_PROMPT',
     'CONTENT_COMPRESS_PROMPT',
     'DOC_TOPIC_MAPPING_PROMPT',
+    'INGEST_NOTE_COMPILE_PROMPT',
     'TOPIC_EXTRACTION_BY_FILENAMES_PROMPT',
     'TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT',
     'OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT',
@@ -77,6 +107,8 @@ __all__ = [
     'RAG_ASSISTANT_PROMPT',
     'RAG_ASSISTANT_WEB_PROMPT',
     'RAG_ASSISTANT_NO_CONTEXT_PROMPT',
+    'RAG_CHAT_PROMPT',
+    'RAG_HYDE_PROMPT',
     'MEMORY_COMPRESS_PROMPT',
     'LONG_MEMORY_COMPRESS_PROMPT',
     'USER_INFO_EXTRACT_PROMPT',
@@ -84,6 +116,7 @@ __all__ = [
     'FILE_OPERATION_PROMPT',
     'CASCADE_SURVEY_NEW_PROMPT',
     'CASCADE_SURVEY_UPDATE_PROMPT',
+    'SURVEY_CHAT_APPEND_PROMPT',
     'PROFILE_EXTRACT_PROMPT',
     'PROFILE_INFERENCE_PROMPT',
     'PROFILE_SUMMARY_PROMPT',

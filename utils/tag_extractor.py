@@ -1,5 +1,4 @@
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
@@ -108,7 +107,7 @@ def extract_tags_from_filename(file_path: str) -> List[str]:
     Returns:
         标签字符串列表
     """
-    from config.settings import config
+    from config import config
     
     if not config.workspace_path:
         return []
@@ -256,11 +255,11 @@ def _parse_yaml_value_simple(value: str) -> Any:
     try:
         return int(value)
     except ValueError as e:
-        sys.stderr.write(f"[_parse_yaml] int conversion failed: {e}\n"); sys.stderr.flush()
+        logger.warning(f"[_parse_yaml] int conversion failed: {e}")
     try:
         return float(value)
     except ValueError as e:
-        sys.stderr.write(f"[_parse_yaml] float conversion failed: {e}\n"); sys.stderr.flush()
+        logger.warning(f"[_parse_yaml] float conversion failed: {e}")
     
     return value
 

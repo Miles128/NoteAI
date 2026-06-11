@@ -129,7 +129,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
     try:
-        from prompts.rag_assistant import HYDE_PROMPT
+        from prompts import HYDE_PROMPT
         from utils.llm_utils import create_llm
 
         prompt = HYDE_PROMPT.format(query=query)

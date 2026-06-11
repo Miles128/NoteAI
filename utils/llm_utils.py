@@ -108,7 +108,7 @@ def is_network_error(exception: Exception) -> bool:
 def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
     """创建 ChatOpenAI 实例（内部复用）"""
     from langchain_openai import ChatOpenAI
-    from config.settings import config
+    from config import config
 
     kwargs = {
         "api_key": config.api_key,
@@ -237,7 +237,7 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
 
 def check_api_config() -> Tuple[bool, str]:
     """检查API配置是否完整且可用"""
-    from config.settings import config
+    from config import config
 
     if not config.api_key or not config.api_key.strip():
         return False, "API Key 未配置，请先配置 API Key"
@@ -410,7 +410,7 @@ def summarize_with_llm(content: str, target_ratio: float = 0.5) -> str:
         logger.error(f"API配置检查失败: {error_msg}")
         return content
 
-    from prompts.note_integration import CONTENT_SUMMARIZE_PROMPT
+    from prompts import CONTENT_SUMMARIZE_PROMPT
 
     try:
         return call_llm(
@@ -436,7 +436,7 @@ def compress_with_llm(content: str, compression_level: str = "medium") -> str:
         logger.error(f"API配置检查失败: {error_msg}")
         return content
 
-    from prompts.note_integration import CONTENT_COMPRESS_PROMPT
+    from prompts import CONTENT_COMPRESS_PROMPT
 
     try:
         return call_llm(
@@ -501,7 +501,7 @@ def rewrite_with_llm(content: str) -> str:
     if not is_valid:
         raise APIConfigError(error_msg)
 
-    from prompts.llm_rewrite import LLM_REWRITE_PROMPT
+    from prompts import LLM_REWRITE_PROMPT
 
     return call_llm(
         LLM_REWRITE_PROMPT,
@@ -521,7 +521,7 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
         raise APIConfigError(error_msg)
 
     from langchain_core.prompts import PromptTemplate
-    from prompts.llm_rewrite import LLM_REWRITE_PROMPT
+    from prompts import LLM_REWRITE_PROMPT
 
     llm = _create_llm(temperature=0.3)
     prompt = PromptTemplate(
@@ -549,7 +549,7 @@ def reformat_markdown_with_llm(content: str) -> str:
     if not content or not content.strip():
         return content
 
-    from config.settings import config
+    from config import config
     if not config.api_key:
         return content
 

@@ -168,7 +168,7 @@ def compile_note_file(
 
             ok, msg = check_api_config()
             if ok:
-                from prompts.note_compile import INGEST_NOTE_COMPILE_PROMPT
+                from prompts import INGEST_NOTE_COMPILE_PROMPT
 
                 rules = _load_project_rules(workspace)
                 prompt = INGEST_NOTE_COMPILE_PROMPT.format(

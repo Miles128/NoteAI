@@ -4,19 +4,9 @@ import re
 import threading
 from pathlib import Path
 
-from config import config, is_ignored_dir
+from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.handlers.base import BaseHandler
-
-RAG_EXCLUDED_DIRS = {
-    ".git",
-    ".obsidian",
-    ".trash",
-    ".rag_index",
-    ".ai_memory",
-    WORKSPACE_APP_FOLDER,
-    RAG_INDEX_FOLDER,
-}
 
 try:
     import jieba  # noqa: F811
@@ -38,9 +28,7 @@ class RagHandler(BaseHandler):
         if not config.rag_enabled:
             return {"success": False, "message": self._rag_disabled_message()}
 
-        from sidecar.rag.chunker import chunk_file
-        from sidecar.rag.embedder import encode_documents
-        from sidecar.rag.index import build_index
+        from sidecar.rag.retriever import rebuild_index
 
         workspace = params.get("workspace", config.workspace_path)
 
@@ -51,43 +39,26 @@ class RagHandler(BaseHandler):
             try:
                 self._send_progress("rag-index-progress", 0, "正在构建知识索引...")
 
-                ws_path = Path(workspace)
-                all_chunks = []
-                file_names = []
-                for md_file in ws_path.rglob("*.md"):
-                    if md_file.name.startswith(".") or "wiki" in md_file.parts:
-                        continue
-                    rel_parts = md_file.relative_to(ws_path).parts
-                    if any(part in RAG_EXCLUDED_DIRS or is_ignored_dir(part) for part in rel_parts):
-                        continue
-                    try:
-                        text = md_file.read_text(encoding="utf-8")
-                        chunks = chunk_file(str(md_file), text)
-                        if chunks:
-                            all_chunks.extend(chunks)
-                            file_names.extend([str(md_file.relative_to(ws_path))] * len(chunks))
-                    except Exception:
-                        continue
-                    self._send_progress("rag-index-progress", 30, f"已读取: {md_file.name}")
+                def progress_cb(cur, tot, msg):
+                    if "Embedding" in msg or "embedding" in msg.lower():
+                        self._send_progress("rag-index-progress", 40, msg)
+                    elif "索引" in msg:
+                        self._send_progress("rag-index-progress", 50, msg)
+                    else:
+                        self._send_progress("rag-index-progress", 30, msg)
 
-                if not all_chunks:
+                result = rebuild_index(progress_callback=progress_cb)
+
+                if result.get("success") is False:
                     self._send_response({
                         "id": "event",
-                        "result": {"type": "rag_index_built", "success": False, "message": "未找到可索引的内容"}
+                        "result": {"type": "rag_index_built", "success": False, "message": result.get("message", "索引构建失败")}
                     })
-                    return
-
-                self._send_progress("rag-index-progress", 40, "正在生成 Embedding...")
-                embeddings = encode_documents([c["content"] for c in all_chunks])
-
-                self._send_progress("rag-index-progress", 50, "正在构建索引...")
-                build_index(workspace, all_chunks, embeddings,
-                            progress_callback=lambda cur, tot, msg: self._send_progress("rag-index-progress", 50 + int(50 * cur / max(tot, 1)), msg))
-
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "rag_index_built", "success": True, "indexed": len(all_chunks)}
-                })
+                else:
+                    self._send_response({
+                        "id": "event",
+                        "result": {"type": "rag_index_built", "success": True, "indexed": result.get("chunk_count", 0)}
+                    })
             except Exception as e:
                 self._send_response({
                     "id": "event",
@@ -195,15 +166,6 @@ class RagHandler(BaseHandler):
         return {"success": False, "message": message, "error_emitted": True}
 
     def _rag_chat(self, params):
-        from prompts.rag_assistant import RAG_CHAT_PROMPT
-        from sidecar.rag.memory import load_short_memory, save_short_memory
-        from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
-
-        if config.rag_enabled:
-            from sidecar.rag.retriever import retrieve as search_fn
-        else:
-            from sidecar.classic_retriever import retrieve as search_fn
-
         question = (params.get("question") or "").strip()
         if not question:
             return {"success": False, "message": "问题不能为空"}
@@ -211,13 +173,11 @@ class RagHandler(BaseHandler):
         if not self._rag_chat_lock.acquire(blocking=False):
             return {"success": False, "message": "已有对话正在进行，请稍候"}
 
+        use_vector_rag = config.rag_enabled
+
         def _worker() -> None:
             try:
-                result = self._do_rag_chat_inner(
-                    params, search_fn, load_short_memory, save_short_memory,
-                    call_llm_raw_stream, check_api_config, APIConfigError, RAG_CHAT_PROMPT,
-                    use_vector_rag=config.rag_enabled,
-                )
+                result = self._do_rag_chat_inner(params, use_vector_rag=use_vector_rag)
                 if isinstance(result, dict) and not result.get("success", True):
                     if not result.get("error_emitted"):
                         self._emit_rag_error(result.get("message", "请求失败"))
@@ -235,9 +195,16 @@ class RagHandler(BaseHandler):
         save_short_memory("")
         return {"success": True}
 
-    def _do_rag_chat_inner(self, params, search_fn, load_memory_fn, save_memory_fn,
-                           call_llm_raw_stream, check_api_config, APIConfigError,
-                           RAG_CHAT_PROMPT, *, use_vector_rag: bool = True):
+    def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
+        from prompts import RAG_CHAT_PROMPT
+        from sidecar.rag.memory import load_short_memory, save_short_memory
+        from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
+
+        if use_vector_rag:
+            from sidecar.rag.retriever import retrieve as search_fn
+        else:
+            from sidecar.classic_retriever import retrieve as search_fn
+
         question = params.get("question", "").strip()
         if not question:
             return {"success": False, "message": "问题不能为空"}
@@ -290,7 +257,7 @@ class RagHandler(BaseHandler):
         if tool_context:
             context = (context + "\n\n" + tool_context).strip() if context else tool_context
 
-        history = load_memory_fn() or ""
+        history = load_short_memory() or ""
         compressed = self._extractive_compress(history)
 
         prompt = RAG_CHAT_PROMPT.format(
@@ -336,7 +303,7 @@ class RagHandler(BaseHandler):
             if history
             else f"用户: {question}\n助手: {display_answer}"
         )
-        save_memory_fn(updated_history)
+        save_short_memory(updated_history)
 
         from sidecar.rag.memory import update_long_memory
         try:
@@ -355,7 +322,7 @@ class RagHandler(BaseHandler):
         return {"success": True, "suggest_save_note": suggest_save_note}
 
     def _generate_hyde(self, question):
-        from prompts.rag_assistant import RAG_HYDE_PROMPT
+        from prompts import RAG_HYDE_PROMPT
         from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
 
         try:

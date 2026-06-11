@@ -199,6 +199,14 @@ Aligned with [docs/PRD.md](./docs/PRD.md) — evolve from batch tool to **contin
 | 🎨 P1 | Main-area state machine · unified inbox · clickable citations · onboarding |
 | 🟢 P2 | Contradiction detection · graph + editor coexist · Vite bundle (later) |
 
+### 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) to get started.
+
+- Report Bugs: [Issue Tracker](https://github.com/Miles128/NoteAI/issues)
+- Submit PRs: [Pull Requests](https://github.com/Miles128/NoteAI/pulls)
+- Code of Conduct: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+
 ### 👤 Author & License
 
 **Sihai (四海)** · [MIT License](./LICENSE)
@@ -398,6 +406,14 @@ pytest
 | 🟡 P1 | 保存时交叉引用 · 搜索增强 · WIKI 摘要索引 · 云盘产品化 |
 | 🎨 P1 | 主区域状态机 · 统一待处理 · 小忆引用可点击 · 首次引导 |
 | 🟢 P2 | 矛盾检测 · 图谱与编辑并存 · 前端 Vite 打包（不急） |
+
+### 🤝 贡献
+
+欢迎贡献！请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md) 了解如何参与。
+
+- 报告 Bug: [Issue Tracker](https://github.com/Miles128/NoteAI/issues)
+- 提交 PR: [Pull Requests](https://github.com/Miles128/NoteAI/pulls)
+- 行为准则: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ### 👤 作者与许可
 

@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 
-from config.settings import config
+from config import config
 from utils.logger import logger
 from utils.helpers import (
     sanitize_filename, clean_text, extract_title_from_markdown
@@ -13,7 +13,7 @@ from utils.llm_utils import (
     check_api_config, APIConfigError, NetworkError, is_network_error
 )
 from utils.tag_extractor import process_and_tag_file_with_yaml
-from prompts.note_integration import TOPIC_NOTE_GENERATION_PROMPT, DOC_TOPIC_MAPPING_PROMPT
+from prompts import TOPIC_NOTE_GENERATION_PROMPT, DOC_TOPIC_MAPPING_PROMPT
 
 class NoteIntegration:
     """笔记整合器"""

@@ -3,7 +3,6 @@ from .base import BaseHandler
 from .config_handler import ConfigHandler
 from .files_handler import FilesHandler
 from .intel_handler import IntelHandler
-from .intel_topic_handler import IntelTopicHandler
 from .links_handler import LinksHandler
 from .rag_handler import RagHandler
 from .tags_handler import TagsHandler
@@ -24,7 +23,6 @@ __all__ = [
     'TopicsHandler',
     'LinksHandler',
     'IntelHandler',
-    'IntelTopicHandler',
     'RagHandler',
     'CloudSyncHandler',
     'IngestHandler',

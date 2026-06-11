@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/web_download.yaml 优先加载，本文件中的常量仅作备用参考
 WEB_TO_MARKDOWN_PROMPT = """你是一个专业的网页内容提取专家。请将以下网页HTML内容转换为格式规范的Markdown文档。
 
 要求：

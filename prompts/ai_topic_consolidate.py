@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/ai_topic_consolidate.yaml 优先加载，本文件中的常量仅作备用参考
 AI_TOPIC_ANALYZE_PROMPT = """你是一位专业的笔记分类专家。请扫描以下所有文件及其当前主题分配和内容摘要，对每个文件的主题合理性进行判断。
 
 ## 判断逻辑

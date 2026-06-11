@@ -1,5 +1,4 @@
 import shutil
-import sys
 from pathlib import Path
 
 import yaml
@@ -18,10 +17,12 @@ from sidecar.cascade import (
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
 from sidecar.wiki_utils import (
+    create_topic as wiki_create_topic,
     get_all_topic_names,
     get_survey_status,
     parse_wiki_headings,
     resolve_wiki_path,
+    sync_wiki_with_files,
     toggle_survey,
 )
 from utils.activity_log import get_entries
@@ -34,11 +35,7 @@ from utils.topic_assigner import (
     load_pending,
     move_file_to_notes_topic_folder,
     save_pending,
-    sync_wiki_with_files,
     write_topic_to_file,
-)
-from utils.topic_assigner import (
-    create_topic as wiki_create_topic,
 )
 from utils.topic_manager import TopicManager
 
@@ -124,7 +121,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                 else:
                     skipped += 1
             except Exception as e:
-                sys.stderr.write(f"[topics_handler] batch assign error {md_file}: {e}\n")
+                logger.error(f"[topics_handler] batch assign error {md_file}: {e}")
                 skipped += 1
 
             if i % 10 == 0:
@@ -305,14 +302,14 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             try:
                 shutil.rmtree(str(notes_topic_dir))
             except Exception as e:
-                sys.stderr.write(f"[delete_topic] rmdir: {e}\n")
+                logger.error(f"[delete_topic] rmdir: {e}")
 
         org_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, topic_name)
         if org_dir.exists():
             try:
                 shutil.rmtree(str(org_dir))
             except Exception as e:
-                sys.stderr.write(f"[delete_topic] rmdir org: {e}\n")
+                logger.error(f"[delete_topic] rmdir org: {e}")
 
         try:
             sync_result = self._sync_wiki_with_folder_system()
@@ -428,7 +425,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             if topic:
                 self._start_task(f"cascade_{topic}_{file_path.stem}", cascade_on_topic_resolved, args=(str(file_path), topic))
         except Exception as e:
-            sys.stderr.write(f"[topics_handler] file_added_cascade error: {e}\n")
+            logger.error(f"[topics_handler] file_added_cascade error: {e}")
 
     def _get_all_pending(self, _params):
         workspace = config.workspace_path

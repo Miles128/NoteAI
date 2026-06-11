@@ -25,7 +25,7 @@ Tauri v2 shell (src-tauri/)
 
 **Communication flow**: Frontend JS → `window.api` (Tauri invoke) → Rust → spawns Python sidecar → JSON-RPC over stdin/stdout → `server.py:main()` reads lines, dispatches via `RpcRouter`.
 
-**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 12 handlers, each a subclass of `BaseHandler`. `BaseHandler.__getattr__` proxies to server via `_PROXY_ALLOWED` whitelist — handlers can access server attributes without explicit injection. Each handler registers routes with `RpcRouter`.
+**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 14 handlers, each a subclass of `BaseHandler`. `BaseHandler.__getattr__` proxies to server via `_PROXY_ALLOWED` whitelist — handlers can access server attributes without explicit injection. Each handler registers routes with `RpcRouter`.
 
 **RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → Milvus Lite hybrid search (dense 0.7 + sparse 0.3) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. Sparse: jieba TF-IDF.
 
@@ -33,7 +33,7 @@ Tauri v2 shell (src-tauri/)
 
 ## Key conventions
 
-- **Config**: singleton `config` loaded at import time from `config/app_config.py:318`. Never instantiate `AppConfig` directly — import `from config import config` or `from config.settings import config`.
+- **Config**: singleton `config` loaded at import time from `config/app_config.py`. Never instantiate `AppConfig` directly — import `from config import config` or `from config.settings import config`. Persist workspace path through `config/workspace_state.py`; `config.workspace_path` is the runtime value.
 - **Frontmatter**: canonical parser is `sidecar.textutils.parse_frontmatter(text)` → `(meta_dict, body_str)`. Many handlers still use manual regex `r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---'` — prefer `parse_frontmatter` for new code.
 - **LLM calls**: go through `utils/llm_utils`. `_LLM_SEMAPHORE = Semaphore(4)` limits concurrency. `call_llm_raw()` uses `_retry_with_backoff()` with exponential backoff for rate limits. Both sync and stream variants now respect the semaphore.
 - **Chunk IDs**: generated via `hashlib.md5(f"{file_path}::{section_title}::{content[:100]}".encode()).hexdigest()[:12]` in `chunker.py:169`. Note: `section_title` can be `None`.
@@ -43,15 +43,14 @@ Tauri v2 shell (src-tauri/)
 
 ## Critical gotchas
 
-- **`modules/abstract_generator.py`**: f-strings now use real `\n` (were literal `\\n` before fix — verify if regenerating surveys).
 - **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; Milvus eventual consistency could lose track of sparse index entries).
 - **`rag/retriever.py:_rerank()`**: no longer overwrites `score` with `rerank_score` — both fields preserved. Sort post-rerank uses `rerank_score`.
 - **`rag_chat_with_actions`**: aliases `rag_chat` only; LLM code execution path removed.
 - **`rag/index.py:hybrid_search()`**: sparse-only hits query Milvus for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
 - **Embedder module import** (`rag/embedder.py:7-11`): sets `os.environ["HF_ENDPOINT"]` and `NO_PROXY` at import time — affects entire process. Uses hf-mirror.com.
-- **`topic_assigner.py`** is 2100+ lines — mixes AI classification, wiki management, file operations, and dedup. Split pending.
+- **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, `topic_pending.py`, and `topic_wiki_manager.py`; keep new topic logic in that cluster instead of growing handlers.
 - **`IGNORED_DIRS`** (constants.py): lowercased match on `{"ai", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`.
-- **WIKI.md operations**: at least 5 different files manipulate WIKI.md with slightly different text parsing — easy to break consistency.
+- **WIKI.md operations**: production writes should enter through `sidecar/wiki_utils.py`; lower-level parsers/CRUD helpers remain under `utils/wiki_manager.py` and `utils/topic_wiki_manager.py`.
 - **API key storage**: 3-tier priority: env var > OS keyring > base64-obfuscated file (`api_config.json`) in `~/Library/Application Support/NoteAI/`. Base64 is NOT encryption.
 - **No rate limiting** on RAG endpoints beyond the LLM semaphore.
 

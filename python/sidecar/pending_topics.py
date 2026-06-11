@@ -1,30 +1,21 @@
-"""Pending topic suggestions persisted under the workspace root."""
+"""Compatibility wrapper for pending topic suggestions.
 
-import json
+The canonical implementation lives in utils.topic_pending so all callers share
+the same locking and atomic-write behavior.
+"""
+
 from pathlib import Path
 
-from config import config
+from utils.topic_pending import get_pending_path, load_pending, save_pending
 
 
 def get_pending_topics_path() -> Path | None:
-    workspace = config.workspace_path
-    if not workspace:
-        return None
-    return Path(workspace) / ".pending_topics.json"
+    return get_pending_path()
 
 
 def load_pending_topics() -> list:
-    path = get_pending_topics_path()
-    if not path or not path.exists():
-        return []
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    return load_pending()
 
 
 def save_pending_topics(pending: list) -> None:
-    path = get_pending_topics_path()
-    if not path:
-        return
-    path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_pending(pending)

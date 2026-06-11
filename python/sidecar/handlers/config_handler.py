@@ -1,9 +1,9 @@
-import sys
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
 from sidecar.rag.profile import load_profile, save_profile
 from utils.llm_utils import test_api_connection
+from utils.logger import logger
 
 
 class ConfigHandler(BaseHandler):
@@ -176,8 +176,7 @@ class ConfigHandler(BaseHandler):
             try:
                 return {"success": True, "rules": rules_path.read_text(encoding='utf-8')}
             except Exception as e:
-                sys.stderr.write(f"[config_handler] reading project rules file: {e}\n")
-                sys.stderr.flush()
+                logger.error(f"[config_handler] reading project rules file: {e}")
         return {"success": True, "rules": ""}
 
     def _save_project_rules(self, params):

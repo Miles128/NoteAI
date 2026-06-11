@@ -6,7 +6,8 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import config, is_ignored_dir
+from config import config
+from config.settings import is_ignored_dir
 from utils.topic_assigner import auto_assign_topic_for_file, load_pending, parse_wiki_headings
 from utils.text_utils import parse_frontmatter
 import os

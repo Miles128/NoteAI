@@ -1,7 +1,7 @@
-import sys
 from pathlib import Path
 
 from config import config, is_ignored_dir
+from utils.logger import logger
 from config.constants import ABSTRACT_FOLDER, NOTES_FOLDER, RAW_FOLDER
 from config.settings import workspace_manager
 from sidecar.handlers.base import BaseHandler
@@ -45,15 +45,12 @@ class WorkspaceHandler(BaseHandler):
         return compute_kb_health(self.config.workspace_path)
 
     def _get_workspace_status(self, _params):
-        path = self.config.workspace_path
-        if not path or not Path(path).exists():
-            saved_path, _ = workspace_manager.load_workspace()
-            if saved_path and Path(saved_path).exists():
-                self.config.workspace_path = saved_path
-                self.config.save()
-                path = saved_path
-                self.config.setup_workspace_folders()
-                self._server._setup_watcher(path)
+        saved_path, _ = workspace_manager.load_workspace()
+        path = saved_path if saved_path and Path(saved_path).exists() else ""
+        if path and path != self.config.workspace_path:
+            self.config.workspace_path = path
+            self.config.setup_workspace_folders()
+            self._server._setup_watcher(path)
         if path and Path(path).exists():
             from sidecar.schema_manager import ensure_schema, needs_schema_setup
             ensure_schema(path)
@@ -79,24 +76,20 @@ class WorkspaceHandler(BaseHandler):
         if not success:
             return {"success": False, "message": message}
         self.config.workspace_path = ""
-        save_ok, save_msg = self.config.save()
-        if not save_ok:
-            return {"success": False, "message": save_msg}
         return {"success": True, "message": "已清除保存的工作区"}
 
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
             self.config.workspace_path = path
-            save_ok, save_msg = self.config.save()
-            if not save_ok:
-                return {"success": False, "message": save_msg}
             from sidecar.schema_manager import ensure_schema
             ensure_schema(path)
             self.file_previewer.workspace_path = path
             self._server._setup_watcher(path)
             self._server._invalidate_cache()
-            workspace_manager.save_workspace(path)
+            save_ok, save_msg = workspace_manager.save_workspace(path)
+            if not save_ok:
+                return {"success": False, "message": save_msg}
             from sidecar.schema_manager import needs_schema_setup
             return {
                 "success": True,
@@ -152,8 +145,7 @@ class WorkspaceHandler(BaseHandler):
                     else:
                         root_files.append(node)
         except PermissionError as e:
-            sys.stderr.write(f"[workspace_handler] building workspace tree: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[workspace_handler] building workspace tree: {e}")
 
         return pinned + items + root_files
 
@@ -179,8 +171,7 @@ class WorkspaceHandler(BaseHandler):
                     "modified": stat.st_mtime,
                 })
         except PermissionError as e:
-            sys.stderr.write(f"[workspace_handler] building flat tree: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[workspace_handler] building flat tree: {e}")
         return items
 
     def _build_recursive_tree(self, dir_path: Path, workspace: Path):
@@ -214,8 +205,7 @@ class WorkspaceHandler(BaseHandler):
                         "modified": stat.st_mtime,
                     })
         except PermissionError as e:
-            sys.stderr.write(f"[workspace_handler] building recursive tree: {e}\n")
-            sys.stderr.flush()
+            logger.warning(f"[workspace_handler] building recursive tree: {e}")
         return items
 
     def _on_file_selected(self, params):

@@ -5,6 +5,12 @@
 #schema-wizard-modal .modal-dialog {
     max-width: 560px;
     width: 92%;
+    max-height: min(720px, calc(100vh - 40px));
+}
+
+#schema-wizard-modal .modal-body {
+    flex: 1;
+    scrollbar-gutter: stable;
 }
 
 [data-theme="light"] #schema-wizard-modal .modal-dialog {
@@ -57,15 +63,16 @@
 
 .schema-option-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 8px;
 }
 
 .schema-option-card {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
-    padding: 10px 12px;
+    min-height: 34px;
+    padding: 8px 12px;
     border: 1px solid var(--border, #333);
     border-radius: 8px;
     cursor: pointer;
@@ -90,8 +97,13 @@
 
 .schema-option-list {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
+}
+
+.schema-option-list .schema-option-card {
+    flex: 1 1 160px;
 }
 
 .schema-wizard-custom {
@@ -105,8 +117,8 @@
 
 #schema-wizard-preview {
     width: 100%;
-    min-height: 200px;
-    max-height: 40vh;
+    min-height: 180px;
+    max-height: 36vh;
     font-family: ui-monospace, monospace;
     font-size: 12px;
     line-height: 1.45;
@@ -118,6 +130,9 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
 }
 
 .schema-wizard-footer .right {

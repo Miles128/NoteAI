@@ -507,67 +507,6 @@ async function saveProjectRules(rules) {
     return pyCall('save_project_rules', { rules: rules });
 }
 
-function getTauriWindow() {
-    if (window.__TAURI__ && window.__TAURI__.window) {
-        if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
-            return window.__TAURI__.window.getCurrentWindow();
-        }
-        if (typeof window.__TAURI__.window.getCurrent === 'function') {
-            return window.__TAURI__.window.getCurrent();
-        }
-    }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window) {
-        if (typeof window.__TAURI_INTERNALS__.window.getCurrentWindow === 'function') {
-            return window.__TAURI_INTERNALS__.window.getCurrentWindow();
-        }
-        if (typeof window.__TAURI_INTERNALS__.window.getCurrent === 'function') {
-            return window.__TAURI_INTERNALS__.window.getCurrent();
-        }
-    }
-    return null;
-}
-
-function moveWindow(dx, dy) {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win && typeof win.startDragging === 'function') {
-            win.startDragging();
-        }
-    }
-}
-
-function minimizeWindow() {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.minimize();
-    }
-}
-
-function maximizeWindow() {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.toggleMaximize();
-    }
-}
-
-function closeWindow() {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.close();
-    }
-}
-
-async function openFileInNewWindow(path, name) {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        if (invoke) {
-            return invoke('open_file_in_new_window', { path: path, name: name || null });
-        }
-    }
-    console.error('[API] Not running in Tauri');
-    throw new Error('Not running in Tauri');
-}
-
 async function cloudSyncListProviders() { return pyCall('cloud_sync_list_providers'); }
 async function cloudSyncAuth(provider, credentials) { return pyCall('cloud_sync_auth', { provider_name: provider, credentials: credentials }); }
 async function cloudSyncPush(provider) { return pyCall('cloud_sync_push', { provider_name: provider }); }
@@ -630,11 +569,11 @@ window.api = {
     getTopicFiles: getTopicFiles,
     generateAbstract: generateAbstract,
 
-    moveWindow: moveWindow,
-    minimizeWindow: minimizeWindow,
-    maximizeWindow: maximizeWindow,
-    closeWindow: closeWindow,
-    openFileInNewWindow: openFileInNewWindow,
+    moveWindow: function() { return window.WindowManager && window.WindowManager.moveWindow.apply(window.WindowManager, arguments); },
+    minimizeWindow: function() { return window.WindowManager && window.WindowManager.minimizeWindow(); },
+    maximizeWindow: function() { return window.WindowManager && window.WindowManager.maximizeWindow(); },
+    closeWindow: function() { return window.WindowManager && window.WindowManager.closeWindow(); },
+    openFileInNewWindow: function(path, name) { return window.WindowManager && window.WindowManager.openFileInNewWindow(path, name); },
 
     discoverLinks: discoverLinks,
     getBacklinks: getBacklinks,

@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import config
+from config import config
 
 workspace_path = config.workspace_path
 if not workspace_path:

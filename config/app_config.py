@@ -15,6 +15,7 @@ from .constants import (
     SYSTEM_APP_DATA_DIR,
     USED_FOLDER,
     WORKSPACE_APP_FOLDER,
+    WORKSPACE_STATE_FILE,
 )
 from .security import _deobfuscate, _restrict_file_permissions
 
@@ -231,6 +232,16 @@ class AppConfig:
         elif api_key_from_file:
             api_data['api_key'] = api_key_from_file
 
+        workspace_default = ""
+        try:
+            if WORKSPACE_STATE_FILE.exists():
+                state_data = json.loads(WORKSPACE_STATE_FILE.read_text(encoding="utf-8"))
+                state_workspace = state_data.get("workspace_path", "")
+                if state_workspace and Path(state_workspace).exists():
+                    workspace_default = state_workspace
+        except Exception:
+            workspace_default = ""
+
         env_mappings = {
             'api_key': ('NOTEAI_API_KEY', api_data.get('api_key', file_data.get('api_key', ''))),
             'api_base': ('NOTEAI_API_BASE', api_data.get('api_base', file_data.get('api_base', 'https://api.openai.com/v1'))),
@@ -238,7 +249,7 @@ class AppConfig:
             'temperature': ('NOTEAI_TEMPERATURE', api_data.get('temperature', file_data.get('temperature', 0.7))),
             'max_tokens': ('NOTEAI_MAX_TOKENS', api_data.get('max_tokens', file_data.get('max_tokens', 32000))),
             'max_context_tokens': ('NOTEAI_MAX_CONTEXT', api_data.get('max_context_tokens', file_data.get('max_context_tokens', 128000))),
-            'workspace_path': ('NOTEAI_WORKSPACE_PATH', file_data.get('workspace_path', '')),
+            'workspace_path': ('NOTEAI_WORKSPACE_PATH', workspace_default),
         }
 
         init_kwargs = {}
@@ -261,6 +272,8 @@ class AppConfig:
                 init_kwargs[key] = config_default
 
         for key, value in file_data.items():
+            if key == "workspace_path":
+                continue
             if key not in init_kwargs or init_kwargs[key] == '':
                 init_kwargs[key] = value
 
@@ -273,7 +286,6 @@ class AppConfig:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
-        os.environ['NOTEAI_WORKSPACE_PATH'] = self.workspace_path
         os.environ['NOTEAI_API_BASE'] = self.api_base
         os.environ['NOTEAI_MODEL_NAME'] = self.model_name
         os.environ['NOTEAI_TEMPERATURE'] = str(self.temperature)
@@ -283,6 +295,7 @@ class AppConfig:
         # should obtain it from the keyring or api_config.json, not inherit it.
 
         api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens', 'disable_thinking'}
+        runtime_fields = {'workspace_path'}
         _skip_keys = {'_lock'}
 
         with self._lock:
@@ -291,7 +304,11 @@ class AppConfig:
         try:
             Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
-            non_api_config = {k: v for k, v in snapshot.items() if k not in api_fields and k not in _skip_keys}
+            non_api_config = {
+                k: v
+                for k, v in snapshot.items()
+                if k not in api_fields and k not in runtime_fields and k not in _skip_keys
+            }
 
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)

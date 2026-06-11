@@ -3,7 +3,7 @@ from pathlib import Path
 
 from utils.activity_log import add_entry as _log
 from config.constants import TOPIC_SEP
-from config.settings import config
+from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER, config
 from utils.logger import logger
 
 from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word, parse_frontmatter
@@ -15,6 +15,7 @@ from utils.wiki_manager import (
     _remove_empty_topic_sections, create_topic, rename_topic,
     delete_topic, sync_wiki_with_files,
 )
+from utils.wiki_sync import topic_from_notes_path, _write_file_topic_from_folder
 
 from utils.topic_classifier import (
     _norm_topic,
@@ -231,3 +232,86 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
         return None
 
     return _auto_assign_existing_file(full_path, workspace, use_llm)
+
+
+def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # noqa: PLR0912
+    """自动处理新建/移动的 Markdown 文件：对齐主题、自动分配、移动到正确目录。
+
+    Args:
+        file_path: Markdown 文件路径
+        send_event: 可选回调，用于向前端发送事件，签名为 send_event(event_dict)
+        mark_wiki_sync: 可选回调，用于标记需要 wiki 同步，签名为 mark_wiki_sync()
+    """
+    path = Path(file_path)
+    try:
+        text = path.read_text(encoding='utf-8')
+    except Exception as e:
+        logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
+        return
+
+    meta, body = parse_frontmatter(text)
+
+    folder_topic = topic_from_notes_path(path)
+    if folder_topic:
+        file_topic = meta.get("topic") if meta else None
+        if isinstance(file_topic, list):
+            file_topic = file_topic[0] if len(file_topic) == 1 else None
+        if isinstance(file_topic, str):
+            file_topic = file_topic.strip() or None
+        if meta is None or _check_topic_needs_processing(meta) or file_topic != folder_topic:
+            try:
+                if _write_file_topic_from_folder(path, folder_topic):
+                    if mark_wiki_sync:
+                        mark_wiki_sync()
+            except Exception as e:
+                logger.warning(f"[watcher] align topic from folder failed for {file_path}: {e}\n")
+        return
+
+    if meta is None or _check_topic_needs_processing(meta):
+        try:
+            result = auto_assign_topic_for_file(file_path)
+            if result and result.get("status") == "auto_assigned" and result.get("topic"):
+                sync_wiki_with_files()
+                if send_event:
+                    send_event({
+                        "type": "auto_topic_assigned",
+                        "file": file_path,
+                        "topic": result["topic"],
+                    })
+        except Exception as e:
+            logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
+        return
+
+    file_topic = meta.get('topic') if meta else None
+    if isinstance(file_topic, list):
+        file_topic = file_topic[0] if len(file_topic) == 1 else None
+
+    if not file_topic:
+        return
+
+    workspace = config.workspace_path
+    filename = Path(file_path).stem
+
+    is_survey = filename.endswith('综述') or filename.endswith('_综述')
+    if is_survey:
+        expected_dir = Path(workspace) / ABSTRACT_FOLDER / file_topic
+    else:
+        expected_dir = Path(workspace) / NOTES_FOLDER / file_topic
+
+    try:
+        in_correct_folder = Path(file_path).is_relative_to(expected_dir)
+    except AttributeError:
+        in_correct_folder = str(Path(file_path)).startswith(str(expected_dir))
+
+    if not in_correct_folder and not is_survey:
+        move_result = move_file_to_notes_topic_folder(file_path, file_topic)
+        if move_result.get("success"):
+            new_path = move_result.get("new_path", "")
+            sync_wiki_with_files()
+            if send_event:
+                send_event({
+                    "type": "auto_file_moved",
+                    "file": file_path,
+                    "topic": file_topic,
+                    "new_path": new_path,
+                })

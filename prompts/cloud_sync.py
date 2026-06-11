@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/cloud_sync.yaml 优先加载，本文件中的常量仅作备用参考
 CLOUD_SYNC_CONFLICT_NOTICE_PROMPT = """云同步冲突通知
 
 以下文件在云端有更新版本，与本地版本存在冲突：

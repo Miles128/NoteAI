@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/llm_rewrite.yaml 优先加载，本文件中的常量仅作备用参考
 LLM_REWRITE_PROMPT = """你是一位专业的笔记整理专家。请将以下文档内容用中立客观的笔记文档风格重写，并转换为条理清晰的 Markdown 格式。
 
 ## 重写规则

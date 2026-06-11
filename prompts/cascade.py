@@ -1,3 +1,4 @@
+# NOTE: 运行时由 prompts/yaml/cascade.yaml 优先加载，本文件中的常量仅作备用参考
 CASCADE_SURVEY_NEW_PROMPT = """你是一位专业的学术综述撰写专家。请根据以下主题下的所有笔记内容，撰写一篇全面、深入的主题综述。
 
 ## 主题：{topic_name}

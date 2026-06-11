@@ -819,7 +819,7 @@ body {
     min-width: 260px;
     max-width: min(520px, 42vw);
     margin: 0;
-    z-index: 2;
+    z-index: 9500;
     flex-direction: row;
     align-items: stretch;
     background: var(--ai-panel-bg);

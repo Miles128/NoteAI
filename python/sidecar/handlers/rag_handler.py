@@ -247,12 +247,21 @@ class RagHandler(BaseHandler):
         tool_context = run_readonly_tool_prefetch(question, send_event=_send_tool_event)
 
         context_parts = []
+        citations = []
         for r in search_results:
             body = (r.get("content") or "").strip()
             if not body:
                 continue
             label = r.get("source_label") or r.get("file_name") or r.get("file_path", "")
-            context_parts.append(f"[{len(context_parts) + 1}] {label}\n{body}")
+            idx = len(context_parts) + 1
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            citations.append({
+                "index": idx,
+                "file_path": r.get("file_path", ""),
+                "file_name": r.get("file_name") or Path(r.get("file_path", "")).stem,
+                "section_title": r.get("section_title") or "",
+                "topic": r.get("topic") or "",
+            })
         context = "\n\n".join(context_parts)
         if tool_context:
             context = (context + "\n\n" + tool_context).strip() if context else tool_context
@@ -317,6 +326,7 @@ class RagHandler(BaseHandler):
                 "type": "rag_chat_done",
                 "answer": display_answer,
                 "suggest_save_note": suggest_save_note,
+                "citations": citations,
             },
         })
         return {"success": True, "suggest_save_note": suggest_save_note}

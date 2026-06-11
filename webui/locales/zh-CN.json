@@ -251,7 +251,8 @@
     "saveAsNote": "保存为笔记",
     "saving": "保存中",
     "savedToNotes": "已保存到 Notes/小忆对话",
-    "saveFailed": "保存失败: {message}"
+    "saveFailed": "保存失败: {message}",
+    "sources": "参考来源"
   },
   "settings": {
     "title": "设置",

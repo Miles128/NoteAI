@@ -425,6 +425,9 @@ window.AssistantModule = (function() {
                 var answerText = eventData.answer || _currentStreamEl.textContent || '';
                 _currentStreamEl.textContent = answerText;
                 _chatHistory.push({ role: 'assistant', content: answerText });
+                if (eventData.citations && eventData.citations.length > 0) {
+                    _renderCitations(_currentStreamEl, eventData.citations);
+                }
                 if (_lastArchive) {
                     _lastArchive.answer = answerText;
                     if (eventData.suggest_save_note) {
@@ -502,6 +505,63 @@ window.AssistantModule = (function() {
         actions.appendChild(btn);
         bubble.appendChild(actions);
         archive.rowEl = bubble;
+    }
+
+    function _renderCitations(contentEl, citations) {
+        if (!contentEl || !citations || citations.length === 0) return;
+        var bubble = contentEl.closest('.ai-msg');
+        if (!bubble) return;
+
+        var container = document.createElement('div');
+        container.className = 'ai-citations';
+
+        var header = document.createElement('div');
+        header.className = 'ai-citations-header';
+        header.textContent = window.t('assistant.sources') || '参考来源';
+        container.appendChild(header);
+
+        var list = document.createElement('div');
+        list.className = 'ai-citations-list';
+
+        citations.forEach(function(cite) {
+            var item = document.createElement('div');
+            item.className = 'ai-citation-item';
+            item.setAttribute('data-file-path', cite.file_path || '');
+
+            var index = document.createElement('span');
+            index.className = 'ai-citation-index';
+            index.textContent = cite.index;
+            item.appendChild(index);
+
+            var info = document.createElement('div');
+            info.className = 'ai-citation-info';
+
+            var name = document.createElement('span');
+            name.className = 'ai-citation-name';
+            name.textContent = cite.file_name || cite.file_path;
+            info.appendChild(name);
+
+            if (cite.topic) {
+                var topic = document.createElement('span');
+                topic.className = 'ai-citation-topic';
+                topic.textContent = cite.topic;
+                info.appendChild(topic);
+            }
+
+            item.appendChild(info);
+
+            item.addEventListener('click', function() {
+                var filePath = cite.file_path;
+                if (filePath && window.api && window.api.onFileSelected) {
+                    window.api.onFileSelected(filePath);
+                }
+            });
+
+            list.appendChild(item);
+        });
+
+        container.appendChild(list);
+        bubble.appendChild(container);
     }
 
     return {

@@ -25,8 +25,6 @@ from sidecar.wiki_utils import (
 from utils.activity_log import get_entries
 from utils.logger import logger
 from utils.topic_assigner import (
-    _deduplicate_files_in_wiki,
-    _merge_duplicate_topics_in_wiki,
     auto_assign_topic_for_file,
     load_pending,
     move_file_to_notes_topic_folder,
@@ -34,6 +32,10 @@ from utils.topic_assigner import (
     write_topic_to_file,
 )
 from utils.topic_manager import TopicManager
+from utils.wiki_manager import (
+    _deduplicate_files_in_wiki,
+    _merge_duplicate_topics_in_wiki,
+)
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):

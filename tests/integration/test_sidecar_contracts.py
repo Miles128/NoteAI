@@ -29,12 +29,14 @@ from modules.file_preview import FilePreviewer
 from utils.activity_log import add_entry, get_entries
 from utils.topic_assigner import (
     auto_assign_topic_for_file,
+)
+from utils.topic_manager import TopicManager
+from utils.wiki_manager import (
     parse_wiki_headings,
     parse_wiki_structure,
     sync_wiki_with_files,
+    topic_from_notes_path,
 )
-from utils.topic_manager import TopicManager
-from utils.wiki_manager import topic_from_notes_path
 
 
 @pytest.fixture

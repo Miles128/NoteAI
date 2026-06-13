@@ -10,6 +10,7 @@ from sidecar.rag.context_expand import (
     _MAX_BACKLINK_FILES,
     _MAX_SURVEY_CHARS,
     _BACKLINK_SCORE,
+    _backlink_items,
     _confirmed_neighbor_paths,
     _read_file_excerpt,
     _survey_items,
@@ -72,39 +73,6 @@ def _topic_tree_context(workspace: str) -> dict | None:
         "source_label": "主题树",
         "score": 1.0,
     }
-
-
-def _backlink_items(workspace: str, seed_paths: list[str], exclude: set[str]) -> list[dict]:
-    items: list[dict] = []
-    added: set[str] = set()
-
-    for seed in seed_paths:
-        if len(items) >= _MAX_BACKLINK_FILES:
-            break
-        for neighbor in _confirmed_neighbor_paths(seed):
-            if neighbor in exclude or neighbor in added:
-                continue
-            if len(items) >= _MAX_BACKLINK_FILES:
-                break
-
-            content = _read_file_excerpt(workspace, neighbor, _MAX_BACKLINK_CHARS)
-            if not content.strip():
-                continue
-
-            added.add(neighbor)
-            name = Path(neighbor).name
-            items.append({
-                "id": f"backlink::{neighbor}",
-                "content": content,
-                "file_path": neighbor,
-                "file_name": name,
-                "topic": "",
-                "source_type": "backlink",
-                "source_label": f"关联笔记·{name}",
-                "score": _BACKLINK_SCORE,
-                "linked_from": seed,
-            })
-    return items
 
 
 def retrieve(

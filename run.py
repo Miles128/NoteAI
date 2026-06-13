@@ -50,6 +50,16 @@ def check_dependencies():
 
     # 解析包名：从 "pkg>=1.0" 或 "pkg[extra]>=1.0" 等格式中提取包名
     import re
+    # PyPI 包名 → Python import 名（不同时才需要列出）
+    _IMPORT_MAP = {
+        "beautifulsoup4": "bs4",
+        "python-docx": "docx",
+        "python-pptx": "pptx",
+        "pillow": "PIL",
+        "pymupdf": "fitz",
+        "pyyaml": "yaml",
+        "readability-lxml": "readability",
+    }
     missing = []
     for dep_str in dependencies:
         dep_str = dep_str.strip()
@@ -58,7 +68,7 @@ def check_dependencies():
         # 提取包名（去掉版本约束和 extras）
         pkg_name = re.split(r'[<>=!~;\[]', dep_str)[0].strip()
         # 映射 PyPI 包名到 import 模块名
-        import_name = pkg_name.replace("-", "_")
+        import_name = _IMPORT_MAP.get(pkg_name.lower(), pkg_name.replace("-", "_"))
         try:
             __import__(import_name)
         except ImportError:

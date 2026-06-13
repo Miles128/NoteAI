@@ -99,6 +99,10 @@ class TestChunker:
 class TestIndex:
     """Test Milvus index operations."""
 
+    @pytest.mark.skipif(
+        not _has_milvus_lite(),
+        reason="milvus-lite not installed"
+    )
     def test_index_exists_returns_false_for_empty_workspace(self, workspace: Path) -> None:
         from sidecar.rag.index import index_exists
 

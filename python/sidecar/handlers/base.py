@@ -1,4 +1,3 @@
-
 from sidecar.pending_topics import load_pending_topics, save_pending_topics
 
 
@@ -13,10 +12,6 @@ class BaseHandler:
     @property
     def config(self):
         return self._ctx.config
-
-    @property
-    def logger(self):
-        return self._ctx.logger
 
     @property
     def _send_response(self):
@@ -35,24 +30,8 @@ class BaseHandler:
         return self._server._resolve_path
 
     @property
-    def _start_workspace_watcher(self):
-        return self._server._start_workspace_watcher
-
-    @property
-    def _stop_watcher(self):
-        return self._server._stop_watcher
-
-    @property
-    def _invalidate_cache(self):
-        return self._server._invalidate_cache
-
-    @property
     def _cached_or_compute(self):
         return self._server._cached_or_compute
-
-    @property
-    def _auto_process_md_file(self):
-        return self._server._auto_process_md_file
 
     @property
     def _do_cascade_survey_update(self):
@@ -61,10 +40,6 @@ class BaseHandler:
     @property
     def _batch_auto_assign_topics(self):
         return self._server._batch_auto_assign_topics
-
-    @property
-    def _do_file_added_cascade(self):
-        return self._server._do_file_added_cascade
 
     @property
     def web_downloader(self):
@@ -89,6 +64,7 @@ class BaseHandler:
     @staticmethod
     def _parse_frontmatter(md_text: str) -> dict:
         from sidecar.textutils import parse_frontmatter
+
         return parse_frontmatter(md_text)
 
     def _load_pending_topics(self):

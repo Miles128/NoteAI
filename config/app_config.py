@@ -20,6 +20,7 @@ from .constants import (
 from .security import _deobfuscate, _restrict_file_permissions
 
 import logging
+
 _logger = logging.getLogger("NoteAI")
 
 
@@ -146,6 +147,7 @@ class AppConfig:
             (noteai_folder / RAG_INDEX_FOLDER).mkdir(parents=True, exist_ok=True)
 
             from utils.workspace_log import migrate_legacy_logs
+
             migrate_legacy_logs(str(workspace))
 
             return True, f"工作文件夹已设置: {self.workspace_path}"
@@ -156,6 +158,7 @@ class AppConfig:
 
     def validate_api_config(self) -> bool:
         from utils.helpers import validate_api_key
+
         if not validate_api_key(self.api_key):
             return False
         if not self.api_base or not self.api_base.strip():
@@ -175,29 +178,29 @@ class AppConfig:
 
     def check_content_within_context(self, content: str) -> tuple:
         from utils.llm_utils import _estimate_tokens
+
         estimated_tokens = _estimate_tokens(content, self.model_name)
 
         if estimated_tokens <= self.max_context_tokens:
             return (True, estimated_tokens, content)
 
         from utils.llm_utils import process_content_with_llm
+
         processed_content, was_summarized, was_truncated, final_tokens = process_content_with_llm(
-            content,
-            max_tokens=self.max_context_tokens,
-            model_name=self.model_name
+            content, max_tokens=self.max_context_tokens, model_name=self.model_name
         )
 
         return (False, final_tokens, processed_content)
 
     @classmethod
-    def load_from_file(cls, config_path: str = None) -> 'AppConfig':
+    def load_from_file(cls, config_path: str = None) -> "AppConfig":
         if config_path is None:
             config_path = PROJECT_CONFIG_PATH
 
         file_data = {}
         if os.path.exists(config_path):
             try:
-                with open(config_path, 'r', encoding='utf-8') as f:
+                with open(config_path, "r", encoding="utf-8") as f:
                     file_data = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 _logger.warning("加载配置失败: %s, 使用默认配置", e)
@@ -208,29 +211,31 @@ class AppConfig:
         api_key_from_file = None
         if os.path.exists(API_CONFIG_FILE):
             try:
-                with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                with open(API_CONFIG_FILE, "r", encoding="utf-8") as f:
                     api_data = json.load(f)
-                if 'api_key' in api_data and api_data['api_key']:
-                    api_key_from_file = _deobfuscate(api_data['api_key'])
+                if "api_key" in api_data and api_data["api_key"]:
+                    api_key_from_file = _deobfuscate(api_data["api_key"])
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 _logger.warning("加载API配置失败: %s", e)
             except Exception as e:
                 _logger.warning("加载API配置时发生未知错误: %s", e)
 
         import importlib.util
+
         try:
             spec = importlib.util.find_spec("keyring")
             if spec:
                 import keyring
+
                 keyring_key = keyring.get_password("NoteAI", "api_key") or ""
             else:
                 keyring_key = ""
         except Exception:
             keyring_key = ""
         if keyring_key:
-            api_data['api_key'] = keyring_key
+            api_data["api_key"] = keyring_key
         elif api_key_from_file:
-            api_data['api_key'] = api_key_from_file
+            api_data["api_key"] = api_key_from_file
 
         workspace_default = ""
         try:
@@ -243,38 +248,46 @@ class AppConfig:
             workspace_default = ""
 
         env_mappings = {
-            'api_key': ('NOTEAI_API_KEY', api_data.get('api_key', file_data.get('api_key', ''))),
-            'api_base': ('NOTEAI_API_BASE', api_data.get('api_base', file_data.get('api_base', 'https://api.openai.com/v1'))),
-            'model_name': ('NOTEAI_MODEL_NAME', api_data.get('model_name', file_data.get('model_name', 'gpt-4'))),
-            'temperature': ('NOTEAI_TEMPERATURE', api_data.get('temperature', file_data.get('temperature', 0.7))),
-            'max_tokens': ('NOTEAI_MAX_TOKENS', api_data.get('max_tokens', file_data.get('max_tokens', 32000))),
-            'max_context_tokens': ('NOTEAI_MAX_CONTEXT', api_data.get('max_context_tokens', file_data.get('max_context_tokens', 128000))),
-            'workspace_path': ('NOTEAI_WORKSPACE_PATH', workspace_default),
+            "api_key": ("NOTEAI_API_KEY", api_data.get("api_key", file_data.get("api_key", ""))),
+            "api_base": (
+                "NOTEAI_API_BASE",
+                api_data.get("api_base", file_data.get("api_base", "https://api.openai.com/v1")),
+            ),
+            "model_name": ("NOTEAI_MODEL_NAME", api_data.get("model_name", file_data.get("model_name", "gpt-4"))),
+            "temperature": ("NOTEAI_TEMPERATURE", api_data.get("temperature", file_data.get("temperature", 0.7))),
+            "max_tokens": ("NOTEAI_MAX_TOKENS", api_data.get("max_tokens", file_data.get("max_tokens", 32000))),
+            "max_context_tokens": (
+                "NOTEAI_MAX_CONTEXT",
+                api_data.get("max_context_tokens", file_data.get("max_context_tokens", 128000)),
+            ),
+            "workspace_path": ("NOTEAI_WORKSPACE_PATH", workspace_default),
         }
+
+        _FLOAT_KEYS = {"temperature"}
+        _INT_KEYS = {"max_tokens", "max_context_tokens"}
+
+        def _coerce(key, raw, default):
+            if key in _FLOAT_KEYS:
+                try:
+                    return float(raw)
+                except (ValueError, TypeError):
+                    return default
+            if key in _INT_KEYS:
+                try:
+                    return int(float(raw))
+                except (ValueError, TypeError):
+                    return default
+            return raw
 
         init_kwargs = {}
         for key, (env_var, config_default) in env_mappings.items():
             env_value = os.environ.get(env_var)
-            if env_value is not None:
-                if key in ['temperature']:
-                    try:
-                        init_kwargs[key] = float(env_value)
-                    except ValueError:
-                        init_kwargs[key] = config_default
-                elif key in ['max_tokens', 'max_context_tokens']:
-                    try:
-                        init_kwargs[key] = int(float(env_value))
-                    except ValueError:
-                        init_kwargs[key] = config_default
-                else:
-                    init_kwargs[key] = env_value
-            else:
-                init_kwargs[key] = config_default
+            init_kwargs[key] = _coerce(key, env_value, config_default) if env_value is not None else config_default
 
         for key, value in file_data.items():
             if key == "workspace_path":
                 continue
-            if key not in init_kwargs or init_kwargs[key] == '':
+            if key not in init_kwargs or init_kwargs[key] == "":
                 init_kwargs[key] = value
 
         valid_keys = {f.name for f in fields(cls)}
@@ -286,17 +299,25 @@ class AppConfig:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
-        os.environ['NOTEAI_API_BASE'] = self.api_base
-        os.environ['NOTEAI_MODEL_NAME'] = self.model_name
-        os.environ['NOTEAI_TEMPERATURE'] = str(self.temperature)
-        os.environ['NOTEAI_MAX_TOKENS'] = str(self.max_tokens)
-        os.environ['NOTEAI_MAX_CONTEXT'] = str(self.max_context_tokens)
+        os.environ["NOTEAI_API_BASE"] = self.api_base
+        os.environ["NOTEAI_MODEL_NAME"] = self.model_name
+        os.environ["NOTEAI_TEMPERATURE"] = str(self.temperature)
+        os.environ["NOTEAI_MAX_TOKENS"] = str(self.max_tokens)
+        os.environ["NOTEAI_MAX_CONTEXT"] = str(self.max_context_tokens)
         # NOTE: API key is intentionally NOT written to environ — children
         # should obtain it from the keyring or api_config.json, not inherit it.
 
-        api_fields = {'api_key', 'api_base', 'model_name', 'temperature', 'max_tokens', 'max_context_tokens', 'disable_thinking'}
-        runtime_fields = {'workspace_path'}
-        _skip_keys = {'_lock'}
+        api_fields = {
+            "api_key",
+            "api_base",
+            "model_name",
+            "temperature",
+            "max_tokens",
+            "max_context_tokens",
+            "disable_thinking",
+        }
+        runtime_fields = {"workspace_path"}
+        _skip_keys = {"_lock"}
 
         with self._lock:
             snapshot = dict(self.__dict__)
@@ -310,7 +331,7 @@ class AppConfig:
                 if k not in api_fields and k not in runtime_fields and k not in _skip_keys
             }
 
-            with open(config_path, 'w', encoding='utf-8') as f:
+            with open(config_path, "w", encoding="utf-8") as f:
                 json.dump(non_api_config, f, ensure_ascii=False, indent=2)
 
             _logger.info("配置已保存到: %s", config_path)
@@ -328,13 +349,14 @@ class AppConfig:
             SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
             api_config = {k: v for k, v in snapshot.items() if k in api_fields}
-            if 'api_key' in api_config and api_config['api_key']:
+            if "api_key" in api_config and api_config["api_key"]:
                 from utils.keyring_store import store_api_key
-                store_api_key(api_config['api_key'])
-                api_config.pop('api_key', None)
+
+                store_api_key(api_config["api_key"])
+                api_config.pop("api_key", None)
 
             if api_config:
-                with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                with open(API_CONFIG_FILE, "w", encoding="utf-8") as f:
                     json.dump(api_config, f, ensure_ascii=False, indent=2)
 
                 _restrict_file_permissions(API_CONFIG_FILE)
@@ -356,7 +378,7 @@ class AppConfig:
     def to_dict(self) -> Dict[str, Any]:
         with self._lock:
             d = self.__dict__.copy()
-            d.pop('_lock', None)
+            d.pop("_lock", None)
             return d
 
 

@@ -1,7 +1,6 @@
 import re
 import shutil
 import threading
-from datetime import datetime
 from pathlib import Path
 
 from config import config
@@ -21,8 +20,8 @@ def _safe_topic_segment(segment: str) -> str:
 
 def _safe_topic_path(topic: str) -> str:
     """将 > 分隔的主题字符串转为文件系统安全路径（用 / 连接）。"""
-    if '/' in topic and TOPIC_SEP not in topic:
-        topic = topic.replace('/', TOPIC_SEP)
+    from utils.topic_classifier import _norm_topic
+    topic = _norm_topic(topic)
     parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     safe_parts = []
     for p in parts:
@@ -221,7 +220,6 @@ def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_t
     long_notes.sort(key=lambda x: len(x[1]["content"]), reverse=True)
 
     current_total = total_len
-    compressed_indices = set()
 
     for idx, note in long_notes:
         if current_total <= target_len:
@@ -239,29 +237,6 @@ def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_t
                 "content": compressed,
             }
             current_total -= (original_len - compressed_len)
-            compressed_indices.add(idx)
-
-    if current_total > target_len and long_notes:
-        for idx, note in long_notes:
-            if idx in compressed_indices:
-                continue
-            if current_total <= target_len:
-                break
-            if len(note["content"]) <= 500:
-                continue
-
-            original_len = len(note["content"])
-            note_ratio = max(0.3, target_len / current_total)
-            compressed = _compress_text(note["content"], note_ratio)
-            compressed_len = len(compressed)
-
-            if compressed_len < original_len:
-                notes[idx] = {
-                    "file_name": note["file_name"],
-                    "file_path": note["file_path"],
-                    "content": compressed,
-                }
-                current_total -= (original_len - compressed_len)
 
     return notes
 

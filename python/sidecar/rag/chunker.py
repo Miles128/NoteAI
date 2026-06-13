@@ -142,12 +142,8 @@ def _is_table(text: str) -> bool:
     if not first_line.startswith('|') or not first_line.endswith('|'):
         return False
 
-    if len(lines) >= 2:
-        second_line = lines[1].strip()
-        if second_line.startswith('|') and re.match(r'^\|[-:|]+\|$', second_line):
-            return True
-
-    return False
+    second_line = lines[1].strip()
+    return second_line.startswith('|') and bool(re.match(r'^\|[-:|]+\|$', second_line))
 
 
 def _is_code_block(text: str) -> bool:

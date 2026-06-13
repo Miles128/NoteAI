@@ -6,13 +6,7 @@ from pathlib import Path
 
 from config import config
 from sidecar.rag.context_expand import (
-    _MAX_BACKLINK_CHARS,
-    _MAX_BACKLINK_FILES,
-    _MAX_SURVEY_CHARS,
-    _BACKLINK_SCORE,
     _backlink_items,
-    _confirmed_neighbor_paths,
-    _read_file_excerpt,
     _survey_items,
 )
 from sidecar.textutils import parse_frontmatter
@@ -132,16 +126,18 @@ def retrieve(
 
         seen_paths.add(rel)
         title = _file_title(text, rel)
-        file_hits.append({
-            "id": f"fulltext::{rel}",
-            "content": body,
-            "file_path": rel,
-            "file_name": Path(rel).name,
-            "topic": file_topic,
-            "source_type": "fulltext",
-            "source_label": title,
-            "score": float(item.get("score", 0)),
-        })
+        file_hits.append(
+            {
+                "id": f"fulltext::{rel}",
+                "content": body,
+                "file_path": rel,
+                "file_name": Path(rel).name,
+                "topic": file_topic,
+                "source_type": "fulltext",
+                "source_label": title,
+                "score": float(item.get("score", 0)),
+            }
+        )
         if len(file_hits) >= DEFAULT_TOP_K:
             break
 

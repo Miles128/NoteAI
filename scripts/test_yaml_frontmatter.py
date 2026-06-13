@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """测试YAML front matter生成功能"""
 
 import sys
@@ -9,11 +8,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from utils.tag_extractor import (
-    generate_yaml_frontmatter,
     add_yaml_frontmatter_to_content,
+    generate_yaml_frontmatter,
     parse_yaml_frontmatter,
-    extract_tags_from_filename,
-    split_filename_fields
+    split_filename_fields,
 )
 
 
@@ -24,15 +22,13 @@ def test_generate_frontmatter():
     print("=" * 60)
 
     frontmatter = generate_yaml_frontmatter(
-        title='测试文档标题',
-        tags=['人工智能', '机器学习', '深度学习'],
-        source='https://example.com/article'
+        title="测试文档标题", tags=["人工智能", "机器学习", "深度学习"], source="https://example.com/article"
     )
     print(frontmatter)
-    assert frontmatter.startswith('---')
-    assert 'title:' in frontmatter
-    assert 'tags:' in frontmatter
-    assert '人工智能' in frontmatter
+    assert frontmatter.startswith("---")
+    assert "title:" in frontmatter
+    assert "tags:" in frontmatter
+    assert "人工智能" in frontmatter
     print("✓ 通过\n")
 
 
@@ -43,12 +39,10 @@ def test_special_characters():
     print("=" * 60)
 
     frontmatter = generate_yaml_frontmatter(
-        title='测试: 包含"引号"和: 冒号的标题',
-        tags=['tag1', 'tag2'],
-        source='C:\\Users\\test\\file.pdf'
+        title='测试: 包含"引号"和: 冒号的标题', tags=["tag1", "tag2"], source="C:\\Users\\test\\file.pdf"
     )
     print(frontmatter)
-    assert frontmatter.startswith('---')
+    assert frontmatter.startswith("---")
     print("✓ 通过\n")
 
 
@@ -58,7 +52,7 @@ def test_add_frontmatter_to_content():
     print("测试3: 添加front matter到内容")
     print("=" * 60)
 
-    content = '''# 测试标题
+    content = """# 测试标题
 
 这是一段测试内容。包含中文和英文混合。
 
@@ -67,15 +61,11 @@ def test_add_frontmatter_to_content():
 ## 第二章节
 
 更多内容...
-'''
-    result = add_yaml_frontmatter_to_content(
-        content,
-        title='自动提取标题测试',
-        source='test.md'
-    )
+"""
+    result = add_yaml_frontmatter_to_content(content, title="自动提取标题测试", source="test.md")
     print(result)
-    assert result.startswith('---')
-    assert '# 测试标题' in result
+    assert result.startswith("---")
+    assert "# 测试标题" in result
     print("✓ 通过\n")
 
 
@@ -104,7 +94,7 @@ def test_parse_frontmatter():
     print("测试5: 解析YAML front matter")
     print("=" * 60)
 
-    full_content = '''---
+    full_content = """---
 title: "测试文档"
 tags: [tag1, tag2, tag3]
 date: "2026-04-19"
@@ -114,13 +104,13 @@ source: "https://example.com"
 # 正文标题
 
 正文内容...
-'''
+"""
     try:
         frontmatter_dict, body = parse_yaml_frontmatter(full_content)
         print(f"解析的front matter: {frontmatter_dict}")
         print(f"正文: {body[:50]}...")
-        assert frontmatter_dict.get('title') == '测试文档'
-        assert '# 正文标题' in body
+        assert frontmatter_dict.get("title") == "测试文档"
+        assert "# 正文标题" in body
         print("✓ 通过\n")
     except ImportError:
         print("⚠ PyYAML未安装，跳过解析测试（不影响生成功能）\n")
@@ -134,7 +124,7 @@ def test_empty_content():
 
     frontmatter = generate_yaml_frontmatter()
     print(frontmatter)
-    assert frontmatter.startswith('---')
+    assert frontmatter.startswith("---")
     print("✓ 通过\n")
 
 
@@ -158,9 +148,10 @@ def main():
     except Exception as e:
         print(f"测试失败: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

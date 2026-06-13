@@ -1,9 +1,10 @@
 import re
 from pathlib import Path
 
-from config.constants import TOPIC_SEP
-from config import config
 from sidecar.textutils import parse_frontmatter, write_frontmatter
+
+from config import config
+from config.constants import TOPIC_SEP
 from utils.logger import logger
 from utils.topic_classifier import _norm_topic
 
@@ -152,7 +153,7 @@ def _clear_topic_in_file(file_path):
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):
-    from utils.wiki_manager import remove_file_from_wiki_topic, add_file_to_wiki_topic
+    from utils.wiki_manager import add_file_to_wiki_topic, remove_file_from_wiki_topic
 
     new_topic = _norm_topic(new_topic)
     workspace = config.workspace_path
@@ -187,10 +188,8 @@ def move_file_to_topic(file_rel_path, new_topic, file_title=None):
     if add_success:
         if old_topic:
             return {"success": True, "message": f"已从「{old_topic}」移动到「{new_topic}」"}
-        else:
-            return {"success": True, "message": f"已添加到「{new_topic}」"}
-    else:
-        return {"success": False, "message": "移动失败"}
+        return {"success": True, "message": f"已添加到「{new_topic}」"}
+    return {"success": False, "message": "移动失败"}
 
 
 def _read_topic_from_file(file_path):

@@ -11,16 +11,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WEBUI = REPO_ROOT / "webui"
 INDEX = WEBUI / "index.html"
 
-REQUIRED_ELEMENT_IDS = frozenset({
-    "sidebar",
-    "right-area",
-    "content-panel",
-    "preview-panel",
-    "tiptap-editor",
-    "tiptap-editor-container",
-    "graph-panel",
-    "ai-panel",
-})
+REQUIRED_ELEMENT_IDS = frozenset(
+    {
+        "sidebar",
+        "right-area",
+        "content-panel",
+        "preview-panel",
+        "tiptap-editor",
+        "tiptap-editor-container",
+        "graph-panel",
+        "ai-panel",
+    }
+)
 
 REQUIRED_STATIC_ASSETS = (
     "css/variables.css",

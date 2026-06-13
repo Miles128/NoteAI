@@ -1,8 +1,6 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.schema_manager import (
     DEFAULT_SCHEMA,
     SCHEMA_CONFIGURED_MARKER,
@@ -14,6 +12,8 @@ from sidecar.schema_manager import (
     parse_schema_rules,
     save_schema_text,
 )
+
+from config import config
 
 
 @pytest.fixture

@@ -18,8 +18,8 @@ from sidecar.handlers import (
     ConfigHandler,
     FilesHandler,
     IngestHandler,
-    KbHandler,
     IntelHandler,
+    KbHandler,
     LinksHandler,
     RagHandler,
     TagsHandler,
@@ -27,18 +27,18 @@ from sidecar.handlers import (
     TransferHandler,
     WorkspaceHandler,
 )
-from sidecar.schema_manager import ensure_schema
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
+from sidecar.schema_manager import ensure_schema
 from sidecar.service_context import ServiceContext
+from sidecar.wiki_utils import (
+    sync_wiki_with_files,
+)
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger
 from utils.topic_assigner import (
     auto_process_md_file,
-)
-from sidecar.wiki_utils import (
-    sync_wiki_with_files,
 )
 from utils.ttl_cache import TTLCache
 
@@ -239,7 +239,7 @@ class SidecarServer(PathHelpersMixin):
         return self._topics_handler._batch_auto_assign_topics(params)
 
     @staticmethod
-    def _rel_parts(file_path: str) -> tuple[str, ...]:
+    def _rel_parts(file_path: str | Path) -> tuple[str, ...]:
         workspace = config.workspace_path
         path = Path(file_path)
         try:

@@ -65,14 +65,16 @@ class BaiduProvider(CloudProvider):
         for item in data.get("list", []):
             is_dir = item.get("isdir", 0) == 1
             mtime = item.get("server_mtime", 0)
-            items.append(CloudFileInfo(
-                path=f"{remote_path}/{item['server_filename']}" if remote_path else item["server_filename"],
-                name=item["server_filename"],
-                size=item.get("size", 0),
-                modified_time=float(mtime) if mtime else 0.0,
-                is_dir=is_dir,
-                cloud_id=str(item.get("fs_id", "")),
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=f"{remote_path}/{item['server_filename']}" if remote_path else item["server_filename"],
+                    name=item["server_filename"],
+                    size=item.get("size", 0),
+                    modified_time=float(mtime) if mtime else 0.0,
+                    is_dir=is_dir,
+                    cloud_id=str(item.get("fs_id", "")),
+                )
+            )
         return items
 
     def upload_file(self, local_path: str, remote_path: str) -> bool:

@@ -11,6 +11,7 @@ from sidecar.handlers.base import BaseHandler
 try:
     import jieba  # noqa: F811
     import jieba.analyse  # noqa: F401
+
     _HAS_JIEBA = True
 except ImportError:
     _HAS_JIEBA = False
@@ -50,20 +51,31 @@ class RagHandler(BaseHandler):
                 result = rebuild_index(progress_callback=progress_cb)
 
                 if result.get("success") is False:
-                    self._send_response({
-                        "id": "event",
-                        "result": {"type": "rag_index_built", "success": False, "message": result.get("message", "索引构建失败")}
-                    })
+                    self._send_response(
+                        {
+                            "id": "event",
+                            "result": {
+                                "type": "rag_index_built",
+                                "success": False,
+                                "message": result.get("message", "索引构建失败"),
+                            },
+                        }
+                    )
                 else:
-                    self._send_response({
-                        "id": "event",
-                        "result": {"type": "rag_index_built", "success": True, "indexed": result.get("chunk_count", 0)}
-                    })
+                    self._send_response(
+                        {
+                            "id": "event",
+                            "result": {
+                                "type": "rag_index_built",
+                                "success": True,
+                                "indexed": result.get("chunk_count", 0),
+                            },
+                        }
+                    )
             except Exception as e:
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "rag_index_built", "success": False, "message": str(e)}
-                })
+                self._send_response(
+                    {"id": "event", "result": {"type": "rag_index_built", "success": False, "message": str(e)}}
+                )
             finally:
                 self._rag_build_lock.release()
 
@@ -81,6 +93,7 @@ class RagHandler(BaseHandler):
     @staticmethod
     def _check_error_reset():
         import time
+
         try:
             ep = RagHandler._error_state_path()
             data = json.loads(Path(ep).read_text(encoding="utf-8"))
@@ -100,10 +113,11 @@ class RagHandler(BaseHandler):
     @staticmethod
     def _record_error(msg):
         import time
+
         with contextlib.suppress(OSError):
             Path(RagHandler._error_state_path()).write_text(
-                json.dumps({"ts": time.time(), "msg": msg}, ensure_ascii=False),
-                encoding="utf-8")
+                json.dumps({"ts": time.time(), "msg": msg}, ensure_ascii=False), encoding="utf-8"
+            )
 
     def _rag_add_chunks(self, params):
         if not config.rag_enabled:
@@ -149,6 +163,7 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": "未设置工作区"}
 
         from sidecar.rag.index import delete_by_file
+
         try:
             delete_by_file(workspace, file_path)
             return {"success": True}
@@ -156,10 +171,12 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def _emit_rag_error(self, message: str) -> None:
-        self._send_response({
-            "id": "event",
-            "result": {"type": "rag_error", "message": message},
-        })
+        self._send_response(
+            {
+                "id": "event",
+                "result": {"type": "rag_error", "message": message},
+            }
+        )
 
     def _fail_rag(self, message: str) -> dict:
         self._emit_rag_error(message)
@@ -192,6 +209,7 @@ class RagHandler(BaseHandler):
 
     def _rag_clear_memory(self, params):
         from sidecar.rag.memory import save_short_memory
+
         save_short_memory("")
         return {"success": True}
 
@@ -255,13 +273,15 @@ class RagHandler(BaseHandler):
             label = r.get("source_label") or r.get("file_name") or r.get("file_path", "")
             idx = len(context_parts) + 1
             context_parts.append(f"[{idx}] {label}\n{body}")
-            citations.append({
-                "index": idx,
-                "file_path": r.get("file_path", ""),
-                "file_name": r.get("file_name") or Path(r.get("file_path", "")).stem,
-                "section_title": r.get("section_title") or "",
-                "topic": r.get("topic") or "",
-            })
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": r.get("file_path", ""),
+                    "file_name": r.get("file_name") or Path(r.get("file_path", "")).stem,
+                    "section_title": r.get("section_title") or "",
+                    "topic": r.get("topic") or "",
+                }
+            )
         context = "\n\n".join(context_parts)
         if tool_context:
             context = (context + "\n\n" + tool_context).strip() if context else tool_context
@@ -278,13 +298,15 @@ class RagHandler(BaseHandler):
         assistant_response = ""
 
         def on_token(token):
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rag_chat_chunk",
-                    "token": token,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "rag_chat_chunk",
+                        "token": token,
+                    },
                 }
-            })
+            )
 
         try:
             assistant_response = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_token)
@@ -315,20 +337,23 @@ class RagHandler(BaseHandler):
         save_short_memory(updated_history)
 
         from sidecar.rag.memory import update_long_memory
+
         try:
             update_long_memory(question)
         except Exception:
             pass
 
-        self._send_response({
-            "id": "event",
-            "result": {
-                "type": "rag_chat_done",
-                "answer": display_answer,
-                "suggest_save_note": suggest_save_note,
-                "citations": citations,
-            },
-        })
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "rag_chat_done",
+                    "answer": display_answer,
+                    "suggest_save_note": suggest_save_note,
+                    "citations": citations,
+                },
+            }
+        )
         return {"success": True, "suggest_save_note": suggest_save_note}
 
     def _generate_hyde(self, question):
@@ -363,7 +388,7 @@ class RagHandler(BaseHandler):
                 parts.append(f"{role}: {text}")
                 continue
 
-            sentences = re.split(r'[。！？\n]', text)
+            sentences = re.split(r"[。！？\n]", text)
             sentences = [s.strip() for s in sentences if len(s.strip()) > 3]
 
             if not sentences:

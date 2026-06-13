@@ -86,14 +86,16 @@ class OneDriveProvider(CloudProvider):
         items = []
         for item in resp.json().get("value", []):
             ts = self._parse_mtime(item.get("lastModifiedDateTime", ""))
-            items.append(CloudFileInfo(
-                path=f"{remote_path}/{item['name']}" if remote_path else item["name"],
-                name=item["name"],
-                size=item.get("size", 0),
-                modified_time=ts,
-                is_dir="folder" in item,
-                cloud_id=item.get("id", ""),
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=f"{remote_path}/{item['name']}" if remote_path else item["name"],
+                    name=item["name"],
+                    size=item.get("size", 0),
+                    modified_time=ts,
+                    is_dir="folder" in item,
+                    cloud_id=item.get("id", ""),
+                )
+            )
         return items
 
     def upload_file(self, local_path: str, remote_path: str) -> bool:
@@ -120,5 +122,7 @@ class OneDriveProvider(CloudProvider):
         parent = f"{self.REMOTE_ROOT}/{'/'.join(parts[:-1])}" if len(parts) > 1 else self.REMOTE_ROOT
         url = f"{self.GRAPH_BASE}/me/drive/root:{parent}:/children"
         body = {"name": parts[-1], "folder": {}}
-        resp = requests.post(url, headers={**self._headers(), "Content-Type": "application/json"}, json=body, timeout=30)
+        resp = requests.post(
+            url, headers={**self._headers(), "Content-Type": "application/json"}, json=body, timeout=30
+        )
         return resp.status_code in (200, 201)

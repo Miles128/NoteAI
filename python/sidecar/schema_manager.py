@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 from config import config
-from config.settings import WORKSPACE_APP_FOLDER
 
 SCHEMA_FILENAME = "schema.md"
 LEGACY_SCHEMA_FILENAME = "SCHEMA.md"

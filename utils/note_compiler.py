@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import yaml
+from sidecar.compile_state import file_needs_compile, mark_compiled
+from sidecar.textutils import parse_frontmatter
 
 from config import config
 from config.settings import NOTES_FOLDER
-from sidecar.compile_state import file_needs_compile, mark_compiled
-from sidecar.textutils import parse_frontmatter
 from utils.logger import logger
 
 _CONVERTED_SOURCE_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".html", ".htm", ".txt"}

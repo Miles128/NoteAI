@@ -17,14 +17,16 @@ from pathlib import Path
 from typing import Any
 
 from config import config, is_ignored_dir
+from utils.logger import logger
 from utils.text_utils import (
-    tokenize as tokenize_text,
-    _is_meaningful_tag,
     _is_generic_word,
+    _is_meaningful_tag,
     _normalize_for_match,
     parse_frontmatter,
 )
-from utils.logger import logger
+from utils.text_utils import (
+    tokenize as tokenize_text,
+)
 
 
 def _get_links_path() -> Path | None:

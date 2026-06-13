@@ -21,6 +21,7 @@ class AgentHandler(BaseHandler):
 
         def _worker() -> None:
             try:
+
                 def send_event(payload: dict) -> None:
                     self._send_response({"id": "event", "result": payload})
 
@@ -31,13 +32,15 @@ class AgentHandler(BaseHandler):
                     send_event=send_event,
                 )
                 if not result.get("success"):
-                    self._send_response({
-                        "id": "event",
-                        "result": {
-                            "type": "agent_error",
-                            "message": result.get("message", "小忆没能完成这次请求"),
-                        },
-                    })
+                    self._send_response(
+                        {
+                            "id": "event",
+                            "result": {
+                                "type": "agent_error",
+                                "message": result.get("message", "小忆没能完成这次请求"),
+                            },
+                        }
+                    )
                     return
 
                 answer = result.get("answer", "")
@@ -45,19 +48,23 @@ class AgentHandler(BaseHandler):
                 save_short_memory(updated[-3000:])
                 update_long_memory(question)
 
-                self._send_response({
-                    "id": "event",
-                    "result": {
-                        "type": "agent_chat_done",
-                        "answer": answer,
-                        "tools": result.get("tools", []),
-                    },
-                })
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "agent_chat_done",
+                            "answer": answer,
+                            "tools": result.get("tools", []),
+                        },
+                    }
+                )
             except Exception as e:
-                self._send_response({
-                    "id": "event",
-                    "result": {"type": "agent_error", "message": str(e)},
-                })
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {"type": "agent_error", "message": str(e)},
+                    }
+                )
             finally:
                 self._agent_lock.release()
 

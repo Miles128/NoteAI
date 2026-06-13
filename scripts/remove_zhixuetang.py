@@ -1,4 +1,3 @@
-import re
 import sys
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from config.settings import is_ignored_dir
 def remove_zhixuetang(text):
     """
     删除'知学堂'三个字，支持被换行符/空白分隔的情况
-    
+
     支持的模式：
     - '知学堂' → ''
     - '知\n学堂' → ''
@@ -18,7 +17,7 @@ def remove_zhixuetang(text):
     - '知\n学\n堂' → ''
     - '知 \n 学 \n 堂' → '' (带空白)
     """
-    chars = ['知', '学', '堂']
+    chars = ["知", "学", "堂"]
     result = text
     max_whitespace = 20
 
@@ -29,7 +28,7 @@ def remove_zhixuetang(text):
             if result[i] != chars[0]:
                 continue
 
-            remaining = result[i + 1:]
+            remaining = result[i + 1 :]
             idx2 = -1
             for j in range(min(max_whitespace, len(remaining))):
                 if remaining[j] == chars[1]:
@@ -38,7 +37,7 @@ def remove_zhixuetang(text):
             if idx2 < 0:
                 continue
 
-            after_idx2 = remaining[idx2 + 1:]
+            after_idx2 = remaining[idx2 + 1 :]
             idx3 = -1
             for j in range(min(max_whitespace, len(after_idx2))):
                 if after_idx2[j] == chars[2]:
@@ -76,22 +75,22 @@ def main():
         nonlocal modified_count, file_count
         try:
             for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
-                if entry.name.startswith('.'):
+                if entry.name.startswith("."):
                     continue
                 if entry.is_dir():
                     if is_ignored_dir(entry.name):
                         continue
                     scan(str(entry))
-                elif entry.suffix.lower() == '.md':
+                elif entry.suffix.lower() == ".md":
                     file_count += 1
                     try:
-                        original = entry.read_text(encoding='utf-8')
+                        original = entry.read_text(encoding="utf-8")
                         modified = remove_zhixuetang(original)
 
                         if modified != original:
                             diff_len = len(original) - len(modified)
                             print(f"[修改] {entry.relative_to(workspace)}  (删除约 {diff_len} 字符)")
-                            entry.write_text(modified, encoding='utf-8')
+                            entry.write_text(modified, encoding="utf-8")
                             modified_count += 1
                     except Exception as e:
                         print(f"[错误] {entry.relative_to(workspace)}: {e}")

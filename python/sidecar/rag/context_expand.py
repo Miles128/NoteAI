@@ -85,16 +85,18 @@ def _survey_items(workspace: str, topic_keys: list[str]) -> list[dict]:
             body = body[:_MAX_SURVEY_CHARS] + "…"
 
         leaf = topic.rsplit(TOPIC_SEP, maxsplit=1)[-1]
-        items.append({
-            "id": f"survey::{topic}",
-            "content": body,
-            "file_path": rel,
-            "file_name": survey_path.name,
-            "topic": topic,
-            "source_type": "survey",
-            "source_label": f"主题综述·{leaf}",
-            "score": 0.95,
-        })
+        items.append(
+            {
+                "id": f"survey::{topic}",
+                "content": body,
+                "file_path": rel,
+                "file_name": survey_path.name,
+                "topic": topic,
+                "source_type": "survey",
+                "source_label": f"主题综述·{leaf}",
+                "score": 0.95,
+            }
+        )
     return items
 
 
@@ -126,17 +128,19 @@ def _backlink_items(workspace: str, seed_paths: list[str], exclude: set[str]) ->
 
             added.add(neighbor)
             name = Path(neighbor).name
-            items.append({
-                "id": f"backlink::{neighbor}",
-                "content": content,
-                "file_path": neighbor,
-                "file_name": name,
-                "topic": chunks[0].get("topic", "") if chunks else "",
-                "source_type": "backlink",
-                "source_label": f"关联笔记·{name}",
-                "score": _BACKLINK_SCORE,
-                "linked_from": seed,
-            })
+            items.append(
+                {
+                    "id": f"backlink::{neighbor}",
+                    "content": content,
+                    "file_path": neighbor,
+                    "file_name": name,
+                    "topic": chunks[0].get("topic", "") if chunks else "",
+                    "source_type": "backlink",
+                    "source_label": f"关联笔记·{name}",
+                    "score": _BACKLINK_SCORE,
+                    "linked_from": seed,
+                }
+            )
     return items
 
 
@@ -189,8 +193,5 @@ def expand_retrieval_context(
         out.append(item)
 
     if surveys or backlinks:
-        logger.info(
-            f"[rag/context_expand] surveys={len(surveys)} backlinks={len(backlinks)} "
-            f"vector={len(expanded)}"
-        )
+        logger.info(f"[rag/context_expand] surveys={len(surveys)} backlinks={len(backlinks)} vector={len(expanded)}")
     return out

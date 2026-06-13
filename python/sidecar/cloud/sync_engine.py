@@ -52,11 +52,13 @@ class SyncEngine:
                     try:
                         stat = os.stat(full)
                         rel = os.path.relpath(full, self._workspace)
-                        files.append({
-                            "relative_path": rel,
-                            "mtime": stat.st_mtime,
-                            "size": stat.st_size,
-                        })
+                        files.append(
+                            {
+                                "relative_path": rel,
+                                "mtime": stat.st_mtime,
+                                "size": stat.st_size,
+                            }
+                        )
                     except OSError:
                         continue
         return files
@@ -76,11 +78,13 @@ class SyncEngine:
             if item.is_dir:
                 self._scan_remote_recursive(item.path, result)
             else:
-                result.append({
-                    "relative_path": item.path,
-                    "mtime": item.modified_time,
-                    "size": item.size,
-                })
+                result.append(
+                    {
+                        "relative_path": item.path,
+                        "mtime": item.modified_time,
+                        "size": item.size,
+                    }
+                )
 
     def _ensure_remote_dirs(self, relative_path: str):
         parts = relative_path.replace("\\", "/").split("/")

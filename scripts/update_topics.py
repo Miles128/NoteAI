@@ -1,111 +1,115 @@
-import os, re, yaml, sys
-from pathlib import Path
+import re
+import sys
 from datetime import datetime
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import config
 
 workspace = config.workspace_path
 if not workspace:
-    print('Error: 未设置工作区路径 (workspace_path)')
+    print("Error: 未设置工作区路径 (workspace_path)")
     exit(1)
 workspace = Path(workspace)
-notes_dir = workspace / 'Notes'
+notes_dir = workspace / "Notes"
 
 topic_map = {}
 topic_files = {}
 
 for subfolder in sorted(notes_dir.iterdir()):
-    if not subfolder.is_dir() or subfolder.name.startswith('.'):
+    if not subfolder.is_dir() or subfolder.name.startswith("."):
         continue
     topic_name = subfolder.name
     topic_files[topic_name] = []
-    for md_file in sorted(subfolder.glob('*.md')):
-        if not md_file.name.startswith('.'):
+    for md_file in sorted(subfolder.glob("*.md")):
+        if not md_file.name.startswith("."):
             topic_map[md_file] = topic_name
             topic_files[topic_name].append(md_file.name)
 
+
 def extract_frontmatter_and_body(text):
-    text = text.lstrip('\ufeff')
+    text = text.lstrip("\ufeff")
     fm_parts = []
     body = text
-    while body.startswith('---'):
-        end = body.find('\n---', 4)
+    while body.startswith("---"):
+        end = body.find("\n---", 4)
         if end < 0:
             break
         chunk = body[4:end].strip()
         if chunk:
             fm_parts.append(chunk)
-        body = body[end + 4:]
-        if body.startswith('\n'):
+        body = body[end + 4 :]
+        if body.startswith("\n"):
             body = body[1:]
-        body = body.lstrip('\ufeff')
+        body = body.lstrip("\ufeff")
     return fm_parts, body
 
+
 def clean_fm_text(fm_text):
-    lines = fm_text.split('\n')
+    lines = fm_text.split("\n")
     cleaned = []
     i = 0
     while i < len(lines):
         line = lines[i]
         stripped = line.lstrip()
-        if stripped.startswith('topic:') or stripped.startswith('topics:'):
+        if stripped.startswith("topic:") or stripped.startswith("topics:"):
             i += 1
             while i < len(lines):
                 next_stripped = lines[i].lstrip()
-                if next_stripped.startswith('- ') or next_stripped.startswith('  ') or next_stripped.startswith('\t'):
+                if next_stripped.startswith("- ") or next_stripped.startswith("  ") or next_stripped.startswith("\t"):
                     i += 1
                 else:
                     break
             continue
-        if stripped.startswith('- ') and (not cleaned or not cleaned[-1].strip()):
+        if stripped.startswith("- ") and (not cleaned or not cleaned[-1].strip()):
             i += 1
             continue
         cleaned.append(line)
         i += 1
-    return '\n'.join(cleaned)
+    return "\n".join(cleaned)
+
 
 updated = 0
 for md_file, topic_name in topic_map.items():
     try:
-        text = md_file.read_text(encoding='utf-8')
+        text = md_file.read_text(encoding="utf-8")
         fm_parts, body = extract_frontmatter_and_body(text)
 
-        merged_fm = '\n'.join(fm_parts)
+        merged_fm = "\n".join(fm_parts)
         merged_fm = clean_fm_text(merged_fm)
-        merged_fm = re.sub(r'\n{3,}', '\n\n', merged_fm)
+        merged_fm = re.sub(r"\n{3,}", "\n\n", merged_fm)
         merged_fm = merged_fm.strip()
         if merged_fm:
-            merged_fm += f'\ntopics:\n- {topic_name}'
+            merged_fm += f"\ntopics:\n- {topic_name}"
         else:
-            merged_fm = f'topics:\n- {topic_name}'
+            merged_fm = f"topics:\n- {topic_name}"
 
-        new_content = f'---\n{merged_fm}\n---\n{body}'
-        md_file.write_text(new_content, encoding='utf-8')
+        new_content = f"---\n{merged_fm}\n---\n{body}"
+        md_file.write_text(new_content, encoding="utf-8")
         updated += 1
     except Exception as e:
-        print(f'Error: {md_file.name}: {e}')
+        print(f"Error: {md_file.name}: {e}")
 
-print(f'Updated {updated} files')
+print(f"Updated {updated} files")
 
-wiki_lines = ['# WIKI\n']
-wiki_lines.append(f'生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M")}')
-wiki_lines.append(f'主题数量: {len(topic_files)}\n')
-wiki_lines.append('## 目录\n')
+wiki_lines = ["# WIKI\n"]
+wiki_lines.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+wiki_lines.append(f"主题数量: {len(topic_files)}\n")
+wiki_lines.append("## 目录\n")
 for topic_name in sorted(topic_files.keys()):
     count = len(topic_files[topic_name])
-    wiki_lines.append(f'- {topic_name} - {count} 个文件')
-wiki_lines.append('')
+    wiki_lines.append(f"- {topic_name} - {count} 个文件")
+wiki_lines.append("")
 for topic_name in sorted(topic_files.keys()):
-    wiki_lines.append(f'## {topic_name}\n')
-    wiki_lines.append('### 来源文件\n')
+    wiki_lines.append(f"## {topic_name}\n")
+    wiki_lines.append("### 来源文件\n")
     for i, fname in enumerate(topic_files[topic_name], 1):
-        wiki_lines.append(f'{i}. **{fname.replace(".md", "")}**')
-        wiki_lines.append(f'   - 文件名：{fname}')
-        wiki_lines.append(f'   - 原始路径：Notes/{topic_name}/{fname}')
-    wiki_lines.append('')
+        wiki_lines.append(f"{i}. **{fname.replace('.md', '')}**")
+        wiki_lines.append(f"   - 文件名：{fname}")
+        wiki_lines.append(f"   - 原始路径：Notes/{topic_name}/{fname}")
+    wiki_lines.append("")
 
-wiki_path = workspace / 'wiki' / 'WIKI.md'
+wiki_path = workspace / "wiki" / "WIKI.md"
 wiki_path.parent.mkdir(parents=True, exist_ok=True)
-wiki_path.write_text('\n'.join(wiki_lines), encoding='utf-8')
-print(f'WIKI.md rewritten with {len(topic_files)} topics')
+wiki_path.write_text("\n".join(wiki_lines), encoding="utf-8")
+print(f"WIKI.md rewritten with {len(topic_files)} topics")

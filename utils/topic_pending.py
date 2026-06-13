@@ -27,7 +27,7 @@ def load_pending():
         if not path or not path.exists():
             return []
         try:
-            return json.loads(path.read_text(encoding='utf-8'))
+            return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError, ValueError) as e:
             logger.error(f"[topic_assigner] load_pending failed: {e}")
             return []
@@ -38,8 +38,8 @@ def save_pending(pending):
         path = _get_pending_path()
         if not path:
             return
-        tmp_path = path.with_suffix('.tmp')
-        tmp_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(pending, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp_path.replace(path)
 
 
@@ -73,7 +73,7 @@ def cleanup_stale_pending():
             logger.info(f"[topic_assigner] 清理无效待办: {file_path} 文件已不存在")
             continue
         try:
-            text = full.read_text(encoding='utf-8')
+            text = full.read_text(encoding="utf-8")
             meta, _ = parse_frontmatter(text)
             if meta is not None and not _check_topic_needs_processing(meta):
                 logger.info(f"[topic_assigner] 清理已处理待办: {file_path} 已有主题")

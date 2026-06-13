@@ -1,8 +1,8 @@
 """Tests for the unified error handling utilities."""
 
-import sys
 import pytest
-from utils.error_handler import log_exception, swallow, format_exc_compact
+
+from utils.error_handler import format_exc_compact, swallow
 
 
 class TestFormatExcCompact:

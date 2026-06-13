@@ -8,25 +8,21 @@ from config.constants import TOPIC_SEP
 from sidecar.cascade import (
     append_changelog,
     cascade_on_topic_resolved,
-    collect_topic_notes,
     ensure_topic_folder,
-    generate_new_survey,
-    get_survey_path,
-    update_existing_survey,
 )
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
 from sidecar.wiki_utils import (
     create_topic as wiki_create_topic,
+)
+from sidecar.wiki_utils import (
     get_all_topic_names,
     get_survey_status,
     parse_wiki_headings,
-    resolve_wiki_path,
     sync_wiki_with_files,
     toggle_survey,
 )
 from utils.activity_log import get_entries
-from utils.link_indexer import load_links
 from utils.logger import logger
 from utils.topic_assigner import (
     _deduplicate_files_in_wiki,
@@ -49,7 +45,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": str(e)}
 
     def _topic_dir_path(self, workspace_path: Path, topic_name: str) -> Path:
-        normalized = topic_name.replace('/', TOPIC_SEP)
+        normalized = topic_name.replace("/", TOPIC_SEP)
         parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
         topic_dir = workspace_path / config.NOTES_FOLDER
         for part in parts:
@@ -57,7 +53,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return topic_dir
 
     def _topic_artifact_dir_path(self, workspace_path: Path, root_folder: str, topic_name: str) -> Path:
-        normalized = topic_name.replace('/', TOPIC_SEP)
+        normalized = topic_name.replace("/", TOPIC_SEP)
         parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
         topic_dir = workspace_path / root_folder
         for part in parts:
@@ -100,8 +96,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "未设置工作区或工作区不存在"}
 
         ws = Path(config.workspace_path)
-        md_files = [f for f in ws.rglob("*.md") if not f.name.startswith(".")
-                    and "wiki" not in f.parts and not is_ignored_dir(f.parent.name)]
+        md_files = [
+            f
+            for f in ws.rglob("*.md")
+            if not f.name.startswith(".") and "wiki" not in f.parts and not is_ignored_dir(f.parent.name)
+        ]
         total = len(md_files)
         auto_assigned = 0
         need_confirm = 0
@@ -125,8 +124,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                 skipped += 1
 
             if i % 10 == 0:
-                self._send_progress("topic-assign-progress", int((i + 1) / total * 100),
-                                    f"处理中 {i + 1}/{total}")
+                self._send_progress("topic-assign-progress", int((i + 1) / total * 100), f"处理中 {i + 1}/{total}")
 
         for topic in assigned_topics:
             self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
@@ -338,7 +336,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
         try:
-            text = full_path.read_text(encoding='utf-8')
+            text = full_path.read_text(encoding="utf-8")
             fm, _ = self._parse_frontmatter(text)
             if fm is None:
                 return {"success": True, "topics": []}
@@ -354,11 +352,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not topic_name or not workspace or not workspace_path.exists():
             return {"success": True, "files": []}
         files = []
-        for md_file in sorted(workspace_path.rglob('*.md')):
-            if md_file.name.startswith('.') or 'wiki' in md_file.parts:
+        for md_file in sorted(workspace_path.rglob("*.md")):
+            if md_file.name.startswith(".") or "wiki" in md_file.parts:
                 continue
             try:
-                text = md_file.read_text(encoding='utf-8')
+                text = md_file.read_text(encoding="utf-8")
                 fm, _ = self._parse_frontmatter(text)
                 if fm is None:
                     continue
@@ -381,8 +379,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
         try:
-            text = full_path.read_text(encoding='utf-8')
-            had_bom = text.startswith('\ufeff')
+            text = full_path.read_text(encoding="utf-8")
+            had_bom = text.startswith("\ufeff")
             meta, body = self._parse_frontmatter(text)
             if meta is None:
                 return {"success": True, "message": "无需修改"}
@@ -390,12 +388,12 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                 meta.pop("topic", None)
                 if meta:
                     new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-                    prefix = '\ufeff' if had_bom else ''
-                    new_content = prefix + '---\n' + new_fm + '\n---\n' + body.lstrip('\n')
+                    prefix = "\ufeff" if had_bom else ""
+                    new_content = prefix + "---\n" + new_fm + "\n---\n" + body.lstrip("\n")
                 else:
-                    prefix = '\ufeff' if had_bom else ''
-                    new_content = prefix + body.lstrip('\n')
-                full_path.write_text(new_content, encoding='utf-8')
+                    prefix = "\ufeff" if had_bom else ""
+                    new_content = prefix + body.lstrip("\n")
+                full_path.write_text(new_content, encoding="utf-8")
                 notes_root = Path(config.workspace_path) / config.NOTES_FOLDER
                 notes_root.mkdir(parents=True, exist_ok=True)
                 if full_path.parent != notes_root:
@@ -423,7 +421,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             fm, _ = self._parse_frontmatter(text)
             topic = fm.get("topic") if fm else None
             if topic:
-                self._start_task(f"cascade_{topic}_{file_path.stem}", cascade_on_topic_resolved, args=(str(file_path), topic))
+                self._start_task(
+                    f"cascade_{topic}_{file_path.stem}", cascade_on_topic_resolved, args=(str(file_path), topic)
+                )
         except Exception as e:
             logger.error(f"[topics_handler] file_added_cascade error: {e}")
 

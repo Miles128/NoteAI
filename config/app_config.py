@@ -1,9 +1,10 @@
 import json
+import logging
 import os
 import threading
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from .constants import (
     ABSTRACT_FOLDER,
@@ -18,8 +19,6 @@ from .constants import (
     WORKSPACE_STATE_FILE,
 )
 from .security import _deobfuscate, _restrict_file_permissions
-
-import logging
 
 _logger = logging.getLogger("NoteAI")
 
@@ -125,7 +124,7 @@ class AppConfig:
             return ""
         return str(Path(self.workspace_path) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER)
 
-    def setup_workspace_folders(self) -> Tuple[bool, str]:
+    def setup_workspace_folders(self) -> tuple[bool, str]:
         if not self.workspace_path:
             return False, "工作文件夹路径未设置"
 
@@ -200,7 +199,7 @@ class AppConfig:
         file_data = {}
         if os.path.exists(config_path):
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     file_data = json.load(f)
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 _logger.warning("加载配置失败: %s, 使用默认配置", e)
@@ -211,7 +210,7 @@ class AppConfig:
         api_key_from_file = None
         if os.path.exists(API_CONFIG_FILE):
             try:
-                with open(API_CONFIG_FILE, "r", encoding="utf-8") as f:
+                with open(API_CONFIG_FILE, encoding="utf-8") as f:
                     api_data = json.load(f)
                 if "api_key" in api_data and api_data["api_key"]:
                     api_key_from_file = _deobfuscate(api_data["api_key"])
@@ -295,7 +294,7 @@ class AppConfig:
 
         return cls(**init_kwargs)
 
-    def save_to_file(self, config_path: str = None) -> Tuple[bool, str]:
+    def save_to_file(self, config_path: str = None) -> tuple[bool, str]:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
@@ -375,7 +374,7 @@ class AppConfig:
     def save(self, config_path: str = None):
         return self.save_to_file(config_path)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         with self._lock:
             d = self.__dict__.copy()
             d.pop("_lock", None)

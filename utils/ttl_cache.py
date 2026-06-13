@@ -1,8 +1,8 @@
 """TTL-aware dict cache with LRU eviction — prevents unbounded memory growth."""
 
-import time
 import threading
-from typing import Any, Optional
+import time
+from typing import Any
 
 
 class TTLCache:
@@ -23,7 +23,7 @@ class TTLCache:
         self._ttl = ttl
         self._max_size = max_size
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         with self._lock:
             entry = self._data.get(key)
             if entry is None:
@@ -34,7 +34,7 @@ class TTLCache:
                 return None
             return value
 
-    def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:
+    def set(self, key: str, value: Any, ttl: float | None = None) -> None:
         expiry = time.monotonic() + (ttl if ttl is not None else self._ttl)
         with self._lock:
             if key in self._data:

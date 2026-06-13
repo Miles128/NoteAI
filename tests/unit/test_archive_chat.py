@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
+from sidecar.archive_wiki import archive_chat_answer, parse_save_suggestion
 
 from config import config
-from sidecar.archive_wiki import archive_chat_answer, parse_save_suggestion
 
 _SCHEMA_OK = (
     "ai_may_edit_wiki: true\n"

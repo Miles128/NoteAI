@@ -136,10 +136,12 @@ class IngestHandler(BaseHandler):
             )
         except Exception as e:
             logger.warning(f"[ingest] pipeline error: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "ingest_complete", "success": False, "error": str(e)},
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "ingest_complete", "success": False, "error": str(e)},
+                }
+            )
 
     def _cancel_ingest(self, _params):
         request_cancel()

@@ -174,7 +174,7 @@ class ConfigHandler(BaseHandler):
         rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
         if rules_path.exists():
             try:
-                return {"success": True, "rules": rules_path.read_text(encoding='utf-8')}
+                return {"success": True, "rules": rules_path.read_text(encoding="utf-8")}
             except Exception as e:
                 logger.error(f"[config_handler] reading project rules file: {e}")
         return {"success": True, "rules": ""}
@@ -186,5 +186,5 @@ class ConfigHandler(BaseHandler):
         rules = params.get("rules", "")
         rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
         rules_path.parent.mkdir(parents=True, exist_ok=True)
-        rules_path.write_text(rules, encoding='utf-8')
+        rules_path.write_text(rules, encoding="utf-8")
         return {"success": True, "message": "项目规则已保存"}

@@ -114,14 +114,16 @@ class JianguoyunProvider(CloudProvider):
                     continue
                 propstat = resp_elem.find("d:propstat/d:prop", ns)
                 is_dir, size, mtime = self._parse_propstat(propstat, ns)
-                items.append(CloudFileInfo(
-                    path=f"{remote_path}/{name}" if remote_path else name,
-                    name=name,
-                    size=size,
-                    modified_time=mtime,
-                    is_dir=is_dir,
-                    cloud_id=href,
-                ))
+                items.append(
+                    CloudFileInfo(
+                        path=f"{remote_path}/{name}" if remote_path else name,
+                        name=name,
+                        size=size,
+                        modified_time=mtime,
+                        is_dir=is_dir,
+                        cloud_id=href,
+                    )
+                )
         except ET.ParseError:
             pass
         return items[1:] if items else items

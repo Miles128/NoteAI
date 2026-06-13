@@ -1,14 +1,14 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.convert_failures import (
     clear_convert_failure,
     load_convert_failures,
     record_convert_batch_results,
     record_convert_failure,
 )
+
+from config import config
 from utils.link_indexer import load_links, suggest_links_for_file
 
 
@@ -30,10 +30,12 @@ def test_record_and_clear_convert_failure(workspace: Path) -> None:
 
 
 def test_record_convert_batch_results(workspace: Path) -> None:
-    n = record_convert_batch_results([
-        {"success": False, "source": "a.pdf", "error": "fail"},
-        {"success": True, "source": "b.pdf"},
-    ])
+    n = record_convert_batch_results(
+        [
+            {"success": False, "source": "a.pdf", "error": "fail"},
+            {"success": True, "source": "b.pdf"},
+        ]
+    )
     assert n == 1
     assert len(load_convert_failures()) == 1
 

@@ -5,7 +5,6 @@ from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
-
 import sidecar.rag.retriever as _mod
 
 

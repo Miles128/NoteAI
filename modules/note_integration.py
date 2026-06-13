@@ -1,28 +1,25 @@
-import re
 import json
+import re
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Dict, Optional, Callable
 
 from config import config
+from prompts import DOC_TOPIC_MAPPING_PROMPT, TOPIC_NOTE_GENERATION_PROMPT
+from utils.helpers import clean_text, extract_title_from_markdown, sanitize_filename
+from utils.llm_utils import APIConfigError, NetworkError, check_api_config, is_network_error
 from utils.logger import logger
-from utils.helpers import (
-    sanitize_filename, clean_text, extract_title_from_markdown
-)
-from utils.llm_utils import (
-    check_api_config, APIConfigError, NetworkError, is_network_error
-)
 from utils.tag_extractor import process_and_tag_file_with_yaml
-from prompts import TOPIC_NOTE_GENERATION_PROMPT, DOC_TOPIC_MAPPING_PROMPT
+
 
 class NoteIntegration:
     """笔记整合器"""
 
-    def __init__(self, progress_callback: Optional[Callable] = None):
+    def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
         self.documents = []
-    
-    def load_documents_from_folder(self, folder_path: str) -> List[Dict]:
+
+    def load_documents_from_folder(self, folder_path: str) -> list[dict]:
         """从文件夹加载Markdown文档"""
         folder = Path(folder_path)
         documents = []
@@ -38,31 +35,21 @@ class NoteIntegration:
                 self.progress_callback(i + 1, len(md_files), f"读取 MD 文件中 - {md_file.name}")
 
             try:
-                with open(md_file, 'r', encoding='utf-8') as f:
+                with open(md_file, encoding="utf-8") as f:
                     content = f.read()
-                
+
                 title = extract_title_from_markdown(content) or md_file.stem
-                
-                documents.append({
-                    'path': str(md_file),
-                    'title': title,
-                    'content': content,
-                    'filename': md_file.name
-                })
-                
+
+                documents.append({"path": str(md_file), "title": title, "content": content, "filename": md_file.name})
+
             except Exception as e:
                 logger.error(f"加载文件失败 {md_file}: {e}")
-        
+
         self.documents = documents
         logger.info(f"已加载 {len(documents)} 个文档")
         return documents
-    
-    def integrate(
-        self,
-        documents: List[Dict],
-        save_path: str = None,
-        user_topics: List[str] = None
-    ) -> Dict:
+
+    def integrate(self, documents: list[dict], save_path: str = None, user_topics: list[str] = None) -> dict:
         """笔记整合入口
 
         Args:
@@ -72,12 +59,7 @@ class NoteIntegration:
         """
         return self._integrate_by_topics(documents, save_path, user_topics)
 
-    def _integrate_by_topics(
-        self,
-        documents: List[Dict],
-        save_path: str = None,
-        user_topics: List[str] = None
-    ) -> Dict:
+    def _integrate_by_topics(self, documents: list[dict], save_path: str = None, user_topics: list[str] = None) -> dict:
         """基于主题的笔记整合策略
 
         流程：
@@ -94,6 +76,7 @@ class NoteIntegration:
             raise APIConfigError("未提供主题列表，请先提取主题")
 
         try:
+
             def report_progress(step_msg):
                 if self.progress_callback:
                     self.progress_callback(1, 1, step_msg)
@@ -117,8 +100,7 @@ class NoteIntegration:
             max_workers = min(len(user_topics), 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_topic = {
-                    executor.submit(process_one, name, indices): name
-                    for name, indices in topic_doc_mapping.items()
+                    executor.submit(process_one, name, indices): name for name, indices in topic_doc_mapping.items()
                 }
                 for future in as_completed(future_to_topic):
                     topic_name = future_to_topic[future]
@@ -136,12 +118,12 @@ class NoteIntegration:
             save_dir = Path(save_path) if save_path else Path(config.get_organized_folder())
 
             for result in topic_results:
-                safe_name = sanitize_filename(result['topic_name'])
+                safe_name = sanitize_filename(result["topic_name"])
                 output_file = save_dir / f"{safe_name}.md"
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(result['content'])
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(result["content"])
 
                 process_and_tag_file_with_yaml(str(output_file))
                 output_files.append(str(output_file))
@@ -152,6 +134,7 @@ class NoteIntegration:
             wiki_content = self._generate_wiki_md(topic_results)
 
             from sidecar.wiki_utils import write_wiki_text
+
             if write_wiki_text(wiki_content):
                 logger.info("WIKI.md 已生成")
             else:
@@ -161,6 +144,7 @@ class NoteIntegration:
 
             try:
                 from utils.tag_extractor import save_tags_md
+
                 if config.workspace_path:
                     save_tags_md(config.workspace_path)
             except Exception as e:
@@ -169,12 +153,12 @@ class NoteIntegration:
             self.documents = []
 
             return {
-                'content': '\n\n---\n\n'.join([r['content'] for r in topic_results]),
-                'document_count': len(documents),
-                'topic_count': len(topic_results),
-                'topics': [r['topic_name'] for r in topic_results],
-                'file_paths': output_files,
-                'wiki_path': str(wiki_path)
+                "content": "\n\n---\n\n".join([r["content"] for r in topic_results]),
+                "document_count": len(documents),
+                "topic_count": len(topic_results),
+                "topics": [r["topic_name"] for r in topic_results],
+                "file_paths": output_files,
+                "wiki_path": str(Path(config.workspace_path or "") / "wiki" / "WIKI.md"),
             }
 
         except APIConfigError:
@@ -186,18 +170,17 @@ class NoteIntegration:
             logger.error(f"整合失败: {e}")
             raise
 
-    def _map_documents_to_topics(self, topics: List[str], documents: List[Dict]) -> Dict[str, List[int]]:
+    def _map_documents_to_topics(self, topics: list[str], documents: list[dict]) -> dict[str, list[int]]:
         """使用 LLM 将整个文件分配到最匹配的主题"""
         from utils.llm_utils import call_llm
 
         topic_doc_mapping = {t: [] for t in topics}
 
-        docs_info = '\n'.join([
-            f"- 文档{i}: {d.get('title', d.get('filename', '未命名'))}"
-            for i, d in enumerate(documents)
-        ])
+        docs_info = "\n".join(
+            [f"- 文档{i}: {d.get('title', d.get('filename', '未命名'))}" for i, d in enumerate(documents)]
+        )
 
-        topics_text = '\n'.join([f"{i+1}. {t}" for i, t in enumerate(topics)])
+        topics_text = "\n".join([f"{i + 1}. {t}" for i, t in enumerate(topics)])
 
         try:
             if self.progress_callback:
@@ -209,7 +192,7 @@ class NoteIntegration:
                 docs_info=docs_info,
             )
             result = json.loads(response_text)
-            mapping = result.get('mapping', {})
+            mapping = result.get("mapping", {})
 
             for topic_name, doc_indices in mapping.items():
                 # 验证 doc_indices 是整数列表且在有效范围内
@@ -237,14 +220,14 @@ class NoteIntegration:
             logger.warning(f"LLM 文件-主题映射失败，使用关键词匹配: {e}")
             return self._fallback_doc_mapping(topics, documents)
 
-    def _fallback_doc_mapping(self, topics: List[str], documents: List[Dict]) -> Dict[str, List[int]]:
+    def _fallback_doc_mapping(self, topics: list[str], documents: list[dict]) -> dict[str, list[int]]:
         """降级策略：基于关键词匹配将文档分配到主题"""
         topic_doc_mapping = {t: [] for t in topics}
         assigned_docs = set()
 
         for i, doc in enumerate(documents):
-            title = doc.get('title', '').lower()
-            content_lower = doc.get('content', '').lower()
+            title = doc.get("title", "").lower()
+            content_lower = doc.get("content", "").lower()
             best_topic = None
             best_score = 0
 
@@ -280,7 +263,7 @@ class NoteIntegration:
 
         return topic_doc_mapping
 
-    def _process_topic(self, topic_name: str, documents: List[Dict], doc_indices: List[int]) -> Dict:
+    def _process_topic(self, topic_name: str, documents: list[dict], doc_indices: list[int]) -> dict:
         """处理单个主题的内容
 
         Args:
@@ -293,33 +276,22 @@ class NoteIntegration:
         """
         topic_docs = [documents[i] for i in doc_indices if isinstance(i, int) and 0 <= i < len(documents)]
 
-        combined_content = '\n\n---\n\n'.join([d['content'] for d in topic_docs])
+        combined_content = "\n\n---\n\n".join([d["content"] for d in topic_docs])
         original_word_count = self._count_words(combined_content)
 
-        generated_content = self._generate_topic_note(
-            topic_name,
-            combined_content,
-            original_word_count
-        )
+        generated_content = self._generate_topic_note(topic_name, combined_content, original_word_count)
 
-        source_files = [
-            {
-                'path': d['path'],
-                'filename': d['filename'],
-                'title': d['title']
-            }
-            for d in topic_docs
-        ]
+        source_files = [{"path": d["path"], "filename": d["filename"], "title": d["title"]} for d in topic_docs]
 
         return {
-            'topic_name': topic_name,
-            'content': generated_content,
-            'document_count': len(topic_docs),
-            'original_word_count': original_word_count,
-            'source_files': source_files
+            "topic_name": topic_name,
+            "content": generated_content,
+            "document_count": len(topic_docs),
+            "original_word_count": original_word_count,
+            "source_files": source_files,
         }
 
-    def _extract_heading_outline(self, content: str) -> List[Dict]:
+    def _extract_heading_outline(self, content: str) -> list[dict]:
         """从 Markdown 内容中提取标题大纲
 
         Args:
@@ -329,16 +301,17 @@ class NoteIntegration:
             [{level: int, text: str}, ...]
         """
         import re
-        pattern = r'^(#{1,6})\s+(.+)$'
+
+        pattern = r"^(#{1,6})\s+(.+)$"
         matches = re.finditer(pattern, content, re.MULTILINE)
         outline = []
         for match in matches:
             level = len(match.group(1))
             text = match.group(2).strip()
-            outline.append({'level': level, 'text': text})
+            outline.append({"level": level, "text": text})
         return outline
 
-    def _generate_wiki_md(self, topic_results: List[Dict]) -> str:
+    def _generate_wiki_md(self, topic_results: list[dict]) -> str:
         """生成 WIKI.md 内容
 
         Args:
@@ -365,19 +338,19 @@ class NoteIntegration:
         lines.append("## 主题目录")
         lines.append("")
         for i, result in enumerate(topic_results):
-            topic_name = result['topic_name']
+            topic_name = result["topic_name"]
             safe_name = sanitize_filename(topic_name)
-            doc_count = result.get('document_count', 0)
-            lines.append(f"{i+1}. [{topic_name}](./{safe_name}.md) - {doc_count} 个源文件")
+            doc_count = result.get("document_count", 0)
+            lines.append(f"{i + 1}. [{topic_name}](./{safe_name}.md) - {doc_count} 个源文件")
         lines.append("")
         lines.append("---")
         lines.append("")
 
         for result in topic_results:
-            topic_name = result['topic_name']
+            topic_name = result["topic_name"]
             safe_name = sanitize_filename(topic_name)
-            source_files = result.get('source_files', [])
-            content = result.get('content', '')
+            source_files = result.get("source_files", [])
+            content = result.get("content", "")
 
             lines.append(f"## {topic_name}")
             lines.append("")
@@ -387,7 +360,7 @@ class NoteIntegration:
             outline = self._extract_heading_outline(content)
             if outline:
                 for item in outline:
-                    indent = "  " * (item['level'] - 1)
+                    indent = "  " * (item["level"] - 1)
                     lines.append(f"{indent}- {item['text']}")
             else:
                 lines.append("> 未检测到标题结构")
@@ -397,10 +370,10 @@ class NoteIntegration:
             lines.append("")
             if source_files:
                 for j, sf in enumerate(source_files):
-                    title = sf.get('title', sf.get('filename', '未命名'))
-                    filename = sf.get('filename', '未知')
-                    path = sf.get('path', '')
-                    lines.append(f"{j+1}. **{title}**")
+                    title = sf.get("title", sf.get("filename", "未命名"))
+                    filename = sf.get("filename", "未知")
+                    path = sf.get("path", "")
+                    lines.append(f"{j + 1}. **{title}**")
                     lines.append(f"   - 文件名：`{filename}`")
                     if path:
                         lines.append(f"   - 原始路径：`{path}`")
@@ -416,18 +389,18 @@ class NoteIntegration:
             lines.append("---")
             lines.append("")
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def _count_words(self, text: str) -> int:
         """统计中文字符数（包含英文单词），排除代码块和链接"""
         if not text:
             return 0
         # 移除代码块避免统计代码中的标识符
-        cleaned = re.sub(r'```[\s\S]*?```', '', text)
+        cleaned = re.sub(r"```[\s\S]*?```", "", text)
         # 移除链接 URL
-        cleaned = re.sub(r'https?://\S+', '', cleaned)
-        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', cleaned))
-        english_words = len(re.findall(r'\b[a-zA-Z]+\b', cleaned))
+        cleaned = re.sub(r"https?://\S+", "", cleaned)
+        chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", cleaned))
+        english_words = len(re.findall(r"\b[a-zA-Z]+\b", cleaned))
         return chinese_chars + english_words
 
     def _generate_topic_note(self, topic_name: str, content: str, target_word_count: int) -> str:
@@ -448,4 +421,3 @@ class NoteIntegration:
         except Exception as e:
             logger.error(f"生成主题笔记失败 {topic_name}: {e}")
             return f"# {topic_name}\n\n内容生成失败，请参考源文档。"
-

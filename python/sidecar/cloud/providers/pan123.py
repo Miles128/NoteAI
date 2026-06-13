@@ -11,7 +11,12 @@ class Pan123Provider(CloudProvider):
     AUTH_TYPE = "credentials"
     AUTH_FIELDS = [
         {"key": "client_id", "label": "Client ID", "type": "text", "placeholder": "123云盘开放平台 Client ID"},
-        {"key": "client_secret", "label": "Client Secret", "type": "password", "placeholder": "123云盘开放平台 Client Secret"},
+        {
+            "key": "client_secret",
+            "label": "Client Secret",
+            "type": "password",
+            "placeholder": "123云盘开放平台 Client Secret",
+        },
     ]
 
     API_BASE = "https://open.123pan.com"
@@ -114,14 +119,16 @@ class Pan123Provider(CloudProvider):
                 except (ValueError, TypeError):
                     ts = 0.0
             name = item.get("FileName", "")
-            items.append(CloudFileInfo(
-                path=f"{remote_path}/{name}" if remote_path else name,
-                name=name,
-                size=item.get("Size", 0),
-                modified_time=ts,
-                is_dir=item.get("IsDirectory", False),
-                cloud_id=str(item.get("FileId", "")),
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=f"{remote_path}/{name}" if remote_path else name,
+                    name=name,
+                    size=item.get("Size", 0),
+                    modified_time=ts,
+                    is_dir=item.get("IsDirectory", False),
+                    cloud_id=str(item.get("FileId", "")),
+                )
+            )
         return items
 
     def _resolve_path(self, remote_path: str) -> int:
@@ -166,7 +173,15 @@ class Pan123Provider(CloudProvider):
         upload_resp = requests.post(
             f"{self.API_BASE}/api/file/upload",
             headers=self._headers(),
-            json={"driveId": 0, "duplicate": 2, "etag": "", "fileName": filename, "parentFileId": parent_id, "size": file_size, "type": 0},
+            json={
+                "driveId": 0,
+                "duplicate": 2,
+                "etag": "",
+                "fileName": filename,
+                "parentFileId": parent_id,
+                "size": file_size,
+                "type": 0,
+            },
             timeout=30,
         )
         data = upload_resp.json()

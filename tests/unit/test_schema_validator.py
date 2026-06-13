@@ -1,5 +1,3 @@
-import pytest
-
 from sidecar.schema_validator import (
     check_notes_writable,
     check_wiki_writable,

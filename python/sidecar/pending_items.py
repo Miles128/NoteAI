@@ -24,23 +24,27 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
     items: list[dict] = []
 
     for p in load_pending():
-        items.append({
-            "type": "topic",
-            "file": p.get("file", ""),
-            "title": p.get("title", ""),
-            "candidates": p.get("candidates", []),
-            "source": p.get("source", ""),
-        })
+        items.append(
+            {
+                "type": "topic",
+                "file": p.get("file", ""),
+                "title": p.get("title", ""),
+                "candidates": p.get("candidates", []),
+                "source": p.get("source", ""),
+            }
+        )
 
     try:
         for link in load_links().get("links", []):
             if link.get("status") == "pending":
-                items.append({
-                    "type": "link",
-                    "source": link.get("from", ""),
-                    "target": link.get("to", ""),
-                    "context": link.get("reason", ""),
-                })
+                items.append(
+                    {
+                        "type": "link",
+                        "source": link.get("from", ""),
+                        "target": link.get("to", ""),
+                        "context": link.get("reason", ""),
+                    }
+                )
     except Exception:
         pass
 
@@ -49,26 +53,30 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         kind = issue.get("kind") or ""
         if kind == "pending_topics":
             continue
-        items.append({
-            "type": "lint",
-            "lint_kind": kind,
-            "severity": issue.get("severity", "info"),
-            "message": issue.get("message", ""),
-            "file_path": issue.get("file_path", ""),
-            "topic": issue.get("topic", ""),
-            "action": _lint_action(kind),
-        })
+        items.append(
+            {
+                "type": "lint",
+                "lint_kind": kind,
+                "severity": issue.get("severity", "info"),
+                "message": issue.get("message", ""),
+                "file_path": issue.get("file_path", ""),
+                "topic": issue.get("topic", ""),
+                "action": _lint_action(kind),
+            }
+        )
 
     for fail in load_cascade_failures():
         topic = (fail.get("topic") or "").strip()
         if not topic:
             continue
-        items.append({
-            "type": "cascade_fail",
-            "topic": topic,
-            "error": fail.get("error", ""),
-            "ts": fail.get("ts", 0),
-        })
+        items.append(
+            {
+                "type": "cascade_fail",
+                "topic": topic,
+                "error": fail.get("error", ""),
+                "ts": fail.get("ts", 0),
+            }
+        )
 
     from sidecar.convert_failures import load_convert_failures
 
@@ -76,11 +84,13 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         path = (fail.get("file") or "").strip()
         if not path:
             continue
-        items.append({
-            "type": "convert_fail",
-            "file": path,
-            "error": fail.get("error", ""),
-            "ts": fail.get("ts", 0),
-        })
+        items.append(
+            {
+                "type": "convert_fail",
+                "file": path,
+                "error": fail.get("error", ""),
+                "ts": fail.get("ts", 0),
+            }
+        )
 
     return items

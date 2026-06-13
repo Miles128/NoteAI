@@ -1,12 +1,11 @@
 import os
-import sys
 import threading
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-from config.constants import SYSTEM_APP_DATA_DIR
 from config import config, is_ignored_dir
+from config.constants import SYSTEM_APP_DATA_DIR
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
@@ -46,6 +45,7 @@ def _get_reranker():
             return _RERANKER
         try:
             from sidecar.rag.embedder import _ensure_hf_env
+
             _ensure_hf_env()
             from FlagEmbedding import FlagReranker
 
@@ -70,14 +70,17 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
         return []
 
     from sidecar.rag.embedder import encode_query
+
     query_emb = encode_query(query)
     if not query_emb.get("dense_vec"):
         return []
 
     from sidecar.rag.profile import rewrite_query_with_profile
+
     profile_query = rewrite_query_with_profile(query)
 
     from sidecar.rag.index import filter_usable_chunks, hybrid_search
+
     top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
     results = hybrid_search(
         workspace,
@@ -123,6 +126,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     results = filter_usable_chunks(results)[:DEFAULT_TOP_K]
 
     from sidecar.rag.context_expand import expand_retrieval_context
+
     expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
     return filter_usable_chunks(expanded)
 
@@ -138,11 +142,13 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
         hypo_answer = result.content if hasattr(result, "content") else str(result)
 
         from sidecar.rag.embedder import encode_query
+
         hyde_emb = encode_query(hypo_answer)
         if not hyde_emb.get("dense_vec"):
             return []
 
         from sidecar.rag.index import hybrid_search
+
         return hybrid_search(
             workspace,
             query_dense=hyde_emb["dense_vec"],
@@ -161,6 +167,7 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
         return results
 
     from sidecar.rag.embedder import encode
+
     try:
         contents = [r.get("content", "") for r in results]
         if not any(contents):
@@ -170,6 +177,7 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
         dense_vecs = embeddings["dense_vecs"]
 
         import numpy as np
+
         norms = np.linalg.norm(dense_vecs, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1, norms)
         norm_vecs = dense_vecs / norms
@@ -281,7 +289,9 @@ def rebuild_index(progress_callback=None):
 
     texts = [c["content"] for c in all_chunks]
     try:
-        embeddings = encode_documents(texts, download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None)
+        embeddings = encode_documents(
+            texts, download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None
+        )
     except Exception as e:
         return {"success": False, "message": f"Embedding 生成失败: {e}"}
 
@@ -291,6 +301,7 @@ def rebuild_index(progress_callback=None):
     result = build_index(workspace, all_chunks, embeddings, progress_callback=progress_callback)
 
     from sidecar.rag.profile import update_profile_from_topics
+
     topic_counts = {}
     for c in all_chunks:
         t = c.get("topic", "")

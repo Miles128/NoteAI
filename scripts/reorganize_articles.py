@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-import sys, re, json, time
+import json
+import re
+import sys
+import time
 from pathlib import Path
+
 from openai import OpenAI
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -21,12 +25,15 @@ PROMPT = """你是一位专业的文档编辑。请将以下文章重新整理�
 原文内容：
 {content}"""
 
+
 def load_config():
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    with open(CONFIG_PATH, encoding="utf-8") as f:
         return json.load(f)
 
+
 def count_h2(filepath):
-    return len(re.findall(r'^## ', filepath.read_text(encoding="utf-8"), re.MULTILINE))
+    return len(re.findall(r"^## ", filepath.read_text(encoding="utf-8"), re.MULTILINE))
+
 
 def call_llm(cfg, content):
     client = OpenAI(api_key=cfg["api_key"], base_url=cfg["api_base"])
@@ -34,14 +41,16 @@ def call_llm(cfg, content):
         model=cfg["model_name"],
         messages=[{"role": "user", "content": PROMPT.format(content=content)}],
         temperature=0.3,
-        max_tokens=cfg.get("max_tokens", 32000)
+        max_tokens=cfg.get("max_tokens", 32000),
     )
     return resp.choices[0].message.content.strip()
+
 
 def main():
     cfg = load_config()
     if not cfg.get("api_key"):
-        print("错误: 请先配置 API Key"); sys.exit(1)
+        print("错误: 请先配置 API Key")
+        sys.exit(1)
 
     target_files = [(f, count_h2(f)) for f in NOTES_DIR.glob("*.md") if count_h2(f) <= 2]
     print(f"二级标题≤2的文件: {len(target_files)} 个")
@@ -53,20 +62,26 @@ def main():
         print(f"\n处理: {f.name} (当前{h2}个二级标题)")
         content = f.read_text(encoding="utf-8")
         if len(content) < 100:
-            print("  内容过短，跳过"); failed += 1; continue
+            print("  内容过短，跳过")
+            failed += 1
+            continue
         try:
             result = call_llm(cfg, content)
             if not result or len(result) < 50:
-                print("  LLM返回过短，跳过"); failed += 1; continue
-            new_h2 = len(re.findall(r'^## ', result, re.MULTILINE))
+                print("  LLM返回过短，跳过")
+                failed += 1
+                continue
+            new_h2 = len(re.findall(r"^## ", result, re.MULTILINE))
             f.write_text(result, encoding="utf-8")
             print(f"  完成: {h2} -> {new_h2} 个二级标题")
             success += 1
         except Exception as e:
-            print(f"  失败: {e}"); failed += 1
+            print(f"  失败: {e}")
+            failed += 1
         time.sleep(2)
 
     print(f"\n完成: 成功 {success}, 失败 {failed}")
+
 
 if __name__ == "__main__":
     main()

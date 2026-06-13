@@ -128,11 +128,10 @@ def main() -> None:
             _set_nested(zh, key, s)
 
     LOCALES.mkdir(parents=True, exist_ok=True)
-    (LOCALES / "zh-CN.json").write_text(
-        json.dumps(zh, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    (LOCALES / "zh-CN.json").write_text(json.dumps(zh, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     en: dict = {}
+
     def walk(d: dict, prefix: str = "") -> None:
         for k, v in d.items():
             full = f"{prefix}.{k}" if prefix else k
@@ -142,9 +141,7 @@ def main() -> None:
                 _set_nested(en, full, _translate_en(v, full))
 
     walk(zh)
-    (LOCALES / "en.json").write_text(
-        json.dumps(en, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    (LOCALES / "en.json").write_text(json.dumps(en, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     print(f"Generated {len(key_for_text)} keys")
     print(f"Written {LOCALES / 'zh-CN.json'} and {LOCALES / 'en.json'}")

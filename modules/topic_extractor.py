@@ -4,17 +4,17 @@
 """
 
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+
 from config import config
-from utils.logger import logger
-from utils.llm_utils import check_api_config
 from prompts import (
-    TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
-    TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
+    OUTPUT_FORMAT_AUTO_INSTRUCTIONS_PROMPT,
     OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT,
     TOPIC_COUNT_AUTO_INSTRUCTIONS_PROMPT,
-    OUTPUT_FORMAT_AUTO_INSTRUCTIONS_PROMPT
+    TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT,
+    TOPIC_EXTRACTION_BY_FILENAMES_PROMPT,
 )
+from utils.llm_utils import check_api_config
+from utils.logger import logger
 
 
 class TopicExtractor:
@@ -42,7 +42,7 @@ class TopicExtractor:
         if self.progress_callback:
             self.progress_callback(current, total, message)
 
-    def get_md_filenames(self, folder_path: str) -> List[str]:
+    def get_md_filenames(self, folder_path: str) -> list[str]:
         """
         获取文件夹下所有 MD 文件名（不读取内容）
 
@@ -59,12 +59,12 @@ class TopicExtractor:
             return filenames
 
         for md_file in folder.rglob("*.md"):
-            if not md_file.name.startswith('.'):
+            if not md_file.name.startswith("."):
                 filenames.append(md_file.stem)
 
         return filenames
 
-    def calculate_topic_range(self, notes_count: int, organized_count: int) -> Tuple[int, int]:
+    def calculate_topic_range(self, notes_count: int, organized_count: int) -> tuple[int, int]:
         """
         计算主题个数范围
 
@@ -94,7 +94,7 @@ class TopicExtractor:
 
         return min_topics, max_topics
 
-    def extract_topics(self, specified_topic_count: Optional[int] = None) -> Dict:
+    def extract_topics(self, specified_topic_count: int | None = None) -> dict:
         """
         提取主题
 
@@ -153,7 +153,7 @@ class TopicExtractor:
             if notes_filenames:
                 all_filenames.extend([f"[Notes] {name}" for name in notes_filenames])
 
-            titles_text = '\n'.join([f"{i+1}. {name}" for i, name in enumerate(all_filenames)])
+            titles_text = "\n".join([f"{i + 1}. {name}" for i, name in enumerate(all_filenames)])
 
             self._update_progress(4, 10, "正在调用大模型分析主题...")
 
@@ -162,7 +162,9 @@ class TopicExtractor:
                 topic_count_instructions = TOPIC_COUNT_SPECIFIED_INSTRUCTIONS_PROMPT.format(topic_count=min_topics)
                 output_format_instructions = OUTPUT_FORMAT_SPECIFIED_INSTRUCTIONS_PROMPT.format(topic_count=min_topics)
             else:
-                topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS_PROMPT.format(min_topics=min_topics, max_topics=max_topics)
+                topic_count_instructions = TOPIC_COUNT_AUTO_INSTRUCTIONS_PROMPT.format(
+                    min_topics=min_topics, max_topics=max_topics
+                )
                 output_format_instructions = OUTPUT_FORMAT_AUTO_INSTRUCTIONS_PROMPT
 
             # 构建最终提示词
@@ -171,7 +173,7 @@ class TopicExtractor:
                 topic_count_instructions=topic_count_instructions,
                 output_format_instructions=output_format_instructions,
                 notes_count=notes_count,
-                organized_count=organized_count
+                organized_count=organized_count,
             )
 
             # 调用大模型
@@ -199,16 +201,17 @@ class TopicExtractor:
                 "max_topics": max_topics,
                 "is_specified": is_specified,
                 "notes_count": notes_count,
-                "organized_count": organized_count
+                "organized_count": organized_count,
             }
 
         except Exception as e:
             logger.error(f"提取主题失败: {e}")
             import traceback
+
             traceback.print_exc()
             return {"success": False, "error": f"提取主题失败: {str(e)}"}
 
-    def _parse_topics_response(self, content: str) -> List[str]:
+    def _parse_topics_response(self, content: str) -> list[str]:
         """
         解析大模型返回的主题列表
 
@@ -221,18 +224,19 @@ class TopicExtractor:
             主题名称列表
         """
         import re
+
         topics = []
 
-        for line in content.split('\n'):
+        for line in content.split("\n"):
             line = line.strip()
             if not line:
                 continue
 
-            line = re.sub(r'^主题\d+[：:]\s*', '', line).strip()
-            line = re.sub(r'^[\d\-\•\*]+[\.\、\)\s]+\s*', '', line).strip()
+            line = re.sub(r"^主题\d+[：:]\s*", "", line).strip()
+            line = re.sub(r"^[\d\-\•\*]+[\.\、\)\s]+\s*", "", line).strip()
 
-            if '|' in line:
-                line = line.split('|')[0].strip()
+            if "|" in line:
+                line = line.split("|")[0].strip()
 
             if line:
                 topics.append(line)

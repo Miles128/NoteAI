@@ -3,10 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
-from config import config
 from sidecar.handlers.kb_handler import KbHandler
 from sidecar.kb_lint import run_kb_lint
+
+from config import config
 
 _SCHEMA_OK = (
     "ai_may_edit_wiki: true\n"
@@ -54,10 +54,12 @@ def test_get_lint_report_cached(workspace: Path, kb_handler: KbHandler) -> None:
 
 
 def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None:
-    result = kb_handler._archive_chat_answer({
-        "question": "Q",
-        "answer": "A",
-        "target": "note",
-    })
+    result = kb_handler._archive_chat_answer(
+        {
+            "question": "Q",
+            "answer": "A",
+            "target": "note",
+        }
+    )
     assert result["success"] is True
     assert (workspace / "Notes" / "小忆对话").exists()

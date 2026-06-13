@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
+from sidecar.kb_lint import log_lint_report
 
 from config import config
-from sidecar.kb_lint import log_lint_report
 
 
 @pytest.fixture

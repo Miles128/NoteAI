@@ -41,12 +41,17 @@ def test_migrate_legacy_activity_json(workspace: Path) -> None:
     legacy = workspace / WORKSPACE_APP_FOLDER / "activity_log.json"
     legacy.parent.mkdir(parents=True, exist_ok=True)
     legacy.write_text(
-        json.dumps([{
-            "ts": time.time(),
-            "type": "move",
-            "msg": "旧日志条目",
-            "detail": "Notes/x.md",
-        }], ensure_ascii=False),
+        json.dumps(
+            [
+                {
+                    "ts": time.time(),
+                    "type": "move",
+                    "msg": "旧日志条目",
+                    "detail": "Notes/x.md",
+                }
+            ],
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
 

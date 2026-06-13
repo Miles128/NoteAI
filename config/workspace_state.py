@@ -3,7 +3,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from .constants import WORKSPACE_STATE_FILE
 
@@ -23,14 +23,14 @@ class WorkspaceStateManager:
         except (PermissionError, OSError) as e:
             raise WorkspaceStateError(f"无法创建应用数据目录: {e}")
 
-    def _atomic_write(self, data: Dict[str, Any]) -> bool:
+    def _atomic_write(self, data: dict[str, Any]) -> bool:
         try:
             temp_dir = self.state_file.parent
             fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix=".tmp")
 
             try:
                 os.close(fd)
-                with open(temp_path, 'w', encoding='utf-8') as f:
+                with open(temp_path, "w", encoding="utf-8") as f:
                     json.dump(data, f, ensure_ascii=False, indent=2)
 
                 fsync_fd = os.open(temp_path, os.O_RDONLY)
@@ -59,7 +59,7 @@ class WorkspaceStateManager:
         except OSError as e:
             raise WorkspaceStateError(f"保存工作区状态失败：{e}")
 
-    def save_workspace(self, workspace_path: str, additional_data: Dict[str, Any] = None) -> Tuple[bool, str]:
+    def save_workspace(self, workspace_path: str, additional_data: dict[str, Any] = None) -> tuple[bool, str]:
         if not workspace_path:
             return False, "工作区路径为空"
 
@@ -67,11 +67,7 @@ class WorkspaceStateManager:
         if not workspace.exists():
             return False, f"工作区路径不存在: {workspace_path}"
 
-        data = {
-            "workspace_path": str(workspace),
-            "last_opened_at": self._get_timestamp(),
-            "version": "1.0.0"
-        }
+        data = {"workspace_path": str(workspace), "last_opened_at": self._get_timestamp(), "version": "1.0.0"}
 
         if additional_data:
             data.update(additional_data)
@@ -84,12 +80,12 @@ class WorkspaceStateManager:
         except WorkspaceStateError as e:
             return False, str(e)
 
-    def load_workspace(self) -> Tuple[Optional[str], Dict[str, Any]]:
+    def load_workspace(self) -> tuple[str | None, dict[str, Any]]:
         if not self.state_file.exists():
             return None, {}
 
         try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
+            with open(self.state_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             workspace_path = data.get("workspace_path")
@@ -105,13 +101,13 @@ class WorkspaceStateManager:
             print(f"加载工作区状态时出错: {e}")
             return self._try_restore_from_backup()
 
-    def _try_restore_from_backup(self) -> Tuple[Optional[str], Dict[str, Any]]:
+    def _try_restore_from_backup(self) -> tuple[str | None, dict[str, Any]]:
         backup_file = self.state_file.with_suffix(".json.bak")
         if not backup_file.exists():
             return None, {}
 
         try:
-            with open(backup_file, 'r', encoding='utf-8') as f:
+            with open(backup_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             workspace_path = data.get("workspace_path")
@@ -125,7 +121,7 @@ class WorkspaceStateManager:
         except Exception:
             return None, {}
 
-    def clear_workspace_state(self) -> Tuple[bool, str]:
+    def clear_workspace_state(self) -> tuple[bool, str]:
         try:
             if self.state_file.exists():
                 old_path = self.state_file.with_suffix(".json.bak")
@@ -137,7 +133,7 @@ class WorkspaceStateManager:
         except Exception as e:
             return False, f"清除工作区状态失败: {e}"
 
-    def get_workspace_info(self) -> Dict[str, Any]:
+    def get_workspace_info(self) -> dict[str, Any]:
         info = {
             "is_saved": False,
             "saved_path": None,
@@ -146,14 +142,14 @@ class WorkspaceStateManager:
             "workspace_name": None,
             "last_opened_at": None,
             "state_file": str(self.state_file),
-            "state_file_exists": self.state_file.exists()
+            "state_file_exists": self.state_file.exists(),
         }
 
         if not self.state_file.exists():
             return info
 
         try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
+            with open(self.state_file, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception:
             data = self._try_read_backup()
@@ -177,19 +173,20 @@ class WorkspaceStateManager:
 
         return info
 
-    def _try_read_backup(self) -> Dict[str, Any]:
+    def _try_read_backup(self) -> dict[str, Any]:
         backup_file = self.state_file.with_suffix(".json.bak")
         if not backup_file.exists():
             return {}
 
         try:
-            with open(backup_file, 'r', encoding='utf-8') as f:
+            with open(backup_file, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return {}
 
     def _get_timestamp(self) -> str:
         from datetime import datetime
+
         return datetime.now().isoformat()
 
 

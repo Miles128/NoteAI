@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 NoteAI — 开发者启动器（v2）
 
@@ -9,8 +8,8 @@ Python sidecar（`python/main.py`）通过 stdin/stdout JSON-RPC 提供后端服
 不要与 `python/main.py`（sidecar 进程入口）混淆。
 """
 
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 project_root = Path(__file__).parent
@@ -50,6 +49,7 @@ def check_dependencies():
 
     # 解析包名：从 "pkg>=1.0" 或 "pkg[extra]>=1.0" 等格式中提取包名
     import re
+
     # PyPI 包名 → Python import 名（不同时才需要列出）
     _IMPORT_MAP = {
         "beautifulsoup4": "bs4",
@@ -66,7 +66,7 @@ def check_dependencies():
         if not dep_str or dep_str.startswith("#"):
             continue
         # 提取包名（去掉版本约束和 extras）
-        pkg_name = re.split(r'[<>=!~;\[]', dep_str)[0].strip()
+        pkg_name = re.split(r"[<>=!~;\[]", dep_str)[0].strip()
         # 映射 PyPI 包名到 import 模块名
         import_name = _IMPORT_MAP.get(pkg_name.lower(), pkg_name.replace("-", "_"))
         try:
@@ -76,7 +76,7 @@ def check_dependencies():
 
     if missing:
         print("缺少以下依赖包，请先安装：")
-        print(f"  uv sync")
+        print("  uv sync")
         print(f"  （或 pip install {' '.join(missing)}）")
         return False
 
@@ -85,20 +85,14 @@ def check_dependencies():
 
 def check_tauri_cli():
     try:
-        result = subprocess.run(
-            ["cargo", "tauri", "--version"],
-            capture_output=True, text=True, timeout=10
-        )
+        result = subprocess.run(["cargo", "tauri", "--version"], capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
             return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
     try:
-        result = subprocess.run(
-            ["npx", "tauri", "--version"],
-            capture_output=True, text=True, timeout=30
-        )
+        result = subprocess.run(["npx", "tauri", "--version"], capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             return True
     except (FileNotFoundError, subprocess.TimeoutExpired):

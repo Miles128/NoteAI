@@ -15,11 +15,10 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-
 from utils.wiki_manager import (
-    _get_wiki_path,
-    _renumber_wiki_files,
     parse_wiki_headings as _parse_wiki_headings_full,
+)
+from utils.wiki_manager import (
     parse_wiki_structure as _parse_wiki_structure_full,
 )
 
@@ -117,12 +116,7 @@ def ensure_wiki_exists(workspace_str: str | Path | None = None) -> Path:
     wiki_path = resolve_wiki_path(workspace_str)
     if not wiki_path.exists():
         wiki_path.parent.mkdir(parents=True, exist_ok=True)
-        content = (
-            f"# WIKI\n\n"
-            f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-            f"主题数量: 0\n\n"
-            f"## 目录\n\n"
-        )
+        content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
         wiki_path.write_text(content, encoding="utf-8")
     return wiki_path
 
@@ -143,10 +137,7 @@ def get_survey_status(workspace_str: str | Path | None = None) -> dict[str, bool
         stripped = lines[i].strip()
         if stripped.startswith("## "):
             current_parent = stripped[3:].strip()
-            is_off = (
-                i + 1 < len(lines)
-                and lines[i + 1].strip() == "> 综述: off"
-            )
+            is_off = i + 1 < len(lines) and lines[i + 1].strip() == "> 综述: off"
             surveys[current_parent] = not is_off
         elif stripped.startswith("### ") and current_parent:
             child = stripped[4:].strip()
@@ -155,10 +146,7 @@ def get_survey_status(workspace_str: str | Path | None = None) -> dict[str, bool
             if parent_on:
                 surveys[full] = False
             else:
-                is_off = (
-                    i + 1 < len(lines)
-                    and lines[i + 1].strip() == "> 综述: off"
-                )
+                is_off = i + 1 < len(lines) and lines[i + 1].strip() == "> 综述: off"
                 surveys[full] = not is_off
     return surveys
 

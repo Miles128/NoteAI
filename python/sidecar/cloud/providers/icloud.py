@@ -9,7 +9,12 @@ class ICloudProvider(CloudProvider):
     DISPLAY_NAME = "iCloud"
     AUTH_TYPE = "path"
     AUTH_FIELDS = [
-        {"key": "folder_path", "label": "iCloud 文件夹路径", "type": "text", "placeholder": "如 ~/Library/Mobile Documents/com~apple~CloudDocs/NoteAI/"},
+        {
+            "key": "folder_path",
+            "label": "iCloud 文件夹路径",
+            "type": "text",
+            "placeholder": "如 ~/Library/Mobile Documents/com~apple~CloudDocs/NoteAI/",
+        },
     ]
 
     def __init__(self, config: dict):
@@ -39,14 +44,16 @@ class ICloudProvider(CloudProvider):
         for entry in os.scandir(target):
             stat = entry.stat()
             rel = os.path.join(remote_path, entry.name) if remote_path else entry.name
-            items.append(CloudFileInfo(
-                path=rel,
-                name=entry.name,
-                size=stat.st_size,
-                modified_time=stat.st_mtime,
-                is_dir=entry.is_dir(follow_symlinks=False),
-                cloud_id=os.path.join(target, entry.name),
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=rel,
+                    name=entry.name,
+                    size=stat.st_size,
+                    modified_time=stat.st_mtime,
+                    is_dir=entry.is_dir(follow_symlinks=False),
+                    cloud_id=os.path.join(target, entry.name),
+                )
+            )
         return items
 
     def upload_file(self, local_path: str, remote_path: str) -> bool:

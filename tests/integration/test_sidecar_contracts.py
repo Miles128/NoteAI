@@ -130,7 +130,9 @@ class TestWorkspaceTree:
         assert server._workspace_change_affects_wiki("deleted", workspace / "Notes" / "主题", is_directory=True)
         assert not server._workspace_change_affects_wiki("modified", note_path, is_directory=False)
         assert not server._workspace_change_affects_wiki("deleted", workspace / "wiki" / "WIKI.md", is_directory=False)
-        assert not server._workspace_change_affects_wiki("deleted", workspace / WORKSPACE_APP_FOLDER / "log.md", is_directory=False)
+        assert not server._workspace_change_affects_wiki(
+            "deleted", workspace / WORKSPACE_APP_FOLDER / "log.md", is_directory=False
+        )
 
     def test_topic_from_notes_path_reads_folder_hierarchy(self, workspace: Path) -> None:
         note = workspace / "Notes" / "AI" / "产品" / "一篇.md"
@@ -233,11 +235,7 @@ class TestParseWikiStructure:
         wiki_dir.mkdir(exist_ok=True)
         wiki = wiki_dir / "WIKI.md"
         wiki.write_text(
-            "## AI产品经理之路\n\n"
-            "1. **产品思维**\n"
-            "2. **需求分析**\n\n"
-            "### Agent 架构\n\n"
-            "1. **Agent 设计**\n",
+            "## AI产品经理之路\n\n1. **产品思维**\n2. **需求分析**\n\n### Agent 架构\n\n1. **Agent 设计**\n",
             encoding="utf-8",
         )
         topics = parse_wiki_structure()
@@ -276,9 +274,7 @@ class TestParseWikiStructure:
 
     def test_parse_wiki_headings_returns_full_topic_paths(self, workspace: Path) -> None:
         (workspace / "wiki" / "WIKI.md").write_text(
-            "## 普通人的AI指南\n\n"
-            "### Agent 入门\n\n"
-            "#### 工具调用\n",
+            "## 普通人的AI指南\n\n### Agent 入门\n\n#### 工具调用\n",
             encoding="utf-8",
         )
 
@@ -415,11 +411,7 @@ class TestWorkspaceTreeContract:
         tree = handler._get_workspace_tree({})
 
         raw = next(item for item in tree if item["name"] == "Raw")
-        file_names = [
-            c["name"]
-            for c in raw.get("children", [])
-            if c.get("type") == "file"
-        ]
+        file_names = [c["name"] for c in raw.get("children", []) if c.get("type") == "file"]
         assert "paper.docx" in file_names
 
 

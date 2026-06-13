@@ -1,11 +1,11 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.cascade_runner import record_cascade_failure
 from sidecar.kb_lint import run_kb_lint
 from sidecar.pending_items import collect_pending_items
+
+from config import config
 
 
 @pytest.fixture

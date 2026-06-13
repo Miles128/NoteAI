@@ -40,13 +40,16 @@ class TransferHandler(BaseHandler):
         if not urls:
             return {"success": False, "message": "请输入至少一个URL"}
 
-        if not self._start_task("web_download", self._do_web_download, args=(urls, save_path, ai_assist, include_images)):
+        if not self._start_task(
+            "web_download", self._do_web_download, args=(urls, save_path, ai_assist, include_images)
+        ):
             return {"success": False, "message": "下载任务正在进行中，请稍后"}
 
         return {"success": True, "message": "下载已开始"}
 
     def _do_web_download(self, urls, save_path, ai_assist, include_images):
         try:
+
             def progress_cb(current, total, message):
                 self._send_progress("web-progress", current / total if total > 0 else 0, message)
 
@@ -55,16 +58,20 @@ class TransferHandler(BaseHandler):
             self.web_downloader.include_images = include_images
             result = self.web_downloader.download_batch(urls, save_path)
             success_count = sum(1 for r in result if r.get("success"))
-            self._send_response({
-                "id": "event",
-                "result": {"type": "web_download_complete", "success_count": success_count, "total": len(result), "data": result}
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "web_download_complete",
+                        "success_count": success_count,
+                        "total": len(result),
+                        "data": result,
+                    },
+                }
+            )
         except Exception as e:
             logger.warning(f"[ERROR] web_download: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "web_download_error", "error": str(e)}
-            })
+            self._send_response({"id": "event", "result": {"type": "web_download_error", "error": str(e)}})
 
     def _import_files(self, params):
 
@@ -124,24 +131,23 @@ class TransferHandler(BaseHandler):
             success_count = sum(1 for r in result if r.get("success"))
             fail_count = sum(1 for r in result if not r.get("success"))
 
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "file_import_complete",
-                    "data": {
-                        "success": True,
-                        "imported": success_count,
-                        "failed": fail_count + len(skipped),
-                        "skipped": skipped
-                    }
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "file_import_complete",
+                        "data": {
+                            "success": True,
+                            "imported": success_count,
+                            "failed": fail_count + len(skipped),
+                            "skipped": skipped,
+                        },
+                    },
                 }
-            })
+            )
         except Exception as e:
             logger.warning(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "file_import_error", "error": str(e)}
-            })
+            self._send_response({"id": "event", "result": {"type": "file_import_error", "error": str(e)}})
 
     def _start_file_conversion(self, params):
         ai_assist = params.get("ai_assist", False)
@@ -162,16 +168,10 @@ class TransferHandler(BaseHandler):
                 output_path=str(Path(workspace) / NOTES_FOLDER),
                 raw_path=str(Path(workspace) / RAW_FOLDER),
             )
-            self._send_response({
-                "id": "event",
-                "result": {"type": "file_conversion_complete", "data": result}
-            })
+            self._send_response({"id": "event", "result": {"type": "file_conversion_complete", "data": result}})
         except Exception as e:
             logger.warning(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "file_conversion_error", "error": str(e)}
-            })
+            self._send_response({"id": "event", "result": {"type": "file_conversion_error", "error": str(e)}})
 
     def _auto_convert_pending(self, _params=None):
         workspace = self.config.workspace_path
@@ -183,11 +183,11 @@ class TransferHandler(BaseHandler):
         ws / RAW_FOLDER
 
         pending = []
-        for f in ws.rglob('*'):
-            if not f.is_file() or f.name.startswith('.'):
+        for f in ws.rglob("*"):
+            if not f.is_file() or f.name.startswith("."):
                 continue
             rel = f.relative_to(ws)
-            if any(part.startswith('.') for part in rel.parts):
+            if any(part.startswith(".") for part in rel.parts):
                 continue
             if RAW_FOLDER in rel.parts:
                 continue
@@ -205,31 +205,28 @@ class TransferHandler(BaseHandler):
     def _do_auto_convert(self, workspace, pending_files):
         try:
             raw_path = str(Path(workspace) / "Raw")
-            results = self.file_converter.convert_batch(
-                pending_files, workspace, raw_path=raw_path
-            )
+            results = self.file_converter.convert_batch(pending_files, workspace, raw_path=raw_path)
             from sidecar.convert_failures import record_convert_batch_results
 
             record_convert_batch_results(results)
             converted = sum(1 for r in results if r.get("success"))
             failed = sum(1 for r in results if not r.get("success"))
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "auto_convert_complete",
-                    "data": {
-                        "total": len(pending_files),
-                        "converted": converted,
-                        "failed": failed,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "auto_convert_complete",
+                        "data": {
+                            "total": len(pending_files),
+                            "converted": converted,
+                            "failed": failed,
+                        },
                     },
-                },
-            })
+                }
+            )
         except Exception as e:
             logger.warning(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "auto_convert_error", "error": str(e)}
-            })
+            self._send_response({"id": "event", "result": {"type": "auto_convert_error", "error": str(e)}})
 
     def _get_convert_failures(self, _params):
         return {"success": True, "items": load_convert_failures()}
@@ -239,7 +236,9 @@ class TransferHandler(BaseHandler):
         workspace = self.config.workspace_path
         if not workspace or not file_path:
             return {"success": False, "message": "参数缺失"}
-        if not self._start_task(f"convert_retry_{Path(file_path).stem}", self._do_retry_convert, args=(file_path, workspace)):
+        if not self._start_task(
+            f"convert_retry_{Path(file_path).stem}", self._do_retry_convert, args=(file_path, workspace)
+        ):
             return {"success": False, "message": "转换任务正在进行中"}
         return {"success": True, "message": f"已开始重试转换：{file_path}"}
 
@@ -291,9 +290,7 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        result = self.topic_extractor.extract_topics(
-            specified_topic_count=topic_count
-        )
+        result = self.topic_extractor.extract_topics(specified_topic_count=topic_count)
         if not result.get("success"):
             return {"success": False, "message": result.get("error", "提取主题失败")}
         return result
@@ -317,23 +314,15 @@ class TransferHandler(BaseHandler):
         try:
             documents = self.note_integration.load_documents_from_folder(workspace)
             result = self.note_integration.integrate(
-                documents=documents,
-                save_path=workspace,
-                user_topics=topics if topics else None
+                documents=documents, save_path=workspace, user_topics=topics if topics else None
             )
             self.note_integration.documents = []
-            self._send_response({
-                "id": "event",
-                "result": {"type": "note_integration_complete", "data": result}
-            })
+            self._send_response({"id": "event", "result": {"type": "note_integration_complete", "data": result}})
         except Exception as e:
             if self.note_integration:
                 self.note_integration.documents = []
             logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "note_integration_error", "error": str(e)}
-            })
+            self._send_response({"id": "event", "result": {"type": "note_integration_error", "error": str(e)}})
 
     def _import_rss_feed(self, params):
         from sidecar.multi_source import import_rss_feed
@@ -378,28 +367,31 @@ class TransferHandler(BaseHandler):
                 if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in supported:
                     pending.append(str(f))
         if not pending:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "raw_convert_complete",
-                    "success": True,
-                    "converted": 0,
-                    "message": "Raw/ 下无可转换文件",
-                },
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "raw_convert_complete",
+                        "success": True,
+                        "converted": 0,
+                        "message": "Raw/ 下无可转换文件",
+                    },
+                }
+            )
             return
         raw_path = str(raw_root)
         results = self.file_converter.convert_batch(pending, workspace, raw_path=raw_path)
         record_convert_batch_results(results)
         converted = sum(1 for r in results if r.get("success"))
-        self._send_response({
-            "id": "event",
-            "result": {
-                "type": "raw_convert_complete",
-                "success": True,
-                "converted": converted,
-                "total": len(pending),
-                "message": f"Raw 转换完成: {converted}/{len(pending)}",
-            },
-        })
-
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "raw_convert_complete",
+                    "success": True,
+                    "converted": converted,
+                    "total": len(pending),
+                    "message": f"Raw 转换完成: {converted}/{len(pending)}",
+                },
+            }
+        )

@@ -1,7 +1,6 @@
 """Tests for full-text inverted index."""
 
 import pytest
-from pathlib import Path
 
 
 class TestFullTextIndex:
@@ -17,6 +16,7 @@ class TestFullTextIndex:
 
     def test_search_finds_documents(self, tmp_workspace, monkeypatch):
         from utils.fulltext_index import FullTextIndex
+
         monkeypatch.setattr("config.config.workspace_path", str(tmp_workspace))
 
         idx = FullTextIndex()
@@ -31,11 +31,13 @@ class TestFullTextIndex:
 
     def test_empty_query(self):
         from utils.fulltext_index import FullTextIndex
+
         idx = FullTextIndex()
         assert idx.search("") == []
 
     def test_mark_dirty(self, tmp_workspace, monkeypatch):
         from utils.fulltext_index import FullTextIndex
+
         monkeypatch.setattr("config.config.workspace_path", str(tmp_workspace))
 
         idx = FullTextIndex()

@@ -239,21 +239,25 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
         if isinstance(topic, list):
             topic = topic[0] if topic else ""
         if not str(topic).strip():
-            issues.append(LintIssue(
-                kind="orphan_topic",
-                severity="warning",
-                message="缺少主题（无文件夹路径且 frontmatter 无 topic）",
-                file_path=rel,
-            ))
+            issues.append(
+                LintIssue(
+                    kind="orphan_topic",
+                    severity="warning",
+                    message="缺少主题（无文件夹路径且 frontmatter 无 topic）",
+                    file_path=rel,
+                )
+            )
 
         for target in _WIKILINK.findall(body):
             if not _wikilink_target_exists(target, names):
-                issues.append(LintIssue(
-                    kind="broken_link",
-                    severity="warning",
-                    message=f"双向链接目标不存在: [[{target}]]",
-                    file_path=rel,
-                ))
+                issues.append(
+                    LintIssue(
+                        kind="broken_link",
+                        severity="warning",
+                        message=f"双向链接目标不存在: [[{target}]]",
+                        file_path=rel,
+                    )
+                )
 
     survey_by_topic: dict[str, Path] = {}
     wiki = root / "wiki"
@@ -281,27 +285,32 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
     for topic_key, survey_path in survey_by_topic.items():
         note_mtime = notes_by_topic_mtime.get(topic_key, 0)
         if note_mtime and survey_path.stat().st_mtime < note_mtime - 1:
-            issues.append(LintIssue(
-                kind="stale_survey",
-                severity="info",
-                message="笔记已更新但综述可能过时",
-                file_path=str(survey_path.relative_to(root)),
-                topic=topic_key,
-            ))
+            issues.append(
+                LintIssue(
+                    kind="stale_survey",
+                    severity="info",
+                    message="笔记已更新但综述可能过时",
+                    file_path=str(survey_path.relative_to(root)),
+                    topic=topic_key,
+                )
+            )
 
     pending_path = root / ".pending_topics.json"
     if pending_path.exists():
         try:
             import json
+
             pending = json.loads(pending_path.read_text(encoding="utf-8"))
             count = len(pending) if isinstance(pending, list) else 0
             if count:
-                issues.append(LintIssue(
-                    kind="pending_topics",
-                    severity="info",
-                    message=f"{count} 篇待确认主题",
-                    file_path=".pending_topics.json",
-                ))
+                issues.append(
+                    LintIssue(
+                        kind="pending_topics",
+                        severity="info",
+                        message=f"{count} 篇待确认主题",
+                        file_path=".pending_topics.json",
+                    )
+                )
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -350,6 +359,7 @@ def _save_report(workspace: Path, report: dict) -> None:
     p = workspace / WORKSPACE_APP_FOLDER / "lint_report.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     import json
+
     p.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -424,6 +434,7 @@ def load_lint_report(workspace: str | None = None) -> dict:
         return {"success": True, "issues": [], "summary": {"total": 0}, "cached": False}
     try:
         import json
+
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict):
             data.setdefault("success", True)

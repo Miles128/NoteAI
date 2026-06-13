@@ -1,10 +1,10 @@
 """LLM 调用相关的统一工具模块"""
 
 import re
-import time
 import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Tuple, Callable
 
 from utils.logger import logger
 
@@ -129,9 +129,10 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
-def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
+def _create_llm(temperature: float = 0.7, max_tokens: int | None = None):
     """创建 ChatOpenAI 实例（内部复用）"""
     from langchain_openai import ChatOpenAI
+
     from config import config
 
     kwargs = {
@@ -153,7 +154,7 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
 create_llm = _create_llm
 
 
-def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: Optional[int] = None, **kwargs) -> str:
+def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | None = None, **kwargs) -> str:
     """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
     if not kwargs:
         return call_llm_raw(prompt_template, temperature, max_tokens)
@@ -175,7 +176,7 @@ def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: Optiona
 def call_llm_raw(
     prompt_text: str,
     temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
     from concurrent.futures import TimeoutError as FutureTimeout
@@ -202,7 +203,7 @@ def call_llm_raw(
 def call_llm_raw_stream(
     prompt_text: str,
     temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
     chunk_callback=None,
 ) -> str:
     """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。带重试。"""
@@ -238,7 +239,7 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
         _LLM_SEMAPHORE.release()
 
 
-def check_api_config() -> Tuple[bool, str]:
+def check_api_config() -> tuple[bool, str]:
     """检查API配置是否完整且可用"""
     from config import config
 
@@ -326,9 +327,9 @@ def _normalize_api_base(api_base: str) -> str:
     return api_base
 
 
-def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[bool, str]:
+def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[bool, str]:
     """测试 API 连接是否可用"""
-    logger.info(f"[API连接测试] 开始测试连接...")
+    logger.info("[API连接测试] 开始测试连接...")
     logger.info(f"[API连接测试] API Base: {api_base}")
     logger.info(f"[API连接测试] 模型名称: {model_name}")
 
@@ -503,6 +504,7 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
         raise APIConfigError(error_msg)
 
     from langchain_core.prompts import PromptTemplate
+
     from prompts import LLM_REWRITE_PROMPT
 
     llm = _create_llm(temperature=0.3)

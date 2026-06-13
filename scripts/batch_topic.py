@@ -6,11 +6,12 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
+import os
+
 from config import config
 from config.settings import is_ignored_dir
-from utils.topic_assigner import auto_assign_topic_for_file, load_pending, parse_wiki_headings
 from utils.text_utils import parse_frontmatter
-import os
+from utils.topic_assigner import auto_assign_topic_for_file, load_pending, parse_wiki_headings
 
 
 def main():
@@ -37,21 +38,21 @@ def main():
     assigned = 0
 
     for root, dirs, files in os.walk(ws):
-        dirs[:] = [d for d in dirs if not d.startswith('.') and not is_ignored_dir(d)]
+        dirs[:] = [d for d in dirs if not d.startswith(".") and not is_ignored_dir(d)]
         for fname in sorted(files):
-            if not fname.endswith('.md'):
+            if not fname.endswith(".md"):
                 continue
             fpath = Path(root) / fname
             total += 1
             try:
-                text = fpath.read_text(encoding='utf-8')
+                text = fpath.read_text(encoding="utf-8")
             except Exception:
                 skipped += 1
                 continue
 
             has_topic = False
             meta, _ = parse_frontmatter(text)
-            if meta and meta.get('topic'):
+            if meta and meta.get("topic"):
                 has_topic = True
 
             if has_topic:
@@ -70,7 +71,7 @@ def main():
     pending_count = len(pending)
 
     print("-" * 50)
-    print(f"扫描完成:")
+    print("扫描完成:")
     print(f"  总计 MD 文件: {total}")
     print(f"  跳过 (读取失败): {skipped}")
     print(f"  已有主题: {total - assigned - skipped}")
@@ -80,5 +81,5 @@ def main():
     print("重启 NoteAI 应用后，点击「主题」按钮查看结果")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

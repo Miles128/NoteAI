@@ -2,31 +2,32 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Optional, Callable, Dict, List
-from pathlib import Path
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from pathlib import Path
 
-from config import config
 from config.settings import RAW_FOLDER
-from utils.logger import logger
 from utils.helpers import (
-    sanitize_filename, clean_text, remove_images_from_markdown,
-    ensure_dir, get_file_extension, read_file_with_encoding
+    clean_text,
+    ensure_dir,
+    get_file_extension,
+    read_file_with_encoding,
+    remove_images_from_markdown,
+    sanitize_filename,
 )
-from utils.llm_utils import (
-    check_api_config, APIConfigError, NetworkError, is_network_error
-)
-from utils.pdf_utils import extract_pdf_text, extract_pdf_pages
+from utils.logger import logger
+from utils.pdf_utils import extract_pdf_pages, extract_pdf_text
 from utils.tag_extractor import (
-    extract_tags_from_filename,
     add_yaml_frontmatter_to_content,
-    add_yaml_frontmatter_to_file
+    add_yaml_frontmatter_to_file,
+    extract_tags_from_filename,
 )
+
 
 class BaseConverter(ABC):
     """转换器基类"""
 
-    def __init__(self, progress_callback: Optional[Callable] = None):
+    def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
 
     @abstractmethod
@@ -38,7 +39,7 @@ class BaseConverter(ABC):
 class PDFConverter(BaseConverter):
     """PDF转Markdown转换器（仅使用快速路径）"""
 
-    SUPPORTED_FORMATS = ['.pdf']
+    SUPPORTED_FORMATS = [".pdf"]
 
     MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION = 3
     SIGNATURE_MIN_LENGTH = 5
@@ -67,11 +68,11 @@ class PDFConverter(BaseConverter):
         """使用 PyMuPDF 提取 PDF 文本（统一入口）"""
         return extract_pdf_text(file_path)
 
-    def _extract_page_texts(self, file_path: str) -> List[str]:
+    def _extract_page_texts(self, file_path: str) -> list[str]:
         """提取每一页的文本用于签名检测"""
         return extract_pdf_pages(file_path)
 
-    def _find_signature_lines(self, page_texts: List[str]) -> set:
+    def _find_signature_lines(self, page_texts: list[str]) -> set:
         """
         识别在每一页都出现的重复文本行（签名、页眉、页脚等）
 
@@ -83,7 +84,7 @@ class PDFConverter(BaseConverter):
 
         signature_candidates = []
         for page_text in page_texts:
-            lines = page_text.split('\n')
+            lines = page_text.split("\n")
             lines = [line.strip() for line in lines if line.strip()]
             signature_candidates.append(set(lines))
 
@@ -116,7 +117,7 @@ class PDFConverter(BaseConverter):
         if not signature_lines:
             return markdown_content
 
-        lines = markdown_content.split('\n')
+        lines = markdown_content.split("\n")
         filtered_lines = []
         skip_count = 0
 
@@ -130,11 +131,10 @@ class PDFConverter(BaseConverter):
         if skip_count > 0:
             logger.info(f"已移除 {skip_count} 行签名/页眉/页脚内容")
 
-        return '\n'.join(filtered_lines)
+        return "\n".join(filtered_lines)
 
 
 class TXTConverter(BaseConverter):
-
     def to_markdown(self, file_path: str) -> str:
         """TXT转Markdown"""
         logger.info(f"开始转换TXT: {file_path}")
@@ -148,7 +148,7 @@ class TXTConverter(BaseConverter):
 
             logger.info(f"TXT转换完成: {file_path}")
             return markdown_content
-            
+
         except Exception as e:
             logger.error(f"TXT转换失败: {e}")
             raise
@@ -157,7 +157,7 @@ class TXTConverter(BaseConverter):
 class DOCXConverter(BaseConverter):
     """Word文档转Markdown转换器（使用mammoth，仅支持 .docx）"""
 
-    SUPPORTED_FORMATS = ['.docx']
+    SUPPORTED_FORMATS = [".docx"]
 
     def to_markdown(self, file_path: str) -> str:
         """将Word文档转换为Markdown"""
@@ -179,7 +179,8 @@ class DOCXConverter(BaseConverter):
     def _extract_docx_text(self, file_path: str) -> str:
         """使用mammoth将DOCX转换为Markdown"""
         import mammoth
-        with open(file_path, 'rb') as docx_file:
+
+        with open(file_path, "rb") as docx_file:
             result = mammoth.convert_to_markdown(docx_file)
             return result.value
 
@@ -187,7 +188,7 @@ class DOCXConverter(BaseConverter):
 class LegacyDOCConverter(BaseConverter):
     """旧版 Word .doc 转 Markdown，依赖系统可用的文本提取工具。"""
 
-    SUPPORTED_FORMATS = ['.doc']
+    SUPPORTED_FORMATS = [".doc"]
 
     def to_markdown(self, file_path: str) -> str:
         logger.info(f"开始转换旧版Word文档: {file_path}")
@@ -261,7 +262,7 @@ class LegacyDOCConverter(BaseConverter):
 class PPTConverter(BaseConverter):
     """PPT转Markdown转换器（使用python-pptx，仅支持 .pptx）"""
 
-    SUPPORTED_FORMATS = ['.pptx']
+    SUPPORTED_FORMATS = [".pptx"]
 
     def to_markdown(self, file_path: str) -> str:
         logger.info(f"开始转换PPT: {file_path}")
@@ -281,6 +282,7 @@ class PPTConverter(BaseConverter):
 
     def _extract_pptx_text(self, file_path: str) -> str:
         from pptx import Presentation
+
         prs = Presentation(file_path)
         slides = []
         for i, slide in enumerate(prs.slides, 1):
@@ -310,7 +312,7 @@ class PPTConverter(BaseConverter):
 class LegacyPPTConverter(BaseConverter):
     """旧版 PowerPoint .ppt 转 Markdown，解析 OLE PowerPoint Document 文本记录。"""
 
-    SUPPORTED_FORMATS = ['.ppt']
+    SUPPORTED_FORMATS = [".ppt"]
     TEXT_CHARS_ATOM = 4000
     TEXT_BYTES_ATOM = 4008
     CSTRING = 4026
@@ -353,15 +355,15 @@ class LegacyPPTConverter(BaseConverter):
         pos = 0
         data_len = len(data)
         while pos + 8 <= data_len:
-            rec_header = int.from_bytes(data[pos:pos + 2], "little")
-            rec_type = int.from_bytes(data[pos + 2:pos + 4], "little")
-            rec_len = int.from_bytes(data[pos + 4:pos + 8], "little")
+            rec_header = int.from_bytes(data[pos : pos + 2], "little")
+            rec_type = int.from_bytes(data[pos + 2 : pos + 4], "little")
+            rec_len = int.from_bytes(data[pos + 4 : pos + 8], "little")
             next_pos = pos + 8 + rec_len
             if rec_len < 0 or next_pos > data_len:
                 pos += 1
                 continue
 
-            payload = data[pos + 8:next_pos]
+            payload = data[pos + 8 : next_pos]
             if rec_type == self.TEXT_CHARS_ATOM:
                 text = self._decode_utf16(payload)
                 if text:
@@ -423,7 +425,7 @@ class LegacyPPTConverter(BaseConverter):
 class HTMLConverter(BaseConverter):
     """HTML转Markdown转换器（使用html2text）"""
 
-    SUPPORTED_FORMATS = ['.html', '.htm']
+    SUPPORTED_FORMATS = [".html", ".htm"]
 
     def to_markdown(self, file_path: str) -> str:
         logger.info(f"开始转换HTML: {file_path}")
@@ -443,6 +445,7 @@ class HTMLConverter(BaseConverter):
 
     def _extract_html_text(self, file_path: str) -> str:
         import html2text
+
         h = html2text.HTML2Text()
         h.ignore_links = False
         h.ignore_images = False
@@ -454,15 +457,15 @@ class HTMLConverter(BaseConverter):
 class FileConverterManager:
     """文件转换管理器"""
 
-    PDF_FORMATS = ['.pdf']
-    DOCX_FORMATS = ['.docx']
-    LEGACY_DOC_FORMATS = ['.doc']
-    PPT_FORMATS = ['.pptx']
-    LEGACY_PPT_FORMATS = ['.ppt']
-    HTML_FORMATS = ['.html', '.htm']
-    TXT_FORMATS = ['.txt']
+    PDF_FORMATS = [".pdf"]
+    DOCX_FORMATS = [".docx"]
+    LEGACY_DOC_FORMATS = [".doc"]
+    PPT_FORMATS = [".pptx"]
+    LEGACY_PPT_FORMATS = [".ppt"]
+    HTML_FORMATS = [".html", ".htm"]
+    TXT_FORMATS = [".txt"]
 
-    def __init__(self, progress_callback: Optional[Callable] = None):
+    def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
         self._pdf_converter = None
         self._docx_converter = None
@@ -477,10 +480,10 @@ class FileConverterManager:
         if not content or len(content.strip()) < 50:
             return True
         text = content.strip()
-        has_heading = bool(re.search(r'^#{1,3}\s+\S', text, re.MULTILINE))
-        has_sentence_end = bool(re.search(r'[。！？.!?\n]', text))
-        has_comma = bool(re.search(r'[，,、；;：:]', text))
-        has_paragraph = text.count('\n\n') >= 1
+        has_heading = bool(re.search(r"^#{1,3}\s+\S", text, re.MULTILINE))
+        has_sentence_end = bool(re.search(r"[。！？.!?\n]", text))
+        has_comma = bool(re.search(r"[，,、；;：:]", text))
+        has_paragraph = text.count("\n\n") >= 1
         if has_heading and has_sentence_end:
             return False
         if has_sentence_end and has_comma and len(text) > 100:
@@ -539,27 +542,26 @@ class FileConverterManager:
         ext = ext.lower()
         if ext in self.PDF_FORMATS:
             return self.pdf_converter
-        elif ext in self.DOCX_FORMATS:
+        if ext in self.DOCX_FORMATS:
             return self.docx_converter
-        elif ext in self.LEGACY_DOC_FORMATS:
+        if ext in self.LEGACY_DOC_FORMATS:
             return self.legacy_doc_converter
-        elif ext in self.PPT_FORMATS:
+        if ext in self.PPT_FORMATS:
             return self.ppt_converter
-        elif ext in self.LEGACY_PPT_FORMATS:
+        if ext in self.LEGACY_PPT_FORMATS:
             return self.legacy_ppt_converter
-        elif ext in self.HTML_FORMATS:
+        if ext in self.HTML_FORMATS:
             return self.html_converter
-        elif ext in self.TXT_FORMATS:
+        if ext in self.TXT_FORMATS:
             return self.txt_converter
-        else:
-            return None
-    
+        return None
+
     def convert_file(
         self,
         file_path: str,
         output_path: str,
-        output_format: str = 'markdown',
-    ) -> Dict:
+        output_format: str = "markdown",
+    ) -> dict:
         """
         转换单个文件
 
@@ -568,37 +570,36 @@ class FileConverterManager:
             output_path: 输出目录路径
             output_format: 输出格式（目前仅支持 markdown）
         """
-        result = {
-            'file_path': file_path,
-            'success': False,
-            'output_path': None,
-            'error': None
-        }
-        
+        result = {"file_path": file_path, "success": False, "output_path": None, "error": None}
+
         try:
             file_path_obj = Path(file_path)
-            
+
             if not file_path_obj.exists():
-                result['error'] = "文件不存在"
+                result["error"] = "文件不存在"
                 return result
-            
+
             ext = get_file_extension(file_path_obj.name)
             converter = self._get_converter(ext)
-            
+
             if converter is None:
-                result['error'] = f"不支持的文件格式: {ext}"
+                result["error"] = f"不支持的文件格式: {ext}"
                 return result
-            
+
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path))
 
             if self._needs_llm_rewrite(markdown_content):
                 try:
-                    from utils.llm_utils import check_api_config, call_llm_raw
+                    from utils.llm_utils import call_llm_raw, check_api_config
+
                     ok, msg = check_api_config()
                     if ok:
                         from prompts import GENERAL_CONTENT_TO_MARKDOWN_PROMPT
-                        prompt = GENERAL_CONTENT_TO_MARKDOWN_PROMPT.format(source_type=ext, content=markdown_content[:6000])
+
+                        prompt = GENERAL_CONTENT_TO_MARKDOWN_PROMPT.format(
+                            source_type=ext, content=markdown_content[:6000]
+                        )
                         rewritten = call_llm_raw(prompt, temperature=0.3)
                         if rewritten and len(rewritten.strip()) > len(markdown_content.strip()) * 0.3:
                             markdown_content = rewritten.strip()
@@ -607,15 +608,11 @@ class FileConverterManager:
                     logger.warning(f"LLM 重写失败，保留原始转换: {e}")
 
             # 添加YAML front matter
-            markdown_content = add_yaml_frontmatter_to_content(
-                markdown_content,
-                tags=[],
-                source=file_path
-            )
-            
+            markdown_content = add_yaml_frontmatter_to_content(markdown_content, tags=[], source=file_path)
+
             # 保存文件
             output_dir = ensure_dir(output_path)
-            output_filename = sanitize_filename(file_path_obj.stem) + '.md'
+            output_filename = sanitize_filename(file_path_obj.stem) + ".md"
             output_file = output_dir / output_filename
 
             counter = 1
@@ -625,7 +622,7 @@ class FileConverterManager:
                 output_file = original_output_file.parent / f"{stem}_{counter}.md"
                 counter += 1
 
-            with open(output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
 
             tags = extract_tags_from_filename(str(output_file))
@@ -634,29 +631,30 @@ class FileConverterManager:
 
             try:
                 from utils.topic_assigner import auto_assign_topic_for_file
+
                 auto_assign_topic_for_file(str(output_file))
             except Exception as e:
                 logger.warning(f"自动分配主题失败: {e}")
 
-            result['success'] = True
-            result['output_path'] = str(output_file)
-            result['tags'] = tags
+            result["success"] = True
+            result["output_path"] = str(output_file)
+            result["tags"] = tags
 
             logger.info(f"文件转换成功: {output_file}")
-            
+
         except Exception as e:
-            result['error'] = str(e)
+            result["error"] = str(e)
             logger.error(f"文件转换失败: {e}")
-        
+
         return result
-    
+
     def convert_batch(
         self,
-        file_paths: List[str],
+        file_paths: list[str],
         output_path: str,
         raw_path: str = None,
-        output_format: str = 'markdown',
-    ) -> List[Dict]:
+        output_format: str = "markdown",
+    ) -> list[dict]:
         """批量转换文件"""
         results = []
         total = len(file_paths)
@@ -667,13 +665,13 @@ class FileConverterManager:
 
             result = self.convert_file(file_path, output_path, output_format)
 
-            if result['success'] and raw_path:
+            if result["success"] and raw_path:
                 self._move_to_raw(file_path, raw_path)
 
             results.append(result)
 
         if self.progress_callback:
-            success_count = sum(1 for r in results if r['success'])
+            success_count = sum(1 for r in results if r["success"])
             self.progress_callback(total, total, f"转换完成: {success_count}/{total} 成功")
 
         return results
@@ -699,51 +697,54 @@ class FileConverterManager:
                     counter += 1
 
             import shutil
+
             shutil.move(str(source), str(dest))
             logger.info(f"已移动文件到Raw: {source} -> {dest}")
             return True
         except Exception as e:
             logger.error(f"移动文件到Raw失败: {file_path}, 错误: {e}")
             return False
-    
+
     def convert_folder(
         self,
         folder_path: str,
         output_path: str,
         raw_path: str = None,
-        output_format: str = 'markdown',
+        output_format: str = "markdown",
         recursive: bool = True,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """转换整个文件夹"""
         folder = Path(folder_path)
 
         if not folder.exists():
             logger.error(f"文件夹不存在: {folder_path}")
-            return [{
-                'file_path': folder_path,
-                'success': False,
-                'output_path': None,
-                'error': f"文件夹不存在: {folder_path}"
-            }]
+            return [
+                {
+                    "file_path": folder_path,
+                    "success": False,
+                    "output_path": None,
+                    "error": f"文件夹不存在: {folder_path}",
+                }
+            ]
 
         file_paths = []
-        all_files = list(folder.rglob('*') if recursive else folder.glob('*'))
+        all_files = list(folder.rglob("*") if recursive else folder.glob("*"))
 
         for file_path in all_files:
-            if file_path.is_file() and not file_path.name.startswith('.'):
+            if file_path.is_file() and not file_path.name.startswith("."):
                 relative_path = file_path.relative_to(folder)
                 if RAW_FOLDER in relative_path.parts:
                     continue
                 ext = file_path.suffix.lower()
-                if ext != '.md' and ext in self.get_supported_formats():
+                if ext != ".md" and ext in self.get_supported_formats():
                     file_paths.append(str(file_path))
 
         logger.info(f"找到 {len(file_paths)} 个可转换文件")
 
         return self.convert_batch(file_paths, output_path, raw_path, output_format)
-    
+
     @classmethod
-    def get_supported_formats(cls) -> List[str]:
+    def get_supported_formats(cls) -> list[str]:
         """获取支持的格式列表"""
         return (
             cls.PDF_FORMATS

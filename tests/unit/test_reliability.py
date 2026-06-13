@@ -7,14 +7,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-
-from config import config
 from sidecar.agent_runner import execute_tool
 from sidecar.handlers.agent_handler import AgentHandler
 from sidecar.handlers.files_handler import FilesHandler
 from sidecar.handlers.ingest_handler import IngestHandler
 from sidecar.ingest_pipeline import save_ingest_state
 from sidecar.rag.index import filter_usable_chunks, is_usable_chunk
+
+from config import config
 
 
 def test_is_usable_chunk_requires_body() -> None:
@@ -76,13 +76,15 @@ def test_create_note_writes_file(workspace: Path) -> None:
 
 
 def test_get_ingest_status_includes_progress(workspace: Path) -> None:
-    save_ingest_state({
-        "status": "interrupted",
-        "stage": "index",
-        "progress": 0.42,
-        "message": "索引中",
-        "stats": {},
-    })
+    save_ingest_state(
+        {
+            "status": "interrupted",
+            "stage": "index",
+            "progress": 0.42,
+            "message": "索引中",
+            "stats": {},
+        }
+    )
     srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
     handler = IngestHandler(srv)
     status = handler._get_ingest_status({})
@@ -114,10 +116,10 @@ def test_retrieve_filters_empty_before_expand(workspace: Path) -> None:
         {"id": "1", "content": "", "file_path": "Notes/a.md", "score": 0.9},
         {"id": "2", "content": "  ", "file_path": "Notes/b.md", "score": 0.8},
     ]
-    with patch("sidecar.rag.embedder.encode_query", return_value={"dense_vec": [0.1] * 512}), patch(
-        "sidecar.rag.index.hybrid_search", return_value=empty_hits
-    ), patch(
-        "sidecar.rag.context_expand.expand_retrieval_context", side_effect=lambda hits, **kw: hits
+    with (
+        patch("sidecar.rag.embedder.encode_query", return_value={"dense_vec": [0.1] * 512}),
+        patch("sidecar.rag.index.hybrid_search", return_value=empty_hits),
+        patch("sidecar.rag.context_expand.expand_retrieval_context", side_effect=lambda hits, **kw: hits),
     ):
         results = retrieve("test query")
     assert results == []

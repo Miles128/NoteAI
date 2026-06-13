@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from config import config, is_ignored_dir
-from utils.logger import logger
+from config import is_ignored_dir
 from config.constants import ABSTRACT_FOLDER, NOTES_FOLDER, RAW_FOLDER
 from config.settings import workspace_manager
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 FILE_TREE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
 FILE_TREE_IGNORED_DIRS = {
@@ -53,6 +53,7 @@ class WorkspaceHandler(BaseHandler):
             self._server._setup_watcher(path)
         if path and Path(path).exists():
             from sidecar.schema_manager import ensure_schema, needs_schema_setup
+
             ensure_schema(path)
             self.file_previewer.workspace_path = path
             return {
@@ -83,6 +84,7 @@ class WorkspaceHandler(BaseHandler):
         if path and Path(path).exists():
             self.config.workspace_path = path
             from sidecar.schema_manager import ensure_schema
+
             ensure_schema(path)
             self.file_previewer.workspace_path = path
             self._server._setup_watcher(path)
@@ -91,6 +93,7 @@ class WorkspaceHandler(BaseHandler):
             if not save_ok:
                 return {"success": False, "message": save_msg}
             from sidecar.schema_manager import needs_schema_setup
+
             return {
                 "success": True,
                 "message": "工作区已设置",
@@ -114,7 +117,7 @@ class WorkspaceHandler(BaseHandler):
 
         try:
             for entry in sorted(ws.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-                if entry.name.startswith('.'):
+                if entry.name.startswith("."):
                     continue
                 if entry.is_dir():
                     if entry.name not in ALLOWED_ROOT_DIRS:
@@ -123,12 +126,14 @@ class WorkspaceHandler(BaseHandler):
                         children = self._build_flat_tree(entry, ws)
                     else:
                         children = self._build_recursive_tree(entry, ws)
-                    items.append({
-                        "name": entry.name,
-                        "path": str(entry.relative_to(ws)),
-                        "type": "folder",
-                        "children": children,
-                    })
+                    items.append(
+                        {
+                            "name": entry.name,
+                            "path": str(entry.relative_to(ws)),
+                            "type": "folder",
+                            "children": children,
+                        }
+                    )
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
                         continue
@@ -153,7 +158,7 @@ class WorkspaceHandler(BaseHandler):
         items = []
         try:
             for entry in sorted(dir_path.rglob("*"), key=lambda p: p.name.lower()):
-                if entry.name.startswith('.'):
+                if entry.name.startswith("."):
                     continue
                 if entry.is_dir():
                     continue
@@ -163,13 +168,15 @@ class WorkspaceHandler(BaseHandler):
                     continue
                 rel = str(entry.relative_to(workspace))
                 stat = entry.stat()
-                items.append({
-                    "name": entry.name,
-                    "path": rel,
-                    "type": "file",
-                    "size": stat.st_size,
-                    "modified": stat.st_mtime,
-                })
+                items.append(
+                    {
+                        "name": entry.name,
+                        "path": rel,
+                        "type": "file",
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                    }
+                )
         except PermissionError as e:
             logger.warning(f"[workspace_handler] building flat tree: {e}")
         return items
@@ -178,32 +185,36 @@ class WorkspaceHandler(BaseHandler):
         items = []
         try:
             for entry in sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
-                if entry.name.startswith('.'):
+                if entry.name.startswith("."):
                     continue
                 rel = str(entry.relative_to(workspace))
                 if entry.is_dir():
                     if entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name):
                         continue
                     children = self._build_recursive_tree(entry, workspace)
-                    items.append({
-                        "name": entry.name,
-                        "path": rel,
-                        "type": "folder",
-                        "children": children,
-                    })
+                    items.append(
+                        {
+                            "name": entry.name,
+                            "path": rel,
+                            "type": "folder",
+                            "children": children,
+                        }
+                    )
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
                         continue
                     if not entry.exists():
                         continue
                     stat = entry.stat()
-                    items.append({
-                        "name": entry.name,
-                        "path": rel,
-                        "type": "file",
-                        "size": stat.st_size,
-                        "modified": stat.st_mtime,
-                    })
+                    items.append(
+                        {
+                            "name": entry.name,
+                            "path": rel,
+                            "type": "file",
+                            "size": stat.st_size,
+                            "modified": stat.st_mtime,
+                        }
+                    )
         except PermissionError as e:
             logger.warning(f"[workspace_handler] building recursive tree: {e}")
         return items

@@ -105,16 +105,20 @@ class CloudSyncHandler(BaseHandler):
                 self._send_progress("cloud-push-progress", current / total if total > 0 else 0, message)
 
             result = engine.push(progress_callback=progress_cb)
-            self._send_response({
-                "id": "event",
-                "result": {"type": "cloud_push_complete", "data": result},
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "cloud_push_complete", "data": result},
+                }
+            )
         except Exception as e:
             logger.warning(f"[cloud_sync] push failed: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "cloud_push_error", "error": str(e)},
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "cloud_push_error", "error": str(e)},
+                }
+            )
 
     def _pull(self, params):
         provider, err = self._resolve_provider(params)
@@ -133,16 +137,20 @@ class CloudSyncHandler(BaseHandler):
                 self._send_progress("cloud-pull-progress", current / total if total > 0 else 0, message)
 
             result = engine.pull(progress_callback=progress_cb)
-            self._send_response({
-                "id": "event",
-                "result": {"type": "cloud_pull_complete", "data": result},
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "cloud_pull_complete", "data": result},
+                }
+            )
         except Exception as e:
             logger.warning(f"[cloud_sync] pull failed: {e}\n{traceback.format_exc()}")
-            self._send_response({
-                "id": "event",
-                "result": {"type": "cloud_pull_error", "error": str(e)},
-            })
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "cloud_pull_error", "error": str(e)},
+                }
+            )
 
     def _status(self, params):
         workspace = self._get_workspace()

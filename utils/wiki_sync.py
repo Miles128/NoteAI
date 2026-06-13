@@ -2,40 +2,40 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from sidecar.textutils import parse_frontmatter
+from sidecar.wiki_utils import collect_survey_off_topics
 
-from config.constants import TOPIC_SEP
 from config import config
+from config.constants import TOPIC_SEP
 from utils.logger import logger
 from utils.wiki_manager import _get_wiki_path
-from sidecar.wiki_utils import collect_survey_off_topics
-from sidecar.textutils import parse_frontmatter
 
 
 def _write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
     try:
-        text = file_path.read_text(encoding='utf-8')
-        had_bom = text.startswith('\ufeff')
+        text = file_path.read_text(encoding="utf-8")
+        had_bom = text.startswith("\ufeff")
 
         raw_meta, body = parse_frontmatter(text)
         had_frontmatter = raw_meta is not None
         meta = raw_meta if isinstance(raw_meta, dict) else {}
 
-        before = meta.get('topic')
+        before = meta.get("topic")
         if topic:
-            meta['topic'] = topic
+            meta["topic"] = topic
         else:
-            meta.pop('topic', None)
+            meta.pop("topic", None)
 
-        if before == meta.get('topic') and had_frontmatter:
+        if before == meta.get("topic") and had_frontmatter:
             return False
 
-        prefix = '\ufeff' if had_bom else ''
+        prefix = "\ufeff" if had_bom else ""
         if meta:
             fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-            new_text = prefix + '---\n' + fm + '\n---\n' + body.lstrip('\n')
+            new_text = prefix + "---\n" + fm + "\n---\n" + body.lstrip("\n")
         else:
-            new_text = prefix + body.lstrip('\n')
-        file_path.write_text(new_text, encoding='utf-8')
+            new_text = prefix + body.lstrip("\n")
+        file_path.write_text(new_text, encoding="utf-8")
         return True
     except Exception as e:
         logger.warning(f"[wiki_sync] update file topic failed {file_path}: {e}")
@@ -43,7 +43,7 @@ def _write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
 
 
 def _is_hidden_path(path: Path) -> bool:
-    return any(part.startswith('.') for part in path.parts)
+    return any(part.startswith(".") for part in path.parts)
 
 
 def topic_from_notes_path(file_path: str | Path) -> str | None:
@@ -121,7 +121,9 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
     updated_files = 0
 
     if notes_root.exists():
-        for directory in sorted((p for p in notes_root.rglob('*') if p.is_dir()), key=lambda p: str(p.relative_to(notes_root))):
+        for directory in sorted(
+            (p for p in notes_root.rglob("*") if p.is_dir()), key=lambda p: str(p.relative_to(notes_root))
+        ):
             try:
                 rel_parts = directory.relative_to(notes_root).parts
             except ValueError:
@@ -134,12 +136,12 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
                 topic_parts.setdefault(topic, parts)
                 topic_files.setdefault(topic, [])
 
-        for md_file in sorted(notes_root.rglob('*.md'), key=lambda p: str(p.relative_to(notes_root))):
+        for md_file in sorted(notes_root.rglob("*.md"), key=lambda p: str(p.relative_to(notes_root))):
             try:
                 rel_parts = md_file.relative_to(notes_root).parts
             except ValueError:
                 continue
-            if _is_hidden_path(Path(*rel_parts)) or md_file.name in ('WIKI.md', 'tags.md'):
+            if _is_hidden_path(Path(*rel_parts)) or md_file.name in ("WIKI.md", "tags.md"):
                 continue
             topic_dir_parts = rel_parts[:-1]
             if not topic_dir_parts:
@@ -184,7 +186,7 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
         lines.append("")
 
     content = "\n".join(lines).rstrip() + "\n"
-    wiki_path.write_text(content, encoding='utf-8')
+    wiki_path.write_text(content, encoding="utf-8")
 
     return {
         "success": True,

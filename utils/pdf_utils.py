@@ -1,7 +1,5 @@
 """PDF 文本提取工具"""
 
-from typing import List
-
 
 def extract_pdf_text(file_path: str, strip: bool = True) -> str:
     """
@@ -24,7 +22,7 @@ def extract_pdf_text(file_path: str, strip: bool = True) -> str:
     return "\n\n".join(parts)
 
 
-def extract_pdf_pages(file_path: str) -> List[str]:
+def extract_pdf_pages(file_path: str) -> list[str]:
     """
     使用 PyMuPDF（fitz）从 PDF 文件中逐页提取文本。
 

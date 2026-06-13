@@ -30,6 +30,7 @@ class TencentCOSProvider(CloudProvider):
             return self._client
         try:
             from qcloud_cos import CosConfig, CosS3Client  # noqa: PLC0415
+
             conf = CosConfig(Region=self._region, SecretId=self._secret_id, SecretKey=self._secret_key)
             self._client = CosS3Client(conf)
             return self._client
@@ -88,30 +89,34 @@ class TencentCOSProvider(CloudProvider):
         for prefix_obj in resp.get("CommonPrefixes", []):
             p = prefix_obj.get("Prefix", "")
             name = p.rstrip("/").split("/")[-1]
-            rel = p[len(self.REMOTE_PREFIX) + 1:].rstrip("/")
-            items.append(CloudFileInfo(
-                path=rel,
-                name=name,
-                size=0,
-                modified_time=0.0,
-                is_dir=True,
-                cloud_id=p,
-            ))
+            rel = p[len(self.REMOTE_PREFIX) + 1 :].rstrip("/")
+            items.append(
+                CloudFileInfo(
+                    path=rel,
+                    name=name,
+                    size=0,
+                    modified_time=0.0,
+                    is_dir=True,
+                    cloud_id=p,
+                )
+            )
         for obj in resp.get("Contents", []):
             key = obj.get("Key", "")
             name = key.split("/")[-1]
             if not name:
                 continue
-            rel = key[len(self.REMOTE_PREFIX) + 1:]
+            rel = key[len(self.REMOTE_PREFIX) + 1 :]
             ts = self._parse_mtime(obj.get("LastModified", ""))
-            items.append(CloudFileInfo(
-                path=rel,
-                name=name,
-                size=obj.get("Size", 0),
-                modified_time=ts,
-                is_dir=False,
-                cloud_id=key,
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=rel,
+                    name=name,
+                    size=obj.get("Size", 0),
+                    modified_time=ts,
+                    is_dir=False,
+                    cloud_id=key,
+                )
+            )
         return items
 
     def upload_file(self, local_path: str, remote_path: str) -> bool:

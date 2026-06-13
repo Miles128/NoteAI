@@ -6,14 +6,12 @@ Requires project dependencies (see pyproject.toml). Run: pytest tests/integratio
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from config import config
-from config.settings import NOTES_FOLDER, RAW_FOLDER, WORKSPACE_APP_FOLDER
 
 
 @pytest.fixture

@@ -2,10 +2,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
-from config import config
 from sidecar.handlers.ingest_handler import IngestHandler
 from sidecar.schema_manager import SCHEMA_FILENAME
+
+from config import config
 
 
 @pytest.fixture

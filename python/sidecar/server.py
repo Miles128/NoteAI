@@ -18,8 +18,8 @@ from sidecar.handlers import (
     ConfigHandler,
     FilesHandler,
     IngestHandler,
-    KbHandler,
     IntelHandler,
+    KbHandler,
     LinksHandler,
     RagHandler,
     TagsHandler,
@@ -27,18 +27,18 @@ from sidecar.handlers import (
     TransferHandler,
     WorkspaceHandler,
 )
-from sidecar.schema_manager import ensure_schema
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
+from sidecar.schema_manager import ensure_schema
 from sidecar.service_context import ServiceContext
+from sidecar.wiki_utils import (
+    sync_wiki_with_files,
+)
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger
 from utils.topic_assigner import (
     auto_process_md_file,
-)
-from sidecar.wiki_utils import (
-    sync_wiki_with_files,
 )
 from utils.ttl_cache import TTLCache
 
@@ -147,6 +147,7 @@ class SidecarServer(PathHelpersMixin):
         try:
             ensure_schema(workspace)
             from sidecar.schema_manager import needs_schema_setup
+
             if not needs_schema_setup(workspace):
                 sync_wiki_with_files()
                 logger.info("[startup] WIKI.md synced with workspace")
@@ -154,10 +155,12 @@ class SidecarServer(PathHelpersMixin):
                 logger.info("[startup] schema setup pending, skip WIKI sync")
         except Exception as e:
             logger.warning(f"[startup] sync failed: {e}")
-        self._send_response({
-            "id": "event",
-            "result": {"type": "workspace_files_changed"},
-        })
+        self._send_response(
+            {
+                "id": "event",
+                "result": {"type": "workspace_files_changed"},
+            }
+        )
 
     def _setup_watcher(self, workspace_path):
         try:
@@ -235,18 +238,25 @@ class SidecarServer(PathHelpersMixin):
     def _batch_auto_assign_topics(self, params):
         return self._topics_handler._batch_auto_assign_topics(params)
 
+    @staticmethod
+    def _rel_parts(file_path: str | Path) -> tuple[str, ...]:
+        workspace = config.workspace_path
+        path = Path(file_path)
+        try:
+            return path.relative_to(workspace).parts if workspace else path.parts
+        except ValueError:
+            return path.parts
+
+    @staticmethod
+    def _is_hidden_or_ignored(rel_parts: tuple[str, ...]) -> bool:
+        return any(part.startswith(".") for part in rel_parts) or any(is_ignored_dir(part) for part in rel_parts)
+
     def _is_relevant_workspace_change(self, file_path, is_directory=False):
         path = Path(file_path)
-        workspace = config.workspace_path
-        try:
-            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
-        except ValueError:
-            rel_parts = path.parts
-        if any(part.startswith(".") for part in rel_parts):
+        rel_parts = self._rel_parts(path)
+        if self._is_hidden_or_ignored(rel_parts):
             return False
         if "wiki" in rel_parts:
-            return False
-        if any(is_ignored_dir(part) for part in rel_parts):
             return False
         if is_directory:
             return True
@@ -256,40 +266,30 @@ class SidecarServer(PathHelpersMixin):
         if change_type not in ("created", "deleted", "moved"):
             return False
 
-        workspace = config.workspace_path
         for changed_path in (file_path, src_path):
             if not changed_path:
                 continue
             path = Path(changed_path)
-            try:
-                rel_parts = path.relative_to(workspace).parts if workspace else path.parts
-            except ValueError:
-                continue
+            rel_parts = self._rel_parts(path)
             if not rel_parts or rel_parts[0] != NOTES_FOLDER:
                 continue
-            if any(part.startswith(".") for part in rel_parts):
-                continue
-            if any(is_ignored_dir(part) for part in rel_parts):
+            if self._is_hidden_or_ignored(rel_parts):
                 continue
             if is_directory or path.suffix.lower() == ".md":
                 return True
         return False
 
     def _track_watcher_path(self, file_path: str | None) -> None:
-        workspace = config.workspace_path
-        if not workspace or not file_path:
+        if not file_path:
             return
         path = Path(file_path)
         if not path.is_file() or path.suffix.lower() != ".md":
             return
-        try:
-            rel = str(path.relative_to(workspace))
-        except ValueError:
-            return
-        if "wiki" in Path(rel).parts or any(part.startswith(".") for part in Path(rel).parts):
+        rel_parts = self._rel_parts(path)
+        if not rel_parts or "wiki" in rel_parts or self._is_hidden_or_ignored(rel_parts):
             return
         with self._watcher_debounce_lock:
-            self._watcher_changed_paths.add(rel)
+            self._watcher_changed_paths.add(str(Path(*rel_parts)))
 
     def _on_workspace_file_changed(self, change_type, file_path, src_path=None, is_directory=False):
         if not self._is_relevant_workspace_change(file_path, is_directory=is_directory) and (
@@ -304,19 +304,10 @@ class SidecarServer(PathHelpersMixin):
                 self._track_watcher_path(src_path)
 
         path = Path(file_path)
-        workspace = config.workspace_path
-        try:
-            rel_parts = path.relative_to(workspace).parts if workspace else path.parts
-        except ValueError:
-            rel_parts = path.parts
-        suffix = path.suffix.lower()
-
-        if not is_directory and change_type in ("created", "moved") and suffix == ".md" and workspace:
-            try:
-                if not any(is_ignored_dir(p) for p in rel_parts):
-                    self._auto_process_md_file(str(path))
-            except ValueError:
-                logger.warning(f"[watcher] path outside workspace: {file_path}\n")
+        if not is_directory and change_type in ("created", "moved") and path.suffix.lower() == ".md":
+            rel_parts = self._rel_parts(path)
+            if not self._is_hidden_or_ignored(rel_parts):
+                self._auto_process_md_file(str(path))
 
         with self._watcher_debounce_lock:
             if self._workspace_change_affects_wiki(change_type, file_path, src_path, is_directory=is_directory):
@@ -353,13 +344,15 @@ class SidecarServer(PathHelpersMixin):
                 sync_wiki_with_files()
             except Exception as e:
                 logger.warning(f"[watcher] syncing WIKI after workspace change: {e}\n")
-        self._send_response({
-            "id": "event",
-            "result": {
-                "type": "workspace_files_changed",
-                "file_paths": changed_paths,
-            },
-        })
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "workspace_files_changed",
+                    "file_paths": changed_paths,
+                },
+            }
+        )
 
     def handle_request(self, request):
         self._router.handle(request)

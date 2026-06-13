@@ -1,13 +1,12 @@
-import pytest
-import tempfile
-from pathlib import Path
 import sys
-import shutil
+from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "python"))
 
-from utils.topic_manager import TopicManager, LEVEL1_TOPICS
+from utils.topic_manager import TopicManager
 
 
 class TestFullWorkflow:
@@ -149,12 +148,15 @@ class TestAbstractMutualExclusion:
 class TestFolderLevelDetermination:
     """文件夹层级判定"""
 
-    @pytest.mark.parametrize("parent,expected", [
-        ("Notes/AI产品经理之路", 2),
-        ("Notes/AI产品经理之路/需求分析", 3),
-        ("Notes/AI产品经理之路/需求分析/细节", -1),
-        ("Notes", 1),
-    ])
+    @pytest.mark.parametrize(
+        "parent,expected",
+        [
+            ("Notes/AI产品经理之路", 2),
+            ("Notes/AI产品经理之路/需求分析", 3),
+            ("Notes/AI产品经理之路/需求分析/细节", -1),
+            ("Notes", 1),
+        ],
+    )
     def test_level_determination(self, tmp_path, parent, expected):
         p = tmp_path / parent
         p.mkdir(parents=True)

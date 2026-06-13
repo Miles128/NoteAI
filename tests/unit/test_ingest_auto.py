@@ -1,16 +1,14 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.ingest_pipeline import (
-    load_ingest_state,
     normalize_ingest_state,
     prepare_auto_ingest,
-    request_full_ingest,
     save_ingest_state,
 )
 from sidecar.schema_manager import SCHEMA_FILENAME
+
+from config import config
 
 
 @pytest.fixture
@@ -33,11 +31,13 @@ def test_prepare_auto_ingest_resumes_interrupted(workspace: Path) -> None:
         "# ok\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",
         encoding="utf-8",
     )
-    save_ingest_state({
-        "status": "interrupted",
-        "mode": "full",
-        "completed_stages": ["schema", "convert", "compile"],
-    })
+    save_ingest_state(
+        {
+            "status": "interrupted",
+            "mode": "full",
+            "completed_stages": ["schema", "convert", "compile"],
+        }
+    )
     plan = prepare_auto_ingest(str(workspace))
     assert plan["action"] == "start"
     assert plan["resume"] is True

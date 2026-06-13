@@ -7,7 +7,6 @@ and re-indexes when workspace files change.
 import re
 import threading
 from pathlib import Path
-from typing import Dict, List, Set
 
 from config import config
 
@@ -20,8 +19,8 @@ class FullTextIndex:
     __slots__ = ("_index", "_files", "_lock", "_dirty")
 
     def __init__(self):
-        self._index: Dict[str, Dict[str, List[int]]] = {}
-        self._files: Dict[str, float] = {}  # relpath → mtime
+        self._index: dict[str, dict[str, list[int]]] = {}
+        self._files: dict[str, float] = {}  # relpath → mtime
         self._lock = threading.Lock()
         self._dirty = True
 
@@ -78,7 +77,7 @@ class FullTextIndex:
         self.ensure_indexed()
 
         with self._lock:
-            file_hits: Dict[str, int] = {}
+            file_hits: dict[str, int] = {}
             for word in query_words:
                 for rel in self._index.get(word, {}):
                     file_hits[rel] = file_hits.get(rel, 0) + len(self._index[word][rel])

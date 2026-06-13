@@ -82,7 +82,7 @@ class TagsHandler(BaseHandler):
                 "dry_run": True,
                 "updated": 0,
                 "preview": changes,
-                "message": f"预览：{len(changes)} 个文件将被修改"
+                "message": f"预览：{len(changes)} 个文件将被修改",
             }
 
         updated = 0
@@ -122,7 +122,11 @@ class TagsHandler(BaseHandler):
         if tag_name in existing_tags:
             return {"success": True, "message": "标签已存在", "created": False}
 
-        return {"success": True, "message": f"标签「{tag_name}」已就绪，可通过编辑文件 frontmatter 使用", "created": True}
+        return {
+            "success": True,
+            "message": f"标签「{tag_name}」已就绪，可通过编辑文件 frontmatter 使用",
+            "created": True,
+        }
 
     def _rename_tag(self, params):
         old_tag = params.get("old_tag", "")
@@ -157,14 +161,14 @@ class TagsHandler(BaseHandler):
                 "success": True,
                 "message": f"已合并标签到「{new_tag}」，更新 {updated_count} 个文件",
                 "updated": updated_count,
-                "merged": True
+                "merged": True,
             }
 
         return {
             "success": True,
             "message": f"已重命名标签，更新 {updated_count} 个文件",
             "updated": updated_count,
-            "merged": False
+            "merged": False,
         }
 
     def _delete_tag(self, params):
@@ -189,7 +193,7 @@ class TagsHandler(BaseHandler):
         return {
             "success": True,
             "message": f"已删除标签「{tag_name}」，更新 {updated_count} 个文件",
-            "updated": updated_count
+            "updated": updated_count,
         }
 
     def _collect_tag_map(self, workspace: str) -> dict[str, list[str]]:
@@ -242,12 +246,14 @@ class TagsHandler(BaseHandler):
             new_tags = [tag for tag in matched_tags if tag not in existing_tags]
             if not new_tags:
                 continue
-            changes.append({
-                "path": str(md_file.relative_to(workspace)),
-                "existing_tags": existing_tags,
-                "matched_tags": matched_tags,
-                "new_tags_to_add": new_tags,
-            })
+            changes.append(
+                {
+                    "path": str(md_file.relative_to(workspace)),
+                    "existing_tags": existing_tags,
+                    "matched_tags": matched_tags,
+                    "new_tags_to_add": new_tags,
+                }
+            )
         return changes
 
     @staticmethod

@@ -251,7 +251,8 @@
     "saveAsNote": "Save as note",
     "saving": "Saving…",
     "savedToNotes": "Saved to Notes/XiaoYi chats",
-    "saveFailed": "Save failed: {message}"
+    "saveFailed": "Save failed: {message}",
+    "sources": "Sources"
   },
   "settings": {
     "title": "Settings",

@@ -1,14 +1,14 @@
 from config.constants import TOPIC_SEP
 from config.settings import config
 from utils.logger import logger
-from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word
+from utils.text_utils import _is_generic_word, _is_meaningful_tag, _normalize_for_match
+from utils.text_utils import tokenize as tokenize_text
 
 
 def _norm_topic(topic: str) -> str:
-    from config.constants import TOPIC_SEP
     clean = topic.strip()
-    if '/' in clean and TOPIC_SEP not in clean:
-        clean = clean.replace('/', TOPIC_SEP)
+    if "/" in clean and TOPIC_SEP not in clean:
+        clean = clean.replace("/", TOPIC_SEP)
     return clean
 
 
@@ -75,8 +75,8 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
     if not topic_names:
         return []
 
-    from utils.llm_utils import call_llm
     from prompts import TOPIC_SUGGESTION_PROMPT
+    from utils.llm_utils import call_llm
 
     tags_str = ", ".join(tags) if tags else "无"
     topic_list_str = "\n".join(f"- {t}" for t in topic_names)
@@ -89,6 +89,7 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
 
     try:
         from sidecar.schema_manager import schema_prompt_snippet
+
         prompt += "\n\n" + schema_prompt_snippet(800)
     except Exception:
         pass
@@ -96,8 +97,8 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
     try:
         result = call_llm(prompt, temperature=0.3)
         suggested = []
-        for line in result.strip().split('\n'):
-            line = line.strip().lstrip('-•*0-9. ').strip()
+        for line in result.strip().split("\n"):
+            line = line.strip().lstrip("-•*0-9. ").strip()
             if not line:
                 continue
             for tn in topic_names:
@@ -137,7 +138,12 @@ def _collect_topic_candidates(headings, filename: str, tags: list[str]):
     candidates = [h["name"] for h in high_priority_candidates]
     extra_candidates = [h["name"] for h in low_priority_candidates if h["name"] not in candidates]
     for raw in [*tags, *tokenize_text(filename)]:
-        if _is_meaningful_tag(raw) and not _is_generic_word(raw) and raw not in candidates and raw not in extra_candidates:
+        if (
+            _is_meaningful_tag(raw)
+            and not _is_generic_word(raw)
+            and raw not in candidates
+            and raw not in extra_candidates
+        ):
             extra_candidates.append(raw)
     return high_priority_candidates, candidates, extra_candidates
 

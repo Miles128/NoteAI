@@ -217,6 +217,7 @@ def _scan_classify_pending(workspace: str) -> list[Path]:
             continue
         try:
             from sidecar.textutils import parse_frontmatter
+
             text = md.read_text(encoding="utf-8")
             fm, _ = parse_frontmatter(text)
             if topic_from_notes_path(md):
@@ -346,15 +347,17 @@ def run_ingest(
             state["status"] = "needs_schema"
             save_ingest_state(state)
             if send_event:
-                send_event({
-                    "id": "event",
-                    "result": {
-                        "type": "ingest_complete",
-                        "success": False,
-                        "needs_schema": True,
-                        "message": "请先完成工作区 Schema 配置",
-                    },
-                })
+                send_event(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "ingest_complete",
+                            "success": False,
+                            "needs_schema": True,
+                            "message": "请先完成工作区 Schema 配置",
+                        },
+                    }
+                )
             return {"success": False, "needs_schema": True, "message": "请先完成工作区 Schema 配置"}
 
         prog("schema", 0.02, "schema.md 已就绪…")
@@ -416,9 +419,7 @@ def run_ingest(
                 prog("compile", 0.17, f"笔记编译 ({len(compile_targets)} 篇)…")
                 stats["compiled"], _ = compile_notes_batch(
                     compile_targets,
-                    progress_cb=lambda cur, tot, msg: prog(
-                        "compile", 0.17 + 0.11 * cur / max(tot, 1), msg
-                    ),
+                    progress_cb=lambda cur, tot, msg: prog("compile", 0.17 + 0.11 * cur / max(tot, 1), msg),
                 )
             prog("compile", 0.28, f"笔记编译完成: {stats['compiled']} 篇")
             mark_stage_done("compile")
@@ -480,7 +481,8 @@ def run_ingest(
                         index_targets.append(path)
             else:
                 index_targets = [
-                    md for md in ws_path.rglob("*.md")
+                    md
+                    for md in ws_path.rglob("*.md")
                     if not md.name.startswith(".")
                     and "wiki" not in md.parts
                     and not md.name.endswith("_综述.md")
@@ -535,6 +537,7 @@ def run_ingest(
         else:
             cascade_topics = sorted(affected_topics)
             if cascade_topics:
+
                 def cascade_prog(cur: int, tot: int, msg: str) -> None:
                     prog("cascade", 0.7 + 0.25 * cur / max(tot, 1), msg)
 
@@ -588,24 +591,28 @@ def run_ingest(
         prog("sync", 1.0, "入库流水线完成")
 
         if send_event:
-            send_event({
-                "id": "event",
-                "result": {
-                    "type": "ingest_complete",
-                    "success": True,
-                    "stats": stats,
-                },
-            })
+            send_event(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "ingest_complete",
+                        "success": True,
+                        "stats": stats,
+                    },
+                }
+            )
         return {"success": True, "stats": stats}
 
     except _Cancelled:
         state["status"] = "cancelled"
         save_ingest_state(state)
         if send_event:
-            send_event({
-                "id": "event",
-                "result": {"type": "ingest_complete", "success": False, "cancelled": True},
-            })
+            send_event(
+                {
+                    "id": "event",
+                    "result": {"type": "ingest_complete", "success": False, "cancelled": True},
+                }
+            )
         return {"success": False, "cancelled": True, "stats": stats}
 
     except Exception as e:
@@ -614,10 +621,12 @@ def run_ingest(
         state["can_retry"] = True
         save_ingest_state(state)
         if send_event:
-            send_event({
-                "id": "event",
-                "result": {"type": "ingest_complete", "success": False, "error": str(e)},
-            })
+            send_event(
+                {
+                    "id": "event",
+                    "result": {"type": "ingest_complete", "success": False, "error": str(e)},
+                }
+            )
         return {"success": False, "message": str(e), "stats": stats}
 
 

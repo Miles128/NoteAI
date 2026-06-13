@@ -2,10 +2,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-from config import config
 from sidecar.ingest_pipeline import clear_cancel, load_ingest_state, request_cancel, run_ingest
 from sidecar.schema_manager import SCHEMA_FILENAME
+
+from config import config
 
 
 @pytest.fixture
@@ -31,11 +31,13 @@ def test_run_ingest_creates_schema_and_completes(workspace: Path) -> None:
     def on_event(resp: dict) -> None:
         events.append(resp.get("result", {}))
 
-    with patch("sidecar.ingest_pipeline.run_cascade_for_topics", return_value={"updated": 0, "failed": []}), \
-         patch("sidecar.ingest_pipeline.retry_failed_cascades", return_value={"updated": 0}), \
-         patch("sidecar.ingest_pipeline.sync_wiki_with_files"), \
-         patch("utils.note_compiler.compile_notes_batch", return_value=(0, [])), \
-         patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(0, [])):
+    with (
+        patch("sidecar.ingest_pipeline.run_cascade_for_topics", return_value={"updated": 0, "failed": []}),
+        patch("sidecar.ingest_pipeline.retry_failed_cascades", return_value={"updated": 0}),
+        patch("sidecar.ingest_pipeline.sync_wiki_with_files"),
+        patch("utils.note_compiler.compile_notes_batch", return_value=(0, [])),
+        patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(0, [])),
+    ):
         result = run_ingest(mode="full", send_progress=on_progress, send_event=on_event)
 
     assert result["success"] is True
@@ -52,8 +54,7 @@ def test_run_ingest_respects_cancel(workspace: Path) -> None:
     )
     request_cancel()
 
-    with patch("sidecar.ingest_pipeline.clear_cancel"), \
-         patch("sidecar.ingest_pipeline.sync_wiki_with_files"):
+    with patch("sidecar.ingest_pipeline.clear_cancel"), patch("sidecar.ingest_pipeline.sync_wiki_with_files"):
         result = run_ingest(mode="full")
 
     assert result.get("cancelled") is True

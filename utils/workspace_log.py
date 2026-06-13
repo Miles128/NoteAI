@@ -30,10 +30,7 @@ def log_path(workspace: str | None = None) -> Path | None:
 def _ensure_header(content: str) -> str:
     if content.strip():
         return content
-    return (
-        "# 知识库变更日志\n\n"
-        "> 统一记录：入库、转换、分类、级联、问答归档、Lint。按日分组。\n\n"
-    )
+    return "# 知识库变更日志\n\n> 统一记录：入库、转换、分类、级联、问答归档、Lint。按日分组。\n\n"
 
 
 def append_log(entry_type: str, message: str, detail: str = "") -> None:
@@ -73,13 +70,11 @@ def append_log(entry_type: str, message: str, detail: str = "") -> None:
         # trim old lines for this day
         day_start = insert_idx
         day_end = day_start
-        while day_end < len(lines) and not (
-            day_end > day_start and lines[day_end].startswith("## ")
-        ):
+        while day_end < len(lines) and not (day_end > day_start and lines[day_end].startswith("## ")):
             day_end += 1
         day_lines = lines[day_start:day_end]
         if len(day_lines) > _MAX_LINES_PER_DAY:
-            lines = lines[:day_start] + day_lines[-_MAX_LINES_PER_DAY :]
+            lines = lines[:day_start] + day_lines[-_MAX_LINES_PER_DAY:]
 
         path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
@@ -95,9 +90,7 @@ def parse_log_entries(limit: int = 100, workspace: str | None = None) -> list[di
 
     entries: list[dict] = []
     current_day = ""
-    pattern = re.compile(
-        r"^- `(?P<time>\d{2}:\d{2}:\d{2})` \*\*\[?(?P<type>[A-Z_]+)\]?\*\* (?P<msg>.+)$"
-    )
+    pattern = re.compile(r"^- `(?P<time>\d{2}:\d{2}:\d{2})` \*\*\[?(?P<type>[A-Z_]+)\]?\*\* (?P<msg>.+)$")
     for raw in content.splitlines():
         stripped = raw.strip()
         if stripped.startswith("## "):
@@ -110,13 +103,15 @@ def parse_log_entries(limit: int = 100, workspace: str | None = None) -> list[di
         detail = ""
         if " — " in msg:
             msg, detail = msg.split(" — ", 1)
-        entries.append({
-            "date": current_day,
-            "time": m.group("time"),
-            "type": m.group("type").lower(),
-            "msg": msg.strip(),
-            "detail": detail.strip(),
-        })
+        entries.append(
+            {
+                "date": current_day,
+                "time": m.group("time"),
+                "type": m.group("type").lower(),
+                "msg": msg.strip(),
+                "detail": detail.strip(),
+            }
+        )
     return entries[-limit:]
 
 
@@ -150,13 +145,15 @@ def _parse_legacy_json_entries(path: Path) -> list[dict]:
             dt = datetime.fromtimestamp(float(ts))
         except (TypeError, ValueError, OSError):
             dt = datetime.now()
-        out.append({
-            "date": dt.strftime("%Y-%m-%d"),
-            "time": dt.strftime("%H:%M:%S"),
-            "type": str(item.get("type") or "event").lower(),
-            "msg": str(item.get("msg") or "").strip(),
-            "detail": str(item.get("detail") or "").strip(),
-        })
+        out.append(
+            {
+                "date": dt.strftime("%Y-%m-%d"),
+                "time": dt.strftime("%H:%M:%S"),
+                "type": str(item.get("type") or "event").lower(),
+                "msg": str(item.get("msg") or "").strip(),
+                "detail": str(item.get("detail") or "").strip(),
+            }
+        )
     return out
 
 
@@ -181,13 +178,15 @@ def _parse_legacy_md_entries(path: Path) -> list[dict]:
         time_part = ts_raw
         if " " in ts_raw:
             date, _, time_part = ts_raw.partition(" ")
-        entries.append({
-            "date": date,
-            "time": time_part,
-            "type": (m.group("type") or "event").lower(),
-            "msg": m.group("msg").strip(),
-            "detail": "",
-        })
+        entries.append(
+            {
+                "date": date,
+                "time": time_part,
+                "type": (m.group("type") or "event").lower(),
+                "msg": m.group("msg").strip(),
+                "detail": "",
+            }
+        )
     return entries
 
 

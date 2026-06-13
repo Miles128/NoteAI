@@ -1,8 +1,8 @@
 """Lightweight JSON-RPC router for noteai sidecar. Supports sync and async handlers."""
 
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from utils.logger import logger
@@ -38,6 +38,7 @@ class RpcRouter:
             return
 
         if handler.async_mode:
+
             def _run():
                 try:
                     result = handler.fn(params)

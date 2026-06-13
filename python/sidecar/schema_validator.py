@@ -5,9 +5,17 @@ from __future__ import annotations
 from config.constants import TOPIC_SEP
 from sidecar.schema_manager import allows_wiki_edit, needs_schema_setup, parse_schema_rules
 
-_FORBIDDEN_LEAVES = frozenset({
-    "其他", "杂项", "未分类", "other", "misc", "uncategorized", "未归类",
-})
+_FORBIDDEN_LEAVES = frozenset(
+    {
+        "其他",
+        "杂项",
+        "未分类",
+        "other",
+        "misc",
+        "uncategorized",
+        "未归类",
+    }
+)
 
 
 class SchemaValidationError(ValueError):

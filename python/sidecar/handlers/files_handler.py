@@ -11,7 +11,7 @@ from utils.topic_assigner import sync_wiki_with_files
 
 class FilesHandler(BaseHandler):
     PREVIEW_LARGE_RAW_UTF8_THRESHOLD = 512 * 1024
-    RAW_SLICE_EXTENSIONS = frozenset({'.md', '.markdown', '.txt'})
+    RAW_SLICE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
     RAW_SLICE_MAX = 786_432
 
     def _resolved_preview_full_path(self, params):
@@ -31,7 +31,7 @@ class FilesHandler(BaseHandler):
         if not blob:
             return True
         try:
-            blob.decode('utf-8')
+            blob.decode("utf-8")
         except UnicodeDecodeError:
             return False
         return True
@@ -45,7 +45,7 @@ class FilesHandler(BaseHandler):
         if ext in self.RAW_SLICE_EXTENSIONS:
             sz = resolved.stat().st_size
             take = min(8192, sz)
-            header = resolved.read_bytes()[:take] if take else b''
+            header = resolved.read_bytes()[:take] if take else b""
             if (
                 not bool(params.get("force_semantic_preview"))
                 and sz > self.PREVIEW_LARGE_RAW_UTF8_THRESHOLD
@@ -85,11 +85,10 @@ class FilesHandler(BaseHandler):
         limit_req = min(limit_req, self.RAW_SLICE_MAX)
 
         sz = resolved.stat().st_size
-        if offset > sz:
-            offset = sz
+        offset = min(offset, sz)
         remaining = sz - offset
         read_len = min(limit_req, remaining)
-        with resolved.open('rb') as fh:
+        with resolved.open("rb") as fh:
             fh.seek(offset)
             blob = fh.read(read_len)
         next_off = offset + len(blob)
@@ -153,7 +152,7 @@ class FilesHandler(BaseHandler):
                 "success": True,
                 "content": base64.b64encode(raw_bytes).decode("utf-8"),
                 "size": len(raw_bytes),
-                "file_name": Path(full_path).name
+                "file_name": Path(full_path).name,
             }
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -193,12 +192,12 @@ class FilesHandler(BaseHandler):
             return {"success": False, "message": "文件不存在"}
 
         file_topic = None
-        if full_path.suffix.lower() == '.md':
+        if full_path.suffix.lower() == ".md":
             try:
-                text = full_path.read_text(encoding='utf-8')
+                text = full_path.read_text(encoding="utf-8")
                 meta, _ = self._parse_frontmatter(text)
-                if meta and isinstance(meta.get('topic'), str):
-                    file_topic = meta['topic'].strip().strip("'\"")
+                if meta and isinstance(meta.get("topic"), str):
+                    file_topic = meta["topic"].strip().strip("'\"")
             except Exception as e:
                 logger.warning(f"[files_handler] reading file topic for deletion: {e}\n")
 
@@ -206,7 +205,7 @@ class FilesHandler(BaseHandler):
             send2trash = importlib.import_module("send2trash")
             send2trash.send2trash(str(full_path))
 
-            if full_path.suffix.lower() == '.md':
+            if full_path.suffix.lower() == ".md":
                 try:
                     sync_wiki_with_files()
                 except Exception as e:
@@ -217,7 +216,10 @@ class FilesHandler(BaseHandler):
 
             return {"success": True}
         except ImportError:
-            return {"success": False, "message": "未安装 send2trash，无法安全删除文件。请运行: uv pip install send2trash"}
+            return {
+                "success": False,
+                "message": "未安装 send2trash，无法安全删除文件。请运行: uv pip install send2trash",
+            }
         except Exception as e:
             return {"success": False, "message": str(e)}
 

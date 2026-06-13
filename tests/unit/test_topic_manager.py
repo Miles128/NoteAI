@@ -1,16 +1,14 @@
-import pytest
-import tempfile
-from pathlib import Path
 import sys
+from pathlib import Path
 
 # 确保项目路径在 sys.path 中
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "python"))
 
 from utils.topic_manager import (
-    TopicManager,
     LEVEL1_TOPICS,
     MAX_LEVEL,
+    TopicManager,
 )
 
 
@@ -24,22 +22,14 @@ class TestParseTopicHierarchy:
         assert result[0] == {"name": "普通人的AI指南", "level": 1, "parent": None}
 
     def test_level1_and_level2(self):
-        fm = {"topic": [
-            "普通人的AI指南",
-            {"AI Agent 核心架构设计": []}
-        ]}
+        fm = {"topic": ["普通人的AI指南", {"AI Agent 核心架构设计": []}]}
         result = TopicManager.parse_topic_hierarchy(fm)
         assert len(result) == 2
         assert result[0] == {"name": "普通人的AI指南", "level": 1, "parent": None}
         assert result[1] == {"name": "AI Agent 核心架构设计", "level": 2, "parent": "普通人的AI指南"}
 
     def test_full_three_levels(self):
-        fm = {"topic": [
-            "AI应用开发教程",
-            {"Agent 架构设计": [
-                {"MCP vs CLI 对比": []}
-            ]}
-        ]}
+        fm = {"topic": ["AI应用开发教程", {"Agent 架构设计": [{"MCP vs CLI 对比": []}]}]}
         result = TopicManager.parse_topic_hierarchy(fm)
         assert len(result) == 3
         assert result[0]["level"] == 1

@@ -8,42 +8,52 @@
 存储：workspace/.links.json
 """
 
+from __future__ import annotations
+
 import json
 import re
 import time
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple, Any
+from typing import Any
 
 from config import config, is_ignored_dir
-from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _is_generic_word, _normalize_for_match, parse_frontmatter
 from utils.logger import logger
+from utils.text_utils import (
+    _is_generic_word,
+    _is_meaningful_tag,
+    _normalize_for_match,
+    parse_frontmatter,
+)
+from utils.text_utils import (
+    tokenize as tokenize_text,
+)
 
 
-def _get_links_path() -> Optional[Path]:
+def _get_links_path() -> Path | None:
     ws = config.workspace_path
     if not ws:
         return None
     return Path(ws) / ".links.json"
 
 
-def load_links() -> Dict[str, Any]:
+def load_links() -> dict[str, Any]:
     path = _get_links_path()
     if not path or not path.exists():
         return {"links": [], "last_scan": None}
     try:
-        return json.loads(path.read_text(encoding='utf-8'))
+        return json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning(f"[link_indexer] 读取 .links.json 失败: {e}")
         return {"links": [], "last_scan": None}
 
 
-def save_links(data: Dict[str, Any]) -> bool:
+def save_links(data: dict[str, Any]) -> bool:
     path = _get_links_path()
     if not path:
         return False
     try:
-        tmp_path = path.with_suffix('.tmp')
-        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp_path = path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp_path.replace(path)
         return True
     except Exception as e:
@@ -158,12 +168,14 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         key = _link_key(rel, other["path"])
         if key in existing_keys:
             continue
-        merged.append({
-            "from": rel,
-            "to": other["path"],
-            "reason": reason,
-            "status": "pending",
-        })
+        merged.append(
+            {
+                "from": rel,
+                "to": other["path"],
+                "reason": reason,
+                "status": "pending",
+            }
+        )
         existing_keys.add(key)
         added += 1
 
@@ -272,7 +284,7 @@ def _llm_pick_cross_refs(
         )
 
     prompt = f"""你是知识库双向链接编辑。源文章：
-《{source_meta.get('title', '')}》
+《{source_meta.get("title", "")}》
 摘要：{body_excerpt[:400]}
 
 从下列候选中选出**所有**与源文章有实质关联的笔记（概念重叠、补充、前置知识均可）。数量不设下限或上限，只排除弱相关。
@@ -409,12 +421,14 @@ def discover_cross_refs_for_file(
         if use_llm:
             auto = True
         status = "confirmed" if auto else "pending"
-        merged.append({
-            "from": rel,
-            "to": row["path"],
-            "reason": row.get("reason", "交叉引用"),
-            "status": status,
-        })
+        merged.append(
+            {
+                "from": rel,
+                "to": row["path"],
+                "reason": row.get("reason", "交叉引用"),
+                "status": status,
+            }
+        )
         existing_keys.add(key)
         added += 1
         if status == "confirmed":
@@ -438,11 +452,11 @@ def discover_cross_refs_for_file(
 
 def _read_file_topic(file_path: Path) -> str:
     try:
-        text = file_path.read_text(encoding='utf-8')
+        text = file_path.read_text(encoding="utf-8")
         meta, _ = parse_frontmatter(text)
         if not meta:
             return ""
-        topic = meta.get('topic')
+        topic = meta.get("topic")
         if isinstance(topic, list):
             return str(topic[0]).strip() if len(topic) == 1 else ""
         if isinstance(topic, str) and topic.strip():
@@ -452,27 +466,27 @@ def _read_file_topic(file_path: Path) -> str:
     return ""
 
 
-def _iter_md_files(workspace: Path) -> List[Path]:
+def _iter_md_files(workspace: Path) -> list[Path]:
     """收集所有 MD 文件（排除隐藏文件和忽略目录）"""
-    excluded = {'AI Wiki', '.git', '.obsidian', '.trash', 'wiki'}
+    excluded = {"AI Wiki", ".git", ".obsidian", ".trash", "wiki"}
     files = []
     for folder in workspace.iterdir():
         if not folder.is_dir():
             continue
-        if folder.name in excluded or folder.name.startswith('.'):
+        if folder.name in excluded or folder.name.startswith("."):
             continue
         if is_ignored_dir(folder.name):
             continue
-        for md_file in folder.rglob('*.md'):
-            if md_file.name.startswith('.'):
+        for md_file in folder.rglob("*.md"):
+            if md_file.name.startswith("."):
                 continue
             files.append(md_file)
     return files
 
 
-def _parse_file_meta(md_file: Path) -> Dict[str, Any]:
+def _parse_file_meta(md_file: Path) -> dict[str, Any]:
     try:
-        text = md_file.read_text(encoding='utf-8')
+        text = md_file.read_text(encoding="utf-8")
     except Exception as e:
         logger.warning(f"[link_indexer] 无法读取文件 {md_file.name}: {e}")
         return None
@@ -483,21 +497,21 @@ def _parse_file_meta(md_file: Path) -> Dict[str, Any]:
     topic = None
 
     if meta:
-        t = meta.get('title')
+        t = meta.get("title")
         if t and isinstance(t, str):
             title = t
-        raw_tags = meta.get('tags', [])
+        raw_tags = meta.get("tags", [])
         if isinstance(raw_tags, list):
             tags = [str(t).strip() for t in raw_tags if t]
         elif isinstance(raw_tags, str) and raw_tags.strip():
             tags = [raw_tags.strip()]
-        raw_topic = meta.get('topic')
+        raw_topic = meta.get("topic")
         if isinstance(raw_topic, str) and raw_topic.strip():
             topic = raw_topic.strip()
     else:
         body = text
 
-    summary = body[:500].replace('\n', ' ').strip()
+    summary = body[:500].replace("\n", " ").strip()
     rel_path = str(md_file.relative_to(Path(config.workspace_path)))
 
     return {
@@ -509,7 +523,7 @@ def _parse_file_meta(md_file: Path) -> Dict[str, Any]:
     }
 
 
-def _build_candidate_pairs(metas: List[Dict]) -> List[Tuple[Dict, Dict, int]]:
+def _build_candidate_pairs(metas: list[dict]) -> list[tuple[dict, dict, int]]:
     """
     粗筛候选对，返回 [(meta_a, meta_b, priority)]。
     priority: 1=同topic, 2=共享tag, 3=文件名token重叠
@@ -537,10 +551,16 @@ def _build_candidate_pairs(metas: List[Dict]) -> List[Tuple[Dict, Dict, int]]:
                     priority = 2
             # 文件名 token 重叠
             else:
-                a_tokens = set(_normalize_for_match(t) for t in tokenize_text(a["title"])
-                              if _is_meaningful_tag(t) and not _is_generic_word(t))
-                b_tokens = set(_normalize_for_match(t) for t in tokenize_text(b["title"])
-                              if _is_meaningful_tag(t) and not _is_generic_word(t))
+                a_tokens = set(
+                    _normalize_for_match(t)
+                    for t in tokenize_text(a["title"])
+                    if _is_meaningful_tag(t) and not _is_generic_word(t)
+                )
+                b_tokens = set(
+                    _normalize_for_match(t)
+                    for t in tokenize_text(b["title"])
+                    if _is_meaningful_tag(t) and not _is_generic_word(t)
+                )
                 if len(a_tokens & b_tokens) >= 2:
                     priority = 3
 
@@ -553,8 +573,7 @@ def _build_candidate_pairs(metas: List[Dict]) -> List[Tuple[Dict, Dict, int]]:
     return pairs[:200]
 
 
-def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
-                        progress_callback=None) -> List[Dict]:
+def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_callback=None) -> list[dict]:
     """
     将候选对批处理发给 LLM，获取确认的链接。
     每次发送最多 15 对。
@@ -575,7 +594,7 @@ def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
     total_batches = (len(candidate_pairs) + batch_size - 1) // batch_size
 
     for batch_idx in range(0, len(candidate_pairs), batch_size):
-        batch = candidate_pairs[batch_idx:batch_idx + batch_size]
+        batch = candidate_pairs[batch_idx : batch_idx + batch_size]
 
         # 构建 prompt
         lines = []
@@ -605,7 +624,7 @@ def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
         try:
             response = call_llm_raw(prompt, temperature=0.3)
             # 提取 JSON
-            json_match = re.search(r'\[[\s\S]*\]', response)
+            json_match = re.search(r"\[[\s\S]*\]", response)
             if json_match:
                 results = json.loads(json_match.group(0))
                 for item in results:
@@ -615,25 +634,26 @@ def _ask_llm_for_links(candidate_pairs: List[Tuple[Dict, Dict, int]],
                         local_idx = pair[0]
                         if local_idx in idx_map:
                             meta_a, meta_b = idx_map[local_idx]
-                            all_links.append({
-                                "from": meta_a["path"],
-                                "to": meta_b["path"],
-                                "reason": reason,
-                                "status": "pending",
-                            })
+                            all_links.append(
+                                {
+                                    "from": meta_a["path"],
+                                    "to": meta_b["path"],
+                                    "reason": reason,
+                                    "status": "pending",
+                                }
+                            )
         except Exception as e:
             logger.warning(f"[link_indexer] LLM batch error: {e}")
             continue
 
         if progress_callback:
             current_batch = batch_idx // batch_size + 1
-            progress_callback(current_batch, total_batches,
-                            f"AI 分析中 ({current_batch}/{total_batches})")
+            progress_callback(current_batch, total_batches, f"AI 分析中 ({current_batch}/{total_batches})")
 
     return all_links
 
 
-def discover_links(progress_callback=None) -> Dict[str, Any]:
+def discover_links(progress_callback=None) -> dict[str, Any]:
     """
     运行完整的链接发现流程：
     1. 收集所有文件元数据
@@ -687,6 +707,7 @@ def discover_links(progress_callback=None) -> Dict[str, Any]:
     if not new_links and candidate_pairs:
         # All LLM calls may have failed; check API
         from utils.llm_utils import check_api_config
+
         ok, msg = check_api_config()
         if not ok:
             return {"success": False, "message": f"API 未配置: {msg}"}
@@ -726,7 +747,7 @@ def discover_links(progress_callback=None) -> Dict[str, Any]:
     }
 
 
-def get_backlinks(file_path: str) -> Dict[str, Any]:
+def get_backlinks(file_path: str) -> dict[str, Any]:
     """获取指定文件的链接；file_path 为空时返回所有链接"""
     data = load_links()
     all_links = data.get("links", [])
@@ -734,15 +755,17 @@ def get_backlinks(file_path: str) -> Dict[str, Any]:
     if not file_path:
         links = []
         for link in all_links:
-            links.append({
-                "from": link["from"],
-                "to": link["to"],
-                "file": link["from"],
-                "other": link["to"],
-                "reason": link.get("reason", ""),
-                "status": link.get("status", "pending"),
-                "direction": "outgoing",
-            })
+            links.append(
+                {
+                    "from": link["from"],
+                    "to": link["to"],
+                    "file": link["from"],
+                    "other": link["to"],
+                    "reason": link.get("reason", ""),
+                    "status": link.get("status", "pending"),
+                    "direction": "outgoing",
+                }
+            )
         return {
             "success": True,
             "file": "",
@@ -754,14 +777,16 @@ def get_backlinks(file_path: str) -> Dict[str, Any]:
     for link in all_links:
         if link["to"] == file_path or link["from"] == file_path:
             other = link["from"] if link["to"] == file_path else link["to"]
-            incoming.append({
-                "from": link["from"],
-                "to": link["to"],
-                "file": other,
-                "reason": link.get("reason", ""),
-                "status": link.get("status", "pending"),
-                "direction": "incoming" if link["to"] == file_path else "outgoing",
-            })
+            incoming.append(
+                {
+                    "from": link["from"],
+                    "to": link["to"],
+                    "file": other,
+                    "reason": link.get("reason", ""),
+                    "status": link.get("status", "pending"),
+                    "direction": "incoming" if link["to"] == file_path else "outgoing",
+                }
+            )
 
     return {
         "success": True,
@@ -771,14 +796,14 @@ def get_backlinks(file_path: str) -> Dict[str, Any]:
     }
 
 
-def confirm_link(from_path: str, to_path: str) -> Dict[str, Any]:
+def confirm_link(from_path: str, to_path: str) -> dict[str, Any]:
     """确认一个链接"""
     data = load_links()
     links = data.get("links", [])
     found = False
     for link in links:
-        key1 = (link["from"] == from_path and link["to"] == to_path)
-        key2 = (link["from"] == to_path and link["to"] == from_path)
+        key1 = link["from"] == from_path and link["to"] == to_path
+        key2 = link["from"] == to_path and link["to"] == from_path
         if key1 or key2:
             link["status"] = "confirmed"
             found = True
@@ -789,15 +814,15 @@ def confirm_link(from_path: str, to_path: str) -> Dict[str, Any]:
     return {"success": False, "message": "链接不存在"}
 
 
-def reject_link(from_path: str, to_path: str) -> Dict[str, Any]:
+def reject_link(from_path: str, to_path: str) -> dict[str, Any]:
     """删除一个链接"""
     data = load_links()
     links = data.get("links", [])
     new_links = []
     removed = False
     for link in links:
-        key1 = (link["from"] == from_path and link["to"] == to_path)
-        key2 = (link["from"] == to_path and link["to"] == from_path)
+        key1 = link["from"] == from_path and link["to"] == to_path
+        key2 = link["from"] == to_path and link["to"] == from_path
         if key1 or key2:
             removed = True
             continue
@@ -809,7 +834,7 @@ def reject_link(from_path: str, to_path: str) -> Dict[str, Any]:
     return {"success": False, "message": "链接不存在"}
 
 
-def confirm_all_links() -> Dict[str, Any]:
+def confirm_all_links() -> dict[str, Any]:
     """一键确认所有 pending 链接"""
     data = load_links()
     links = data.get("links", [])

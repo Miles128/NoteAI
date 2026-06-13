@@ -1,7 +1,6 @@
 import math
 import os
 import shutil
-import sys
 import threading
 from pathlib import Path
 
@@ -59,7 +58,36 @@ import jieba
 
 jieba.setLogLevel(jieba.logging.INFO)
 
-_STOP_WORDS = {"的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这"}
+_STOP_WORDS = {
+    "的",
+    "了",
+    "在",
+    "是",
+    "我",
+    "有",
+    "和",
+    "就",
+    "不",
+    "人",
+    "都",
+    "一",
+    "一个",
+    "上",
+    "也",
+    "很",
+    "到",
+    "说",
+    "要",
+    "去",
+    "你",
+    "会",
+    "着",
+    "没有",
+    "看",
+    "好",
+    "自己",
+    "这",
+}
 
 
 def _onnx_inference_threads() -> int | None:
@@ -101,11 +129,7 @@ def _get_dense_model(download_callback=None):
         for attempt in range(2):
             try:
                 if download_callback:
-                    download_callback(
-                        "正在加载 Embedding 模型…"
-                        if attempt == 0
-                        else "正在重新下载 Embedding 模型…"
-                    )
+                    download_callback("正在加载 Embedding 模型…" if attempt == 0 else "正在重新下载 Embedding 模型…")
                 _dense = TextEmbedding(
                     DENSE_MODEL_NAME,
                     cache_dir=str(_FASTEMBED_CACHE),
@@ -115,9 +139,7 @@ def _get_dense_model(download_callback=None):
                 return _DENSE_MODEL
             except Exception as e:
                 if attempt == 0 and _is_recoverable_embed_load_err(e):
-                    logger.warning(
-                        f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry."
-                    )
+                    logger.warning(f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry.")
                     _purge_bge_zh_snapshot(_FASTEMBED_CACHE)
                     continue
                 logger.error(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}")

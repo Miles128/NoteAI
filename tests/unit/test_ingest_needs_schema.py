@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
+from sidecar.ingest_pipeline import run_ingest
 
 from config import config
-from sidecar.ingest_pipeline import run_ingest
 
 
 @pytest.fixture

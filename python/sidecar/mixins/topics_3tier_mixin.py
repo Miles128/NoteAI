@@ -139,14 +139,18 @@ class Topics3TierMixin:
             if tid in seen_ids:
                 return
             seen_ids.add(tid)
-            nodes.append({
-                "id": tid, "name": topic["name"],
-                "level": topic["level"], "type": "topic",
-                "has_abstract": topic.get("has_abstract", False),
-                "abstract_file": topic.get("abstract_file"),
-                "file_count": topic.get("file_count", 0),
-                "is_center": topic["level"] == 1,
-            })
+            nodes.append(
+                {
+                    "id": tid,
+                    "name": topic["name"],
+                    "level": topic["level"],
+                    "type": "topic",
+                    "has_abstract": topic.get("has_abstract", False),
+                    "abstract_file": topic.get("abstract_file"),
+                    "file_count": topic.get("file_count", 0),
+                    "is_center": topic["level"] == 1,
+                }
+            )
             if parent:
                 edges.append({"source": parent, "target": tid})
 
@@ -223,7 +227,9 @@ class Topics3TierMixin:
                 fid = f"file:{fpath}"
                 if fid not in seen_ids:
                     seen_ids.add(fid)
-                    nodes.append({"id": fid, "name": Path(fpath).stem, "type": "file", "full_path": str(ws_path / fpath)})
+                    nodes.append(
+                        {"id": fid, "name": Path(fpath).stem, "type": "file", "full_path": str(ws_path / fpath)}
+                    )
                 edges.append({"source": tag_id, "target": fid})
 
     def _get_graph_data(self, params):

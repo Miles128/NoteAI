@@ -40,6 +40,7 @@ class TestRpcRouter:
 
     def test_async_method(self, captured):
         import threading
+
         router, cap = captured
         event = threading.Event()
 

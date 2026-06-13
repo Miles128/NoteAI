@@ -1,5 +1,4 @@
 import re
-import sys
 
 from utils.logger import logger
 from utils.wiki_manager import _get_wiki_path, _renumber_wiki_files
@@ -10,15 +9,15 @@ def _remove_empty_topic_sections(topic_name_lower):
     if not wiki_path or not wiki_path.exists():
         return
     try:
-        content = wiki_path.read_text(encoding='utf-8')
+        content = wiki_path.read_text(encoding="utf-8")
     except Exception:
         return
-    lines = content.split('\n')
+    lines = content.split("\n")
     result_lines = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
-        if stripped.startswith('## ') and not stripped.startswith('### '):
+        if stripped.startswith("## ") and not stripped.startswith("### "):
             heading_name = stripped[3:].strip()
             if heading_name.lower() == topic_name_lower:
                 section_lines = [lines[i]]
@@ -26,10 +25,10 @@ def _remove_empty_topic_sections(topic_name_lower):
                 j = i + 1
                 while j < len(lines):
                     s = lines[j].strip()
-                    if s.startswith('## ') and not s.startswith('### '):
+                    if s.startswith("## ") and not s.startswith("### "):
                         break
                     section_lines.append(lines[j])
-                    if re.match(r'^\d+\.\s+\*\*', s):
+                    if re.match(r"^\d+\.\s+\*\*", s):
                         has_files = True
                     j += 1
                 if has_files:
@@ -39,10 +38,10 @@ def _remove_empty_topic_sections(topic_name_lower):
         result_lines.append(lines[i])
         i += 1
     try:
-        new_content = '\n'.join(result_lines)
-        if not new_content.endswith('\n'):
-            new_content += '\n'
-        wiki_path.write_text(new_content, encoding='utf-8')
+        new_content = "\n".join(result_lines)
+        if not new_content.endswith("\n"):
+            new_content += "\n"
+        wiki_path.write_text(new_content, encoding="utf-8")
     except Exception as e:
         logger.warning(f"[topic_assigner] 写入 WIKI.md 失败: {e}")
 
@@ -53,24 +52,24 @@ def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
         return 0
 
     try:
-        content = wiki_path.read_text(encoding='utf-8')
+        content = wiki_path.read_text(encoding="utf-8")
     except Exception:
         return 0
 
-    lines = content.split('\n')
-    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+    lines = content.split("\n")
+    file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
 
     sections = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
-        if re.match(r'^## (?!目录)', stripped):
+        if re.match(r"^## (?!目录)", stripped):
             heading_name = stripped[3:].strip()
             section_lines = [lines[i]]
             j = i + 1
             while j < len(lines):
                 s = lines[j].strip()
-                if re.match(r'^## (?!目录)', s):
+                if re.match(r"^## (?!目录)", s):
                     break
                 section_lines.append(lines[j])
                 j += 1
@@ -129,7 +128,7 @@ def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
         new_lines.append(line)
 
     _renumber_wiki_files(new_lines)
-    wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
+    wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
     return merged
 
 
@@ -139,12 +138,12 @@ def _deduplicate_files_in_wiki():
         return 0
 
     try:
-        content = wiki_path.read_text(encoding='utf-8')
+        content = wiki_path.read_text(encoding="utf-8")
     except Exception:
         return 0
 
-    lines = content.split('\n')
-    file_item_pattern = re.compile(r'^(\d+)\.\s+\*\*(.+?)\*\*\s*$')
+    lines = content.split("\n")
+    file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
     new_lines = []
     i = 0
     removed = 0
@@ -152,7 +151,7 @@ def _deduplicate_files_in_wiki():
     while i < len(lines):
         line = lines[i]
         stripped = line.strip()
-        is_heading = bool(re.match(r'^#{2,}\s+', stripped)) and stripped[2:].strip() not in ('目录', '来源文件')
+        is_heading = bool(re.match(r"^#{2,}\s+", stripped)) and stripped[2:].strip() not in ("目录", "来源文件")
 
         if is_heading:
             new_lines.append(line)
@@ -160,7 +159,7 @@ def _deduplicate_files_in_wiki():
             j = i + 1
             while j < len(lines):
                 s = lines[j].strip()
-                if re.match(r'^#{2,}\s+', s):
+                if re.match(r"^#{2,}\s+", s):
                     break
                 fm = file_item_pattern.match(s)
                 if fm:
@@ -180,5 +179,5 @@ def _deduplicate_files_in_wiki():
 
     if removed > 0:
         _renumber_wiki_files(new_lines)
-        wiki_path.write_text('\n'.join(new_lines), encoding='utf-8')
+        wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
     return removed

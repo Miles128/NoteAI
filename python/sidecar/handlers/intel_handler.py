@@ -36,15 +36,15 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": "文件不存在"}
 
         try:
-            content = full_path.read_text(encoding='utf-8')
+            content = full_path.read_text(encoding="utf-8")
             fm, body = self._parse_frontmatter(content)
             rewritten_body = rewrite_with_llm(body)
             if fm is not None:
                 fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-                rewritten = '---\n' + fm_str + '\n---\n' + rewritten_body
+                rewritten = "---\n" + fm_str + "\n---\n" + rewritten_body
             else:
                 rewritten = rewritten_body
-            full_path.write_text(rewritten, encoding='utf-8')
+            full_path.write_text(rewritten, encoding="utf-8")
             return {"success": True, "message": "改写完成"}
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
@@ -70,52 +70,60 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": "文件不存在"}
 
         try:
-            content = full_path.read_text(encoding='utf-8')
+            content = full_path.read_text(encoding="utf-8")
             fm, body = self._parse_frontmatter(content)
 
             def on_chunk(token):
-                self._send_response({
-                    "id": "event",
-                    "result": {
-                        "type": "rewrite_chunk",
-                        "file_path": file_path,
-                        "token": token,
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "rewrite_chunk",
+                            "file_path": file_path,
+                            "token": token,
+                        },
                     }
-                })
+                )
 
             rewritten = rewrite_with_llm_stream(body, chunk_callback=on_chunk)
 
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rewrite_done",
-                    "file_path": file_path,
-                    "success": True,
-                    "rewritten_text": rewritten,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "rewrite_done",
+                        "file_path": file_path,
+                        "success": True,
+                        "rewritten_text": rewritten,
+                    },
                 }
-            })
+            )
             return {"success": True, "message": "改写完成"}
         except APIConfigError as e:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rewrite_done",
-                    "file_path": file_path,
-                    "success": False,
-                    "message": str(e),
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "rewrite_done",
+                        "file_path": file_path,
+                        "success": False,
+                        "message": str(e),
+                    },
                 }
-            })
+            )
             return {"success": False, "message": str(e)}
         except Exception as e:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "rewrite_done",
-                    "file_path": file_path,
-                    "success": False,
-                    "message": f"改写失败: {str(e)}",
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "rewrite_done",
+                        "file_path": file_path,
+                        "success": False,
+                        "message": f"改写失败: {str(e)}",
+                    },
                 }
-            })
+            )
             return {"success": False, "message": f"改写失败: {str(e)}"}
 
     def _llm_rewrite_apply(self, params):
@@ -138,15 +146,16 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": "文件不存在"}
 
         try:
-            original = full_path.read_text(encoding='utf-8')
+            original = full_path.read_text(encoding="utf-8")
             from sidecar.textutils import parse_frontmatter
+
             fm, _ = parse_frontmatter(original)
             if fm is not None:
                 fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
                 final_text = f"---\n{fm_str}\n---\n\n{rewritten_text}"
             else:
                 final_text = rewritten_text
-            full_path.write_text(final_text, encoding='utf-8')
+            full_path.write_text(final_text, encoding="utf-8")
             return {"success": True, "message": "已保存"}
         except Exception as e:
             return {"success": False, "message": f"保存失败: {str(e)}"}
@@ -166,8 +175,8 @@ class IntelHandler(BaseHandler):
         if not workspace_path.exists():
             return {"success": False, "message": "工作区不存在"}
 
-        from utils.fulltext_index import fulltext_index
         from sidecar.textutils import parse_frontmatter as sidecar_parse_fm
+        from utils.fulltext_index import fulltext_index
 
         raw_results = fulltext_index.search(query)
         results = []
@@ -202,15 +211,17 @@ class IntelHandler(BaseHandler):
                     title = stripped[2:].strip()
                     break
 
-            results.append({
-                "path": item["path"],
-                "title": title,
-                "snippet": item.get("snippet", ""),
-                "name": Path(item["path"]).name,
-                "matches": item.get("score", 0),
-                "topic": file_topic,
-                "tags": tags,
-            })
+            results.append(
+                {
+                    "path": item["path"],
+                    "title": title,
+                    "snippet": item.get("snippet", ""),
+                    "name": Path(item["path"]).name,
+                    "matches": item.get("score", 0),
+                    "topic": file_topic,
+                    "tags": tags,
+                }
+            )
 
         return {
             "success": True,
@@ -242,58 +253,59 @@ class IntelHandler(BaseHandler):
 
         workspace_path = Path(workspace)
         files_info = []
-        for md_file in sorted(workspace_path.rglob('*.md')):
-            if md_file.name.startswith('.'):
+        for md_file in sorted(workspace_path.rglob("*.md")):
+            if md_file.name.startswith("."):
                 continue
-            if 'wiki' in md_file.parts:
+            if "wiki" in md_file.parts:
                 continue
             rel_path = str(md_file.relative_to(workspace_path))
             file_topic = ""
             content_summary = ""
             try:
-                text = md_file.read_text(encoding='utf-8')
+                text = md_file.read_text(encoding="utf-8")
                 fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get('topics'), list):
-                    file_topic = ', '.join(fm['topics'])
-                lines = body.strip().split('\n')
+                if fm and isinstance(fm.get("topics"), list):
+                    file_topic = ", ".join(fm["topics"])
+                lines = body.strip().split("\n")
                 summary_lines = []
                 for line in lines:
                     stripped = line.strip()
-                    if stripped and not stripped.startswith('```') and not stripped.startswith('---'):
+                    if stripped and not stripped.startswith("```") and not stripped.startswith("---"):
                         summary_lines.append(stripped)
                         if len(summary_lines) >= 5:
                             break
-                content_summary = ' '.join(summary_lines)[:200]
+                content_summary = " ".join(summary_lines)[:200]
             except Exception as e:
                 logger.warning(f"[intel_topic] reading file for topic analysis: {e}\n")
-            files_info.append({
-                "name": md_file.name,
-                "path": rel_path,
-                "topic": file_topic,
-                "summary": content_summary,
-            })
+            files_info.append(
+                {
+                    "name": md_file.name,
+                    "path": rel_path,
+                    "topic": file_topic,
+                    "summary": content_summary,
+                }
+            )
 
-        file_list_str = '\n'.join([
-            f"- {f['name']} (路径: {f['path']}, 当前主题: {f['topic'] or '无'}, 摘要: {f['summary'] or '无'})"
-            for f in files_info
-        ])
-        existing_topics_str = '\n'.join(["- " + t for t in existing_topics]) if existing_topics else "暂无主题"
-
-        prompt = AI_TOPIC_ANALYZE_PROMPT.format(
-            existing_topics=existing_topics_str,
-            file_list=file_list_str
+        file_list_str = "\n".join(
+            [
+                f"- {f['name']} (路径: {f['path']}, 当前主题: {f['topic'] or '无'}, 摘要: {f['summary'] or '无'})"
+                for f in files_info
+            ]
         )
+        existing_topics_str = "\n".join(["- " + t for t in existing_topics]) if existing_topics else "暂无主题"
+
+        prompt = AI_TOPIC_ANALYZE_PROMPT.format(existing_topics=existing_topics_str, file_list=file_list_str)
 
         try:
             result_text = call_llm_raw(prompt, temperature=0.3)
-            json_match = re.search(r'\{[\s\S]*?\}', result_text)
+            json_match = re.search(r"\{[\s\S]*?\}", result_text)
             if not json_match:
                 return {"success": False, "message": "LLM 返回格式异常"}
             json_str = json_match.group()
             try:
                 suggestions = json.loads(json_str)
             except json.JSONDecodeError:
-                json_match = re.search(r'\{[\s\S]*\}', result_text)
+                json_match = re.search(r"\{[\s\S]*\}", result_text)
                 if not json_match:
                     return {"success": False, "message": "LLM 返回格式异常"}
                 suggestions = json.loads(json_match.group())
@@ -324,15 +336,15 @@ class IntelHandler(BaseHandler):
 
         workspace_path = Path(workspace)
         notes_parts = []
-        for md_file in sorted(workspace_path.rglob('*.md')):
-            if md_file.name.startswith('.'):
+        for md_file in sorted(workspace_path.rglob("*.md")):
+            if md_file.name.startswith("."):
                 continue
-            if 'wiki' in md_file.parts:
+            if "wiki" in md_file.parts:
                 continue
             try:
-                text = md_file.read_text(encoding='utf-8')
+                text = md_file.read_text(encoding="utf-8")
                 fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get('topics'), list) and topic_name in fm['topics']:
+                if fm and isinstance(fm.get("topics"), list) and topic_name in fm["topics"]:
                     content = body.strip()[:2000]
                     if content:
                         notes_parts.append(f"### {md_file.name}\n\n{content}")
@@ -340,25 +352,24 @@ class IntelHandler(BaseHandler):
                 continue
 
         if not notes_parts:
-            return {"success": False, "message": f"主题 \"{topic_name}\" 下没有找到任何文件"}
+            return {"success": False, "message": f'主题 "{topic_name}" 下没有找到任何文件'}
 
-        notes_content = '\n\n---\n\n'.join(notes_parts)
-        prompt = TOPIC_SURVEY_PROMPT.format(
-            topic_name=topic_name,
-            notes_content=notes_content
-        )
+        notes_content = "\n\n---\n\n".join(notes_parts)
+        prompt = TOPIC_SURVEY_PROMPT.format(topic_name=topic_name, notes_content=notes_content)
 
         full_text = ""
 
         def on_chunk(token):
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "survey_chunk",
-                    "topic": topic_name,
-                    "token": token,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "survey_chunk",
+                        "topic": topic_name,
+                        "token": token,
+                    },
                 }
-            })
+            )
 
         try:
             from langchain_core.prompts import PromptTemplate
@@ -374,8 +385,10 @@ class IntelHandler(BaseHandler):
                 full_text += token
                 on_chunk(token)
 
-            safe_name = "".join(c for c in topic_name if c.isalnum() or c in ('_', '-', '.', ' ') or '\u4e00' <= c <= '\u9fff').strip()
-            if not safe_name or '..' in safe_name:
+            safe_name = "".join(
+                c for c in topic_name if c.isalnum() or c in ("_", "-", ".", " ") or "\u4e00" <= c <= "\u9fff"
+            ).strip()
+            if not safe_name or ".." in safe_name:
                 return {"success": False, "message": "主题名称包含非法字符"}
 
             abstract_folder = workspace_path / config.ABSTRACT_FOLDER
@@ -397,40 +410,46 @@ class IntelHandler(BaseHandler):
             fm = {"topic": topic_name, "type": "survey", "tags": [topic_name]}
             fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
             survey_with_fm = f"---\n{fm_str}\n---\n\n{full_text.strip()}"
-            survey_path.write_text(survey_with_fm, encoding='utf-8')
+            survey_path.write_text(survey_with_fm, encoding="utf-8")
             survey_file = str(survey_path.relative_to(workspace_path))
 
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "survey_done",
-                    "topic": topic_name,
-                    "success": True,
-                    "file_path": survey_file,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "survey_done",
+                        "topic": topic_name,
+                        "success": True,
+                        "file_path": survey_file,
+                    },
                 }
-            })
+            )
             return {"success": True, "message": "综述撰写完成", "file_path": survey_file}
         except APIConfigError as e:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "survey_done",
-                    "topic": topic_name,
-                    "success": False,
-                    "message": str(e),
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "survey_done",
+                        "topic": topic_name,
+                        "success": False,
+                        "message": str(e),
+                    },
                 }
-            })
+            )
             return {"success": False, "message": str(e)}
         except Exception as e:
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "survey_done",
-                    "topic": topic_name,
-                    "success": False,
-                    "message": f"撰写失败: {str(e)}",
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "survey_done",
+                        "topic": topic_name,
+                        "success": False,
+                        "message": f"撰写失败: {str(e)}",
+                    },
                 }
-            })
+            )
             return {"success": False, "message": f"撰写失败: {str(e)}"}
 
     def _apply_topic_suggestion(self, params):
@@ -482,6 +501,7 @@ class IntelHandler(BaseHandler):
                     add_file_to_wiki_topic(str(md_file), topic_name, Path(fn).stem)
 
         from sidecar.cascade import append_changelog, collect_topic_notes, ensure_topic_folder, generate_new_survey
+
         ensure_topic_folder(topic_name)
         notes = collect_topic_notes(topic_name)
         if notes:
@@ -519,6 +539,7 @@ class IntelHandler(BaseHandler):
             get_survey_path,
             update_existing_survey,
         )
+
         ensure_topic_folder(new_topic)
         notes = collect_topic_notes(new_topic)
         if notes:
@@ -556,6 +577,7 @@ class IntelHandler(BaseHandler):
             get_survey_path,
             update_existing_survey,
         )
+
         ensure_topic_folder(topic_name)
         notes = collect_topic_notes(topic_name)
         if notes:
@@ -571,7 +593,7 @@ class IntelHandler(BaseHandler):
         return None
 
     def _apply_merge_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic_assigner import move_file_to_notes_topic_folder
 
         source = suggestion.get("source_topic", "").strip()
         target = suggestion.get("target_topic", "").strip()

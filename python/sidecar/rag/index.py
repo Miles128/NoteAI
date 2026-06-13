@@ -105,8 +105,8 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     total = len(chunks)
 
     for i in range(0, total, batch_size):
-        batch_chunks = chunks[i:i + batch_size]
-        batch_embeds = embeddings[i:i + batch_size]
+        batch_chunks = chunks[i : i + batch_size]
+        batch_embeds = embeddings[i : i + batch_size]
 
         data = []
         for chunk, emb in zip(batch_chunks, batch_embeds, strict=False):
@@ -303,7 +303,7 @@ def hybrid_search(
 
 
 def _escape_filter_value(value: str) -> str:
-    return value.replace('\\', '\\\\').replace('"', '\\"')
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _get_chunks_by_file(workspace: str, file_path: str) -> list[dict]:
@@ -415,6 +415,6 @@ def _append_sparse_index(workspace: str, chunks: list[dict], embeddings: list[di
             str_keys = {str(k): float(v) for k, v in lexical.items()}
             existing[chunk_id] = str_keys
 
-    tmp_path = path.with_suffix('.tmp')
+    tmp_path = path.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
     tmp_path.replace(path)

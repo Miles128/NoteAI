@@ -141,14 +141,16 @@ class AliyunProvider(CloudProvider):
         for item in resp.json().get("items", []):
             ts = self._parse_mtime(item.get("updated_at", ""))
             name = item.get("name", "")
-            items.append(CloudFileInfo(
-                path=f"{remote_path}/{name}" if remote_path else name,
-                name=name,
-                size=item.get("size", 0),
-                modified_time=ts,
-                is_dir=item.get("type") == "folder",
-                cloud_id=item.get("file_id", ""),
-            ))
+            items.append(
+                CloudFileInfo(
+                    path=f"{remote_path}/{name}" if remote_path else name,
+                    name=name,
+                    size=item.get("size", 0),
+                    modified_time=ts,
+                    is_dir=item.get("type") == "folder",
+                    cloud_id=item.get("file_id", ""),
+                )
+            )
         return items
 
     def upload_file(self, local_path: str, remote_path: str) -> bool:

@@ -42,11 +42,13 @@ def record_convert_failure(file_path: str, error: str) -> None:
     if not rel:
         return
     items = [x for x in load_convert_failures() if x.get("file") != rel]
-    items.append({
-        "file": rel,
-        "error": (error or "转换失败")[:500],
-        "ts": time.time(),
-    })
+    items.append(
+        {
+            "file": rel,
+            "error": (error or "转换失败")[:500],
+            "ts": time.time(),
+        }
+    )
     save_convert_failures(items)
 
 

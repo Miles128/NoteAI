@@ -1,9 +1,8 @@
 """Secure API key storage via OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)."""
 
-import sys
-import logging
 import base64
 import hashlib
+import logging
 import os
 import tempfile
 
@@ -16,34 +15,37 @@ _HAS_KEYRING = False
 _keyring_exc = None
 try:
     import keyring
+
     _HAS_KEYRING = True
 except ImportError:
     _keyring_exc = "keyring library not installed"
 
 
 def _fallback_path():
-    from pathlib import Path
     from config.settings import SYSTEM_APP_DATA_DIR
+
     SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     return SYSTEM_APP_DATA_DIR / "api_key.dat"
 
 
 def _derive_fernet_key() -> bytes:
-    from cryptography.fernet import Fernet
-    machine_id = os.uname().nodename if hasattr(os, 'uname') else os.environ.get('COMPUTERNAME', 'localhost')
-    user = os.environ.get('USER', os.environ.get('USERNAME', 'user'))
+
+    machine_id = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "localhost")
+    user = os.environ.get("USER", os.environ.get("USERNAME", "user"))
     seed = f"NoteAI:{machine_id}:{user}".encode()
     return base64.urlsafe_b64encode(hashlib.sha256(seed).digest())
 
 
 def _encrypt(value: str) -> bytes:
     from cryptography.fernet import Fernet
+
     f = Fernet(_derive_fernet_key())
     return f.encrypt(value.encode("utf-8"))
 
 
 def _decrypt(data: bytes) -> str:
     from cryptography.fernet import Fernet
+
     f = Fernet(_derive_fernet_key())
     return f.decrypt(data).decode("utf-8")
 

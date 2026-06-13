@@ -1,7 +1,6 @@
 import re
 import shutil
 import threading
-from datetime import datetime
 from pathlib import Path
 
 from config import config
@@ -13,16 +12,17 @@ _changelog_lock = threading.Lock()
 
 
 def _safe_topic_segment(segment: str) -> str:
-    safe = "".join(c for c in segment if c.isalnum() or c in ('_', '-', '.', ' ') or '\u4e00' <= c <= '\u9fff').strip()
-    if not safe or '..' in safe:
+    safe = "".join(c for c in segment if c.isalnum() or c in ("_", "-", ".", " ") or "\u4e00" <= c <= "\u9fff").strip()
+    if not safe or ".." in safe:
         return ""
     return safe
 
 
 def _safe_topic_path(topic: str) -> str:
     """将 > 分隔的主题字符串转为文件系统安全路径（用 / 连接）。"""
-    if '/' in topic and TOPIC_SEP not in topic:
-        topic = topic.replace('/', TOPIC_SEP)
+    from utils.topic_classifier import _norm_topic
+
+    topic = _norm_topic(topic)
     parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     safe_parts = []
     for p in parts:
@@ -30,7 +30,7 @@ def _safe_topic_path(topic: str) -> str:
         if not s:
             return ""
         safe_parts.append(s)
-    return '/'.join(safe_parts)
+    return "/".join(safe_parts)
 
 
 def get_organized_topic_dir(topic: str) -> Path | None:
@@ -123,34 +123,36 @@ def collect_topic_notes(topic: str) -> list[dict]:
     workspace_path = Path(workspace)
     notes = []
 
-    for md_file in sorted(workspace_path.rglob('*.md')):
-        if md_file.name.startswith('.'):
+    for md_file in sorted(workspace_path.rglob("*.md")):
+        if md_file.name.startswith("."):
             continue
-        if 'wiki' in md_file.parts:
+        if "wiki" in md_file.parts:
             continue
-        if md_file.name.endswith('_综述.md') or md_file.name.endswith('综述.md'):
+        if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
         try:
-            text = md_file.read_text(encoding='utf-8')
+            text = md_file.read_text(encoding="utf-8")
             fm, body = parse_frontmatter(text)
 
             topic_match = False
             if fm:
-                file_topic = fm.get('topic', '')
+                file_topic = fm.get("topic", "")
                 if isinstance(file_topic, str) and file_topic == topic:
                     topic_match = True
-                file_topics = fm.get('topics', [])
+                file_topics = fm.get("topics", [])
                 if isinstance(file_topics, list) and topic in file_topics:
                     topic_match = True
 
             if topic_match:
                 content = body.strip()
                 if content:
-                    notes.append({
-                        "file_name": md_file.name,
-                        "file_path": str(md_file.relative_to(workspace_path)),
-                        "content": content,
-                    })
+                    notes.append(
+                        {
+                            "file_name": md_file.name,
+                            "file_path": str(md_file.relative_to(workspace_path)),
+                            "content": content,
+                        }
+                    )
         except Exception:
             continue
 
@@ -160,6 +162,7 @@ def collect_topic_notes(topic: str) -> list[dict]:
 def _compress_text(content: str, target_ratio: float = 0.6) -> str:
     try:
         from snownlp import SnowNLP
+
         s = SnowNLP(content)
         sentences = s.sentences
         if not sentences:
@@ -170,7 +173,7 @@ def _compress_text(content: str, target_ratio: float = 0.6) -> str:
         if not summary:
             return content
 
-        return ''.join(summary)
+        return "".join(summary)
     except Exception as e:
         logger.warning(f"[compress_text] SnowNLP failed: {e}, fallback to jieba\n")
         return _compress_text_jieba(content, target_ratio)
@@ -182,7 +185,7 @@ def _compress_text_jieba(content: str, target_ratio: float = 0.6) -> str:
     except ImportError:
         return content
 
-    sentences = re.split(r'[。！？\n]', content)
+    sentences = re.split(r"[。！？\n]", content)
     sentences = [s.strip() for s in sentences if s.strip()]
     if not sentences:
         return content
@@ -204,7 +207,7 @@ def _compress_text_jieba(content: str, target_ratio: float = 0.6) -> str:
             ordered.append(s)
             seen.add(s)
 
-    return '。'.join(ordered) + '。' if ordered else content
+    return "。".join(ordered) + "。" if ordered else content
 
 
 def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_total_len: int = 5000) -> list[dict]:
@@ -221,7 +224,6 @@ def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_t
     long_notes.sort(key=lambda x: len(x[1]["content"]), reverse=True)
 
     current_total = total_len
-    compressed_indices = set()
 
     for idx, note in long_notes:
         if current_total <= target_len:
@@ -238,36 +240,14 @@ def compress_notes_if_needed(notes: list[dict], target_ratio: float = 0.8, max_t
                 "file_path": note["file_path"],
                 "content": compressed,
             }
-            current_total -= (original_len - compressed_len)
-            compressed_indices.add(idx)
-
-    if current_total > target_len and long_notes:
-        for idx, note in long_notes:
-            if idx in compressed_indices:
-                continue
-            if current_total <= target_len:
-                break
-            if len(note["content"]) <= 500:
-                continue
-
-            original_len = len(note["content"])
-            note_ratio = max(0.3, target_len / current_total)
-            compressed = _compress_text(note["content"], note_ratio)
-            compressed_len = len(compressed)
-
-            if compressed_len < original_len:
-                notes[idx] = {
-                    "file_name": note["file_name"],
-                    "file_path": note["file_path"],
-                    "content": compressed,
-                }
-                current_total -= (original_len - compressed_len)
+            current_total -= original_len - compressed_len
 
     return notes
 
 
 def _add_survey_frontmatter(topic: str, content: str) -> str:
     import yaml
+
     fm = {"topic": topic, "type": "survey", "tags": [topic]}
     fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
     return f"---\n{fm_str}\n---\n\n{content}"
@@ -282,27 +262,27 @@ def fix_existing_survey_topics() -> dict:
     fixed = 0
     skipped = 0
 
-    for md_file in workspace_path.rglob('*.md'):
-        if md_file.name.startswith('.'):
+    for md_file in workspace_path.rglob("*.md"):
+        if md_file.name.startswith("."):
             continue
-        if not (md_file.name.endswith('_综述.md') or md_file.name.endswith('综述.md')):
+        if not (md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md")):
             continue
         try:
-            text = md_file.read_text(encoding='utf-8')
+            text = md_file.read_text(encoding="utf-8")
             fm, body = parse_frontmatter(text)
 
             stem = md_file.stem
-            topic_name = re.sub(r'[_\s]*综述$', '', stem).strip()
+            topic_name = re.sub(r"[_\s]*综述$", "", stem).strip()
             if not topic_name:
                 skipped += 1
                 continue
 
-            if fm and fm.get('topic') == topic_name:
+            if fm and fm.get("topic") == topic_name:
                 skipped += 1
                 continue
 
             new_content = _add_survey_frontmatter(topic_name, body.strip())
-            md_file.write_text(new_content, encoding='utf-8')
+            md_file.write_text(new_content, encoding="utf-8")
             fixed += 1
         except Exception:
             skipped += 1
@@ -323,18 +303,14 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
     notes = compress_notes_if_needed(notes, target_ratio=0.8)
 
-    notes_content = '\n\n---\n\n'.join(
-        f"### {n['file_name']}\n\n{n['content']}" for n in notes
-    )
+    notes_content = "\n\n---\n\n".join(f"### {n['file_name']}\n\n{n['content']}" for n in notes)
 
-    prompt = CASCADE_SURVEY_NEW_PROMPT.format(
-        topic_name=topic,
-        notes_content=notes_content
-    )
+    prompt = CASCADE_SURVEY_NEW_PROMPT.format(topic_name=topic, notes_content=notes_content)
 
     full_text = ""
     try:
         from langchain_core.prompts import PromptTemplate
+
         llm = create_llm(temperature=0.3)
         pt = PromptTemplate(template=prompt, input_variables=[])
         chain = pt | llm
@@ -351,7 +327,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
         survey_path.parent.mkdir(parents=True, exist_ok=True)
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
-        survey_path.write_text(survey_content, encoding='utf-8')
+        survey_path.write_text(survey_content, encoding="utf-8")
 
         append_changelog(f"生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
@@ -374,24 +350,21 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
     except APIConfigError as e:
         return {"success": False, "message": str(e)}
 
-    existing_text = survey_path.read_text(encoding='utf-8')
+    existing_text = survey_path.read_text(encoding="utf-8")
     _fm, existing_body = parse_frontmatter(existing_text)
 
     new_notes = compress_notes_if_needed(new_notes, target_ratio=0.8)
 
-    new_notes_content = '\n\n---\n\n'.join(
-        f"### {n['file_name']}\n\n{n['content']}" for n in new_notes
-    )
+    new_notes_content = "\n\n---\n\n".join(f"### {n['file_name']}\n\n{n['content']}" for n in new_notes)
 
     prompt = CASCADE_SURVEY_UPDATE_PROMPT.format(
-        topic_name=topic,
-        existing_survey=existing_body,
-        new_notes=new_notes_content
+        topic_name=topic, existing_survey=existing_body, new_notes=new_notes_content
     )
 
     full_text = ""
     try:
         from langchain_core.prompts import PromptTemplate
+
         llm = create_llm(temperature=0.3)
         pt = PromptTemplate(template=prompt, input_variables=[])
         chain = pt | llm
@@ -403,7 +376,7 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
                 on_chunk(token)
 
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
-        survey_path.write_text(survey_content, encoding='utf-8')
+        survey_path.write_text(survey_content, encoding="utf-8")
 
         append_changelog(f"更新综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
@@ -454,6 +427,7 @@ def cascade_on_topic_resolved(file_path: str, topic: str, on_chunk=None) -> dict
 
 def append_changelog(message: str):
     from utils.workspace_log import append_log
+
     with _changelog_lock:
         append_log("cascade", message)
 
@@ -523,12 +497,16 @@ def check_and_generate_surveys(on_progress=None) -> dict:
         result = generate_new_survey(topic, notes)
         if result.get("success"):
             generated += 1
-            append_changelog(f"补生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.rsplit(TOPIC_SEP, maxsplit=1)[-1])}_综述.md")
+            append_changelog(
+                f"补生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{_safe_topic_segment(topic.rsplit(TOPIC_SEP, maxsplit=1)[-1])}_综述.md"
+            )
         else:
             errors.append({"topic": topic, "error": result.get("message", "未知错误")})
 
     if on_progress:
-        on_progress(total, total, f"完成：检查 {total} 个主题，生成 {generated} 篇综述，跳过 {survey_skipped} 篇（已关闭）")
+        on_progress(
+            total, total, f"完成：检查 {total} 个主题，生成 {generated} 篇综述，跳过 {survey_skipped} 篇（已关闭）"
+        )
 
     return {
         "success": True,
@@ -542,4 +520,5 @@ def check_and_generate_surveys(on_progress=None) -> dict:
 
 def _read_survey_status_from_wiki() -> dict:
     from sidecar.wiki_utils import get_survey_status
+
     return get_survey_status()

@@ -96,6 +96,7 @@ def compress_text_sync(text, prompt_template):
 def update_long_memory(user_message):
     with _LOCK:
         from sidecar.rag.profile import update_profile_from_message
+
         update_profile_from_message(user_message)
 
         new_info = extract_user_info_sync(user_message)
@@ -107,6 +108,7 @@ def update_long_memory(user_message):
 
         if len(combined) > _MAX_LONG_MEMORY_CHARS:
             from prompts import LONG_MEMORY_COMPRESS_PROMPT
+
             combined = compress_text_sync(combined, LONG_MEMORY_COMPRESS_PROMPT)
 
         save_long_memory(combined)
@@ -128,12 +130,14 @@ def update_short_memory(chat_history):
         full_text = "\n".join(lines)
 
         from prompts import MEMORY_COMPRESS_PROMPT
+
         compressed = compress_text_sync(full_text, MEMORY_COMPRESS_PROMPT)
         save_short_memory(compressed)
 
 
 def build_memory_section():
     from sidecar.rag.profile import get_profile_summary
+
     profile_summary = get_profile_summary()
 
     long_mem = load_long_memory()

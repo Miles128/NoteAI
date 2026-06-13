@@ -17,6 +17,7 @@ def _load_yaml_module(module_name: str) -> dict[str, str] | None:
         return None
     try:
         import yaml as _yaml
+
         with open(yaml_file, encoding="utf-8") as f:
             data = _yaml.safe_load(f)
     except Exception as e:
@@ -67,6 +68,7 @@ def _load_from_yaml(name: str, **kwargs) -> str | None:
     if not yaml_file.exists():
         return None
     import yaml as _yaml
+
     with open(yaml_file, encoding="utf-8") as f:
         data = _yaml.safe_load(f)
     if not isinstance(data, dict):

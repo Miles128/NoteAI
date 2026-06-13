@@ -2,10 +2,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-from config import config
 from sidecar.kb_lint import auto_fix_broken_links, run_kb_lint
 
+from config import config
 
 _SCHEMA_OK = (
     "ai_may_edit_wiki: true\n"

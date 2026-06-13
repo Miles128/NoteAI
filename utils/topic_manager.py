@@ -30,7 +30,7 @@ LEVEL1_ORDER = {}
 
 class TopicManager:
     """三层主题管理器
-    
+
     职责：
     - 解析 YAML frontmatter 中的 topic 层级
     - 构建嵌套主题树
@@ -44,13 +44,13 @@ class TopicManager:
     @staticmethod
     def parse_topic_hierarchy(frontmatter: dict) -> list[dict]:
         """从 frontmatter 解析三层主题结构
-        
+
         输入 frontmatter 中 topic 字段的 YAML 结构:
           topic:
           - L1名称
             - L2名称
               - L3名称
-        
+
         返回:
           [
             {"name": "L1名称", "level": 1, "parent": None},
@@ -79,26 +79,32 @@ class TopicManager:
                         logger.warning(f"[topic] 二级标题缺少一级父级: {l2_name}")
                         continue
                     current_l2 = l2_name
-                    topics.append({
-                        "name": l2_name,
-                        "level": 2,
-                        "parent": current_l1,
-                    })
+                    topics.append(
+                        {
+                            "name": l2_name,
+                            "level": 2,
+                            "parent": current_l1,
+                        }
+                    )
                     if isinstance(l2_children, list):
                         for l3_item in l2_children:
                             if isinstance(l3_item, str):
-                                topics.append({
-                                    "name": l3_item.strip(),
-                                    "level": 3,
-                                    "parent": l2_name,
-                                })
-                            elif isinstance(l3_item, dict):
-                                for l3_name in l3_item:
-                                    topics.append({
-                                        "name": l3_name.strip(),
+                                topics.append(
+                                    {
+                                        "name": l3_item.strip(),
                                         "level": 3,
                                         "parent": l2_name,
-                                    })
+                                    }
+                                )
+                            elif isinstance(l3_item, dict):
+                                for l3_name in l3_item:
+                                    topics.append(
+                                        {
+                                            "name": l3_name.strip(),
+                                            "level": 3,
+                                            "parent": l2_name,
+                                        }
+                                    )
         return topics
 
     # ============================================================
@@ -231,12 +237,11 @@ class TopicManager:
 
         if len(parts) == 0:
             return 1
-        elif len(parts) == 1:
+        if len(parts) == 1:
             return 2
-        elif len(parts) == 2:
+        if len(parts) == 2:
             return 3
-        else:
-            return -1
+        return -1
 
     # ============================================================
     # 删除保护

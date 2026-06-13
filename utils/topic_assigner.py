@@ -1,48 +1,35 @@
 import re
 from pathlib import Path
 
-from utils.activity_log import add_entry as _log
 from config.constants import TOPIC_SEP
 from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER, config
+from utils.activity_log import add_entry as _log
 from utils.logger import logger
-
-from utils.text_utils import tokenize as tokenize_text, _is_meaningful_tag, _normalize_for_match, _is_generic_word, parse_frontmatter
-from utils.wiki_manager import (
-    _get_wiki_path, parse_wiki_headings, parse_wiki_structure,
-    add_file_to_wiki_topic, remove_file_from_wiki_topic,
-    rename_wiki_topic, _remove_topic_from_wiki,
-    _merge_duplicate_topics_in_wiki, _deduplicate_files_in_wiki,
-    _remove_empty_topic_sections, create_topic, rename_topic,
-    delete_topic, sync_wiki_with_files,
+from utils.text_utils import (
+    parse_frontmatter,
 )
-from utils.wiki_sync import topic_from_notes_path, _write_file_topic_from_folder
-
 from utils.topic_classifier import (
-    _norm_topic,
+    _collect_topic_candidates,
     _find_best_topic_match,
     _llm_suggest_topic,
-    _collect_topic_candidates,
     _match_llm_suggestions,
 )
 from utils.topic_file_ops import (
-    write_topic_to_file,
-    _clear_topic_in_file,
-    _read_topic_from_file,
-    _read_title_from_file,
-    move_file_to_notes_topic_folder,
-    move_file_to_topic,
-    _remove_empty_dir,
-    _optimize_file_format,
-    _needs_format_optimization,
     _check_topic_needs_processing,
+    move_file_to_notes_topic_folder,
+    write_topic_to_file,
 )
 from utils.topic_pending import (
-    _get_pending_path,
+    _drop_pending_for_rel,
     load_pending,
     save_pending,
-    _drop_pending_for_rel,
-    cleanup_stale_pending,
 )
+from utils.wiki_manager import (
+    add_file_to_wiki_topic,
+    parse_wiki_headings,
+    sync_wiki_with_files,
+)
+from utils.wiki_sync import _write_file_topic_from_folder, topic_from_notes_path
 
 
 def _infer_topic_from_notes_folder(full_path: Path, workspace: str) -> str | None:
@@ -81,10 +68,10 @@ def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
     if not meta:
         return title, tags
 
-    t = meta.get('title')
+    t = meta.get("title")
     if t and isinstance(t, str):
         title = t
-    raw_tags = meta.get('tags', [])
+    raw_tags = meta.get("tags", [])
     if isinstance(raw_tags, list):
         tags = [str(t).strip() for t in raw_tags if t]
     elif isinstance(raw_tags, str) and raw_tags.strip():
@@ -92,7 +79,9 @@ def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
     return title, tags
 
 
-def _apply_auto_topic(full_path: Path, workspace: str, topic: str, title: str, source: str | None, format_optimized: bool):
+def _apply_auto_topic(
+    full_path: Path, workspace: str, topic: str, title: str, source: str | None, format_optimized: bool
+):
     write_topic_to_file(str(full_path), topic)
     add_file_to_wiki_topic(_workspace_rel(full_path, workspace), topic, title)
     move_file_to_notes_topic_folder(str(full_path), topic)
@@ -105,7 +94,15 @@ def _apply_auto_topic(full_path: Path, workspace: str, topic: str, title: str, s
     return result
 
 
-def _save_pending_assignment(full_path: Path, workspace: str, title: str, tags: list[str], candidates: list[str], source: str, format_optimized: bool):
+def _save_pending_assignment(
+    full_path: Path,
+    workspace: str,
+    title: str,
+    tags: list[str],
+    candidates: list[str],
+    source: str,
+    format_optimized: bool,
+):
     pending = load_pending()
     rel = _workspace_rel(full_path, workspace)
     existing = next((p for p in pending if p.get("file") == rel), None)
@@ -120,7 +117,7 @@ def _save_pending_assignment(full_path: Path, workspace: str, title: str, tags: 
 
 def _load_assignment_text(full_path: Path):
     try:
-        text = full_path.read_text(encoding='utf-8')
+        text = full_path.read_text(encoding="utf-8")
     except Exception:
         return None, None, "", []
     meta, body = parse_frontmatter(text)
@@ -130,9 +127,9 @@ def _load_assignment_text(full_path: Path):
 
 def _try_assign_survey(full_path: Path, workspace: str, title: str, format_optimized: bool):
     filename = full_path.stem
-    if not (filename.endswith('综述') or filename.endswith('_综述')):
+    if not (filename.endswith("综述") or filename.endswith("_综述")):
         return None
-    survey_hint = re.sub(r'[_\s]*综述$', '', filename).strip()
+    survey_hint = re.sub(r"[_\s]*综述$", "", filename).strip()
     if not survey_hint:
         return None
     best_match = _find_best_topic_match(survey_hint, parse_wiki_headings())
@@ -164,7 +161,7 @@ def _try_assign_with_llm(
     headings,
     format_optimized: bool,
 ):
-    body = text[match.end():] if match else text
+    body = text[match.end() :] if match else text
     content_preview = body[:1500].strip()
     topic_names = [h["name"] for h in headings]
     llm_suggestions = _llm_suggest_topic(title, tags, content_preview, topic_names)
@@ -210,7 +207,7 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
 
     if need_llm:
         llm_result, llm_candidates = _try_assign_with_llm(
-            full_path, workspace, text, match, title, tags, headings, format_optimized
+            full_path, workspace, text, None, title, tags, headings, format_optimized
         )
         if llm_result:
             return llm_result
@@ -244,7 +241,7 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
     """
     path = Path(file_path)
     try:
-        text = path.read_text(encoding='utf-8')
+        text = path.read_text(encoding="utf-8")
     except Exception as e:
         logger.warning(f"[watcher] failed to read {file_path}: {e}\n")
         return
@@ -273,16 +270,18 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
             if result and result.get("status") == "auto_assigned" and result.get("topic"):
                 sync_wiki_with_files()
                 if send_event:
-                    send_event({
-                        "type": "auto_topic_assigned",
-                        "file": file_path,
-                        "topic": result["topic"],
-                    })
+                    send_event(
+                        {
+                            "type": "auto_topic_assigned",
+                            "file": file_path,
+                            "topic": result["topic"],
+                        }
+                    )
         except Exception as e:
             logger.warning(f"[watcher] auto_assign_topic_for_file failed for {file_path}: {e}\n")
         return
 
-    file_topic = meta.get('topic') if meta else None
+    file_topic = meta.get("topic") if meta else None
     if isinstance(file_topic, list):
         file_topic = file_topic[0] if len(file_topic) == 1 else None
 
@@ -292,7 +291,7 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
     workspace = config.workspace_path
     filename = Path(file_path).stem
 
-    is_survey = filename.endswith('综述') or filename.endswith('_综述')
+    is_survey = filename.endswith("综述") or filename.endswith("_综述")
     if is_survey:
         expected_dir = Path(workspace) / ABSTRACT_FOLDER / file_topic
     else:
@@ -309,9 +308,11 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
             new_path = move_result.get("new_path", "")
             sync_wiki_with_files()
             if send_event:
-                send_event({
-                    "type": "auto_file_moved",
-                    "file": file_path,
-                    "topic": file_topic,
-                    "new_path": new_path,
-                })
+                send_event(
+                    {
+                        "type": "auto_file_moved",
+                        "file": file_path,
+                        "topic": file_topic,
+                        "new_path": new_path,
+                    }
+                )

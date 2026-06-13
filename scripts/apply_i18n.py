@@ -289,10 +289,22 @@ def generate_en(zh_data: dict) -> dict:
 
 def _ui_line(line: str) -> bool:
     markers = (
-        "innerHTML", "textContent", "placeholder", ".title", "showStatus",
-        "updateStatus", "alert(", "confirm(", "prompt(", "ToastModule",
-        "badge.textContent", "label.textContent", "btn.textContent",
-        "setSidebarStatus", "aria-label", "document.title",
+        "innerHTML",
+        "textContent",
+        "placeholder",
+        ".title",
+        "showStatus",
+        "updateStatus",
+        "alert(",
+        "confirm(",
+        "prompt(",
+        "ToastModule",
+        "badge.textContent",
+        "label.textContent",
+        "btn.textContent",
+        "setSidebarStatus",
+        "aria-label",
+        "document.title",
     )
     return any(m in line for m in markers)
 
@@ -337,9 +349,7 @@ def main() -> None:
     flat = flatten(zh_data)
 
     en_data = generate_en(zh_data)
-    (LOCALES / "en.json").write_text(
-        json.dumps(en_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    (LOCALES / "en.json").write_text(json.dumps(en_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Generated en.json ({len(flat)} keys)")
 
     print("Patching JS files...")

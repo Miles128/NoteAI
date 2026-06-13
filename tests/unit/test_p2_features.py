@@ -1,9 +1,6 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
-from sidecar.schema_manager import SCHEMA_FILENAME
 from sidecar.agent_runner import (
     _parse_agent_json,
     _tool_create_topic,
@@ -11,6 +8,9 @@ from sidecar.agent_runner import (
     format_tool_status,
 )
 from sidecar.multi_source import import_transcript
+from sidecar.schema_manager import SCHEMA_FILENAME
+
+from config import config
 from utils.link_indexer import discover_cross_refs_for_file, load_links
 
 
@@ -22,7 +22,7 @@ def workspace(tmp_path: Path) -> Path:
     for i, title in enumerate(["源文章", "同主题A", "同主题B", "提及源", "标签友", "远房亲戚"]):
         p = notes / f"{title}.md"
         topic = "AI > 子题" if i < 3 else "AI > 其他"
-        tags = 'tags: [RAG, 测试]' if i == 4 else "tags: []"
+        tags = "tags: [RAG, 测试]" if i == 4 else "tags: []"
         body = f"讨论 {title} 的内容。"
         if i == 3:
             body = "这里提到了源文章的核心观点。"
@@ -70,19 +70,23 @@ def test_write_tool_blocked_without_agent_mode() -> None:
 
 
 def test_create_topic_l2_requires_user_specified_parent(workspace: Path) -> None:
-    denied = _tool_create_topic({
-        "name": "子主题",
-        "parent": "AI Agent",
-        "_user_text": "帮我建个子主题",
-    })
+    denied = _tool_create_topic(
+        {
+            "name": "子主题",
+            "parent": "AI Agent",
+            "_user_text": "帮我建个子主题",
+        }
+    )
     assert denied["success"] is False
     assert denied.get("needs_user_input") is True
 
-    allowed = _tool_create_topic({
-        "name": "子主题",
-        "parent": "AI Agent",
-        "_user_text": "在 AI Agent 下创建子主题",
-    })
+    allowed = _tool_create_topic(
+        {
+            "name": "子主题",
+            "parent": "AI Agent",
+            "_user_text": "在 AI Agent 下创建子主题",
+        }
+    )
     assert allowed["success"] is True
     assert allowed.get("topic") == "AI Agent > 子主题"
 
@@ -112,8 +116,9 @@ def test_import_transcript(workspace: Path) -> None:
 def test_create_note(workspace: Path) -> None:
     from types import SimpleNamespace
 
-    from config import config as app_config
     from sidecar.handlers.files_handler import FilesHandler
+
+    from config import config as app_config
 
     app_config.workspace_path = str(workspace)
     srv = SimpleNamespace(_ctx=SimpleNamespace(config=app_config, logger=None))

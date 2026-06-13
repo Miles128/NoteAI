@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
+from sidecar.rag.index_state import file_needs_index, mark_indexed
 
 from config import config
-from sidecar.rag.index_state import file_needs_index, mark_indexed
 
 
 @pytest.fixture

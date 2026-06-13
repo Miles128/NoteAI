@@ -6,10 +6,8 @@ Requires project dependencies (see pyproject.toml). Run: pytest tests/integratio
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,7 +16,8 @@ from config import config
 
 def _has_milvus_lite() -> bool:
     try:
-        import milvus_lite
+        import milvus_lite  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -99,15 +98,13 @@ class TestChunker:
 class TestIndex:
     """Test Milvus index operations."""
 
+    @pytest.mark.skipif(not _has_milvus_lite(), reason="milvus-lite not installed")
     def test_index_exists_returns_false_for_empty_workspace(self, workspace: Path) -> None:
         from sidecar.rag.index import index_exists
 
         assert index_exists(str(workspace)) is False
 
-    @pytest.mark.skipif(
-        not _has_milvus_lite(),
-        reason="milvus-lite not installed"
-    )
+    @pytest.mark.skipif(not _has_milvus_lite(), reason="milvus-lite not installed")
     def test_build_index(self, workspace: Path) -> None:
         from sidecar.rag.index import build_index, index_exists
 
@@ -130,10 +127,7 @@ class TestIndex:
         assert result.get("success") is True
         assert index_exists(str(workspace)) is True
 
-    @pytest.mark.skipif(
-        not _has_milvus_lite(),
-        reason="milvus-lite not installed"
-    )
+    @pytest.mark.skipif(not _has_milvus_lite(), reason="milvus-lite not installed")
     def test_delete_by_file(self, workspace: Path) -> None:
         from sidecar.rag.index import build_index, delete_by_file, index_exists
 
@@ -223,7 +217,12 @@ class TestEmbedder:
     def test_encode_query_returns_dense_vec(self) -> None:
         from sidecar.rag.embedder import encode_query
 
-        result = encode_query("test query")
+        try:
+            result = encode_query("test query")
+        except Exception as e:
+            if "Could not load model" in str(e) or "offline" in str(e).lower():
+                pytest.skip(f"Embedding model unavailable: {e}")
+            raise
         assert "dense_vec" in result
         assert len(result["dense_vec"]) == 512
 

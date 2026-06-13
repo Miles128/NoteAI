@@ -7,12 +7,12 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
 import requests
 
 from config import config
 from config.settings import NOTES_FOLDER
 from utils.helpers import sanitize_filename
-from utils.logger import logger
 
 _INBOX = "_采集"
 

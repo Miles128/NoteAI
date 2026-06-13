@@ -54,11 +54,13 @@ def duckduckgo_search(query: str) -> list:
                 snippet = snippet_tag.get_text(strip=True)
 
             if title and href:
-                results.append({
-                    "title": title,
-                    "url": href,
-                    "snippet": snippet,
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "url": href,
+                        "snippet": snippet,
+                    }
+                )
 
             if len(results) >= MAX_RESULTS:
                 break
@@ -91,9 +93,16 @@ def baidu_search(query: str) -> list:
             href = title_tag.get("href", "")
 
             snippet = ""
-            for sel in ["span.content-right_8Zs40", ".c-abstract",
-                        "div.c-abstract", ".c-span-last", "div.c-span-last",
-                        "div.c-span9", "div.c-span12", "p"]:
+            for sel in [
+                "span.content-right_8Zs40",
+                ".c-abstract",
+                "div.c-abstract",
+                ".c-span-last",
+                "div.c-span-last",
+                "div.c-span9",
+                "div.c-span12",
+                "p",
+            ]:
                 snippet_tag = item.select_one(sel)
                 if snippet_tag:
                     text = snippet_tag.get_text(strip=True)
@@ -111,18 +120,22 @@ def baidu_search(query: str) -> list:
                 try:
                     head_resp = requests.get(
                         urljoin("https://www.baidu.com", href),
-                        headers=_HEADERS, timeout=3, allow_redirects=True,
+                        headers=_HEADERS,
+                        timeout=3,
+                        allow_redirects=True,
                     )
                     href = str(head_resp.url) if _is_safe_url(head_resp.url) else ""
                 except Exception as e:
                     logger.warning(f"[rag/web_search] resolve url {href} error: {e}\n")
 
             if title and href:
-                results.append({
-                    "title": title,
-                    "url": href,
-                    "snippet": snippet,
-                })
+                results.append(
+                    {
+                        "title": title,
+                        "url": href,
+                        "snippet": snippet,
+                    }
+                )
 
             if len(results) >= MAX_RESULTS:
                 break
@@ -202,17 +215,21 @@ def search_and_fetch(query: str, max_pages: int = 3) -> list:
             r = future_map[future]
             content = future.result()
             if content:
-                fetched.append({
-                    "title": r["title"],
-                    "url": r["url"],
-                    "snippet": r["snippet"],
-                    "content": content,
-                })
+                fetched.append(
+                    {
+                        "title": r["title"],
+                        "url": r["url"],
+                        "snippet": r["snippet"],
+                        "content": content,
+                    }
+                )
             else:
-                fetched.append({
-                    "title": r["title"],
-                    "url": r["url"],
-                    "snippet": r["snippet"],
-                    "content": r["snippet"],
-                })
+                fetched.append(
+                    {
+                        "title": r["title"],
+                        "url": r["url"],
+                        "snippet": r["snippet"],
+                        "content": r["snippet"],
+                    }
+                )
     return fetched

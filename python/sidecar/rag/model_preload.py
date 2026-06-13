@@ -35,6 +35,7 @@ class ModelWarmupManager:
     def _preload_embedder(cls):
         try:
             from sidecar.rag.embedder import get_model
+
             get_model()
         except Exception as e:
             logger.warning(f"[preload] embedder warmup skipped: {e}\n")
@@ -43,6 +44,7 @@ class ModelWarmupManager:
     def _preload_reranker(cls):
         try:
             from sidecar.rag.retriever import _get_reranker
+
             _get_reranker()
         except Exception as e:
             logger.warning(f"[preload] reranker warmup skipped: {e}\n")

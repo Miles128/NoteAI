@@ -20,13 +20,15 @@ class LinksHandler(BaseHandler):
             finally:
                 self._link_discovery_lock.release()
 
-            self._send_response({
-                "id": "event",
-                "result": {
-                    "type": "link_discovery_complete",
-                    "data": result,
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "link_discovery_complete",
+                        "data": result,
+                    },
                 }
-            })
+            )
 
         t = threading.Thread(target=run, daemon=True)
         t.start()

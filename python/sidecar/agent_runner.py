@@ -168,8 +168,8 @@ def _parse_agent_json(text: str) -> dict[str, Any] | None:
 
 
 def _tool_search_files(args: dict[str, Any]) -> dict[str, Any]:
-    from utils.fulltext_index import fulltext_index
     from sidecar.textutils import parse_frontmatter
+    from utils.fulltext_index import fulltext_index
 
     query = (args.get("query") or "").strip()
     topic_filter = (args.get("topic") or "").strip()
@@ -199,12 +199,14 @@ def _tool_search_files(args: dict[str, Any]) -> dict[str, Any]:
             tags = [raw_tags.strip()]
         if tag_filter and tag_filter not in tags:
             continue
-        results.append({
-            "path": item["path"],
-            "title": Path(item["path"]).stem,
-            "snippet": item.get("snippet", "")[:120],
-            "topic": file_topic,
-        })
+        results.append(
+            {
+                "path": item["path"],
+                "title": Path(item["path"]).stem,
+                "snippet": item.get("snippet", "")[:120],
+                "topic": file_topic,
+            }
+        )
     return {"success": True, "count": len(results), "results": results}
 
 
@@ -353,23 +355,27 @@ def _run_tool_step(
     safe_args["_user_text"] = user_text
 
     if send_event:
-        send_event({
-            "type": "agent_tool",
-            "phase": "start",
-            "tool": tool_name,
-            "message": format_tool_status(tool_name, safe_args, phase="start"),
-        })
+        send_event(
+            {
+                "type": "agent_tool",
+                "phase": "start",
+                "tool": tool_name,
+                "message": format_tool_status(tool_name, safe_args, phase="start"),
+            }
+        )
 
     result = execute_tool(tool_name, safe_args, agent_mode=agent_mode)
 
     if send_event:
-        send_event({
-            "type": "agent_tool",
-            "phase": "done",
-            "tool": tool_name,
-            "message": format_tool_status(tool_name, safe_args, result, phase="done"),
-            "result": result,
-        })
+        send_event(
+            {
+                "type": "agent_tool",
+                "phase": "done",
+                "tool": tool_name,
+                "message": format_tool_status(tool_name, safe_args, result, phase="done"),
+                "result": result,
+            }
+        )
 
     return result
 

@@ -1,6 +1,6 @@
+import pathlib
 import re
 import sys
-import pathlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,8 +14,8 @@ workspace = pathlib.Path(workspace)
 updated = 0
 skipped = 0
 
-for f in sorted(workspace.rglob('*.md')):
-    if f.name.startswith('.') or 'wiki' in f.parts:
+for f in sorted(workspace.rglob("*.md")):
+    if f.name.startswith(".") or "wiki" in f.parts:
         continue
 
     rel = f.relative_to(workspace)
@@ -27,23 +27,23 @@ for f in sorted(workspace.rglob('*.md')):
     folder_name = parts[-2]
 
     try:
-        text = f.read_text(encoding='utf-8')
-        m = re.match(r'^---\s*\n(.*?)\n---', text, re.DOTALL)
+        text = f.read_text(encoding="utf-8")
+        m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
 
         if m:
             fm = m.group(1)
-            body = text[m.end():]
-            if re.search(r'^topic:', fm, re.MULTILINE):
-                fm = re.sub(r'^topic:.*$', 'topic: ' + folder_name, fm, flags=re.MULTILINE)
+            body = text[m.end() :]
+            if re.search(r"^topic:", fm, re.MULTILINE):
+                fm = re.sub(r"^topic:.*$", "topic: " + folder_name, fm, flags=re.MULTILINE)
             else:
-                fm += '\ntopic: ' + folder_name
-            new_text = '---\n' + fm + '\n---' + body
+                fm += "\ntopic: " + folder_name
+            new_text = "---\n" + fm + "\n---" + body
         else:
-            new_text = '---\ntopic: ' + folder_name + '\n---\n' + text
+            new_text = "---\ntopic: " + folder_name + "\n---\n" + text
 
-        f.write_text(new_text, encoding='utf-8')
+        f.write_text(new_text, encoding="utf-8")
         updated += 1
     except Exception as e:
-        print(f'ERROR: {f}: {e}')
+        print(f"ERROR: {f}: {e}")
 
-print(f'Updated: {updated}, Skipped (root level): {skipped}')
+print(f"Updated: {updated}, Skipped (root level): {skipped}")

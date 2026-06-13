@@ -6,12 +6,12 @@ import json
 from pathlib import Path
 
 import pytest
-
-from config import config
-from config.constants import WORKSPACE_APP_FOLDER
 from sidecar.ingest_pipeline import load_ingest_state, prepare_auto_ingest, request_full_ingest
 from sidecar.kb_health import compute_kb_health
 from sidecar.schema_manager import SCHEMA_FILENAME
+
+from config import config
+from config.constants import WORKSPACE_APP_FOLDER
 
 
 @pytest.fixture
@@ -24,11 +24,13 @@ def workspace(tmp_path: Path) -> Path:
     (ws / "wiki").mkdir(parents=True)
     (ws / "wiki" / "Agent_综述.md").write_text("# Survey\n", encoding="utf-8")
     (ws / ".links.json").write_text(
-        json.dumps({
-            "links": [
-                {"from": "Notes/AI/Agent/note-a.md", "to": "Notes/AI/Agent/note-b.md", "status": "confirmed"},
-            ]
-        }),
+        json.dumps(
+            {
+                "links": [
+                    {"from": "Notes/AI/Agent/note-a.md", "to": "Notes/AI/Agent/note-b.md", "status": "confirmed"},
+                ]
+            }
+        ),
         encoding="utf-8",
     )
     lint_dir = ws / WORKSPACE_APP_FOLDER

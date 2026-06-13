@@ -1,26 +1,29 @@
 """LLM 调用相关的统一工具模块"""
 
 import re
-import time
 import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, Tuple, Callable
 
 from utils.logger import logger
 
 
 class APIConfigError(Exception):
     """API配置错误异常"""
+
     pass
 
 
 class NetworkError(Exception):
     """网络连接错误异常"""
+
     pass
 
 
 class LLMRateLimitError(Exception):
     """LLM 限流错误"""
+
     pass
 
 
@@ -60,54 +63,76 @@ def _retry_with_backoff(
                 _LLM_SEMAPHORE.release()
         except Exception as e:
             last_error = e
-            error_str = str(e).lower()
-            # 判断是否可重试
-            retryable = any(kw in error_str for kw in (
-                '429', 'rate limit', 'too many', '503', '502', '504',
-                'timeout', 'timed out', 'connection', 'reset', 'overloaded'
-            ))
-            if not retryable or attempt >= max_retries:
+            if not _is_retryable_error(e) or attempt >= max_retries:
                 break
-            delay = min(base_delay * (2 ** attempt), max_delay)
-            logger.warning(f"LLM 调用失败 (尝试 {attempt+1}/{max_retries+1})，"
-                           f"{delay:.1f}s 后重试: {e}")
+            delay = min(base_delay * (2**attempt), max_delay)
+            logger.warning(f"LLM 调用失败 (尝试 {attempt + 1}/{max_retries + 1})，{delay:.1f}s 后重试: {e}")
             time.sleep(delay)
     raise last_error  # type: ignore[misc]
 
 
-def is_network_error(exception: Exception) -> bool:
-    """判断异常是否为网络相关错误"""
+_RETRYABLE_KEYWORDS = frozenset(
+    (
+        "429",
+        "rate limit",
+        "too many",
+        "503",
+        "502",
+        "504",
+        "timeout",
+        "timed out",
+        "connection",
+        "connect",
+        "reset",
+        "overloaded",
+        "network",
+        "socket",
+        "dns",
+        "unreachable",
+        "refused",
+        "abort",
+        "closed",
+        "ssl",
+        "certificate",
+        "handshake",
+        "proxy",
+        "tunnel",
+        "gateway",
+    )
+)
+
+_RETRYABLE_EXCEPTION_TYPES = frozenset(
+    (
+        "timeout",
+        "connection",
+        "socket",
+        "ssl",
+        "proxy",
+        "http",
+        "url",
+        "network",
+    )
+)
+
+
+def _is_retryable_error(exception: Exception) -> bool:
+    """判断异常是否可重试（网络/限流错误）"""
     error_str = str(exception).lower()
     error_type = type(exception).__name__.lower()
-
-    network_keywords = [
-        'timeout', 'timed out', 'connection', 'connect',
-        'network', 'socket', 'dns', 'unreachable',
-        'refused', 'reset', 'abort', 'closed',
-        'ssl', 'certificate', 'handshake',
-        'proxy', 'tunnel', 'gateway',
-        'httpx', 'urllib3', 'requests'
-    ]
-
-    for keyword in network_keywords:
-        if keyword in error_str or keyword in error_type:
-            return True
-
-    network_exception_types = [
-        'timeout', 'connection', 'socket', 'ssl',
-        'proxy', 'http', 'url', 'network'
-    ]
-
-    for net_type in network_exception_types:
-        if net_type in error_type:
-            return True
-
-    return False
+    return any(kw in error_str for kw in _RETRYABLE_KEYWORDS) or any(
+        t in error_type for t in _RETRYABLE_EXCEPTION_TYPES
+    )
 
 
-def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
+def is_network_error(exception: Exception) -> bool:
+    """判断异常是否为网络相关错误"""
+    return _is_retryable_error(exception)
+
+
+def _create_llm(temperature: float = 0.7, max_tokens: int | None = None):
     """创建 ChatOpenAI 实例（内部复用）"""
     from langchain_openai import ChatOpenAI
+
     from config import config
 
     kwargs = {
@@ -129,12 +154,7 @@ def _create_llm(temperature: float = 0.7, max_tokens: Optional[int] = None):
 create_llm = _create_llm
 
 
-def call_llm(
-    prompt_template: str,
-    temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
-    **kwargs
-) -> str:
+def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | None = None, **kwargs) -> str:
     """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
     if not kwargs:
         return call_llm_raw(prompt_template, temperature, max_tokens)
@@ -143,10 +163,7 @@ def call_llm(
 
     def _invoke():
         llm = _create_llm(temperature, max_tokens)
-        prompt = PromptTemplate(
-            template=prompt_template,
-            input_variables=list(kwargs.keys())
-        )
+        prompt = PromptTemplate(template=prompt_template, input_variables=list(kwargs.keys()))
         chain = prompt | llm
         return chain.invoke(kwargs)
 
@@ -159,7 +176,7 @@ def call_llm(
 def call_llm_raw(
     prompt_text: str,
     temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
     from concurrent.futures import TimeoutError as FutureTimeout
@@ -186,7 +203,7 @@ def call_llm_raw(
 def call_llm_raw_stream(
     prompt_text: str,
     temperature: float = 0.7,
-    max_tokens: Optional[int] = None,
+    max_tokens: int | None = None,
     chunk_callback=None,
 ) -> str:
     """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。带重试。"""
@@ -194,23 +211,10 @@ def call_llm_raw_stream(
     if not is_valid:
         raise RuntimeError(error_msg)
 
-    last_error = None
-    for attempt in range(3):
-        try:
-            return _do_stream(prompt_text, temperature, max_tokens, chunk_callback)
-        except Exception as e:
-            last_error = e
-            error_str = str(e).lower()
-            retryable = any(kw in error_str for kw in (
-                '429', 'rate limit', 'too many', '503', '502', '504',
-                'timeout', 'timed out', 'connection', 'reset', 'overloaded'
-            ))
-            if not retryable or attempt >= 2:
-                break
-            delay = min(2.0 * (2 ** attempt), 30.0)
-            logger.warning(f"LLM stream 失败 (尝试 {attempt+1}/3)，{delay:.1f}s 后重试: {e}")
-            time.sleep(delay)
-    raise last_error
+    def _invoke():
+        return _do_stream(prompt_text, temperature, max_tokens, chunk_callback)
+
+    return _retry_with_backoff(_invoke)
 
 
 def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
@@ -235,7 +239,7 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
         _LLM_SEMAPHORE.release()
 
 
-def check_api_config() -> Tuple[bool, str]:
+def check_api_config() -> tuple[bool, str]:
     """检查API配置是否完整且可用"""
     from config import config
 
@@ -259,24 +263,37 @@ def _classify_api_error(error_msg: str, api_base: str, model_name: str) -> str:
     """分类 API 错误，返回更具体的错误信息"""
     error_str = error_msg.lower()
 
+    _RULES: list[tuple[tuple[str, ...], str | None, str]] = [
+        # (match_keywords, optional_sub_check, message)
+        (("401", "unauthorized", "authentication"), None, "API 认证失败，请检查 API Key 是否正确"),
+        (("403", "forbidden"), None, "API 访问被拒绝：可能是账户余额不足或权限受限"),
+        (("429", "rate limit", "too many"), None, "API 请求频率超限，请稍后重试"),
+        (("500", "502", "503", "504"), None, "API 服务器错误，请稍后重试或检查 API 状态"),
+        (
+            ("dns", "name or service not known", "nodename nor servname"),
+            None,
+            f"DNS 解析失败，无法解析 API 地址：{api_base}",
+        ),
+        (("ssl", "certificate"), None, "SSL 证书验证失败，请检查 API 地址是否正确或网络环境"),
+        (("proxy",), None, "代理连接失败，请检查代理配置"),
+        (("invalid url", "malformed"), None, f"API Base URL 格式无效：{api_base}"),
+        (("insufficient_quota", "quota", "balance"), None, "API 配额不足或账户余额不足，请检查账户状态"),
+        (("context_length", "maximum context"), None, "请求内容超出模型上下文长度限制"),
+    ]
+
+    for keywords, _, msg in _RULES:
+        if any(kw in error_str for kw in keywords):
+            return msg
+
     if "401" in error_str or "unauthorized" in error_str or "authentication" in error_str:
         if "api key" in error_str or "invalid" in error_str:
             return "API 认证失败：密钥无效或已过期"
         return "API 认证失败，请检查 API Key 是否正确"
 
-    if "403" in error_str or "forbidden" in error_str:
-        return "API 访问被拒绝：可能是账户余额不足或权限受限"
-
     if "404" in error_str or "not found" in error_str:
         if "model" in error_str:
             return f"模型不存在或不可用：{model_name}"
         return f"API 端点不存在，请检查 API Base URL：{api_base}"
-
-    if "429" in error_str or "rate limit" in error_str or "too many" in error_str:
-        return "API 请求频率超限，请稍后重试"
-
-    if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
-        return "API 服务器错误，请稍后重试或检查 API 状态"
 
     if "connection" in error_str or "connect" in error_str:
         if "refused" in error_str:
@@ -287,24 +304,6 @@ def _classify_api_error(error_msg: str, api_base: str, model_name: str) -> str:
 
     if "timeout" in error_str or "timed out" in error_str:
         return f"API 连接超时，请检查网络和 API 地址：{api_base}"
-
-    if "dns" in error_str or "name or service not known" in error_str or "nodename nor servname" in error_str:
-        return f"DNS 解析失败，无法解析 API 地址：{api_base}"
-
-    if "ssl" in error_str or "certificate" in error_str:
-        return "SSL 证书验证失败，请检查 API 地址是否正确或网络环境"
-
-    if "proxy" in error_str:
-        return "代理连接失败，请检查代理配置"
-
-    if "invalid url" in error_str or "malformed" in error_str:
-        return f"API Base URL 格式无效：{api_base}"
-
-    if "insufficient_quota" in error_str or "quota" in error_str or "balance" in error_str:
-        return "API 配额不足或账户余额不足，请检查账户状态"
-
-    if "context_length" in error_str or "maximum context" in error_str:
-        return "请求内容超出模型上下文长度限制"
 
     return f"API 连接失败：{error_msg}"
 
@@ -328,9 +327,9 @@ def _normalize_api_base(api_base: str) -> str:
     return api_base
 
 
-def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[bool, str]:
+def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[bool, str]:
     """测试 API 连接是否可用"""
-    logger.info(f"[API连接测试] 开始测试连接...")
+    logger.info("[API连接测试] 开始测试连接...")
     logger.info(f"[API连接测试] API Base: {api_base}")
     logger.info(f"[API连接测试] 模型名称: {model_name}")
 
@@ -344,12 +343,13 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
     model_name = model_name.strip() if model_name else "gpt-4"
 
     url_pattern = re.compile(
-        r'^https?://'
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
-        r'localhost|'
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
-        r'(?::\d+)?'
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE
+        r"^https?://"
+        r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"
+        r"localhost|"
+        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+        r"(?::\d+)?"
+        r"(?:/?|[/?]\S+)$",
+        re.IGNORECASE,
     )
 
     if not url_pattern.match(api_base):
@@ -360,13 +360,8 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> Tuple[b
     def _test():
         try:
             from langchain_openai import ChatOpenAI
-            llm = ChatOpenAI(
-                api_key=api_key,
-                base_url=api_base,
-                model=model_name,
-                temperature=0,
-                max_tokens=10
-            )
+
+            llm = ChatOpenAI(api_key=api_key, base_url=api_base, model=model_name, temperature=0, max_tokens=10)
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
                 result[0] = (True, "API 连接成功")
@@ -397,6 +392,7 @@ def _estimate_tokens(text: str, model_name: str = "gpt-4") -> int:
     """估算文本的 token 数量"""
     try:
         import tiktoken
+
         encoding = tiktoken.encoding_for_model(model_name)
         return len(encoding.encode(text))
     except Exception:
@@ -413,12 +409,7 @@ def summarize_with_llm(content: str, target_ratio: float = 0.5) -> str:
     from prompts import CONTENT_SUMMARIZE_PROMPT
 
     try:
-        return call_llm(
-            CONTENT_SUMMARIZE_PROMPT,
-            temperature=0.3,
-            content=content,
-            target_ratio=target_ratio
-        )
+        return call_llm(CONTENT_SUMMARIZE_PROMPT, temperature=0.3, content=content, target_ratio=target_ratio)
     except NetworkError:
         raise
     except Exception as e:
@@ -439,12 +430,7 @@ def compress_with_llm(content: str, compression_level: str = "medium") -> str:
     from prompts import CONTENT_COMPRESS_PROMPT
 
     try:
-        return call_llm(
-            CONTENT_COMPRESS_PROMPT,
-            temperature=0.2,
-            content=content,
-            compression_level=compression_level
-        )
+        return call_llm(CONTENT_COMPRESS_PROMPT, temperature=0.2, content=content, compression_level=compression_level)
     except NetworkError:
         raise
     except Exception as e:
@@ -482,11 +468,12 @@ def process_content_with_llm(content: str, max_tokens: int = 131072, model_name:
 
     logger.info(f"LLM压缩后仍超出限制({compressed_tokens} > {max_tokens} tokens)，进行策略性截断")
     from utils.helpers import smart_truncate_text
+
     max_chars = int(len(compressed_content) * max_tokens / compressed_tokens)
     truncated_content = smart_truncate_text(
         compressed_content,
         max_length=max_chars,
-        suffix="\n\n---\n\n[内容已截断，超出上下文限制。已优先保留核心信息和关键逻辑。]"
+        suffix="\n\n---\n\n[内容已截断，超出上下文限制。已优先保留核心信息和关键逻辑。]",
     )
     truncated_tokens = _estimate_tokens(truncated_content, model_name)
     logger.info(f"策略性截断完成，最终{truncated_tokens} tokens")
@@ -503,11 +490,7 @@ def rewrite_with_llm(content: str) -> str:
 
     from prompts import LLM_REWRITE_PROMPT
 
-    return call_llm(
-        LLM_REWRITE_PROMPT,
-        temperature=0.3,
-        content=content
-    )
+    return call_llm(LLM_REWRITE_PROMPT, temperature=0.3, content=content)
 
 
 def rewrite_with_llm_stream(content: str, chunk_callback=None):
@@ -521,13 +504,11 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
         raise APIConfigError(error_msg)
 
     from langchain_core.prompts import PromptTemplate
+
     from prompts import LLM_REWRITE_PROMPT
 
     llm = _create_llm(temperature=0.3)
-    prompt = PromptTemplate(
-        template=LLM_REWRITE_PROMPT,
-        input_variables=["content"]
-    )
+    prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
     chain = prompt | llm
 
     full_text = ""
@@ -550,20 +531,17 @@ def reformat_markdown_with_llm(content: str) -> str:
         return content
 
     from config import config
+
     if not config.api_key:
         return content
 
     try:
         from prompts import MARKDOWN_REFORMAT_PROMPT
-        result = call_llm(
-            MARKDOWN_REFORMAT_PROMPT,
-            temperature=0.2,
-            content=content
-        )
+
+        result = call_llm(MARKDOWN_REFORMAT_PROMPT, temperature=0.2, content=content)
         if result and result.strip():
             return result
         return content
     except Exception as e:
-        import sys
         logger.warning(f"[reformat_markdown_with_llm] LLM formatting failed: {e}\n")
         return content

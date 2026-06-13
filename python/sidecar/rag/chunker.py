@@ -112,8 +112,8 @@ def _split_into_segments(content: str) -> list:
         code_match = code_pattern.search(content, pos)
         table_match = table_pattern.search(content, pos)
 
-        next_code_pos = code_match.start() if code_match else float('inf')
-        next_table_pos = table_match.start() if table_match else float('inf')
+        next_code_pos = code_match.start() if code_match else float("inf")
+        next_table_pos = table_match.start() if table_match else float("inf")
 
         if next_code_pos < next_table_pos:
             if next_code_pos > pos:
@@ -134,25 +134,21 @@ def _split_into_segments(content: str) -> list:
 
 
 def _is_table(text: str) -> bool:
-    lines = text.strip().split('\n')
+    lines = text.strip().split("\n")
     if len(lines) < 2:
         return False
 
     first_line = lines[0].strip()
-    if not first_line.startswith('|') or not first_line.endswith('|'):
+    if not first_line.startswith("|") or not first_line.endswith("|"):
         return False
 
-    if len(lines) >= 2:
-        second_line = lines[1].strip()
-        if second_line.startswith('|') and re.match(r'^\|[-:|]+\|$', second_line):
-            return True
-
-    return False
+    second_line = lines[1].strip()
+    return second_line.startswith("|") and bool(re.match(r"^\|[-:|]+\|$", second_line))
 
 
 def _is_code_block(text: str) -> bool:
     text = text.strip()
-    return text.startswith('```') and text.endswith('```')
+    return text.startswith("```") and text.endswith("```")
 
 
 def _make_chunk(content: str, file_path: str, topic, tags, section_title) -> dict:

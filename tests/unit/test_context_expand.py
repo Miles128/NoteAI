@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 
 import pytest
+from sidecar.rag.context_expand import expand_retrieval_context
 
 from config import config
-from sidecar.rag.context_expand import expand_retrieval_context
 
 
 @pytest.fixture
@@ -32,25 +32,31 @@ def test_expand_adds_survey_and_backlink(workspace: Path) -> None:
 
     links_path = workspace / ".links.json"
     links_path.write_text(
-        json.dumps({
-            "links": [{
-                "from": "Notes/a.md",
-                "to": "Notes/b.md",
-                "status": "confirmed",
-                "reason": "test",
-            }],
-        }),
+        json.dumps(
+            {
+                "links": [
+                    {
+                        "from": "Notes/a.md",
+                        "to": "Notes/b.md",
+                        "status": "confirmed",
+                        "reason": "test",
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
 
-    vector_hits = [{
-        "id": "chunk1",
-        "content": "chunk from a",
-        "file_path": "Notes/a.md",
-        "file_name": "a.md",
-        "topic": topic,
-        "score": 0.9,
-    }]
+    vector_hits = [
+        {
+            "id": "chunk1",
+            "content": "chunk from a",
+            "file_path": "Notes/a.md",
+            "file_name": "a.md",
+            "topic": topic,
+            "score": 0.9,
+        }
+    ]
 
     expanded = expand_retrieval_context(vector_hits, topics=[topic], workspace=str(workspace))
 

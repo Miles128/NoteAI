@@ -9,8 +9,7 @@ def workspace_with_notes(tmp_path, monkeypatch):
     notes.mkdir(parents=True)
     note = notes / "切片策略.md"
     note.write_text(
-        "---\ntopic: AI > RAG\n tags: [切片, 检索]\n---\n# 切片策略\n\n"
-        "文档切片是 RAG 的基础步骤。\n",
+        "---\ntopic: AI > RAG\n tags: [切片, 检索]\n---\n# 切片策略\n\n文档切片是 RAG 的基础步骤。\n",
         encoding="utf-8",
     )
     wiki = tmp_path / "wiki"

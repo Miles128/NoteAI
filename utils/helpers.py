@@ -1,68 +1,68 @@
 """通用工具函数"""
 
-import re
-import os
 import hashlib
-from pathlib import Path
-from typing import Optional, List
+import os
+import re
 import unicodedata
-
+from pathlib import Path
 
 from utils.llm_utils import reformat_markdown_with_llm
 
 
 def sanitize_filename(filename: str, max_length: int = 100) -> str:
     """清理文件名，移除非法字符"""
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    filename = ''.join(char for char in filename if unicodedata.category(char)[0] != 'C')
+    filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
+    filename = "".join(char for char in filename if unicodedata.category(char)[0] != "C")
     if len(filename) > max_length:
         name, ext = os.path.splitext(filename)
-        filename = name[:max_length - len(ext)] + ext
-    filename = filename.strip(' .')
+        filename = name[: max_length - len(ext)] + ext
+    filename = filename.strip(" .")
     return filename or "unnamed"
 
 
 def generate_hash(content: str, length: int = 8) -> str:
     """生成内容哈希"""
-    return hashlib.sha256(content.encode('utf-8')).hexdigest()[:length]
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()[:length]
 
 
 def clean_text(text: str) -> str:
     """清理文本内容"""
-    text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    lines = text.split('\n')
+    text = re.sub(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]", "", text)
+    lines = text.split("\n")
     cleaned_lines = []
     for line in lines:
-        line = re.sub(r'[​-‏﻿]', '', line)
-        line = re.sub(r'[ \t]+', ' ', line)
+        line = re.sub(r"[​-‏﻿]", "", line)
+        line = re.sub(r"[ \t]+", " ", line)
         cleaned_lines.append(line.strip())
-    text = '\n'.join(cleaned_lines)
-    text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
-    text = re.sub(r'\s+', ' ', text)
+    text = "\n".join(cleaned_lines)
+    text = re.sub(r"\n\s*\n\s*\n", "\n\n", text)
+    text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
 def remove_images_from_markdown(md_content: str) -> str:
     """从Markdown中移除图片"""
-    md_content = re.sub(r'!\[([^\]]*)\]\([^)]+\)', '', md_content)
-    md_content = re.sub(r'<img[^>]+>', '', md_content, flags=re.IGNORECASE)
-    md_content = re.sub(r'\[([^\]]+)\]:\s*\S+\.(?:png|jpg|jpeg|gif|webp|svg)\s*\n?', '', md_content, flags=re.IGNORECASE)
+    md_content = re.sub(r"!\[([^\]]*)\]\([^)]+\)", "", md_content)
+    md_content = re.sub(r"<img[^>]+>", "", md_content, flags=re.IGNORECASE)
+    md_content = re.sub(
+        r"\[([^\]]+)\]:\s*\S+\.(?:png|jpg|jpeg|gif|webp|svg)\s*\n?", "", md_content, flags=re.IGNORECASE
+    )
     return md_content
 
 
-def extract_title_from_markdown(md_content: str) -> Optional[str]:
+def extract_title_from_markdown(md_content: str) -> str | None:
     """从Markdown内容中提取标题"""
-    lines = md_content.split('\n')
+    lines = md_content.split("\n")
     for line in lines:
         line = line.strip()
-        if line.startswith('# '):
+        if line.startswith("# "):
             return line[2:].strip()
-        if line.startswith('## '):
+        if line.startswith("## "):
             return line[3:].strip()
     return None
 
 
-def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
     """将文本分割成块"""
     if overlap >= chunk_size:
         overlap = chunk_size - 1
@@ -74,7 +74,7 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200
         end = min(start + chunk_size, text_length)
         if end < text_length:
             for i in range(end, start, -1):
-                if text[i - 1] in '.。!！?？\n':
+                if text[i - 1] in ".。!！?？\n":
                     end = i
                     break
 
@@ -87,15 +87,17 @@ def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200
     return chunks
 
 
-def recursive_markdown_chunk(text: str, chunk_size: int = 1000, overlap: int = 200, current_heading: str = "") -> List[str]:
+def recursive_markdown_chunk(
+    text: str, chunk_size: int = 1000, overlap: int = 200, current_heading: str = ""
+) -> list[str]:
     """递归Markdown切片：按照标题层级、标点符号层层切片"""
     if len(text) <= chunk_size:
-        if current_heading and not text.startswith('#'):
+        if current_heading and not text.startswith("#"):
             return [f"{current_heading}\n\n{text}"]
         return [text]
 
     chunks = []
-    heading_pattern = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+    heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
     headings = list(heading_pattern.finditer(text))
 
     if len(headings) > 1:
@@ -105,24 +107,23 @@ def recursive_markdown_chunk(text: str, chunk_size: int = 1000, overlap: int = 2
 
             section = text[start_pos:end_pos].strip()
             heading_line = headings[i].group(0)
-            section_content = text[headings[i].end():end_pos].strip()
+            section_content = text[headings[i].end() : end_pos].strip()
 
             if len(section) > chunk_size:
                 sub_chunks = recursive_markdown_chunk(
-                    section_content, chunk_size, overlap,
-                    current_heading=heading_line
+                    section_content, chunk_size, overlap, current_heading=heading_line
                 )
                 chunks.extend(sub_chunks)
             else:
                 if current_heading:
-                    if not section.startswith('#'):
+                    if not section.startswith("#"):
                         section = f"{current_heading}\n\n{section}"
                     else:
                         section = f"{current_heading}\n{section}"
                 chunks.append(section)
     elif len(headings) == 1:
         heading_line = headings[0].group(0)
-        content_after_heading = text[headings[0].end():].strip()
+        content_after_heading = text[headings[0].end() :].strip()
 
         if len(content_after_heading) <= chunk_size:
             full_section = f"{heading_line}\n\n{content_after_heading}"
@@ -131,19 +132,18 @@ def recursive_markdown_chunk(text: str, chunk_size: int = 1000, overlap: int = 2
             chunks.append(full_section)
         else:
             sub_chunks = recursive_markdown_chunk(
-                content_after_heading, chunk_size, overlap,
-                current_heading=heading_line
+                content_after_heading, chunk_size, overlap, current_heading=heading_line
             )
             chunks.extend(sub_chunks)
     else:
-        paragraphs = re.split(r'\n\n+', text)
+        paragraphs = re.split(r"\n\n+", text)
 
         if len(paragraphs) > 1 and any(len(p) > chunk_size for p in paragraphs):
             current_chunk = ""
             for para in paragraphs:
                 if len(current_chunk) + len(para) + 2 > chunk_size:
                     if current_chunk:
-                        if current_heading and not current_chunk.startswith('#'):
+                        if current_heading and not current_chunk.startswith("#"):
                             current_chunk = f"{current_heading}\n\n{current_chunk}"
                         chunks.append(current_chunk.strip())
 
@@ -153,14 +153,13 @@ def recursive_markdown_chunk(text: str, chunk_size: int = 1000, overlap: int = 2
                         current_chunk = ""
                     else:
                         current_chunk = para
+                elif current_chunk:
+                    current_chunk += "\n\n" + para
                 else:
-                    if current_chunk:
-                        current_chunk += "\n\n" + para
-                    else:
-                        current_chunk = para
+                    current_chunk = para
 
             if current_chunk:
-                if current_heading and not current_chunk.startswith('#'):
+                if current_heading and not current_chunk.startswith("#"):
                     current_chunk = f"{current_heading}\n\n{current_chunk}"
                 chunks.append(current_chunk.strip())
         else:
@@ -170,19 +169,19 @@ def recursive_markdown_chunk(text: str, chunk_size: int = 1000, overlap: int = 2
     return chunks
 
 
-def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_heading: str = "") -> List[str]:
+def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_heading: str = "") -> list[str]:
     """按标点符号分割文本（递归切片的最后一层）"""
     if len(text) <= chunk_size:
-        if current_heading and not text.startswith('#'):
+        if current_heading and not text.startswith("#"):
             return [f"{current_heading}\n\n{text}"]
         return [text]
 
     chunks = []
     punctuation_patterns = [
-        r'[.。!！?？]',
-        r'[;；]',
-        r'[，,]',
-        r'\n',
+        r"[.。!！?？]",
+        r"[;；]",
+        r"[，,]",
+        r"\n",
     ]
 
     split_pos = None
@@ -201,14 +200,13 @@ def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_head
         split_pos = min(chunk_size, len(text))
 
     chunk = text[:split_pos].strip()
-    if current_heading and not chunk.startswith('#'):
+    if current_heading and not chunk.startswith("#"):
         chunk = f"{current_heading}\n\n{chunk}"
     chunks.append(chunk)
 
     safe_overlap = min(overlap, max(split_pos - 1, 0))
     remaining_start = split_pos - safe_overlap
-    if remaining_start >= split_pos:
-        remaining_start = split_pos
+    remaining_start = min(split_pos, remaining_start)
 
     remaining = text[remaining_start:].strip()
 
@@ -221,7 +219,7 @@ def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_head
 
 def format_file_size(size_bytes: int) -> str:
     """格式化文件大小"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024:
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024
@@ -238,29 +236,33 @@ def ensure_dir(path: str) -> Path:
 def is_valid_url(url: str) -> bool:
     """验证URL是否有效，阻止对私有网络地址的请求（SSRF 防护）"""
     import ipaddress
+
     try:
         import validators
+
         if validators.url(url) is not True:
             return False
     except ImportError:
         pattern = re.compile(
-            r'^https?://'
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
-            r'localhost|'
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
-            r'(?::\d+)?'
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+            r"^https?://"
+            r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"
+            r"localhost|"
+            r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+            r"(?::\d+)?"
+            r"(?:/?|[/?]\S+)$",
+            re.IGNORECASE,
+        )
         if not pattern.match(url):
             return False
 
     # SSRF 防护：阻止对私有网络地址的请求
     try:
-        parsed = __import__('urllib.parse').urlparse(url)
+        parsed = __import__("urllib.parse").urlparse(url)
         hostname = parsed.hostname
         if not hostname:
             return False
         # 阻止 localhost
-        if hostname in ('localhost', '127.0.0.1', '::1', '0.0.0.0'):
+        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
             return False
         # 阻止私有 IP 和链路本地地址
         try:
@@ -280,7 +282,7 @@ def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
     """截断文本"""
     if len(text) <= max_length:
         return text
-    return text[:max_length - len(suffix)] + suffix
+    return text[: max_length - len(suffix)] + suffix
 
 
 def get_file_extension(filename: str) -> str:
@@ -288,14 +290,14 @@ def get_file_extension(filename: str) -> str:
     return Path(filename).suffix.lower()
 
 
-def read_file_with_encoding(file_path: str, encodings: List[str] = None) -> str:
+def read_file_with_encoding(file_path: str, encodings: list[str] = None) -> str:
     """尝试多种编码读取文件"""
     if encodings is None:
-        encodings = ['utf-8', 'gbk', 'gb2312', 'latin-1', 'cp1252']
+        encodings = ["utf-8", "gbk", "gb2312", "latin-1", "cp1252"]
 
     for encoding in encodings:
         try:
-            with open(file_path, 'r', encoding=encoding) as f:
+            with open(file_path, encoding=encoding) as f:
                 return f.read()
         except UnicodeDecodeError:
             continue
@@ -316,15 +318,15 @@ def validate_api_key(api_key: str) -> bool:
 def detect_language(text: str) -> str:
     """简单检测文本语言"""
     if not text:
-        return 'unknown'
-    chinese_chars = sum(1 for char in text if '一' <= char <= '鿿')
+        return "unknown"
+    chinese_chars = sum(1 for char in text if "一" <= char <= "鿿")
     total_chars = len(text)
     if total_chars == 0:
-        return 'unknown'
+        return "unknown"
     chinese_ratio = chinese_chars / total_chars
     if chinese_ratio > 0.3:
-        return 'chinese'
-    return 'english'
+        return "chinese"
+    return "english"
 
 
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
@@ -344,7 +346,9 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
                     if attempt < max_retries - 1:
                         time.sleep(delay * (attempt + 1))
             raise last_exception
+
         return wrapper
+
     return decorator
 
 
@@ -355,7 +359,7 @@ def smart_truncate_text(text: str, max_length: int = 1000, suffix: str = "...") 
 
     available_length = max_length - len(suffix)
 
-    lines = text.split('\n')
+    lines = text.split("\n")
     result_lines = []
     current_length = 0
     found_content_start = False
@@ -363,26 +367,25 @@ def smart_truncate_text(text: str, max_length: int = 1000, suffix: str = "...") 
     for line in lines:
         line_length = len(line) + 1
 
-        if line.strip().startswith('#'):
+        if line.strip().startswith("#"):
             result_lines.append(line)
             current_length += line_length
             found_content_start = True
-        elif not found_content_start and line.strip() == '':
+        elif not found_content_start and line.strip() == "":
             result_lines.append(line)
             current_length += line_length
+        elif current_length + line_length <= available_length:
+            result_lines.append(line)
+            current_length += line_length
+            found_content_start = True
         else:
-            if current_length + line_length <= available_length:
-                result_lines.append(line)
-                current_length += line_length
-                found_content_start = True
-            else:
-                remaining = available_length - current_length
-                if remaining > 50:
-                    truncated_line = _truncate_at_sentence_boundary(line, remaining)
-                    result_lines.append(truncated_line)
-                break
+            remaining = available_length - current_length
+            if remaining > 50:
+                truncated_line = _truncate_at_sentence_boundary(line, remaining)
+                result_lines.append(truncated_line)
+            break
 
-    result = '\n'.join(result_lines)
+    result = "\n".join(result_lines)
 
     if len(result) > max_length:
         result = result[:available_length]
@@ -397,7 +400,7 @@ def _truncate_at_sentence_boundary(text: str, max_length: int) -> str:
     if len(text) <= max_length:
         return text
 
-    boundary_chars = ['.', '。', '!', '！', '?', '？', '\n']
+    boundary_chars = [".", "。", "!", "！", "?", "？", "\n"]
 
     best_pos = max_length
     for i in range(max_length, 0, -1):
@@ -413,30 +416,30 @@ def clean_markdown_content(content: str) -> str:
     if not content:
         return content
 
-    lines = content.split('\n')
+    lines = content.split("\n")
     cleaned_lines = []
     prev_line_empty = False
 
     for line in lines:
-        line = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]', '', line)
-        line = re.sub(r'[​-‏﻿]', '', line)
+        line = re.sub(r"[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f-\x9f]", "", line)
+        line = re.sub(r"[​-‏﻿]", "", line)
 
         is_empty = not line.strip()
 
         if is_empty:
             if not prev_line_empty:
-                cleaned_lines.append('')
+                cleaned_lines.append("")
                 prev_line_empty = True
             continue
 
-        line = re.sub(r'[ \t]+', ' ', line)
+        line = re.sub(r"[ \t]+", " ", line)
         line = line.rstrip()
 
         cleaned_lines.append(line)
         prev_line_empty = False
 
-    result = '\n'.join(cleaned_lines)
-    result = re.sub(r'\n{3,}', '\n\n', result)
+    result = "\n".join(cleaned_lines)
+    result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result.strip()
 
@@ -448,15 +451,15 @@ def optimize_markdown_format(content: str, title: str = "") -> str:
 
     content = clean_markdown_content(content)
 
-    lines = content.split('\n')
+    lines = content.split("\n")
     result_lines = []
     found_h1 = False
 
     for line in lines:
         stripped = line.strip()
 
-        if stripped.startswith('#'):
-            heading_match = re.match(r'^(#{1,6})\s+(.*)$', stripped)
+        if stripped.startswith("#"):
+            heading_match = re.match(r"^(#{1,6})\s+(.*)$", stripped)
             if heading_match:
                 level = len(heading_match.group(1))
                 text = heading_match.group(2).strip()
@@ -465,21 +468,21 @@ def optimize_markdown_format(content: str, title: str = "") -> str:
                 result_lines.append(f"{'#' * level} {text}")
                 continue
 
-        if stripped.startswith('- ') or stripped.startswith('* '):
-            result_lines.append('- ' + stripped[2:])
+        if stripped.startswith("- ") or stripped.startswith("* "):
+            result_lines.append("- " + stripped[2:])
             continue
 
-        if re.match(r'^\d+\.\s', stripped):
+        if re.match(r"^\d+\.\s", stripped):
             result_lines.append(stripped)
             continue
 
-        if stripped.startswith('```'):
+        if stripped.startswith("```"):
             result_lines.append(stripped)
             continue
 
         result_lines.append(line)
 
-    result = '\n'.join(result_lines)
+    result = "\n".join(result_lines)
 
     if not found_h1 and title:
         if result.strip():
@@ -495,12 +498,13 @@ def smart_format_markdown(content: str, title: str = "") -> str:
 
     content = clean_markdown_content(content)
 
-    h2_count = len(re.findall(r'^##\s+', content, re.MULTILINE))
+    h2_count = len(re.findall(r"^##\s+", content, re.MULTILINE))
 
     if h2_count >= 2:
         return content
 
     from config import config
+
     if config.api_key:
         result = reformat_markdown_with_llm(content)
         if result != content:

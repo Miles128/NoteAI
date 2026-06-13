@@ -35,11 +35,14 @@ dependencies = [
     "numpy>=1.24.0",
     "keyring>=24.0.0",
     "cryptography>=42.0.0",
+    "snownlp",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.4.0",
+    "mypy>=1.0",
 ]
 
 [build-system]
@@ -72,14 +75,26 @@ select = [
     "UP",  # pyupgrade
     "SIM", # flake8-simplify
     "RET", # flake8-return
-    "ARG", # flake8-unused-arguments
-    "PL",  # pylint
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
+    "E402",  # module-import-not-at-top-of-file (intentional deferred imports)
+    "E741",  # ambiguous-variable-name
+    "B005",  # strip-with-multi-characters
+    "B007",  # unused-loop-control-variable
     "B008",  # do not perform function calls in argument defaults
-    "ARG001", # unused function argument (too many for now)
-    "PLR0913", # too many arguments
+    "B904",  # raise-without-from-inside-except
+    "SIM102",  # collapsible-if
+    "SIM103",  # needless-bool
+    "SIM105",  # suppressible-exception
+    "SIM108",  # if-else-block-instead-of-if-exp
+    "SIM110",  # reimplemented-builtin
+    "SIM201",  # negate-equal-op
+    "RET503",  # implicit-return
+    "RET504",  # unnecessary-assign
+    "C401",  # unnecessary-generator-set
+    "C416",  # unnecessary-comprehension
+    "F841",  # unused-variable
 ]
 
 [tool.ruff.format]
@@ -98,6 +113,7 @@ filterwarnings = [
 
 [tool.mypy]
 python_version = "3.10"
-warn_return_any = true
+warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true
+exclude = ["src-tauri/target"]

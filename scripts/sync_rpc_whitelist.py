@@ -8,10 +8,10 @@ ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SIDECAR = ROOT / "python" / "sidecar"
 RUST_RPC = ROOT / "src-tauri" / "src" / "rpc.rs"
 
-REGISTER_RE = re.compile(r'''router\.register\(\s*["'](\w+)["']''')
+REGISTER_RE = re.compile(r"""router\.register\(\s*["'](\w+)["']""")
 
 RUST_ARRAY_RE = re.compile(
-    r'static\s+ALLOWED_PYTHON_METHODS\s*:\s*&\[&str\]\s*=\s*&\[(.*?)\];',
+    r"static\s+ALLOWED_PYTHON_METHODS\s*:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
     re.DOTALL,
 )
 RUST_METHOD_RE = re.compile(r'"(\w+)"')

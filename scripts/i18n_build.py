@@ -62,7 +62,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("sidebar.discoverLinksTitle", "发现链接：AI 分析文章关联", "Discover links via AI"),
     # pending
     ("pending.title", "待处理", "Pending"),
-    ("pending.hint", "主题/链接确认、综述失败、转换失败与健康检查问题，统一在此处理。", "Topic/link confirmations, survey failures, conversion errors, and health issues — all in one place."),
+    (
+        "pending.hint",
+        "主题/链接确认、综述失败、转换失败与健康检查问题，统一在此处理。",
+        "Topic/link confirmations, survey failures, conversion errors, and health issues — all in one place.",
+    ),
     ("pending.empty", "没有待处理的事项", "Nothing pending"),
     ("pending.allDone", "所有事项已处理完毕 ✓", "All done ✓"),
     ("pending.allDoneCelebration", "所有事项已处理完毕 🎉", "All done 🎉"),
@@ -118,7 +122,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("assistant.send", "发送", "Send"),
     ("assistant.name", "小忆", "XiaoYi"),
     ("assistant.system", "系统", "System"),
-    ("assistant.welcome", "你好呀～我是小忆，你的知识小助手。想查笔记、理清思路，或有任何问题，直接告诉我就好～", "Hi! I'm XiaoYi, your knowledge assistant. Ask me about your notes or anything else."),
+    (
+        "assistant.welcome",
+        "你好呀～我是小忆，你的知识小助手。想查笔记、理清思路，或有任何问题，直接告诉我就好～",
+        "Hi! I'm XiaoYi, your knowledge assistant. Ask me about your notes or anything else.",
+    ),
     ("assistant.requestFailed", "请求失败", "Request failed"),
     ("assistant.timeout", "响应超时，请检查 API 配置或稍后重试", "Request timed out. Check API settings or try again."),
     # settings nav
@@ -147,7 +155,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("settings.fontLargeHint", "（+4pt）", "(+4pt)"),
     ("settings.experimental", "实验功能", "Experimental"),
     ("settings.cloudSyncExperimental", "启用云盘同步（实验）", "Enable cloud sync (experimental)"),
-    ("settings.cloudSyncExperimentalHint", "默认关闭。开启后设置侧栏显示「云盘同步」。", "Off by default. Shows Cloud sync in settings when enabled."),
+    (
+        "settings.cloudSyncExperimentalHint",
+        "默认关闭。开启后设置侧栏显示「云盘同步」。",
+        "Off by default. Shows Cloud sync in settings when enabled.",
+    ),
     ("settings.saveConfig", "保存配置", "Save settings"),
     ("settings.llmApi", "LLM API", "LLM API"),
     ("settings.maxTokens", "最大 Tokens", "Max tokens"),
@@ -184,7 +196,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("ingest.cancelTitle", "取消入库", "Cancel ingest"),
     # integrator (tab-1)
     ("integrator.cardTitle", "笔记整合", "Note integration"),
-    ("integrator.statusLine", "从Notes文件夹读取markdown文件，整合输出到Abstract文件夹", "Read markdown from Notes/ and output to Abstract/"),
+    (
+        "integrator.statusLine",
+        "从Notes文件夹读取markdown文件，整合输出到Abstract文件夹",
+        "Read markdown from Notes/ and output to Abstract/",
+    ),
     ("integrator.topicSettings", "主题设置", "Topic settings"),
     ("integrator.topicCount", "主题个数（留空则自动选择）", "Topic count (empty = auto)"),
     ("integrator.topicCountPlaceholder", "例如：5", "e.g. 5"),
@@ -203,12 +219,16 @@ CATALOG: list[tuple[str, str, str]] = [
     ("quickCreate.noteTitle", "标题", "Title"),
     ("quickCreate.noteTitlePlaceholder", "笔记标题", "Note title"),
     ("quickCreate.noteTopic", "主题（可选）", "Topic (optional)"),
-    ("quickCreate.noteUncategorizedHint", "未选主题时保存到 Notes/_未分类/", "Saved to Notes/_uncategorized/ if no topic"),
+    (
+        "quickCreate.noteUncategorizedHint",
+        "未选主题时保存到 Notes/_未分类/",
+        "Saved to Notes/_uncategorized/ if no topic",
+    ),
     ("quickCreate.createAndOpen", "创建并打开", "Create & open"),
     ("quickCreate.topicName", "主题名称", "Topic name"),
     ("quickCreate.topicNamePlaceholder", "例如：Agent 入门", "e.g. Agent basics"),
     ("quickCreate.topicParent", "上级主题（可选）", "Parent topic (optional)"),
-    ("quickCreate.topicParentHint", "有上级时创建为「上级 > 名称」", "With parent: \"Parent > Name\""),
+    ("quickCreate.topicParentHint", "有上级时创建为「上级 > 名称」", 'With parent: "Parent > Name"'),
     ("quickCreate.createTopic", "创建主题", "Create topic"),
     ("quickCreate.uncategorized", "（无 / 未分类）", "(None / uncategorized)"),
     # schema wizard modal (titles only — body in schemaWizard.js)
@@ -219,7 +239,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("schemaWizard.finish", "完成并保存", "Finish & save"),
     # project rules
     ("projectRules.title", "项目规则", "Project rules"),
-    ("projectRules.desc", "定义此工作区的项目规则，AI 在回答问题时会参考这些规则。", "Rules for this workspace that AI uses when answering."),
+    (
+        "projectRules.desc",
+        "定义此工作区的项目规则，AI 在回答问题时会参考这些规则。",
+        "Rules for this workspace that AI uses when answering.",
+    ),
     ("projectRules.save", "保存规则", "Save rules"),
     # app status
     ("app.loading", "正在加载...", "Loading…"),
@@ -229,7 +253,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("app.backendRecovered", "Python 后端已恢复", "Python backend recovered"),
     ("app.backendStartFailed", "Python 后端启动失败", "Python backend failed to start"),
     ("app.llmRewriting", "LLM 正在改写文档…", "LLM rewriting document…"),
-    ("app.startFailedAlert", "NoteAI 启动失败\n\n{message}\n\n请检查 Python 环境和依赖是否正确安装。", "NoteAI failed to start\n\n{message}\n\nCheck Python environment and dependencies."),
+    (
+        "app.startFailedAlert",
+        "NoteAI 启动失败\n\n{message}\n\n请检查 Python 环境和依赖是否正确安装。",
+        "NoteAI failed to start\n\n{message}\n\nCheck Python environment and dependencies.",
+    ),
     # integrator hints
     ("integrator.extractTopicsHint", "提取主题：从网页内容中提取关键主题", "Extract topics from web content"),
     ("integrator.startHint", "开始整合：将内容整合到笔记中", "Integrate content into notes"),
@@ -250,37 +278,97 @@ CATALOG: list[tuple[str, str, str]] = [
     ("settings.autoSaveFailed", "配置保存失败: {message}", "Auto-save failed: {message}"),
     ("settings.profileSaved", "画像已保存", "Profile saved"),
     ("settings.schemaTitle", "工作区 Schema", "Workspace Schema"),
-    ("settings.schemaHint", "定义 AI 可写范围、主题层级与冲突策略（schema.md）。", "Define AI write scope, topic hierarchy, and conflict policy (schema.md)."),
+    (
+        "settings.schemaHint",
+        "定义 AI 可写范围、主题层级与冲突策略（schema.md）。",
+        "Define AI write scope, topic hierarchy, and conflict policy (schema.md).",
+    ),
     ("settings.schemaWizardBtn", "配置向导", "Setup wizard"),
     ("settings.schemaReloadBtn", "重新加载", "Reload"),
     ("settings.schemaEditorPlaceholder", "schema.md 内容…", "schema.md content…"),
     ("settings.schemaSaveBtn", "保存 Schema", "Save Schema"),
     ("settings.schemaSaved", "Schema 已保存", "Schema saved"),
     ("settings.maintenanceTitle", "资料维护", "Maintenance"),
-    ("settings.maintenanceHint", "重新转换 Raw/ 下支持的 PDF、Word 等原件，生成 Markdown 笔记。", "Re-convert PDF, Word, etc. in Raw/ to Markdown notes."),
+    (
+        "settings.maintenanceHint",
+        "重新转换 Raw/ 下支持的 PDF、Word 等原件，生成 Markdown 笔记。",
+        "Re-convert PDF, Word, etc. in Raw/ to Markdown notes.",
+    ),
     ("settings.rawConvertBtn", "Raw 批量重转", "Batch re-convert Raw"),
     ("settings.assistantIntroTitle", "小忆助手", "XiaoYi Assistant"),
-    ("settings.assistantIntro1", "小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。", "XiaoYi is your knowledge Q&A partner. In default <strong>Q&A mode</strong>, she searches notes and surveys, and can <strong>search notes and list topics</strong> without Agent mode."),
-    ("settings.assistantIntro2", "开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：", "With <strong>Agent mode</strong>, XiaoYi can <strong>modify your workspace</strong>, for example:"),
-    ("settings.assistantCap1", "<strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测", "<strong>Create topics</strong> — L1 or L2; L2 requires you to specify the L1 parent"),
-    ("settings.assistantCap2", "<strong>移动笔记</strong> — 把某篇笔记归到指定主题下", "<strong>Move notes</strong> — assign a note to a topic"),
-    ("settings.assistantCap3", "<strong>更新综述</strong> — 为某个主题重新生成或刷新主题综述", "<strong>Update surveys</strong> — regenerate topic surveys"),
-    ("settings.assistantCap4", "<strong>整理知识库</strong> — 在需要时触发入库流水线（转换、分类、索引等）", "<strong>Organize KB</strong> — run ingest pipeline when needed"),
-    ("settings.assistantIntro3", "问答模式下也可随时说「有哪些主题」「搜一下 xxx 相关的笔记」。助手模式会逐步执行写操作并在对话里显示进度。LLM 接口请在「模型」分页配置。", "In Q&A mode, ask for topics or to search notes. Agent mode shows progress for write actions. Configure LLM under Model tab."),
+    (
+        "settings.assistantIntro1",
+        "小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。",
+        "XiaoYi is your knowledge Q&A partner. In default <strong>Q&A mode</strong>, she searches notes and surveys, and can <strong>search notes and list topics</strong> without Agent mode.",
+    ),
+    (
+        "settings.assistantIntro2",
+        "开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：",
+        "With <strong>Agent mode</strong>, XiaoYi can <strong>modify your workspace</strong>, for example:",
+    ),
+    (
+        "settings.assistantCap1",
+        "<strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测",
+        "<strong>Create topics</strong> — L1 or L2; L2 requires you to specify the L1 parent",
+    ),
+    (
+        "settings.assistantCap2",
+        "<strong>移动笔记</strong> — 把某篇笔记归到指定主题下",
+        "<strong>Move notes</strong> — assign a note to a topic",
+    ),
+    (
+        "settings.assistantCap3",
+        "<strong>更新综述</strong> — 为某个主题重新生成或刷新主题综述",
+        "<strong>Update surveys</strong> — regenerate topic surveys",
+    ),
+    (
+        "settings.assistantCap4",
+        "<strong>整理知识库</strong> — 在需要时触发入库流水线（转换、分类、索引等）",
+        "<strong>Organize KB</strong> — run ingest pipeline when needed",
+    ),
+    (
+        "settings.assistantIntro3",
+        "问答模式下也可随时说「有哪些主题」「搜一下 xxx 相关的笔记」。助手模式会逐步执行写操作并在对话里显示进度。LLM 接口请在「模型」分页配置。",
+        "In Q&A mode, ask for topics or to search notes. Agent mode shows progress for write actions. Configure LLM under Model tab.",
+    ),
     ("settings.agentModeTitle", "助手模式", "Agent mode"),
     ("settings.agentModeLabel", "开启助手模式", "Enable Agent mode"),
-    ("settings.agentModeDesc", "关闭时仅问答与只读查询；开启后可新建主题、移动笔记、更新综述等", "Off: Q&A and read-only queries. On: create topics, move notes, update surveys, etc."),
+    (
+        "settings.agentModeDesc",
+        "关闭时仅问答与只读查询；开启后可新建主题、移动笔记、更新综述等",
+        "Off: Q&A and read-only queries. On: create topics, move notes, update surveys, etc.",
+    ),
     ("settings.profileTitle", "用户画像", "User profile"),
-    ("settings.profileHint", "用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。", "Describe your background and preferences in Markdown for personalized answers."),
+    (
+        "settings.profileHint",
+        "用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。",
+        "Describe your background and preferences in Markdown for personalized answers.",
+    ),
     ("settings.profileSaveBtn", "保存画像", "Save profile"),
-    ("settings.profilePlaceholder", "## 关于我\n\n- 职业：AI产品经理\n- 专业领域：NLP, RAG\n- 兴趣：大语言模型, AI Agent\n\n## 偏好\n\n- 回答风格：简洁\n- 回答深度：技术向", "## About me\n\n- Role: AI PM\n- Expertise: NLP, RAG\n- Interests: LLM, AI Agent\n\n## Preferences\n\n- Style: concise\n- Depth: technical"),
+    (
+        "settings.profilePlaceholder",
+        "## 关于我\n\n- 职业：AI产品经理\n- 专业领域：NLP, RAG\n- 兴趣：大语言模型, AI Agent\n\n## 偏好\n\n- 回答风格：简洁\n- 回答深度：技术向",
+        "## About me\n\n- Role: AI PM\n- Expertise: NLP, RAG\n- Interests: LLM, AI Agent\n\n## Preferences\n\n- Style: concise\n- Depth: technical",
+    ),
     ("settings.indexTitle", "知识库索引", "Knowledge index"),
-    ("settings.indexHint", "问答依赖向量索引。日常入库会自动维护；若检索结果明显不对，可手动全量重建（耗时较长，请在工作区空闲时操作）。", "Q&A uses vector index. Ingest maintains it daily; rebuild manually if search is wrong (slow)."),
+    (
+        "settings.indexHint",
+        "问答依赖向量索引。日常入库会自动维护；若检索结果明显不对，可手动全量重建（耗时较长，请在工作区空闲时操作）。",
+        "Q&A uses vector index. Ingest maintains it daily; rebuild manually if search is wrong (slow).",
+    ),
     ("settings.rebuildIndexBtn", "重建知识库索引", "Rebuild knowledge index"),
     ("settings.activityLogTitle", "操作记录", "Activity log"),
-    ("settings.activityLogHint", "工作区内 AI 与入库操作，写入 wiki/log.md。健康检查会自动删除断链、更新过时综述。", "AI and ingest actions logged to wiki/log.md. Health check fixes broken links and stale surveys."),
+    (
+        "settings.activityLogHint",
+        "工作区内 AI 与入库操作，写入 wiki/log.md。健康检查会自动删除断链、更新过时综述。",
+        "AI and ingest actions logged to wiki/log.md. Health check fixes broken links and stale surveys.",
+    ),
     ("settings.activityLogLoading", "加载中…", "Loading…"),
-    ("settings.aboutDesc", "NoteAI 是一款智能知识管理工具，帮助用户高效组织和管理 Markdown 笔记。", "NoteAI helps you organize and manage Markdown notes with AI."),
+    (
+        "settings.aboutDesc",
+        "NoteAI 是一款智能知识管理工具，帮助用户高效组织和管理 Markdown 笔记。",
+        "NoteAI helps you organize and manage Markdown notes with AI.",
+    ),
     ("settings.aboutFeatures", "功能：", "Features:"),
     ("settings.aboutFeature1", "多层主题树知识图谱", "Multi-level topic tree & graph"),
     ("settings.aboutFeature2", "AI 辅助写作与内容整合", "AI-assisted writing & integration"),
@@ -288,7 +376,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("settings.aboutFeature4", "标签与双向链接管理", "Tags & bidirectional links"),
     ("settings.aboutTech", "技术栈：", "Tech stack:"),
     ("settings.aboutTechLine", "Tauri v2 + Python Sidecar + D3.js", "Tauri v2 + Python Sidecar + D3.js"),
-    ("settings.aboutTechDesc", "基于 Rust 构建桌面端，Python 提供 AI 能力，D3.js 渲染知识图谱。", "Rust desktop shell, Python AI sidecar, D3.js graph."),
+    (
+        "settings.aboutTechDesc",
+        "基于 Rust 构建桌面端，Python 提供 AI 能力，D3.js 渲染知识图谱。",
+        "Rust desktop shell, Python AI sidecar, D3.js graph.",
+    ),
     # pending item types
     ("pending.typeTopic", "主题确认", "Topic confirmation"),
     ("pending.typeLink", "链接确认", "Link confirmation"),
@@ -305,18 +397,30 @@ CATALOG: list[tuple[str, str, str]] = [
     ("confirm.ok", "确认", "Confirm"),
     # schema wizard (modal in index.html)
     ("schemaWizard.stepPurpose", "这个工作区主要做什么？", "What is this workspace for?"),
-    ("schemaWizard.stepPurposeHint", "决定目录说明与整理语气的默认表述。", "Sets default tone for folder descriptions."),
+    (
+        "schemaWizard.stepPurposeHint",
+        "决定目录说明与整理语气的默认表述。",
+        "Sets default tone for folder descriptions.",
+    ),
     ("schemaWizard.purposePersonal", "个人知识库 — 长期积累、学习笔记", "Personal KB — long-term learning notes"),
     ("schemaWizard.purposeProject", "项目文档库 — 围绕单一产品/课题", "Project docs — single product or topic"),
     ("schemaWizard.purposeResearch", "研究资料库 — 论文、报告、摘录为主", "Research archive — papers and excerpts"),
     ("schemaWizard.stepDomains", "关注哪些知识领域？", "Which knowledge domains?"),
-    ("schemaWizard.stepDomainsHint", "可多选，将生成一级主题示例（可在 project_rules 中再改）。", "Multi-select; generates L1 topic examples (editable in project_rules)."),
+    (
+        "schemaWizard.stepDomainsHint",
+        "可多选，将生成一级主题示例（可在 project_rules 中再改）。",
+        "Multi-select; generates L1 topic examples (editable in project_rules).",
+    ),
     ("schemaWizard.domainRag", "RAG 与检索", "RAG & retrieval"),
     ("schemaWizard.domainProduct", "AI 产品", "AI product"),
     ("schemaWizard.domainLlm", "大模型应用", "LLM applications"),
     ("schemaWizard.domainTools", "工具与效率", "Tools & productivity"),
     ("schemaWizard.domainCareer", "职业成长", "Career growth"),
-    ("schemaWizard.customDomainsPlaceholder", "其他一级主题，逗号分隔，如：产品设计, 开源社区", "Other L1 topics, comma-separated"),
+    (
+        "schemaWizard.customDomainsPlaceholder",
+        "其他一级主题，逗号分隔，如：产品设计, 开源社区",
+        "Other L1 topics, comma-separated",
+    ),
     ("schemaWizard.stepDepth", "主题层级与语言", "Topic depth & language"),
     ("schemaWizard.stepDepthHint", "对应 Notes/ 文件夹深度与命名习惯。", "Maps to Notes/ folder depth and naming."),
     ("schemaWizard.depth2", "以两级为主（一级 > 二级）", "Mostly 2 levels (L1 > L2)"),
@@ -324,15 +428,27 @@ CATALOG: list[tuple[str, str, str]] = [
     ("schemaWizard.langZh", "中文优先（文件名、标签、主题）", "Chinese first (names, tags, topics)"),
     ("schemaWizard.langMixed", "中英混合（专有名词保留英文）", "Mixed CN/EN (keep proper nouns in English)"),
     ("schemaWizard.stepHabits", "整理习惯", "Organization habits"),
-    ("schemaWizard.stepHabitsHint", "写入 schema.md，约束 AI 自动整理行为。", "Written to schema.md to constrain AI organization."),
+    (
+        "schemaWizard.stepHabitsHint",
+        "写入 schema.md，约束 AI 自动整理行为。",
+        "Written to schema.md to constrain AI organization.",
+    ),
     ("schemaWizard.habitFolderTruth", "文件夹路径是主题唯一依据", "Folder path is the sole topic source"),
     ("schemaWizard.habitPending", "不确定分类 → 待办，不硬塞", "Uncertain → pending, never force-fit"),
     ("schemaWizard.habitSurveyOnly", "级联只更新综述，不改笔记正文", "Cascade updates surveys only, not note bodies"),
     ("schemaWizard.habitAutoConvert", "自动转换 PDF/DOCX 等", "Auto-convert PDF/DOCX etc."),
     ("schemaWizard.habitTagsCn", "标签 2～5 个，中文优先", "2–5 tags, Chinese preferred"),
     ("schemaWizard.stepConfirm", "确认生成的 schema.md", "Confirm generated schema.md"),
-    ("schemaWizard.stepConfirmHint", "将保存到工作区根目录，并同步生成 project_rules.md。", "Saved to workspace root; syncs project_rules.md."),
-    ("projectRules.placeholder", "## 项目规则\n\n- 本项目是关于 XXX 的知识库\n- 所有笔记使用中文\n- 代码示例使用 Python\n- 优先使用简洁的技术文档风格", "## Project rules\n\n- This KB is about XXX\n- Notes in Chinese\n- Code examples in Python\n- Concise technical style"),
+    (
+        "schemaWizard.stepConfirmHint",
+        "将保存到工作区根目录，并同步生成 project_rules.md。",
+        "Saved to workspace root; syncs project_rules.md.",
+    ),
+    (
+        "projectRules.placeholder",
+        "## 项目规则\n\n- 本项目是关于 XXX 的知识库\n- 所有笔记使用中文\n- 代码示例使用 Python\n- 优先使用简洁的技术文档风格",
+        "## Project rules\n\n- This KB is about XXX\n- Notes in Chinese\n- Code examples in Python\n- Concise technical style",
+    ),
     # schema wizard status
     ("schemaWizard.saved", "工作区 Schema 已保存", "Workspace schema saved"),
     ("schemaWizard.saveFailed", "保存 Schema 失败: {message}", "Failed to save schema: {message}"),
@@ -361,16 +477,24 @@ CATALOG: list[tuple[str, str, str]] = [
     ("tree.deleteTopic", "删除主题", "Delete topic"),
     ("tree.deleteFolder", "删除文件夹", "Delete folder"),
     ("tree.delete", "删除", "Delete"),
-    ("tree.deleteTopicConfirm", "删除主题「{name}」？（文件将移至 Notes 根目录）", "Delete topic \"{name}\"? (Files move to Notes root)"),
-    ("tree.deleteConfirm", "删除「{name}」？", "Delete \"{name}\"?"),
-    ("tree.enterTopicName", "请输入新主题名称：\n\n将创建对应的主题文件夹，并自动匹配相关文件。", "Enter new topic name:\n\nCreates folder and auto-matches files."),
+    (
+        "tree.deleteTopicConfirm",
+        "删除主题「{name}」？（文件将移至 Notes 根目录）",
+        'Delete topic "{name}"? (Files move to Notes root)',
+    ),
+    ("tree.deleteConfirm", "删除「{name}」？", 'Delete "{name}"?'),
+    (
+        "tree.enterTopicName",
+        "请输入新主题名称：\n\n将创建对应的主题文件夹，并自动匹配相关文件。",
+        "Enter new topic name:\n\nCreates folder and auto-matches files.",
+    ),
     ("tree.deleteTopicFailed", "删除主题失败: ", "Delete topic failed: "),
     ("tree.deleteTopicError", "删除主题出错: ", "Delete topic error: "),
     ("tree.createTopicFailed", "创建主题失败: ", "Create topic failed: "),
     ("tree.createTopicError", "创建主题出错: ", "Create topic error: "),
     ("tree.deleteFailed", "删除失败: ", "Delete failed: "),
     ("tree.deleteError", "删除出错: ", "Delete error: "),
-    ("tree.confirmDeleteItem", "确定要删除 \"{name}\" 吗？", "Delete \"{name}\"?"),
+    ("tree.confirmDeleteItem", '确定要删除 "{name}" 吗？', 'Delete "{name}"?'),
     ("tree.workspaceNotSet", "工作区未设置", "Workspace not set"),
     ("tree.workspaceEmpty", "工作区为空", "Workspace is empty"),
     ("tree.loadFailed", "暂时无法加载文件树", "Could not load file tree"),
@@ -404,10 +528,26 @@ CATALOG: list[tuple[str, str, str]] = [
     ("topic.analysisError", "分析出错", "Analysis error"),
     ("topic.aiAnalysisError", "AI 分析出错: ", "AI analysis error: "),
     ("topic.noTopicsYet", "当前没有主题，请先创建主题", "No topics yet — create one first"),
-    ("topic.enterSubTopicName", "请输入子主题名称：\n\n将添加到「{parent}」下", "Enter subtopic name:\n\nAdds under \"{parent}\""),
-    ("topic.confirmDeleteTopic", "确定要删除主题「{name}」吗？\n\n该主题下的文件将从 WIKI.md 中移除，文件的 topic 标签也会被删除，之后会重新尝试自动匹配主题。", "Delete topic \"{name}\"?\n\nRemoves files from WIKI.md and clears topic tags; auto-match will retry."),
-    ("topic.syncDone", "同步完成：移动 {moved}，新增 {added}，移除 {removed}，删除空主题 {deleted}", "Sync done: moved {moved}, added {added}, removed {removed}, deleted {deleted} empty topics"),
-    ("topic.scanDone", "扫描完成：共 {total} 个文件，自动分配 {assigned} 个，待确认 {pending} 个，跳过 {skipped} 个", "Scan done: {total} files, {assigned} assigned, {pending} pending, {skipped} skipped"),
+    (
+        "topic.enterSubTopicName",
+        "请输入子主题名称：\n\n将添加到「{parent}」下",
+        'Enter subtopic name:\n\nAdds under "{parent}"',
+    ),
+    (
+        "topic.confirmDeleteTopic",
+        "确定要删除主题「{name}」吗？\n\n该主题下的文件将从 WIKI.md 中移除，文件的 topic 标签也会被删除，之后会重新尝试自动匹配主题。",
+        'Delete topic "{name}"?\n\nRemoves files from WIKI.md and clears topic tags; auto-match will retry.',
+    ),
+    (
+        "topic.syncDone",
+        "同步完成：移动 {moved}，新增 {added}，移除 {removed}，删除空主题 {deleted}",
+        "Sync done: moved {moved}, added {added}, removed {removed}, deleted {deleted} empty topics",
+    ),
+    (
+        "topic.scanDone",
+        "扫描完成：共 {total} 个文件，自动分配 {assigned} 个，待确认 {pending} 个，跳过 {skipped} 个",
+        "Scan done: {total} files, {assigned} assigned, {pending} pending, {skipped} skipped",
+    ),
     ("topic.aiWritingSurvey", "AI 正在撰写 {topic} 综述…", "AI writing survey for {topic}…"),
     ("topic.writingSurvey", "正在撰写综述…", "Writing survey…"),
     ("topic.surveyDone", "综述撰写完成，已保存为 {path}", "Survey saved to {path}"),
@@ -418,8 +558,16 @@ CATALOG: list[tuple[str, str, str]] = [
     ("topic.writeError", "撰写出错: ", "Write error: "),
     ("topic.surveyWriteError", "综述撰写出错", "Survey write error"),
     ("topic.createTopicFailed", "创建主题失败", "Create topic failed"),
-    ("topic.enterSurveyTopic", "请输入要撰写综述的主题：\n\n现有主题：{topics}", "Topic for survey:\n\nExisting: {topics}"),
-    ("topic.topicCreatedScan", "主题「{name}」创建成功。扫描完成：自动分配 {assigned} 个，待确认 {pending} 个", "Topic \"{name}\" created. Scan: {assigned} assigned, {pending} pending"),
+    (
+        "topic.enterSurveyTopic",
+        "请输入要撰写综述的主题：\n\n现有主题：{topics}",
+        "Topic for survey:\n\nExisting: {topics}",
+    ),
+    (
+        "topic.topicCreatedScan",
+        "主题「{name}」创建成功。扫描完成：自动分配 {assigned} 个，待确认 {pending} 个",
+        'Topic "{name}" created. Scan: {assigned} assigned, {pending} pending',
+    ),
     ("topic.changeName", "更改名称", "Rename"),
     ("topic.aiSuggestionTitle", "AI 主题建议", "AI topic suggestions"),
     ("topic.typeNewTopic", "新建主题", "New topic"),
@@ -511,7 +659,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("assistant.requestFailedMsg", "请求失败: {message}", "Request failed: {message}"),
     ("assistant.indexBuildDone", "知识库索引构建完成，共 {count} 个片段", "Index built: {count} chunks"),
     ("assistant.indexBuildFailed", "索引构建失败: {message}", "Index build failed: {message}"),
-    ("assistant.indexBuilding", "正在构建知识库索引…（手动全量重建，日常入库不会重复跑）", "Building knowledge index… (manual full rebuild)"),
+    (
+        "assistant.indexBuilding",
+        "正在构建知识库索引…（手动全量重建，日常入库不会重复跑）",
+        "Building knowledge index… (manual full rebuild)",
+    ),
     ("assistant.indexRequestFailed", "索引构建请求失败: {message}", "Index build request failed: {message}"),
     ("assistant.insightHint", "小忆觉得这段回答有洞见，可以单独存成笔记", "Save this insightful reply as a note?"),
     ("assistant.saveAsNote", "保存为笔记", "Save as note"),
@@ -522,7 +674,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("app.importing", "正在导入 {count} 个文件", "Importing {count} files…"),
     ("app.importProgress", "导入中", "Importing…"),
     ("app.importDone", "导入完成：{imported} 个文件", "Import done: {imported} files"),
-    ("app.importDoneWithFailed", "导入完成：{imported} 个文件，{failed} 个失败", "Import done: {imported} files, {failed} failed"),
+    (
+        "app.importDoneWithFailed",
+        "导入完成：{imported} 个文件，{failed} 个失败",
+        "Import done: {imported} files, {failed} failed",
+    ),
     ("app.importFailed", "导入失败: {message}", "Import failed: {message}"),
     ("app.importFailedGeneric", "导入失败", "Import failed"),
     ("app.rewritingChars", "LLM 正在改写 {count} 字", "LLM rewriting… {count} chars"),
@@ -539,10 +695,14 @@ CATALOG: list[tuple[str, str, str]] = [
     ("app.saveError", "保存出错: {message}", "Save error: {message}"),
     ("app.rewriteCancelled", "已放弃改写", "Rewrite discarded"),
     ("app.selectFileFirst", "请先选择一个文件", "Select a file first"),
-    ("app.rewriteConfirm", "确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。", "Rewrite this document with LLM?\nUses neutral note style; you can compare before accepting."),
+    (
+        "app.rewriteConfirm",
+        "确定要用 LLM 改写此文档吗？\n改写后将用中立客观的笔记风格重写，改写完成后可对比确认。",
+        "Rewrite this document with LLM?\nUses neutral note style; you can compare before accepting.",
+    ),
     ("app.rewritingDoc", "正在改写文档", "Rewriting document…"),
     ("app.rewriteError", "改写出错: {message}", "Rewrite error: {message}"),
-    ("app.autoAssignedTo", "已自动分配到「{topic}」", "Auto-assigned to \"{topic}\""),
+    ("app.autoAssignedTo", "已自动分配到「{topic}」", 'Auto-assigned to "{topic}"'),
     ("app.autoAssignedTopic", "已自动分配主题", "Topic auto-assigned"),
     ("app.errorPrefix", "错误: ", "Error: "),
     ("app.autoConvertDone", "自动转换完成 {done}/{total} 个文件", "Auto-convert done: {done}/{total} files"),
@@ -584,7 +744,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("tags.deleteTag", "删除标签", "Delete tag"),
     ("tags.addFailed", "添加标签失败: ", "Add tag failed: "),
     ("tags.renameFailed", "重命名标签失败: ", "Rename tag failed: "),
-    ("tags.confirmDelete", "确定要删除标签「{name}」吗？\n\n该标签将从所有文件的 YAML tags 中移除，同时更新 WIKI.md。", "Delete tag \"{name}\"?\n\nRemoves from all file YAML tags and updates WIKI.md."),
+    (
+        "tags.confirmDelete",
+        "确定要删除标签「{name}」吗？\n\n该标签将从所有文件的 YAML tags 中移除，同时更新 WIKI.md。",
+        'Delete tag "{name}"?\n\nRemoves from all file YAML tags and updates WIKI.md.',
+    ),
     ("tags.deleteFailed", "删除标签失败: ", "Delete tag failed: "),
     ("tags.deleteError", "删除标签出错", "Delete tag error"),
     ("tags.createFailed", "创建标签失败: ", "Create tag failed: "),
@@ -601,7 +765,11 @@ CATALOG: list[tuple[str, str, str]] = [
     ("links.apiTestError", "API 连接测试出错: ", "API test error: "),
     ("links.analyzing", "分析中", "Analyzing…"),
     ("links.buildingPairs", "正在读取文件并构建候选对", "Reading files and building candidate pairs…"),
-    ("links.discoverDone", "完成：扫描 {files} 个文件，发现 {count} 个新关联", "Done: scanned {files} files, found {count} new links"),
+    (
+        "links.discoverDone",
+        "完成：扫描 {files} 个文件，发现 {count} 个新关联",
+        "Done: scanned {files} files, found {count} new links",
+    ),
     ("links.discoverNone", "完成：扫描 {files} 个文件，未发现新关联", "Done: scanned {files} files, no new links"),
     ("links.discoverFailed", "发现失败", "Discovery failed"),
     ("links.startFailed", "启动失败", "Start failed"),
@@ -691,7 +859,7 @@ CATALOG: list[tuple[str, str, str]] = [
     ("search.loading", "搜索中...", "Searching…"),
     ("search.failed", "搜索失败", "Search failed"),
     ("search.error", "搜索出错: {message}", "Search error: {message}"),
-    ("search.noResults", "未找到匹配 \"{query}\" 的笔记", "No notes matching \"{query}\""),
+    ("search.noResults", '未找到匹配 "{query}" 的笔记', 'No notes matching "{query}"'),
     ("search.resultCount", "{count} 个结果", "{count} results"),
     ("search.resultTruncated", "前 50 个结果（共 {total} 个）", "Top 50 of {total} results"),
     ("editor.saveLoading", "加载中...", "Loading…"),
@@ -788,139 +956,223 @@ def patch_html() -> None:
     # Replace inner text with data-i18n on parent tags (clear hardcoded text)
     replacements = [
         ('<div class="tree-empty">暂无工作区</div>', '<div class="tree-empty" data-i18n="common.noWorkspace"></div>'),
-        ('<h2>待处理</h2>', '<h2 data-i18n="pending.title"></h2>'),
-        ('<span class="pending-view-count" id="pending-view-count">0 项</span>',
-         '<span class="pending-view-count" id="pending-view-count" data-i18n="common.pendingCount" data-i18n-count="0"></span>'),
-        ('<button type="button" class="pending-header-btn" id="pending-lint-run-btn"',
-         '<button type="button" class="pending-header-btn" id="pending-lint-run-btn" data-i18n="pending.healthCheck"'),
-        ('>健康检查</button>', '></button>'),
-        ('id="pending-cascade-retry-all-btn" title="重试所有综述更新失败项">全部重试综述</button>',
-         'id="pending-cascade-retry-all-btn" data-i18n-title="pending.retryAllSurveys" data-i18n="pending.retryAllSurveys"></button>'),
-        ('<p class="pending-view-hint">主题/链接确认、综述失败、转换失败与健康检查问题，统一在此处理。</p>',
-         '<p class="pending-view-hint" data-i18n="pending.hint"></p>'),
-        ('<div class="pending-view-empty">没有待处理的事项</div>',
-         '<div class="pending-view-empty" data-i18n="pending.empty"></div>'),
+        ("<h2>待处理</h2>", '<h2 data-i18n="pending.title"></h2>'),
+        (
+            '<span class="pending-view-count" id="pending-view-count">0 项</span>',
+            '<span class="pending-view-count" id="pending-view-count" data-i18n="common.pendingCount" data-i18n-count="0"></span>',
+        ),
+        (
+            '<button type="button" class="pending-header-btn" id="pending-lint-run-btn"',
+            '<button type="button" class="pending-header-btn" id="pending-lint-run-btn" data-i18n="pending.healthCheck"',
+        ),
+        (">健康检查</button>", "></button>"),
+        (
+            'id="pending-cascade-retry-all-btn" title="重试所有综述更新失败项">全部重试综述</button>',
+            'id="pending-cascade-retry-all-btn" data-i18n-title="pending.retryAllSurveys" data-i18n="pending.retryAllSurveys"></button>',
+        ),
+        (
+            '<p class="pending-view-hint">主题/链接确认、综述失败、转换失败与健康检查问题，统一在此处理。</p>',
+            '<p class="pending-view-hint" data-i18n="pending.hint"></p>',
+        ),
+        (
+            '<div class="pending-view-empty">没有待处理的事项</div>',
+            '<div class="pending-view-empty" data-i18n="pending.empty"></div>',
+        ),
         ('<div class="card-title">笔记整合</div>', '<div class="card-title" data-i18n="integrator.cardTitle"></div>'),
-        ('<span class="status-text">从Notes文件夹读取markdown文件，整合输出到Abstract文件夹</span>',
-         '<span class="status-text" data-i18n="integrator.statusLine"></span>'),
-        ('<div class="card-title">主题设置</div>', '<div class="card-title" data-i18n="integrator.topicSettings"></div>'),
-        ('<div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>',
-         '<div class="graph-empty" id="graph-empty" style="display:none;" data-i18n="graph.empty"></div>'),
-        ('<div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>',
-         '<div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>'),
-        ('<span class="ai-panel-header-title">小忆助手</span>',
-         '<span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>'),
-        ('<span class="ai-mode-badge" id="ai-mode-badge" title="在设置 → 小忆助手中切换">问答模式</span>',
-         '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>'),
-        ('<h2>设置</h2>', '<h2 data-i18n="settings.title"></h2>'),
-        ('<span id="ingest-pipeline-stage">入库</span>',
-         '<span class="ingest-label" id="ingest-pipeline-stage" data-i18n="ingest.label"></span>'),
+        (
+            '<span class="status-text">从Notes文件夹读取markdown文件，整合输出到Abstract文件夹</span>',
+            '<span class="status-text" data-i18n="integrator.statusLine"></span>',
+        ),
+        (
+            '<div class="card-title">主题设置</div>',
+            '<div class="card-title" data-i18n="integrator.topicSettings"></div>',
+        ),
+        (
+            '<div class="graph-empty" id="graph-empty" style="display:none;">暂无数据</div>',
+            '<div class="graph-empty" id="graph-empty" style="display:none;" data-i18n="graph.empty"></div>',
+        ),
+        (
+            '<div class="graph-loading" id="graph-loading" style="display:none;">加载中...</div>',
+            '<div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>',
+        ),
+        (
+            '<span class="ai-panel-header-title">小忆助手</span>',
+            '<span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>',
+        ),
+        (
+            '<span class="ai-mode-badge" id="ai-mode-badge" title="在设置 → 小忆助手中切换">问答模式</span>',
+            '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>',
+        ),
+        ("<h2>设置</h2>", '<h2 data-i18n="settings.title"></h2>'),
+        (
+            '<span id="ingest-pipeline-stage">入库</span>',
+            '<span class="ingest-label" id="ingest-pipeline-stage" data-i18n="ingest.label"></span>',
+        ),
     ]
     for old, new in replacements:
         if old in html:
             html = html.replace(old, new)
 
     html_replacements = [
-        ('<span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>',
-         '<span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>'),
-        ('<span class="sidebar-footer-status" id="sidebar-status-tags">0 个标签</span>',
-         '<span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>'),
-        ('<span class="sidebar-footer-status" id="sidebar-status-graph">0 个链接</span>',
-         '<span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>'),
-        ('<div class="form-label">主题个数（留空则自动选择）</div>',
-         '<div class="form-label" data-i18n="integrator.topicCount"></div>'),
-        ('<div class="form-label">点击提取主题，或手动输入（每行一个）</div>',
-         '<div class="form-label" data-i18n="integrator.topicListHint"></div>'),
+        (
+            '<span class="sidebar-footer-status" id="sidebar-status-tree">0 篇笔记</span>',
+            '<span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>',
+        ),
+        (
+            '<span class="sidebar-footer-status" id="sidebar-status-tags">0 个标签</span>',
+            '<span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>',
+        ),
+        (
+            '<span class="sidebar-footer-status" id="sidebar-status-graph">0 个链接</span>',
+            '<span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>',
+        ),
+        (
+            '<div class="form-label">主题个数（留空则自动选择）</div>',
+            '<div class="form-label" data-i18n="integrator.topicCount"></div>',
+        ),
+        (
+            '<div class="form-label">点击提取主题，或手动输入（每行一个）</div>',
+            '<div class="form-label" data-i18n="integrator.topicListHint"></div>',
+        ),
         ('placeholder="主题1&#10;主题2&#10;主题3"', 'data-i18n-placeholder="integrator.topicListPlaceholder"'),
-        ('title="提取主题：从网页内容中提取关键主题">提取主题</button>',
-         'data-i18n-title="integrator.extractTopicsHint" data-i18n="integrator.extractTopics"></button>'),
-        ('title="开始整合：将内容整合到笔记中">开始整合</button>',
-         'data-i18n-title="integrator.startHint" data-i18n="integrator.start"></button>'),
-        ('<span class="graph-stats-item"><span id="graph-stat-notes">0</span> 笔记</span>',
-         '<span class="graph-stats-item"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>'),
-        ('<span class="graph-stats-item"><span id="graph-stat-topics">0</span> 主题</span>',
-         '<span class="graph-stats-item"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>'),
-        ('title="一级/二级主题中有综述的占比">综述 ',
-         'data-i18n-title="graph.stats.surveyHint">综述 '),
-        ('title="每篇笔记平均出链数">均链 ',
-         'data-i18n-title="graph.stats.avgLinksHint">均链 '),
-        ('title="Lint 问题总数">Lint ',
-         'data-i18n-title="graph.stats.lintHint">Lint '),
-        ('<button class="graph-filter-btn active" data-filter="topic">主题</button>',
-         '<button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic"></button>'),
-        ('<button class="graph-filter-btn" data-filter="tag">标签</button>',
-         '<button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag"></button>'),
-        ('<button class="graph-filter-btn" data-filter="all">全部</button>',
-         '<button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all"></button>'),
-        ('<h3 id="graph-settings-title">布局参数</h3>',
-         '<h3 id="graph-settings-title" data-i18n="graph.layoutSettings"></h3>'),
-        ('<button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()">恢复默认</button>',
-         '<button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()" data-i18n="common.resetDefault"></button>'),
-        ('<button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()">应用</button>',
-         '<button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()" data-i18n="common.apply"></button>'),
-        ('<span class="pending-links-title">待确认链接</span>',
-         '<span class="pending-links-title" data-i18n="links.pendingTitle"></span>'),
-        ('onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll">全部确认</button>',
-         'onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>'),
-        ('<div class="pending-links-empty" id="pending-links-empty">暂无待确认链接</div>',
-         '<div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>'),
-        ('<div>选择文件以预览</div>',
-         '<div data-i18n="preview.selectFile"></div>'),
-        ('<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint">问答模式</span>',
-         '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>'),
-        ('<div class="form-field flex-1"><div class="form-label">模型</div>',
-         '<div class="form-field flex-1"><div class="form-label" data-i18n="settings.modelLabel"></div>'),
-        ('<div class="form-label">最大 Tokens</div>',
-         '<div class="form-label" data-i18n="settings.maxTokens"></div>'),
-        ('<div class="form-label">最大上下文</div>',
-         '<div class="form-label" data-i18n="settings.maxContext"></div>'),
-        ('<div class="form-label">思考链</div>',
-         '<div class="form-label" data-i18n="settings.thinkingChain"></div>'),
-        ('<button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button>',
-         '<button class="btn btn-primary" onclick="saveApiConfig()" data-i18n="settings.saveConfig"></button>'),
-        ('<div class="card-title">主题</div>',
-         '<div class="card-title" data-i18n="settings.theme"></div>'),
-        ('<span>浅色</span>', '<span data-i18n="settings.themeLight"></span>'),
-        ('<span>深色</span>', '<span data-i18n="settings.themeDark"></span>'),
-        ('<span>纸质</span>', '<span data-i18n="settings.themePaper"></span>'),
-        ('<span>跟随系统</span>', '<span data-i18n="settings.themeSystem"></span>'),
-        ('<span>小</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（默认）</span>',
-         '<span data-i18n="settings.fontSmall"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontSmallHint"></span>'),
-        ('<span>中</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（+2pt）</span>',
-         '<span data-i18n="settings.fontMedium"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontMediumHint"></span>'),
-        ('<span>大</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（+4pt）</span>',
-         '<span data-i18n="settings.fontLarge"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>'),
-        ('<div class="card-title">实验功能</div>',
-         '<div class="card-title" data-i18n="settings.experimental"></div>'),
-        ('<span>启用云盘同步（实验）</span>',
-         '<span data-i18n="settings.cloudSyncExperimental"></span>'),
-        ('<p class="settings-hint">默认关闭。开启后设置侧栏显示「云盘同步」。</p>',
-         '<p class="settings-hint" data-i18n="settings.cloudSyncExperimentalHint"></p>'),
-        ('<div class="download-modal-title">下载</div>',
-         '<div class="download-modal-title" data-i18n="download.title"></div>'),
-        ('<button type="button" class="multi-source-tab active" data-ms-tab="url">网页</button>',
-         '<button type="button" class="multi-source-tab active" data-ms-tab="url" data-i18n="download.tabWeb"></button>'),
-        ('<button type="button" class="multi-source-tab" data-ms-tab="rss">RSS</button>',
-         '<button type="button" class="multi-source-tab" data-ms-tab="rss" data-i18n="download.tabRss"></button>'),
-        ('<button type="button" class="multi-source-tab" data-ms-tab="transcript">转录</button>',
-         '<button type="button" class="multi-source-tab" data-ms-tab="transcript" data-i18n="download.tabTranscript"></button>'),
-        ('<label>条数 <input', '<label><span data-i18n="download.rssCount"></span> <input'),
-        ('<label><input type="checkbox" id="ms-rss-fetch" checked> 抓取原文</label>',
-         '<label><input type="checkbox" id="ms-rss-fetch" checked> <span data-i18n="download.rssFetch"></span></label>'),
-        ('id="ms-rss-import-btn">导入 RSS</button>',
-         'id="ms-rss-import-btn" data-i18n="download.importRss"></button>'),
-        ('id="ms-transcript-import-btn" style="margin-top:8px">保存转录</button>',
-         'id="ms-transcript-import-btn" style="margin-top:8px" data-i18n="download.saveTranscript"></button>'),
-        ('<span class="switch-label">包含图片的外部 URL 链接</span>',
-         '<span class="switch-label" data-i18n="download.includeImages"></span>'),
-        ('id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>',
-         'id="modal-download-btn" onclick="startDownloadFromModal()" data-i18n="download.start"></button>'),
+        (
+            'title="提取主题：从网页内容中提取关键主题">提取主题</button>',
+            'data-i18n-title="integrator.extractTopicsHint" data-i18n="integrator.extractTopics"></button>',
+        ),
+        (
+            'title="开始整合：将内容整合到笔记中">开始整合</button>',
+            'data-i18n-title="integrator.startHint" data-i18n="integrator.start"></button>',
+        ),
+        (
+            '<span class="graph-stats-item"><span id="graph-stat-notes">0</span> 笔记</span>',
+            '<span class="graph-stats-item"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>',
+        ),
+        (
+            '<span class="graph-stats-item"><span id="graph-stat-topics">0</span> 主题</span>',
+            '<span class="graph-stats-item"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>',
+        ),
+        ('title="一级/二级主题中有综述的占比">综述 ', 'data-i18n-title="graph.stats.surveyHint">综述 '),
+        ('title="每篇笔记平均出链数">均链 ', 'data-i18n-title="graph.stats.avgLinksHint">均链 '),
+        ('title="Lint 问题总数">Lint ', 'data-i18n-title="graph.stats.lintHint">Lint '),
+        (
+            '<button class="graph-filter-btn active" data-filter="topic">主题</button>',
+            '<button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic"></button>',
+        ),
+        (
+            '<button class="graph-filter-btn" data-filter="tag">标签</button>',
+            '<button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag"></button>',
+        ),
+        (
+            '<button class="graph-filter-btn" data-filter="all">全部</button>',
+            '<button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all"></button>',
+        ),
+        (
+            '<h3 id="graph-settings-title">布局参数</h3>',
+            '<h3 id="graph-settings-title" data-i18n="graph.layoutSettings"></h3>',
+        ),
+        (
+            '<button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()">恢复默认</button>',
+            '<button type="button" class="graph-settings-btn" onclick="graphResetLayoutSettings()" data-i18n="common.resetDefault"></button>',
+        ),
+        (
+            '<button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()">应用</button>',
+            '<button type="button" class="graph-settings-btn graph-settings-btn-primary" onclick="graphApplyLayoutSettings()" data-i18n="common.apply"></button>',
+        ),
+        (
+            '<span class="pending-links-title">待确认链接</span>',
+            '<span class="pending-links-title" data-i18n="links.pendingTitle"></span>',
+        ),
+        (
+            'onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll">全部确认</button>',
+            'onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>',
+        ),
+        (
+            '<div class="pending-links-empty" id="pending-links-empty">暂无待确认链接</div>',
+            '<div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>',
+        ),
+        ("<div>选择文件以预览</div>", '<div data-i18n="preview.selectFile"></div>'),
+        (
+            '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint">问答模式</span>',
+            '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>',
+        ),
+        (
+            '<div class="form-field flex-1"><div class="form-label">模型</div>',
+            '<div class="form-field flex-1"><div class="form-label" data-i18n="settings.modelLabel"></div>',
+        ),
+        ('<div class="form-label">最大 Tokens</div>', '<div class="form-label" data-i18n="settings.maxTokens"></div>'),
+        ('<div class="form-label">最大上下文</div>', '<div class="form-label" data-i18n="settings.maxContext"></div>'),
+        ('<div class="form-label">思考链</div>', '<div class="form-label" data-i18n="settings.thinkingChain"></div>'),
+        (
+            '<button class="btn btn-primary" onclick="saveApiConfig()">保存配置</button>',
+            '<button class="btn btn-primary" onclick="saveApiConfig()" data-i18n="settings.saveConfig"></button>',
+        ),
+        ('<div class="card-title">主题</div>', '<div class="card-title" data-i18n="settings.theme"></div>'),
+        ("<span>浅色</span>", '<span data-i18n="settings.themeLight"></span>'),
+        ("<span>深色</span>", '<span data-i18n="settings.themeDark"></span>'),
+        ("<span>纸质</span>", '<span data-i18n="settings.themePaper"></span>'),
+        ("<span>跟随系统</span>", '<span data-i18n="settings.themeSystem"></span>'),
+        (
+            '<span>小</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（默认）</span>',
+            '<span data-i18n="settings.fontSmall"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontSmallHint"></span>',
+        ),
+        (
+            '<span>中</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（+2pt）</span>',
+            '<span data-i18n="settings.fontMedium"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontMediumHint"></span>',
+        ),
+        (
+            '<span>大</span>\n                                        <span style="color:var(--text-muted);font-size:12px">（+4pt）</span>',
+            '<span data-i18n="settings.fontLarge"></span>\n                                        <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>',
+        ),
+        ('<div class="card-title">实验功能</div>', '<div class="card-title" data-i18n="settings.experimental"></div>'),
+        ("<span>启用云盘同步（实验）</span>", '<span data-i18n="settings.cloudSyncExperimental"></span>'),
+        (
+            '<p class="settings-hint">默认关闭。开启后设置侧栏显示「云盘同步」。</p>',
+            '<p class="settings-hint" data-i18n="settings.cloudSyncExperimentalHint"></p>',
+        ),
+        (
+            '<div class="download-modal-title">下载</div>',
+            '<div class="download-modal-title" data-i18n="download.title"></div>',
+        ),
+        (
+            '<button type="button" class="multi-source-tab active" data-ms-tab="url">网页</button>',
+            '<button type="button" class="multi-source-tab active" data-ms-tab="url" data-i18n="download.tabWeb"></button>',
+        ),
+        (
+            '<button type="button" class="multi-source-tab" data-ms-tab="rss">RSS</button>',
+            '<button type="button" class="multi-source-tab" data-ms-tab="rss" data-i18n="download.tabRss"></button>',
+        ),
+        (
+            '<button type="button" class="multi-source-tab" data-ms-tab="transcript">转录</button>',
+            '<button type="button" class="multi-source-tab" data-ms-tab="transcript" data-i18n="download.tabTranscript"></button>',
+        ),
+        ("<label>条数 <input", '<label><span data-i18n="download.rssCount"></span> <input'),
+        (
+            '<label><input type="checkbox" id="ms-rss-fetch" checked> 抓取原文</label>',
+            '<label><input type="checkbox" id="ms-rss-fetch" checked> <span data-i18n="download.rssFetch"></span></label>',
+        ),
+        ('id="ms-rss-import-btn">导入 RSS</button>', 'id="ms-rss-import-btn" data-i18n="download.importRss"></button>'),
+        (
+            'id="ms-transcript-import-btn" style="margin-top:8px">保存转录</button>',
+            'id="ms-transcript-import-btn" style="margin-top:8px" data-i18n="download.saveTranscript"></button>',
+        ),
+        (
+            '<span class="switch-label">包含图片的外部 URL 链接</span>',
+            '<span class="switch-label" data-i18n="download.includeImages"></span>',
+        ),
+        (
+            'id="modal-download-btn" onclick="startDownloadFromModal()">开始下载</button>',
+            'id="modal-download-btn" onclick="startDownloadFromModal()" data-i18n="download.start"></button>',
+        ),
         ('id="custom-confirm-cancel"', 'id="custom-confirm-cancel" data-i18n="confirm.cancel"'),
         ('id="custom-confirm-ok"', 'id="custom-confirm-ok" data-i18n="confirm.ok"'),
-        ('id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle">重试</button>',
-         'id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle" data-i18n="ingest.retry"></button>'),
-        ('id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle">取消</button>',
-         'id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle" data-i18n="common.cancel"></button>'),
+        (
+            'id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle">重试</button>',
+            'id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle" data-i18n="ingest.retry"></button>',
+        ),
+        (
+            'id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle">取消</button>',
+            'id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle" data-i18n="common.cancel"></button>',
+        ),
     ]
     for old, new in html_replacements:
         if old in html:
@@ -928,70 +1180,143 @@ def patch_html() -> None:
 
     # Settings tabs (rich HTML)
     settings_html = [
-        ('<div class="card-title">工作区 Schema</div>', '<div class="card-title" data-i18n="settings.schemaTitle"></div>'),
-        ('<p class="settings-hint">定义 AI 可写范围、主题层级与冲突策略（<code>schema.md</code>）。</p>',
-         '<p class="settings-hint" data-i18n="settings.schemaHint"></p>'),
-        ('id="settings-schema-wizard-btn">配置向导</button>', 'id="settings-schema-wizard-btn" data-i18n="settings.schemaWizardBtn"></button>'),
-        ('id="settings-schema-reload-btn">重新加载</button>', 'id="settings-schema-reload-btn" data-i18n="settings.schemaReloadBtn"></button>'),
+        (
+            '<div class="card-title">工作区 Schema</div>',
+            '<div class="card-title" data-i18n="settings.schemaTitle"></div>',
+        ),
+        (
+            '<p class="settings-hint">定义 AI 可写范围、主题层级与冲突策略（<code>schema.md</code>）。</p>',
+            '<p class="settings-hint" data-i18n="settings.schemaHint"></p>',
+        ),
+        (
+            'id="settings-schema-wizard-btn">配置向导</button>',
+            'id="settings-schema-wizard-btn" data-i18n="settings.schemaWizardBtn"></button>',
+        ),
+        (
+            'id="settings-schema-reload-btn">重新加载</button>',
+            'id="settings-schema-reload-btn" data-i18n="settings.schemaReloadBtn"></button>',
+        ),
         ('placeholder="schema.md 内容…"', 'data-i18n-placeholder="settings.schemaEditorPlaceholder"'),
-        ('id="settings-schema-save-btn" style="margin-top:12px">保存 Schema</button>',
-         'id="settings-schema-save-btn" style="margin-top:12px" data-i18n="settings.schemaSaveBtn"></button>'),
-        ('<div class="card-title">资料维护</div>', '<div class="card-title" data-i18n="settings.maintenanceTitle"></div>'),
-        ('<p class="settings-hint">重新转换 <code>Raw/</code> 下支持的 PDF、Word 等原件，生成 Markdown 笔记。</p>',
-         '<p class="settings-hint" data-i18n="settings.maintenanceHint"></p>'),
-        ('id="settings-raw-convert-btn">Raw 批量重转</button>', 'id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>'),
-        ('<div class="card-title">小忆助手</div>', '<div class="card-title" data-i18n="settings.assistantIntroTitle"></div>'),
-        ('<div class="card-title">助手模式</div>', '<div class="card-title" data-i18n="settings.agentModeTitle"></div>'),
-        ('<span class="settings-toggle-label">开启助手模式</span>', '<span class="settings-toggle-label" data-i18n="settings.agentModeLabel"></span>'),
-        ('<span class="settings-toggle-desc">关闭时仅问答与只读查询；开启后可新建主题、移动笔记、更新综述等</span>',
-         '<span class="settings-toggle-desc" data-i18n="settings.agentModeDesc"></span>'),
+        (
+            'id="settings-schema-save-btn" style="margin-top:12px">保存 Schema</button>',
+            'id="settings-schema-save-btn" style="margin-top:12px" data-i18n="settings.schemaSaveBtn"></button>',
+        ),
+        (
+            '<div class="card-title">资料维护</div>',
+            '<div class="card-title" data-i18n="settings.maintenanceTitle"></div>',
+        ),
+        (
+            '<p class="settings-hint">重新转换 <code>Raw/</code> 下支持的 PDF、Word 等原件，生成 Markdown 笔记。</p>',
+            '<p class="settings-hint" data-i18n="settings.maintenanceHint"></p>',
+        ),
+        (
+            'id="settings-raw-convert-btn">Raw 批量重转</button>',
+            'id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>',
+        ),
+        (
+            '<div class="card-title">小忆助手</div>',
+            '<div class="card-title" data-i18n="settings.assistantIntroTitle"></div>',
+        ),
+        (
+            '<div class="card-title">助手模式</div>',
+            '<div class="card-title" data-i18n="settings.agentModeTitle"></div>',
+        ),
+        (
+            '<span class="settings-toggle-label">开启助手模式</span>',
+            '<span class="settings-toggle-label" data-i18n="settings.agentModeLabel"></span>',
+        ),
+        (
+            '<span class="settings-toggle-desc">关闭时仅问答与只读查询；开启后可新建主题、移动笔记、更新综述等</span>',
+            '<span class="settings-toggle-desc" data-i18n="settings.agentModeDesc"></span>',
+        ),
         ('<div class="card-title">用户画像</div>', '<div class="card-title" data-i18n="settings.profileTitle"></div>'),
-        ('<p class="settings-hint">用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。</p>',
-         '<p class="settings-hint" data-i18n="settings.profileHint"></p>'),
-        ('placeholder="## 关于我&#10;&#10;- 职业：AI产品经理',
-         'data-i18n-placeholder="settings.profilePlaceholder" data-profile-placeholder="1" placeholder="## 关于我&#10;&#10;- 职业：AI产品经理'),
-        ('onclick="saveUserProfile()">保存画像</button>', 'onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>'),
+        (
+            '<p class="settings-hint">用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。</p>',
+            '<p class="settings-hint" data-i18n="settings.profileHint"></p>',
+        ),
+        (
+            'placeholder="## 关于我&#10;&#10;- 职业：AI产品经理',
+            'data-i18n-placeholder="settings.profilePlaceholder" data-profile-placeholder="1" placeholder="## 关于我&#10;&#10;- 职业：AI产品经理',
+        ),
+        (
+            'onclick="saveUserProfile()">保存画像</button>',
+            'onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>',
+        ),
         ('<div class="card-title">知识库索引</div>', '<div class="card-title" data-i18n="settings.indexTitle"></div>'),
-        ('<p class="settings-hint">问答依赖向量索引。日常入库会自动维护；若检索结果明显不对，可手动全量重建（耗时较长，请在工作区空闲时操作）。</p>',
-         '<p class="settings-hint" data-i18n="settings.indexHint"></p>'),
-        ('id="settings-assistant-rebuild-index-btn">重建知识库索引</button>',
-         'id="settings-assistant-rebuild-index-btn" data-i18n="settings.rebuildIndexBtn"></button>'),
-        ('<div class="card-title">操作记录</div>', '<div class="card-title" data-i18n="settings.activityLogTitle"></div>'),
-        ('<p class="settings-hint settings-activity-log-hint">工作区内 AI 与入库操作，写入 <code>wiki/log.md</code>。健康检查会自动删除断链、更新过时综述。</p>',
-         '<p class="settings-hint settings-activity-log-hint" data-i18n="settings.activityLogHint"></p>'),
-        ('<div class="settings-activity-log-empty">加载中…</div>',
-         '<div class="settings-activity-log-empty" data-i18n="settings.activityLogLoading"></div>'),
-        ('<p>NoteAI 是一款智能知识管理工具，帮助用户高效组织和管理 Markdown 笔记。</p>',
-         '<p data-i18n="settings.aboutDesc"></p>'),
-        ('<p style="margin-top:12px"><strong>功能：</strong></p>', '<p style="margin-top:12px"><strong data-i18n="settings.aboutFeatures"></strong></p>'),
-        ('<li>多层主题树知识图谱</li>', '<li data-i18n="settings.aboutFeature1"></li>'),
-        ('<li>AI 辅助写作与内容整合</li>', '<li data-i18n="settings.aboutFeature2"></li>'),
-        ('<li>网页内容下载与分析</li>', '<li data-i18n="settings.aboutFeature3"></li>'),
-        ('<li>标签与双向链接管理</li>', '<li data-i18n="settings.aboutFeature4"></li>'),
-        ('<p style="margin-top:16px"><strong>技术栈：</strong>Tauri v2 + Python Sidecar + D3.js</p>',
-         '<p style="margin-top:16px"><strong data-i18n="settings.aboutTech"></strong> <span data-i18n="settings.aboutTechLine"></span></p>'),
-        ('<p style="margin-top:8px">基于 Rust 构建桌面端，Python 提供 AI 能力，D3.js 渲染知识图谱。</p>',
-         '<p style="margin-top:8px" data-i18n="settings.aboutTechDesc"></p>'),
+        (
+            '<p class="settings-hint">问答依赖向量索引。日常入库会自动维护；若检索结果明显不对，可手动全量重建（耗时较长，请在工作区空闲时操作）。</p>',
+            '<p class="settings-hint" data-i18n="settings.indexHint"></p>',
+        ),
+        (
+            'id="settings-assistant-rebuild-index-btn">重建知识库索引</button>',
+            'id="settings-assistant-rebuild-index-btn" data-i18n="settings.rebuildIndexBtn"></button>',
+        ),
+        (
+            '<div class="card-title">操作记录</div>',
+            '<div class="card-title" data-i18n="settings.activityLogTitle"></div>',
+        ),
+        (
+            '<p class="settings-hint settings-activity-log-hint">工作区内 AI 与入库操作，写入 <code>wiki/log.md</code>。健康检查会自动删除断链、更新过时综述。</p>',
+            '<p class="settings-hint settings-activity-log-hint" data-i18n="settings.activityLogHint"></p>',
+        ),
+        (
+            '<div class="settings-activity-log-empty">加载中…</div>',
+            '<div class="settings-activity-log-empty" data-i18n="settings.activityLogLoading"></div>',
+        ),
+        (
+            "<p>NoteAI 是一款智能知识管理工具，帮助用户高效组织和管理 Markdown 笔记。</p>",
+            '<p data-i18n="settings.aboutDesc"></p>',
+        ),
+        (
+            '<p style="margin-top:12px"><strong>功能：</strong></p>',
+            '<p style="margin-top:12px"><strong data-i18n="settings.aboutFeatures"></strong></p>',
+        ),
+        ("<li>多层主题树知识图谱</li>", '<li data-i18n="settings.aboutFeature1"></li>'),
+        ("<li>AI 辅助写作与内容整合</li>", '<li data-i18n="settings.aboutFeature2"></li>'),
+        ("<li>网页内容下载与分析</li>", '<li data-i18n="settings.aboutFeature3"></li>'),
+        ("<li>标签与双向链接管理</li>", '<li data-i18n="settings.aboutFeature4"></li>'),
+        (
+            '<p style="margin-top:16px"><strong>技术栈：</strong>Tauri v2 + Python Sidecar + D3.js</p>',
+            '<p style="margin-top:16px"><strong data-i18n="settings.aboutTech"></strong> <span data-i18n="settings.aboutTechLine"></span></p>',
+        ),
+        (
+            '<p style="margin-top:8px">基于 Rust 构建桌面端，Python 提供 AI 能力，D3.js 渲染知识图谱。</p>',
+            '<p style="margin-top:8px" data-i18n="settings.aboutTechDesc"></p>',
+        ),
     ]
     for old, new in settings_html:
         if old in html:
             html = html.replace(old, new)
 
     assistant_intro = [
-        ('<p class="settings-hint">小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。</p>',
-         '<p class="settings-hint" data-i18n-html="settings.assistantIntro1"></p>'),
-        ('<p class="settings-hint" style="margin-top:8px">开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：</p>',
-         '<p class="settings-hint" style="margin-top:8px" data-i18n-html="settings.assistantIntro2"></p>'),
-        ('<li><strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测</li>',
-         '<li data-i18n-html="settings.assistantCap1"></li>'),
-        ('<li><strong>移动笔记</strong> — 把某篇笔记归到指定主题下</li>',
-         '<li data-i18n-html="settings.assistantCap2"></li>'),
-        ('<li><strong>更新综述</strong> — 为某个主题重新生成或刷新主题综述</li>',
-         '<li data-i18n-html="settings.assistantCap3"></li>'),
-        ('<li><strong>整理知识库</strong> — 在需要时触发入库流水线（转换、分类、索引等）</li>',
-         '<li data-i18n-html="settings.assistantCap4"></li>'),
-        ('<p class="settings-hint">问答模式下也可随时说「有哪些主题」「搜一下 xxx 相关的笔记」。助手模式会逐步执行写操作并在对话里显示进度。LLM 接口请在「模型」分页配置。</p>',
-         '<p class="settings-hint" data-i18n="settings.assistantIntro3"></p>'),
+        (
+            '<p class="settings-hint">小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。</p>',
+            '<p class="settings-hint" data-i18n-html="settings.assistantIntro1"></p>',
+        ),
+        (
+            '<p class="settings-hint" style="margin-top:8px">开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：</p>',
+            '<p class="settings-hint" style="margin-top:8px" data-i18n-html="settings.assistantIntro2"></p>',
+        ),
+        (
+            "<li><strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测</li>",
+            '<li data-i18n-html="settings.assistantCap1"></li>',
+        ),
+        (
+            "<li><strong>移动笔记</strong> — 把某篇笔记归到指定主题下</li>",
+            '<li data-i18n-html="settings.assistantCap2"></li>',
+        ),
+        (
+            "<li><strong>更新综述</strong> — 为某个主题重新生成或刷新主题综述</li>",
+            '<li data-i18n-html="settings.assistantCap3"></li>',
+        ),
+        (
+            "<li><strong>整理知识库</strong> — 在需要时触发入库流水线（转换、分类、索引等）</li>",
+            '<li data-i18n-html="settings.assistantCap4"></li>',
+        ),
+        (
+            '<p class="settings-hint">问答模式下也可随时说「有哪些主题」「搜一下 xxx 相关的笔记」。助手模式会逐步执行写操作并在对话里显示进度。LLM 接口请在「模型」分页配置。</p>',
+            '<p class="settings-hint" data-i18n="settings.assistantIntro3"></p>',
+        ),
     ]
     for old, new in assistant_intro:
         if old in html:
@@ -999,63 +1324,154 @@ def patch_html() -> None:
 
     # quick create modal
     qc = [
-        ('<span id="quick-create-title">快速新建</span>', '<span id="quick-create-title" data-i18n="quickCreate.title"></span>'),
-        ('<button type="button" class="qc-tab active" data-qc-tab="note">新建笔记</button>',
-         '<button type="button" class="qc-tab active" data-qc-tab="note" data-i18n="quickCreate.tabNote"></button>'),
-        ('<button type="button" class="qc-tab" data-qc-tab="topic">新建主题</button>',
-         '<button type="button" class="qc-tab" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>'),
+        (
+            '<span id="quick-create-title">快速新建</span>',
+            '<span id="quick-create-title" data-i18n="quickCreate.title"></span>',
+        ),
+        (
+            '<button type="button" class="qc-tab active" data-qc-tab="note">新建笔记</button>',
+            '<button type="button" class="qc-tab active" data-qc-tab="note" data-i18n="quickCreate.tabNote"></button>',
+        ),
+        (
+            '<button type="button" class="qc-tab" data-qc-tab="topic">新建主题</button>',
+            '<button type="button" class="qc-tab" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>',
+        ),
         ('<label class="qc-label">标题</label>', '<label class="qc-label" data-i18n="quickCreate.noteTitle"></label>'),
-        ('<label class="qc-label">主题（可选）</label>', '<label class="qc-label" data-i18n="quickCreate.noteTopic"></label>'),
-        ('<p class="qc-hint">未选主题时保存到 Notes/_未分类/</p>', '<p class="qc-hint" data-i18n="quickCreate.noteUncategorizedHint"></p>'),
-        ('id="qc-note-submit">创建并打开</button>', 'id="qc-note-submit" data-i18n="quickCreate.createAndOpen"></button>'),
-        ('<label class="qc-label">主题名称</label>', '<label class="qc-label" data-i18n="quickCreate.topicName"></label>'),
-        ('<label class="qc-label">上级主题（可选）</label>', '<label class="qc-label" data-i18n="quickCreate.topicParent"></label>'),
-        ('<p class="qc-hint">有上级时创建为「上级 &gt; 名称」</p>', '<p class="qc-hint" data-i18n="quickCreate.topicParentHint"></p>'),
-        ('id="qc-topic-submit">创建主题</button>', 'id="qc-topic-submit" data-i18n="quickCreate.createTopic"></button>'),
+        (
+            '<label class="qc-label">主题（可选）</label>',
+            '<label class="qc-label" data-i18n="quickCreate.noteTopic"></label>',
+        ),
+        (
+            '<p class="qc-hint">未选主题时保存到 Notes/_未分类/</p>',
+            '<p class="qc-hint" data-i18n="quickCreate.noteUncategorizedHint"></p>',
+        ),
+        (
+            'id="qc-note-submit">创建并打开</button>',
+            'id="qc-note-submit" data-i18n="quickCreate.createAndOpen"></button>',
+        ),
+        (
+            '<label class="qc-label">主题名称</label>',
+            '<label class="qc-label" data-i18n="quickCreate.topicName"></label>',
+        ),
+        (
+            '<label class="qc-label">上级主题（可选）</label>',
+            '<label class="qc-label" data-i18n="quickCreate.topicParent"></label>',
+        ),
+        (
+            '<p class="qc-hint">有上级时创建为「上级 &gt; 名称」</p>',
+            '<p class="qc-hint" data-i18n="quickCreate.topicParentHint"></p>',
+        ),
+        (
+            'id="qc-topic-submit">创建主题</button>',
+            'id="qc-topic-submit" data-i18n="quickCreate.createTopic"></button>',
+        ),
     ]
     for old, new in qc:
         if old in html:
             html = html.replace(old, new)
 
     schema_html = [
-        ('<h3>配置工作区 Schema</h3>', '<h3 data-i18n="schemaWizard.modalTitle"></h3>'),
-        ('<h4>这个工作区主要做什么？</h4>', '<h4 data-i18n="schemaWizard.stepPurpose"></h4>'),
-        ('<p class="hint">决定目录说明与整理语气的默认表述。</p>', '<p class="hint" data-i18n="schemaWizard.stepPurposeHint"></p>'),
-        ('<span>个人知识库 — 长期积累、学习笔记</span>', '<span data-i18n="schemaWizard.purposePersonal"></span>'),
-        ('<span>项目文档库 — 围绕单一产品/课题</span>', '<span data-i18n="schemaWizard.purposeProject"></span>'),
-        ('<span>研究资料库 — 论文、报告、摘录为主</span>', '<span data-i18n="schemaWizard.purposeResearch"></span>'),
-        ('<h4>关注哪些知识领域？</h4>', '<h4 data-i18n="schemaWizard.stepDomains"></h4>'),
-        ('<p class="hint">可多选，将生成一级主题示例（可在 project_rules 中再改）。</p>', '<p class="hint" data-i18n="schemaWizard.stepDomainsHint"></p>'),
-        ('value="rag" checked> RAG 与检索</label>', 'value="rag" checked> <span data-i18n="schemaWizard.domainRag"></span></label>'),
-        ('value="product" checked> AI 产品</label>', 'value="product" checked> <span data-i18n="schemaWizard.domainProduct"></span></label>'),
+        ("<h3>配置工作区 Schema</h3>", '<h3 data-i18n="schemaWizard.modalTitle"></h3>'),
+        ("<h4>这个工作区主要做什么？</h4>", '<h4 data-i18n="schemaWizard.stepPurpose"></h4>'),
+        (
+            '<p class="hint">决定目录说明与整理语气的默认表述。</p>',
+            '<p class="hint" data-i18n="schemaWizard.stepPurposeHint"></p>',
+        ),
+        ("<span>个人知识库 — 长期积累、学习笔记</span>", '<span data-i18n="schemaWizard.purposePersonal"></span>'),
+        ("<span>项目文档库 — 围绕单一产品/课题</span>", '<span data-i18n="schemaWizard.purposeProject"></span>'),
+        ("<span>研究资料库 — 论文、报告、摘录为主</span>", '<span data-i18n="schemaWizard.purposeResearch"></span>'),
+        ("<h4>关注哪些知识领域？</h4>", '<h4 data-i18n="schemaWizard.stepDomains"></h4>'),
+        (
+            '<p class="hint">可多选，将生成一级主题示例（可在 project_rules 中再改）。</p>',
+            '<p class="hint" data-i18n="schemaWizard.stepDomainsHint"></p>',
+        ),
+        (
+            'value="rag" checked> RAG 与检索</label>',
+            'value="rag" checked> <span data-i18n="schemaWizard.domainRag"></span></label>',
+        ),
+        (
+            'value="product" checked> AI 产品</label>',
+            'value="product" checked> <span data-i18n="schemaWizard.domainProduct"></span></label>',
+        ),
         ('value="llm"> 大模型应用</label>', 'value="llm"> <span data-i18n="schemaWizard.domainLlm"></span></label>'),
-        ('value="tools"> 工具与效率</label>', 'value="tools"> <span data-i18n="schemaWizard.domainTools"></span></label>'),
-        ('value="career"> 职业成长</label>', 'value="career"> <span data-i18n="schemaWizard.domainCareer"></span></label>'),
-        ('placeholder="其他一级主题，逗号分隔，如：产品设计, 开源社区"', 'data-i18n-placeholder="schemaWizard.customDomainsPlaceholder"'),
-        ('<h4>主题层级与语言</h4>', '<h4 data-i18n="schemaWizard.stepDepth"></h4>'),
-        ('<p class="hint">对应 `Notes/` 文件夹深度与命名习惯。</p>', '<p class="hint" data-i18n="schemaWizard.stepDepthHint"></p>'),
-        ('<span>以两级为主（一级 &gt; 二级）</span>', '<span data-i18n="schemaWizard.depth2"></span>'),
-        ('<span>标准三级（一级 &gt; 二级 &gt; 三级）</span>', '<span data-i18n="schemaWizard.depth3"></span>'),
-        ('<span>中文优先（文件名、标签、主题）</span>', '<span data-i18n="schemaWizard.langZh"></span>'),
-        ('<span>中英混合（专有名词保留英文）</span>', '<span data-i18n="schemaWizard.langMixed"></span>'),
-        ('<h4>整理习惯</h4>', '<h4 data-i18n="schemaWizard.stepHabits"></h4>'),
-        ('<p class="hint">写入 schema.md，约束 AI 自动整理行为。</p>', '<p class="hint" data-i18n="schemaWizard.stepHabitsHint"></p>'),
-        ('value="folder_truth" checked> 文件夹路径是主题唯一依据</label>', 'value="folder_truth" checked> <span data-i18n="schemaWizard.habitFolderTruth"></span></label>'),
-        ('value="pending" checked> 不确定分类 → 待办，不硬塞</label>', 'value="pending" checked> <span data-i18n="schemaWizard.habitPending"></span></label>'),
-        ('value="survey_only" checked> 级联只更新综述，不改笔记正文</label>', 'value="survey_only" checked> <span data-i18n="schemaWizard.habitSurveyOnly"></span></label>'),
-        ('value="auto_convert" checked> 自动转换 PDF/DOCX 等</label>', 'value="auto_convert" checked> <span data-i18n="schemaWizard.habitAutoConvert"></span></label>'),
-        ('value="tags_cn" checked> 标签 2～5 个，中文优先</label>', 'value="tags_cn" checked> <span data-i18n="schemaWizard.habitTagsCn"></span></label>'),
-        ('<h4>确认生成的 schema.md</h4>', '<h4 data-i18n="schemaWizard.stepConfirm"></h4>'),
-        ('<p class="hint">将保存到工作区根目录，并同步生成 project_rules.md。</p>', '<p class="hint" data-i18n="schemaWizard.stepConfirmHint"></p>'),
-        ('id="schema-wizard-use-default">使用推荐默认</button>', 'id="schema-wizard-use-default" data-i18n="schemaWizard.useDefault"></button>'),
+        (
+            'value="tools"> 工具与效率</label>',
+            'value="tools"> <span data-i18n="schemaWizard.domainTools"></span></label>',
+        ),
+        (
+            'value="career"> 职业成长</label>',
+            'value="career"> <span data-i18n="schemaWizard.domainCareer"></span></label>',
+        ),
+        (
+            'placeholder="其他一级主题，逗号分隔，如：产品设计, 开源社区"',
+            'data-i18n-placeholder="schemaWizard.customDomainsPlaceholder"',
+        ),
+        ("<h4>主题层级与语言</h4>", '<h4 data-i18n="schemaWizard.stepDepth"></h4>'),
+        (
+            '<p class="hint">对应 `Notes/` 文件夹深度与命名习惯。</p>',
+            '<p class="hint" data-i18n="schemaWizard.stepDepthHint"></p>',
+        ),
+        ("<span>以两级为主（一级 &gt; 二级）</span>", '<span data-i18n="schemaWizard.depth2"></span>'),
+        ("<span>标准三级（一级 &gt; 二级 &gt; 三级）</span>", '<span data-i18n="schemaWizard.depth3"></span>'),
+        ("<span>中文优先（文件名、标签、主题）</span>", '<span data-i18n="schemaWizard.langZh"></span>'),
+        ("<span>中英混合（专有名词保留英文）</span>", '<span data-i18n="schemaWizard.langMixed"></span>'),
+        ("<h4>整理习惯</h4>", '<h4 data-i18n="schemaWizard.stepHabits"></h4>'),
+        (
+            '<p class="hint">写入 schema.md，约束 AI 自动整理行为。</p>',
+            '<p class="hint" data-i18n="schemaWizard.stepHabitsHint"></p>',
+        ),
+        (
+            'value="folder_truth" checked> 文件夹路径是主题唯一依据</label>',
+            'value="folder_truth" checked> <span data-i18n="schemaWizard.habitFolderTruth"></span></label>',
+        ),
+        (
+            'value="pending" checked> 不确定分类 → 待办，不硬塞</label>',
+            'value="pending" checked> <span data-i18n="schemaWizard.habitPending"></span></label>',
+        ),
+        (
+            'value="survey_only" checked> 级联只更新综述，不改笔记正文</label>',
+            'value="survey_only" checked> <span data-i18n="schemaWizard.habitSurveyOnly"></span></label>',
+        ),
+        (
+            'value="auto_convert" checked> 自动转换 PDF/DOCX 等</label>',
+            'value="auto_convert" checked> <span data-i18n="schemaWizard.habitAutoConvert"></span></label>',
+        ),
+        (
+            'value="tags_cn" checked> 标签 2～5 个，中文优先</label>',
+            'value="tags_cn" checked> <span data-i18n="schemaWizard.habitTagsCn"></span></label>',
+        ),
+        ("<h4>确认生成的 schema.md</h4>", '<h4 data-i18n="schemaWizard.stepConfirm"></h4>'),
+        (
+            '<p class="hint">将保存到工作区根目录，并同步生成 project_rules.md。</p>',
+            '<p class="hint" data-i18n="schemaWizard.stepConfirmHint"></p>',
+        ),
+        (
+            'id="schema-wizard-use-default">使用推荐默认</button>',
+            'id="schema-wizard-use-default" data-i18n="schemaWizard.useDefault"></button>',
+        ),
         ('id="schema-wizard-back">上一步</button>', 'id="schema-wizard-back" data-i18n="schemaWizard.back"></button>'),
         ('id="schema-wizard-next">下一步</button>', 'id="schema-wizard-next" data-i18n="schemaWizard.next"></button>'),
-        ('id="schema-wizard-save" style="display:none">完成并保存</button>', 'id="schema-wizard-save" style="display:none" data-i18n="schemaWizard.finish"></button>'),
-        ('<h3>项目规则</h3>', '<h3 data-i18n="projectRules.title"></h3>'),
-        ('<p class="modal-desc">定义此工作区的项目规则，AI 在回答问题时会参考这些规则。</p>', '<p class="modal-desc" data-i18n="projectRules.desc"></p>'),
-        ('placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库', 'data-i18n-placeholder="projectRules.placeholder" placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库'),
-        ('onclick="closeProjectRulesModal()">跳过</button>', 'onclick="closeProjectRulesModal()" data-i18n="common.skip"></button>'),
-        ('onclick="saveProjectRulesModal()">保存规则</button>', 'onclick="saveProjectRulesModal()" data-i18n="projectRules.save"></button>'),
+        (
+            'id="schema-wizard-save" style="display:none">完成并保存</button>',
+            'id="schema-wizard-save" style="display:none" data-i18n="schemaWizard.finish"></button>',
+        ),
+        ("<h3>项目规则</h3>", '<h3 data-i18n="projectRules.title"></h3>'),
+        (
+            '<p class="modal-desc">定义此工作区的项目规则，AI 在回答问题时会参考这些规则。</p>',
+            '<p class="modal-desc" data-i18n="projectRules.desc"></p>',
+        ),
+        (
+            'placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库',
+            'data-i18n-placeholder="projectRules.placeholder" placeholder="## 项目规则&#10;&#10;- 本项目是关于 XXX 的知识库',
+        ),
+        (
+            'onclick="closeProjectRulesModal()">跳过</button>',
+            'onclick="closeProjectRulesModal()" data-i18n="common.skip"></button>',
+        ),
+        (
+            'onclick="saveProjectRulesModal()">保存规则</button>',
+            'onclick="saveProjectRulesModal()" data-i18n="projectRules.save"></button>',
+        ),
     ]
     for old, new in schema_html:
         if old in html:
@@ -1085,14 +1501,17 @@ def patch_html() -> None:
         'data-tab="about"><svg': 'data-tab="about" data-i18n="settings.nav.about"><svg',
     }
     # simpler: add data-i18n to span inside nav buttons
-    html = html.replace('<span>模型</span>', '<span data-i18n="settings.nav.model"></span>')
-    html = html.replace('<span>界面</span>', '<span data-i18n="settings.nav.ui"></span>')
-    html = html.replace('<button class="settings-nav-btn" data-tab="assistant">', '<button class="settings-nav-btn" data-tab="assistant">')
-    html = html.replace('<span>小忆助手</span>', '<span data-i18n="settings.nav.assistant"></span>', 1)
-    html = html.replace('<span>操作记录</span>', '<span data-i18n="settings.nav.activityLog"></span>')
-    html = html.replace('<span>Schema</span>', '<span data-i18n="settings.nav.schema"></span>')
-    html = html.replace('<span>关于</span>', '<span data-i18n="settings.nav.about"></span>')
-    html = html.replace('<span>云盘同步</span>', '<span data-i18n="settings.nav.cloudSync"></span>')
+    html = html.replace("<span>模型</span>", '<span data-i18n="settings.nav.model"></span>')
+    html = html.replace("<span>界面</span>", '<span data-i18n="settings.nav.ui"></span>')
+    html = html.replace(
+        '<button class="settings-nav-btn" data-tab="assistant">',
+        '<button class="settings-nav-btn" data-tab="assistant">',
+    )
+    html = html.replace("<span>小忆助手</span>", '<span data-i18n="settings.nav.assistant"></span>', 1)
+    html = html.replace("<span>操作记录</span>", '<span data-i18n="settings.nav.activityLog"></span>')
+    html = html.replace("<span>Schema</span>", '<span data-i18n="settings.nav.schema"></span>')
+    html = html.replace("<span>关于</span>", '<span data-i18n="settings.nav.about"></span>')
+    html = html.replace("<span>云盘同步</span>", '<span data-i18n="settings.nav.cloudSync"></span>')
 
     # Remove broken text_map block - use targeted replacements above
     _ = nav_map
@@ -1133,9 +1552,19 @@ def flatten(d: dict, prefix: str = "") -> dict[str, str]:
 def patch_js_whole_literals(flat: dict[str, str]) -> int:
     """Replace only whole 'text' / \"text\" literals on UI lines."""
     ui_markers = (
-        "innerHTML", "textContent", "placeholder", ".title", "showStatus",
-        "updateStatus", "alert(", "confirm(", "ToastModule", "setSidebarStatus",
-        "aria-label", "badge.textContent", "btn.textContent",
+        "innerHTML",
+        "textContent",
+        "placeholder",
+        ".title",
+        "showStatus",
+        "updateStatus",
+        "alert(",
+        "confirm(",
+        "ToastModule",
+        "setSidebarStatus",
+        "aria-label",
+        "badge.textContent",
+        "btn.textContent",
     )
     text_to_key = {v: k for k, v in flat.items() if v and len(v) >= 2}
     items = sorted(text_to_key.items(), key=lambda x: -len(x[0]))
@@ -1172,9 +1601,10 @@ def patch_js_whole_literals(flat: dict[str, str]) -> int:
 def merge_auto_js_strings(zh: dict, en: dict) -> None:
     """Add remaining JS UI strings from auto-extraction under module.auto.* keys."""
     import sys
+
     sys.path.insert(0, str(ROOT / "scripts"))
-    from generate_i18n import extract_js_strings, _module_prefix, _slug  # noqa: WPS433
     from apply_i18n import translate_zh_to_en as zh_to_en  # noqa: WPS433
+    from generate_i18n import _module_prefix, _slug, extract_js_strings  # noqa: WPS433
 
     counters: dict[str, int] = {}
     seen_values: set[str] = set()

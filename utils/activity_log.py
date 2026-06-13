@@ -23,17 +23,20 @@ def get_entries(limit: int = 100) -> list[dict]:
             ts = datetime.strptime(ts_text, "%Y-%m-%d %H:%M:%S").timestamp()
         except ValueError:
             ts = time.time()
-        out.append({
-            "ts": ts,
-            "type": row.get("type", "event"),
-            "msg": row.get("msg", ""),
-            "detail": row.get("detail", ""),
-        })
+        out.append(
+            {
+                "ts": ts,
+                "type": row.get("type", "event"),
+                "msg": row.get("msg", ""),
+                "detail": row.get("detail", ""),
+            }
+        )
     return out
 
 
 def clear_log() -> None:
     from utils.workspace_log import log_path
+
     p = log_path()
     if p and p.exists():
         p.unlink(missing_ok=True)

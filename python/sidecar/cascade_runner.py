@@ -54,12 +54,14 @@ def save_cascade_failures(items: list[dict]) -> None:
 def record_cascade_failure(topic: str, error: str) -> None:
     items = load_cascade_failures()
     items = [x for x in items if x.get("topic") != topic]
-    items.append({
-        "topic": topic,
-        "error": error,
-        "ts": time.time(),
-        "retries": MAX_RETRIES,
-    })
+    items.append(
+        {
+            "topic": topic,
+            "error": error,
+            "ts": time.time(),
+            "retries": MAX_RETRIES,
+        }
+    )
     save_cascade_failures(items)
 
 
@@ -86,14 +88,16 @@ def run_cascade_survey_update(
         if on_chunk:
             on_chunk(token)
         if send_response:
-            send_response({
-                "id": "event",
-                "result": {
-                    "type": "cascade_survey_chunk",
-                    "topic": topic,
-                    "token": token,
-                },
-            })
+            send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "cascade_survey_chunk",
+                        "topic": topic,
+                        "token": token,
+                    },
+                }
+            )
 
     last_error = ""
     result: dict = {"success": False, "message": "未执行"}
@@ -195,11 +199,13 @@ def _emit_done(
     payload = dict(data or {})
     payload.setdefault("success", success)
     payload.setdefault("message", message)
-    send_response({
-        "id": "event",
-        "result": {
-            "type": "cascade_done",
-            "topic": topic,
-            "data": payload,
-        },
-    })
+    send_response(
+        {
+            "id": "event",
+            "result": {
+                "type": "cascade_done",
+                "topic": topic,
+                "data": payload,
+            },
+        }
+    )

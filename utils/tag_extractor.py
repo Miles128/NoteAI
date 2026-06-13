@@ -1,56 +1,57 @@
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Tuple
+from typing import Any
 
 from config import is_ignored_dir
 from utils.logger import logger
 from utils.text_utils import (
-    is_chinese_word,
-    is_english_word,
-    tokenize_filename,
     CHINESE_STOPWORDS,
     OCCURRENCE_THRESHOLD,
     _count_tag_occurrence,
-    _normalize_for_match,
     _is_generic_word,
+    _normalize_for_match,
+    is_chinese_word,
+    is_english_word,
     parse_frontmatter,
+    tokenize_filename,
 )
 
 try:
     import yaml
+
     PYYAML_AVAILABLE = True
 except ImportError:
     yaml = None
     PYYAML_AVAILABLE = False
 
 
-def _collect_workspace_md_filenames(workspace_path: str) -> List[str]:
+def _collect_workspace_md_filenames(workspace_path: str) -> list[str]:
     """收集 Notes、Organized、Used 文件夹中所有 MD 文件的文件名（只读文件名，不读内容）
-    
+
     Args:
         workspace_path: 工作区根路径
-    
+
     Returns:
         所有 md 文件的文件名列表（不含路径）
     """
     workspace = Path(workspace_path)
     filenames = []
-    
-    for folder_name in ['Notes', 'Abstract', 'Used']:
+
+    for folder_name in ["Notes", "Abstract", "Used"]:
         folder = workspace / folder_name
         if not folder.exists():
             continue
-        md_files = [f for f in folder.rglob('*.md') if not f.name.startswith('.')]
+        md_files = [f for f in folder.rglob("*.md") if not f.name.startswith(".")]
         for md_file in md_files:
             filenames.append(md_file.name)
-    
+
     return filenames
 
 
-def _generate_english_pairs(english_words: List[str]) -> List[str]:
+def _generate_english_pairs(english_words: list[str]) -> list[str]:
     """生成相邻英文单词的组合
-    
+
     例如: ["Machine", "Learning"] -> ["MachineLearning", "Machine Learning"]
     """
     pairs = []
@@ -64,7 +65,7 @@ def _generate_english_pairs(english_words: List[str]) -> List[str]:
     return pairs
 
 
-def _is_word_in_accepted_pair(word: str, accepted_pairs: List[str], case_insensitive: bool = True) -> bool:
+def _is_word_in_accepted_pair(word: str, accepted_pairs: list[str], case_insensitive: bool = True) -> bool:
     """检查单词是否已被包含在已接受的双词组合中（忽略空格）
 
     例如: "Machine" 在 "MachineLearning" 或 "Machine Learning" 中则返回 True
@@ -76,7 +77,7 @@ def _is_word_in_accepted_pair(word: str, accepted_pairs: List[str], case_insensi
     return False
 
 
-def split_filename_fields(filename: str) -> List[str]:
+def split_filename_fields(filename: str) -> list[str]:
     """将文件名字段按分隔符拆分为独立的字段列表
 
     示例：
@@ -86,13 +87,13 @@ def split_filename_fields(filename: str) -> List[str]:
         "设计模式——观察者模式.md" → ["设计模式", "观察者模式"]
     """
     stem = Path(filename).stem
-    parts = re.split(r'[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+', stem)
+    parts = re.split(r"[-_\s——·|/\\\[\]【】：:，,。.！!？?、]+", stem)
     return [p.strip() for p in parts if p.strip()]
 
 
-def extract_tags_from_filename(file_path: str) -> List[str]:
+def extract_tags_from_filename(file_path: str) -> list[str]:
     """基于文件名分词提取标签
-    
+
     算法：
     1. 使用 jieba 对当前文件的文件名进行分词
     2. 按优先级处理：
@@ -100,42 +101,42 @@ def extract_tags_from_filename(file_path: str) -> List[str]:
        b. 英文单词：单个英文单词，若未被包含在已接受的双词组合中，且出现次数 > 3 则加入
        c. 中文单词：排除中文停用词，出现次数 > 3 则加入
     3. 只对比文件名，不读取文件内容
-    
+
     Args:
         file_path: 待打标签的文件路径
-    
+
     Returns:
         标签字符串列表
     """
     from config import config
-    
+
     if not config.workspace_path:
         return []
-    
+
     file_path_obj = Path(file_path)
-    
+
     tokens = tokenize_filename(file_path_obj.name)
-    
+
     if not tokens:
         return []
-    
+
     workspace_filenames = _collect_workspace_md_filenames(config.workspace_path)
-    
+
     if not workspace_filenames:
         return []
-    
+
     english_words = []
     chinese_words = []
-    
+
     for token in tokens:
         if is_english_word(token):
             english_words.append(token)
         elif is_chinese_word(token):
             chinese_words.append(token)
-    
+
     tags = []
     accepted_english_pairs = []
-    
+
     if len(english_words) >= 2:
         pairs = _generate_english_pairs(english_words)
         seen_pairs = set()
@@ -147,21 +148,21 @@ def extract_tags_from_filename(file_path: str) -> List[str]:
             if count > OCCURRENCE_THRESHOLD:
                 tags.append(pair)
                 accepted_english_pairs.append(pair)
-    
+
     for word in english_words:
         if _is_word_in_accepted_pair(word, accepted_english_pairs):
             continue
         count = _count_tag_occurrence(word, workspace_filenames)
         if count > OCCURRENCE_THRESHOLD:
             tags.append(word)
-    
+
     for word in chinese_words:
         if word in CHINESE_STOPWORDS:
             continue
         count = _count_tag_occurrence(word, workspace_filenames)
         if count > OCCURRENCE_THRESHOLD:
             tags.append(word)
-    
+
     seen = set()
     unique_tags = []
     for tag in tags:
@@ -173,18 +174,18 @@ def extract_tags_from_filename(file_path: str) -> List[str]:
     return unique_tags
 
 
-def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
+def tag_files_by_filename(file_paths: list[str]) -> dict[str, list[str]]:
     """对一批 Markdown 文件基于文件名分词提取标签并添加 YAML front matter
-    
+
     Args:
         file_paths: Markdown 文件路径列表
-    
+
     Returns:
         {文件路径: 标签列表} 字典
     """
     if not file_paths:
         return {}
-    
+
     results = {}
     for fp in file_paths:
         try:
@@ -194,18 +195,18 @@ def tag_files_by_filename(file_paths: List[str]) -> Dict[str, List[str]]:
                 results[fp] = tags
         except Exception as e:
             logger.warning(f"[tag_files_by_filename] 处理失败 {fp}: {e}\n")
-    
+
     return results
 
 
 def _parse_yaml_value_simple(value: str) -> Any:
     """简单的 YAML 值解析器（fallback，用于没有 PyYAML 时）"""
     value = value.strip()
-    
+
     if not value:
         return None
-    
-    if value.startswith('[') and value.endswith(']'):
+
+    if value.startswith("[") and value.endswith("]"):
         list_content = value[1:-1].strip()
         if not list_content:
             return []
@@ -222,7 +223,7 @@ def _parse_yaml_value_simple(value: str) -> Any:
                     in_quotes = c
                 else:
                     current += c
-            elif c == ',' and in_quotes is None:
+            elif c == "," and in_quotes is None:
                 items.append(current.strip())
                 current = ""
             else:
@@ -234,24 +235,24 @@ def _parse_yaml_value_simple(value: str) -> Any:
         for item in items:
             item = item.strip()
             if item.startswith('"') and item.endswith('"'):
-                item = item[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+                item = item[1:-1].replace('\\"', '"').replace("\\\\", "\\")
             elif item.startswith("'") and item.endswith("'"):
-                item = item[1:-1].replace("\\'", "'").replace('\\\\', '\\')
+                item = item[1:-1].replace("\\'", "'").replace("\\\\", "\\")
             result.append(item)
         return result
-    
+
     if value.startswith('"') and value.endswith('"'):
-        return value[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
     if value.startswith("'") and value.endswith("'"):
-        return value[1:-1].replace("\\'", "'").replace('\\\\', '\\')
-    
-    if value.lower() == 'true':
+        return value[1:-1].replace("\\'", "'").replace("\\\\", "\\")
+
+    if value.lower() == "true":
         return True
-    if value.lower() == 'false':
+    if value.lower() == "false":
         return False
-    if value.lower() == 'null':
+    if value.lower() == "null":
         return None
-    
+
     try:
         return int(value)
     except ValueError as e:
@@ -260,27 +261,27 @@ def _parse_yaml_value_simple(value: str) -> Any:
         return float(value)
     except ValueError as e:
         logger.warning(f"[_parse_yaml] float conversion failed: {e}")
-    
+
     return value
 
 
-def _parse_yaml_frontmatter_simple(content: str) -> Dict[str, Any]:
+def _parse_yaml_frontmatter_simple(content: str) -> dict[str, Any]:
     """简单的 YAML front matter 解析器（fallback，PyYAML 不可用时使用）"""
     result = {}
-    lines = content.strip().split('\n')
-    
+    lines = content.strip().split("\n")
+
     for line in lines:
         line = line.strip()
-        if not line or line.startswith('#'):
+        if not line or line.startswith("#"):
             continue
-        
+
         # 只在 "key: value" 格式匹配（value 不能为空，确保不误匹配无冒号行或空值行）
-        m = re.match(r'^([\w_-]+)\s*:\s+(.+)', line)
+        m = re.match(r"^([\w_-]+)\s*:\s+(.+)", line)
         if m:
             key = m.group(1)
             value = m.group(2)
             result[key] = _parse_yaml_value_simple(value)
-    
+
     return result
 
 
@@ -288,134 +289,154 @@ def _escape_yaml_string(value: str) -> str:
     """转义YAML字符串中的特殊字符"""
     if not value:
         return '""'
-    
+
     needs_quoting = False
-    special_chars = ['"', '\\', '\n', '\r', '\t', '#', ': ', '[', ']', '{', '}', ',', '*', '&', '!', '|', '>', '%', '@', '`']
-    
+    special_chars = [
+        '"',
+        "\\",
+        "\n",
+        "\r",
+        "\t",
+        "#",
+        ": ",
+        "[",
+        "]",
+        "{",
+        "}",
+        ",",
+        "*",
+        "&",
+        "!",
+        "|",
+        ">",
+        "%",
+        "@",
+        "`",
+    ]
+
     for char in special_chars:
         if char in value:
             needs_quoting = True
             break
-    
-    if value.startswith((' ', '-', '?', ':')) or value.endswith(' '):
+
+    if value.startswith((" ", "-", "?", ":")) or value.endswith(" "):
         needs_quoting = True
-    
+
     if not needs_quoting:
         return value
-    
-    value = value.replace('\\', '\\\\')
+
+    value = value.replace("\\", "\\\\")
     value = value.replace('"', '\\"')
-    value = value.replace('\n', '\\n')
-    value = value.replace('\r', '\\r')
-    value = value.replace('\t', '\\t')
-    
+    value = value.replace("\n", "\\n")
+    value = value.replace("\r", "\\r")
+    value = value.replace("\t", "\\t")
+
     return f'"{value}"'
 
 
 def _format_yaml_value(value: Any) -> str:
     """格式化YAML值，根据类型选择合适的表示方式"""
     if value is None:
-        return 'null'
-    elif isinstance(value, bool):
-        return 'true' if value else 'false'
-    elif isinstance(value, (int, float)):
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
         return str(value)
-    elif isinstance(value, list):
+    if isinstance(value, list):
         if not value:
-            return '[]'
-        items = ', '.join(_escape_yaml_string(str(item)) for item in value)
-        return f'[{items}]'
-    elif isinstance(value, datetime):
-        return _escape_yaml_string(value.strftime('%Y-%m-%d'))
-    else:
-        return _escape_yaml_string(str(value))
+            return "[]"
+        items = ", ".join(_escape_yaml_string(str(item)) for item in value)
+        return f"[{items}]"
+    if isinstance(value, datetime):
+        return _escape_yaml_string(value.strftime("%Y-%m-%d"))
+    return _escape_yaml_string(str(value))
 
 
 def generate_yaml_frontmatter(
     title: str = "",
-    tags: List[str] = None,
+    tags: list[str] = None,
     date: datetime = None,
     source: str = "",
-    extra_fields: Dict[str, Any] = None
+    extra_fields: dict[str, Any] = None,
 ) -> str:
     """生成标准的 YAML front matter（仅包含 tags 和 source）
-    
+
     参数：
         title: 文档标题
         tags: 标签列表
         date: 创建/处理日期（默认当前日期）
         source: 来源（URL或文件路径）
         extra_fields: 额外的自定义字段
-    
+
     返回：
         完整的 YAML front matter 字符串（包含 --- 分隔符）
     """
     fields = {}
-    
+
     if title:
-        fields['title'] = title
-    
+        fields["title"] = title
+
     if tags:
-        fields['tags'] = tags
+        fields["tags"] = tags
     else:
-        fields['tags'] = []
-    
+        fields["tags"] = []
+
     if date is None:
         date = datetime.now()
-    fields['date'] = date
-    
+    fields["date"] = date
+
     if source:
-        fields['source'] = source
-    
+        fields["source"] = source
+
     if extra_fields:
         fields.update(extra_fields)
-    
-    lines = ['---']
-    
-    ordered_keys = ['title', 'tags', 'date', 'source']
+
+    lines = ["---"]
+
+    ordered_keys = ["title", "tags", "date", "source"]
     for key in ordered_keys:
         if key in fields:
             value = fields.pop(key)
             lines.append(f"{key}: {_format_yaml_value(value)}")
-    
+
     for key, value in sorted(fields.items()):
         lines.append(f"{key}: {_format_yaml_value(value)}")
-    
-    lines.append('---')
-    lines.append('')
-    
-    return '\n'.join(lines)
+
+    lines.append("---")
+    lines.append("")
+
+    return "\n".join(lines)
 
 
-def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
+def parse_yaml_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     """解析 Markdown 文件中的 YAML front matter
-    
+
     参数：
         content: Markdown 文件完整内容
-    
+
     返回：
         (frontmatter_dict, remaining_content)
     """
     frontmatter = {}
     body = content
-    
-    if not content.startswith(('---\n', '---\r\n')):
+
+    if not content.startswith(("---\n", "---\r\n")):
         return frontmatter, body
-    
-    lines = content.split('\n')
+
+    lines = content.split("\n")
     frontmatter_lines = []
     frontmatter_end_index = None
-    
+
     for i, line in enumerate(lines[1:], start=1):
-        if line == '---':
+        if line == "---":
             frontmatter_end_index = i
             break
         frontmatter_lines.append(line)
-    
+
     if frontmatter_end_index is None:
         return frontmatter, body
-    
-    frontmatter_content = '\n'.join(frontmatter_lines)
+
+    frontmatter_content = "\n".join(frontmatter_lines)
     if frontmatter_content.strip():
         try:
             if PYYAML_AVAILABLE and yaml is not None:
@@ -424,145 +445,125 @@ def parse_yaml_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
                 frontmatter = _parse_yaml_frontmatter_simple(frontmatter_content)
         except Exception:
             frontmatter = {}
-    
-    remaining_lines = lines[frontmatter_end_index + 1:]
-    while remaining_lines and remaining_lines[0].strip() == '':
+
+    remaining_lines = lines[frontmatter_end_index + 1 :]
+    while remaining_lines and remaining_lines[0].strip() == "":
         remaining_lines.pop(0)
-    body = '\n'.join(remaining_lines)
-    
+    body = "\n".join(remaining_lines)
+
     return frontmatter, body
 
 
 def add_yaml_frontmatter_to_content(
-    content: str,
-    title: str = "",
-    tags: List[str] = None,
-    source: str = "",
-    extra_fields: Dict[str, Any] = None
+    content: str, title: str = "", tags: list[str] = None, source: str = "", extra_fields: dict[str, Any] = None
 ) -> str:
     """为 Markdown 内容添加 YAML front matter
-    
+
     如果内容已存在 front matter，则更新它；否则添加新的。
-    
+
     参数：
         content: 原始 Markdown 内容
         title: 文档标题（如未提供，尝试从内容中提取）
         tags: 标签列表
         source: 来源（URL或文件路径）
         extra_fields: 额外字段
-    
+
     返回：
         添加了 front matter 的完整内容
     """
     existing_frontmatter, body = parse_yaml_frontmatter(content)
-    
+
     if not title:
-        title_match = re.match(r'^#\s+(.+)$', body.lstrip(), re.MULTILINE)
+        title_match = re.match(r"^#\s+(.+)$", body.lstrip(), re.MULTILINE)
         if title_match:
             title = title_match.group(1).strip()
-    
+
     if tags is None:
         tags = []
-    
-    new_frontmatter = generate_yaml_frontmatter(
-        title=title,
-        tags=tags,
-        source=source,
-        extra_fields=extra_fields
-    )
-    
+
+    new_frontmatter = generate_yaml_frontmatter(title=title, tags=tags, source=source, extra_fields=extra_fields)
+
     return new_frontmatter + body
 
 
 def add_yaml_frontmatter_to_file(
-    file_path: str,
-    title: str = "",
-    tags: List[str] = None,
-    source: str = "",
-    extra_fields: Dict[str, Any] = None
+    file_path: str, title: str = "", tags: list[str] = None, source: str = "", extra_fields: dict[str, Any] = None
 ) -> bool:
     """为 Markdown 文件添加 YAML front matter
-    
+
     参数：
         file_path: Markdown 文件路径
         title: 文档标题
         tags: 标签列表
         source: 来源
         extra_fields: 额外字段
-    
+
     返回：
         是否成功
     """
     p = Path(file_path)
-    if not p.exists() or not p.suffix.lower() == '.md':
+    if not p.exists() or not p.suffix.lower() == ".md":
         return False
-    
+
     try:
-        content = p.read_text(encoding='utf-8')
+        content = p.read_text(encoding="utf-8")
         new_content = add_yaml_frontmatter_to_content(
-            content,
-            title=title,
-            tags=tags,
-            source=source,
-            extra_fields=extra_fields
+            content, title=title, tags=tags, source=source, extra_fields=extra_fields
         )
-        p.write_text(new_content, encoding='utf-8')
+        p.write_text(new_content, encoding="utf-8")
         return True
     except (OSError, ValueError) as e:
         logger.warning(f"[tag_extractor] add_yaml_frontmatter_to_file failed: {e}\n")
         return False
 
 
-def process_and_tag_file_with_yaml(
-    file_path: str,
-    source: str = "",
-    title: str = ""
-) -> Dict[str, Any]:
+def process_and_tag_file_with_yaml(file_path: str, source: str = "", title: str = "") -> dict[str, Any]:
     """处理单个文件，基于文件名分词提取标签并添加 YAML front matter
-    
+
     参数：
         file_path: Markdown 文件路径
         source: 来源信息（URL或原文件路径）
         title: 可选的标题覆盖
-    
+
     返回：
         包含处理结果的字典：{'success': bool, 'tags': list, 'title': str}
     """
     result = {
-        'success': False,
-        'tags': [],
-        'title': title,
+        "success": False,
+        "tags": [],
+        "title": title,
     }
-    
+
     p = Path(file_path)
-    if not p.exists() or not p.suffix.lower() == '.md':
+    if not p.exists() or not p.suffix.lower() == ".md":
         return result
-    
+
     try:
-        content = p.read_text(encoding='utf-8')
-        
+        content = p.read_text(encoding="utf-8")
+
         existing_frontmatter, body = parse_yaml_frontmatter(content)
-        
+
         if not title:
-            title = existing_frontmatter.get('title', '')
+            title = existing_frontmatter.get("title", "")
             if not title:
                 from utils.helpers import extract_title_from_markdown
+
                 title = extract_title_from_markdown(body) or p.stem
-        
+
         tags = extract_tags_from_filename(file_path)
-        
+
         new_frontmatter = generate_yaml_frontmatter(
             title=title,
             tags=tags,
             source=source,
         )
-        
+
         new_content = new_frontmatter + body
-        p.write_text(new_content, encoding='utf-8')
-        
-        result['success'] = True
-        result['tags'] = tags
-        result['title'] = title
+        p.write_text(new_content, encoding="utf-8")
+
+        result["success"] = True
+        result["tags"] = tags
+        result["title"] = title
 
         return result
     except (OSError, ValueError, UnicodeError) as e:
@@ -583,22 +584,22 @@ def save_tags_md(workspace_path: str) -> dict:
     def _scan(path):
         try:
             for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
-                if entry.name.startswith('.'):
+                if entry.name.startswith("."):
                     continue
                 if entry.is_dir():
                     if is_ignored_dir(entry.name):
                         continue
-                    if entry.name == 'wiki':
+                    if entry.name == "wiki":
                         continue
                     _scan(str(entry))
-                elif entry.suffix.lower() == '.md':
+                elif entry.suffix.lower() == ".md":
                     try:
-                        text = entry.read_text(encoding='utf-8')
+                        text = entry.read_text(encoding="utf-8")
                         meta, _ = parse_frontmatter(text)
                         if meta is None:
                             continue
                         rel = str(entry.relative_to(workspace))
-                        raw_tags = meta.get('tags', [])
+                        raw_tags = meta.get("tags", [])
                         tags = []
                         if isinstance(raw_tags, list):
                             tags = [str(t).strip() for t in raw_tags if t]
@@ -617,34 +618,34 @@ def save_tags_md(workspace_path: str) -> dict:
     _scan(str(workspace))
 
     existing_tags = set()
-    tags_md_path = workspace / 'wiki' / 'tags.md'
+    tags_md_path = workspace / "wiki" / "tags.md"
     if tags_md_path.exists():
         try:
-            text = tags_md_path.read_text(encoding='utf-8')
-            for line in text.split('\n'):
-                if line.startswith('## '):
+            text = tags_md_path.read_text(encoding="utf-8")
+            for line in text.split("\n"):
+                if line.startswith("## "):
                     tag = line[3:].strip()
                     if tag:
                         existing_tags.add(tag)
         except Exception as e:
             logger.warning(f"[save_tags_md] 读取现有 tags.md 失败: {e}")
 
-    for tag in tag_map.keys():
+    for tag in tag_map:
         existing_tags.add(tag)
 
-    lines = ['# Tags', '']
+    lines = ["# Tags", ""]
     sorted_tags = sorted(existing_tags, key=lambda t: -len(tag_map.get(t, [])))
     for tag in sorted_tags:
-        lines.append('## ' + tag)
-        lines.append('')
+        lines.append("## " + tag)
+        lines.append("")
         files = tag_map.get(tag, [])
         for f in files:
             fname = Path(f).stem
-            lines.append('- [[' + fname + ']]')
-        lines.append('')
+            lines.append("- [[" + fname + "]]")
+        lines.append("")
 
-    tags_md_path = workspace / 'wiki' / 'tags.md'
+    tags_md_path = workspace / "wiki" / "tags.md"
     tags_md_path.parent.mkdir(parents=True, exist_ok=True)
-    tags_md_path.write_text('\n'.join(lines), encoding='utf-8')
+    tags_md_path.write_text("\n".join(lines), encoding="utf-8")
 
     return {"success": True, "count": len(sorted_tags)}

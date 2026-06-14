@@ -233,16 +233,17 @@ class SidecarServer(PathHelpersMixin):
                 workspace = config.workspace_path
                 if workspace:
                     import sys as _sys
+
                     _sys.path.insert(0, str(Path(__file__).parent.parent))
                     from multi_source import fetch_all_subscriptions
+
                     result = fetch_all_subscriptions(workspace)
                     if result.get("results"):
                         imported = sum(r.get("imported", 0) for r in result["results"])
                         if imported > 0:
-                            self._send_response({"id": "event", "result": {
-                                "type": "rss_poll_complete",
-                                "data": {"imported": imported}
-                            }})
+                            self._send_response(
+                                {"id": "event", "result": {"type": "rss_poll_complete", "data": {"imported": imported}}}
+                            )
             except Exception as e:
                 logger.warning("[rss] poll failed: %s", e)
             finally:
@@ -343,7 +344,7 @@ class SidecarServer(PathHelpersMixin):
         # Auto-convert non-markdown files when they appear in workspace
         if not is_directory and change_type in ("created", "moved"):
             ext = path.suffix.lower()
-            if ext in ('.pdf', '.docx', '.doc', '.pptx', '.ppt', '.html', '.htm', '.txt'):
+            if ext in (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".html", ".htm", ".txt"):
                 rp = self._rel_parts(path)
                 if not self._is_hidden_or_ignored(rp) and "wiki" not in rp and "Raw" not in rp:
                     self._auto_convert_new_file(str(path))
@@ -371,9 +372,11 @@ class SidecarServer(PathHelpersMixin):
 
     def _auto_convert_new_file(self, file_path):
         """Auto-convert newly added non-markdown files to Markdown."""
+
         def _do():
             try:
                 from modules.file_converter import FileConverterManager
+
                 ws = config.workspace_path
                 if not ws:
                     return
@@ -382,13 +385,19 @@ class SidecarServer(PathHelpersMixin):
                 if result and result.get("success"):
                     md = result.get("output_path", "")
                     if md:
-                        self._send_response({"id": "event", "result": {
-                            "type": "auto_file_converted",
-                            "data": {"source": file_path, "markdown": md}
-                        }})
+                        self._send_response(
+                            {
+                                "id": "event",
+                                "result": {
+                                    "type": "auto_file_converted",
+                                    "data": {"source": file_path, "markdown": md},
+                                },
+                            }
+                        )
                         self._auto_process_md_file(md)
             except Exception as e:
                 logger.warning("[watcher] auto-convert failed for %s: %s", file_path, e)
+
         threading.Thread(target=_do, daemon=True).start()
 
     def _emit_workspace_change(self):

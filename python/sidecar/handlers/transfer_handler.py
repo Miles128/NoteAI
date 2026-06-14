@@ -409,6 +409,7 @@ class TransferHandler(BaseHandler):
         if not workspace or not url:
             return {"success": False, "message": "缺少工作区或 URL"}
         from sidecar.multi_source import save_subscription
+
         save_subscription(workspace, url, name)
         return {"success": True}
 
@@ -418,6 +419,7 @@ class TransferHandler(BaseHandler):
         if not workspace or not url:
             return {"success": False, "message": "缺少工作区或 URL"}
         from sidecar.multi_source import remove_subscription
+
         remove_subscription(workspace, url)
         return {"success": True}
 
@@ -426,6 +428,7 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "subscriptions": []}
         from sidecar.multi_source import load_subscriptions
+
         return {"success": True, "subscriptions": load_subscriptions(workspace)}
 
     def _fetch_all_rss(self, _params):
@@ -433,4 +436,5 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
         from sidecar.multi_source import fetch_all_subscriptions
+
         return fetch_all_subscriptions(workspace)

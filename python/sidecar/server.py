@@ -83,6 +83,7 @@ class SidecarServer(PathHelpersMixin):
         self._agent_handler = AgentHandler(self)
         self._build_router()
         self._start_workspace_watcher()
+        self._start_rss_polling()
         self._startup_sync()
 
     def _build_router(self):
@@ -223,6 +224,37 @@ class SidecarServer(PathHelpersMixin):
         self._cache.clear()
         fulltext_index.mark_dirty()
 
+    def _start_rss_polling(self):
+        """Start periodic RSS feed polling (every 30 minutes)."""
+        self._rss_poll_timer = None
+
+        def _poll():
+            try:
+                workspace = config.workspace_path
+                if workspace:
+                    import sys as _sys
+
+                    _sys.path.insert(0, str(Path(__file__).parent.parent))
+                    from multi_source import fetch_all_subscriptions
+
+                    result = fetch_all_subscriptions(workspace)
+                    if result.get("results"):
+                        imported = sum(r.get("imported", 0) for r in result["results"])
+                        if imported > 0:
+                            self._send_response(
+                                {"id": "event", "result": {"type": "rss_poll_complete", "data": {"imported": imported}}}
+                            )
+            except Exception as e:
+                logger.warning("[rss] poll failed: %s", e)
+            finally:
+                self._rss_poll_timer = threading.Timer(1800.0, _poll)
+                self._rss_poll_timer.daemon = True
+                self._rss_poll_timer.start()
+
+        self._rss_poll_timer = threading.Timer(1800.0, _poll)
+        self._rss_poll_timer.daemon = True
+        self._rss_poll_timer.start()
+
     def _cached_or_compute(self, key, compute_fn):
         """通用缓存包装器：按工作区路径失效，带 TTL"""
         cached = self._cache.get(key)
@@ -309,6 +341,14 @@ class SidecarServer(PathHelpersMixin):
             if not self._is_hidden_or_ignored(rel_parts):
                 self._auto_process_md_file(str(path))
 
+        # Auto-convert non-markdown files when they appear in workspace
+        if not is_directory and change_type in ("created", "moved"):
+            ext = path.suffix.lower()
+            if ext in (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".html", ".htm", ".txt"):
+                rp = self._rel_parts(path)
+                if not self._is_hidden_or_ignored(rp) and "wiki" not in rp and "Raw" not in rp:
+                    self._auto_convert_new_file(str(path))
+
         with self._watcher_debounce_lock:
             if self._workspace_change_affects_wiki(change_type, file_path, src_path, is_directory=is_directory):
                 self._watcher_needs_wiki_sync = True
@@ -329,6 +369,36 @@ class SidecarServer(PathHelpersMixin):
                 self._watcher_needs_wiki_sync = True
 
         auto_process_md_file(file_path, send_event=_send_event, mark_wiki_sync=_mark_wiki_sync)
+
+    def _auto_convert_new_file(self, file_path):
+        """Auto-convert newly added non-markdown files to Markdown."""
+
+        def _do():
+            try:
+                from modules.file_converter import FileConverterManager
+
+                ws = config.workspace_path
+                if not ws:
+                    return
+                converter = FileConverterManager(ws)
+                result = converter.convert_file(file_path, ai_assist=False)
+                if result and result.get("success"):
+                    md = result.get("output_path", "")
+                    if md:
+                        self._send_response(
+                            {
+                                "id": "event",
+                                "result": {
+                                    "type": "auto_file_converted",
+                                    "data": {"source": file_path, "markdown": md},
+                                },
+                            }
+                        )
+                        self._auto_process_md_file(md)
+            except Exception as e:
+                logger.warning("[watcher] auto-convert failed for %s: %s", file_path, e)
+
+        threading.Thread(target=_do, daemon=True).start()
 
     def _emit_workspace_change(self):
         self._invalidate_cache()

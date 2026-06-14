@@ -277,6 +277,10 @@ async function importFilesToWorkspace() {
     return pyCall('import_files');
 }
 
+async function importFilesDirect(files) {
+    return pyCall('import_files', { files: files });
+}
+
 async function browseFolder() {
     if (checkIsTauri()) {
         var invoke = getTauriInvoke();
@@ -292,6 +296,30 @@ async function startWebDownload(urls, aiAssist, includeImages) {
         ai_assist: aiAssist,
         include_images: includeImages
     });
+}
+
+async function importRssFeed(url, maxItems, fetchArticles) {
+    return pyCall('import_rss_feed', { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles });
+}
+
+async function importTranscript(title, content, source) {
+    return pyCall('import_transcript', { title: title, content: content, source: source });
+}
+
+async function saveRssSubscriptionApi(url, name) {
+    return pyCall('save_rss_subscription', { url: url, name: name });
+}
+
+async function removeRssSubscriptionApi(url) {
+    return pyCall('remove_rss_subscription', { url: url });
+}
+
+async function listRssSubscriptions() {
+    return pyCall('list_rss_subscriptions', {});
+}
+
+async function fetchAllRss() {
+    return pyCall('fetch_all_rss', {});
 }
 
 async function startFileConversion(aiAssist) {
@@ -553,8 +581,15 @@ window.api = {
     saveThemePreference: saveThemePreference,
     addFiles: addFiles,
     importFilesToWorkspace: importFilesToWorkspace,
+    importFilesDirect: importFilesDirect,
     browseFolder: browseFolder,
     startWebDownload: startWebDownload,
+    importRssFeed: importRssFeed,
+    importTranscript: importTranscript,
+    saveRssSubscriptionApi: saveRssSubscriptionApi,
+    removeRssSubscriptionApi: removeRssSubscriptionApi,
+    listRssSubscriptions: listRssSubscriptions,
+    fetchAllRss: fetchAllRss,
     startFileConversion: startFileConversion,
     autoConvertPending: autoConvertPending,
     extractTopics: extractTopics,

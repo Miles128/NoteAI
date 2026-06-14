@@ -276,6 +276,7 @@ function openDownloadModal() {
     modal.classList.add('active');
     
     initModalDrag();
+    initRssTab();
     
     setTimeout(() => {
         const urlInput = document.getElementById('modal-urls');
@@ -504,6 +505,105 @@ window.DownloaderModule = {
 
 window.closeDownloadModal = closeDownloadModal;
 window.startDownloadFromModal = startDownloadFromModal;
+
+// ── RSS Tab ──
+function initRssTab() {
+  var rssImportBtn = document.getElementById('ms-rss-import-btn');
+  if (rssImportBtn && !rssImportBtn._rssBound) {
+    rssImportBtn.addEventListener('click', startRssImport);
+    rssImportBtn._rssBound = true;
+  }
+  var transcriptBtn = document.getElementById('ms-transcript-import-btn');
+  if (transcriptBtn && !transcriptBtn._trBound) {
+    transcriptBtn.addEventListener('click', startTranscriptImport);
+    transcriptBtn._trBound = true;
+  }
+  loadRssSubscriptions();
+}
+
+async function startRssImport() {
+  var urlEl = document.getElementById('ms-rss-url');
+  var maxEl = document.getElementById('ms-rss-max');
+  var fetchEl = document.getElementById('ms-rss-fetch');
+  var url = urlEl ? urlEl.value.trim() : '';
+  if (!url) { alert('请输入 RSS URL'); return; }
+  var maxItems = maxEl ? parseInt(maxEl.value) || 10 : 10;
+  var fetchArticles = fetchEl ? fetchEl.checked : true;
+  var btn = document.getElementById('ms-rss-import-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '导入中...'; }
+  try {
+    var result = await window.api.importRssFeed(url, maxItems, fetchArticles);
+    if (result && result.success) {
+      alert(result.message || 'RSS 导入成功');
+      urlEl.value = '';
+      saveRssSubscription(url);
+      if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+    } else {
+      alert('RSS 导入失败: ' + (result && result.message || '未知错误'));
+    }
+  } catch(e) { alert('RSS 导入失败: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '导入 RSS'; } }
+}
+
+async function startTranscriptImport() {
+  var titleEl = document.getElementById('ms-transcript-title');
+  var sourceEl = document.getElementById('ms-transcript-source');
+  var contentEl = document.getElementById('ms-transcript-content');
+  var title = titleEl ? titleEl.value.trim() : '';
+  var content = contentEl ? contentEl.value.trim() : '';
+  if (!content) { alert('请输入转录内容'); return; }
+  try {
+    var result = await window.api.importTranscript(title, content, sourceEl ? sourceEl.value.trim() : '');
+    if (result && result.success) {
+      alert(result.message || '转录保存成功');
+      if (titleEl) titleEl.value = '';
+      if (sourceEl) sourceEl.value = '';
+      if (contentEl) contentEl.value = '';
+    } else { alert('保存失败: ' + (result && result.message || '未知错误')); }
+  } catch(e) { alert('保存失败: ' + e.message); }
+}
+
+function getRssStorageKey() { return 'noteai_rss_subscriptions'; }
+
+function loadRssSubscriptions() {
+  try {
+    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
+    updateRssSubList(subs);
+  } catch(e) {}
+}
+
+function saveRssSubscription(url) {
+  try {
+    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
+    if (subs.indexOf(url) === -1) { subs.push(url); localStorage.setItem(getRssStorageKey(), JSON.stringify(subs)); updateRssSubList(subs); }
+  } catch(e) {}
+}
+
+function removeRssSubscription(url) {
+  try {
+    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
+    subs = subs.filter(function(u) { return u !== url; });
+    localStorage.setItem(getRssStorageKey(), JSON.stringify(subs));
+    updateRssSubList(subs);
+  } catch(e) {}
+}
+
+function updateRssSubList(subs) {
+  var container = document.getElementById('ms-rss-sub-list');
+  if (!container) return;
+  if (!subs || subs.length === 0) { container.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px 0;">暂无订阅</div>'; return; }
+  var html = '';
+  subs.forEach(function(url) {
+    var short = url.length > 50 ? url.substring(0, 50) + '...' : url;
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">';
+    html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);" title="' + url + '">' + short + '</span>';
+    html += '<button onclick="removeRssSubscription(\'' + url.replace(/'/g, "\\'") + '\')" title="删除" style="margin-left:8px;padding:2px 6px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:14px;">✕</button>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+window.removeRssSubscription = removeRssSubscription;
 
 })();
 

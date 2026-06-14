@@ -29,6 +29,10 @@ class TransferHandler(BaseHandler):
         router.register("import_rss_feed", self._import_rss_feed)
         router.register("import_transcript", self._import_transcript)
         router.register("convert_raw_archive", self._convert_raw_archive)
+        router.register("save_rss_subscription", self._save_rss_subscription)
+        router.register("remove_rss_subscription", self._remove_rss_subscription)
+        router.register("list_rss_subscriptions", self._list_rss_subscriptions)
+        router.register("fetch_all_rss", self._fetch_all_rss)
 
     def _start_web_download(self, params):
         urls = params.get("urls", [])
@@ -327,7 +331,7 @@ class TransferHandler(BaseHandler):
     def _import_rss_feed(self, params):
         from sidecar.multi_source import import_rss_feed
 
-        url = params.get("url", "")
+        url = params.get("feed_url", "") or params.get("url", "")
         max_items = int(params.get("max_items", 10) or 10)
         fetch_articles = bool(params.get("fetch_articles", True))
         if not self.config.workspace_path:
@@ -395,3 +399,38 @@ class TransferHandler(BaseHandler):
                 },
             }
         )
+
+    # ── RSS Subscription Management ──
+
+    def _save_rss_subscription(self, params):
+        url = params.get("url", "")
+        name = params.get("name", "")
+        workspace = self.config.workspace_path
+        if not workspace or not url:
+            return {"success": False, "message": "缺少工作区或 URL"}
+        from sidecar.multi_source import save_subscription
+        save_subscription(workspace, url, name)
+        return {"success": True}
+
+    def _remove_rss_subscription(self, params):
+        url = params.get("url", "")
+        workspace = self.config.workspace_path
+        if not workspace or not url:
+            return {"success": False, "message": "缺少工作区或 URL"}
+        from sidecar.multi_source import remove_subscription
+        remove_subscription(workspace, url)
+        return {"success": True}
+
+    def _list_rss_subscriptions(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "subscriptions": []}
+        from sidecar.multi_source import load_subscriptions
+        return {"success": True, "subscriptions": load_subscriptions(workspace)}
+
+    def _fetch_all_rss(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "请先设置工作区"}
+        from sidecar.multi_source import fetch_all_subscriptions
+        return fetch_all_subscriptions(workspace)

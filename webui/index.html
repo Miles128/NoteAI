@@ -805,6 +805,7 @@
                             <label><input type="checkbox" id="ms-rss-fetch" checked> <span data-i18n="download.rssFetch"></span></label>
                             <button type="button" class="btn btn-secondary" id="ms-rss-import-btn" data-i18n="download.importRss"></button>
                         </div>
+                        <div id="ms-rss-sub-list" style="margin-top:12px;max-height:150px;overflow-y:auto;"></div>
                     </div>
                     <div class="multi-source-pane" id="ms-pane-transcript" hidden>
                         <input type="text" id="ms-transcript-title" class="form-input form-input-full" data-i18n-placeholder="download.transcriptTitle">
@@ -1006,6 +1007,13 @@
     </div>
 
     </div><!-- #app-scale-root -->
+
+    <div class="drop-overlay" id="drop-overlay" style="display:none;">
+      <div class="drop-overlay-content">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="8 10 12 14 16 10"/><path d="M12 14V3"/></svg>
+        <p>释放即可导入文件</p>
+      </div>
+    </div>
 
     <div id="toast-container" class="toast-container" aria-live="polite"></div>
 

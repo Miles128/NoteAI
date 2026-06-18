@@ -450,11 +450,25 @@ window.AssistantModule = (function() {
             } else {
                 addSystemMessage(window.t('assistant.indexBuildFailed', { message: eventData.data.message || window.t('common.unknownError') }));
             }
+        } else if (eventData.type === 'rag-index-progress') {
+            var pct = eventData.data && eventData.data.percent || 0;
+            var msg = eventData.data && eventData.data.message || '';
+            addSystemMessage(window.t('assistant.indexProgress', { percent: pct, message: msg }));
         }
     }
 
+    function _estimateIndexTime() {
+        // Rough estimate: ~0.5s per file for chunking + embedding on M-series Mac
+        var fileCount = window.AppState && window.AppState.files ? window.AppState.files.length : 100;
+        var seconds = Math.max(10, fileCount * 0.5);
+        if (seconds < 60) {
+            return Math.ceil(seconds) + '秒';
+        }
+        return Math.ceil(seconds / 60) + '分钟';
+    }
+
     function rebuildIndex() {
-        addSystemMessage(window.t('assistant.indexBuilding'));
+        addSystemMessage(window.t('assistant.indexBuilding', { estimate: _estimateIndexTime() }));
         window.api.ragRebuildIndex().catch(function(err) {
             addSystemMessage(window.t('assistant.indexRequestFailed', { message: err.message }));
         });
@@ -538,7 +552,7 @@ window.AssistantModule = (function() {
 
             var name = document.createElement('span');
             name.className = 'ai-citation-name';
-            name.textContent = cite.file_name || cite.file_path;
+            name.textContent = cite.source_label || cite.file_name || cite.file_path || ('[' + cite.index + ']');
             info.appendChild(name);
 
             if (cite.topic) {

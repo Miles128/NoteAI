@@ -495,6 +495,17 @@ def run_ingest(
                     index_targets,
                     lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
                 )
+            # Cross-ref should cover all classified files, not just RAG-indexed ones
+            if not indexed_paths:
+                indexed_paths = [
+                    str(md.relative_to(workspace))
+                    for md in ws_path.rglob("*.md")
+                    if not md.name.startswith(".")
+                    and "wiki" not in md.parts
+                    and not md.name.endswith("_综述.md")
+                    and not md.name.endswith("综述.md")
+                    and NOTES_FOLDER in md.parts
+                ]
             prog("index", 0.65, f"索引更新: {stats['indexed_files']} 篇有改动")
             state["pending_crossref_paths"] = indexed_paths
             save_ingest_state(state)
@@ -511,6 +522,8 @@ def run_ingest(
                 from utils.link_indexer import discover_cross_refs_for_file
 
                 total_x = len(crossref_paths)
+                # Use LLM only when few files; skip for large batches to save time
+                use_llm = total_x <= 20
                 cross_added = 0
                 for i, rel in enumerate(crossref_paths):
                     if is_cancelled():
@@ -521,7 +534,7 @@ def run_ingest(
                         f"交叉引用 ({i + 1}/{total_x}): {Path(rel).name}",
                     )
                     try:
-                        xr = discover_cross_refs_for_file(rel, use_llm=True)
+                        xr = discover_cross_refs_for_file(rel, use_llm=use_llm)
                         cross_added += int(xr.get("added") or 0)
                     except Exception:
                         continue

@@ -716,6 +716,12 @@
                                 <p class="settings-hint" data-i18n="settings.indexHint"></p>
                                 <button type="button" class="btn btn-secondary" id="settings-assistant-rebuild-index-btn" data-i18n="settings.rebuildIndexBtn"></button>
                                 <div id="settings-assistant-rebuild-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                                <div id="settings-assistant-rebuild-progress" style="display:none;margin-top:10px">
+                                    <div class="progress-bar-bg" style="width:100%;height:8px;background:var(--border-color);border-radius:4px;overflow:hidden">
+                                        <div id="settings-assistant-rebuild-progress-fill" class="progress-bar-fill" style="width:0%;height:100%;background:var(--accent-color);transition:width 0.3s ease"></div>
+                                    </div>
+                                    <div id="settings-assistant-rebuild-progress-text" class="settings-hint" style="margin-top:6px;font-size:12px"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-activity-log">

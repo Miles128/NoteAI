@@ -1,32 +1,36 @@
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 from config import config, is_ignored_dir
-from config.constants import SYSTEM_APP_DATA_DIR
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 DEFAULT_TOP_K = 5
-# 单次查询：控制 Milvus 召回量、减少 MMR 内 batch-embed 与 cross-encoder 对数
 SEARCH_TOP_K_TAGS = 7
-# best hit 低于该阈值才走 HyDE（省一次 LLM）
 HYDE_TRIGGER_BELOW_SCORE = 0.33
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 6
+_SKIP_RERANK_SCORE = 0.75
 
 _RERANKER = None
 _RERANKER_DISABLED = False
 _RERANKER_LOCK = threading.Lock()
 
+_RETRIEVE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_retrieve")
+
+# Simple in-memory cache for identical queries: key -> (expanded_results, citations)
+_query_cache: dict[str, tuple[list[dict], list[dict]]] = {}
+_QUERY_CACHE_LOCK = threading.Lock()
+_QUERY_CACHE_MAX_SIZE = 50
+
 
 def _reranker_enabled() -> bool:
     if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
         return False
-    if os.environ.get("NOTEAI_ENABLE_RERANKER", "").lower() in ("1", "true", "yes"):
-        return True
     return True
 
 
@@ -44,6 +48,7 @@ def _get_reranker():
         if _RERANKER is not None:
             return _RERANKER
         try:
+            from config.constants import SYSTEM_APP_DATA_DIR
             from sidecar.rag.embedder import _ensure_hf_env
 
             _ensure_hf_env()
@@ -64,44 +69,73 @@ def _get_reranker():
             return None
 
 
+def _cache_key(query: str, topics, tags) -> str:
+    return f"{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}"
+
+
+def _get_cached(query: str, topics, tags):
+    key = _cache_key(query, topics, tags)
+    with _QUERY_CACHE_LOCK:
+        return _query_cache.get(key)
+
+
+def _set_cached(query: str, topics, tags, value):
+    key = _cache_key(query, topics, tags)
+    with _QUERY_CACHE_LOCK:
+        if len(_query_cache) >= _QUERY_CACHE_MAX_SIZE:
+            _query_cache.pop(next(iter(_query_cache)))
+        _query_cache[key] = value
+
+
 def retrieve(query: str, topics: list = None, tags: list = None, progress_callback=None) -> list:
     workspace = config.workspace_path
     if not workspace:
         return []
 
+    cached = _get_cached(query, topics, tags)
+    if cached is not None:
+        return cached[0]
+
     from sidecar.rag.embedder import encode_query
+    from sidecar.rag.index import filter_usable_chunks, hybrid_search
 
     query_emb = encode_query(query)
     if not query_emb.get("dense_vec"):
         return []
 
-    from sidecar.rag.profile import rewrite_query_with_profile
-
-    profile_query = rewrite_query_with_profile(query)
-
-    from sidecar.rag.index import filter_usable_chunks, hybrid_search
-
     top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
+
+    # Profile rewrite runs in parallel (pure LLM call)
+    profile_future = _RETRIEVE_EXECUTOR.submit(_rewrite_profile, query)
+
     results = hybrid_search(
         workspace,
         query_dense=query_emb["dense_vec"],
         query_sparse=query_emb.get("lexical_weights", {}),
+        query_text=query,
         top_k=top_k,
         topics=topics,
         tags=tags,
     )
 
-    if not results or (results and results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE):
-        hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
-        if hyde_results:
-            existing_ids = {r.get("id") for r in results}
-            for r in hyde_results:
-                if r.get("id") not in existing_ids:
-                    results.append(r)
-                    existing_ids.add(r.get("id"))
-            results.sort(key=lambda x: x.get("score", 0), reverse=True)
-            results = results[:top_k]
+    profile_query = profile_future.result()
 
+    # HyDE only if main search is weak
+    if not results or (results and results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE):
+        try:
+            hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
+            if hyde_results:
+                existing_ids = {r.get("id") for r in results}
+                for r in hyde_results:
+                    if r.get("id") not in existing_ids:
+                        results.append(r)
+                        existing_ids.add(r.get("id"))
+                results.sort(key=lambda x: x.get("score", 0), reverse=True)
+                results = results[:top_k]
+        except Exception:
+            pass
+
+    # Profile fallback only if main search returned nothing
     if not results and profile_query != query:
         profile_emb = encode_query(profile_query)
         if profile_emb.get("dense_vec"):
@@ -109,6 +143,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
                 workspace,
                 query_dense=profile_emb["dense_vec"],
                 query_sparse=profile_emb.get("lexical_weights", {}),
+                query_text=profile_query,
                 top_k=top_k,
                 topics=topics,
                 tags=tags,
@@ -128,7 +163,19 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     from sidecar.rag.context_expand import expand_retrieval_context
 
     expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
-    return filter_usable_chunks(expanded)
+    expanded = filter_usable_chunks(expanded)
+
+    _set_cached(query, topics, tags, (expanded, []))
+    return expanded
+
+
+def _rewrite_profile(query: str) -> str:
+    try:
+        from sidecar.rag.profile import rewrite_query_with_profile
+
+        return rewrite_query_with_profile(query)
+    except Exception:
+        return query
 
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
@@ -142,17 +189,17 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
         hypo_answer = result.content if hasattr(result, "content") else str(result)
 
         from sidecar.rag.embedder import encode_query
+        from sidecar.rag.index import hybrid_search
 
         hyde_emb = encode_query(hypo_answer)
         if not hyde_emb.get("dense_vec"):
             return []
 
-        from sidecar.rag.index import hybrid_search
-
         return hybrid_search(
             workspace,
             query_dense=hyde_emb["dense_vec"],
             query_sparse=hyde_emb.get("lexical_weights", {}),
+            query_text=hypo_answer,
             top_k=DEFAULT_TOP_K,
             topics=topics,
             tags=tags,
@@ -166,21 +213,34 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
     if len(results) <= top_k:
         return results
 
-    from sidecar.rag.embedder import encode
+    import numpy as np
 
     try:
-        contents = [r.get("content", "") for r in results]
-        if not any(contents):
-            return results[:top_k]
+        dense_vecs = []
+        needs_encode = False
+        for r in results:
+            vec = r.get("dense_vec")
+            if vec and len(vec) == 512:
+                dense_vecs.append(vec)
+            else:
+                needs_encode = True
+                break
 
-        embeddings = encode(contents)
-        dense_vecs = embeddings["dense_vecs"]
+        if needs_encode or not dense_vecs:
+            from sidecar.rag.embedder import encode
 
-        import numpy as np
+            contents = [r.get("content", "") for r in results]
+            if not any(contents):
+                return results[:top_k]
 
-        norms = np.linalg.norm(dense_vecs, axis=1, keepdims=True)
+            embeddings = encode(contents)
+            dense_vecs_arr = embeddings["dense_vecs"]
+        else:
+            dense_vecs_arr = np.array(dense_vecs, dtype=np.float32)
+
+        norms = np.linalg.norm(dense_vecs_arr, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1, norms)
-        norm_vecs = dense_vecs / norms
+        norm_vecs = dense_vecs_arr / norms
 
         selected_indices = [0]
         remaining = set(range(1, len(results)))
@@ -191,7 +251,6 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
             for idx in remaining:
                 relevance = results[idx].get("score", 0)
-
                 max_sim = 0.0
                 for sel_idx in selected_indices:
                     sim = float(np.dot(norm_vecs[idx], norm_vecs[sel_idx]))
@@ -216,6 +275,10 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
 def _rerank(query: str, results: list, top_k: int = 5) -> list:
     try:
+        # Skip reranking if the top result is already very strong
+        if results and results[0].get("score", 0) >= _SKIP_RERANK_SCORE:
+            return results[:top_k]
+
         reranker = _get_reranker()
         if reranker is None:
             return results[:top_k]
@@ -225,7 +288,6 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
             return results[:top_k]
 
         scores = reranker.compute_score(pairs, normalize=True)
-
         if isinstance(scores, float):
             scores = [scores]
 

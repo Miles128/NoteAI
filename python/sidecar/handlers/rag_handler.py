@@ -38,15 +38,18 @@ class RagHandler(BaseHandler):
 
         def build():
             try:
-                self._send_progress("rag-index-progress", 0, "正在构建知识索引...")
+                self._send_progress("rag-index-progress", 0, "正在扫描文件...")
 
                 def progress_cb(cur, tot, msg):
-                    if "Embedding" in msg or "embedding" in msg.lower():
-                        self._send_progress("rag-index-progress", 40, msg)
-                    elif "索引" in msg:
-                        self._send_progress("rag-index-progress", 50, msg)
+                    if tot <= 0:
+                        pct = 5
                     else:
-                        self._send_progress("rag-index-progress", 30, msg)
+                        pct = min(95, max(5, int(cur / tot * 100)))
+                    self._send_progress("rag-index-progress", pct, msg)
+                    # Also flush stdout explicitly in case buffering delays UI updates
+                    import sys
+
+                    sys.stdout.flush()
 
                 result = rebuild_index(progress_callback=progress_cb)
 
@@ -278,6 +281,7 @@ class RagHandler(BaseHandler):
                     "index": idx,
                     "file_path": r.get("file_path", ""),
                     "file_name": r.get("file_name") or Path(r.get("file_path", "")).stem,
+                    "source_label": r.get("source_label") or "",
                     "section_title": r.get("section_title") or "",
                     "topic": r.get("topic") or "",
                 }

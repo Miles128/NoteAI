@@ -28,6 +28,8 @@ from utils.text_utils import (
     tokenize as tokenize_text,
 )
 
+_VECTOR_SEARCH_DISABLED = False
+
 
 def _get_links_path() -> Path | None:
     ws = config.workspace_path
@@ -210,6 +212,10 @@ def _vector_search_candidates(
     if not query:
         return []
 
+    global _VECTOR_SEARCH_DISABLED
+    if _VECTOR_SEARCH_DISABLED:
+        return []
+
     try:
         from sidecar.rag.embedder import encode_query
         from sidecar.rag.index import hybrid_search
@@ -224,7 +230,8 @@ def _vector_search_candidates(
             top_k=limit + 5,
         )
     except Exception as e:
-        logger.warning(f"[link_indexer] vector search failed: {e}")
+        logger.warning(f"[link_indexer] vector search failed, disabling further attempts: {e}")
+        _VECTOR_SEARCH_DISABLED = True
         return []
 
     out: list[tuple[str, float, str]] = []

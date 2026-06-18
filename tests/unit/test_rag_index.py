@@ -1,17 +1,17 @@
-import json
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
+import numpy as np
 import pytest
-
-sys.modules["pymilvus"] = MagicMock()
-
 from sidecar.rag.index import (
-    _escape_filter_value,
-    _purge_stale_sparse_ids,
-    _sparse_index_path,
+    _empty_metadata,
+    _filter_candidates,
+    _load_metadata,
+    _save_metadata,
+    _update_metadata_index,
+    build_index,
     filter_usable_chunks,
+    hybrid_search,
+    index_exists,
     is_usable_chunk,
 )
 
@@ -59,67 +59,146 @@ class TestFilterUsableChunks:
         assert filter_usable_chunks([]) == []
 
 
-class TestPurgeStaleSparseIds:
+class TestMetadataIndex:
     @pytest.fixture
     def workspace(self, tmp_path: Path) -> Path:
         ws = tmp_path / "ws"
         ws.mkdir()
-        idx_dir = ws / ".noteai" / "rag_index"
-        idx_dir.mkdir(parents=True)
         return ws
 
-    def _write_sparse_index(self, workspace: Path, data: dict):
-        path = _sparse_index_path(str(workspace))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    def test_empty_metadata(self, workspace: Path):
+        assert index_exists(str(workspace)) is False
 
-    def _read_sparse_index(self, workspace: Path) -> dict:
-        path = _sparse_index_path(str(workspace))
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    def test_removes_stale_ids(self, workspace: Path):
-        data = {
-            "chunk_a": {"10": 0.5},
-            "chunk_b": {"20": 0.3},
-            "chunk_c": {"30": 0.7},
+    def test_update_metadata_add(self, workspace: Path):
+        meta = _empty_metadata()
+        chunk = {
+            "id": "c1",
+            "file_path": "Notes/a/b/c.md",
+            "topic": "a > b",
+            "tags": ["tag1", "tag2"],
         }
-        self._write_sparse_index(workspace, data)
-        _purge_stale_sparse_ids(str(workspace), ["chunk_a", "chunk_c"])
-        remaining = self._read_sparse_index(workspace)
-        assert "chunk_a" not in remaining
-        assert "chunk_c" not in remaining
-        assert "chunk_b" in remaining
+        _update_metadata_index(meta, chunk, mode="add")
+        assert "c1" in meta["topics"]["a > b"]
+        assert "c1" in meta["tags"]["tag1"]
+        assert "c1" in meta["tags"]["tag2"]
+        assert "c1" in meta["files"]["Notes/a/b/c.md"]
 
-    def test_no_change_when_ids_absent(self, workspace: Path):
-        data = {"chunk_a": {"10": 0.5}}
-        self._write_sparse_index(workspace, data)
-        _purge_stale_sparse_ids(str(workspace), ["chunk_x", "chunk_y"])
-        remaining = self._read_sparse_index(workspace)
-        assert remaining == data
+    def test_update_metadata_remove(self, workspace: Path):
+        meta = _empty_metadata()
+        chunk = {"id": "c1", "file_path": "x.md", "topic": "a", "tags": ["t1"]}
+        _update_metadata_index(meta, chunk, mode="add")
+        _update_metadata_index(meta, chunk, mode="remove")
+        assert meta["topics"] == {}
+        assert meta["tags"] == {}
+        assert meta["files"] == {}
 
-    def test_no_file_no_error(self, workspace: Path):
-        _purge_stale_sparse_ids(str(workspace), ["chunk_a"])
+    def test_save_and_load_metadata(self, workspace: Path):
+        meta = _empty_metadata()
+        meta["topics"]["t"] = ["c1"]
+        _save_metadata(str(workspace), meta)
+        loaded = _load_metadata(str(workspace))
+        assert loaded["topics"]["t"] == ["c1"]
 
-    def test_empty_stale_list(self, workspace: Path):
-        data = {"chunk_a": {"10": 0.5}}
-        self._write_sparse_index(workspace, data)
-        _purge_stale_sparse_ids(str(workspace), [])
-        remaining = self._read_sparse_index(workspace)
-        assert remaining == data
+    def test_filter_candidates(self, workspace: Path):
+        meta = _empty_metadata()
+        c1 = {"id": "c1", "file_path": "x.md", "topic": "a > b", "tags": ["t1"]}
+        c2 = {"id": "c2", "file_path": "y.md", "topic": "a > c", "tags": ["t2"]}
+        c3 = {"id": "c3", "file_path": "z.md", "topic": "a > b", "tags": ["t2"]}
+        for c in [c1, c2, c3]:
+            _update_metadata_index(meta, c, mode="add")
+        _save_metadata(str(workspace), meta)
+
+        assert _filter_candidates(str(workspace), ["a > b"], None) == {"c1", "c3"}
+        assert _filter_candidates(str(workspace), None, ["t2"]) == {"c2", "c3"}
+        assert _filter_candidates(str(workspace), ["a > b"], ["t2"]) == {"c3"}
 
 
-class TestEscapeFilterValue:
-    def test_no_special_chars(self):
-        assert _escape_filter_value("hello") == "hello"
+class TestBuildAndSearch:
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Path:
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        return ws
 
-    def test_backslash(self):
-        assert _escape_filter_value("path\\to\\file") == "path\\\\to\\\\file"
+    def test_build_index_and_search(self, workspace: Path):
+        chunks = [
+            {
+                "id": "c1",
+                "content": "人工智能在医疗诊断中的应用",
+                "file_path": "Notes/AI/医疗.md",
+                "topic": "AI > 医疗",
+                "tags": ["AI", "医疗"],
+                "section_title": "",
+            },
+            {
+                "id": "c2",
+                "content": "深度学习用于图像识别",
+                "file_path": "Notes/AI/图像.md",
+                "topic": "AI > 图像",
+                "tags": ["AI", "CV"],
+                "section_title": "",
+            },
+            {
+                "id": "c3",
+                "content": "Python 编程入门指南",
+                "file_path": "Notes/编程/Python.md",
+                "topic": "编程 > Python",
+                "tags": ["Python"],
+                "section_title": "",
+            },
+        ]
+        embeddings = [
+            {"dense_vec": np.random.rand(512).astype(np.float32).tolist()},
+            {"dense_vec": np.random.rand(512).astype(np.float32).tolist()},
+            {"dense_vec": np.random.rand(512).astype(np.float32).tolist()},
+        ]
 
-    def test_double_quote(self):
-        assert _escape_filter_value('say "hi"') == 'say \\"hi\\"'
+        result = build_index(str(workspace), chunks, embeddings)
+        assert result["success"] is True
+        assert result["chunk_count"] == 3
+        assert index_exists(str(workspace)) is True
 
-    def test_backslash_and_quote(self):
-        assert _escape_filter_value('path\\to\\"file"') == 'path\\\\to\\\\\\"file\\"'
+        # Use the first chunk's vector as query; should return itself
+        hits = hybrid_search(
+            str(workspace),
+            query_dense=embeddings[0]["dense_vec"],
+            query_text="人工智能 医疗",
+            top_k=3,
+        )
+        assert len(hits) > 0
+        assert hits[0]["id"] == "c1"
 
-    def test_empty_string(self):
-        assert _escape_filter_value("") == ""
+    def test_search_with_topic_filter(self, workspace: Path):
+        chunks = [
+            {
+                "id": "c1",
+                "content": "人工智能在医疗诊断中的应用",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+            {
+                "id": "c2",
+                "content": "深度学习用于图像识别",
+                "file_path": "b.md",
+                "topic": "T2",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [
+            {"dense_vec": ([1.0] + [0.0] * 511)},
+            {"dense_vec": ([0.0] * 511 + [1.0])},
+        ]
+        build_index(str(workspace), chunks, embeddings)
+
+        hits = hybrid_search(
+            str(workspace),
+            query_dense=embeddings[0]["dense_vec"],
+            query_text="医疗 诊断",
+            top_k=3,
+            topics=["T1"],
+        )
+        assert len(hits) == 1
+        assert hits[0]["id"] == "c1"

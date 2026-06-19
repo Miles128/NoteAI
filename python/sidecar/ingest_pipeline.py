@@ -245,6 +245,9 @@ def _index_markdown_files(
     indexed = 0
     indexed_paths: list[str] = []
     total = len(files)
+    pending_chunks: list[dict] = []
+    pending_embeddings: list[dict] = []
+
     for i, md in enumerate(files):
         if is_cancelled():
             break
@@ -264,12 +267,18 @@ def _index_markdown_files(
                 continue
             delete_by_file(workspace, rel)
             embeddings = encode_documents([c["content"] for c in chunks])
-            add_chunks(workspace, chunks, embeddings)
+            pending_chunks.extend(chunks)
+            pending_embeddings.extend(embeddings)
             mark_indexed(rel, mtime, workspace)
             indexed += 1
             indexed_paths.append(rel)
         except Exception:
             continue
+
+    # Batch-add all changed files at once so BM25s is rebuilt only once.
+    if pending_chunks:
+        add_chunks(workspace, pending_chunks, pending_embeddings)
+
     return indexed, indexed_paths
 
 
@@ -305,6 +314,27 @@ def run_ingest(
     if prev.get("force_full_next"):
         mode = "full"
         resume = False
+
+    # Skip startup-style incremental checks when the workspace is already up to date.
+    if (
+        mode == "incremental"
+        and not file_paths
+        and not resume
+        and prev.get("status") == "complete"
+        and prev.get("last_complete_at")
+        and not _workspace_has_pending_ingest(workspace)
+    ):
+        msg = "工作区已是最新，跳过自检"
+        if send_progress:
+            send_progress("sync", 1.0, msg)
+        if send_event:
+            send_event(
+                {
+                    "id": "event",
+                    "result": {"type": "ingest_complete", "success": True, "up_to_date": True, "message": msg},
+                }
+            )
+        return {"success": True, "up_to_date": True, "message": msg}
 
     state = {
         "status": "running",
@@ -495,17 +525,7 @@ def run_ingest(
                     index_targets,
                     lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
                 )
-            # Cross-ref should cover all classified files, not just RAG-indexed ones
-            if not indexed_paths:
-                indexed_paths = [
-                    str(md.relative_to(workspace))
-                    for md in ws_path.rglob("*.md")
-                    if not md.name.startswith(".")
-                    and "wiki" not in md.parts
-                    and not md.name.endswith("_综述.md")
-                    and not md.name.endswith("综述.md")
-                    and NOTES_FOLDER in md.parts
-                ]
+            # Cross-ref only runs on files that actually changed this run.
             prog("index", 0.65, f"索引更新: {stats['indexed_files']} 篇有改动")
             state["pending_crossref_paths"] = indexed_paths
             save_ingest_state(state)

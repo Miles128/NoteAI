@@ -358,6 +358,13 @@ async function startIngest(options) {
     });
 }
 
+async function ensureIngest(options) {
+    var opts = options || {};
+    return pyCall('ensure_ingest', {
+        file_paths: opts.file_paths || []
+    });
+}
+
 async function cancelIngest() {
     return pyCall('cancel_ingest', {});
 }
@@ -649,6 +656,7 @@ window.api = {
     needsSchemaSetup: needsSchemaSetup,
     getSchemaTemplate: getSchemaTemplate,
     startIngest: startIngest,
+    ensureIngest: ensureIngest,
     cancelIngest: cancelIngest,
     retryIngest: retryIngest,
     getIngestStatus: getIngestStatus

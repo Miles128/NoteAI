@@ -272,7 +272,20 @@ async function runPostWorkspaceSetup() {
             console.warn('[App] needs_schema_setup check:', e);
         }
     }
-    if (window.IngestModule && window.IngestModule.startIngest) {
+    // Use ensure_ingest on startup: it skips the whole pipeline if the workspace
+    // is already up to date, instead of re-scanning every file each app open.
+    if (window.api && window.api.ensureIngest) {
+        window.api.ensureIngest().then(function(result) {
+            if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
+                window.EventListeners.markInitialIngestDone();
+            }
+            if (result && !result.started && result.reason === 'up_to_date') {
+                console.info('[App] startup ingest skipped: workspace up to date');
+            }
+        }).catch(function(e) {
+            console.warn('[App] ensure_ingest failed:', e);
+        });
+    } else if (window.IngestModule && window.IngestModule.startIngest) {
         window.IngestModule.startIngest('incremental').then(function() {
             if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
                 window.EventListeners.markInitialIngestDone();

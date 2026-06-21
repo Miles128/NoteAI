@@ -13,6 +13,39 @@ document.addEventListener('DOMContentLoaded', async function() {
     initPreviewResizer();
     initWindowDrag();
 
+    // ── Drag-and-drop file import ──
+    (function(){
+      var overlay = document.getElementById('drop-overlay');
+      var counter = 0;
+      var EXT = ['.pdf','.docx','.doc','.pptx','.ppt','.html','.htm','.txt'];
+      document.addEventListener('dragenter', function(e){ e.preventDefault(); counter++; if(overlay) overlay.style.display='flex'; });
+      document.addEventListener('dragleave', function(e){ e.preventDefault(); counter--; if(counter<=0){ counter=0; if(overlay) overlay.style.display='none'; }});
+      document.addEventListener('dragover', function(e){ e.preventDefault(); });
+      document.addEventListener('drop', async function(e){
+        e.preventDefault(); counter=0;
+        if(overlay) overlay.style.display='none';
+        var files=[];
+        if(e.dataTransfer&&e.dataTransfer.files){
+          for(var i=0;i<e.dataTransfer.files.length;i++){
+            var f=e.dataTransfer.files[i];
+            var ext='.'+f.name.split('.').pop().toLowerCase();
+            if(EXT.indexOf(ext)!==-1) files.push(f.path||f.name);
+          }
+        }
+        if(files.length===0) return;
+        try{
+          updateStatus(window.t('app.importing',{count:files.length}));
+          var r=await window.api.importFilesDirect(files);
+          if(r&&r.success){
+            updateStatus(window.t('app.importDone',{imported:files.length}));
+            if(window.TreeModule&&window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+          } else {
+            updateStatus(window.t('app.importFailed',{message:r&&r.message||''}));
+          }
+        }catch(err){ updateStatus(window.t('app.importFailed',{message:err.message})); }
+      });
+    })();
+
     initTabSwitching();
 
     initCustomTooltip();
@@ -239,7 +272,20 @@ async function runPostWorkspaceSetup() {
             console.warn('[App] needs_schema_setup check:', e);
         }
     }
-    if (window.IngestModule && window.IngestModule.startIngest) {
+    // Use ensure_ingest on startup: it skips the whole pipeline if the workspace
+    // is already up to date, instead of re-scanning every file each app open.
+    if (window.api && window.api.ensureIngest) {
+        window.api.ensureIngest().then(function(result) {
+            if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
+                window.EventListeners.markInitialIngestDone();
+            }
+            if (result && !result.started && result.reason === 'up_to_date') {
+                console.info('[App] startup ingest skipped: workspace up to date');
+            }
+        }).catch(function(e) {
+            console.warn('[App] ensure_ingest failed:', e);
+        });
+    } else if (window.IngestModule && window.IngestModule.startIngest) {
         window.IngestModule.startIngest('incremental').then(function() {
             if (window.EventListeners && window.EventListeners.markInitialIngestDone) {
                 window.EventListeners.markInitialIngestDone();

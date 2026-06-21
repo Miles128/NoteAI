@@ -1,32 +1,37 @@
+import json
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 from config import config, is_ignored_dir
-from config.constants import SYSTEM_APP_DATA_DIR
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
+from utils.ttl_cache import TTLCache
 
 DEFAULT_TOP_K = 5
-# 单次查询：控制 Milvus 召回量、减少 MMR 内 batch-embed 与 cross-encoder 对数
 SEARCH_TOP_K_TAGS = 7
-# best hit 低于该阈值才走 HyDE（省一次 LLM）
 HYDE_TRIGGER_BELOW_SCORE = 0.33
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 6
+_SKIP_RERANK_SCORE = 0.75
 
 _RERANKER = None
 _RERANKER_DISABLED = False
 _RERANKER_LOCK = threading.Lock()
 
+_RETRIEVE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_retrieve")
+
+# TTL cache for identical queries: key -> (expanded_results, citations)
+# Entries expire after 5 minutes so content updates are reflected quickly.
+_query_cache = TTLCache(ttl=300, max_size=50)
+
 
 def _reranker_enabled() -> bool:
     if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
         return False
-    if os.environ.get("NOTEAI_ENABLE_RERANKER", "").lower() in ("1", "true", "yes"):
-        return True
     return True
 
 
@@ -44,6 +49,7 @@ def _get_reranker():
         if _RERANKER is not None:
             return _RERANKER
         try:
+            from config.constants import SYSTEM_APP_DATA_DIR
             from sidecar.rag.embedder import _ensure_hf_env
 
             _ensure_hf_env()
@@ -64,44 +70,69 @@ def _get_reranker():
             return None
 
 
+def _cache_key(query: str, topics, tags) -> str:
+    ws = config.workspace_path or ""
+    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}"
+
+
+def _get_cached(query: str, topics, tags):
+    key = _cache_key(query, topics, tags)
+    return _query_cache.get(key)
+
+
+def _set_cached(query: str, topics, tags, value):
+    key = _cache_key(query, topics, tags)
+    _query_cache.set(key, value)
+
+
 def retrieve(query: str, topics: list = None, tags: list = None, progress_callback=None) -> list:
     workspace = config.workspace_path
     if not workspace:
         return []
 
+    cached = _get_cached(query, topics, tags)
+    if cached is not None:
+        return cached[0]
+
     from sidecar.rag.embedder import encode_query
+    from sidecar.rag.index import filter_usable_chunks, hybrid_search
 
     query_emb = encode_query(query)
     if not query_emb.get("dense_vec"):
         return []
 
-    from sidecar.rag.profile import rewrite_query_with_profile
-
-    profile_query = rewrite_query_with_profile(query)
-
-    from sidecar.rag.index import filter_usable_chunks, hybrid_search
-
     top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
+
+    # Profile rewrite runs in parallel (pure LLM call) but is only used as fallback.
+    profile_future = _RETRIEVE_EXECUTOR.submit(_rewrite_profile, query)
+
     results = hybrid_search(
         workspace,
         query_dense=query_emb["dense_vec"],
         query_sparse=query_emb.get("lexical_weights", {}),
+        query_text=query,
         top_k=top_k,
         topics=topics,
         tags=tags,
     )
 
-    if not results or (results and results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE):
-        hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
-        if hyde_results:
-            existing_ids = {r.get("id") for r in results}
-            for r in hyde_results:
-                if r.get("id") not in existing_ids:
-                    results.append(r)
-                    existing_ids.add(r.get("id"))
-            results.sort(key=lambda x: x.get("score", 0), reverse=True)
-            results = results[:top_k]
+    # HyDE only if the original search is weak, avoiding a mandatory LLM call.
+    if not results or results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE:
+        try:
+            hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
+            if hyde_results:
+                existing_ids = {r.get("id") for r in results}
+                for r in hyde_results:
+                    if r.get("id") not in existing_ids:
+                        results.append(r)
+                        existing_ids.add(r.get("id"))
+                results.sort(key=lambda x: x.get("score", 0), reverse=True)
+                results = results[:top_k]
+        except Exception:
+            pass
 
+    # Profile fallback only if main search returned nothing.
+    profile_query = profile_future.result()
     if not results and profile_query != query:
         profile_emb = encode_query(profile_query)
         if profile_emb.get("dense_vec"):
@@ -109,6 +140,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
                 workspace,
                 query_dense=profile_emb["dense_vec"],
                 query_sparse=profile_emb.get("lexical_weights", {}),
+                query_text=profile_query,
                 top_k=top_k,
                 topics=topics,
                 tags=tags,
@@ -128,7 +160,19 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     from sidecar.rag.context_expand import expand_retrieval_context
 
     expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
-    return filter_usable_chunks(expanded)
+    expanded = filter_usable_chunks(expanded)
+
+    _set_cached(query, topics, tags, (expanded, []))
+    return expanded
+
+
+def _rewrite_profile(query: str) -> str:
+    try:
+        from sidecar.rag.profile import rewrite_query_with_profile
+
+        return rewrite_query_with_profile(query)
+    except Exception:
+        return query
 
 
 def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
@@ -142,17 +186,17 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
         hypo_answer = result.content if hasattr(result, "content") else str(result)
 
         from sidecar.rag.embedder import encode_query
+        from sidecar.rag.index import hybrid_search
 
         hyde_emb = encode_query(hypo_answer)
         if not hyde_emb.get("dense_vec"):
             return []
 
-        from sidecar.rag.index import hybrid_search
-
         return hybrid_search(
             workspace,
             query_dense=hyde_emb["dense_vec"],
             query_sparse=hyde_emb.get("lexical_weights", {}),
+            query_text=hypo_answer,
             top_k=DEFAULT_TOP_K,
             topics=topics,
             tags=tags,
@@ -166,21 +210,34 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
     if len(results) <= top_k:
         return results
 
-    from sidecar.rag.embedder import encode
+    import numpy as np
 
     try:
-        contents = [r.get("content", "") for r in results]
-        if not any(contents):
-            return results[:top_k]
+        dense_vecs = []
+        needs_encode = False
+        for r in results:
+            vec = r.get("dense_vec")
+            if vec and len(vec) == 512:
+                dense_vecs.append(vec)
+            else:
+                needs_encode = True
+                break
 
-        embeddings = encode(contents)
-        dense_vecs = embeddings["dense_vecs"]
+        if needs_encode or not dense_vecs:
+            from sidecar.rag.embedder import encode
 
-        import numpy as np
+            contents = [r.get("content", "") for r in results]
+            if not any(contents):
+                return results[:top_k]
 
-        norms = np.linalg.norm(dense_vecs, axis=1, keepdims=True)
+            embeddings = encode(contents)
+            dense_vecs_arr = embeddings["dense_vecs"]
+        else:
+            dense_vecs_arr = np.array(dense_vecs, dtype=np.float32)
+
+        norms = np.linalg.norm(dense_vecs_arr, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1, norms)
-        norm_vecs = dense_vecs / norms
+        norm_vecs = dense_vecs_arr / norms
 
         selected_indices = [0]
         remaining = set(range(1, len(results)))
@@ -191,7 +248,6 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
             for idx in remaining:
                 relevance = results[idx].get("score", 0)
-
                 max_sim = 0.0
                 for sel_idx in selected_indices:
                     sim = float(np.dot(norm_vecs[idx], norm_vecs[sel_idx]))
@@ -216,6 +272,10 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
 def _rerank(query: str, results: list, top_k: int = 5) -> list:
     try:
+        # Skip reranking if the top result is already very strong
+        if results and results[0].get("score", 0) >= _SKIP_RERANK_SCORE:
+            return results[:top_k]
+
         reranker = _get_reranker()
         if reranker is None:
             return results[:top_k]
@@ -225,7 +285,6 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
             return results[:top_k]
 
         scores = reranker.compute_score(pairs, normalize=True)
-
         if isinstance(scores, float):
             scores = [scores]
 
@@ -242,17 +301,8 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
         return results[:top_k]
 
 
-def rebuild_index(progress_callback=None):
-    workspace = config.workspace_path
-    if not workspace:
-        return {"success": False, "message": "未设置工作区"}
-
-    from sidecar.rag.chunker import chunk_file
-    from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import build_index
-
-    workspace_path = Path(workspace)
-    excluded_dirs = {
+def _excluded_dirs() -> set[str]:
+    return {
         ".git",
         ".obsidian",
         ".trash",
@@ -262,8 +312,12 @@ def rebuild_index(progress_callback=None):
         WORKSPACE_APP_FOLDER,
         RAG_INDEX_FOLDER,
     }
-    all_chunks = []
 
+
+def _scan_files(workspace_path: Path):
+    """Scan workspace for markdown files eligible for indexing."""
+    excluded_dirs = _excluded_dirs()
+    files: dict[str, dict] = {}
     for md_file in sorted(workspace_path.rglob("*.md")):
         if md_file.name.startswith("."):
             continue
@@ -274,12 +328,46 @@ def rebuild_index(progress_callback=None):
         if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
 
+        stat = md_file.stat()
+        rel = str(md_file.relative_to(workspace_path))
+        files[rel] = {"mtime": stat.st_mtime, "size": stat.st_size}
+    return files
+
+
+def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:
+    """Read and chunk a list of files in parallel."""
+    from sidecar.rag.chunker import chunk_file
+
+    def _chunk_one(rel_path: str) -> list[dict]:
         try:
-            text = md_file.read_text(encoding="utf-8")
-            chunks = chunk_file(str(md_file), text)
-            all_chunks.extend(chunks)
+            text = (workspace_path / rel_path).read_text(encoding="utf-8")
+            return chunk_file(rel_path, text)
         except Exception as e:
-            logger.warning(f"[rag/retriever] chunk error {md_file}: {e}\n")
+            logger.warning(f"[rag/retriever] chunk error {rel_path}: {e}\n")
+            return []
+
+    all_chunks: list[dict] = []
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="rag_chunk") as executor:
+        for chunks in executor.map(_chunk_one, rel_paths):
+            all_chunks.extend(chunks)
+    return all_chunks
+
+
+def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str, dict], progress_callback=None):
+    """Full rebuild path used when incremental rebuild is not possible."""
+    from sidecar.rag.chunker import chunk_file
+    from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
+    from sidecar.rag.index import build_index, rebuild_search_indices, save_manifest
+    from sidecar.rag.profile import update_profile_from_topics
+
+    rel_paths = sorted(current_files.keys())
+    all_chunks: list[dict] = []
+    for rel_path in rel_paths:
+        try:
+            text = (workspace_path / rel_path).read_text(encoding="utf-8")
+            all_chunks.extend(chunk_file(rel_path, text))
+        except Exception as e:
+            logger.warning(f"[rag/retriever] chunk error {rel_path}: {e}\n")
 
     if not all_chunks:
         return {"success": False, "message": "未找到可索引的文件"}
@@ -290,7 +378,9 @@ def rebuild_index(progress_callback=None):
     texts = [c["content"] for c in all_chunks]
     try:
         embeddings = encode_documents(
-            texts, download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None
+            texts,
+            download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
+            progress_callback=progress_callback,
         )
     except Exception as e:
         return {"success": False, "message": f"Embedding 生成失败: {e}"}
@@ -298,9 +388,19 @@ def rebuild_index(progress_callback=None):
     if progress_callback:
         progress_callback(len(all_chunks) // 2, len(all_chunks), "正在构建索引...")
 
-    result = build_index(workspace, all_chunks, embeddings, progress_callback=progress_callback)
+    build_index(workspace, all_chunks, embeddings, progress_callback=progress_callback)
 
-    from sidecar.rag.profile import update_profile_from_topics
+    # Build search indices and manifest from the new collection
+    all_chunk_ids = [c["id"] for c in all_chunks]
+    chunk_count = rebuild_search_indices(workspace, all_chunk_ids, progress_callback=progress_callback)
+    build_and_save_global_idf(all_chunks, workspace)
+
+    manifest = {"version": 1, "files": {}}
+    for c in all_chunks:
+        rel = c["file_path"]
+        entry = manifest["files"].setdefault(rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []})
+        entry["chunks"].append(c["id"])
+    save_manifest(workspace, manifest)
 
     topic_counts = {}
     for c in all_chunks:
@@ -310,7 +410,165 @@ def rebuild_index(progress_callback=None):
     sorted_topics = sorted(topic_counts.keys(), key=lambda x: topic_counts[x], reverse=True)
     update_profile_from_topics(sorted_topics)
 
-    return result
+    return {"success": True, "chunk_count": chunk_count}
+
+
+def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
+    workspace = workspace or config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区"}
+
+    from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
+    from sidecar.rag.index import (
+        add_chunks,
+        delete_by_file,
+        index_exists,
+        load_manifest,
+        rebuild_search_indices,
+        save_manifest,
+    )
+    from sidecar.rag.profile import update_profile_from_topics
+
+    workspace_path = Path(workspace)
+    current_files = _scan_files(workspace_path)
+
+    if not current_files:
+        return {"success": False, "message": "未找到可索引的文件"}
+
+    manifest = load_manifest(workspace)
+    can_incremental = (
+        not force_full
+        and index_exists(workspace)
+        and manifest.get("files")
+    )
+
+    if not can_incremental:
+        if progress_callback:
+            progress_callback(0, len(current_files), "全量重建索引...")
+        return _full_rebuild(workspace, workspace_path, current_files, progress_callback=progress_callback)
+
+    # Incremental rebuild
+    old_files = manifest.get("files", {})
+    unchanged: list[str] = []
+    modified: list[str] = []
+    new_files: list[str] = []
+
+    for rel, info in current_files.items():
+        old = old_files.get(rel)
+        if old and old.get("mtime") == info["mtime"] and old.get("size") == info["size"]:
+            unchanged.append(rel)
+        else:
+            modified.append(rel)
+
+    deleted = [rel for rel in old_files if rel not in current_files]
+
+    if progress_callback:
+        progress_callback(0, max(len(modified) + len(new_files) + len(deleted), 1), "准备增量更新...")
+
+    # Delete removed and modified files from the collection
+    for rel_path in deleted + modified:
+        try:
+            delete_by_file(workspace, rel_path)
+        except Exception as e:
+            logger.warning(f"[rag/retriever] delete_by_file failed {rel_path}: {e}\n")
+
+    # Chunk new and modified files in parallel
+    files_to_chunk = modified + new_files
+    new_chunks: list[dict] = []
+    if files_to_chunk:
+        new_chunks = _chunk_files_parallel(workspace_path, files_to_chunk)
+
+    # Encode and add new chunks
+    if new_chunks:
+        if progress_callback:
+            progress_callback(0, len(new_chunks), "正在生成 Embedding...")
+        texts = [c["content"] for c in new_chunks]
+        try:
+            embeddings = encode_documents(
+                texts,
+                download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
+                progress_callback=progress_callback,
+            )
+        except Exception as e:
+            return {"success": False, "message": f"Embedding 生成失败: {e}"}
+        add_chunks(workspace, new_chunks, embeddings)
+
+    # Rebuild BM25s, metadata, global IDF from the full collection
+    all_chunk_ids: list[str] = []
+    new_manifest = {"version": 1, "files": {}}
+
+    for rel in unchanged:
+        entry = old_files[rel]
+        chunk_ids = entry.get("chunks", [])
+        all_chunk_ids.extend(chunk_ids)
+        new_manifest["files"][rel] = {
+            "mtime": entry["mtime"],
+            "size": entry["size"],
+            "chunks": chunk_ids,
+        }
+
+    for c in new_chunks:
+        rel = c["file_path"]
+        all_chunk_ids.append(c["id"])
+        entry = new_manifest["files"].setdefault(
+            rel,
+            {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []},
+        )
+        entry["chunks"].append(c["id"])
+
+    chunk_count = rebuild_search_indices(workspace, all_chunk_ids, progress_callback=progress_callback)
+
+    # Build global IDF from full corpus
+    collection = None
+    try:
+        from sidecar.rag.index import _get_collection
+
+        collection = _get_collection(workspace)
+    except Exception:
+        pass
+
+    full_corpus: list[dict] = []
+    if collection is not None:
+        batch_size = 256
+        for i in range(0, len(all_chunk_ids), batch_size):
+            batch = all_chunk_ids[i : i + batch_size]
+            fetched = collection.fetch(
+                batch,
+                output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+                include_vector=False,
+            )
+            for doc in fetched.values():
+                fields = doc.fields or {}
+                tags = []
+                try:
+                    tags = json.loads(fields.get("tags_json") or "[]")
+                except Exception:
+                    pass
+                full_corpus.append(
+                    {
+                        "id": doc.id,
+                        "content": fields.get("content", ""),
+                        "file_path": fields.get("file_path", ""),
+                        "topic": fields.get("topic", ""),
+                        "tags": tags,
+                        "section_title": fields.get("section_title", ""),
+                    }
+                )
+    else:
+        full_corpus = new_chunks
+
+    build_and_save_global_idf(full_corpus, workspace)
+    save_manifest(workspace, new_manifest)
+
+    topic_counts = {}
+    for c in full_corpus:
+        t = c.get("topic", "")
+        if t:
+            topic_counts[t] = topic_counts.get(t, 0) + 1
+    sorted_topics = sorted(topic_counts.keys(), key=lambda x: topic_counts[x], reverse=True)
+    update_profile_from_topics(sorted_topics)
+
+    return {"success": True, "chunk_count": chunk_count, "incremental": True}
 
 
 def incremental_update(file_path: str, action: str = "update"):

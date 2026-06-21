@@ -1,5 +1,6 @@
 from .agent_handler import AgentHandler
 from .base import BaseHandler
+from .cli_agent_handler import CliAgentHandler
 from .cloud_sync_handler import CloudSyncHandler
 from .config_handler import ConfigHandler
 from .files_handler import FilesHandler
@@ -28,4 +29,5 @@ __all__ = [
     "IngestHandler",
     "KbHandler",
     "AgentHandler",
+    "CliAgentHandler",
 ]

@@ -15,10 +15,10 @@
 
 [data-theme="light"] #schema-wizard-modal .modal-dialog {
     background: var(--modal-bg);
-    border: 0.5px solid var(--glass-border);
-    box-shadow: var(--card-shadow);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 }
 
 .schema-wizard-progress {

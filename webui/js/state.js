@@ -138,7 +138,7 @@
             await window.api.saveThemePreference(theme);
             _state.themePreference = theme;
             try {
-                localStorage.setItem('noteai_theme', theme);
+                window.Storage.setRaw(window.Storage.KEYS.THEME, theme, { silent: true });
             } catch (_e) { /* noop */ }
             notify();
         } catch (e) {

@@ -1,9 +1,9 @@
 """Resolve user-provided paths against the configured workspace."""
 
-import sys
 from pathlib import Path
 
 from config import config
+from utils.logger import logger
 
 
 def resolve_workspace_path(path: str) -> str | None:
@@ -11,7 +11,7 @@ def resolve_workspace_path(path: str) -> str | None:
         return None
     workspace = config.workspace_path
     if not workspace:
-        print("[WARN] resolve_workspace_path: workspace not set", file=sys.stderr)
+        logger.warning("resolve_workspace_path: workspace not set")
         return None
     try:
         workspace_abs = Path(workspace).resolve()
@@ -19,13 +19,12 @@ def resolve_workspace_path(path: str) -> str | None:
         target_abs.relative_to(workspace_abs)
         return str(target_abs)
     except ValueError:
-        print(
-            f"[WARN] resolve_workspace_path: path outside workspace: path={path}, workspace={workspace}",
-            file=sys.stderr,
+        logger.warning(
+            f"resolve_workspace_path: path outside workspace: path={path}, workspace={workspace}",
         )
         return None
     except Exception as e:
-        print(f"[WARN] resolve_workspace_path error for '{path}': {e}", file=sys.stderr)
+        logger.warning(f"resolve_workspace_path error for '{path}': {e}")
         return None
 
 
@@ -59,5 +58,5 @@ def find_file_by_name_in_workspace(path: str) -> str | None:
                 except ValueError:
                     continue
     except Exception as e:
-        print(f"[WARN] find_file_by_name_in_workspace error for '{path}': {e}", file=sys.stderr)
+        logger.warning(f"find_file_by_name_in_workspace error for '{path}': {e}")
     return None

@@ -10,12 +10,46 @@ _MAX_LONG_MEMORY_CHARS = 1500
 
 
 def _memory_dir():
+    """L2 RAG session memory directory.
+
+    L1 (user profile) lives in ``<workspace>/.ai_memory/``; L2 (RAG chat
+    memory) lives in ``<workspace>/.noteai/memory/`` to keep the two layers
+    cleanly separated.
+    """
+    ws = config.workspace_path
+    if not ws:
+        return None
+    d = Path(ws) / ".noteai" / "memory"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _legacy_memory_dir():
+    """Return the old .ai_memory path if it exists (for migration)."""
     ws = config.workspace_path
     if not ws:
         return None
     d = Path(ws) / ".ai_memory"
-    d.mkdir(exist_ok=True)
-    return d
+    return d if d.exists() else None
+
+
+def _migrate_legacy_memory():
+    """One-time migration: move long/short memory from .ai_memory to .noteai/memory."""
+    legacy = _legacy_memory_dir()
+    if not legacy:
+        return
+    new_dir = _memory_dir()
+    if not new_dir:
+        return
+    for name in ("long_memory.json", "short_memory.json"):
+        old = legacy / name
+        new = new_dir / name
+        if old.exists() and not new.exists():
+            try:
+                old.rename(new)
+                logger.info(f"[rag/memory] migrated {name} to .noteai/memory/")
+            except OSError:
+                pass
 
 
 def _long_memory_path():
@@ -29,6 +63,7 @@ def _short_memory_path():
 
 
 def load_long_memory():
+    _migrate_legacy_memory()
     p = _long_memory_path()
     if not p or not p.exists():
         return ""
@@ -47,6 +82,7 @@ def save_long_memory(content):
 
 
 def load_short_memory():
+    _migrate_legacy_memory()
     p = _short_memory_path()
     if not p or not p.exists():
         return ""

@@ -8,8 +8,6 @@ import re
 import threading
 from pathlib import Path
 
-from config import config
-
 _WORD_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 
 
@@ -26,6 +24,8 @@ class FullTextIndex:
 
     def ensure_indexed(self) -> bool:
         """Rebuild index if workspace files have changed.  Returns True if rebuilt."""
+        from config import config
+
         workspace = config.workspace_path
         if not workspace:
             return False
@@ -85,6 +85,8 @@ class FullTextIndex:
             scored = sorted(file_hits.items(), key=lambda x: -x[1])[:max_results]
 
         results = []
+        from config import config
+
         workspace = config.workspace_path
         if not workspace:
             return results

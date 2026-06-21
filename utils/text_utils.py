@@ -1330,6 +1330,37 @@ def _is_meaningful_tag(tag: str) -> bool:
 
 
 def parse_frontmatter(text: str):
-    from sidecar.textutils import parse_frontmatter as _parse_frontmatter
+    """Parse YAML frontmatter from markdown text.
 
-    return _parse_frontmatter(text)
+    Returns (meta_dict, body_str). If no frontmatter is found, returns
+    (None, original_text).
+    """
+    import re
+
+    import yaml
+
+    m = re.match(r"^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---", text.lstrip("\ufeff"))
+    if not m:
+        return None, text
+    try:
+        meta = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError:
+        meta = {}
+    body_start = m.end()
+    body = text.lstrip("\ufeff")[body_start:]
+    return meta, body
+
+
+def write_frontmatter(meta: dict | None, body: str, *, had_bom: bool = False) -> str:
+    """Reconstruct file content from frontmatter dict and body text.
+
+    If *meta* is ``None`` or empty, returns just the body (no frontmatter block).
+    Otherwise returns ``---\\n<yaml>\\n---\\n<body>``.
+    """
+    import yaml
+
+    prefix = "\ufeff" if had_bom else ""
+    if not meta:
+        return prefix + body
+    fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
+    return prefix + "---\n" + fm + "\n---\n" + body.lstrip("\n")

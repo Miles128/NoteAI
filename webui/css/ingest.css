@@ -8,10 +8,10 @@
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    background: var(--surface, #161f2e);
-    border: 0.5px solid var(--border);
-    border-radius: 8px;
-    box-shadow: var(--card-shadow);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    box-shadow: none;
     font-size: 13px;
 }
 
@@ -20,10 +20,10 @@
 }
 
 [data-theme="light"] #ingest-pipeline-bar {
-    background: var(--glass-bg);
-    border-color: var(--glass-border);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
+    background: var(--surface);
+    border-color: var(--border);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
 }
 
 #ingest-pipeline-bar .ingest-track {
@@ -38,7 +38,7 @@
 #ingest-pipeline-bar .ingest-fill {
     height: 100%;
     width: 0%;
-    background: linear-gradient(90deg, #4a90d9, #6ab0f3);
+    background: var(--primary);
     transition: width 0.25s ease;
 }
 

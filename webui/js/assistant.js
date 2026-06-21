@@ -246,6 +246,13 @@ window.AssistantModule = (function() {
         if (!question) return;
 
         input.value = '';
+
+        // CLI Agent 模式：转发到 CliAgentModule
+        if (window.CliAgentModule && window.CliAgentModule.isCliAgentMode && window.CliAgentModule.isCliAgentMode()) {
+            window.CliAgentModule.sendMessage(question);
+            return;
+        }
+
         addUserMessage(question);
         _chatHistory.push({ role: 'user', content: question });
         _lastArchive = { question: question, answer: '', rowEl: null };
@@ -286,6 +293,9 @@ window.AssistantModule = (function() {
     function _extractTopics() {
         if (!window.AppState || !window.AppState.lastTopicData) return null;
         var data = window.AppState.lastTopicData;
+        if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (_e) { return null; }
+        }
         if (!data || !data.topics) return null;
         return data.topics.map(function(t) { return t.name; });
     }
@@ -293,6 +303,9 @@ window.AssistantModule = (function() {
     function _extractTags() {
         if (!window.AppState || !window.AppState.lastTagsData) return null;
         var data = window.AppState.lastTagsData;
+        if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch (_e) { return null; }
+        }
         if (!data || !data.tags) return null;
         return data.tags.map(function(t) { return t.name; });
     }
@@ -448,13 +461,35 @@ window.AssistantModule = (function() {
             if (_indexBuilt) {
                 addSystemMessage(window.t('assistant.indexBuildDone', { count: eventData.data.chunk_count || 0 }));
             } else {
-                addSystemMessage(window.t('assistant.indexBuildFailed', { message: eventData.data.message || window.t('common.unknownError') }));
+                var failMessage = (eventData.data && eventData.data.message) || window.t('common.unknownError');
+                addSystemMessage(window.t('assistant.indexBuildFailed', { message: failMessage }));
+            }
+        } else if (eventData.type === 'rag-index-progress') {
+            var pct = eventData.data && eventData.data.percent || 0;
+            var msg = eventData.data && eventData.data.message || '';
+            addSystemMessage(window.t('assistant.indexProgress', { percent: pct, message: msg }));
+        }
+
+        // CLI Agent 事件转发
+        if (eventData.type && eventData.type.indexOf('cli_agent_') === 0) {
+            if (window.CliAgentModule && window.CliAgentModule.handleEvent) {
+                window.CliAgentModule.handleEvent(eventData);
             }
         }
     }
 
+    function _estimateIndexTime() {
+        // Rough estimate: ~0.5s per file for chunking + embedding on M-series Mac
+        var fileCount = window.AppState && window.AppState.files ? window.AppState.files.length : 100;
+        var seconds = Math.max(10, fileCount * 0.5);
+        if (seconds < 60) {
+            return Math.ceil(seconds) + '秒';
+        }
+        return Math.ceil(seconds / 60) + '分钟';
+    }
+
     function rebuildIndex() {
-        addSystemMessage(window.t('assistant.indexBuilding'));
+        addSystemMessage(window.t('assistant.indexBuilding', { estimate: _estimateIndexTime() }));
         window.api.ragRebuildIndex().catch(function(err) {
             addSystemMessage(window.t('assistant.indexRequestFailed', { message: err.message }));
         });
@@ -538,7 +573,7 @@ window.AssistantModule = (function() {
 
             var name = document.createElement('span');
             name.className = 'ai-citation-name';
-            name.textContent = cite.file_name || cite.file_path;
+            name.textContent = cite.source_label || cite.file_name || cite.file_path || ('[' + cite.index + ']');
             info.appendChild(name);
 
             if (cite.topic) {

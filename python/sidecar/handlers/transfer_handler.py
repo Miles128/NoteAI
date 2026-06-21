@@ -29,6 +29,10 @@ class TransferHandler(BaseHandler):
         router.register("import_rss_feed", self._import_rss_feed)
         router.register("import_transcript", self._import_transcript)
         router.register("convert_raw_archive", self._convert_raw_archive)
+        router.register("save_rss_subscription", self._save_rss_subscription)
+        router.register("remove_rss_subscription", self._remove_rss_subscription)
+        router.register("list_rss_subscriptions", self._list_rss_subscriptions)
+        router.register("fetch_all_rss", self._fetch_all_rss)
 
     def _start_web_download(self, params):
         urls = params.get("urls", [])
@@ -302,7 +306,7 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        self._server.note_integration = NoteIntegration()
+        self._note_integration = NoteIntegration()
 
         if not self._start_task("note_integration", self._do_note_integration, args=(workspace, auto_topic, topics)):
             return {"success": False, "message": "整合任务正在进行中，请稍后"}
@@ -311,23 +315,27 @@ class TransferHandler(BaseHandler):
 
     def _do_note_integration(self, workspace, auto_topic, topics):
         _ = auto_topic
+        ni = getattr(self, "_note_integration", None)
+        if ni is None:
+            ni = NoteIntegration()
+            self._note_integration = ni
         try:
-            documents = self.note_integration.load_documents_from_folder(workspace)
-            result = self.note_integration.integrate(
+            documents = ni.load_documents_from_folder(workspace)
+            result = ni.integrate(
                 documents=documents, save_path=workspace, user_topics=topics if topics else None
             )
-            self.note_integration.documents = []
+            ni.documents = []
             self._send_response({"id": "event", "result": {"type": "note_integration_complete", "data": result}})
         except Exception as e:
-            if self.note_integration:
-                self.note_integration.documents = []
+            if ni:
+                ni.documents = []
             logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             self._send_response({"id": "event", "result": {"type": "note_integration_error", "error": str(e)}})
 
     def _import_rss_feed(self, params):
         from sidecar.multi_source import import_rss_feed
 
-        url = params.get("url", "")
+        url = params.get("feed_url", "") or params.get("url", "")
         max_items = int(params.get("max_items", 10) or 10)
         fetch_articles = bool(params.get("fetch_articles", True))
         if not self.config.workspace_path:
@@ -395,3 +403,42 @@ class TransferHandler(BaseHandler):
                 },
             }
         )
+
+    # ── RSS Subscription Management ──
+
+    def _save_rss_subscription(self, params):
+        url = params.get("url", "")
+        name = params.get("name", "")
+        workspace = self.config.workspace_path
+        if not workspace or not url:
+            return {"success": False, "message": "缺少工作区或 URL"}
+        from sidecar.multi_source import save_subscription
+
+        save_subscription(workspace, url, name)
+        return {"success": True}
+
+    def _remove_rss_subscription(self, params):
+        url = params.get("url", "")
+        workspace = self.config.workspace_path
+        if not workspace or not url:
+            return {"success": False, "message": "缺少工作区或 URL"}
+        from sidecar.multi_source import remove_subscription
+
+        remove_subscription(workspace, url)
+        return {"success": True}
+
+    def _list_rss_subscriptions(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "subscriptions": []}
+        from sidecar.multi_source import load_subscriptions
+
+        return {"success": True, "subscriptions": load_subscriptions(workspace)}
+
+    def _fetch_all_rss(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "请先设置工作区"}
+        from sidecar.multi_source import fetch_all_subscriptions
+
+        return fetch_all_subscriptions(workspace)

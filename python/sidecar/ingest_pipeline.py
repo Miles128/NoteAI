@@ -32,6 +32,72 @@ def _state_path() -> Path | None:
     return p
 
 
+def _fingerprint_path(workspace: str) -> Path:
+    p = Path(workspace) / WORKSPACE_APP_FOLDER / "ingest_fingerprint.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _load_fingerprint(workspace: str) -> dict:
+    path = _fingerprint_path(workspace)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_fingerprint(workspace: str, fingerprint: dict) -> None:
+    path = _fingerprint_path(workspace)
+    try:
+        path.write_text(json.dumps(fingerprint, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _workspace_file_fingerprint(workspace: str) -> dict:
+    """Fast fingerprint of tracked files: path -> [mtime, size]."""
+    ws = Path(workspace)
+    supported = set(FileConverterManager.get_supported_formats())
+    fingerprint: dict = {}
+    for f in ws.rglob("*"):
+        if not f.is_file() or f.name.startswith("."):
+            continue
+        rel = f.relative_to(ws)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if any(is_ignored_dir(p) for p in rel.parts):
+            continue
+        if WORKSPACE_APP_FOLDER in rel.parts or "wiki" in rel.parts or RAW_FOLDER in rel.parts:
+            continue
+        suffix = f.suffix.lower()
+        is_md = suffix == ".md"
+        is_convertible = suffix in supported
+        if not is_md and not is_convertible:
+            continue
+        try:
+            stat = f.stat()
+            fingerprint[str(rel).replace("\\", "/")] = [stat.st_mtime, stat.st_size]
+        except OSError:
+            continue
+    return fingerprint
+
+
+def _workspace_files_changed(workspace: str) -> tuple[bool, dict]:
+    """Return (changed, current_fingerprint).
+
+    Uses mtime + size as the change signal. A full hash is computed only when
+    mtime/size match but we still want to be safe, which is skipped here for
+    speed; callers fall back to content checks when needed.
+    """
+    current = _workspace_file_fingerprint(workspace)
+    previous = _load_fingerprint(workspace)
+    if previous == current:
+        return False, current
+    return True, current
+
+
 def load_ingest_state() -> dict:
     path = _state_path()
     if not path or not path.exists():
@@ -76,6 +142,11 @@ def normalize_ingest_state() -> dict:
 
 
 def _workspace_has_pending_ingest(workspace: str) -> bool:
+    # Fast path: if no tracked files have changed since last scan, skip heavy checks.
+    changed, _ = _workspace_files_changed(workspace)
+    if not changed:
+        return False
+
     if _scan_convert_pending(workspace):
         return True
     if _scan_classify_pending(workspace):
@@ -245,6 +316,9 @@ def _index_markdown_files(
     indexed = 0
     indexed_paths: list[str] = []
     total = len(files)
+    pending_chunks: list[dict] = []
+    pending_embeddings: list[dict] = []
+
     for i, md in enumerate(files):
         if is_cancelled():
             break
@@ -264,12 +338,18 @@ def _index_markdown_files(
                 continue
             delete_by_file(workspace, rel)
             embeddings = encode_documents([c["content"] for c in chunks])
-            add_chunks(workspace, chunks, embeddings)
+            pending_chunks.extend(chunks)
+            pending_embeddings.extend(embeddings)
             mark_indexed(rel, mtime, workspace)
             indexed += 1
             indexed_paths.append(rel)
         except Exception:
             continue
+
+    # Batch-add all changed files at once so BM25s is rebuilt only once.
+    if pending_chunks:
+        add_chunks(workspace, pending_chunks, pending_embeddings)
+
     return indexed, indexed_paths
 
 
@@ -305,6 +385,30 @@ def run_ingest(
     if prev.get("force_full_next"):
         mode = "full"
         resume = False
+
+    # Skip startup-style incremental checks when the workspace is already up to date.
+    if (
+        mode == "incremental"
+        and not file_paths
+        and not resume
+        and prev.get("status") == "complete"
+        and prev.get("last_complete_at")
+        and not _workspace_has_pending_ingest(workspace)
+    ):
+        msg = "工作区已是最新，跳过自检"
+        if send_progress:
+            send_progress("sync", 1.0, msg)
+        if send_event:
+            send_event(
+                {
+                    "id": "event",
+                    "result": {"type": "ingest_complete", "success": True, "up_to_date": True, "message": msg},
+                }
+            )
+        # Save current fingerprint even when skipped, so restarts stay fast.
+        _, fingerprint = _workspace_files_changed(workspace)
+        _save_fingerprint(workspace, fingerprint)
+        return {"success": True, "up_to_date": True, "message": msg}
 
     state = {
         "status": "running",
@@ -495,6 +599,7 @@ def run_ingest(
                     index_targets,
                     lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
                 )
+            # Cross-ref only runs on files that actually changed this run.
             prog("index", 0.65, f"索引更新: {stats['indexed_files']} 篇有改动")
             state["pending_crossref_paths"] = indexed_paths
             save_ingest_state(state)
@@ -511,6 +616,8 @@ def run_ingest(
                 from utils.link_indexer import discover_cross_refs_for_file
 
                 total_x = len(crossref_paths)
+                # Use LLM only when few files; skip for large batches to save time
+                use_llm = total_x <= 20
                 cross_added = 0
                 for i, rel in enumerate(crossref_paths):
                     if is_cancelled():
@@ -521,7 +628,7 @@ def run_ingest(
                         f"交叉引用 ({i + 1}/{total_x}): {Path(rel).name}",
                     )
                     try:
-                        xr = discover_cross_refs_for_file(rel, use_llm=True)
+                        xr = discover_cross_refs_for_file(rel, use_llm=use_llm)
                         cross_added += int(xr.get("added") or 0)
                     except Exception:
                         continue
@@ -588,6 +695,9 @@ def run_ingest(
         state["completed_stages"] = []
         state.pop("error", None)
         save_ingest_state(state)
+        # Save fingerprint so next startup can skip heavy scans when nothing changed.
+        _, fingerprint = _workspace_files_changed(workspace)
+        _save_fingerprint(workspace, fingerprint)
         prog("sync", 1.0, "入库流水线完成")
 
         if send_event:

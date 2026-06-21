@@ -158,22 +158,44 @@ class FilesHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def _reveal_in_finder(self, params):
+        import shutil
+
         path = params.get("path", "")
-        if not path or not Path(path).exists():
-            return {"success": False, "message": "路径不存在"}
+        if not path:
+            return {"success": False, "message": "路径不能为空"}
+
         resolved = self._resolve_path(path)
         if resolved is None:
             return {"success": False, "message": "路径不允许在工作区外"}
-        if not Path(resolved).exists():
+        resolved_path = Path(resolved)
+        if not resolved_path.exists():
             return {"success": False, "message": "解析后的路径不存在"}
-        path = resolved
+
+        # Reject paths with control characters that could confuse external commands.
+        if any(ord(ch) < 32 for ch in resolved):
+            return {"success": False, "message": "路径包含非法字符"}
+
         try:
             if platform.system() == "Darwin":
-                subprocess.Popen(["open", "-R", path])
+                cmd = shutil.which("open")
+                if not cmd:
+                    return {"success": False, "message": "系统未找到 open 命令"}
+                # "--" prevents paths starting with "-" from being parsed as options.
+                subprocess.Popen([cmd, "-R", "--", str(resolved_path)])
             elif platform.system() == "Windows":
-                subprocess.Popen(["explorer", "/select,", path])
+                cmd = shutil.which("explorer")
+                if not cmd:
+                    return {"success": False, "message": "系统未找到 explorer 命令"}
+                # Quote the path so explorer sees it as a single argument.
+                subprocess.Popen([cmd, f'/select,"{resolved_path}"'])
             else:
-                subprocess.Popen(["xdg-open", str(Path(path).parent)])
+                cmd = shutil.which("xdg-open") or shutil.which("nautilus") or shutil.which("dolphin")
+                if not cmd:
+                    return {"success": False, "message": "系统未找到文件管理器命令"}
+                parent = resolved_path.parent
+                if not parent.exists():
+                    return {"success": False, "message": "父目录不存在"}
+                subprocess.Popen([cmd, str(parent)])
             return {"success": True}
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -190,6 +212,24 @@ class FilesHandler(BaseHandler):
 
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
+
+        if not full_path.is_file():
+            return {"success": False, "message": "只能删除文件，不能删除目录"}
+
+        workspace = self.config.workspace_path
+        if workspace:
+            ws_path = Path(workspace).resolve()
+            resolved_path = full_path.resolve()
+            try:
+                rel = resolved_path.relative_to(ws_path)
+            except ValueError:
+                return {"success": False, "message": "只能删除工作区内的文件"}
+            # 保护关键目录本身不被删除（虽然 is_file 已拦截目录，但保留边界校验）
+            protected_roots = {"Notes", "wiki", "Raw", ".noteai", ".ai_memory"}
+            if rel.parts and rel.parts[0] in protected_roots and len(rel.parts) <= 1:
+                return {"success": False, "message": "不能删除工作区的核心目录"}
+            if resolved_path == ws_path:
+                return {"success": False, "message": "不能删除工作区根目录"}
 
         file_topic = None
         if full_path.suffix.lower() == ".md":

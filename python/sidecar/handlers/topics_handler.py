@@ -509,6 +509,17 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)
         router.register("get_survey_status", self._get_survey_status)
         router.register("toggle_survey", self._toggle_survey)
+        router.register("fix_survey_topics", self._fix_survey_topics)
+
+    def _fix_survey_topics(self, _params):
+        try:
+            from sidecar.wiki_utils import sync_wiki_with_files
+
+            sync_wiki_with_files()
+            return {"success": True, "message": "已同步 wiki 与文件系统"}
+        except Exception as e:
+            logger.warning(f"[fix_survey_topics] failed: {e}")
+            return {"success": False, "message": str(e)}
 
     def _get_survey_status(self, _params):
         surveys = get_survey_status()

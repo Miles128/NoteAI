@@ -1,7 +1,9 @@
 """Tests for RPC router."""
 
+from pathlib import Path
+
 import pytest
-from sidecar.rpc_router import RpcRouter
+from sidecar.rpc_router import RpcRouter, _sanitize_error_message
 
 
 class TestRpcRouter:
@@ -64,3 +66,34 @@ class TestRpcRouter:
         router.handle({"id": "4", "method": "fail", "params": {}})
         assert "error" in cap.responses[0]
         assert "boom" in cap.responses[0]["error"]
+
+    def test_error_message_sanitizes_workspace_and_home_paths(self, captured, tmp_path):
+        router, cap = captured
+        ws = tmp_path / "workspace"
+        ws.mkdir()
+        home = Path.home()
+
+        from config import config
+
+        config.workspace_path = str(ws)
+
+        def failing_with_paths(params):
+            raise RuntimeError(f"Failed at {ws} under {home}")
+
+        router.register("fail_paths", failing_with_paths)
+        router.handle({"id": "5", "method": "fail_paths", "params": {}})
+        assert "error" in cap.responses[0]
+        error = cap.responses[0]["error"]
+        assert str(ws) not in error
+        assert str(home) not in error
+        assert "<workspace>" in error
+        assert "<home>" in error
+
+
+def test_sanitize_error_message_replaces_paths():
+    home = str(Path.home())
+    raw = f"cannot read {home}/secret/workspace/file.txt"
+    sanitized = _sanitize_error_message(raw)
+    assert home not in sanitized
+    assert "<home>" in sanitized
+    assert "secret" in sanitized

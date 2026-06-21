@@ -51,15 +51,6 @@ def _all_md_names(workspace: Path) -> set[str]:
     return names
 
 
-def _all_md_names(workspace: Path) -> set[str]:
-    names: set[str] = set()
-    for md in workspace.rglob("*.md"):
-        if md.is_file() and not md.name.startswith("."):
-            names.add(md.name)
-            names.add(md.stem)
-    return names
-
-
 def _wikilink_target_exists(target: str, names: set[str]) -> bool:
     lookup = (target or "").split("|")[0].strip()
     if not lookup:
@@ -195,6 +186,8 @@ def auto_refresh_stale_surveys(
     workspace: str | Path | None = None,
     *,
     send_response: Callable[[dict], None] | None = None,
+    progress_cb: Callable[[int, int, str], None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict:
     """Regenerate surveys for topics whose notes are newer than survey mtime."""
     from sidecar.cascade_runner import run_cascade_for_topics
@@ -210,7 +203,12 @@ def auto_refresh_stale_surveys(
         return {"success": True, "message": "无过时综述", "topics": [], "updated": 0}
 
     append_log("lint", f"自动更新综述: {len(topics)} 个主题", "，".join(topics[:5]))
-    result = run_cascade_for_topics(topics, send_response=send_response)
+    result = run_cascade_for_topics(
+        topics,
+        send_response=send_response,
+        progress_cb=progress_cb,
+        cancel_check=cancel_check,
+    )
     updated = int(result.get("updated") or 0)
     failed = result.get("failed") or []
     if failed:
@@ -321,7 +319,10 @@ def run_kb_lint(
     workspace: str | None = None,
     *,
     auto_repair: bool = True,
+    auto_refresh_surveys: bool = True,
     send_response: Callable[[dict], None] | None = None,
+    progress_cb: Callable[[int, int, str], None] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> dict:
     ws = workspace or config.workspace_path
     if not ws:
@@ -330,13 +331,37 @@ def run_kb_lint(
     root = Path(ws)
     repair: dict = {}
 
+    def _progress(stage_idx: int, stage_total: int, msg: str) -> None:
+        if progress_cb:
+            progress_cb(stage_idx, stage_total, msg)
+
+    if cancel_check and cancel_check():
+        return {"success": False, "issues": [], "summary": {}, "cancelled": True}
+
     if auto_repair:
+        _progress(1, 4, "检查断链...")
         link_result = auto_fix_broken_links(root)
         repair["broken_links"] = link_result
-        survey_result = auto_refresh_stale_surveys(root, send_response=send_response)
-        repair["surveys"] = survey_result
 
+        if cancel_check and cancel_check():
+            return {"success": False, "issues": [], "summary": {}, "cancelled": True, "repair": repair}
+
+        if auto_refresh_surveys:
+            _progress(2, 4, "检查过时综述...")
+            survey_result = auto_refresh_stale_surveys(
+                root,
+                send_response=send_response,
+                progress_cb=progress_cb,
+                cancel_check=cancel_check,
+            )
+            repair["surveys"] = survey_result
+
+    if cancel_check and cancel_check():
+        return {"success": False, "issues": [], "summary": {}, "cancelled": True, "repair": repair}
+
+    _progress(3, 4, "扫描 Lint 问题...")
     issues = _scan_lint_issues(root)
+    _progress(4, 4, "Lint 扫描完成")
     summary = {
         "total": len(issues),
         "broken_link": sum(1 for i in issues if i.kind == "broken_link"),

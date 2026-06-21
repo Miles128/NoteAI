@@ -48,7 +48,9 @@
     "relationGraph": "关系图谱",
     "search": "搜索 (Cmd+K)",
     "settings": "设置",
-    "expandSidebar": "展开侧边栏"
+    "expandSidebar": "展开侧边栏",
+    "toggleFolderSidebar": "开启文件夹栏",
+    "toggleNoteList": "开启文件栏"
   },
   "sidebar": {
     "collapse": "收起侧边栏",
@@ -245,8 +247,13 @@
     "requestFailedMsg": "请求失败: {message}",
     "indexBuildDone": "知识库索引构建完成，共 {count} 个片段",
     "indexBuildFailed": "索引构建失败: {message}",
-    "indexBuilding": "正在构建知识库索引…（手动全量重建，日常入库不会重复跑）",
+    "indexBuilding": "正在构建知识库索引…预计 {estimate}",
+    "indexProgress": "索引构建进度：{percent}%（{message}）",
     "indexRequestFailed": "索引构建请求失败: {message}",
+    "indexStatusDisabled": "向量 RAG 未启用",
+    "indexStatusNotBuilt": "索引尚未建立，请点击下方按钮重建",
+    "indexStatusBuilt": "索引已建立：{files} 个文件 / {chunks} 个片段（{when}）",
+    "indexStatusError": "索引状态读取失败: {message}",
     "insightHint": "小忆觉得这段回答有洞见，可以单独存成笔记",
     "saveAsNote": "保存为笔记",
     "saving": "保存中",
@@ -605,9 +612,16 @@
     "openInNewWindow": "在新窗口打开",
     "deleteTopic": "删除主题",
     "deleteFolder": "删除文件夹",
+    "deleteTopicFolder": "删除主题文件夹",
     "delete": "删除",
     "deleteTopicConfirm": "删除主题「{name}」？（文件将移至 Notes 根目录）",
     "deleteConfirm": "删除「{name}」？",
+    "deleteTopicFolderConfirm": "确认删除主题文件夹「{name}」？",
+    "deleteTopicFolderDetail": "将同时删除该主题（{path}）及其关联的文件夹与文件。",
+    "deleteTopicFolderWarning": "此操作不可逆，删除的数据将无法恢复。",
+    "deleteTopicFolderFailed": "删除主题文件夹失败: ",
+    "deleteTopicFolderError": "删除主题文件夹出错: ",
+    "deleteFolderFailed": "删除文件夹失败: ",
     "enterTopicName": "请输入新主题名称：\n\n将创建对应的主题文件夹，并自动匹配相关文件。",
     "deleteTopicFailed": "删除主题失败: ",
     "deleteTopicError": "删除主题出错: ",
@@ -809,8 +823,38 @@
   "workspace": {
     "auto": {
       "button_class_workspace_btn_onclick_window_Worksp": "\n                <button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开工作区\">\n                    ${window.Icons.get('folderFilled')}\n                    <span>打开工作区</span>\n                </button>\n            ",
-      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
+      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
       "检查工作区状态失败": "检查工作区状态失败:"
     }
+  },
+  "noteList": {
+    "title": "笔记列表",
+    "empty": "选择一个主题查看笔记",
+    "emptyTopic": "该主题下暂无笔记",
+    "noSearchResult": "无匹配笔记",
+    "searchPlaceholder": "搜索笔记..."
+  },
+  "inspector": {
+    "ai": "AI",
+    "properties": "属性",
+    "backlinks": "链接",
+    "propertiesEmpty": "选择一篇笔记查看属性",
+    "backlinksEmpty": "暂无反向链接",
+    "loading": "加载中…",
+    "loadFailed": "加载失败",
+    "basicInfo": "基本信息",
+    "frontmatter": "Frontmatter",
+    "stats": "统计"
+  },
+  "cliAgent": {
+    "selectAgent": "选择 Agent",
+    "generateMd": "生成 AGENTS.md",
+    "generating": "正在生成 AGENTS.md...",
+    "generateSuccess": "AGENTS.md 已生成",
+    "generateFailed": "生成失败",
+    "notInstalled": "未安装",
+    "starting": "正在启动",
+    "completed": "完成",
+    "failed": "执行失败"
   }
 }

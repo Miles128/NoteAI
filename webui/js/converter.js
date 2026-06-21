@@ -93,32 +93,27 @@ function autoSaveConvConfig() {
         convAiAssist: aiToggle ? aiToggle.checked : false
     };
     
-    localStorage.setItem('converter-config', JSON.stringify(config));
+    window.Storage.setItem(window.Storage.KEYS.CONVERTER_CONFIG, config);
 }
 
 function loadSavedConvConfig() {
-    try {
-        const saved = localStorage.getItem('converter-config');
-        if (saved) {
-            const config = JSON.parse(saved);
-            const formatSelect = document.getElementById('conv-target-format');
-            const aiToggle = document.getElementById('conv-ai-toggle');
-            
-            if (formatSelect && config.targetFormat) {
-                formatSelect.value = config.targetFormat;
-            }
-            if (aiToggle && config.convAiAssist !== undefined) {
-                aiToggle.checked = config.convAiAssist;
-            }
-            
-            if (window.TreeModule) {
-                if (window.TreeModule.updateConvAIStatus) {
-                    window.TreeModule.updateConvAIStatus();
-                }
+    const config = window.Storage.getItem(window.Storage.KEYS.CONVERTER_CONFIG, null);
+    if (config) {
+        const formatSelect = document.getElementById('conv-target-format');
+        const aiToggle = document.getElementById('conv-ai-toggle');
+        
+        if (formatSelect && config.targetFormat) {
+            formatSelect.value = config.targetFormat;
+        }
+        if (aiToggle && config.convAiAssist !== undefined) {
+            aiToggle.checked = config.convAiAssist;
+        }
+        
+        if (window.TreeModule) {
+            if (window.TreeModule.updateConvAIStatus) {
+                window.TreeModule.updateConvAIStatus();
             }
         }
-    } catch (e) {
-        console.warn('[Converter] Failed to load config:', e);
     }
 }
 

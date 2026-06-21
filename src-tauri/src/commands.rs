@@ -4,6 +4,24 @@ use tauri::Manager;
 
 use crate::state::AppState;
 
+fn normalize_path(path: &std::path::Path) -> std::path::PathBuf {
+    let mut stack = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(name) => stack.push(name),
+            std::path::Component::ParentDir => {
+                stack.pop();
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                stack.clear();
+                stack.push(component.as_os_str());
+            }
+            std::path::Component::CurDir => {}
+        }
+    }
+    stack.iter().collect()
+}
+
 fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Result<String, String> {
     let workspace = state.workspace_path.lock().unwrap_or_else(|e| e.into_inner());
     let workspace = workspace.as_ref().ok_or("Workspace not set")?;
@@ -15,11 +33,15 @@ fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Re
     } else {
         workspace_abs.join(path)
     };
-    let resolved = target_abs.canonicalize()
-        .map_err(|e| format!("Failed to resolve path: {}", e))?;
-    resolved.strip_prefix(&workspace_abs)
-        .map_err(|_| "Path is outside workspace".to_string())?;
-    Ok(resolved.to_string_lossy().to_string())
+    let resolved = normalize_path(&target_abs);
+    // Canonicalize the resolved path so symlinks and relative segments are fully
+    // resolved before the workspace containment check.
+    let resolved_canonical = resolved.canonicalize().unwrap_or(resolved.clone());
+    // Verify the normalized path stays inside the workspace.
+    if !resolved_canonical.starts_with(&workspace_abs) {
+        return Err("Path is outside workspace".to_string());
+    }
+    Ok(resolved_canonical.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -130,7 +152,8 @@ pub async fn open_file_in_new_window(
     let state = app.state::<AppState>();
     let safe_path = validate_workspace_path(&state, &path)?;
 
-    let builder = tauri::WebviewWindowBuilder::new(
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         window_label,
         WebviewUrl::App("index.html".into()),

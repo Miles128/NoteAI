@@ -177,3 +177,55 @@ def import_transcript(
     if speakers:
         body = f"**说话人**: {speakers}\n\n{body}"
     return _write_note(title, body, source_type="transcript", extra_meta=extra)
+
+
+# ── RSS Subscription Persistence ──
+
+import json
+
+_SUBS_FILE = "rss_subscriptions.json"
+
+
+def _subs_path(workspace: str) -> Path:
+    return Path(workspace) / ".noteai" / _SUBS_FILE
+
+
+def load_subscriptions(workspace: str) -> list[dict]:
+    p = _subs_path(workspace)
+    if not p.exists():
+        return []
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def save_subscription(workspace: str, url: str, name: str = "") -> None:
+    subs = load_subscriptions(workspace)
+    if any(s["url"] == url for s in subs):
+        return
+    subs.append({"url": url, "name": name or url, "last_fetched": None, "interval_minutes": 30})
+    _subs_path(workspace).parent.mkdir(parents=True, exist_ok=True)
+    _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def remove_subscription(workspace: str, url: str) -> None:
+    subs = load_subscriptions(workspace)
+    subs = [s for s in subs if s["url"] != url]
+    _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def fetch_all_subscriptions(workspace: str) -> dict:
+    subs = load_subscriptions(workspace)
+    results = []
+    for sub in subs:
+        try:
+            r = import_rss_feed(sub["url"], max_items=10, fetch_articles=True)
+            results.append({"url": sub["url"], "success": r.get("success", False), "imported": r.get("imported", 0)})
+            if r.get("success"):
+                sub["last_fetched"] = datetime.now(timezone.utc).isoformat()
+        except Exception as e:
+            results.append({"url": sub["url"], "success": False, "error": str(e)})
+    if subs:
+        _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"success": True, "results": results}

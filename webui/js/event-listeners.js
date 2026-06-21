@@ -179,6 +179,8 @@ function initRagEventListener() {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {
                 window.AssistantModule.handleEvent(data);
             }
+            var assistantEvent = new CustomEvent(data.type, { detail: data.data || data });
+            document.dispatchEvent(assistantEvent);
             if (data.type === 'rag_index_built') {
                 if (data.data && data.data.success) {
                     if (typeof window.updateStatus === 'function') {
@@ -190,6 +192,11 @@ function initRagEventListener() {
                     }
                 }
             }
+        } else if (data.type === 'progress' && data.element_id === 'rag-index-progress') {
+            var progressEvent = new CustomEvent('rag-index-progress', {
+                detail: { percent: data.progress || 0, message: data.message || '' }
+            });
+            document.dispatchEvent(progressEvent);
         } else if (data.type === 'ingest_progress' || data.type === 'ingest_complete') {
             if (window.IngestModule && window.IngestModule.handleEvent) {
                 window.IngestModule.handleEvent(data);

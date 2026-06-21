@@ -42,6 +42,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "ensure_schema",
     "ensure_tags_md",
     "extract_topics",
+    "fix_survey_topics",
     "get_activity_log",
     "get_all_pending",
     "get_all_tags",
@@ -119,7 +120,11 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "start_note_integration",
     "start_web_download",
     "test_api_connection",
-    "toggle_survey",];
+    "toggle_survey",
+    "save_rss_subscription",
+    "remove_rss_subscription",
+    "list_rss_subscriptions",
+    "fetch_all_rss",];
 
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
 fn rpc_timeout_secs(method: &str) -> u64 {

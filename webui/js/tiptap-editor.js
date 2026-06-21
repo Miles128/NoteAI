@@ -66,6 +66,21 @@
         _heavyIdleKind: null,
         _heavyInitGen: 0,
 
+        // 工具栏操作映射配置：action -> { method, hasParams, paramKey, defaultParam }
+        toolbarActions: {
+            'bold': { method: 'toggleBold' },
+            'italic': { method: 'toggleItalic' },
+            'strike': { method: 'toggleStrike' },
+            'code': { method: 'toggleCode' },
+            'heading': { method: 'toggleHeading', paramKey: 'level', defaultParam: 1 },
+            'bulletList': { method: 'toggleBulletList' },
+            'orderedList': { method: 'toggleOrderedList' },
+            'blockquote': { method: 'toggleBlockquote' },
+            'codeBlock': { method: 'toggleCodeBlock' },
+            'undo': { method: 'undo' },
+            'redo': { method: 'redo' }
+        },
+
         _cancelHeavyIdle: function() {
             if (this._heavyIdleHandle == null) return;
             if (this._heavyIdleKind === 'idle' && typeof cancelIdleCallback === 'function') {
@@ -457,21 +472,23 @@
             if (!this.editor) return;
             this.userEdited = true;
             var action = btn.dataset.action;
-            var level = parseInt(btn.dataset.level || '0', 10);
+            var cfg = this.toolbarActions[action];
+            if (!cfg) {
+                console.warn('[Tiptap] Unknown toolbar action:', action);
+                this.updateToolbarState();
+                return;
+            }
             var chain = this.editor.chain().focus();
-
             try {
-                if (action === 'bold') chain.toggleBold().run();
-                else if (action === 'italic') chain.toggleItalic().run();
-                else if (action === 'strike') chain.toggleStrike().run();
-                else if (action === 'code') chain.toggleCode().run();
-                else if (action === 'heading') chain.toggleHeading({ level: level || 1 }).run();
-                else if (action === 'bulletList') chain.toggleBulletList().run();
-                else if (action === 'orderedList') chain.toggleOrderedList().run();
-                else if (action === 'blockquote') chain.toggleBlockquote().run();
-                else if (action === 'codeBlock') chain.toggleCodeBlock().run();
-                else if (action === 'undo') chain.undo().run();
-                else if (action === 'redo') chain.redo().run();
+                var method = chain[cfg.method];
+                if (typeof method !== 'function') {
+                    console.warn('[Tiptap] Method not found:', cfg.method);
+                } else if (cfg.paramKey) {
+                    var val = parseInt(btn.dataset[cfg.paramKey] || cfg.defaultParam, 10);
+                    method.call(chain, { level: val || cfg.defaultParam }).run();
+                } else {
+                    method.call(chain).run();
+                }
             } catch (e) {
                 console.warn('[Tiptap] toolbar action failed:', action, e);
             }

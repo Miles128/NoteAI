@@ -48,7 +48,7 @@ class WorkspaceHandler(BaseHandler):
         saved_path, _ = workspace_manager.load_workspace()
         path = saved_path if saved_path and Path(saved_path).exists() else ""
         if path and path != self.config.workspace_path:
-            self.config.workspace_path = path
+            self.config._set_attr("workspace_path", path)
             self.config.setup_workspace_folders()
             self._server._setup_watcher(path)
         if path and Path(path).exists():
@@ -76,13 +76,13 @@ class WorkspaceHandler(BaseHandler):
         success, message = workspace_manager.clear_workspace_state()
         if not success:
             return {"success": False, "message": message}
-        self.config.workspace_path = ""
+        self.config._set_attr("workspace_path", "")
         return {"success": True, "message": "已清除保存的工作区"}
 
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
-            self.config.workspace_path = path
+            self.config._set_attr("workspace_path", path)
             from sidecar.schema_manager import ensure_schema
 
             ensure_schema(path)
@@ -181,7 +181,9 @@ class WorkspaceHandler(BaseHandler):
             logger.warning(f"[workspace_handler] building flat tree: {e}")
         return items
 
-    def _build_recursive_tree(self, dir_path: Path, workspace: Path):
+    def _build_recursive_tree(self, dir_path: Path, workspace: Path, depth: int = 0):
+        # Cap recursion depth to avoid blocking the RPC thread on huge/deep workspaces.
+        MAX_TREE_DEPTH = 6
         items = []
         try:
             for entry in sorted(dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
@@ -191,7 +193,11 @@ class WorkspaceHandler(BaseHandler):
                 if entry.is_dir():
                     if entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name):
                         continue
-                    children = self._build_recursive_tree(entry, workspace)
+                    children = (
+                        self._build_recursive_tree(entry, workspace, depth + 1)
+                        if depth < MAX_TREE_DEPTH
+                        else []
+                    )
                     items.append(
                         {
                             "name": entry.name,

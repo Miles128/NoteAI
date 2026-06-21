@@ -9,11 +9,11 @@ This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.
 ```bash
 uv sync                    # install deps
 uv sync --extra dev        # include test deps
-pytest                     # run all tests (11 test files)
+pytest                     # run all tests (40+ test modules)
 python run.py              # start Tauri dev mode (checks deps + cargo tauri dev)
 ```
 
-Tests live in `tests/`, configured via `pyproject.toml` (`pythonpath = [".", "python"]`). No conftest, no fixtures.
+Tests live in `tests/`, configured via `pyproject.toml` (`pythonpath = [".", "python"]`). Uses `@pytest.fixture` for test setup (e.g. `test_rpc_router.py`).
 
 ## Architecture
 
@@ -25,33 +25,33 @@ Tauri v2 shell (src-tauri/)
 
 **Communication flow**: Frontend JS → `window.api` (Tauri invoke) → Rust → spawns Python sidecar → JSON-RPC over stdin/stdout → `server.py:main()` reads lines, dispatches via `RpcRouter`.
 
-**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 14 handlers, each a subclass of `BaseHandler`. `BaseHandler.__getattr__` proxies to server via `_PROXY_ALLOWED` whitelist — handlers can access server attributes without explicit injection. Each handler registers routes with `RpcRouter`.
+**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 14 handlers, each a subclass of `BaseHandler`. `BaseHandler` uses explicit `@property` accessors to proxy server attributes (e.g. `config`, `_send_response`, `_resolve_path`, `_link_discovery_lock`) — add new properties in `base.py` when handlers need access to new server attributes. Each handler registers routes with `RpcRouter`.
 
-**RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → Milvus Lite hybrid search (dense 0.7 + sparse 0.3) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. Sparse: jieba TF-IDF.
+**RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → zvec hybrid search (dense 0.7 + sparse 0.3) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. Sparse: jieba TF-IDF.
 
 **Three-layer knowledge architecture**: `Notes/` (raw markdown, immutable source) → `wiki/` (AI-compiled structured knowledge) → `Raw/` (original PDF/DOCX archives). Config: `ABSTRACT_FOLDER = "wiki"`.
 
 ## Key conventions
 
 - **Config**: singleton `config` loaded at import time from `config/app_config.py`. Never instantiate `AppConfig` directly — import `from config import config` or `from config.settings import config`. Persist workspace path through `config/workspace_state.py`; `config.workspace_path` is the runtime value.
-- **Frontmatter**: canonical parser is `sidecar.textutils.parse_frontmatter(text)` → `(meta_dict, body_str)`. Many handlers still use manual regex `r'^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---'` — prefer `parse_frontmatter` for new code.
-- **LLM calls**: go through `utils/llm_utils`. `_LLM_SEMAPHORE = Semaphore(4)` limits concurrency. `call_llm_raw()` uses `_retry_with_backoff()` with exponential backoff for rate limits. Both sync and stream variants now respect the semaphore.
-- **Chunk IDs**: generated via `hashlib.md5(f"{file_path}::{section_title}::{content[:100]}".encode()).hexdigest()[:12]` in `chunker.py:169`. Note: `section_title` can be `None`.
+- **Frontmatter**: canonical parser is `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)` (re-exported from `sidecar.textutils` for backward compatibility). All handlers should use `self._parse_frontmatter()` or direct import — avoid manual regex.
+- **LLM calls**: go through `utils/llm_utils`. `_LLM_SEMAPHORE = Semaphore(4)` limits concurrency. `call_llm_raw()` uses `_retry_with_backoff()` with exponential backoff for rate limits. Both sync and stream variants now respect the semaphore. Input prompts are clamped to `config.max_context_tokens` via `_clamp_prompt_text()`.
+- **Chunk IDs**: generated via `hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]` in `chunker.py:155`. Note: `section_title` can be `None`.
 - **Thread safety**: `SidecarServer` uses locks for stdout (`_stdout_lock`), cache (`_cache_lock`), running tasks, watcher debounce, and link discovery. RAG chat is single-threaded via `_rag_chat_lock`.
 - **File watching**: watchdog monitors workspace; 3s debounce; ignores dotfiles, `wiki/` directory, and non-media suffixes.
 - **Workspace paths**: always use `config.workspace_path` — never hardcode. Scripts in `scripts/` should import from `config.settings` (add `sys.path.insert(0, str(Path(__file__).parent.parent))` first).
 
 ## Critical gotchas
 
-- **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; Milvus eventual consistency could lose track of sparse index entries).
+- **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; zvec eventual consistency could lose track of sparse index entries).
 - **`rag/retriever.py:_rerank()`**: no longer overwrites `score` with `rerank_score` — both fields preserved. Sort post-rerank uses `rerank_score`.
 - **`rag_chat_with_actions`**: aliases `rag_chat` only; LLM code execution path removed.
-- **`rag/index.py:hybrid_search()`**: sparse-only hits query Milvus for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
-- **Embedder module import** (`rag/embedder.py:7-11`): sets `os.environ["HF_ENDPOINT"]` and `NO_PROXY` at import time — affects entire process. Uses hf-mirror.com.
+- **`rag/index.py:hybrid_search()`**: sparse-only hits query zvec for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
+- **Embedder module** (`rag/embedder.py`): HF environment variables (`HF_ENDPOINT`, `NO_PROXY`) and `FASTEMBED_CACHE_PATH` are set lazily via `_ensure_hf_env()` / `_ensure_fastembed_cache()` on first model load, not at import time. Uses hf-mirror.com.
 - **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, `topic_pending.py`, and `topic_wiki_manager.py`; keep new topic logic in that cluster instead of growing handlers.
-- **`IGNORED_DIRS`** (constants.py): lowercased match on `{"ai", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`.
+- **`IGNORED_DIRS`** (constants.py): lowercased match on `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`.
 - **WIKI.md operations**: production writes should enter through `sidecar/wiki_utils.py`; lower-level parsers/CRUD helpers remain under `utils/wiki_manager.py` and `utils/topic_wiki_manager.py`.
-- **API key storage**: 3-tier priority: env var > OS keyring > base64-obfuscated file (`api_config.json`) in `~/Library/Application Support/NoteAI/`. Base64 is NOT encryption.
+- **API key storage**: 3-tier priority: env var > OS keyring > Fernet-encrypted file (`api_key.dat`) in `~/Library/Application Support/NoteAI/`. Fallback file uses PBKDF2-derived key with per-installation random salt — this is obfuscation, not strong encryption.
 - **No rate limiting** on RAG endpoints beyond the LLM semaphore.
 
 ## Project memory
@@ -61,7 +61,7 @@ Tauri v2 shell (src-tauri/)
 - **Test coverage**: ~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
 - **Prompts**: Python constants in `prompts/` with parallel `prompts/yaml/` (loader supports both).
 - **Sidecar Python**: dev uses project `.venv`; release can bundle `src-tauri/resources/sidecar-python` via `scripts/bundle_sidecar_python.sh`, or set `NOTEAI_PYTHON`.
-- **`rag_enabled`**: default `false` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
+- **`rag_enabled`**: default `True` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
 
 
 ---
@@ -136,7 +136,7 @@ NoteAI 有两层 Memory，均与工作区绑定（切换工作区即切换画像
 <工作区>/
 ├── .noteai/
 │   ├── memory/       # RAG 会话记忆（L2）
-│   ├── rag_index/    # Milvus Lite 向量索引
+│   ├── rag_index/    # zvec + bm25s 向量索引
 │   └── ingest_state.json 等
 ├── .ai_memory/
 │   ├── user_profile.json   # 用户画像（L1）

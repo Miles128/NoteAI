@@ -1,19 +1,90 @@
+"""Lightweight local RAG index using zvec + BM25s.
+
+Schema:
+- zvec collection: dense vectors + chunk metadata
+- bm25s corpus + index files alongside the collection
+- metadata.json: topic/tag inverted indices for fast filtering
+"""
+
+from __future__ import annotations
+
 import json
+import shutil
 import threading
 from pathlib import Path
+from typing import Any
 
-from pymilvus import DataType, MilvusClient
+import bm25s
+import zvec
 
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
-_load_lock = threading.Lock()
+_DENSE_METRIC = zvec.MetricType.COSINE
+_BM25_K1 = 1.5
+_BM25_B = 0.75
+
+_lock = threading.Lock()
+
+
+def _rag_index_dir(workspace: str) -> Path:
+    return Path(workspace) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
+
+
+def _collection_path(workspace: str) -> Path:
+    p = _rag_index_dir(workspace) / "zvec_collection"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _bm25s_dir(workspace: str) -> Path:
+    p = _rag_index_dir(workspace) / "bm25s"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _metadata_path(workspace: str) -> Path:
+    return _rag_index_dir(workspace) / "metadata.json"
+
+
+def _build_schema() -> zvec.CollectionSchema:
+    return zvec.CollectionSchema(
+        name=_COLLECTION_NAME,
+        fields=[
+            zvec.FieldSchema("content", zvec.DataType.STRING),
+            zvec.FieldSchema("file_path", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
+            zvec.FieldSchema("topic", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
+            zvec.FieldSchema("tags_json", zvec.DataType.STRING),
+            zvec.FieldSchema("section_title", zvec.DataType.STRING),
+        ],
+        vectors=[
+            zvec.VectorSchema(
+                "dense",
+                zvec.DataType.VECTOR_FP32,
+                dimension=_DENSE_DIM,
+                index_param=zvec.HnswIndexParam(metric_type=_DENSE_METRIC),
+            ),
+        ],
+    )
+
+
+def _get_collection(workspace: str) -> zvec.Collection:
+    path = str(_collection_path(workspace))
+    try:
+        return zvec.open(path)
+    except Exception:
+        pass
+    return zvec.create_and_open(path, _build_schema())
+
+
+def _escape_filter_value(value: str) -> str:
+    """Escape a string for use in a zvec filter expression."""
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def is_usable_chunk(result: dict) -> bool:
-    """Drop hits with no body text — sparse-only Milvus rows can be metadata-only."""
     content = (result.get("content") or "").strip()
     return bool(content)
 
@@ -22,399 +93,563 @@ def filter_usable_chunks(results: list[dict]) -> list[dict]:
     return [r for r in results if is_usable_chunk(r)]
 
 
-def _db_path(workspace: str) -> str:
-    p = _rag_index_dir(workspace) / "milvus_lite.db"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return str(p)
-
-
-def _rag_index_dir(workspace: str) -> Path:
-    return Path(workspace) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
-
-
-def _get_client(workspace: str) -> MilvusClient:
-    return MilvusClient(uri=_db_path(workspace))
-
-
-def _collection_exists(client: MilvusClient) -> bool:
-    return client.has_collection(_COLLECTION_NAME)
-
-
-def _ensure_collection_loaded(_workspace: str, client: MilvusClient) -> bool:
-    """Milvus Lite keeps collections 'released' until load(); required before search/query."""
-    if not _collection_exists(client):
-        return False
-    with _load_lock:
-        try:
-            client.load_collection(collection_name=_COLLECTION_NAME)
-            return True
-        except Exception as e:
-            err = str(e).lower()
-            if "already" in err or "loaded" in err:
-                return True
-            logger.warning(f"[rag/index] load_collection failed: {e}\n")
-            return False
-
-
-def _create_collection(client: MilvusClient):
-    from pymilvus import CollectionSchema, FieldSchema
-
-    fields = [
-        FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=256),
-        FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=8192),
-        FieldSchema(name="file_path", dtype=DataType.VARCHAR, max_length=512),
-        FieldSchema(name="topic", dtype=DataType.VARCHAR, max_length=256),
-        FieldSchema(name="tags", dtype=DataType.VARCHAR, max_length=1024),
-        FieldSchema(name="section_title", dtype=DataType.VARCHAR, max_length=256),
-        FieldSchema(name="dense_vec", dtype=DataType.FLOAT_VECTOR, dim=_DENSE_DIM),
-    ]
-    schema = CollectionSchema(fields, enable_dynamic_field=True)
-
-    index_params = client.prepare_index_params()
-    index_params.add_index(
-        field_name="dense_vec",
-        index_type="IVF_FLAT",
-        metric_type="COSINE",
-        params={"nlist": 128},
-    )
-
-    client.create_collection(
-        collection_name=_COLLECTION_NAME,
-        schema=schema,
-        index_params=index_params,
-    )
-
-
 def index_exists(workspace: str) -> bool:
+    return _collection_path(workspace).exists() and _metadata_path(workspace).exists()
+
+
+def count_indexed_chunks(workspace: str) -> int:
+    """Return approximate chunk count from the metadata inverted index.
+
+    Cross-checks the actual collection count when available and falls back to
+    metadata when the collection is empty or inaccessible.
+    """
+    metadata = _load_metadata(workspace)
+    files = metadata.get("files") or {}
+    metadata_total = 0
+    for ids in files.values():
+        metadata_total += len(ids)
+
     try:
-        client = _get_client(workspace)
-        return _collection_exists(client)
+        collection_count = _collection_count(workspace)
     except Exception:
-        return False
+        collection_count = -1
+
+    if collection_count >= 0 and metadata_total != collection_count:
+        logger.warning(
+            f"Chunk count mismatch: metadata={metadata_total}, collection={collection_count}; "
+            f"using collection count"
+        )
+        return collection_count
+    return metadata_total
 
 
-def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None):
-    client = _get_client(workspace)
+def _collection_count(workspace: str) -> int:
+    """Query the zvec collection for total entity count, or -1 if unavailable."""
+    try:
+        import zvec
 
-    if _collection_exists(client):
-        client.drop_collection(_COLLECTION_NAME)
+        collection = zvec.Collection(str(_collection_path(workspace)))
+        return int(collection.num_entities)
+    except Exception:
+        return -1
 
-    _create_collection(client)
 
-    batch_size = 100
+def _empty_metadata() -> dict[str, Any]:
+    return {"topics": {}, "tags": {}, "files": {}, "version": 2}
+
+
+def _load_metadata(workspace: str) -> dict[str, Any]:
+    path = _metadata_path(workspace)
+    if not path.exists():
+        return _empty_metadata()
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                data.setdefault("topics", {})
+                data.setdefault("tags", {})
+                data.setdefault("files", {})
+                return data
+    except Exception:
+        pass
+    return _empty_metadata()
+
+
+def _save_metadata(workspace: str, metadata: dict[str, Any]) -> None:
+    path = _metadata_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False)
+    tmp.replace(path)
+
+
+def _update_metadata_index(metadata: dict[str, Any], chunk: dict, mode: str = "add") -> None:
+    chunk_id = chunk["id"]
+    topic = chunk.get("topic") or ""
+    tags = chunk.get("tags") or []
+    file_path = chunk.get("file_path") or ""
+
+    def _mutate(key: str, value: str) -> None:
+        if not value:
+            return
+        bucket = metadata.setdefault(key, {})
+        ids = set(bucket.get(value, []))
+        if mode == "add":
+            ids.add(chunk_id)
+        else:
+            ids.discard(chunk_id)
+        if ids:
+            bucket[value] = sorted(ids)
+        else:
+            bucket.pop(value, None)
+
+    _mutate("topics", topic)
+    _mutate("files", file_path)
+    for tag in tags:
+        _mutate("tags", tag)
+
+
+def _chunk_to_doc(chunk: dict, embedding: dict) -> zvec.Doc:
+    cid = chunk.get("id", "")
+    content = (chunk.get("content") or "")[:8192]
+    file_path = (chunk.get("file_path") or "")[:512]
+    topic = (chunk.get("topic") or "")[:256]
+    tags = chunk.get("tags") or []
+    section_title = (chunk.get("section_title") or "")[:256]
+    vec = embedding.get("dense_vec") or [0.0] * _DENSE_DIM
+
+    return zvec.Doc(
+        id=cid,
+        vectors={"dense": vec},
+        fields={
+            "content": content,
+            "file_path": file_path,
+            "topic": topic,
+            "tags_json": json.dumps(tags, ensure_ascii=False),
+            "section_title": section_title,
+        },
+    )
+
+
+def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
+    fields = doc.fields or {}
+    tags = []
+    try:
+        tags = json.loads(fields.get("tags_json") or "[]")
+    except Exception:
+        pass
+    return {
+        "id": doc.id,
+        "content": fields.get("content", ""),
+        "file_path": fields.get("file_path", ""),
+        "topic": fields.get("topic", ""),
+        "tags": tags,
+        "section_title": fields.get("section_title", ""),
+        "dense_vec": None,
+        "dense_score": score if score is not None else 0.0,
+        "sparse_score": 0.0,
+        "score": score if score is not None else 0.0,
+    }
+
+
+def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None) -> dict[str, Any]:
+    index_dir = _rag_index_dir(workspace)
+    index_dir.mkdir(parents=True, exist_ok=True)
+
+    collection_path = _collection_path(workspace)
+    if collection_path.exists():
+        shutil.rmtree(collection_path, ignore_errors=True)
+    for old in index_dir.glob("*.tmp"):
+        old.unlink()
+
+    collection = zvec.create_and_open(str(collection_path), _build_schema())
+
+    batch_size = 128
     total = len(chunks)
 
     for i in range(0, total, batch_size):
         batch_chunks = chunks[i : i + batch_size]
         batch_embeds = embeddings[i : i + batch_size]
-
-        data = []
-        for chunk, emb in zip(batch_chunks, batch_embeds, strict=False):
-            tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
-            row = {
-                "id": chunk.get("id", f"chunk_{i}"),
-                "content": (chunk.get("content") or "")[:8192],
-                "file_path": (chunk.get("file_path") or "")[:512],
-                "topic": (chunk.get("topic") or "")[:256],
-                "tags": tags_str[:1024],
-                "section_title": (chunk.get("section_title") or "")[:256],
-                "dense_vec": emb.get("dense_vec", [0.0] * _DENSE_DIM),
-            }
-            data.append(row)
-
-        client.insert(collection_name=_COLLECTION_NAME, data=data)
-
+        docs = [_chunk_to_doc(c, e) for c, e in zip(batch_chunks, batch_embeds, strict=False)]
+        if docs:
+            collection.insert(docs)
         if progress_callback:
             progress_callback(min(i + batch_size, total), total, "写入索引")
 
-    _save_sparse_index(workspace, chunks, embeddings)
-    _ensure_collection_loaded(workspace, client)
+    collection.flush()
+
+    # Build BM25s index
+    if progress_callback:
+        progress_callback(total, total, "构建 BM25 索引...")
+
+    tokenized_corpus = bm25s.tokenize(
+        [c.get("content", "") for c in chunks],
+        stopwords="zh",
+    )
+    retriever = bm25s.BM25(corpus=chunks, k1=_BM25_K1, b=_BM25_B)
+    retriever.index(tokenized_corpus)
+    retriever.save(_bm25s_dir(workspace), corpus=chunks)
+
+    # Build metadata indices
+    metadata = _empty_metadata()
+    for chunk in chunks:
+        _update_metadata_index(metadata, chunk, mode="add")
+    _save_metadata(workspace, metadata)
 
     return {"success": True, "chunk_count": total}
 
 
-def _sparse_index_path(workspace: str) -> Path:
-    return _rag_index_dir(workspace) / "sparse_index.json"
-
-
-def _save_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict]):
-    path = _sparse_index_path(workspace)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    sparse_data = {}
-    for chunk, emb in zip(chunks, embeddings, strict=False):
-        chunk_id = chunk.get("id", "")
-        lexical = emb.get("lexical_weights", {})
-        if isinstance(lexical, dict):
-            str_keys = {str(k): float(v) for k, v in lexical.items()}
-            sparse_data[chunk_id] = str_keys
-
-    path.write_text(json.dumps(sparse_data, ensure_ascii=False), encoding="utf-8")
-
-
-def _load_sparse_index(workspace: str) -> dict:
-    path = _sparse_index_path(workspace)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-
-def _purge_stale_sparse_ids(workspace: str, stale_ids: list[str]):
-    path = _sparse_index_path(workspace)
-    if not path.exists():
+def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> None:
+    if not chunks:
         return
+
+    collection = _get_collection(workspace)
+    metadata = _load_metadata(workspace)
+
+    docs = []
+    for chunk, emb in zip(chunks, embeddings, strict=False):
+        if not chunk.get("id"):
+            continue
+        docs.append(_chunk_to_doc(chunk, emb))
+        _update_metadata_index(metadata, chunk, mode="add")
+
+    if not docs:
+        return
+
+    collection.upsert(docs)
+    collection.flush()
+    _save_metadata(workspace, metadata)
+
+    # Rebuild BM25s with merged corpus
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        changed = False
-        for cid in stale_ids:
-            if cid in data:
-                del data[cid]
-                changed = True
-        if changed:
-            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-            logger.debug("Purged %d stale sparse index entries", len(stale_ids))
+        bm25_dir = _bm25s_dir(workspace)
+        if bm25_dir.exists() and any(bm25_dir.iterdir()):
+            old_retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
+            old_corpus = old_retriever.corpus
+            if isinstance(old_corpus, dict):
+                old_corpus = old_corpus.get("documents", [])
+        else:
+            old_corpus = []
+
+        old_map = {c.get("id"): c for c in old_corpus if c.get("id")}
+        for c in chunks:
+            if c.get("id"):
+                old_map[c["id"]] = c
+        merged_corpus = list(old_map.values())
+
+        tokenized = bm25s.tokenize([c.get("content", "") for c in merged_corpus], stopwords="zh")
+        retriever = bm25s.BM25(corpus=merged_corpus, k1=_BM25_K1, b=_BM25_B)
+        retriever.index(tokenized)
+        retriever.save(bm25_dir, corpus=merged_corpus)
+    except Exception as e:
+        logger.warning(f"[rag/index] BM25s rebuild failed: {e}\n")
+
+
+def delete_by_file(workspace: str, file_path: str) -> None:
+    collection = _get_collection(workspace)
+    metadata = _load_metadata(workspace)
+
+    removed = []
+    try:
+        filter_expr = f"file_path = {_escape_filter_value(file_path)}"
+        docs = collection.query(filter=filter_expr, topk=10000, output_fields=["content", "file_path", "topic", "tags_json", "section_title"])
+        for doc in docs:
+            fields = doc.fields or {}
+            tags = []
+            try:
+                tags = json.loads(fields.get("tags_json") or "[]")
+            except Exception:
+                pass
+            chunk = {
+                "id": doc.id,
+                "content": fields.get("content", ""),
+                "file_path": fields.get("file_path", ""),
+                "topic": fields.get("topic", ""),
+                "tags": tags,
+                "section_title": fields.get("section_title", ""),
+            }
+            removed.append(chunk)
+            _update_metadata_index(metadata, chunk, mode="remove")
+    except Exception as e:
+        logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
+
+    if removed:
+        ids = [c["id"] for c in removed]
+        collection.delete(ids)
+        collection.flush()
+
+    _save_metadata(workspace, metadata)
+
+    # Rebuild BM25s without deleted docs
+    try:
+        bm25_dir = _bm25s_dir(workspace)
+        if not bm25_dir.exists() or not any(bm25_dir.iterdir()):
+            return
+        retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
+        old_corpus = retriever.corpus
+        if isinstance(old_corpus, dict):
+            old_corpus = old_corpus.get("documents", [])
+        removed_ids = {c["id"] for c in removed}
+        new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
+        if not new_corpus:
+            for f in bm25_dir.iterdir():
+                f.unlink()
+            return
+        tokenized = bm25s.tokenize([c.get("content", "") for c in new_corpus], stopwords="zh")
+        new_retriever = bm25s.BM25(corpus=new_corpus, k1=_BM25_K1, b=_BM25_B)
+        new_retriever.index(tokenized)
+        new_retriever.save(bm25_dir, corpus=new_corpus)
+    except Exception as e:
+        logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
+
+
+def _load_bm25_retriever(workspace: str):
+    bm25_dir = _bm25s_dir(workspace)
+    if not bm25_dir.exists() or not any(bm25_dir.iterdir()):
+        return None, []
+    try:
+        retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
+        corpus = retriever.corpus
+        if isinstance(corpus, dict):
+            corpus = corpus.get("documents", [])
+        return retriever, corpus
     except Exception:
-        pass
+        return None, []
+
+
+def _dense_search(
+    collection: zvec.Collection,
+    query_dense: list[float],
+    candidate_ids: set[str] | None,
+    top_k: int,
+) -> list[dict]:
+    if candidate_ids is not None and not candidate_ids:
+        return []
+
+    query = zvec.Query(
+        field_name="dense",
+        vector=query_dense,
+        param=zvec.HnswQueryParam(ef=min(top_k * 10, 200)),
+    )
+
+    # zvec filters do not operate on the primary id.  Query a larger pool and
+    # post-filter manually when candidate_ids is provided.
+    search_topk = top_k * 4
+    if candidate_ids:
+        search_topk = max(search_topk, min(len(candidate_ids), 10000))
+
+    docs = collection.query(
+        query,
+        topk=search_topk,
+        output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+    )
+
+    results = []
+    for doc in docs:
+        if candidate_ids is not None and doc.id not in candidate_ids:
+            continue
+        # zvec cosine distance -> similarity score
+        score = 1.0 - (doc.score or 0.0)
+        r = _doc_to_result(doc, score)
+        results.append(r)
+    return results
+
+
+def _sparse_search(
+    workspace: str,
+    query_text: str,
+    candidate_ids: set[str] | None,
+    top_k: int,
+) -> dict[str, float]:
+    retriever, corpus = _load_bm25_retriever(workspace)
+    if retriever is None or not corpus:
+        return {}
+
+    query_tokens = bm25s.tokenize([query_text], stopwords="zh")
+    results, scores = retriever.retrieve(query_tokens, k=min(top_k * 4, len(corpus)))
+
+    out: dict[str, float] = {}
+    if results.size == 0:
+        return out
+
+    for hit_arr, score_arr in zip(results, scores, strict=False):
+        for hit, score in zip(hit_arr, score_arr, strict=False):
+            score = float(score)
+            if score <= 0:
+                continue
+            cid = hit.get("id", "") if isinstance(hit, dict) else ""
+            if not cid:
+                continue
+            if candidate_ids is not None and cid not in candidate_ids:
+                continue
+            out[cid] = max(out.get(cid, 0.0), score)
+    return out
+
+
+def _filter_candidates(workspace: str, topics: list[str] | None, tags: list[str] | None) -> set[str] | None:
+    metadata = _load_metadata(workspace)
+    candidates: set[str] | None = None
+
+    if topics:
+        topic_ids: set[str] = set()
+        for t in topics:
+            topic_ids.update(metadata.get("topics", {}).get(t, []))
+        candidates = topic_ids
+
+    if tags:
+        tag_ids: set[str] = set()
+        for t in tags:
+            tag_ids.update(metadata.get("tags", {}).get(t, []))
+        if candidates is None:
+            candidates = tag_ids
+        else:
+            candidates &= tag_ids
+
+    return candidates
 
 
 def hybrid_search(
     workspace: str,
     query_dense: list[float],
-    query_sparse: dict,
+    query_sparse: dict | None = None,
     top_k: int = 10,
-    topics: list = None,
-    tags: list = None,
+    topics: list | None = None,
+    tags: list | None = None,
+    query_text: str = "",
 ) -> list[dict]:
-    client = _get_client(workspace)
+    collection = _get_collection(workspace)
 
-    if not _ensure_collection_loaded(workspace, client):
-        return []
+    candidates = _filter_candidates(workspace, topics, tags)
 
-    filter_expr = None
-    conditions = []
-    if topics:
-        safe_topics = [t.replace('"', '\\"') for t in topics]
-        topic_conds = " || ".join([f'topic == "{t}"' for t in safe_topics])
-        conditions.append(f"({topic_conds})")
-    if tags:
-        safe_tags = [t.replace('"', '\\"') for t in tags]
-        tag_conds = " || ".join([f'contains(tags, "{t}")' for t in safe_tags])
-        conditions.append(f"({tag_conds})")
-    if conditions:
-        filter_expr = " && ".join(conditions)
+    dense_results = _dense_search(collection, query_dense, candidates, top_k)
+    dense_map = {r["id"]: r for r in dense_results}
 
-    search_params = {"metric_type": "COSINE", "params": {"nprobe": 32}}
-    dense_results = client.search(
-        collection_name=_COLLECTION_NAME,
-        data=[query_dense],
-        limit=top_k * 3,
-        output_fields=["id", "content", "file_path", "topic", "tags", "section_title"],
-        search_params=search_params,
-        filter=filter_expr,
-    )
+    # Use query_text for BM25; fallback to reconstructing from sparse dict
+    if not query_text and query_sparse:
+        query_text = " ".join(str(k) for k, v in query_sparse.items() if v > 0)
 
-    if not dense_results or not dense_results[0]:
-        return []
+    sparse_scores: dict[str, float] = {}
+    if query_text:
+        sparse_scores = _sparse_search(workspace, query_text, candidates, top_k)
 
-    sparse_index = _load_sparse_index(workspace)
-    sparse_scores = {}
-    if query_sparse and sparse_index:
-        query_norm = sum(v * v for v in query_sparse.values()) ** 0.5
-        if query_norm > 0:
-            for chunk_id, doc_sparse in sparse_index.items():
-                dot = 0.0
-                for k, v in query_sparse.items():
-                    str_k = str(k)
-                    if str_k in doc_sparse:
-                        dot += v * doc_sparse[str_k]
-                if dot > 0:
-                    sparse_scores[chunk_id] = dot / query_norm
-
+    # Merge dense + sparse
     results_map = {}
-    for hit in dense_results[0]:
-        chunk_id = hit["entity"]["id"]
-        dense_score = hit["distance"]
-        sparse_score = sparse_scores.get(chunk_id, 0.0)
-        combined = 0.7 * dense_score + 0.3 * sparse_score
+    for cid, r in dense_map.items():
+        sparse = sparse_scores.get(cid, 0.0)
+        r["sparse_score"] = sparse
+        r["score"] = 0.7 * r["dense_score"] + 0.3 * min(sparse, 1.0)
+        results_map[cid] = r
 
-        tags_val = hit["entity"].get("tags", "[]")
-        try:
-            tags_list = json.loads(tags_val) if isinstance(tags_val, str) else tags_val
-        except Exception:
-            tags_list = []
-
-        results_map[chunk_id] = {
-            "id": chunk_id,
-            "content": hit["entity"].get("content", ""),
-            "file_path": hit["entity"].get("file_path", ""),
-            "topic": hit["entity"].get("topic", ""),
-            "tags": tags_list,
-            "section_title": hit["entity"].get("section_title", ""),
-            "dense_score": float(dense_score),
-            "sparse_score": float(sparse_score),
-            "score": float(combined),
-        }
-
-    stale_ids = []
-    for chunk_id, sparse_score in sparse_scores.items():
-        if chunk_id not in results_map and sparse_score > 0.3:
+    # Add sparse-only hits
+    if sparse_scores:
+        sparse_ids = [cid for cid in sparse_scores if cid not in results_map]
+        if sparse_ids:
             try:
-                lookup = client.query(
-                    collection_name=_COLLECTION_NAME,
-                    filter=f'id == "{chunk_id}"',
-                    output_fields=["content", "file_path", "topic", "tags", "section_title"],
-                    limit=1,
+                fetched = collection.fetch(
+                    sparse_ids,
+                    output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+                    include_vector=False,
                 )
-                if lookup:
-                    hit = lookup[0]
-                    content = (hit.get("content") or "").strip()
-                    if not content:
-                        stale_ids.append(chunk_id)
+                for cid, doc in fetched.items():
+                    if cid not in sparse_scores:
                         continue
-                    tags_val = hit.get("tags", "[]")
-                    try:
-                        tags_list = json.loads(tags_val) if isinstance(tags_val, str) else tags_val
-                    except Exception:
-                        tags_list = []
-                    results_map[chunk_id] = {
-                        "id": chunk_id,
-                        "content": content,
-                        "file_path": hit.get("file_path", ""),
-                        "topic": hit.get("topic", ""),
-                        "tags": tags_list,
-                        "section_title": hit.get("section_title", ""),
-                        "dense_score": 0.0,
-                        "sparse_score": float(sparse_score),
-                        "score": float(0.3 * sparse_score),
-                    }
-                else:
-                    stale_ids.append(chunk_id)
-            except Exception:
-                pass
-
-    if stale_ids:
-        _purge_stale_sparse_ids(workspace, stale_ids)
+                    r = _doc_to_result(doc)
+                    r["sparse_score"] = sparse_scores[cid]
+                    r["score"] = 0.3 * min(sparse_scores[cid], 1.0)
+                    results_map[cid] = r
+            except Exception as e:
+                logger.warning(f"[rag/index] sparse-only fetch failed: {e}\n")
 
     sorted_results = sorted(results_map.values(), key=lambda x: x["score"], reverse=True)
     return filter_usable_chunks(sorted_results)[:top_k]
 
 
-def _escape_filter_value(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
-
-
 def _get_chunks_by_file(workspace: str, file_path: str) -> list[dict]:
-    client = _get_client(workspace)
-    if not _ensure_collection_loaded(workspace, client):
-        return []
     try:
-        safe_path = _escape_filter_value(file_path)
-        results = client.query(
-            collection_name=_COLLECTION_NAME,
-            filter=f'file_path == "{safe_path}"',
-            output_fields=["id"],
-        )
-        return results if results else []
+        collection = _get_collection(workspace)
+        filter_expr = f"file_path = {_escape_filter_value(file_path)}"
+        docs = collection.query(filter=filter_expr, topk=10000, output_fields=[])
+        return [{"id": doc.id} for doc in docs]
     except Exception:
         return []
 
 
 def fetch_chunks_by_file(workspace: str, file_path: str, limit: int = 2) -> list[dict]:
-    """Return chunk payloads for a file (used by backlink context expansion)."""
     try:
-        client = _get_client(workspace)
-    except Exception as e:
-        logger.warning(f"[rag/index] fetch_chunks_by_file client error: {e}\n")
-        return []
-    if not _ensure_collection_loaded(workspace, client):
-        return []
-    try:
-        safe_path = _escape_filter_value(file_path)
-        rows = client.query(
-            collection_name=_COLLECTION_NAME,
-            filter=f'file_path == "{safe_path}"',
-            output_fields=["id", "content", "file_path", "topic", "section_title"],
-            limit=limit,
+        collection = _get_collection(workspace)
+        filter_expr = f"file_path = {_escape_filter_value(file_path)}"
+        docs = collection.query(
+            filter=filter_expr,
+            topk=limit,
+            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
         )
-        return rows if rows else []
+        return [_doc_to_result(doc) for doc in docs]
     except Exception as e:
         logger.warning(f"[rag/index] fetch_chunks_by_file error: {e}\n")
         return []
 
 
-def delete_by_file(workspace: str, file_path: str):
-    client = _get_client(workspace)
-    if not _ensure_collection_loaded(workspace, client):
-        return
+def manifest_path(workspace: str) -> Path:
+    return _rag_index_dir(workspace) / "file_manifest.json"
 
-    chunks_to_check = _get_chunks_by_file(workspace, file_path)
-    chunk_ids_to_remove = {c["id"] for c in chunks_to_check}
 
+def load_manifest(workspace: str) -> dict[str, Any]:
+    path = manifest_path(workspace)
+    if not path.exists():
+        return {"version": 1, "files": {}}
     try:
-        safe_path = _escape_filter_value(file_path)
-        client.delete(
-            collection_name=_COLLECTION_NAME,
-            filter=f'file_path == "{safe_path}"',
-        )
-    except Exception as e:
-        logger.warning(f"[rag/index] delete_by_file error: {e}\n")
-
-    sparse_index = _load_sparse_index(workspace)
-    to_remove = [k for k in sparse_index if k in chunk_ids_to_remove]
-    for k in to_remove:
-        del sparse_index[k]
-    if to_remove:
-        _sparse_index_path(workspace).write_text(json.dumps(sparse_index, ensure_ascii=False), encoding="utf-8")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "files" in data:
+            data.setdefault("version", 1)
+            return data
+    except Exception:
+        pass
+    return {"version": 1, "files": {}}
 
 
-def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]):
-    client = _get_client(workspace)
-
-    if not _collection_exists(client):
-        _create_collection(client)
-
-    data = []
-    for i, (chunk, emb) in enumerate(zip(chunks, embeddings, strict=False)):
-        tags_str = json.dumps(chunk.get("tags", []), ensure_ascii=False)
-        row = {
-            "id": chunk.get("id", f"chunk_add_{i}"),
-            "content": (chunk.get("content") or "")[:8192],
-            "file_path": (chunk.get("file_path") or "")[:512],
-            "topic": (chunk.get("topic") or "")[:256],
-            "tags": tags_str[:1024],
-            "section_title": (chunk.get("section_title") or "")[:256],
-            "dense_vec": emb.get("dense_vec", [0.0] * _DENSE_DIM),
-        }
-        data.append(row)
-
-    if data:
-        client.insert(collection_name=_COLLECTION_NAME, data=data)
-        _ensure_collection_loaded(workspace, client)
-
-    _append_sparse_index(workspace, chunks, embeddings)
-
-
-def _append_sparse_index(workspace: str, chunks: list[dict], embeddings: list[dict]):
-    path = _sparse_index_path(workspace)
+def save_manifest(workspace: str, manifest: dict[str, Any]) -> None:
+    path = manifest_path(workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False)
+    tmp.replace(path)
 
-    existing = {}
-    if path.exists():
-        try:
-            existing = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            existing = {}
 
-    for chunk, emb in zip(chunks, embeddings, strict=False):
-        chunk_id = chunk.get("id", "")
-        lexical = emb.get("lexical_weights", {})
-        if isinstance(lexical, dict):
-            str_keys = {str(k): float(v) for k, v in lexical.items()}
-            existing[chunk_id] = str_keys
+def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_callback=None) -> int:
+    """Rebuild BM25s and metadata from all chunks currently in the zvec collection.
 
-    tmp_path = path.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
-    tmp_path.replace(path)
+    Returns the number of chunks in the rebuilt indices.
+    """
+    collection = _get_collection(workspace)
+    corpus: list[dict] = []
+
+    batch_size = 256
+    total = len(all_chunk_ids)
+    for i in range(0, total, batch_size):
+        batch = all_chunk_ids[i : i + batch_size]
+        fetched = collection.fetch(
+            batch,
+            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+            include_vector=False,
+        )
+        for cid, doc in fetched.items():
+            fields = doc.fields or {}
+            tags: list[str] = []
+            try:
+                tags = json.loads(fields.get("tags_json") or "[]")
+            except Exception:
+                pass
+            corpus.append(
+                {
+                    "id": cid,
+                    "content": fields.get("content", ""),
+                    "file_path": fields.get("file_path", ""),
+                    "topic": fields.get("topic", ""),
+                    "tags": tags,
+                    "section_title": fields.get("section_title", ""),
+                }
+            )
+        if progress_callback:
+            progress_callback(min(i + batch_size, total), total, "重建检索索引")
+
+    if not corpus:
+        return 0
+
+    # Rebuild metadata
+    metadata = _empty_metadata()
+    for chunk in corpus:
+        _update_metadata_index(metadata, chunk, mode="add")
+    _save_metadata(workspace, metadata)
+
+    # Rebuild BM25s
+    if progress_callback:
+        progress_callback(total, total, "重建 BM25 索引")
+    bm25_dir = _bm25s_dir(workspace)
+    tokenized = bm25s.tokenize([c.get("content", "") for c in corpus], stopwords="zh")
+    retriever = bm25s.BM25(corpus=corpus, k1=_BM25_K1, b=_BM25_B)
+    retriever.index(tokenized)
+    retriever.save(bm25_dir, corpus=corpus)
+
+    return len(corpus)

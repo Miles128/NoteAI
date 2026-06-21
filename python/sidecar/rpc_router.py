@@ -1,11 +1,34 @@
 """Lightweight JSON-RPC router for noteai sidecar. Supports sync and async handlers."""
 
+import re
 import traceback
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 
 from utils.logger import logger
+
+
+def _sanitize_error_message(message: str) -> str:
+    """Remove absolute paths and home directory hints from RPC error messages."""
+    if not message:
+        return message
+    home = str(Path.home())
+    workspace = ""
+    try:
+        from config import config
+
+        workspace = (config.workspace_path or "").strip()
+    except Exception:
+        pass
+    for prefix in [workspace, home]:
+        if prefix:
+            message = message.replace(prefix, "<workspace>" if prefix == workspace else "<home>")
+    # Collapse repeated placeholders
+    message = re.sub(r"(<workspace>)+", "<workspace>", message)
+    message = re.sub(r"(<home>)+", "<home>", message)
+    return message
 
 
 class RpcHandler:
@@ -44,7 +67,8 @@ class RpcRouter:
                     result = handler.fn(params)
                     self._send_ok(req_id, result)
                 except Exception as e:
-                    self._send_error(req_id, str(e))
+                    logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
+                    self._send_error(req_id, _sanitize_error_message(str(e)))
 
             self._executor.submit(_run)
         else:
@@ -53,7 +77,7 @@ class RpcRouter:
                 self._send_ok(req_id, result)
             except Exception as e:
                 logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
-                self._send_error(req_id, str(e))
+                self._send_error(req_id, _sanitize_error_message(str(e)))
 
     def _send_ok(self, req_id: str, result: Any) -> None:
         if self.send_response is not None:
@@ -66,3 +90,10 @@ class RpcRouter:
     @property
     def methods(self):
         return list(self._handlers.keys())
+
+    def shutdown(self, wait: bool = False):
+        """Shutdown the thread pool used for async handlers."""
+        try:
+            self._executor.shutdown(wait=wait, cancel_futures=not wait)
+        except Exception:
+            pass

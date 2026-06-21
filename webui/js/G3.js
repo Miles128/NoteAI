@@ -17,7 +17,7 @@ function _collectDescendantIds(rootId, childMap) {
 
 const _GRAPH_TAU = Math.PI * 2;
 const _GRAPH_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
-const GRAPH_LAYOUT_STORAGE_KEY = 'noteai.graphLayout.v1';
+const GRAPH_LAYOUT_STORAGE_KEY = window.Storage.KEYS.GRAPH_LAYOUT;
 
 /** @type {Record<string, number>} */
 const GRAPH_LAYOUT_DEFAULTS = {
@@ -59,8 +59,8 @@ const GRAPH_LAYOUT_DEFAULTS = {
     simAlpha: 0.55,
     simAlphaDecay: 0.12,
     simVelocityDecay: 0.72,
-    radiusL1: 6,
-    radiusOther: 5,
+    radiusL1: 5,
+    radiusOther: 4,
     fitPad: 60,
     fitMaxScale: 1.5,
     clampSideRatio: 0.12,
@@ -145,10 +145,8 @@ function _snapGraphLayoutValue(v, param) {
 
 function loadGraphLayoutConfig() {
     const cfg = Object.assign({}, GRAPH_LAYOUT_DEFAULTS);
-    try {
-        const raw = localStorage.getItem(GRAPH_LAYOUT_STORAGE_KEY);
-        if (!raw) return cfg;
-        const saved = JSON.parse(raw);
+    const saved = window.Storage.getItem(GRAPH_LAYOUT_STORAGE_KEY, null, { silent: true });
+    if (saved) {
         const schema = _graphLayoutSchemaByKey();
         Object.keys(saved).forEach(function(key) {
             if (!schema[key]) return;
@@ -157,16 +155,16 @@ function loadGraphLayoutConfig() {
             const p = schema[key];
             cfg[key] = Math.min(p.max, Math.max(p.min, v));
         });
-    } catch (e) { /* ignore */ }
+    }
     return cfg;
 }
 
 function saveGraphLayoutConfig(cfg) {
-    localStorage.setItem(GRAPH_LAYOUT_STORAGE_KEY, JSON.stringify(cfg));
+    window.Storage.setItem(GRAPH_LAYOUT_STORAGE_KEY, cfg);
 }
 
 function resetGraphLayoutConfigStorage() {
-    localStorage.removeItem(GRAPH_LAYOUT_STORAGE_KEY);
+    window.Storage.removeItem(GRAPH_LAYOUT_STORAGE_KEY);
 }
 
 function _graphCfg() {

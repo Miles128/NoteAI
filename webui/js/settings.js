@@ -235,6 +235,39 @@ function applyAssistantSettingsToForm(uiConfig) {
         agentEl.checked = uiConfig.assistant_agent_mode === true;
     }
     updateRagIndexCardVisibility(uiConfig.rag_enabled === true);
+    if (uiConfig.rag_enabled === true) {
+        refreshRagIndexStatus();
+    }
+}
+
+async function refreshRagIndexStatus() {
+    var statusEl = document.getElementById('settings-assistant-index-status');
+    if (!statusEl || !window.api || !window.api.ragIndexStatus) return;
+    try {
+        var result = await window.api.ragIndexStatus();
+        if (!result || !result.success) {
+            statusEl.textContent = window.t('assistant.indexStatusError', {
+                message: (result && result.message) || window.t('common.unknownError')
+            });
+            return;
+        }
+        if (!result.enabled) {
+            statusEl.textContent = window.t('assistant.indexStatusDisabled');
+            return;
+        }
+        if (!result.built) {
+            statusEl.textContent = window.t('assistant.indexStatusNotBuilt');
+            return;
+        }
+        var when = result.mtime ? new Date(result.mtime * 1000).toLocaleString() : '';
+        statusEl.textContent = window.t('assistant.indexStatusBuilt', {
+            files: result.file_count || 0,
+            chunks: result.chunk_count || 0,
+            when: when
+        });
+    } catch (e) {
+        if (statusEl) statusEl.textContent = window.t('assistant.indexStatusError', { message: e.message || String(e) });
+    }
 }
 
 function updateRagIndexCardVisibility(ragEnabled) {
@@ -269,6 +302,12 @@ function initAssistantSettings() {
             var enabled = ragEl.checked;
             updateRagIndexCardVisibility(enabled);
             saveAssistantUiConfig({ rag_enabled: enabled });
+            if (enabled) {
+                refreshRagIndexStatus();
+            } else {
+                var statusEl = document.getElementById('settings-assistant-index-status');
+                if (statusEl) statusEl.textContent = window.t('assistant.indexStatusDisabled');
+            }
         });
     }
 
@@ -323,8 +362,6 @@ function initAssistantSettings() {
         document.addEventListener('rag_index_built', function(e) {
             var data = e.detail || {};
             var progressWrap = document.getElementById('settings-assistant-rebuild-progress');
-            var progressFill = document.getElementById('settings-assistant-rebuild-progress-fill');
-            var progressText = document.getElementById('settings-assistant-rebuild-progress-text');
             var statusEl = document.getElementById('settings-assistant-rebuild-status');
             if (progressWrap) progressWrap.style.display = 'none';
             if (data.success) {
@@ -332,6 +369,7 @@ function initAssistantSettings() {
             } else {
                 if (statusEl) statusEl.textContent = window.t('assistant.indexBuildFailed', { message: data.message || '' });
             }
+            refreshRagIndexStatus();
         });
     }
 }

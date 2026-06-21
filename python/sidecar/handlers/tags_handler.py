@@ -41,12 +41,9 @@ def _normalize_tags(raw_tags) -> list[str]:
 
 
 def _dump_frontmatter(meta: dict, body: str, had_bom: bool) -> str:
-    prefix = "\ufeff" if had_bom else ""
-    if not meta:
-        return prefix + body.lstrip("\n")
-    frontmatter = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-    separator = "" if body.startswith("\n") else "\n"
-    return prefix + "---\n" + frontmatter + "\n---" + separator + body
+    from sidecar.textutils import write_frontmatter
+
+    return write_frontmatter(meta, body, had_bom=had_bom)
 
 
 class TagsHandler(BaseHandler):

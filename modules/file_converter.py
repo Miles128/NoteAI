@@ -25,48 +25,71 @@ from utils.tag_extractor import (
 
 
 class BaseConverter(ABC):
-    """转换器基类"""
+    """转换器基类（模板方法模式）
+
+    子类只需实现 `_extract_text` 提供特定格式的文本提取逻辑，
+    通用流程（日志、文本清理、图片移除、异常处理）由基类统一处理。
+    """
+
+    # 子类可覆盖此属性以自定义日志中的显示名称
+    _display_name: str = ""
 
     def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
 
-    @abstractmethod
+    def _converter_name(self) -> str:
+        """获取日志中显示的转换器名称"""
+        return self._display_name or self.__class__.__name__.replace("Converter", "")
+
     def to_markdown(self, file_path: str) -> str:
-        """转换为Markdown"""
+        """转换为 Markdown（模板方法，统一处理日志与异常）"""
+        name = self._converter_name()
+        logger.info(f"开始转换{name}: {file_path}")
+
+        try:
+            markdown_content = self._extract_text(file_path)
+            markdown_content = self._post_process(markdown_content, file_path)
+
+            logger.info(f"{name}转换完成: {file_path}")
+            return markdown_content
+
+        except Exception as e:
+            logger.error(f"{name}转换失败 {file_path}: {e}")
+            raise
+
+    def _post_process(self, content: str, file_path: str) -> str:
+        """后处理逻辑（文本清理 + 图片移除），子类可覆盖以插入额外步骤"""
+        content = clean_text(content)
+        content = remove_images_from_markdown(content)
+        return content
+
+    @abstractmethod
+    def _extract_text(self, file_path: str) -> str:
+        """提取文本内容（由子类实现）"""
         pass
 
 
 class PDFConverter(BaseConverter):
     """PDF转Markdown转换器（仅使用快速路径）"""
 
-    SUPPORTED_FORMATS = [".pdf"]
+    SUPPORTED_FORMATS = ['.pdf']
+    _display_name = "PDF"
 
     MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION = 3
     SIGNATURE_MIN_LENGTH = 5
     SIGNATURE_MAX_LENGTH = 200
     SIGNATURE_MAX_LINES = 5
 
-    def to_markdown(self, file_path: str) -> str:
-        """使用 PyMuPDF 将 PDF 转换为 Markdown"""
-        logger.info(f"开始转换PDF: {file_path}")
-
-        try:
-            markdown_content = self._extract_pdf_text(file_path)
-            markdown_content = clean_text(markdown_content)
-            markdown_content = self._remove_repeated_signatures(markdown_content, file_path)
-
-            markdown_content = remove_images_from_markdown(markdown_content)
-
-            logger.info(f"PDF转换完成: {file_path}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"PDF转换失败 {file_path}: {e}")
-            raise
-
-    def _extract_pdf_text(self, file_path: str) -> str:
-        """使用 PyMuPDF 提取 PDF 文本（统一入口）"""
+    def _extract_text(self, file_path: str) -> str:
+        """使用 PyMuPDF 提取 PDF 文本"""
         return extract_pdf_text(file_path)
+
+    def _post_process(self, content: str, file_path: str) -> str:
+        """PDF 特定后处理：clean_text → 签名移除 → 图片移除"""
+        content = clean_text(content)
+        content = self._remove_repeated_signatures(content, file_path)
+        content = remove_images_from_markdown(content)
+        return content
 
     def _extract_page_texts(self, file_path: str) -> list[str]:
         """提取每一页的文本用于签名检测"""
@@ -135,52 +158,23 @@ class PDFConverter(BaseConverter):
 
 
 class TXTConverter(BaseConverter):
-    def to_markdown(self, file_path: str) -> str:
-        """TXT转Markdown"""
-        logger.info(f"开始转换TXT: {file_path}")
+    _display_name = "TXT"
 
-        try:
-            raw_content = read_file_with_encoding(file_path)
-
-            markdown_content = clean_text(raw_content)
-
-            markdown_content = remove_images_from_markdown(markdown_content)
-
-            logger.info(f"TXT转换完成: {file_path}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"TXT转换失败: {e}")
-            raise
+    def _extract_text(self, file_path: str) -> str:
+        """读取 TXT 文件内容（自动探测编码）"""
+        return read_file_with_encoding(file_path)
 
 
 class DOCXConverter(BaseConverter):
     """Word文档转Markdown转换器（使用mammoth，仅支持 .docx）"""
 
-    SUPPORTED_FORMATS = [".docx"]
+    SUPPORTED_FORMATS = ['.docx']
+    _display_name = "Word文档"
 
-    def to_markdown(self, file_path: str) -> str:
-        """将Word文档转换为Markdown"""
-        logger.info(f"开始转换Word文档: {file_path}")
-
-        try:
-            markdown_content = self._extract_docx_text(file_path)
-            markdown_content = clean_text(markdown_content)
-
-            markdown_content = remove_images_from_markdown(markdown_content)
-
-            logger.info(f"Word文档转换完成: {file_path}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"Word文档转换失败 {file_path}: {e}")
-            raise
-
-    def _extract_docx_text(self, file_path: str) -> str:
+    def _extract_text(self, file_path: str) -> str:
         """使用mammoth将DOCX转换为Markdown"""
         import mammoth
-
-        with open(file_path, "rb") as docx_file:
+        with open(file_path, 'rb') as docx_file:
             result = mammoth.convert_to_markdown(docx_file)
             return result.value
 
@@ -188,20 +182,17 @@ class DOCXConverter(BaseConverter):
 class LegacyDOCConverter(BaseConverter):
     """旧版 Word .doc 转 Markdown，依赖系统可用的文本提取工具。"""
 
-    SUPPORTED_FORMATS = [".doc"]
+    SUPPORTED_FORMATS = ['.doc']
+    _display_name = "旧版Word文档"
 
-    def to_markdown(self, file_path: str) -> str:
-        logger.info(f"开始转换旧版Word文档: {file_path}")
-
+    def _extract_text(self, file_path: str) -> str:
+        """依次尝试 textutil / antiword / catdoc，返回首个成功提取的原始文本"""
         errors = []
         for extractor in (self._extract_with_textutil, self._extract_with_antiword, self._extract_with_catdoc):
             try:
                 content = extractor(file_path)
                 if content and content.strip():
-                    markdown_content = clean_text(content)
-                    markdown_content = remove_images_from_markdown(markdown_content)
-                    logger.info(f"旧版Word文档转换完成: {file_path}")
-                    return markdown_content
+                    return content
             except Exception as e:
                 errors.append(str(e))
 
@@ -263,24 +254,9 @@ class PPTConverter(BaseConverter):
     """PPT转Markdown转换器（使用python-pptx，仅支持 .pptx）"""
 
     SUPPORTED_FORMATS = [".pptx"]
+    _display_name = "PPT"
 
-    def to_markdown(self, file_path: str) -> str:
-        logger.info(f"开始转换PPT: {file_path}")
-
-        try:
-            markdown_content = self._extract_pptx_text(file_path)
-            markdown_content = clean_text(markdown_content)
-
-            markdown_content = remove_images_from_markdown(markdown_content)
-
-            logger.info(f"PPT转换完成: {file_path}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"PPT转换失败 {file_path}: {e}")
-            raise
-
-    def _extract_pptx_text(self, file_path: str) -> str:
+    def _extract_text(self, file_path: str) -> str:
         from pptx import Presentation
 
         prs = Presentation(file_path)
@@ -312,25 +288,13 @@ class PPTConverter(BaseConverter):
 class LegacyPPTConverter(BaseConverter):
     """旧版 PowerPoint .ppt 转 Markdown，解析 OLE PowerPoint Document 文本记录。"""
 
-    SUPPORTED_FORMATS = [".ppt"]
+    SUPPORTED_FORMATS = ['.ppt']
+    _display_name = "旧版PPT"
     TEXT_CHARS_ATOM = 4000
     TEXT_BYTES_ATOM = 4008
     CSTRING = 4026
 
-    def to_markdown(self, file_path: str) -> str:
-        logger.info(f"开始转换旧版PPT: {file_path}")
-
-        try:
-            markdown_content = self._extract_ppt_text(file_path)
-            markdown_content = clean_text(markdown_content)
-            markdown_content = remove_images_from_markdown(markdown_content)
-            logger.info(f"旧版PPT转换完成: {file_path}")
-            return markdown_content
-        except Exception as e:
-            logger.error(f"旧版PPT转换失败 {file_path}: {e}")
-            raise
-
-    def _extract_ppt_text(self, file_path: str) -> str:
+    def _extract_text(self, file_path: str) -> str:
         import olefile
 
         with olefile.OleFileIO(file_path) as ole:
@@ -426,24 +390,9 @@ class HTMLConverter(BaseConverter):
     """HTML转Markdown转换器（使用html2text）"""
 
     SUPPORTED_FORMATS = [".html", ".htm"]
+    _display_name = "HTML"
 
-    def to_markdown(self, file_path: str) -> str:
-        logger.info(f"开始转换HTML: {file_path}")
-
-        try:
-            markdown_content = self._extract_html_text(file_path)
-            markdown_content = clean_text(markdown_content)
-
-            markdown_content = remove_images_from_markdown(markdown_content)
-
-            logger.info(f"HTML转换完成: {file_path}")
-            return markdown_content
-
-        except Exception as e:
-            logger.error(f"HTML转换失败 {file_path}: {e}")
-            raise
-
-    def _extract_html_text(self, file_path: str) -> str:
+    def _extract_text(self, file_path: str) -> str:
         import html2text
 
         h = html2text.HTML2Text()

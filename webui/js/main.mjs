@@ -59,6 +59,18 @@ async function loadModules() {
     const { TreeModule } = window;
     window.TreeModule = TreeModule;
 
+    await import('./note-list.js');
+    window.NoteListModule = window.NoteListModule || {};
+    if (window.NoteListModule.init) window.NoteListModule.init();
+
+    await import('./inspector.js');
+    window.InspectorModule = window.InspectorModule || {};
+    if (window.InspectorModule.init) window.InspectorModule.init();
+
+    await import('./cli-agent.js');
+    window.CliAgentModule = window.CliAgentModule || {};
+    if (window.CliAgentModule.init) window.CliAgentModule.init();
+
     await import('./sidebar.js');
     window.switchSidebarView = window.switchSidebarView;
     window.updateSidebarStats = window.updateSidebarStats;

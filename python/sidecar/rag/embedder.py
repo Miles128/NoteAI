@@ -12,6 +12,7 @@ from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 
 _HF_ENV_CONFIGURED = False
+_FASTEMBED_CACHE_PATH_CONFIGURED = False
 
 
 def _ensure_hf_env():
@@ -41,8 +42,13 @@ def _fastembed_cache_root() -> Path:
     return root
 
 
-_FASTEMBED_CACHE = _fastembed_cache_root()
-os.environ["FASTEMBED_CACHE_PATH"] = str(_FASTEMBED_CACHE)
+def _ensure_fastembed_cache():
+    global _FASTEMBED_CACHE_PATH_CONFIGURED
+    if _FASTEMBED_CACHE_PATH_CONFIGURED:
+        return
+    cache = _fastembed_cache_root()
+    os.environ["FASTEMBED_CACHE_PATH"] = str(cache)
+    _FASTEMBED_CACHE_PATH_CONFIGURED = True
 
 from fastembed import TextEmbedding
 
@@ -126,6 +132,7 @@ def _is_recoverable_embed_load_err(err: BaseException) -> bool:
 def _get_dense_model(download_callback=None):
     global _DENSE_MODEL
     _ensure_hf_env()
+    _ensure_fastembed_cache()
     with _DENSE_MODEL_LOCK:
         if _DENSE_MODEL is not None:
             return _DENSE_MODEL
@@ -135,7 +142,7 @@ def _get_dense_model(download_callback=None):
                     download_callback("正在加载 Embedding 模型…" if attempt == 0 else "正在重新下载 Embedding 模型…")
                 _dense = TextEmbedding(
                     DENSE_MODEL_NAME,
-                    cache_dir=str(_FASTEMBED_CACHE),
+                    cache_dir=str(_fastembed_cache_root()),
                     threads=_onnx_inference_threads(),
                 )
                 _DENSE_MODEL = _dense
@@ -143,7 +150,7 @@ def _get_dense_model(download_callback=None):
             except Exception as e:
                 if attempt == 0 and _is_recoverable_embed_load_err(e):
                     logger.warning(f"[rag/embedder] Load failed ({e!s}); purge cache {_FF_MODEL_FOLDER} and retry.")
-                    _purge_bge_zh_snapshot(_FASTEMBED_CACHE)
+                    _purge_bge_zh_snapshot(_fastembed_cache_root())
                     continue
                 logger.error(f"[rag/embedder] Failed to load {DENSE_MODEL_NAME}: {e}")
                 raise

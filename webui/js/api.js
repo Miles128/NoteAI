@@ -23,10 +23,45 @@ function getTauriInvoke() {
     return null;
 }
 
+var _pyCallRetries = 2;
+var _pyCallRetryDelayMs = 300;
+
+function _isRetryableError(e) {
+    if (!e) return false;
+    var msg = String(e.message || e);
+    return msg.indexOf('timeout') !== -1 ||
+        msg.indexOf('aborted') !== -1 ||
+        msg.indexOf('cancelled') !== -1 ||
+        msg.indexOf('invoke') !== -1 ||
+        msg.indexOf('sidecar') !== -1;
+}
+
+function _translateError(e) {
+    var msg = String(e && (e.message || e));
+    if (msg.indexOf('Not running in Tauri') !== -1) {
+        return new Error('应用未在 Tauri 环境中运行');
+    }
+    if (msg.indexOf('Tauri invoke not available') !== -1) {
+        return new Error('Tauri 调用接口不可用，请重启应用');
+    }
+    if (msg.indexOf('timeout') !== -1) {
+        return new Error('请求超时，请稍后重试');
+    }
+    if (msg.indexOf('sidecar') !== -1 || msg.indexOf('python') !== -1) {
+        return new Error('后端服务暂时不可用，请重启应用');
+    }
+    return e;
+}
+
 async function pyCall(method, params) {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        if (!invoke) throw new Error('Tauri invoke not available');
+    if (!checkIsTauri()) {
+        throw _translateError(new Error('Not running in Tauri'));
+    }
+    var invoke = getTauriInvoke();
+    if (!invoke) throw _translateError(new Error('Tauri invoke not available'));
+
+    var lastError = null;
+    for (var attempt = 0; attempt <= _pyCallRetries; attempt++) {
         try {
             var result = await invoke('py_call', {
                 method: method,
@@ -34,12 +69,17 @@ async function pyCall(method, params) {
             });
             return result;
         } catch (e) {
+            lastError = e;
+            if (attempt < _pyCallRetries && _isRetryableError(e)) {
+                console.warn('[API] pyCall retry:', method, attempt + 1, e);
+                await new Promise(function(resolve) { setTimeout(resolve, _pyCallRetryDelayMs * (attempt + 1)); });
+                continue;
+            }
             console.error('[API] pyCall error:', method, e);
-            throw e;
+            throw _translateError(e);
         }
     }
-    console.error('[API] Not running in Tauri');
-    throw new Error('Not running in Tauri');
+    throw _translateError(lastError);
 }
 
 var PREVIEW_RAW_SLICE_CHUNK_BYTES = 384 * 1024;
@@ -116,20 +156,24 @@ function sliceChunkToUint8(b64) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// 特殊 API 函数：涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览，无法配置化生成
+// ---------------------------------------------------------------------------
+
 async function openWorkspace() {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        var folder = await invoke('open_folder_dialog');
-        if (folder) {
-            var pyResult = await pyCall('set_workspace_path', { path: folder });
-            if (pyResult && pyResult.success) {
-                await invoke('set_workspace_path', { path: folder });
-            }
-            return pyResult || { success: false, message: '设置工作区失败' };
-        }
-        return { success: false, message: '未选择文件夹' };
+    if (!checkIsTauri()) {
+        throw new Error('必须在 Tauri 环境中运行');
     }
-    return pyCall('open_workspace');
+    var invoke = getTauriInvoke();
+    var folder = await invoke('open_folder_dialog');
+    if (folder) {
+        var pyResult = await pyCall('set_workspace_path', { path: folder });
+        if (pyResult && pyResult.success) {
+            await invoke('set_workspace_path', { path: folder });
+        }
+        return pyResult || { success: false, message: '设置工作区失败' };
+    }
+    return { success: false, message: '未选择文件夹' };
 }
 
 async function getWorkspaceStatus() {
@@ -142,262 +186,32 @@ async function getWorkspaceStatus() {
     return result;
 }
 
-async function getWorkspaceTree() {
-    return pyCall('get_workspace_tree');
-}
-
-async function getAllTags() {
-    return pyCall('get_all_tags');
-}
-
-async function getTopicTree() {
-    return pyCall('get_topic_tree');
-}
-
-async function autoTagFiles(dryRun) {
-    return pyCall('auto_tag_files', { dry_run: !!dryRun });
-}
-
-async function saveTagsMd() {
-    return pyCall('save_tags_md');
-}
-
-async function autoAssignTopic(filePath) {
-    return pyCall('auto_assign_topic', { file_path: filePath });
-}
-
-async function batchAutoAssignTopics() {
-    return pyCall('batch_auto_assign_topics', {});
-}
-
-async function createTopic(name) {
-    return pyCall('create_topic', { name: name });
-}
-
-async function createTopicFolder(name, parentPath, level) {
-    return pyCall('create_topic_folder', { name: name, parent_path: parentPath || '', level: level || 0 });
-}
-
-async function createTag(name) {
-    return pyCall('create_tag', { name: name });
-}
-
-async function getPendingTopics() {
-    return pyCall('get_pending_topics');
-}
-
-async function getAllPending() {
-    return pyCall('get_all_pending');
-}
-
-async function getActivityLog(limit) {
-    return pyCall('get_activity_log', { limit: limit || 50 });
-}
-
-async function resolveTopic(filePath, topic) {
-    return pyCall('resolve_topic', { file_path: filePath, topic: topic });
-}
-
-async function mergeDuplicateTopics() {
-    return pyCall('merge_duplicate_topics', {});
-}
-
-async function renameTopic(oldTopic, newTopic) {
-    return pyCall('rename_topic', { old_topic: oldTopic, new_topic: newTopic });
-}
-
-async function deleteTopic(topicName) {
-    return pyCall('delete_topic', { topic_name: topicName });
-}
-
-async function renameTag(oldTag, newTag) {
-    return pyCall('rename_tag', { old_tag: oldTag, new_tag: newTag });
-}
-
-async function deleteTag(tagName) {
-    return pyCall('delete_tag', { tag_name: tagName });
-}
-
-async function moveFileToTopic(filePath, newTopic) {
-    return pyCall('move_file_to_topic', { file_path: filePath, new_topic: newTopic });
-}
-
-async function moveFile(filePath, targetFolder) {
-    return pyCall('move_file', { file_path: filePath, target_folder: targetFolder });
-}
-
-async function addTagToFile(filePath, tag) {
-    return pyCall('add_tag_to_file', { file_path: filePath, tag: tag });
-}
-
-async function ensureTagsMd() {
-    return pyCall('ensure_tags_md');
-}
-
-async function getApiConfig() {
-    return pyCall('get_api_config');
-}
-
-async function saveApiConfig(cfg) {
-    return pyCall('save_api_config', cfg);
-}
-
-async function getUiConfig() {
-    return pyCall('get_ui_config');
-}
-
-async function saveUiConfig(cfg) {
-    return pyCall('save_ui_config', cfg);
-}
-
-async function getThemePreference() {
-    return pyCall('get_theme_preference');
-}
-
-async function saveThemePreference(theme) {
-    return pyCall('save_theme_preference', { theme: theme });
-}
-
 async function addFiles() {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        var files = await invoke('open_file_dialog');
-        return files || [];
+    if (!checkIsTauri()) {
+        throw new Error('必须在 Tauri 环境中运行');
     }
-    return pyCall('add_files');
+    var invoke = getTauriInvoke();
+    var files = await invoke('open_file_dialog');
+    return files || [];
 }
 
 async function importFilesToWorkspace() {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        var files = await invoke('open_file_dialog');
-        if (!files || files.length === 0) return { cancelled: true };
-        return pyCall('import_files', { files: files });
+    if (!checkIsTauri()) {
+        throw new Error('必须在 Tauri 环境中运行');
     }
-    return pyCall('import_files');
-}
-
-async function importFilesDirect(files) {
+    var invoke = getTauriInvoke();
+    var files = await invoke('open_file_dialog');
+    if (!files || files.length === 0) return { cancelled: true };
     return pyCall('import_files', { files: files });
 }
 
 async function browseFolder() {
-    if (checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        var folder = await invoke('open_folder_dialog');
-        return folder || '';
+    if (!checkIsTauri()) {
+        throw new Error('必须在 Tauri 环境中运行');
     }
-    return pyCall('browse_folder');
-}
-
-async function startWebDownload(urls, aiAssist, includeImages) {
-    return pyCall('start_web_download', {
-        urls: urls,
-        ai_assist: aiAssist,
-        include_images: includeImages
-    });
-}
-
-async function importRssFeed(url, maxItems, fetchArticles) {
-    return pyCall('import_rss_feed', { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles });
-}
-
-async function importTranscript(title, content, source) {
-    return pyCall('import_transcript', { title: title, content: content, source: source });
-}
-
-async function saveRssSubscriptionApi(url, name) {
-    return pyCall('save_rss_subscription', { url: url, name: name });
-}
-
-async function removeRssSubscriptionApi(url) {
-    return pyCall('remove_rss_subscription', { url: url });
-}
-
-async function listRssSubscriptions() {
-    return pyCall('list_rss_subscriptions', {});
-}
-
-async function fetchAllRss() {
-    return pyCall('fetch_all_rss', {});
-}
-
-async function startFileConversion(aiAssist) {
-    return pyCall('start_file_conversion', { ai_assist: aiAssist });
-}
-
-async function autoConvertPending() {
-    return pyCall('auto_convert_pending', {});
-}
-
-async function ensureSchema() {
-    return pyCall('ensure_schema', {});
-}
-
-async function getSchema() {
-    return pyCall('get_schema', {});
-}
-
-async function needsSchemaSetup() {
-    return pyCall('needs_schema_setup', {});
-}
-
-async function getSchemaTemplate() {
-    return pyCall('get_schema_template', {});
-}
-
-async function saveSchema(content) {
-    return pyCall('save_schema', { content: content });
-}
-
-async function startIngest(options) {
-    var opts = options || {};
-    return pyCall('start_ingest', {
-        mode: opts.mode || 'full',
-        file_paths: opts.file_paths || []
-    });
-}
-
-async function ensureIngest(options) {
-    var opts = options || {};
-    return pyCall('ensure_ingest', {
-        file_paths: opts.file_paths || []
-    });
-}
-
-async function cancelIngest() {
-    return pyCall('cancel_ingest', {});
-}
-
-async function retryIngest(options) {
-    var opts = options || {};
-    return pyCall('retry_ingest', {
-        mode: opts.mode || 'full',
-        file_paths: opts.file_paths || []
-    });
-}
-
-async function getIngestStatus() {
-    return pyCall('get_ingest_status', {});
-}
-
-async function extractTopics(topicCount) {
-    return pyCall('extract_topics', { topic_count: topicCount });
-}
-
-async function startNoteIntegration(autoTopic, topics) {
-    return pyCall('start_note_integration', {
-        auto_topic: autoTopic,
-        topics: topics
-    });
-}
-
-async function refreshLog() {
-    return pyCall('refresh_log');
-}
-
-async function onFileSelected(path) {
-    return pyCall('on_file_selected', { path: path });
+    var invoke = getTauriInvoke();
+    var folder = await invoke('open_folder_dialog');
+    return folder || '';
 }
 
 async function getFilePreview(path) {
@@ -426,241 +240,225 @@ async function getFilePreview(path) {
     return hydrateSemanticPreviewRpc(raw);
 }
 
-async function canPreviewFile(path) {
-    return pyCall('can_preview_file', { path: path });
+// ---------------------------------------------------------------------------
+// 窗口控制：直接调用 Tauri 窗口 API，不走 pyCall
+// ---------------------------------------------------------------------------
+
+function getTauriWindow() {
+    if (window.__TAURI__ && window.__TAURI__.window) {
+        if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
+            return window.__TAURI__.window.getCurrentWindow();
+        }
+        if (typeof window.__TAURI__.window.getCurrent === 'function') {
+            return window.__TAURI__.window.getCurrent();
+        }
+    }
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window) {
+        if (typeof window.__TAURI_INTERNALS__.window.getCurrentWindow === 'function') {
+            return window.__TAURI_INTERNALS__.window.getCurrentWindow();
+        }
+        if (typeof window.__TAURI_INTERNALS__.window.getCurrent === 'function') {
+            return window.__TAURI_INTERNALS__.window.getCurrent();
+        }
+    }
+    return null;
 }
 
-async function saveFileContent(path, content) {
-    return pyCall('save_file_content', { path: path, content: content });
+function moveWindow(dx, dy) {
+    if (checkIsTauri()) {
+        var win = getTauriWindow();
+        if (win && typeof win.startDragging === 'function') {
+            win.startDragging();
+        }
+    }
 }
 
-async function readFileRaw(path) {
-    return pyCall('read_file_raw', { path: path });
+function minimizeWindow() {
+    if (checkIsTauri()) {
+        var win = getTauriWindow();
+        if (win) win.minimize();
+    }
 }
 
-async function discoverLinks() {
-    return pyCall('discover_links', {});
+function maximizeWindow() {
+    if (checkIsTauri()) {
+        var win = getTauriWindow();
+        if (win) win.toggleMaximize();
+    }
 }
 
-async function getBacklinks(filePath) {
-    return pyCall('get_backlinks', { file_path: filePath });
+function closeWindow() {
+    if (checkIsTauri()) {
+        var win = getTauriWindow();
+        if (win) win.close();
+    }
 }
 
-async function getLinkStats() {
-    return pyCall('get_link_stats', {});
+async function openFileInNewWindow(path, name) {
+    if (checkIsTauri()) {
+        var invoke = getTauriInvoke();
+        if (invoke) {
+            return invoke('open_file_in_new_window', { path: path, name: name || null });
+        }
+    }
+    console.error('[API] Not running in Tauri');
+    throw new Error('Not running in Tauri');
 }
 
-async function getGraphData(filter) {
-    return pyCall('get_graph_data', { filter: filter || 'topic' });
+// ---------------------------------------------------------------------------
+// 配置化 API 注册：消除重复的 "定义异步函数 → 调用 pyCall → 返回结果" 模式
+//
+// 每项定义：
+//   name   —— 暴露到 window.api 上的方法名
+//   method —— 对应的 Python sidecar RPC 方法名
+//   params —— 可选，将函数入参映射为 pyCall 参数对象的函数；省略则传 {}
+// ---------------------------------------------------------------------------
+
+function createApiFunction(def) {
+    return async function() {
+        var params = def.params ? def.params.apply(null, arguments) : {};
+        return pyCall(def.method, params);
+    };
 }
 
-async function confirmLink(fromPath, toPath) {
-    return pyCall('confirm_link', { from: fromPath, to: toPath });
-}
+var API_DEFS = [
+    // ---- 工作区 / 主题 / 标签 ----
+    { name: 'getWorkspaceTree', method: 'get_workspace_tree' },
+    { name: 'getTopicTree', method: 'get_topic_tree' },
+    { name: 'getAllTags', method: 'get_all_tags' },
+    { name: 'autoTagFiles', method: 'auto_tag_files', params: function(dryRun) { return { dry_run: !!dryRun }; } },
+    { name: 'saveTagsMd', method: 'save_tags_md' },
+    { name: 'ensureTagsMd', method: 'ensure_tags_md' },
+    { name: 'autoAssignTopic', method: 'auto_assign_topic', params: function(filePath) { return { file_path: filePath }; } },
+    { name: 'batchAutoAssignTopics', method: 'batch_auto_assign_topics', params: function() { return {}; } },
+    { name: 'createTopic', method: 'create_topic', params: function(name) { return { name: name }; } },
+    { name: 'createTopicFolder', method: 'create_topic_folder', params: function(name, parentPath, level) { return { name: name, parent_path: parentPath || '', level: level || 0 }; } },
+    { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
+    { name: 'getPendingTopics', method: 'get_pending_topics' },
+    { name: 'getAllPending', method: 'get_all_pending' },
+    { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
+    { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; } },
+    { name: 'mergeDuplicateTopics', method: 'merge_duplicate_topics', params: function() { return {}; } },
+    { name: 'renameTopic', method: 'rename_topic', params: function(oldTopic, newTopic) { return { old_topic: oldTopic, new_topic: newTopic }; } },
+    { name: 'deleteTopic', method: 'delete_topic', params: function(topicName) { return { topic_name: topicName }; } },
+    { name: 'renameTag', method: 'rename_tag', params: function(oldTag, newTag) { return { old_tag: oldTag, new_tag: newTag }; } },
+    { name: 'deleteTag', method: 'delete_tag', params: function(tagName) { return { tag_name: tagName }; } },
+    { name: 'moveFileToTopic', method: 'move_file_to_topic', params: function(filePath, newTopic) { return { file_path: filePath, new_topic: newTopic }; } },
+    { name: 'moveFile', method: 'move_file', params: function(filePath, targetFolder) { return { file_path: filePath, target_folder: targetFolder }; } },
+    { name: 'addTagToFile', method: 'add_tag_to_file', params: function(filePath, tag) { return { file_path: filePath, tag: tag }; } },
 
-async function rejectLink(fromPath, toPath) {
-    return pyCall('reject_link', { from: fromPath, to: toPath });
-}
+    // ---- 配置 ----
+    { name: 'getApiConfig', method: 'get_api_config' },
+    { name: 'saveApiConfig', method: 'save_api_config', params: function(cfg) { return cfg; } },
+    { name: 'getUiConfig', method: 'get_ui_config' },
+    { name: 'saveUiConfig', method: 'save_ui_config', params: function(cfg) { return cfg; } },
+    { name: 'getThemePreference', method: 'get_theme_preference' },
+    { name: 'saveThemePreference', method: 'save_theme_preference', params: function(theme) { return { theme: theme }; } },
 
-async function confirmAllLinks() {
-    return pyCall('confirm_all_links', {});
-}
+    // ---- 下载 / 转换 / 整合 ----
+    { name: 'startWebDownload', method: 'start_web_download', params: function(urls, aiAssist, includeImages) { return { urls: urls, ai_assist: aiAssist, include_images: includeImages }; } },
+    { name: 'startFileConversion', method: 'start_file_conversion', params: function(aiAssist) { return { ai_assist: aiAssist }; } },
+    { name: 'autoConvertPending', method: 'auto_convert_pending', params: function() { return {}; } },
+    { name: 'extractTopics', method: 'extract_topics', params: function(topicCount) { return { topic_count: topicCount }; } },
+    { name: 'startNoteIntegration', method: 'start_note_integration', params: function(autoTopic, topics) { return { auto_topic: autoTopic, topics: topics }; } },
+    { name: 'refreshLog', method: 'refresh_log' },
+    { name: 'onFileSelected', method: 'on_file_selected', params: function(path) { return { path: path }; } },
+    { name: 'canPreviewFile', method: 'can_preview_file', params: function(path) { return { path: path }; } },
+    { name: 'saveFileContent', method: 'save_file_content', params: function(path, content) { return { path: path, content: content }; } },
+    { name: 'readFileRaw', method: 'read_file_raw', params: function(path) { return { path: path }; } },
+    { name: 'importFilesDirect', method: 'import_files', params: function(files) { return { files: files }; } },
+    { name: 'importRssFeed', method: 'import_rss_feed', params: function(url, maxItems, fetchArticles) { return { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles }; } },
+    { name: 'importTranscript', method: 'import_transcript', params: function(title, content, source) { return { title: title, content: content, source: source }; } },
 
-async function syncWikiWithFiles() {
-    return pyCall('sync_wiki_with_files', {});
-}
+    // ---- 知识图谱 / 链接 ----
+    { name: 'discoverLinks', method: 'discover_links', params: function() { return {}; } },
+    { name: 'getBacklinks', method: 'get_backlinks', params: function(filePath) { return { file_path: filePath }; } },
+    { name: 'getLinkStats', method: 'get_link_stats', params: function() { return {}; } },
+    { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
+    { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; } },
+    { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; } },
+    { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; } },
+    { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; } },
+    { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
+    { name: 'generateAbstract', method: 'generate_abstract', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
 
-async function getTopicFiles(topicName, level) {
-    return pyCall('get_topic_files', { topic_name: topicName, level: level });
-}
+    // ---- LLM 改写 ----
+    { name: 'llmRewrite', method: 'llm_rewrite', params: function(filePath) { return { file_path: filePath }; } },
+    { name: 'llmRewriteStream', method: 'llm_rewrite_stream', params: function(filePath) { return { file_path: filePath }; } },
+    { name: 'llmRewriteApply', method: 'llm_rewrite_apply', params: function(filePath, rewrittenText) { return { file_path: filePath, rewritten_text: rewrittenText }; } },
 
-async function generateAbstract(topicName, level) {
-    return pyCall('generate_abstract', { topic_name: topicName, level: level });
-}
+    // ---- AI 主题 ----
+    { name: 'aiTopicAnalyze', method: 'ai_topic_analyze', params: function() { return {}; } },
+    { name: 'aiTopicSurvey', method: 'ai_topic_survey', params: function(topic) { return { topic: topic }; } },
+    { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; } },
 
-async function llmRewrite(filePath) {
-    return pyCall('llm_rewrite', { file_path: filePath });
-}
+    // ---- RAG ----
+    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile) { return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null }; } },
+    { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; } },
+    { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
+    { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; } },
+    { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; } },
+    { name: 'getChangelog', method: 'get_changelog', params: function(limit) { return { limit: limit || 50 }; } },
+    { name: 'checkAndGenerateSurveys', method: 'check_and_generate_surveys', params: function() { return {}; } },
 
-async function llmRewriteStream(filePath) {
-    return pyCall('llm_rewrite_stream', { file_path: filePath });
-}
+    // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
+    { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },
+    { name: 'runCliAgent', method: 'run_cli_agent', params: function(agentId, prompt, workspacePath) { return { agent_id: agentId, prompt: prompt, workspace_path: workspacePath || '' }; } },
+    { name: 'generateVaultAgentsMd', method: 'generate_vault_agents_md', params: function() { return {}; } },
 
-async function llmRewriteApply(filePath, rewrittenText) {
-    return pyCall('llm_rewrite_apply', { file_path: filePath, rewritten_text: rewrittenText });
-}
+    // ---- 用户画像 / 规则 ----
+    { name: 'getUserProfile', method: 'get_user_profile', params: function() { return {}; } },
+    { name: 'saveUserProfile', method: 'save_user_profile', params: function(data) { return data; } },
+    { name: 'getProjectRules', method: 'get_project_rules', params: function() { return {}; } },
+    { name: 'saveProjectRules', method: 'save_project_rules', params: function(rules) { return { rules: rules }; } },
 
-async function aiTopicAnalyze() {
-    return pyCall('ai_topic_analyze', {});
-}
+    // ---- Schema / Ingest ----
+    { name: 'ensureSchema', method: 'ensure_schema', params: function() { return {}; } },
+    { name: 'getSchema', method: 'get_schema', params: function() { return {}; } },
+    { name: 'needsSchemaSetup', method: 'needs_schema_setup', params: function() { return {}; } },
+    { name: 'getSchemaTemplate', method: 'get_schema_template', params: function() { return {}; } },
+    { name: 'saveSchema', method: 'save_schema', params: function(content) { return { content: content }; } },
+    { name: 'startIngest', method: 'start_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; } },
+    { name: 'cancelIngest', method: 'cancel_ingest', params: function() { return {}; } },
+    { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; } },
+    { name: 'getIngestStatus', method: 'get_ingest_status', params: function() { return {}; } },
+    { name: 'ensureIngest', method: 'ensure_ingest', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; } },
 
-async function aiTopicSurvey(topic) {
-    return pyCall('ai_topic_survey', { topic: topic });
-}
+    // ---- 云同步 ----
+    { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' },
+    { name: 'cloudSyncAuth', method: 'cloud_sync_auth', params: function(provider, credentials) { return { provider_name: provider, credentials: credentials }; } },
+    { name: 'cloudSyncPush', method: 'cloud_sync_push', params: function(provider) { return { provider_name: provider }; } },
+    { name: 'cloudSyncPull', method: 'cloud_sync_pull', params: function(provider) { return { provider_name: provider }; } },
+    { name: 'cloudSyncStatus', method: 'cloud_sync_status', params: function(provider) { return { provider_name: provider }; } },
+    { name: 'cloudSyncSaveConfig', method: 'cloud_sync_save_config', params: function(provider, config) { return { provider_name: provider, config: config }; } },
+    { name: 'cloudSyncLoadConfig', method: 'cloud_sync_load_config', params: function(provider) { return { provider_name: provider }; } },
+    { name: 'cloudSyncDisconnect', method: 'cloud_sync_disconnect', params: function(provider) { return { provider_name: provider }; } }
+];
 
-async function applyTopicSuggestion(suggestion) {
-    return pyCall('apply_topic_suggestion', { suggestion: suggestion });
-}
+var generatedApi = {};
+API_DEFS.forEach(function(def) {
+    generatedApi[def.name] = createApiFunction(def);
+});
 
-async function ragChat(question, topics, tags, currentFile) {
-    return pyCall('rag_chat', { question, topics: topics || null, tags: tags || null, current_file: currentFile || null });
-}
-
-async function ragRebuildIndex() {
-    return pyCall('rag_rebuild_index', {});
-}
-
-async function archiveChatAnswer(payload) {
-    return pyCall('archive_chat_answer', payload || {});
-}
-
-async function runKbLint() {
-    return pyCall('run_kb_lint', {});
-}
-
-async function getChangelog(limit) {
-    return pyCall('get_changelog', { limit: limit || 50 });
-}
-
-async function checkAndGenerateSurveys() {
-    return pyCall('check_and_generate_surveys', {});
-}
-
-async function getUserProfile() {
-    return pyCall('get_user_profile', {});
-}
-
-async function saveUserProfile(data) {
-    return pyCall('save_user_profile', data);
-}
-
-async function getProjectRules() {
-    return pyCall('get_project_rules', {});
-}
-
-async function saveProjectRules(rules) {
-    return pyCall('save_project_rules', { rules: rules });
-}
-
-async function cloudSyncListProviders() { return pyCall('cloud_sync_list_providers'); }
-async function cloudSyncAuth(provider, credentials) { return pyCall('cloud_sync_auth', { provider_name: provider, credentials: credentials }); }
-async function cloudSyncPush(provider) { return pyCall('cloud_sync_push', { provider_name: provider }); }
-async function cloudSyncPull(provider) { return pyCall('cloud_sync_pull', { provider_name: provider }); }
-async function cloudSyncStatus(provider) { return pyCall('cloud_sync_status', { provider_name: provider }); }
-async function cloudSyncSaveConfig(provider, config) { return pyCall('cloud_sync_save_config', { provider_name: provider, config: config }); }
-async function cloudSyncLoadConfig(provider) { return pyCall('cloud_sync_load_config', { provider_name: provider }); }
-async function cloudSyncDisconnect(provider) { return pyCall('cloud_sync_disconnect', { provider_name: provider }); }
-
-window.api = {
+window.api = Object.assign({}, generatedApi, {
     invoke: pyCall,
     getApiPort: function() { return 0; },
 
+    // 特殊 API（涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览）
     openWorkspace: openWorkspace,
     getWorkspaceStatus: getWorkspaceStatus,
-    getWorkspaceTree: getWorkspaceTree,
-    getAllTags: getAllTags,
-    getTopicTree: getTopicTree,
-    autoTagFiles: autoTagFiles,
-    saveTagsMd: saveTagsMd,
-    ensureTagsMd: ensureTagsMd,
-    autoAssignTopic: autoAssignTopic,
-    batchAutoAssignTopics: batchAutoAssignTopics,
-    createTopic: createTopic,
-    createTopicFolder: createTopicFolder,
-    createTag: createTag,
-    getPendingTopics: getPendingTopics,
-    getAllPending: getAllPending,
-    getActivityLog: getActivityLog,
-    resolveTopic: resolveTopic,
-    mergeDuplicateTopics: mergeDuplicateTopics,
-    renameTopic: renameTopic,
-    deleteTopic: deleteTopic,
-    renameTag: renameTag,
-    deleteTag: deleteTag,
-    moveFileToTopic: moveFileToTopic,
-    moveFile: moveFile,
-    addTagToFile: addTagToFile,
-    getApiConfig: getApiConfig,
-    saveApiConfig: saveApiConfig,
-    getUiConfig: getUiConfig,
-    saveUiConfig: saveUiConfig,
-    getThemePreference: getThemePreference,
-    saveThemePreference: saveThemePreference,
     addFiles: addFiles,
     importFilesToWorkspace: importFilesToWorkspace,
-    importFilesDirect: importFilesDirect,
     browseFolder: browseFolder,
-    startWebDownload: startWebDownload,
-    importRssFeed: importRssFeed,
-    importTranscript: importTranscript,
-    saveRssSubscriptionApi: saveRssSubscriptionApi,
-    removeRssSubscriptionApi: removeRssSubscriptionApi,
-    listRssSubscriptions: listRssSubscriptions,
-    fetchAllRss: fetchAllRss,
-    startFileConversion: startFileConversion,
-    autoConvertPending: autoConvertPending,
-    extractTopics: extractTopics,
-    startNoteIntegration: startNoteIntegration,
-    refreshLog: refreshLog,
-    onFileSelected: onFileSelected,
     getFilePreview: getFilePreview,
-    canPreviewFile: canPreviewFile,
-    saveFileContent: saveFileContent,
-    readFileRaw: readFileRaw,
-    syncWikiWithFiles: syncWikiWithFiles,
-    getTopicFiles: getTopicFiles,
-    generateAbstract: generateAbstract,
 
-    moveWindow: function() { return window.WindowManager && window.WindowManager.moveWindow.apply(window.WindowManager, arguments); },
-    minimizeWindow: function() { return window.WindowManager && window.WindowManager.minimizeWindow(); },
-    maximizeWindow: function() { return window.WindowManager && window.WindowManager.maximizeWindow(); },
-    closeWindow: function() { return window.WindowManager && window.WindowManager.closeWindow(); },
-    openFileInNewWindow: function(path, name) { return window.WindowManager && window.WindowManager.openFileInNewWindow(path, name); },
-
-    discoverLinks: discoverLinks,
-    getBacklinks: getBacklinks,
-    getLinkStats: getLinkStats,
-    getGraphData: getGraphData,
-    confirmLink: confirmLink,
-    rejectLink: rejectLink,
-    confirmAllLinks: confirmAllLinks,
-    llmRewrite: llmRewrite,
-    llmRewriteStream: llmRewriteStream,
-    llmRewriteApply: llmRewriteApply,
-    aiTopicAnalyze: aiTopicAnalyze,
-    aiTopicSurvey: aiTopicSurvey,
-    applyTopicSuggestion: applyTopicSuggestion,
-    ragChat: ragChat,
-    ragRebuildIndex: ragRebuildIndex,
-    archiveChatAnswer: archiveChatAnswer,
-    runKbLint: runKbLint,
-    getChangelog: getChangelog,
-    checkAndGenerateSurveys: checkAndGenerateSurveys,
-    getUserProfile: getUserProfile,
-    saveUserProfile: saveUserProfile,
-    getProjectRules: getProjectRules,
-    saveProjectRules: saveProjectRules,
-
-    cloudSyncListProviders: cloudSyncListProviders,
-    cloudSyncAuth: cloudSyncAuth,
-    cloudSyncPush: cloudSyncPush,
-    cloudSyncPull: cloudSyncPull,
-    cloudSyncStatus: cloudSyncStatus,
-    cloudSyncSaveConfig: cloudSyncSaveConfig,
-    cloudSyncLoadConfig: cloudSyncLoadConfig,
-    cloudSyncDisconnect: cloudSyncDisconnect,
-
-    ensureSchema: ensureSchema,
-    getSchema: getSchema,
-    saveSchema: saveSchema,
-    needsSchemaSetup: needsSchemaSetup,
-    getSchemaTemplate: getSchemaTemplate,
-    startIngest: startIngest,
-    ensureIngest: ensureIngest,
-    cancelIngest: cancelIngest,
-    retryIngest: retryIngest,
-    getIngestStatus: getIngestStatus
-};
+    // 窗口控制
+    moveWindow: moveWindow,
+    minimizeWindow: minimizeWindow,
+    maximizeWindow: maximizeWindow,
+    closeWindow: closeWindow,
+    openFileInNewWindow: openFileInNewWindow
+});
 
 })();
 

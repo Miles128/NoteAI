@@ -306,7 +306,7 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        self._server.note_integration = NoteIntegration()
+        self._note_integration = NoteIntegration()
 
         if not self._start_task("note_integration", self._do_note_integration, args=(workspace, auto_topic, topics)):
             return {"success": False, "message": "整合任务正在进行中，请稍后"}
@@ -315,16 +315,20 @@ class TransferHandler(BaseHandler):
 
     def _do_note_integration(self, workspace, auto_topic, topics):
         _ = auto_topic
+        ni = getattr(self, "_note_integration", None)
+        if ni is None:
+            ni = NoteIntegration()
+            self._note_integration = ni
         try:
-            documents = self.note_integration.load_documents_from_folder(workspace)
-            result = self.note_integration.integrate(
+            documents = ni.load_documents_from_folder(workspace)
+            result = ni.integrate(
                 documents=documents, save_path=workspace, user_topics=topics if topics else None
             )
-            self.note_integration.documents = []
+            ni.documents = []
             self._send_response({"id": "event", "result": {"type": "note_integration_complete", "data": result}})
         except Exception as e:
-            if self.note_integration:
-                self.note_integration.documents = []
+            if ni:
+                ni.documents = []
             logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             self._send_response({"id": "event", "result": {"type": "note_integration_error", "error": str(e)}})
 

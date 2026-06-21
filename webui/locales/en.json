@@ -48,7 +48,9 @@
     "relationGraph": "Relation graph",
     "search": "Search (Cmd+K)",
     "settings": "Settings",
-    "expandSidebar": "Expand sidebar"
+    "expandSidebar": "Expand sidebar",
+    "toggleFolderSidebar": "Folder sidebar",
+    "toggleNoteList": "File list"
   },
   "sidebar": {
     "collapse": "Collapse sidebar",
@@ -248,6 +250,10 @@
     "indexBuilding": "Building knowledge index… estimated {estimate}",
     "indexProgress": "Index progress: {percent}% ({message})",
     "indexRequestFailed": "Index build request failed: {message}",
+    "indexStatusDisabled": "Vector RAG is disabled",
+    "indexStatusNotBuilt": "Index not built yet. Click rebuild below.",
+    "indexStatusBuilt": "Index ready: {files} files / {chunks} chunks ({when})",
+    "indexStatusError": "Failed to read index status: {message}",
     "insightHint": "Save this insightful reply as a note?",
     "saveAsNote": "Save as note",
     "saving": "Saving…",
@@ -606,9 +612,16 @@
     "openInNewWindow": "Open in new window",
     "deleteTopic": "Delete topic",
     "deleteFolder": "Delete folder",
+    "deleteTopicFolder": "Delete topic folder",
     "delete": "Delete",
     "deleteTopicConfirm": "Delete topic \"{name}\"? (Files move to Notes root)",
     "deleteConfirm": "Delete \"{name}\"?",
+    "deleteTopicFolderConfirm": "Delete topic folder \"{name}\"?",
+    "deleteTopicFolderDetail": "This will delete the topic ({path}) and its associated folder and files.",
+    "deleteTopicFolderWarning": "This action cannot be undone. Deleted data cannot be recovered.",
+    "deleteTopicFolderFailed": "Delete topic folder failed: ",
+    "deleteTopicFolderError": "Delete topic folder error: ",
+    "deleteFolderFailed": "Delete folder failed: ",
     "enterTopicName": "Enter new topic name:\n\nCreates folder and auto-matches files.",
     "deleteTopicFailed": "Delete topic failed: ",
     "deleteTopicError": "Delete topic error: ",
@@ -810,8 +823,38 @@
   "workspace": {
     "auto": {
       "button_class_workspace_btn_onclick_window_Worksp": "<button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开workspace\"> ${window.Icons.get('folderFilled')} <span>打开workspace</span> </button>",
-      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
+      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
       "检查工作区状态失败": "检查workspace状态失败:"
     }
+  },
+  "noteList": {
+    "title": "Notes",
+    "empty": "Select a topic to view notes",
+    "emptyTopic": "No notes in this topic",
+    "noSearchResult": "No matching notes",
+    "searchPlaceholder": "Search notes..."
+  },
+  "inspector": {
+    "ai": "AI",
+    "properties": "Properties",
+    "backlinks": "Links",
+    "propertiesEmpty": "Select a note to view properties",
+    "backlinksEmpty": "No backlinks",
+    "loading": "Loading...",
+    "loadFailed": "Load failed",
+    "basicInfo": "Basic Info",
+    "frontmatter": "Frontmatter",
+    "stats": "Statistics"
+  },
+  "cliAgent": {
+    "selectAgent": "Select Agent",
+    "generateMd": "Generate AGENTS.md",
+    "generating": "Generating AGENTS.md...",
+    "generateSuccess": "AGENTS.md generated",
+    "generateFailed": "Generation failed",
+    "notInstalled": "Not installed",
+    "starting": "Starting",
+    "completed": "Completed",
+    "failed": "Failed"
   }
 }

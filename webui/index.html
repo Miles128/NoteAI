@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="css/cloud-sync.css">
     <link rel="stylesheet" href="css/ingest.css">
     <link rel="stylesheet" href="css/schema-wizard.css">
+    <link rel="stylesheet" href="css/inspector.css">
 
     <script src="d3.min.js"></script>
     <script src="marked.min.js"></script>
@@ -56,6 +57,24 @@
                     <path d="M7 13h6"></path>
                 </svg>
                 <span id="workspace-name-display"></span>
+            </button>
+            <button class="titlebar-btn titlebar-toggle-btn" id="titlebar-toggle-folder-sidebar" onclick="toggleSidebar()" data-i18n-title="titlebar.toggleFolderSidebar" aria-label="Folder sidebar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                </svg>
+            </button>
+            <button class="titlebar-btn titlebar-toggle-btn" id="titlebar-toggle-note-list" onclick="toggleNoteList()" data-i18n-title="titlebar.toggleNoteList" aria-label="File list">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8 6h13"></path>
+                    <path d="M8 12h13"></path>
+                    <path d="M8 18h13"></path>
+                    <path d="M3 6h.01"></path>
+                    <path d="M3 12h.01"></path>
+                    <path d="M3 18h.01"></path>
+                </svg>
             </button>
             <button class="titlebar-btn tab-btn sidebar-view-btn active" data-sidebar="tree" onclick="switchSidebarView('tree')" data-i18n-title="titlebar.tree">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -217,6 +236,21 @@
         </div>
 
         <div class="resizer" id="sidebar-resizer"></div>
+
+        <div class="note-list-panel" id="note-list-panel">
+            <div class="note-list-header">
+                <span class="note-list-title" id="note-list-title" data-i18n="noteList.title"></span>
+                <span class="note-list-count" id="note-list-count">0</span>
+            </div>
+            <div class="note-list-search" id="note-list-search-wrap" style="display:none;">
+                <input type="text" class="note-list-search-input" id="note-list-search-input" data-i18n-placeholder="noteList.searchPlaceholder">
+            </div>
+            <div class="note-list-body" id="note-list-body">
+                <div class="note-list-empty" data-i18n="noteList.empty"></div>
+            </div>
+        </div>
+
+        <div class="resizer" id="note-list-resizer"></div>
 
         <div class="right-area" id="right-area">
             <div class="content-panel" id="content-panel">
@@ -484,27 +518,53 @@
                 </div>
             </div>
 
-        <div class="ai-panel" id="ai-panel">
+        <div class="ai-panel inspector-panel" id="ai-panel">
             <div class="ai-panel-top-resizer" id="ai-resizer-top"></div>
             <div class="ai-resizer ai-resizer-left" id="ai-resizer-left"></div>
             <div class="ai-panel-inner">
-                <div class="ai-panel-header">
-                    <span class="ai-panel-header-dot"></span>
-                    <span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>
-                    <span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>
+                <div class="inspector-tabs" id="inspector-tabs">
+                    <button class="inspector-tab is-active" data-inspector-tab="ai" data-i18n-title="inspector.ai">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="3"></rect><circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle><circle cx="14.5" cy="13" r="1.2" fill="currentColor"></circle><line x1="12" y1="4" x2="12" y2="8"></line><circle cx="12" cy="3.5" r="1.2" fill="currentColor"></circle></svg>
+                        <span data-i18n="inspector.ai"></span>
+                    </button>
+                    <button class="inspector-tab" data-inspector-tab="properties" data-i18n-title="inspector.properties">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>
+                        <span data-i18n="inspector.properties"></span>
+                    </button>
+                    <button class="inspector-tab" data-inspector-tab="backlinks" data-i18n-title="inspector.backlinks">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        <span data-i18n="inspector.backlinks"></span>
+                    </button>
                     <button class="ai-panel-close-btn" onclick="toggleAIPanel()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
-                <div class="ai-panel-body">
-                    <div class="ai-panel-messages" id="ai-panel-messages">
+                <div class="inspector-tab-content is-active" id="inspector-content-ai">
+                    <div class="ai-panel-header">
+                        <span class="ai-panel-header-dot"></span>
+                        <span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>
+                        <span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>
+                    </div>
+                    <div class="ai-panel-body">
+                        <div class="ai-panel-messages" id="ai-panel-messages">
+                        </div>
+                    </div>
+                    <div class="ai-panel-input">
+                        <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
+                        <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                        </button>
                     </div>
                 </div>
-                <div class="ai-panel-input">
-                    <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
-                    <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                    </button>
+                <div class="inspector-tab-content" id="inspector-content-properties">
+                    <div class="inspector-properties-body" id="inspector-properties-body">
+                        <div class="inspector-empty" data-i18n="inspector.propertiesEmpty"></div>
+                    </div>
+                </div>
+                <div class="inspector-tab-content" id="inspector-content-backlinks">
+                    <div class="inspector-backlinks-body" id="inspector-backlinks-body">
+                        <div class="inspector-empty" data-i18n="inspector.backlinksEmpty"></div>
+                    </div>
                 </div>
             </div>
             <div class="ai-resizer ai-resizer-right" id="ai-resizer-right"></div>
@@ -713,6 +773,7 @@
                             </div>
                             <div class="card" id="settings-assistant-rag-index-card" style="margin-top:16px;display:none">
                                 <div class="card-title" data-i18n="settings.indexTitle"></div>
+                                <div id="settings-assistant-index-status" class="settings-hint" style="margin-bottom:10px"></div>
                                 <p class="settings-hint" data-i18n="settings.indexHint"></p>
                                 <button type="button" class="btn btn-secondary" id="settings-assistant-rebuild-index-btn" data-i18n="settings.rebuildIndexBtn"></button>
                                 <div id="settings-assistant-rebuild-status" class="settings-hint" style="display:none;margin-top:8px"></div>
@@ -1031,6 +1092,7 @@
         <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
     </div>
     <script src="js/error-handler.js"></script>
+    <script src="js/storage.js"></script>
     <script src="js/G3.js"></script>
 </body>
 </html>

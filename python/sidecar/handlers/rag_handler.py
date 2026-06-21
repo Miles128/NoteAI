@@ -7,6 +7,7 @@ from pathlib import Path
 from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.handlers.base import BaseHandler
+from utils.logger import logger
 
 try:
     import jieba  # noqa: F811
@@ -51,7 +52,7 @@ class RagHandler(BaseHandler):
 
                     sys.stdout.flush()
 
-                result = rebuild_index(progress_callback=progress_cb)
+                result = rebuild_index(progress_callback=progress_cb, workspace=workspace)
 
                 if result.get("success") is False:
                     self._send_response(
@@ -71,7 +72,8 @@ class RagHandler(BaseHandler):
                             "result": {
                                 "type": "rag_index_built",
                                 "success": True,
-                                "indexed": result.get("chunk_count", 0),
+                                "chunk_count": result.get("chunk_count", 0),
+                                "file_count": result.get("file_count", 0),
                             },
                         }
                     )
@@ -101,7 +103,7 @@ class RagHandler(BaseHandler):
             ep = RagHandler._error_state_path()
             data = json.loads(Path(ep).read_text(encoding="utf-8"))
             ts = data.get("ts", 0)
-            if time.time() - ts < 180:
+            if time.time() - ts < config.rag_error_cooldown_seconds:
                 return data.get("msg", ""), True
             Path(ep).unlink(missing_ok=True)
         except (OSError, json.JSONDecodeError, ValueError):
@@ -217,14 +219,9 @@ class RagHandler(BaseHandler):
         return {"success": True}
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
-        from prompts import RAG_CHAT_PROMPT
-        from sidecar.rag.memory import load_short_memory, save_short_memory
-        from utils.llm_utils import APIConfigError, call_llm_raw_stream, check_api_config
-
-        if use_vector_rag:
-            from sidecar.rag.retriever import retrieve as search_fn
-        else:
-            from sidecar.classic_retriever import retrieve as search_fn
+        from sidecar.intent_router import classify_intent
+        from sidecar.rag.memory import load_short_memory
+        from utils.llm_utils import APIConfigError, check_api_config
 
         question = params.get("question", "").strip()
         if not question:
@@ -245,103 +242,47 @@ class RagHandler(BaseHandler):
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
 
-        topics = params.get("topics") or None
-        tags = params.get("tags") or None
-
-        try:
-            if use_vector_rag:
-                hyde_question = self._generate_hyde(question)
-                search_results = search_fn(hyde_question, topics=topics, tags=tags)
-                if not search_results:
-                    search_results = search_fn(question, topics=topics, tags=tags)
-            else:
-                search_results = search_fn(question, topics=topics, tags=tags)
-        except Exception as e:
-            RagHandler._record_error(f"检索失败: {e}")
-            return self._fail_rag(f"检索失败: {e}")
-
-        def _send_tool_event(payload: dict) -> None:
-            self._send_response({"id": "event", "result": payload})
-
-        from sidecar.agent_runner import run_readonly_tool_prefetch
-
-        tool_context = run_readonly_tool_prefetch(question, send_event=_send_tool_event)
-
-        context_parts = []
-        citations = []
-        for r in search_results:
-            body = (r.get("content") or "").strip()
-            if not body:
-                continue
-            label = r.get("source_label") or r.get("file_name") or r.get("file_path", "")
-            idx = len(context_parts) + 1
-            context_parts.append(f"[{idx}] {label}\n{body}")
-            citations.append(
-                {
-                    "index": idx,
-                    "file_path": r.get("file_path", ""),
-                    "file_name": r.get("file_name") or Path(r.get("file_path", "")).stem,
-                    "source_label": r.get("source_label") or "",
-                    "section_title": r.get("section_title") or "",
-                    "topic": r.get("topic") or "",
-                }
-            )
-        context = "\n\n".join(context_parts)
-        if tool_context:
-            context = (context + "\n\n" + tool_context).strip() if context else tool_context
-
         history = load_short_memory() or ""
         compressed = self._extractive_compress(history)
 
-        prompt = RAG_CHAT_PROMPT.format(
-            context=context,
-            history=compressed if compressed else "无历史对话",
-            question=question,
+        intent = classify_intent(question, history=compressed)
+        logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
+
+        if intent["intent"] in ("chat", "general"):
+            return self._answer_without_retrieval(question, compressed, intent=intent["intent"])
+        if intent["intent"] == "web":
+            return self._answer_without_retrieval(question, compressed, intent="web")
+        if intent["intent"] == "action":
+            return self._answer_with_agent(question, compressed)
+
+        # workspace / unknown -> RAG retrieval
+        return self._answer_with_rag(params, question, compressed, use_vector_rag=use_vector_rag)
+
+    def _send_chat_chunk(self, token: str) -> None:
+        self._send_response(
+            {
+                "id": "event",
+                "result": {"type": "rag_chat_chunk", "token": token},
+            }
         )
 
-        assistant_response = ""
-
-        def on_token(token):
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "rag_chat_chunk",
-                        "token": token,
-                    },
-                }
-            )
-
-        try:
-            assistant_response = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_token)
-        except APIConfigError as e:
-            RagHandler._record_error(f"LLM调用失败: {e}")
-            return self._fail_rag(str(e))
-        except Exception as e:
-            RagHandler._record_error(f"LLM错误: {e}")
-            return self._fail_rag(str(e))
-
-        if not assistant_response.strip():
-            return self._fail_rag("AI 未生成回复")
-
+    def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
         from sidecar.archive_wiki import parse_save_suggestion
+        from sidecar.rag.memory import load_short_memory, save_short_memory, update_long_memory
 
-        display_answer, suggest_save_note = parse_save_suggestion(assistant_response)
-
+        display_answer, suggest_save_note = parse_save_suggestion(answer)
         if not display_answer.strip():
             return self._fail_rag("AI 未生成回复")
 
         RagHandler._clear_error_reset()
 
+        history = load_short_memory() or ""
         updated_history = (
             f"{history}\n用户: {question}\n助手: {display_answer}"
             if history
             else f"用户: {question}\n助手: {display_answer}"
         )
         save_short_memory(updated_history)
-
-        from sidecar.rag.memory import update_long_memory
-
         try:
             update_long_memory(question)
         except Exception:
@@ -354,29 +295,177 @@ class RagHandler(BaseHandler):
                     "type": "rag_chat_done",
                     "answer": display_answer,
                     "suggest_save_note": suggest_save_note,
-                    "citations": citations,
+                    "citations": citations or [],
                 },
             }
         )
         return {"success": True, "suggest_save_note": suggest_save_note}
 
-    def _generate_hyde(self, question):
-        from prompts import RAG_HYDE_PROMPT
-        from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
+    def _answer_without_retrieval(self, question: str, compressed_history: str, *, intent: str = "general") -> dict:
+        from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_CONTEXT_PROMPT, RAG_ASSISTANT_WEB_PROMPT
+        from utils.llm_utils import APIConfigError, call_llm_raw_stream
+
+        memory_section = f"对话历史：{compressed_history}\n\n" if compressed_history else ""
+
+        if intent == "web":
+            from sidecar.rag.web_search import search_and_fetch
+
+            web_results = []
+            try:
+                web_results = search_and_fetch(question, max_pages=2)
+            except Exception as e:
+                logger.warning(f"[rag/web] search failed: {e}")
+
+            web_context_parts = []
+            for idx, r in enumerate(web_results, 1):
+                title = r.get("title", "")
+                url = r.get("url", "")
+                content = (r.get("content") or r.get("snippet") or "").strip()[:1200]
+                if title or content:
+                    web_context_parts.append(f"[{idx}] {title}\n{url}\n{content}")
+
+            web_context = "\n\n".join(web_context_parts) if web_context_parts else "未搜索到有效结果。"
+            prompt = RAG_ASSISTANT_WEB_PROMPT.format(
+                persona=ASSISTANT_PERSONA_PROMPT,
+                memory_section=memory_section,
+                web_context=web_context,
+                question=question,
+            )
+        else:
+            prompt = RAG_ASSISTANT_NO_CONTEXT_PROMPT.format(
+                persona=ASSISTANT_PERSONA_PROMPT,
+                memory_section=memory_section,
+                question=question,
+            )
 
         try:
-            is_valid, _ = check_api_config()
-            if not is_valid:
-                return question
-        except APIConfigError:
-            return question
+            answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+        except APIConfigError as e:
+            RagHandler._record_error(f"LLM调用失败: {e}")
+            return self._fail_rag(str(e))
+        except Exception as e:
+            RagHandler._record_error(f"LLM错误: {e}")
+            return self._fail_rag(str(e))
+
+        return self._finish_chat(question, answer)
+
+    def _answer_with_agent(self, question: str, compressed_history: str) -> dict:
+        from sidecar.agent_runner import run_agent_chat
+
+        def _send_tool_event(payload: dict) -> None:
+            self._send_response({"id": "event", "result": payload})
 
         try:
-            prompt = RAG_HYDE_PROMPT.format(question=question)
-            result = call_llm_raw(prompt, temperature=0.1, max_tokens=300)
-            return result.strip() or question
-        except Exception:
-            return question
+            result = run_agent_chat(
+                question,
+                history=compressed_history,
+                agent_mode=True,
+                send_event=_send_tool_event,
+            )
+        except Exception as e:
+            RagHandler._record_error(f"Agent错误: {e}")
+            return self._fail_rag(str(e))
+
+        if not isinstance(result, dict) or not result.get("success"):
+            msg = result.get("message", "操作执行失败") if isinstance(result, dict) else "操作执行失败"
+            return self._fail_rag(msg)
+
+        answer = result.get("answer", "").strip()
+        if not answer:
+            answer = "已经帮你处理好了～"
+
+        # Emit the agent answer as a single chunk so the UI still gets a stream event.
+        self._send_chat_chunk(answer)
+        return self._finish_chat(question, answer)
+
+    def _answer_with_rag(self, params, question: str, compressed_history: str, *, use_vector_rag: bool) -> dict:
+        from prompts import RAG_CHAT_PROMPT
+        from utils.llm_utils import APIConfigError, call_llm_raw_stream
+
+        topics = params.get("topics") or None
+        tags = params.get("tags") or None
+        current_file = params.get("current_file") or ""
+
+        if use_vector_rag:
+            from sidecar.rag.retriever import retrieve as search_fn
+        else:
+            from sidecar.classic_retriever import retrieve as search_fn
+
+        try:
+            search_results = search_fn(question, topics=topics, tags=tags)
+        except Exception as e:
+            RagHandler._record_error(f"检索失败: {e}")
+            return self._fail_rag(f"检索失败: {e}")
+
+        context_parts = []
+        citations = []
+        seen_paths: set[str] = set()
+
+        # Prioritize current file as [0] so the model can cite it explicitly.
+        if current_file:
+            current_full = self._resolve_path(current_file)
+            try:
+                if current_full:
+                    cf_text = Path(current_full).read_text(encoding="utf-8")
+                    _, cf_body = self._parse_frontmatter(cf_text)
+                    cf_body = (cf_body or cf_text).strip()[:4000]
+                    if cf_body:
+                        label = Path(current_file).stem
+                        context_parts.append(f"[0] {label}（当前打开文件）\n{cf_body}")
+                        seen_paths.add(current_file)
+                        citations.append(
+                            {
+                                "index": 0,
+                                "file_path": current_file,
+                                "file_name": label,
+                                "source_label": label,
+                                "section_title": "",
+                                "topic": "",
+                            }
+                        )
+            except Exception:
+                pass
+
+        for r in search_results:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
+            fp = r.get("file_path", "")
+            if fp and fp in seen_paths:
+                continue
+            if fp:
+                seen_paths.add(fp)
+            label = r.get("source_label") or r.get("file_name") or fp or ""
+            idx = len(context_parts) + 1
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": fp,
+                    "file_name": r.get("file_name") or Path(fp).stem,
+                    "source_label": r.get("source_label") or "",
+                    "section_title": r.get("section_title") or "",
+                    "topic": r.get("topic") or "",
+                }
+            )
+        context = "\n\n".join(context_parts)
+
+        prompt = RAG_CHAT_PROMPT.format(
+            context=context,
+            history=compressed_history if compressed_history else "无历史对话",
+            question=question,
+        )
+
+        try:
+            answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+        except APIConfigError as e:
+            RagHandler._record_error(f"LLM调用失败: {e}")
+            return self._fail_rag(str(e))
+        except Exception as e:
+            RagHandler._record_error(f"LLM错误: {e}")
+            return self._fail_rag(str(e))
+
+        return self._finish_chat(question, answer, citations=citations)
 
     def _extractive_compress(self, older_history):
         if not older_history:
@@ -432,6 +521,64 @@ class RagHandler(BaseHandler):
         """Manual full rebuild (settings / assistant); not run on app open."""
         return self._init_rag_index(params)
 
+    def _rag_index_status(self, params):
+        if not config.rag_enabled:
+            return {"success": True, "enabled": False, "built": False, "chunk_count": 0, "file_count": 0}
+
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+
+        from sidecar.ingest_pipeline import load_ingest_state
+        from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest, manifest_path
+
+        try:
+            exists = index_exists(workspace)
+            chunk_count = count_indexed_chunks(workspace)
+            manifest = load_manifest(workspace)
+            files = manifest.get("files", {})
+            file_count = len(files)
+            mtime = None
+            if manifest_path(workspace).exists():
+                mtime = Path(manifest_path(workspace)).stat().st_mtime
+
+            ingest_state = load_ingest_state()
+            is_building = ingest_state.get("status") == "running" and ingest_state.get("stage") in (
+                "convert",
+                "compile",
+                "classify",
+                "index",
+                "crossref",
+            )
+            percent = 0.0
+            if is_building:
+                progress = ingest_state.get("progress")
+                if isinstance(progress, (int, float)) and 0 <= progress <= 1:
+                    percent = round(progress * 100, 1)
+                else:
+                    stage_progress = {
+                        "convert": 16,
+                        "compile": 28,
+                        "classify": 45,
+                        "index": 65,
+                        "crossref": 70,
+                    }
+                    percent = stage_progress.get(ingest_state.get("stage"), 0)
+
+            return {
+                "success": True,
+                "enabled": True,
+                "built": exists and chunk_count > 0,
+                "chunk_count": chunk_count,
+                "file_count": file_count,
+                "mtime": mtime,
+                "is_building": is_building,
+                "percent": percent,
+                "stage": ingest_state.get("stage") if is_building else None,
+            }
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
     def register_routes(self, router):
         router.register("init_rag_index", self._init_rag_index)
         router.register("rag_rebuild_index", self._rag_rebuild_index)
@@ -440,3 +587,4 @@ class RagHandler(BaseHandler):
         router.register("rag_chat", self._rag_chat, async_mode=True)
         router.register("rag_chat_with_actions", self._rag_chat_with_actions, async_mode=True)
         router.register("rag_clear_memory", self._rag_clear_memory)
+        router.register("rag_index_status", self._rag_index_status)

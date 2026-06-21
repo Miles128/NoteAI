@@ -14,6 +14,7 @@ from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
     AgentHandler,
+    CliAgentHandler,
     CloudSyncHandler,
     ConfigHandler,
     FilesHandler,
@@ -52,7 +53,6 @@ class SidecarServer(PathHelpersMixin):
         self.web_downloader = WebDownloader()
         self.file_converter = FileConverterManager()
         self.file_previewer = FilePreviewer()
-        self.note_integration = None
         self.topic_extractor = TopicExtractor()
         self._progress_callback = None
         self._running_tasks = set()
@@ -81,6 +81,7 @@ class SidecarServer(PathHelpersMixin):
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
         self._agent_handler = AgentHandler(self)
+        self._cli_agent_handler = CliAgentHandler(self)
         self._build_router()
         self._start_workspace_watcher()
         self._start_rss_polling()
@@ -101,6 +102,7 @@ class SidecarServer(PathHelpersMixin):
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
         self._agent_handler.register_routes(self._router)
+        self._cli_agent_handler.register_routes(self._router)
 
     def _send_response(self, resp):
         with self._stdout_lock:
@@ -162,6 +164,19 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
+        # Temporarily skip auto RAG index on startup for fast UI verification.
+        # if config.rag_enabled and workspace and Path(workspace).exists():
+        #     self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
+
+    def _auto_rebuild_rag_index(self):
+        workspace = config.workspace_path
+        if not workspace or not Path(workspace).exists():
+            return
+        try:
+            logger.info("[startup] auto checking rag index")
+            self._rag_handler._init_rag_index({})
+        except Exception as e:
+            logger.warning(f"[startup] auto rag index failed: {e}")
 
     def _setup_watcher(self, workspace_path):
         try:
@@ -214,7 +229,7 @@ class SidecarServer(PathHelpersMixin):
         if self._watcher_observer:
             try:
                 self._watcher_observer.stop()
-                self._watcher_observer.join(timeout=2)
+                self._watcher_observer.join(timeout=5)
             except Exception as e:
                 logger.warning(f"[watcher] stop failed: {e}\n")
             self._watcher_observer = None
@@ -223,18 +238,21 @@ class SidecarServer(PathHelpersMixin):
         """文件变更时失效所有缓存"""
         self._cache.clear()
         fulltext_index.mark_dirty()
+        from sidecar.rag.retriever import _query_cache
+
+        _query_cache.clear()
 
     def _start_rss_polling(self):
         """Start periodic RSS feed polling (every 30 minutes)."""
         self._rss_poll_timer = None
+        rss_path = str(Path(__file__).parent.parent)
+        if rss_path not in sys.path:
+            sys.path.insert(0, rss_path)
 
         def _poll():
             try:
                 workspace = config.workspace_path
                 if workspace:
-                    import sys as _sys
-
-                    _sys.path.insert(0, str(Path(__file__).parent.parent))
                     from multi_source import fetch_all_subscriptions
 
                     result = fetch_all_subscriptions(workspace)
@@ -427,6 +445,16 @@ class SidecarServer(PathHelpersMixin):
     def handle_request(self, request):
         self._router.handle(request)
 
+    def shutdown(self):
+        """Gracefully stop background services."""
+        self._stop_watcher()
+        if self._rss_poll_timer:
+            try:
+                self._rss_poll_timer.cancel()
+            except Exception:
+                pass
+        self._router.shutdown(wait=False)
+
 
 def main():
     server = SidecarServer()
@@ -434,17 +462,20 @@ def main():
 
     ModelWarmupManager.start_preload()
 
-    for raw_line in sys.stdin:
-        request_line = raw_line.strip()
-        if not request_line:
-            continue
-        try:
-            request = json.loads(request_line)
-            server.handle_request(request)
-        except json.JSONDecodeError as e:
-            server._send_response({"id": "", "error": f"Invalid JSON: {e}"})
-        except Exception as e:
-            server._send_response({"id": "", "error": str(e)})
+    try:
+        for raw_line in sys.stdin:
+            request_line = raw_line.strip()
+            if not request_line:
+                continue
+            try:
+                request = json.loads(request_line)
+                server.handle_request(request)
+            except json.JSONDecodeError as e:
+                server._send_response({"id": "", "error": f"Invalid JSON: {e}"})
+            except Exception as e:
+                server._send_response({"id": "", "error": str(e)})
+    finally:
+        server.shutdown()
 
 
 if __name__ == "__main__":

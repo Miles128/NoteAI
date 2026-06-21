@@ -58,8 +58,8 @@ class BaseHandler:
         return self._server.topic_extractor
 
     @property
-    def note_integration(self):
-        return self._server.note_integration
+    def _link_discovery_lock(self):
+        return self._server._link_discovery_lock
 
     @staticmethod
     def _parse_frontmatter(md_text: str) -> dict:

@@ -4,6 +4,7 @@ import base64
 import hashlib
 import logging
 import os
+import secrets
 import tempfile
 
 _log = logging.getLogger("NoteAI")
@@ -28,26 +29,41 @@ def _fallback_path():
     return SYSTEM_APP_DATA_DIR / "api_key.dat"
 
 
-def _derive_fernet_key() -> bytes:
+_PBKDF2_ITERATIONS = 100_000
 
+
+def _derive_fernet_key(salt: bytes) -> bytes:
+    """Derive a Fernet key from machine info and a per-installation salt.
+
+    The fallback file stores the salt alongside the ciphertext. This is still
+    obfuscation, not true encryption: anyone with the file and the machine
+    info can decrypt it. It is only used when the OS keychain is unavailable.
+    """
     machine_id = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "localhost")
     user = os.environ.get("USER", os.environ.get("USERNAME", "user"))
-    seed = f"NoteAI:{machine_id}:{user}".encode()
-    return base64.urlsafe_b64encode(hashlib.sha256(seed).digest())
+    password = f"NoteAI:{machine_id}:{user}".encode()
+    key = hashlib.pbkdf2_hmac("sha256", password, salt, _PBKDF2_ITERATIONS, dklen=32)
+    return base64.urlsafe_b64encode(key)
 
 
 def _encrypt(value: str) -> bytes:
     from cryptography.fernet import Fernet
 
-    f = Fernet(_derive_fernet_key())
-    return f.encrypt(value.encode("utf-8"))
+    salt = secrets.token_bytes(16)
+    f = Fernet(_derive_fernet_key(salt))
+    ciphertext = f.encrypt(value.encode("utf-8"))
+    return base64.b64encode(salt + ciphertext)
 
 
 def _decrypt(data: bytes) -> str:
     from cryptography.fernet import Fernet
 
-    f = Fernet(_derive_fernet_key())
-    return f.decrypt(data).decode("utf-8")
+    raw = base64.b64decode(data)
+    if len(raw) < 16:
+        raise ValueError("Invalid fallback data")
+    salt, ciphertext = raw[:16], raw[16:]
+    f = Fernet(_derive_fernet_key(salt))
+    return f.decrypt(ciphertext).decode("utf-8")
 
 
 def _fallback_read() -> str:

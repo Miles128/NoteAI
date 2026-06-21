@@ -1,11 +1,9 @@
 (function() { 'use strict';
 
-var THEME_STORAGE_KEY = 'noteai_theme';
+var THEME_STORAGE_KEY = window.Storage.KEYS.THEME;
 
 function persistThemeLocal(theme) {
-    try {
-        localStorage.setItem(THEME_STORAGE_KEY, theme);
-    } catch (_e) { /* noop */ }
+    window.Storage.setRaw(THEME_STORAGE_KEY, theme, { silent: true });
 }
 
 function syncThemeRadioInputs(theme) {
@@ -80,7 +78,7 @@ function applySystemTheme() {
 
 function initSystemThemeListener() {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        var currentTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'system';
+        var currentTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true });
         if (currentTheme === 'system') {
             applySystemTheme();
         }
@@ -97,7 +95,7 @@ async function applyThemeBootstrap() {
         console.warn('[Theme] getThemePreference failed:', e);
     }
     if (pref === null || pref === undefined || String(pref).trim() === '') {
-        pref = localStorage.getItem(THEME_STORAGE_KEY);
+        pref = window.Storage.getRaw(THEME_STORAGE_KEY, null, { silent: true });
     }
     pref = pref || 'system';
 
@@ -153,7 +151,7 @@ function applyTheme(theme) {
 function restoreSidebarWidth() {
     const sidebar = document.querySelector('.sidebar');
     if (!sidebar) return;
-    const savedWidth = localStorage.getItem('sidebar-width');
+    const savedWidth = window.Storage.getRaw(window.Storage.KEYS.SIDEBAR_WIDTH, null, { silent: true });
     if (savedWidth) {
         const w = parseInt(savedWidth, 10);
         if (w >= 180 && w <= 600) {
@@ -203,7 +201,7 @@ function initResizer() {
         resizer.classList.remove('resizing');
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-        localStorage.setItem('sidebar-width', sidebar.offsetWidth);
+        window.Storage.setRaw(window.Storage.KEYS.SIDEBAR_WIDTH, String(sidebar.offsetWidth));
         if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
     });
 }
@@ -212,10 +210,8 @@ function initPreviewResizer() {
     const resizer = document.getElementById('preview-resizer');
     const previewPanel = document.getElementById('preview-panel');
     if (!resizer || !previewPanel) {
-        console.log('[DEBUG] initPreviewResizer: resizer or previewPanel not found', { resizer, previewPanel });
         return;
     }
-    console.log('[DEBUG] initPreviewResizer: initialized successfully');
     let isResizing = false;
 
     resizer.addEventListener('mousedown', (e) => {
@@ -300,14 +296,14 @@ function setFontSize(size) {
 
 function applyFontSize(size) {
     setFontSize(size);
-    localStorage.setItem('noteai_font_size', size);
+    window.Storage.setRaw(window.Storage.KEYS.FONT_SIZE, size);
     if (window.SettingsModule && window.SettingsModule.saveFontSize) {
         window.SettingsModule.saveFontSize(size);
     }
 }
 
 function restoreFontSize() {
-    var saved = localStorage.getItem('noteai_font_size') || 'small';
+    var saved = window.Storage.getRaw(window.Storage.KEYS.FONT_SIZE, 'small', { silent: true });
     setFontSize(saved);
 }
 

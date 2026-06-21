@@ -21,21 +21,12 @@ function getSelectedFileName() {
 }
 
 function loadTreeState() {
-    try {
-        var saved = localStorage.getItem('tree-expanded-state');
-        if (saved) treeExpandedState = JSON.parse(saved);
-    } catch (e) {
-        console.warn('[Tree] loadTreeState failed:', e);
-        treeExpandedState = {};
-    }
+    var saved = window.Storage.getItem(window.Storage.KEYS.TREE_STATE, null, { silent: true });
+    treeExpandedState = saved || {};
 }
 
 function saveTreeState() {
-    try {
-        localStorage.setItem('tree-expanded-state', JSON.stringify(treeExpandedState));
-    } catch (e) {
-        console.warn('[Tree] saveTreeState failed:', e);
-    }
+    window.Storage.setItem(window.Storage.KEYS.TREE_STATE, treeExpandedState);
 }
 
 function toggleTreeFolder(element) {
@@ -46,6 +37,13 @@ function toggleTreeFolder(element) {
 
     var toggle = element.querySelector('.tree-toggle');
     if (toggle) toggle.classList.toggle('collapsed');
+
+    var folderIcon = element.querySelector('.tree-folder-icon');
+    if (folderIcon) {
+        folderIcon.innerHTML = children.classList.contains('hidden')
+            ? window.Icons.get('folderFilled')
+            : window.Icons.get('folderOpen');
+    }
 
     var path = element.getAttribute('data-path');
     if (path) {
@@ -88,8 +86,13 @@ function renderFileTree(treeData, container) {
 
     function buildTreeHTML(nodes, indentLevel) {
         return nodes.map(function(node) {
-            var hasChildren = node.children && node.children.length > 0;
             var isFolder = node.type === 'folder';
+            var hasChildren = node.children && node.children.length > 0;
+
+            // 只渲染文件夹节点（Tolaria Files-first：侧边栏只显示文件夹层级）
+            if (!isFolder) {
+                return '';
+            }
 
             var expanded = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
             var childrenHidden = expanded ? '' : 'hidden';
@@ -97,24 +100,18 @@ function renderFileTree(treeData, container) {
             var ep = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-            var html = '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
+            var levelClass = 'tree-level-' + Math.min(indentLevel, 3);
+            var folderIcon = expanded ? window.Icons.get('folderOpen') : window.Icons.get('folderFilled');
+
+            var html = '<div class="tree-item folder ' + levelClass + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
 
             for (var i = 0; i < indentLevel; i++) {
                 html += '<span class="tree-indent-unit"></span>';
             }
 
-            if (isFolder) {
-                html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '">' + window.Icons.get('chevron') + '</span>';
-            } else {
-                html += '<span class="tree-toggle" style="visibility:hidden">' + window.Icons.get('chevron') + '</span>';
-            }
-
+            html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '" onclick="event.stopPropagation(); TreeModule.toggleTreeFolder(this.parentElement);">' + window.Icons.get('chevron') + '</span>';
+            html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
             html += '<span class="tree-name">' + en + '</span>';
-
-            if (!isFolder && node.modified) {
-                html += '<span class="tree-modified">' + formatModifiedTime(node.modified) + '</span>';
-            }
-
             html += '</div>';
 
             if (hasChildren) {
@@ -133,6 +130,10 @@ function renderFileTree(treeData, container) {
             var name = this.getAttribute('data-name');
             if (this.classList.contains('folder')) {
                 window.TreeModule.toggleTreeFolder(this);
+                // 触发 Note List 显示该主题下的笔记
+                if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
+                    window.NoteListModule.showTopicNotes(path, name);
+                }
             } else {
                 setActiveTreeItem(this);
                 window.TreeModule.selectFile(path, name);
@@ -187,17 +188,17 @@ function showTreeContextMenu(e, itemEl) {
 
     if (isFolder) {
         items.push({
-            label: window.t('tree.deleteTopic'),
+            label: window.t('tree.deleteTopicFolder'),
             icon: window.Icons.get('trash'),
-            action: function() { showTopicDeleteConfirm(itemEl, path, name); }
+            action: function() { showDeleteTopicFolderConfirm(path, name); }
+        });
+    } else {
+        items.push({
+            label: window.t('tree.delete'),
+            icon: window.Icons.get('trash'),
+            action: function() { showDeleteConfirm(itemEl, path, name); }
         });
     }
-
-    items.push({
-        label: isFolder ? window.t('tree.deleteFolder') : window.t('tree.delete'),
-        icon: window.Icons.get('trash'),
-        action: function() { showDeleteConfirm(itemEl, path, name); }
-    });
 
     items.forEach(function(item) {
         var el = document.createElement('div');
@@ -224,49 +225,30 @@ function showTreeContextMenu(e, itemEl) {
     menu.style.top = y + 'px';
 }
 
-function showTopicDeleteConfirm(itemEl, path, name) {
-    var existingConfirm = itemEl.querySelector('.delete-confirm-bar');
-    if (existingConfirm) return;
+async function showDeleteTopicFolderConfirm(path, name) {
+    var topicName = name;
+    var message = window.t('tree.deleteTopicFolderConfirm', { name: escapeHtml(name) }) + '\n\n' +
+        window.t('tree.deleteTopicFolderDetail', { path: escapeHtml(path) }) + '\n' +
+        window.t('tree.deleteTopicFolderWarning');
 
-    var bar = document.createElement('div');
-    bar.className = 'delete-confirm-bar';
-    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteTopicConfirm', { name: escapeHtml(name) }) + '</span>' +
-        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDeleteTopic') + '">' + window.Icons.get('check', 16) + '</button>' +
-        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
+    var confirmed = await window._customConfirm(message);
+    if (!confirmed) return;
 
-    itemEl.style.position = 'relative';
-    itemEl.appendChild(bar);
-
-    bar.querySelector('.delete-confirm-yes').addEventListener('click', function(e) {
-        e.stopPropagation();
-        doDeleteTopic(name, bar);
-    });
-
-    bar.querySelector('.delete-confirm-no').addEventListener('click', function(e) {
-        e.stopPropagation();
-        bar.remove();
-    });
-
-    var outsideClick = function(e) {
-        if (!bar.contains(e.target) && e.target !== itemEl) {
-            bar.remove();
-            document.removeEventListener('click', outsideClick);
-        }
-    };
-    setTimeout(function() { document.addEventListener('click', outsideClick); }, 10);
-}
-
-async function doDeleteTopic(topicName, confirmBar) {
-    if (confirmBar) confirmBar.remove();
     try {
-        var result = await window.api.deleteTopic(topicName);
-        if (result && result.success) {
+        var topicResult = await window.api.deleteTopic(topicName);
+        if (!topicResult || !topicResult.success) {
+            alert(window.t('topic.deleteTopicFailed') + (topicResult ? topicResult.message || window.t('common.unknownError') : window.t('common.unknownError')));
+            return;
+        }
+
+        var fileResult = await window.api.invoke('delete_file', { path: path });
+        if (fileResult && fileResult.success) {
             window.TreeModule.loadFileTree();
         } else {
-            alert(window.t('topic.deleteTopicFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
+            alert(window.t('tree.deleteFolderFailed') + (fileResult ? fileResult.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert(window.t('tree.deleteTopicError') + (e.message || e));
+        alert(window.t('tree.deleteTopicFolderError') + (e.message || e));
     }
 }
 
@@ -503,10 +485,11 @@ function flattenVisibleNodes(treeData) {
         if (!nodes) return;
         for (var i = 0; i < nodes.length; i++) {
             var node = nodes[i];
-            var isFolder = node.type === 'folder';
+            // 侧边栏仅展示文件夹层级，跳过具体文件
+            if (node.type !== 'folder') continue;
             var expanded = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
             result.push({ path: node.path, name: node.name, type: node.type, depth: depth, modified: node.modified, expanded: expanded });
-            if (isFolder && expanded && node.children) {
+            if (expanded && node.children) {
                 walk(node.children, depth + 1);
             }
         }
@@ -521,7 +504,6 @@ function renderVirtualTree(container) {
         return;
     }
 
-    var totalHeight = _flatVisibleNodes.length * _virtualScrollItemHeight;
     var scrollTop = container.scrollTop || 0;
     var viewHeight = container.clientHeight || 600;
 
@@ -535,23 +517,19 @@ function renderVirtualTree(container) {
 
     for (var i = startIdx; i < endIdx; i++) {
         var node = _flatVisibleNodes[i];
-        var isFolder = node.type === 'folder';
+        var expanded = node.expanded;
+        var levelClass = 'tree-level-' + Math.min(node.depth, 3);
+        var folderIcon = expanded ? window.Icons.get('folderOpen') : window.Icons.get('folderFilled');
         var ep = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-        html += '<div class="tree-item ' + (isFolder ? 'folder' : 'file') + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
+        html += '<div class="tree-item folder ' + levelClass + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
         for (var d = 0; d < node.depth; d++) {
             html += '<span class="tree-indent-unit"></span>';
         }
-        if (isFolder) {
-            html += '<span class="tree-toggle ' + (node.expanded ? '' : 'collapsed') + '">' + window.Icons.get('chevron') + '</span>';
-        } else {
-            html += '<span class="tree-toggle" style="visibility:hidden">' + window.Icons.get('chevron') + '</span>';
-        }
+        html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '">' + window.Icons.get('chevron') + '</span>';
+        html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
         html += '<span class="tree-name">' + en + '</span>';
-        if (!isFolder && node.modified) {
-            html += '<span class="tree-modified">' + formatModifiedTime(node.modified) + '</span>';
-        }
         html += '</div>';
     }
 
@@ -565,15 +543,13 @@ function renderVirtualTree(container) {
             if (!item) return;
             var path = item.getAttribute('data-path');
             var name = item.getAttribute('data-name');
-            if (item.classList.contains('folder')) {
-                var currentExpanded = treeExpandedState.hasOwnProperty(path) ? treeExpandedState[path] : true;
-                treeExpandedState[path] = !currentExpanded;
-                saveTreeState();
-                _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
-                renderVirtualTree(container);
-            } else {
-                setActiveTreeItem(item);
-                window.TreeModule.selectFile(path, name);
+            var currentExpanded = treeExpandedState.hasOwnProperty(path) ? treeExpandedState[path] : true;
+            treeExpandedState[path] = !currentExpanded;
+            saveTreeState();
+            _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
+            renderVirtualTree(container);
+            if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
+                window.NoteListModule.showTopicNotes(path, name);
             }
         });
 
@@ -690,6 +666,13 @@ async function _loadFileTreeOnce(force) {
     } catch (e) {
         console.warn('[Tree] refreshPendingBtnState failed:', _describeTreeLoadError(e), e);
     }
+    try {
+        if (window.NoteListModule && window.NoteListModule.showAllNotes) {
+            window.NoteListModule.showAllNotes();
+        }
+    } catch (e) {
+        console.warn('[Tree] NoteListModule.showAllNotes failed:', e);
+    }
 }
 
 function selectFile(path, fileName) {
@@ -707,6 +690,15 @@ function selectFile(path, fileName) {
 
     if (window.api) {
         window.api.onFileSelected(path).catch(function() {});
+    }
+
+    // 触发 Note List 高亮当前文件
+    if (window.NoteListModule && window.NoteListModule.setActiveFile) {
+        window.NoteListModule.setActiveFile(path);
+    }
+    // 触发 Inspector 更新属性/Backlinks
+    if (window.InspectorModule && window.InspectorModule.onFileSelected) {
+        window.InspectorModule.onFileSelected(path);
     }
 
     var container = document.getElementById('tiptap-editor-container');
@@ -816,7 +808,6 @@ window.hideTreeContextMenu = hideTreeContextMenu;
 window.revealInFinder = revealInFinder;
 window.showTreeContextMenu = showTreeContextMenu;
 window.onAddTopicFromFileTree = onAddTopicFromFileTree;
-window.doDeleteTopic = doDeleteTopic;
 
 })();
 

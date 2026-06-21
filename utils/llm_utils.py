@@ -173,6 +173,16 @@ def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | N
     return str(response).strip()
 
 
+def _clamp_prompt_text(prompt_text: str, max_tokens: int, model_name: str) -> str:
+    """Clamp prompt text to fit within the configured context budget."""
+    estimated = _estimate_tokens(prompt_text, model_name)
+    if estimated <= max_tokens:
+        return prompt_text
+    logger.warning(f"Prompt too long ({estimated} > {max_tokens} tokens), compressing/truncating")
+    processed, _, _, _ = process_content_with_llm(prompt_text, max_tokens=max_tokens, model_name=model_name)
+    return processed
+
+
 def call_llm_raw(
     prompt_text: str,
     temperature: float = 0.7,
@@ -180,6 +190,14 @@ def call_llm_raw(
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
     from concurrent.futures import TimeoutError as FutureTimeout
+
+    if not prompt_text:
+        return ""
+
+    from config import config
+
+    budget = config.max_context_tokens if config.max_context_tokens > 0 else 128000
+    prompt_text = _clamp_prompt_text(prompt_text, budget, config.model_name)
 
     def _invoke():
         llm = _create_llm(temperature, max_tokens)
@@ -211,6 +229,14 @@ def call_llm_raw_stream(
     if not is_valid:
         raise RuntimeError(error_msg)
 
+    if not prompt_text:
+        return ""
+
+    from config import config
+
+    budget = config.max_context_tokens if config.max_context_tokens > 0 else 128000
+    prompt_text = _clamp_prompt_text(prompt_text, budget, config.model_name)
+
     def _invoke():
         return _do_stream(prompt_text, temperature, max_tokens, chunk_callback)
 
@@ -221,22 +247,40 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
     acquired = _LLM_SEMAPHORE.acquire(timeout=60)
     if not acquired:
         raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
-    try:
-        logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
-        llm = _create_llm(temperature, max_tokens)
-        full_text = ""
-        for chunk in llm.stream(prompt_text):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            if chunk_callback:
-                chunk_callback(token)
-        logger.info(f"LLM stream done, response length: {len(full_text)}")
-        return full_text.strip()
-    except Exception as e:
-        logger.warning(f"[llm_utils] stream error: {e}\n")
-        raise
-    finally:
-        _LLM_SEMAPHORE.release()
+
+    result = {"text": "", "error": None, "done": False}
+
+    def _run():
+        try:
+            logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+            llm = _create_llm(temperature, max_tokens)
+            full_text = ""
+            for chunk in llm.stream(prompt_text):
+                token = chunk.content if hasattr(chunk, "content") else str(chunk)
+                full_text += token
+                if chunk_callback:
+                    chunk_callback(token)
+            result["text"] = full_text.strip()
+            logger.info(f"LLM stream done, response length: {len(full_text)}")
+        except Exception as e:
+            logger.warning(f"[llm_utils] stream error: {e}\n")
+            result["error"] = e
+        finally:
+            result["done"] = True
+            _LLM_SEMAPHORE.release()
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=120)
+
+    if not result["done"]:
+        logger.warning("[llm_utils] stream timeout after 120s")
+        raise RuntimeError("LLM 流式调用超时（120秒）")
+
+    if result["error"]:
+        raise result["error"]
+
+    return result["text"]
 
 
 def check_api_config() -> tuple[bool, str]:

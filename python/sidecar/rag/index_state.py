@@ -7,6 +7,7 @@ from pathlib import Path
 
 from config import config
 from config.settings import WORKSPACE_APP_FOLDER
+from utils.logger import logger
 
 
 def _state_path(workspace: str | None = None) -> Path | None:
@@ -33,13 +34,26 @@ def load_state(workspace: str | None = None) -> dict[str, float]:
 
 
 def save_state(files: dict[str, float], workspace: str | None = None) -> None:
+    import os as _os
+    import tempfile as _tempfile
+
     path = _state_path(workspace)
     if not path:
         return
-    path.write_text(
-        json.dumps({"files": files}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    data = json.dumps({"files": files}, ensure_ascii=False, indent=2)
+    try:
+        fd, tmp = _tempfile.mkstemp(dir=str(path.parent), prefix=".rag_index_state_")
+        try:
+            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+        except Exception:
+            _os.close(fd)
+            raise
+        _os.replace(tmp, str(path))
+    except Exception as e:
+        logger.warning(f"[rag/index_state] save failed: {e}")
+        # Fallback to direct write on atomic-write failure.
+        path.write_text(data, encoding="utf-8")
 
 
 def file_needs_index(rel_path: str, mtime: float, workspace: str | None = None) -> bool:

@@ -32,6 +32,8 @@ def _extract_ddg_url(href: str) -> str:
 def duckduckgo_search(query: str) -> list:
     try:
         url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        if not _is_safe_url(url):
+            return []
         resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
         if not _is_safe_url(resp.url):
             return []
@@ -74,7 +76,11 @@ def duckduckgo_search(query: str) -> list:
 def baidu_search(query: str) -> list:
     try:
         url = f"https://www.baidu.com/s?wd={quote_plus(query)}&rn={MAX_RESULTS}"
+        if not _is_safe_url(url):
+            return []
         resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+        if not _is_safe_url(resp.url):
+            return []
         resp.raise_for_status()
         resp.encoding = resp.apparent_encoding or "utf-8"
 

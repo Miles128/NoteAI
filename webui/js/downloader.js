@@ -259,17 +259,12 @@ function openDownloadModal() {
     modalContent.style.width = (currentWidth * 0.72) + 'px';
     modalContent.style.height = (currentHeight * 0.75 * 1.1) + 'px';
     
-    const savedConfig = localStorage.getItem('downloader-config');
+    const savedConfig = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null, { silent: true });
     if (savedConfig) {
-        try {
-            const config = JSON.parse(savedConfig);
-            const modalIncludeImages = document.getElementById('modal-web-include-images');
-            
-            if (modalIncludeImages && config.webIncludeImages !== undefined) {
-                modalIncludeImages.checked = config.webIncludeImages;
-            }
-        } catch (e) {
-            console.warn('[Downloader] Failed to load config:', e);
+        const modalIncludeImages = document.getElementById('modal-web-include-images');
+        
+        if (modalIncludeImages && savedConfig.webIncludeImages !== undefined) {
+            modalIncludeImages.checked = savedConfig.webIncludeImages;
         }
     }
     
@@ -297,7 +292,7 @@ function autoSaveModalConfig() {
         webIncludeImages: includeImages ? includeImages.checked : true
     };
     
-    localStorage.setItem('downloader-config', JSON.stringify(config));
+    window.Storage.setItem(window.Storage.KEYS.DOWNLOADER_CONFIG, config);
 }
 
 async function startDownloadFromModal() {
@@ -448,32 +443,27 @@ function autoSaveConfig() {
         webIncludeImages: includeImages ? includeImages.checked : true
     };
     
-    localStorage.setItem('downloader-config', JSON.stringify(config));
+    window.Storage.setItem(window.Storage.KEYS.DOWNLOADER_CONFIG, config);
 }
 
 function loadSavedConfig() {
-    try {
-        const saved = localStorage.getItem('downloader-config');
-        if (saved) {
-            const config = JSON.parse(saved);
-            const aiToggle = document.getElementById('web-ai-toggle');
-            const includeImages = document.getElementById('web-include-images');
-            
-            if (aiToggle && config.webAiAssist !== undefined) {
-                aiToggle.checked = config.webAiAssist;
-            }
-            if (includeImages && config.webIncludeImages !== undefined) {
-                includeImages.checked = config.webIncludeImages;
-            }
-            
-            if (window.TreeModule) {
-                if (window.TreeModule.updateWebAIStatus) {
-                    window.TreeModule.updateWebAIStatus();
-                }
+    const config = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null);
+    if (config) {
+        const aiToggle = document.getElementById('web-ai-toggle');
+        const includeImages = document.getElementById('web-include-images');
+        
+        if (aiToggle && config.webAiAssist !== undefined) {
+            aiToggle.checked = config.webAiAssist;
+        }
+        if (includeImages && config.webIncludeImages !== undefined) {
+            includeImages.checked = config.webIncludeImages;
+        }
+        
+        if (window.TreeModule) {
+            if (window.TreeModule.updateWebAIStatus) {
+                window.TreeModule.updateWebAIStatus();
             }
         }
-    } catch (e) {
-        console.warn('[Downloader] Failed to load config:', e);
     }
 }
 
@@ -566,26 +556,20 @@ async function startTranscriptImport() {
 function getRssStorageKey() { return 'noteai_rss_subscriptions'; }
 
 function loadRssSubscriptions() {
-  try {
-    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
-    updateRssSubList(subs);
-  } catch(e) {}
+  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
+  updateRssSubList(subs);
 }
 
 function saveRssSubscription(url) {
-  try {
-    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
-    if (subs.indexOf(url) === -1) { subs.push(url); localStorage.setItem(getRssStorageKey(), JSON.stringify(subs)); updateRssSubList(subs); }
-  } catch(e) {}
+  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
+  if (subs.indexOf(url) === -1) { subs.push(url); window.Storage.setItem(getRssStorageKey(), subs, { silent: true }); updateRssSubList(subs); }
 }
 
 function removeRssSubscription(url) {
-  try {
-    var subs = JSON.parse(localStorage.getItem(getRssStorageKey()) || '[]');
-    subs = subs.filter(function(u) { return u !== url; });
-    localStorage.setItem(getRssStorageKey(), JSON.stringify(subs));
-    updateRssSubList(subs);
-  } catch(e) {}
+  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
+  subs = subs.filter(function(u) { return u !== url; });
+  window.Storage.setItem(getRssStorageKey(), subs, { silent: true });
+  updateRssSubList(subs);
 }
 
 function updateRssSubList(subs) {

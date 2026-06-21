@@ -18,7 +18,7 @@ from .constants import (
     WORKSPACE_APP_FOLDER,
     WORKSPACE_STATE_FILE,
 )
-from .security import _deobfuscate, _restrict_file_permissions
+from .security import _restrict_file_permissions
 
 _logger = logging.getLogger("NoteAI")
 
@@ -75,7 +75,8 @@ class AppConfig:
     topic_list: str = ""
     cloud_sync_experimental: bool = False
     assistant_agent_mode: bool = False
-    rag_enabled: bool = False
+    rag_enabled: bool = True
+    rag_error_cooldown_seconds: int = 180
     locale: str = "zh-CN"
 
     def __post_init__(self):
@@ -207,34 +208,27 @@ class AppConfig:
                 _logger.warning("加载配置时发生未知错误: %s, 使用默认配置", e)
 
         api_data = {}
-        api_key_from_file = None
         if os.path.exists(API_CONFIG_FILE):
             try:
                 with open(API_CONFIG_FILE, encoding="utf-8") as f:
                     api_data = json.load(f)
-                if "api_key" in api_data and api_data["api_key"]:
-                    api_key_from_file = _deobfuscate(api_data["api_key"])
             except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
                 _logger.warning("加载API配置失败: %s", e)
             except Exception as e:
                 _logger.warning("加载API配置时发生未知错误: %s", e)
 
-        import importlib.util
-
+        # Load API key from OS keyring first; fall back to encrypted file storage.
+        # The file fallback uses a key derived from machine info and provides
+        # obfuscation only — it is not a substitute for the OS keychain.
         try:
-            spec = importlib.util.find_spec("keyring")
-            if spec:
-                import keyring
+            from utils.keyring_store import load_api_key
 
-                keyring_key = keyring.get_password("NoteAI", "api_key") or ""
-            else:
-                keyring_key = ""
-        except Exception:
+            keyring_key = load_api_key() or ""
+        except Exception as e:
+            _logger.warning("加载API key失败: %s", e)
             keyring_key = ""
         if keyring_key:
             api_data["api_key"] = keyring_key
-        elif api_key_from_file:
-            api_data["api_key"] = api_key_from_file
 
         workspace_default = ""
         try:

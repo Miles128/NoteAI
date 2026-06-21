@@ -6,9 +6,6 @@ import re
 import unicodedata
 from pathlib import Path
 
-from utils.llm_utils import reformat_markdown_with_llm
-
-
 def sanitize_filename(filename: str, max_length: int = 100) -> str:
     """清理文件名，移除非法字符"""
     filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
@@ -504,6 +501,7 @@ def smart_format_markdown(content: str, title: str = "") -> str:
         return content
 
     from config import config
+    from utils.llm_utils import reformat_markdown_with_llm
 
     if config.api_key:
         result = reformat_markdown_with_llm(content)

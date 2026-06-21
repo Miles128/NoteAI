@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,10 @@ from utils.text_utils import (
 )
 
 _VECTOR_SEARCH_DISABLED = False
+
+# 工作区文件元数据缓存：{workspace: {rel_path: (mtime, meta)}}
+_file_meta_cache: dict[str, dict[str, tuple[float, dict[str, Any] | None]]] = {}
+_meta_cache_lock = threading.Lock()
 
 
 def _get_links_path() -> Path | None:
@@ -124,6 +129,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         return {"success": False, "message": "非 Markdown 文件", "added": 0}
 
     rel = str(full.relative_to(ws))
+    _invalidate_meta_cache(rel)
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
@@ -137,12 +143,9 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])}
     suggestions: list[tuple[dict, int, str]] = []
 
-    for md in _iter_md_files(ws):
-        other_rel = str(md.relative_to(ws))
+    all_metas = _load_all_metas_cached(ws)
+    for other_rel, other in all_metas.items():
         if other_rel == rel:
-            continue
-        other = _parse_file_meta(md)
-        if not other:
             continue
         key = _link_key(rel, other_rel)
         if key in existing_keys:
@@ -345,6 +348,10 @@ def discover_cross_refs_for_file(
         return {"success": False, "message": "非 Markdown 文件", "added": 0}
 
     rel = str(full.relative_to(ws))
+
+    # 保存后强制刷新当前文件缓存，确保后续读取到最新内容
+    _invalidate_meta_cache(rel)
+
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
@@ -358,11 +365,8 @@ def discover_cross_refs_for_file(
     existing_links = existing.get("links", [])
     existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links}
 
-    all_metas: dict[str, dict[str, Any]] = {}
-    for md in _iter_md_files(ws):
-        meta = _parse_file_meta(md)
-        if meta:
-            all_metas[meta["path"]] = meta
+    # 使用 mtime 缓存，避免每次保存都全量解析所有文件
+    all_metas = _load_all_metas_cached(ws)
 
     scored: dict[str, dict[str, Any]] = {}
 
@@ -530,6 +534,58 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any]:
     }
 
 
+def _load_all_metas_cached(workspace: Path) -> dict[str, dict[str, Any]]:
+    """
+    增量加载工作区所有 Markdown 元数据。
+    按 mtime 缓存，只解析新增或修改的文件；删除不存在的文件缓存。
+    """
+    ws_str = str(workspace)
+    files = _iter_md_files(workspace)
+    current: dict[str, tuple[float, dict[str, Any] | None]] = {}
+
+    for md in files:
+        try:
+            rel = str(md.relative_to(workspace))
+            mtime = md.stat().st_mtime
+            current[rel] = (mtime, None)  # meta 稍后按需填充
+        except (OSError, ValueError):
+            continue
+
+    with _meta_cache_lock:
+        cache = _file_meta_cache.get(ws_str, {})
+        result: dict[str, dict[str, Any]] = {}
+
+        for rel, (mtime, _) in current.items():
+            cached = cache.get(rel)
+            if cached and abs(cached[0] - mtime) <= 0.5 and cached[1] is not None:
+                result[rel] = cached[1]
+            else:
+                full = workspace / rel
+                meta = _parse_file_meta(full)
+                if meta:
+                    result[rel] = meta
+                    cache[rel] = (mtime, meta)
+
+        # 清理已删除文件的缓存
+        stale = set(cache.keys()) - set(current.keys())
+        for rel in stale:
+            cache.pop(rel, None)
+
+        _file_meta_cache[ws_str] = cache
+        return result
+
+
+def _invalidate_meta_cache(rel_path: str) -> None:
+    """当单个文件保存后，强制刷新该文件的缓存条目。"""
+    ws = config.workspace_path
+    if not ws:
+        return
+    with _meta_cache_lock:
+        cache = _file_meta_cache.get(ws)
+        if cache and rel_path in cache:
+            cache.pop(rel_path, None)
+
+
 def _build_candidate_pairs(metas: list[dict]) -> list[tuple[dict, dict, int]]:
     """
     粗筛候选对，返回 [(meta_a, meta_b, priority)]。
@@ -677,15 +733,12 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
     if len(md_files) < 2:
         return {"success": False, "message": "文件数量不足（至少需要2个）"}
 
-    # Step 1: 提取元数据
+    # Step 1: 提取元数据（使用 mtime 缓存，避免每次全量解析）
     if progress_callback:
         progress_callback(0, 3, "正在读取文件元数据...")
 
-    metas = []
-    for f in md_files:
-        meta = _parse_file_meta(f)
-        if meta:
-            metas.append(meta)
+    all_metas = _load_all_metas_cached(workspace)
+    metas = list(all_metas.values())
 
     if len(metas) < 2:
         return {"success": False, "message": "可解析的文件数量不足"}

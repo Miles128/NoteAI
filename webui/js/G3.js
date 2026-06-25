@@ -1090,10 +1090,6 @@ const Graph3Tier = {
                         d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(scale).translate(-d.x, -d.y)
                     );
                 }
-            } else if (d.type === 'tag' && self.filter === 'tag') {
-                if (typeof switchSidebarView === 'function') {
-                    switchSidebarView('tags');
-                }
             }
         });
 

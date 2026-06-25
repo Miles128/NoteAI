@@ -1,6 +1,14 @@
 (function() { 'use strict';
 
 var THEME_STORAGE_KEY = 'noteai_theme';
+var SIDEBAR_FONT_KEY = 'noteai_sidebar_font_family';
+var PREVIEW_FONT_KEY = 'noteai_preview_font_family';
+var FONT_FAMILY_MAP = {
+    system: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+    sans: '"PingFang SC", "Microsoft YaHei", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+    serif: '"Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", Georgia, serif',
+    mono: '"SF Mono", "JetBrains Mono", "Iosevka Web", Consolas, monospace'
+};
 
 function persistThemeLocal(theme) {
     try {
@@ -70,7 +78,7 @@ function applySystemTheme() {
     if (prefersDark) {
         html.setAttribute('data-theme', 'dark');
     } else {
-        html.removeAttribute('data-theme');
+        html.setAttribute('data-theme', 'light');
     }
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
@@ -311,6 +319,53 @@ function restoreFontSize() {
     setFontSize(saved);
 }
 
+function normalizeFontFamily(value) {
+    return FONT_FAMILY_MAP[value] ? value : 'system';
+}
+
+function applyContentFonts(sidebarFont, previewFont) {
+    var sidebar = normalizeFontFamily(sidebarFont);
+    var preview = normalizeFontFamily(previewFont);
+    document.documentElement.style.setProperty('--sidebar-font-family', FONT_FAMILY_MAP[sidebar]);
+    document.documentElement.style.setProperty('--preview-font-family', FONT_FAMILY_MAP[preview]);
+    document.querySelectorAll('select[name="sidebar-font-family"]').forEach(function(select) {
+        select.value = sidebar;
+    });
+    document.querySelectorAll('select[name="preview-font-family"]').forEach(function(select) {
+        select.value = preview;
+    });
+}
+
+function setSidebarFontFamily(value) {
+    var font = normalizeFontFamily(value);
+    var preview = localStorage.getItem(PREVIEW_FONT_KEY) || 'system';
+    localStorage.setItem(SIDEBAR_FONT_KEY, font);
+    applyContentFonts(font, preview);
+    if (window.SettingsModule && window.SettingsModule.saveFontFamily) {
+        window.SettingsModule.saveFontFamily('sidebar_font_family', font);
+    }
+}
+
+function setPreviewFontFamily(value) {
+    var font = normalizeFontFamily(value);
+    var sidebar = localStorage.getItem(SIDEBAR_FONT_KEY) || 'system';
+    localStorage.setItem(PREVIEW_FONT_KEY, font);
+    applyContentFonts(sidebar, font);
+    if (window.SettingsModule && window.SettingsModule.saveFontFamily) {
+        window.SettingsModule.saveFontFamily('preview_font_family', font);
+    }
+}
+
+function restoreContentFonts() {
+    applyContentFonts(
+        localStorage.getItem(SIDEBAR_FONT_KEY) || 'system',
+        localStorage.getItem(PREVIEW_FONT_KEY) || 'system'
+    );
+}
+
+window.setSidebarFontFamily = setSidebarFontFamily;
+window.setPreviewFontFamily = setPreviewFontFamily;
+
 window.ThemeModule = {
     toggleTheme,
     setTheme,
@@ -322,6 +377,10 @@ window.ThemeModule = {
     applyThemeBootstrap,
     setFontSize: applyFontSize,
     restoreFontSize,
+    applyContentFonts,
+    restoreContentFonts,
+    setSidebarFontFamily,
+    setPreviewFontFamily,
     restoreSidebarWidth,
     initResizer,
     initPreviewResizer,
@@ -330,4 +389,3 @@ window.ThemeModule = {
 };
 
 })();
-

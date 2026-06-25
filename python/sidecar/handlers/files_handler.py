@@ -1,6 +1,7 @@
 import base64
 import importlib
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -221,6 +222,49 @@ class FilesHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def _move_file(self, params):
+        src_path = params.get("file_path", "")
+        target_folder = params.get("target_folder", "")
+        if not src_path or not target_folder:
+            return {"success": False, "message": "源文件和目标文件夹不能为空"}
+
+        src = self._resolve_path(src_path)
+        dest_dir = self._resolve_path(target_folder)
+        if not src or not dest_dir:
+            return {"success": False, "message": "路径无效"}
+
+        src = Path(src)
+        dest_dir = Path(dest_dir)
+        if not src.exists():
+            return {"success": False, "message": "源文件不存在"}
+        if not dest_dir.is_dir():
+            return {"success": False, "message": "目标不是文件夹"}
+        if src.resolve() == dest_dir.resolve():
+            return {"success": False, "message": "不能移动到自身"}
+        if src.is_dir():
+            try:
+                dest_dir.resolve().relative_to(src.resolve())
+                return {"success": False, "message": "不能移动到子目录"}
+            except ValueError:
+                pass
+
+        dest = dest_dir / src.name
+        if dest.exists():
+            return {"success": False, "message": "目标位置已存在同名文件"}
+
+        try:
+            shutil.move(str(src), str(dest))
+            if src.suffix.lower() == ".md" or dest.suffix.lower() == ".md" or src.is_dir():
+                try:
+                    sync_wiki_with_files()
+                except Exception as e:
+                    logger.warning(f"[files_handler] syncing WIKI after move: {e}\n")
+            workspace = self.config.workspace_path
+            rel = str(dest.relative_to(Path(workspace))) if workspace else str(dest)
+            return {"success": True, "path": rel, "message": "已移动"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
     def _create_note(self, params):
         from config.constants import TOPIC_SEP
         from config.settings import NOTES_FOLDER
@@ -289,3 +333,4 @@ class FilesHandler(BaseHandler):
         router.register("read_file_raw", self._read_file_raw)
         router.register("reveal_in_finder", self._reveal_in_finder)
         router.register("delete_file", self._delete_file)
+        router.register("move_file", self._move_file)

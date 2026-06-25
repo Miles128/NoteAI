@@ -29,10 +29,10 @@ def _mock_embedder_module(monkeypatch):
 
 
 class TestRerankerEnabled:
-    def test_default_returns_true(self, monkeypatch):
+    def test_default_returns_false(self, monkeypatch):
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         monkeypatch.delenv("NOTEAI_ENABLE_RERANKER", raising=False)
-        assert _mod._reranker_enabled() is True
+        assert _mod._reranker_enabled() is False
 
     def test_disable_env_1(self, monkeypatch):
         monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
@@ -52,7 +52,8 @@ class TestRerankerEnabled:
 
     def test_disable_env_other_value(self, monkeypatch):
         monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
-        assert _mod._reranker_enabled() is True
+        monkeypatch.delenv("NOTEAI_ENABLE_RERANKER", raising=False)
+        assert _mod._reranker_enabled() is False
 
     def test_enable_env_1(self, monkeypatch):
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
@@ -87,6 +88,7 @@ class TestGetReranker:
 
     def test_sets_disabled_flag_on_import_error(self, monkeypatch, _mock_embedder_module):
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
+        monkeypatch.setenv("NOTEAI_ENABLE_RERANKER", "1")
         monkeypatch.setitem(sys.modules, "FlagEmbedding", None)
 
         real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
@@ -104,6 +106,7 @@ class TestGetReranker:
 
     def test_sets_disabled_flag_on_generic_exception(self, monkeypatch, _mock_embedder_module):
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
+        monkeypatch.setenv("NOTEAI_ENABLE_RERANKER", "1")
         _mock_embedder_module._ensure_hf_env = MagicMock(side_effect=RuntimeError("boom"))
 
         result = _mod._get_reranker()

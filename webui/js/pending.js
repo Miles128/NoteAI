@@ -137,9 +137,15 @@ function renderPendingList(items, listEl) {
             html += renderPendingTopicItem(item, idx);
         } else if (item.type === 'link') {
             html += renderPendingLinkItem(item, idx);
+        } else if (item.type === 'lint') {
+            html += renderPendingInfoItem(item, idx, 'lint');
+        } else if (item.type === 'cascade_fail') {
+            html += renderPendingInfoItem(item, idx, 'cascade');
+        } else if (item.type === 'convert_fail') {
+            html += renderPendingInfoItem(item, idx, 'convert');
         }
     });
-    listEl.innerHTML = html;
+    listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
 }
 
 function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
@@ -207,6 +213,22 @@ function renderPendingLinkItem(item, idx) {
     html += '<button data-action="confirm-link">' + window.t('pending.confirmLink') + '</button>';
     html += '<button class="btn-reject" data-action="reject-link">' + window.t('pending.rejectLink') + '</button>';
     html += '</div>';
+    html += '</div>';
+    return html;
+}
+
+function renderPendingInfoItem(item, idx, kind) {
+    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : 'pending.typeConvert');
+    var title = item.message || item.topic || item.file || item.file_path || item.error || '';
+    var detail = item.file_path || item.file || item.topic || item.error || '';
+    if (kind === 'cascade' && item.error) detail = item.error;
+    if (kind === 'convert' && item.error) detail = (item.file || '') + (item.file && item.error ? ' · ' : '') + item.error;
+    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '">';
+    html += '<span class="pending-item-type type-' + kind + '">' + window.t(labelKey) + '</span>';
+    html += '<div class="pending-item-title">' + window.escapeHtml(title || window.t('pending.itemNeedsReview')) + '</div>';
+    if (detail && detail !== title) {
+        html += '<div class="pending-item-path">' + window.escapeHtml(detail) + '</div>';
+    }
     html += '</div>';
     return html;
 }
@@ -340,11 +362,63 @@ function refreshPendingBtnState() {
                 btn.title = window.t('pending.todoBadgeEmpty');
                 if (badge) badge.style.display = 'none';
             }
+            var inboxCount = document.getElementById('vault-inbox-count');
+            if (inboxCount) inboxCount.textContent = count > 99 ? '99+' : String(count);
         }
     }).catch(function() {});
 }
 
+function _setButtonBusy(btn, busy, labelKey) {
+    if (!btn) return;
+    btn.disabled = !!busy;
+    if (labelKey) btn.textContent = window.t(labelKey);
+}
+
+function runPendingHealthCheck() {
+    var btn = document.getElementById('pending-lint-run-btn');
+    if (!window.api || !window.api.runKbLint) return;
+    _setButtonBusy(btn, true, 'pending.healthCheckRunning');
+    window.api.runKbLint().then(function() {
+        loadPendingItems();
+        refreshPendingBtnState();
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') {
+            window.updateStatus(window.t('pending.loadFailed', { error: e.message || String(e) }));
+        }
+    }).finally(function() {
+        _setButtonBusy(btn, false, 'pending.healthCheck');
+    });
+}
+
+function retryAllPendingSurveys() {
+    var btn = document.getElementById('pending-cascade-retry-all-btn');
+    if (!window.api || !window.api.retryAllCascadeFailures) return;
+    _setButtonBusy(btn, true, 'pending.retrying');
+    window.api.retryAllCascadeFailures().then(function() {
+        loadPendingItems();
+        refreshPendingBtnState();
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') {
+            window.updateStatus(window.t('pending.loadFailed', { error: e.message || String(e) }));
+        }
+    }).finally(function() {
+        _setButtonBusy(btn, false, 'pending.retryAllSurveys');
+    });
+}
+
 document.addEventListener('click', _handlePendingClick);
+document.addEventListener('DOMContentLoaded', function() {
+    var lintBtn = document.getElementById('pending-lint-run-btn');
+    var retryBtn = document.getElementById('pending-cascade-retry-all-btn');
+    if (lintBtn && !lintBtn.dataset.pendingBound) {
+        lintBtn.addEventListener('click', runPendingHealthCheck);
+        lintBtn.dataset.pendingBound = '1';
+    }
+    if (retryBtn && !retryBtn.dataset.pendingBound) {
+        retryBtn.addEventListener('click', retryAllPendingSurveys);
+        retryBtn.dataset.pendingBound = '1';
+    }
+});
 
 window.togglePendingView = togglePendingView;
 window.refreshPendingBtnState = refreshPendingBtnState;
@@ -357,4 +431,3 @@ Object.defineProperty(window, '_pendingViewVisible', {
 });
 
 })();
-

@@ -28,17 +28,17 @@ def _reranker_enabled() -> bool:
         return False
     if os.environ.get("NOTEAI_ENABLE_RERANKER", "").lower() in ("1", "true", "yes"):
         return True
-    return True
+    return False
 
 
 def _get_reranker():
     global _RERANKER, _RERANKER_DISABLED
+    if _RERANKER is not None:
+        return _RERANKER
     if not _reranker_enabled():
         return None
     if _RERANKER_DISABLED:
         return None
-    if _RERANKER is not None:
-        return _RERANKER
     with _RERANKER_LOCK:
         if _RERANKER_DISABLED:
             return None

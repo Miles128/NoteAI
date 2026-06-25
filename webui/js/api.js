@@ -129,7 +129,7 @@ async function openWorkspace() {
         }
         return { success: false, message: '未选择文件夹' };
     }
-    return pyCall('open_workspace');
+    throw new Error('Not running in Tauri');
 }
 
 async function getWorkspaceStatus() {
@@ -137,7 +137,6 @@ async function getWorkspaceStatus() {
     if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
-        pyCall('fix_survey_topics', {}).catch(function(err) { console.warn('[fix_survey_topics]', err); });
     }
     return result;
 }
@@ -183,7 +182,7 @@ async function createTag(name) {
 }
 
 async function getPendingTopics() {
-    return pyCall('get_pending_topics');
+    return pyCall('get_all_pending');
 }
 
 async function getAllPending() {
@@ -192,6 +191,10 @@ async function getAllPending() {
 
 async function getActivityLog(limit) {
     return pyCall('get_activity_log', { limit: limit || 50 });
+}
+
+async function retryAllCascadeFailures() {
+    return pyCall('retry_all_cascade_failures', {});
 }
 
 async function resolveTopic(filePath, topic) {
@@ -264,7 +267,7 @@ async function addFiles() {
         var files = await invoke('open_file_dialog');
         return files || [];
     }
-    return pyCall('add_files');
+    throw new Error('Not running in Tauri');
 }
 
 async function importFilesToWorkspace() {
@@ -283,7 +286,7 @@ async function browseFolder() {
         var folder = await invoke('open_folder_dialog');
         return folder || '';
     }
-    return pyCall('browse_folder');
+    throw new Error('Not running in Tauri');
 }
 
 async function startWebDownload(urls, aiAssist, includeImages) {
@@ -432,7 +435,7 @@ async function confirmAllLinks() {
 }
 
 async function syncWikiWithFiles() {
-    return pyCall('sync_wiki_with_files', {});
+    return pyCall('get_topic_tree_3tier', {});
 }
 
 async function getTopicFiles(topicName, level) {
@@ -440,19 +443,11 @@ async function getTopicFiles(topicName, level) {
 }
 
 async function generateAbstract(topicName, level) {
-    return pyCall('generate_abstract', { topic_name: topicName, level: level });
-}
-
-async function llmRewrite(filePath) {
-    return pyCall('llm_rewrite', { file_path: filePath });
-}
-
-async function llmRewriteStream(filePath) {
-    return pyCall('llm_rewrite_stream', { file_path: filePath });
-}
-
-async function llmRewriteApply(filePath, rewrittenText) {
-    return pyCall('llm_rewrite_apply', { file_path: filePath, rewritten_text: rewrittenText });
+    var result = await pyCall('ai_topic_survey', { topic: topicName });
+    if (result && result.file_path && !result.abstract_file) {
+        result.abstract_file = result.file_path;
+    }
+    return result;
 }
 
 async function aiTopicAnalyze() {
@@ -484,11 +479,11 @@ async function runKbLint() {
 }
 
 async function getChangelog(limit) {
-    return pyCall('get_changelog', { limit: limit || 50 });
+    return pyCall('get_activity_log', { limit: limit || 50 });
 }
 
 async function checkAndGenerateSurveys() {
-    return pyCall('check_and_generate_surveys', {});
+    return { success: true, message: '主题综述由入库流水线和待办重试维护' };
 }
 
 async function getUserProfile() {
@@ -597,6 +592,7 @@ window.api = {
     getPendingTopics: getPendingTopics,
     getAllPending: getAllPending,
     getActivityLog: getActivityLog,
+    retryAllCascadeFailures: retryAllCascadeFailures,
     resolveTopic: resolveTopic,
     mergeDuplicateTopics: mergeDuplicateTopics,
     renameTopic: renameTopic,
@@ -643,9 +639,6 @@ window.api = {
     confirmLink: confirmLink,
     rejectLink: rejectLink,
     confirmAllLinks: confirmAllLinks,
-    llmRewrite: llmRewrite,
-    llmRewriteStream: llmRewriteStream,
-    llmRewriteApply: llmRewriteApply,
     aiTopicAnalyze: aiTopicAnalyze,
     aiTopicSurvey: aiTopicSurvey,
     applyTopicSuggestion: applyTopicSuggestion,

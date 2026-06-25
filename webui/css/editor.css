@@ -221,6 +221,7 @@
 }
 
 .editor-preview-scroll {
+    font-family: var(--preview-font-family);
     flex: 1;
     overflow-y: auto;
     padding: 16px 20px;
@@ -391,21 +392,6 @@
     flex-shrink: 0;
 }
 
-.tiptap-btn-rewrite {
-    margin-left: auto;
-    border: 1px solid var(--border) !important;
-    border-radius: 6px !important;
-    padding: 4px 10px !important;
-    gap: 4px;
-    flex-shrink: 0;
-}
-
-.tiptap-btn-rewrite:hover:not(:disabled) {
-    border-color: var(--primary) !important;
-    color: var(--primary);
-    background: var(--primary-light);
-}
-
 .tiptap-editor-content {
     flex: 1;
     min-height: 0;
@@ -474,11 +460,11 @@
 }
 
 .tiptap-prose {
-    max-width: 900px;
+    max-width: 760px;
     margin: 0 auto;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    font-size: 1.143em;
-    line-height: 1.8;
+    font-family: var(--preview-font-family);
+    font-size: 16px;
+    line-height: 1.7;
     color: var(--text);
     outline: none;
     padding-bottom: calc(80px * var(--font-scale, 1));
@@ -544,30 +530,33 @@
 .tiptap-prose h4,
 .tiptap-prose h5,
 .tiptap-prose h6 {
-    margin: 1.5em 0 0.5em 0;
+    margin: 1.5em 0 0.55em 0;
     font-weight: 600;
     line-height: 1.3;
     color: var(--heading-color);
     background-color: var(--heading-bg);
-    padding: 0.3em 0.6em;
-    border-radius: 4px;
+    padding: 0;
+    letter-spacing: -0.015em;
 }
 
 .tiptap-prose h1 {
-    font-size: 2em;
+    font-size: 34px;
     color: var(--h1-color);
     border-bottom: 1px solid var(--border);
-    padding-bottom: 0.3em;
+    padding-bottom: 20px;
+    text-align: center;
+    margin-top: 0.4em;
+    margin-bottom: 1.1em;
 }
 
 .tiptap-prose h2 {
-    font-size: 1.5em;
+    font-size: 24px;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 0.2em;
+    padding-bottom: 10px;
 }
 
 .tiptap-prose h3 {
-    font-size: 1.25em;
+    font-size: 19px;
 }
 
 .tiptap-prose h4 {
@@ -812,116 +801,4 @@
 }
 .tag-autocomplete-item:hover {
     background: var(--surface-hover);
-}
-
-#rewrite-diff-panel {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    background: var(--surface);
-}
-
-.rewrite-diff-header {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    flex-shrink: 0;
-}
-
-.rewrite-diff-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text);
-    margin-right: 8px;
-}
-
-.rewrite-diff-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 16px;
-    border-radius: 6px;
-    border: none;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.rewrite-confirm-btn {
-    background: var(--color-confirmed);
-    color: var(--on-primary);
-}
-
-.rewrite-confirm-btn:hover {
-    background: #238636;
-}
-
-.rewrite-cancel-btn {
-    background: var(--color-danger);
-    color: var(--on-primary);
-}
-
-.rewrite-cancel-btn:hover {
-    background: #b62324;
-}
-
-.rewrite-diff-body {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.rewrite-diff-pane {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.rewrite-diff-pane-label {
-    padding: 6px 16px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: var(--background-secondary);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    text-align: center;
-}
-
-.rewrite-diff-pane-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px 20px;
-}
-
-.rewrite-diff-divider {
-    width: 1px;
-    background: var(--border);
-    flex-shrink: 0;
-}
-
-[data-theme="dark"] .rewrite-confirm-btn {
-    background: var(--color-confirmed);
-}
-
-[data-theme="dark"] .rewrite-confirm-btn:hover {
-    background: #2ea043;
-}
-
-[data-theme="dark"] .rewrite-cancel-btn {
-    background: var(--color-danger);
-}
-
-[data-theme="dark"] .rewrite-cancel-btn:hover {
-    background: #da3633;
 }

@@ -1,353 +1,330 @@
-# NoteAI PRD — AI 原生个人知识库
+# NoteAI PRD - Minimal AI Knowledge Base
 
-**版本**：v2.1  
-**日期**：2026-05-20  
-**状态说明**：本文档以当前代码库（Tauri + Python sidecar + `webui/`）为准，区分「已实现」「部分实现」「规划中」。与 [README.md](../README.md) 路线图一致。
+**Version**: v3.0
+**Date**: 2026-06-24
+**Status**: Product direction and P0 execution plan
 
----
+## 1. Positioning
 
-## 1. 产品定位
+NoteAI is a local-first, minimal AI knowledge base for collecting Chinese and mixed-language research materials, converting them into Markdown, and keeping them organized with lightweight AI assistance.
 
-**一句话**：本地优先的 AI 知识编译器——把零散资料整理成可检索、可演进、按主题组织的 Markdown 知识库。
+The primary product comparison is **Tolaria**: local Markdown, Git-friendly files, offline-first operation, and AI-agent-friendly workflows. NoteAI should not become a full LLM Wiki clone, a Notion/Tana-style object database, or a visualization-heavy graph tool.
 
-灵感来自 Karpathy LLM Wiki：
+One-line positioning:
 
-> Stop re-deriving, start compiling.
+> Tolaria manages your Markdown vault; NoteAI helps turn raw sources into a clean, maintainable knowledge base.
 
-与一次性 RAG 问答的区别：NoteAI 在工作区中持久化 **Notes（源）→ wiki（编译层）→ Raw（归档）**，并由 AI 辅助分类、综述、链接与检索。当前阶段仍以 **批处理 + 事件触发** 为主，尚未达到「全自动持续编译」的理想态。
+## 2. Product Principles
 
-**目标用户**：深度知识工作者——研究员、产品经理、工程师、写作者。
+1. **Local files are the source of truth**
+   Markdown, YAML frontmatter, `Raw/`, `Notes/`, and `wiki/` must remain readable without NoteAI.
 
-**运行形态**：桌面应用（Tauri v2），非纯浏览器站点；功能验证须在 `python run.py` / `cargo tauri dev` 下进行。
+2. **Relationship stays minimal**
+   No complex property graph, no many relationship types, no nested object schema.
 
----
+3. **Interface stays quiet**
+   Keep the existing knowledge graph, but do not expand visualization as a main direction. Prefer Inbox, lists, editor, search, and review flows.
 
-## 2. 系统架构
+4. **Retrieval stays lightweight by default**
+   Default RAG should use vector recall, BM25 lexical ranking, and simple heuristics. Do not download a model reranker unless the user explicitly opts in.
 
-### 2.1 技术栈
+5. **AI writes are reviewable**
+   AI can suggest, generate, and organize, but meaningful writes should be visible, reversible, and eventually Git-trackable.
 
-| 层 | 技术 | 说明 |
-|----|------|------|
-| 桌面壳 | Tauri v2 (Rust) | 加载 `webui/`，`invoke` 转发 RPC |
-| 前端 | HTML / CSS / 原生 JS | IIFE 模块 + 唯一 ES 模块 `main.mjs`；Tiptap、marked、PDF.js、D3 |
-| 后端 | Python 3.10+ sidecar | stdin/stdout **JSON-RPC**，`RpcRouter` 分发 |
-| 向量索引 | Milvus Lite + fastembed | 稠密：`bge-small-zh-v1.5`（512d） |
-| 稀疏检索 | jieba TF-IDF | 与稠密混合权重约 0.7 / 0.3 |
-| 重排 | FlagReranker | `bge-reranker-v2-m3` |
-| LLM | OpenAI 兼容 API | 经 `utils/llm_utils`，并发信号量 4 |
+6. **Derived data is disposable**
+   Vector indexes, caches, state files, and memory are runtime data. The workspace should be recoverable from files.
 
-**通信链**：
+## 3. Target Users
 
-```
-webui (window.api) → Tauri Rust → Python sidecar → Handler → 文件系统 / Milvus / LLM
-```
+- Users who collect PDFs, DOCX files, web articles, newsletters, WeChat/Zhihu pages, and Markdown notes.
+- Users who want a local knowledge base but do not want to manually classify every source.
+- Users who prefer Markdown and files over SaaS databases.
+- Users who need AI-assisted organization, summaries, and Q&A, especially in Chinese contexts.
 
-进度与流式结果通过 RPC `event`（`progress`、`cascade_survey_chunk`、`cascade_done` 等）推送到前端。
+## 4. Non-Goals
 
-### 2.2 Sidecar 模块（已实现 RPC）
+NoteAI should not prioritize:
 
-| Handler | 职责摘要 |
-|---------|----------|
-| `WorkspaceHandler` | 工作区路径、文件树、选中文件、操作日志刷新 |
-| `TransferHandler` | 网页下载、导入、格式转换、`auto_convert_pending`、笔记整合 |
-| `FilesHandler` | 预览、保存、删除、在 Finder 中显示；保存后可触发级联综述 |
-| `TopicsHandler` | 主题树、自动/批量分类、移动、pending、活动日志、综述开关 |
-| `TagsHandler` | 标签列表、自动打标、TAGS.md 维护 |
-| `LinksHandler` | 双向链接发现、确认/拒绝、统计 |
-| `IntelHandler` | AI 改写（流式）、全文搜索 |
-| `IntelTopicHandler` | 主题分析、综述生成/应用建议 |
-| `RagHandler` | 索引初始化、分块增删、RAG 对话（含 actions 变体）、清空记忆 |
-| `ConfigHandler` | API/UI 配置、主题、用户画像、项目规则 |
-| `CloudSyncHandler` | 多云盘认证、推拉、状态（**实验性**） |
+- A full Obsidian replacement.
+- A formal LLM Wiki implementation.
+- A Notion/Tana-style typed object system.
+- Complex relationship schemas.
+- Large whiteboards, canvases, or visualization-first navigation.
+- A full Git client.
+- Electron migration.
 
-主题三层扩展路由注册在 `TopicsHandler.register_routes_3tier`（`get_topic_tree_3tier`、`get_graph_data` 等）。
+## 5. Workspace Model
 
-### 2.3 工作区数据模型
-
-```
-<工作区>/
-├── Notes/                 # 原始笔记 Markdown（按主题文件夹，最多三级）
-│   └── {一级}/{二级}/{三级}/文章.md
-├── wiki/                  # AI 编译层
-│   ├── WIKI.md            # 主题索引（与 Notes 文件夹结构同步）
-│   ├── log.md             # 级联变更日志（按日分组，见 §3.8）
-│   └── {主题}_综述.md     # 主题综述（叶名命名，平铺在 wiki 或子路径）
-├── Raw/                   # 非 MD 原件归档；自动转换扫描会跳过 Raw/ 内文件
-├── .noteai/               # 工作区运行时（常量 WORKSPACE_APP_FOLDER）
-│   ├── memory/            # RAG 会话记忆
-│   ├── rag_index/         # Milvus Lite 数据
-│   └── ingest_state.json 等运行时状态
-├── .ai_memory/            # 用户画像 JSON、项目规则 Markdown
-│   ├── user_profile.json
-│   └── project_rules.md
-├── .pending_topics.json   # 待确认主题分类
-└── .links.json            # 待确认双向链接
+```text
+<workspace>/
+├── Notes/              # User-readable Markdown notes, organized by topic
+├── wiki/               # AI-maintained summaries, WIKI.md, log.md
+├── Raw/                # Original imported files
+├── schema.md           # Workspace rules and AI behavior constraints
+├── .noteai/            # Runtime state: memory, rag_index, ingest_state
+└── .ai_memory/         # User profile and project rules
 ```
 
-**系统级配置目录**（非工作区）：`~/Library/Application Support/NoteAI/`（macOS）— `workspace_state.json`、`api_config.json`（Fernet 加密字段）等。
+Current three-layer model remains:
 
-**Frontmatter 约定**：`topic: 一级 > 二级 > 三级`（分隔符 ` > `，最多三层）。
+- `Raw/`: original files.
+- `Notes/`: converted and editable Markdown notes.
+- `wiki/`: compiled summaries and indexes.
 
-**文件监视**：watchdog，约 3s 防抖；忽略 dot 目录、`wiki/`、以及 `IGNORED_DIRS` 中列出的别名；支持 `.md/.txt/.pdf/.docx/.pptx/.html/.doc/.ppt` 等后缀。
+Do not introduce heavy `entities/`, `concepts/`, `relations/`, or database-like folders in P0/P1.
 
-> **文档与代码差异**：README 中「NoteAI/」为便于理解的别名；运行时目录名为 **`.noteai`**。用户画像实际路径为 **`<工作区>/.ai_memory/user_profile.json`**，非项目根 `NoteAI/profile.md`。
+## 6. Minimal Relationship Model
 
-### 2.4 记忆与规范
+Relationship in NoteAI means only three things:
 
-| 层级 | 实际路径 | 作用 |
-|------|----------|------|
-| L1 用户画像 | `<工作区>/.ai_memory/user_profile.json` | 身份、偏好、`profile_md`；RAG 可读取 |
-| L2 工作区 Memory | `<工作区>/.noteai/memory/` | 当前工作区对话记忆 |
-| 项目规则 | `<工作区>/.ai_memory/project_rules.md` | 设置中「项目规则」读写 |
-| 提示词 | `prompts/`（Python 常量） | 分类、综述、级联、云同步等；YAML 迁移停滞 |
+### 6.1 Topic
 
----
+One primary topic per note.
 
-## 3. 已实现功能（按用户旅程）
-
-### 3.1 工作区与导航
-
-- 首次/切换工作区：创建 `Notes/`、`wiki/`、`Raw/`、`.noteai/{memory,logs,rag_index}`。
-- 侧栏文件树：映射 **Notes / wiki / Raw** 三区。
-- 主题树（扁平 + 三层）、关系图谱（笔记 / 主题 / 标签 / 链接，D3 力导向）。
-- 全文搜索（工作区内标题与正文）。
-- 标题栏 **待办** 视图：聚合 `get_all_pending`（主题 pending + 链接 pending）。
-
-### 3.2 采集与格式转换
-
-| 能力 | 说明 |
-|------|------|
-| 网页下载 | URL → Markdown（`start_web_download`） |
-| 文件导入 | 复制到 `Raw/` 后批量转换（`import_files` + `start_file_conversion`） |
-| **自动转换** | 打开工作区 + 文件变更后调用 `auto_convert_pending`；扫描支持格式，**跳过 `Raw/` 下已有归档** |
-| 笔记整合 | `start_note_integration`（多笔记合并流程） |
-
-支持 PDF / DOCX / PPTX / HTML 等 → Markdown（`modules/file_converter`）。
-
-### 3.3 主题与分类
-
-- AI 单篇 / 批量主题分配（`auto_assign_topic`、`batch_auto_assign_topics`）。
-- 手动创建/重命名/删除主题、移动文件、解析 pending（`resolve_topic`）。
-- 启动时 `sync_wiki_with_files`：WIKI.md 与 `Notes/` 文件夹对齐。
-- 重复主题合并（`merge_duplicate_topics`）。
-- 综述开关与状态（`toggle_survey`、`get_survey_status`）。
-
-不确定分类写入 `.pending_topics.json`，由待办 UI 确认。
-
-### 3.4 标签
-
-- jieba 词频提取 + `auto_tag_files`。
-- `TAGS.md` 维护、创建/重命名/删除标签。
-
-### 3.5 双向链接
-
-- 本地粗筛 + LLM 精判，结果进入 pending。
-- 确认/拒绝单条或全部（`confirm_link`、`reject_link`、`confirm_all_links`）。
-- 反向链接查询、链接统计。
-
-### 3.6 阅读、预览与编辑
-
-| 类型 | 行为 |
-|------|------|
-| `.md` | Tiptap 所见即所得（`tiptap-bundle.js` 须在 `main.mjs` 之前加载）；自动保存 |
-| PDF | PDF.js 分页预览 |
-| DOCX | mammoth → HTML 只读预览；旧 `.doc` 经转换器 |
-| 其他 | 按 `file_preview` 类型回退（文本、图片等） |
-
-**AI 改写**：选中内容流式改写（`llm_rewrite_stream`），对比后应用（`llm_rewrite_apply`）。
-
-### 3.7 小忆助手（RAG）
-
-流水线：
-
-```
-用户提问 → HyDE 查询扩展 → Milvus 混合检索 → 主题/标签过滤
-         → FlagReranker 重排 → MMR 去重 → LLM 流式回答
+```yaml
+topic: AI工具 > 知识管理
 ```
 
-- 工作区索引：`init_rag_index`、`rag_add_chunks` / `rag_remove_chunks`（与文件监视联动）。
-- `rag_chat` / `rag_chat_with_actions`（后者含 **可执行代码动作**，存在注入风险，见 §5）。
-- `rag_clear_memory` 清空 L2 记忆。
+Rules:
 
-### 3.8 综述与级联更新（部分闭环）
+- Maximum three levels.
+- Default to one main topic per file.
+- Used for folder placement, filtering, summaries, and WIKI sync.
 
-**已实现**：
+### 6.2 Source
 
-- 按主题生成/更新 `wiki/*_综述.md`（`ai_topic_survey`、级联模块 `sidecar/cascade.py`）。
-- 触发场景：主题解析、文件移入主题、Ingest/Lint 级联、手动重试；失败队列可重试（待办「综述失败」）。
-- 变更写入 **`wiki/log.md`**；前端 `cascade_survey_chunk` / `cascade_done`。
-- **Ingest 统一任务条**：转换 → 分类 → 索引 → 综述 → Lint → WIKI 同步（可取消/重试）。
+Simple source traceability.
 
-**未实现**：Karpathy 式「单源触及 10–15 页」的全自动交叉引用网。
+```yaml
+source_url: https://example.com/article
+source_file: Raw/example.pdf
+```
 
-### 3.9 记录与日志
+Rules:
 
-| 文件 | 内容 |
-|------|------|
-| `.noteai/log.md` | ~~已废弃~~ → 见 `wiki/log.md`；旧 `.noteai/activity_log.json` 打开工作区时自动迁移 |
-| `wiki/log.md` | **统一变更日志**（入库、转换、分类、级联、Lint、问答归档） |
-| UI「操作记录」 | 设置 → 操作记录，`get_activity_log` 读 `wiki/log.md` |
+- Used for audit and summary citations.
+- Do not build a complex citation graph in P0.
 
-二者已合并为 **`wiki/log.md`**（Karpathy 式按日条目）；旧 `.noteai/activity_log.json` 在打开工作区时自动迁移。
+### 6.3 Related
 
-### 3.10 云盘同步（实验性）
+Lightweight related notes.
 
-- 提供商：OneDrive、百度、阿里云、腾讯云 COS、123 盘、坚果云 WebDAV、iCloud（`python/sidecar/cloud/providers/`）。
-- RPC：`cloud_sync_*` 系列；前端 **设置 → 云盘同步**（`webui/js/cloud-sync.js`）。
-- **产品状态**：默认隐藏（设置 → 界面 → 启用云盘同步实验）；冲突策略未产品化。
+```yaml
+related:
+  - [[另一篇笔记]]
+  - [[某个主题综述]]
+```
 
-### 3.11 配置与安全
+Rules:
 
-- API Key 优先级：**环境变量 > OS keyring > Fernet 加密 `api_config.json`**。
-- UI 配置、明暗主题、连接测试。
-- CI：`pytest` + GitHub Actions（`main`、`LangChain2` 及 PR）。
+- AI may suggest related notes.
+- Suggestions should enter Inbox when uncertain.
+- No relationship type taxonomy such as `depends_on`, `blocks`, `mentions`, `contains`.
 
----
+## 7. Core User Flows
 
-## 4. 部分实现与已知限制
+### 7.1 Import
 
-| 项 | 现状 |
-|----|------|
-| 编译模式 | Ingest 统一流水线 + 事件触发级联；非 7×24 持续守护 |
-| WIKI.md | **每主题一行摘要**（综述/首段摘录）+ 文件列表 |
-| Query → Archive | 笔记 / wiki / **追加综述**（LLM 合并） |
-| Lint | 健康检查 + 入库末尾；**自动删断链、自动更新过时综述** |
-| 检索扩展 | 向量 + 已确认反链 1-hop + 主题综述（`context_expand`） |
-| schema.md | 顶层规范 + 向导 + 设置页编辑；运行时校验写权限/主题层级 |
-| 交叉引用 | 保存后本地启发式建议 → pending；全库 AI 发现仍走「发现链接」 |
-| 转换失败 | `.noteai/convert_failures.json` + 待办重试 |
-| RAG actions | `rag_chat_with_actions` 已等同于 `rag_chat`（无 LLM 代码执行） |
-| 稀疏检索 | 空正文块在 `hybrid_search` 中过滤并清理陈旧 sparse id |
-| RAG 默认 | `rag_enabled=false`；关闭时用主题树 + 全文 + wiki（`classic_retriever`） |
-| 分发 Python | 发行包需自带解释器或 `NOTEAI_PYTHON`；见 `scripts/bundle_sidecar_python.sh` |
-| 前端布局 | `body { zoom }` 与 flex 组合可能导致侧栏/预览异常（多字号需 Tauri 回归） |
-| 测试覆盖 | 30+ 单元测试模块 + 1 个 sidecar 集成契约测试（`pytest` 约 250+） |
-| 文档别名 | README/AGENTS 中 `NoteAI/`、`NoteAI/profile.md` 与代码路径不一致 |
+User imports PDF, DOCX, PPTX, HTML, TXT, web pages, or Markdown.
 
----
+Expected result:
 
-## 5. 与 Karpathy 理想模型对照
+- Original file goes to `Raw/` when applicable.
+- Markdown note is created under `Notes/`.
+- Topic and tags are suggested.
+- Failures enter Inbox.
 
-| 概念 | NoteAI 现状 | 差距 |
-|------|-------------|------|
-| Raw Sources | `Raw/` 归档 | 缺少「不可变」语义与版本策略 |
-| Wiki 编译层 | `wiki/*_综述.md` + 级联更新 | 有触发式更新，无全库联动与交叉引用网 |
-| Schema | `project_rules.md` + `prompts/` | 无统一 `schema.md` |
-| Ingest | 八阶段可恢复流水线（convert→…→lint→sync） | 非 7×24 持续守护 |
-| Query → Archive | 笔记 / wiki / 追加综述 | 非全自动 wiki 页沉淀 |
-| Lint | 断链/孤儿/过时综述 + 自动修复 | 需打开应用触发 |
-| index 摘要 | WIKI.md 每主题 `>` 摘要行 | 与 Karpathy 一行摘要仍有风格差 |
-| log | `wiki/log.md` 按日分组 | 旧 `.noteai` 日志可迁移 |
+### 7.2 Organize
 
-**结论**：P0/P1 闭环已落地；距离「持续自我维护的编译器」仍差 **Raw 版本语义、全自动交叉引用网、7×24 守护**。
+AI suggests:
 
----
+- Topic.
+- 2-5 useful Chinese tags.
+- Optional related notes.
 
-## 6. 功能路线图
+User confirms uncertain changes in Inbox.
 
-与 [README.md §路线图](../README.md) 对齐。
+### 7.3 Maintain
 
-### P0 — 产品闭环（已交付）
+When new notes enter a topic:
 
-| 项 | 说明 | 状态 |
-|----|------|------|
-| 级联增强 | 入库/Lint 触发综述；失败队列 + 待办重试 | ✅ |
-| Ingest 进度 | 单一任务条（可取消/重试） | ✅ |
-| Query → Archive | 笔记 / wiki / 追加综述 | ✅ |
-| Lint | 断链/孤儿/过时综述 + 自动修复 | ✅ |
-| schema.md | 向导 + 设置编辑 + 运行时校验 | ✅ |
+- `wiki/WIKI.md` stays aligned with `Notes/`.
+- Affected topic summaries are marked stale or updated by the ingest pipeline.
+- Failures and review items go to Inbox.
 
-### P1 — 体验与智能
+### 7.4 Read And Edit
 
-| 项 | 说明 | 状态 |
-|----|------|------|
-| 保存时交叉引用 | 保存 MD 后本地启发式 → pending | ✅ 首版 |
-| 搜索增强 | 主题/标签过滤、预览高亮 | ✅ 首版 |
-| WIKI 摘要索引 | 每主题 `>` 摘要行 | ✅ |
-| 转换可感知 | 失败队列 + 待办重试 | ✅ |
-| 云盘同步 | 实验开关，默认隐藏 | ✅ |
-| 检索扩展 | 向量 + 反链 1-hop + 综述 | ✅（已有） |
-| Karpathy 交叉引用网 | 单源 8–15 页自动建链（保存/入库触发） | ✅ |
+User can:
 
-### P2 — Agent 化
+- Open Markdown notes in the editor.
+- Preview PDF/DOCX files.
+- Edit frontmatter.
+- Ask Xiao Yi about current workspace content.
+- Save useful answers back to `Notes/` or `wiki/`.
 
-| 项 | 说明 | 状态 |
-|----|------|------|
-| Agent 助手 | 结构化工具：搜文件、列主题、移笔记、跑综述 | ✅ 首版 |
-| 多源采集 | RSS / 转录 → Notes/_采集 | ✅ 首版 |
-| Personal Memory | 对话后自动提炼进 L1 user_profile | ✅ |
-| Raw 批量重转 | `convert_raw_archive` RPC | ✅ |
+## 8. Interface Direction
 
-（原 P2 列表保留为方向说明：Agent 型助手、RSS/剪藏/转录、L1 Memory 升级。）
+The main screen should converge toward:
 
-### P3 — 生态
+```text
+┌───────────┬──────────────┬──────────────────────┐
+│ Sidebar   │ List         │ Reader / Editor       │
+│           │              │                      │
+│ Inbox     │ Inbox items  │ Markdown / Preview    │
+│ Notes     │ Notes        │ AI suggestions / Diff │
+│ Topics    │ Search hits  │                      │
+│ Wiki      │              │                      │
+│ Graph     │              │                      │
+└───────────┴──────────────┴──────────────────────┘
+```
 
-- 本地模型（Ollama 等）。
-- 移动端只读 + 同步。
-- 发布导出、协作空间。
+Navigation priority:
 
-### 优先级（开发排序）
+1. Inbox.
+2. Notes.
+3. Topics.
+4. Wiki.
+5. Search.
+6. Graph as optional view.
 
-1. P0：schema.md → Ingest UI → 级联可靠性 → Lint → Query→Archive  
-2. P1：交叉引用、搜索、WIKI 摘要、云同步决策  
-3. P2：Agent、多源采集、Memory 升级  
-4. P3：Local AI、移动端、发布
+Hide or de-emphasize:
 
----
+- Cloud sync until it is production-ready.
+- Agent mode by default.
+- Advanced RAG controls.
+- Large dashboard-style metrics.
 
-## 7. 非功能需求
+## 9. Inbox
 
-| 类别 | 要求 |
-|------|------|
-| 隐私 | 默认本地；API Key 不落库明文；云同步凭证走 keyring/加密配置 |
-| 性能 | LLM 并发上限 4；大文件转换/索引后台任务，不阻塞 RPC 主线程 |
-| 可靠性 | 工作区路径校验；删除主题级联警告；Milvus 删除前先查询 chunk |
-| 可维护性 | 新 RPC 须注册 `src-tauri/src/rpc.rs` 白名单；集成测试见 `tests/integration/test_sidecar_contracts.py` |
-| 兼容性 | macOS 为主开发平台；Windows/Linux 路径与 keyring 行为需单独验证 |
+Inbox is the product's main maintenance surface.
 
----
+It should contain:
 
-## 8. 成功指标（目标态）
+- Pending topic decisions.
+- Pending related-note suggestions.
+- Conversion failures.
+- Stale or failed summaries.
+- Lint issues.
+- Risky AI writes awaiting confirmation.
 
-| 指标 | 目标 |
-|------|------|
-| 编译覆盖率 | 有综述的活跃主题占比 > 80% |
-| 交叉引用密度 | 平均每篇 Notes 至少 1 条已确认出链 |
-| Lint 健康度 | 断链/过时/孤儿占比 < 5% |
-| 对话归档率 | 满意回答存档操作 > 20%（功能上线后统计） |
-| 周活跃 | 深度用户每周使用 ≥ 4 天 |
+Each item should have a clear action:
 
-当前版本 **不以** 上表作为发布门禁，仅作 v2.x 演进方向。
+- Accept.
+- Reject.
+- Retry.
+- Open source.
+- Open generated diff.
 
----
+## 10. AI Behavior
 
-## 9. 附录：关键 RPC 索引
+AI may:
 
-<details>
-<summary>展开 RPC 列表（开发参考）</summary>
+- Suggest topic, tags, and related notes.
+- Generate or refresh topic summaries.
+- Rewrite selected text.
+- Answer questions grounded in notes and wiki.
+- Propose file moves.
 
-**工作区**：`get_workspace_status`, `set_workspace_path`, `get_workspace_tree`, `on_file_selected`, `refresh_log`
+AI should not silently:
 
-**传输**：`start_web_download`, `import_files`, `start_file_conversion`, `auto_convert_pending`, `extract_topics`, `start_note_integration`
+- Delete files.
+- Merge topics.
+- Overwrite summaries.
+- Bulk-move notes.
+- Rewrite large parts of a workspace.
 
-**文件**：`get_file_preview`, `save_file_content`, `read_file_raw`, `delete_file`, `reveal_in_finder`
+## 11. Technical Direction
 
-**主题**：`get_topic_tree`, `auto_assign_topic`, `batch_auto_assign_topics`, `move_file_to_topic`, `get_all_pending`, `get_activity_log`, `get_topic_tree_3tier`, `get_graph_data`, …
+### 11.1 Keep Tauri
 
-**标签**：`get_all_tags`, `auto_tag_files`, `create_tag`, `rename_tag`, `delete_tag`
+Do not migrate to Electron.
 
-**链接**：`discover_links`, `get_backlinks`, `confirm_link`, `reject_link`, …
+Reasons:
 
-**智能**：`llm_rewrite`, `llm_rewrite_stream`, `search_files`, `ai_topic_survey`, …
+- Tolaria itself uses Tauri.
+- NoteAI's heavy work is already in the Python sidecar.
+- Electron would not solve the current core problems: RPC contract drift, topic/wiki service fragmentation, UI complexity, and AI write review.
+- Electron would increase package size and memory cost on top of Python and ML dependencies.
 
-**RAG**：`init_rag_index`, `rag_chat`, `rag_chat_with_actions`, `rag_clear_memory`
+### 11.2 Modernize Gradually
 
-**云同步**：`cloud_sync_list_providers`, `cloud_sync_auth`, `cloud_sync_push`, `cloud_sync_pull`, …
+Preferred path:
 
-**配置**：`get_api_config`, `save_api_config`, `get_user_profile`, `save_user_profile`, `get_project_rules`, …
+1. Keep Tauri + Python sidecar.
+2. Keep vanilla JS in the short term.
+3. Introduce stricter RPC contract tests.
+4. Keep zvec as the default vector-store backend and retain Milvus Lite as a compatibility fallback.
+5. Keep BM25 as the default lexical ranking layer.
+6. Keep local model rerankers disabled by default; no cloud rerankers and no LLM-as-reranker.
+7. Later migrate frontend modules to Vite + TypeScript if UI refactoring becomes necessary.
+8. Extract Python services around stable boundaries:
+   - `TopicService`
+   - `WikiService`
+   - `InboxService`
+   - `IngestService`
+   - `RelationshipService` as minimal topic/source/related only
 
-</details>
+### 11.3 Git As P1
 
----
+Minimal Git support:
 
-*维护说明：实现变更时请同步更新 §2–§4；路线图以 README 与本文 §6 为准，避免三处漂移。*
+- Detect whether workspace is a Git repository.
+- Show modified file count.
+- Let users inspect AI-generated changes.
+- Offer one-click commit for AI maintenance batches.
+- Support rollback of one AI batch.
+
+Do not build:
+
+- Full branch UI.
+- Remote sync UI.
+- Conflict editor.
+
+## 12. P0 Development Plan
+
+### P0.1 Contract Cleanup
+
+- Remove stale frontend RPC calls.
+- Add missing thin RPCs for still-visible UI actions.
+- Add tests that compare frontend calls against Rust allowlist.
+
+### P0.2 Lightweight RAG Default
+
+- Disable local model reranker by default.
+- Replace simplified TF-IDF sparse scoring with BM25.
+- Use zvec as the default local vector store while keeping Milvus Lite available via configuration.
+- Avoid cloud rerankers and LLM rerankers.
+
+### P0.3 Inbox First
+
+- Make Inbox the default landing view when items exist.
+- Merge pending topics, related suggestions, conversion failures, cascade failures, and lint issues.
+- Ensure every item has one obvious next action.
+
+### P0.4 Relationship Minimalization
+
+- Normalize frontmatter around `topic`, `source_url`, `source_file`, `related`, and `tags`.
+- Keep link discovery as "related note suggestions".
+- Avoid exposing relationship type management UI.
+
+### P0.5 UI Simplification
+
+- Reduce dashboard and metrics prominence.
+- Keep Graph as optional.
+- Hide experimental cloud sync and Agent mode behind settings.
+
+## 13. P1 Roadmap
+
+- Git-backed AI write review.
+- Summary citation/source list.
+- Diff review for topic changes and summary updates.
+- MCP or CLI surface for external agents.
+- Vite + TypeScript migration only if UI maintenance cost justifies it.
+
+## 14. Success Metrics
+
+- A new user can import sources and get organized notes within 10 minutes.
+- Most files are auto-classified or placed in Inbox with clear decisions.
+- Users spend most maintenance time in Inbox, not hunting through settings.
+- AI-generated writes are visible and reversible.
+- The workspace remains useful as plain Markdown even without NoteAI.

@@ -1,4 +1,6 @@
-.file-tree-container {
+.file-tree-container,
+.note-list-container {
+    font-family: var(--sidebar-font-family);
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -7,6 +9,126 @@
     user-select: none;
 }
 
+.note-list-container {
+    padding: 0;
+}
+
+.note-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 50px;
+    padding: 8px 12px 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: none;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+}
+
+.note-list-titlebar {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.note-list-heading {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.note-list-sort {
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.1;
+}
+
+.note-list-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.note-list-action {
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+}
+
+.note-list-action:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.note-list-container .tree-item {
+    min-height: 92px;
+    height: auto;
+    align-items: flex-start;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.note-list-container .tree-toggle {
+    display: none;
+}
+
+.note-list-container .tree-name {
+    line-height: 1.25;
+}
+
+.note-list-container .tree-modified {
+    font-size: 11px;
+}
+
+.note-list-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.note-list-title {
+    display: block;
+    font-size: 14px;
+    font-weight: 650;
+    color: var(--text);
+}
+
+.note-list-summary {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+
+.note-list-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 2px;
+    color: #9a9a96;
+    font-size: 11px;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
 
 .tree-empty {
     padding: 32px 16px;
@@ -23,7 +145,7 @@
     margin: 0;
     font-size: 1em;
     color: var(--text-muted);
-    font-weight: 300;
+    font-weight: 450;
     cursor: pointer;
     white-space: nowrap;
     position: relative;
@@ -31,11 +153,12 @@
 }
 
 .tree-item:hover {
-    background: rgba(0, 0, 0, 0.04);
+    background: var(--surface-hover);
 }
 
 .tree-item.is-active {
-    background: rgba(0, 0, 0, 0.06);
+    background: var(--sidebar-active);
+    color: var(--primary);
 }
 
 .tree-item.is-active::before {
@@ -44,8 +167,8 @@
     left: 0;
     top: 0;
     bottom: 0;
-    width: 2px;
-    background: var(--text);
+    width: 3px;
+    background: var(--primary);
 }
 
 .tree-indent-unit {
@@ -66,32 +189,28 @@
 }
 
 .tree-toggle {
-    width: 18px;
+    width: 22px;
     height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     cursor: inherit;
-    opacity: 0.6;
-    transition: transform 0.12s ease, opacity 0.15s;
+    opacity: 0.68;
+    transition: opacity 0.15s;
 }
 
 .tree-toggle:hover {
     opacity: 1;
 }
 
-.tree-toggle.collapsed {
-    transform: rotate(-90deg);
-}
-
-.tree-toggle svg {
-    width: 10px;
-    height: 10px;
-    color: var(--text-muted);
+.tree-toggle svg.tree-folder-icon {
+    width: 15px;
+    height: 15px;
+    color: currentColor;
     fill: none;
     stroke: currentColor;
-    stroke-width: 2;
+    stroke-width: 1.65;
     stroke-linecap: round;
     stroke-linejoin: round;
 }

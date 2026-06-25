@@ -55,6 +55,8 @@ class AppConfig:
     theme: str = "light"
     theme_preference: str = "system"
     font_size: str = "small"
+    sidebar_font_family: str = "system"
+    preview_font_family: str = "system"
     accent_color: str = "#4A90D9"
     window_width: int = 1400
     window_height: int = 900
@@ -75,6 +77,7 @@ class AppConfig:
     cloud_sync_experimental: bool = False
     assistant_agent_mode: bool = False
     rag_enabled: bool = False
+    rag_vector_store: str = "zvec"
     locale: str = "zh-CN"
 
     def __post_init__(self):
@@ -239,6 +242,7 @@ class AppConfig:
             'max_tokens': ('NOTEAI_MAX_TOKENS', api_data.get('max_tokens', file_data.get('max_tokens', 32000))),
             'max_context_tokens': ('NOTEAI_MAX_CONTEXT', api_data.get('max_context_tokens', file_data.get('max_context_tokens', 128000))),
             'workspace_path': ('NOTEAI_WORKSPACE_PATH', file_data.get('workspace_path', '')),
+            'rag_vector_store': ('NOTEAI_VECTOR_STORE', file_data.get('rag_vector_store', 'zvec')),
         }
 
         init_kwargs = {}

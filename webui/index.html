@@ -32,7 +32,7 @@
 </head>
 <body>
     <!-- 早于模块脚本：避免首屏点在 HTML onclick 上对 toggleSidebar 等产生 ReferenceError -->
-    <script>window.toggleSidebar = window.toggleSidebar || function(){ };</script>
+    <script>window.toggleSidebar = window.toggleSidebar || function(){ }; window.toggleFileListSidebar = window.toggleFileListSidebar || function(){ };</script>
     <div id="app-scale-root">
     <div class="custom-titlebar" data-tauri-drag-region>
         <div class="titlebar-left" data-tauri-drag-region>
@@ -58,35 +58,7 @@
                 </svg>
                 <span id="workspace-name-display"></span>
             </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn active" data-sidebar="tree" onclick="switchSidebarView('tree')" data-i18n-title="titlebar.tree">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 3h7v7H3z"></path>
-                    <path d="M14 3h7v7h-7z"></path>
-                    <path d="M14 14h7v7h-7z"></path>
-                    <path d="M3 14h7v7H3z"></path>
-                    <path d="M10 6.5h4"></path>
-                    <path d="M10 17.5h4"></path>
-                    <path d="M17.5 10v4"></path>
-                    <path d="M6.5 10v4"></path>
-                </svg>
-            </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="tags" onclick="switchSidebarView('tags')" data-i18n-title="titlebar.tags">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"></path>
-                    <path d="M7 7h.01"></path>
-                </svg>
-            </button>
-            <button class="titlebar-btn tab-btn sidebar-view-btn" data-sidebar="graph" onclick="switchSidebarView('graph')" data-i18n-title="titlebar.links">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="8" cy="6" r="2.5"></circle>
-                    <circle cx="16" cy="18" r="2.5"></circle>
-                    <path d="M10.5 6h4a2 2 0 0 1 2 2v6"></path>
-                    <path d="M13.5 18h-4a2 2 0 0 1-2-2v-6"></path>
-                    <polyline points="15.5 4 10.5 6 15.5 8"></polyline>
-                    <polyline points="8.5 20 13.5 18 8.5 16"></polyline>
-                </svg>
-            </button>
-            </div>
+        </div>
         <div class="titlebar-center" data-tauri-drag-region>
             <div class="titlebar-file-name-wrapper">
                 <div class="titlebar-file-name" id="titlebar-file-name"></div>
@@ -110,17 +82,6 @@
                     <line x1="12" y1="17" x2="12.01" y2="17"></line>
                 </svg>
                 <span class="pending-badge" style="display:none;"></span>
-            </button>
-            <button class="titlebar-btn" id="titlebar-ai-toggle-btn" onclick="toggleAIPanel()" data-i18n-title="titlebar.aiAssistant">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="5" y="8" width="14" height="10" rx="3"></rect>
-                    <circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle>
-                    <circle cx="14.5" cy="13" r="1.2" fill="currentColor"></circle>
-                    <line x1="12" y1="4" x2="12" y2="8"></line>
-                    <circle cx="12" cy="3.5" r="1.2" fill="currentColor"></circle>
-                    <line x1="8" y1="18" x2="8" y2="20"></line>
-                    <line x1="16" y1="18" x2="16" y2="20"></line>
-                </svg>
             </button>
             <button class="titlebar-btn" id="titlebar-split-btn" onclick="toggleEditMode()" data-i18n-title="titlebar.edit" style="display: none;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -153,6 +114,17 @@
                     <circle cx="12" cy="12" r="3"></circle>
                 </svg>
             </button>
+            <button class="titlebar-btn" id="titlebar-ai-toggle-btn" onclick="toggleAIPanel()" data-i18n-title="titlebar.aiAssistant">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="5" y="8" width="14" height="10" rx="3"></rect>
+                    <circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle>
+                    <circle cx="14.5" cy="13" r="1.2" fill="currentColor"></circle>
+                    <line x1="12" y1="4" x2="12" y2="8"></line>
+                    <circle cx="12" cy="3.5" r="1.2" fill="currentColor"></circle>
+                    <line x1="8" y1="18" x2="8" y2="20"></line>
+                    <line x1="16" y1="18" x2="16" y2="20"></line>
+                </svg>
+            </button>
         </div>
     </div>
     <div class="app-container">
@@ -161,27 +133,37 @@
                 <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
         </button>
+        <button class="sidebar-expand-btn" id="file-list-expand-btn" onclick="toggleFileListSidebar()" data-i18n-title="titlebar.expandSidebar" style="display: none;">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
         <div class="sidebar sidebar-left" id="sidebar">
+            <div class="vault-quick-nav">
+                <button class="vault-nav-item is-active" type="button" onclick="togglePendingView()">
+                    <span class="vault-nav-icon">▣</span>
+                    <span data-i18n="sidebar.inbox"></span>
+                    <span class="vault-nav-count" id="vault-inbox-count">0</span>
+                </button>
+                <button class="vault-nav-item" type="button" onclick="showGraphHomeView()">
+                    <span class="vault-nav-icon">▤</span>
+                    <span data-i18n="sidebar.allNotes"></span>
+                    <span class="vault-nav-count" id="vault-all-notes-count">0</span>
+                </button>
+                <button class="vault-nav-item" type="button">
+                    <span class="vault-nav-icon">□</span>
+                    <span data-i18n="sidebar.archive"></span>
+                </button>
+            </div>
+            <div class="vault-section-header">
+                <span data-i18n="sidebar.folders"></span>
+                <button type="button" class="vault-section-action" onclick="openQuickCreate('topic')" data-i18n-title="sidebar.newTopic">+</button>
+            </div>
             <div class="sidebar-main" id="sidebar-main">
                 <div class="sidebar-pane is-active" id="sidebar-pane-tree" data-sidebar-pane="tree">
                     <div class="file-tree-container" id="file-tree">
                         <div class="tree-empty" data-i18n="common.noWorkspace"></div>
                     </div>
-                </div>
-                <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
-                    <div class="sidebar-view-container" id="sidebar-tags"></div>
-                    <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
-                        <input type="text" class="topic-input" id="tag-input-field" data-i18n-placeholder="sidebar.tagPlaceholder">
-                        <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" data-i18n-title="common.cancel">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                        <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" data-i18n-title="sidebar.confirmCreateTag">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="sidebar-pane" id="sidebar-pane-graph" data-sidebar-pane="graph" hidden>
-                    <div class="sidebar-view-container" id="sidebar-graph"></div>
                 </div>
             </div>
             <div class="sidebar-dock" id="sidebar-dock">
@@ -199,25 +181,28 @@
                     </button>
                     <span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>
                 </div>
-                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-tags" data-sidebar-dock="tags" hidden>
-                    <button class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" data-i18n-title="sidebar.autoTagTitle">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                    </button>
-                    <button class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" data-i18n-title="sidebar.addTagTitle">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    </button>
-                    <span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>
-                </div>
-                <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
-                    <button class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" data-i18n-title="sidebar.discoverLinksTitle">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                    </button>
-                    <span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>
-                </div>
             </div>
         </div>
 
         <div class="resizer" id="sidebar-resizer"></div>
+
+        <div class="sidebar sidebar-left file-list-sidebar" id="file-list-sidebar">
+            <div class="sidebar-main" id="file-list-main">
+                <div class="note-list-container" id="note-list">
+                    <div class="tree-empty" data-i18n="common.noWorkspace"></div>
+                </div>
+            </div>
+            <div class="sidebar-dock" id="file-list-dock">
+                <div class="sidebar-footer sidebar-dock-panel is-active" id="file-list-footer">
+                    <button class="sidebar-footer-btn" onclick="toggleFileListSidebar()" data-i18n-title="sidebar.collapse">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="15 18 9 12 15 6"></polyline>
+                        </svg>
+                    </button>
+                    <span class="sidebar-footer-status" id="note-list-status" data-i18n="common.notesCount" data-i18n-count="0"></span>
+                </div>
+            </div>
+        </div>
 
         <div class="right-area" id="right-area">
             <div class="content-panel" id="content-panel">
@@ -233,6 +218,9 @@
                     <p class="pending-view-hint" data-i18n="pending.hint"></p>
                     <div class="pending-view-sections">
                         <div class="pending-section">
+                            <div class="pending-section-title">
+                                <span class="pending-section-label" data-i18n="pending.inboxTitle"></span>
+                            </div>
                             <div class="pending-view-list" id="pending-view-list">
                                 <div class="pending-view-empty" data-i18n="pending.empty"></div>
                             </div>
@@ -240,6 +228,14 @@
                         <div class="pending-section" id="pending-cascade-section" style="display:none;" hidden>
                             <div class="pending-cascade-list" id="pending-cascade-list"></div>
                             <span class="pending-cascade-count" id="pending-cascade-count" hidden></span>
+                        </div>
+                        <div class="pending-section">
+                            <div class="pending-section-title">
+                                <span class="pending-section-label" data-i18n="pending.activityTitle"></span>
+                            </div>
+                            <div class="pending-view-log" id="pending-view-log">
+                                <div class="pending-view-empty" data-i18n="common.loading"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -357,20 +353,6 @@
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
             <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
 
-            <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
-                <div class="pending-links-header">
-                    <span class="pending-links-title" data-i18n="links.pendingTitle"></span>
-                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>
-                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" data-i18n-title="common.close">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="pending-links-body" id="pending-links-body">
-                    <div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>
-                    <div class="pending-links-list" id="pending-links-list"></div>
-                </div>
-            </div>
-
             <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
 
             </div>
@@ -485,12 +467,6 @@
                                 </svg>
                             </button>
                             <div class="tiptap-spacer"></div>
-                            <button class="tiptap-btn tiptap-btn-rewrite" id="tiptap-rewrite-btn" onclick="onLLMRewrite()" data-i18n-title="editor.llmRewrite">
-                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 20h9"></path>
-                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                                </svg>
-                            </button>
                         </div>
                         <div class="tiptap-editor-content" id="tiptap-editor"></div>
                         <div id="frontmatter-panel" style="display: none;"></div>
@@ -508,10 +484,24 @@
             <div class="ai-panel-top-resizer" id="ai-resizer-top"></div>
             <div class="ai-resizer ai-resizer-left" id="ai-resizer-left"></div>
             <div class="ai-panel-inner">
+                <div class="ai-workspace-tabs">
+                    <button type="button" class="ai-workspace-tab active">Vault issues audit</button>
+                    <button type="button" class="ai-workspace-tab">Vault issues audit</button>
+                    <button type="button" class="ai-workspace-tab">Vault is</button>
+                </div>
                 <div class="ai-panel-header">
-                    <span class="ai-panel-header-dot"></span>
-                    <span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>
-                    <span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>
+                    <div class="ai-mode-switch" role="tablist" aria-label="Assistant mode">
+                        <button type="button" class="ai-mode-btn active" data-ai-mode="rag" data-i18n="assistant.mode.rag"></button>
+                        <button type="button" class="ai-mode-btn" data-ai-mode="cli" data-i18n="assistant.mode.cli"></button>
+                    </div>
+                    <select class="ai-cli-select" id="ai-cli-agent-select" data-i18n-title="assistant.cli.selectTitle" hidden>
+                        <option value="claude-code">Claude Code</option>
+                        <option value="codex-cli">Codex CLI</option>
+                        <option value="opencode">OpenCode</option>
+                        <option value="kimicode">KimiCode</option>
+                        <option value="gemini-cli">Gemini CLI</option>
+                        <option value="aider">Aider</option>
+                    </select>
                     <button class="ai-panel-close-btn" onclick="toggleAIPanel()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
@@ -521,7 +511,7 @@
                     </div>
                 </div>
                 <div class="ai-panel-input">
-                    <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
+                    <textarea id="ai-input" rows="2" autocomplete="off" data-i18n-placeholder="assistant.ragPlaceholder"></textarea>
                     <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                     </button>
@@ -654,6 +644,29 @@
                                         <span data-i18n="settings.fontLarge"></span>
                                         <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>
                                     </label>
+                                </div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.contentFonts"></div>
+                                <div class="form-group form-row">
+                                    <div class="form-field flex-1">
+                                        <div class="form-label" data-i18n="settings.sidebarFont"></div>
+                                        <select class="form-input" name="sidebar-font-family" onchange="setSidebarFontFamily(this.value)">
+                                            <option value="system" data-i18n="settings.fontSystem"></option>
+                                            <option value="sans" data-i18n="settings.fontSans"></option>
+                                            <option value="serif" data-i18n="settings.fontSerif"></option>
+                                            <option value="mono" data-i18n="settings.fontMono"></option>
+                                        </select>
+                                    </div>
+                                    <div class="form-field flex-1">
+                                        <div class="form-label" data-i18n="settings.previewFont"></div>
+                                        <select class="form-input" name="preview-font-family" onchange="setPreviewFontFamily(this.value)">
+                                            <option value="system" data-i18n="settings.fontSystem"></option>
+                                            <option value="sans" data-i18n="settings.fontSans"></option>
+                                            <option value="serif" data-i18n="settings.fontSerif"></option>
+                                            <option value="mono" data-i18n="settings.fontMono"></option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card" style="margin-top:16px">

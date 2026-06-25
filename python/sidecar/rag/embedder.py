@@ -1,4 +1,3 @@
-import math
 import os
 import shutil
 import sys
@@ -133,35 +132,17 @@ def _bge_prefix(texts: list[str], is_query: bool = False) -> list[str]:
 
 def _compute_sparse(texts: list[str]) -> list[dict]:
     results = []
-    doc_freq = {}
     tokenized = []
 
     for text in texts:
         tokens = [w for w in jieba.cut(text) if w.strip() and w not in _STOP_WORDS]
         tokenized.append(tokens)
-        seen = set(tokens)
-        for t in seen:
-            doc_freq[t] = doc_freq.get(t, 0) + 1
-
-    n_docs = len(texts)
-    idf = {}
-    for t, df in doc_freq.items():
-        if n_docs <= 1:
-            idf[t] = 1.0
-        else:
-            idf[t] = max(0.0, math.log((n_docs - df + 0.5) / (df + 0.5)) + 1.0)
 
     for tokens in tokenized:
         tf = {}
         for t in tokens:
             tf[t] = tf.get(t, 0) + 1
-        sparse = {}
-        for t, count in tf.items():
-            if t in idf:
-                weight = (count / len(tokens)) * idf[t] if tokens else 0
-                if weight > 0:
-                    sparse[t] = weight
-        results.append(sparse)
+        results.append({term: float(count) for term, count in tf.items() if count > 0})
 
     return results
 

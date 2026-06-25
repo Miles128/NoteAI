@@ -1,19 +1,45 @@
 (function() { 'use strict';
 
+var FOLDER_SIDEBAR_KEY = 'noteai_folder_sidebar_collapsed';
+var FILE_LIST_SIDEBAR_KEY = 'noteai_file_list_sidebar_collapsed';
+
+function _setPanelCollapsed(panelId, expandBtnId, storageKey, collapsed, resizerId) {
+    var panel = document.getElementById(panelId);
+    var expandBtn = document.getElementById(expandBtnId);
+    var resizer = resizerId ? document.getElementById(resizerId) : null;
+    if (!panel) return;
+
+    panel.classList.toggle('collapsed', !!collapsed);
+    if (expandBtn) expandBtn.style.display = collapsed ? 'flex' : 'none';
+    if (resizer) resizer.style.display = collapsed ? 'none' : '';
+
+    try {
+        localStorage.setItem(storageKey, collapsed ? '1' : '0');
+    } catch (e) {
+        console.warn('[Sidebar] save collapsed state failed:', e);
+    }
+}
+
+function _restorePanelCollapsed(panelId, expandBtnId, storageKey, resizerId) {
+    var collapsed = false;
+    try {
+        collapsed = localStorage.getItem(storageKey) === '1';
+    } catch (e) {
+        collapsed = false;
+    }
+    _setPanelCollapsed(panelId, expandBtnId, storageKey, collapsed, resizerId);
+}
+
 function toggleSidebar() {
     var sidebar = document.getElementById('sidebar');
-    var expandBtn = document.getElementById('sidebar-expand-btn');
-    var resizer = document.getElementById('sidebar-resizer');
     if (!sidebar) return;
-    if (sidebar.classList.contains('collapsed')) {
-        sidebar.classList.remove('collapsed');
-        if (expandBtn) expandBtn.style.display = 'none';
-        if (resizer) resizer.style.display = '';
-    } else {
-        sidebar.classList.add('collapsed');
-        if (expandBtn) expandBtn.style.display = 'flex';
-        if (resizer) resizer.style.display = 'none';
-    }
+    _setPanelCollapsed('sidebar', 'sidebar-expand-btn', FOLDER_SIDEBAR_KEY, !sidebar.classList.contains('collapsed'), 'sidebar-resizer');
+}
+
+function toggleFileListSidebar() {
+    var sidebar = document.getElementById('file-list-sidebar');
+    if (!sidebar) return;
+    _setPanelCollapsed('file-list-sidebar', 'file-list-expand-btn', FILE_LIST_SIDEBAR_KEY, !sidebar.classList.contains('collapsed'));
 }
 
 function _deactivatePendingBtn() {
@@ -105,16 +131,6 @@ function updateSidebarStats() {
         var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
         el.textContent = window.t('common.notesCount', { count: fileCount });
     }
-    var tagsEl = document.getElementById('sidebar-status-tags');
-    if (tagsEl) {
-        var tagCount = document.querySelectorAll('#sidebar-tags .sidebar-tag-group[data-tag-name]').length;
-        tagsEl.textContent = window.t('common.tagsCount', { count: tagCount });
-    }
-    var graphEl = document.getElementById('sidebar-status-graph');
-    if (graphEl) {
-        var linkCount = document.querySelectorAll('#sidebar-graph .link-card.link-confirmed').length;
-        graphEl.textContent = window.t('common.linksCount', { count: linkCount });
-    }
 }
 
 document.addEventListener('localechange', function() {
@@ -134,11 +150,11 @@ function setSidebarStatus(view, text, isActive) {
 }
 
 function switchSidebarView(view) {
+    if (view !== 'tree') view = 'tree';
     window.AppState.currentSidebarView = view;
 
     var sidebar = document.querySelector('.sidebar-left');
     var resizer = document.getElementById('sidebar-resizer');
-    var tagInput = document.getElementById('sidebar-tag-input');
 
     document.querySelectorAll('.sidebar-pane').forEach(function(pane) {
         pane.classList.remove('is-active');
@@ -148,7 +164,6 @@ function switchSidebarView(view) {
         dock.classList.remove('is-active');
         dock.hidden = true;
     });
-    if (tagInput) tagInput.style.display = 'none';
 
     var activePane = document.getElementById('sidebar-pane-' + view);
     if (activePane) {
@@ -161,16 +176,8 @@ function switchSidebarView(view) {
         activeDock.hidden = false;
     }
 
-    if (view === 'tree') {
-        if (sidebar) sidebar.classList.remove('sidebar-narrow');
-        if (resizer) resizer.style.display = '';
-    } else if (view === 'tags') {
-        if (sidebar) sidebar.classList.add('sidebar-narrow');
-        if (resizer) resizer.style.display = 'none';
-    } else if (view === 'graph') {
-        if (sidebar) sidebar.classList.add('sidebar-narrow');
-        if (resizer) resizer.style.display = 'none';
-    }
+    if (sidebar) sidebar.classList.remove('sidebar-narrow');
+    if (resizer) resizer.style.display = '';
 
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
@@ -191,18 +198,8 @@ function switchSidebarView(view) {
         }
     }
 
-    if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); }).catch(function() {});
-    if (view === 'graph' && window.LinksModule) { window.LinksModule.loadGraphView(); setTimeout(updateSidebarStats, 500); }
-
-    // 联动知识图谱过滤
     if (window.Graph3Tier && window.Graph3Tier.load) {
-        if (view === 'tags') {
-            window.Graph3Tier.load('tag');
-        } else if (view === 'graph') {
-            window.Graph3Tier.load('all');
-        } else if (view === 'tree') {
-            window.Graph3Tier.load('topic');
-        }
+        window.Graph3Tier.load('topic');
     }
     updateSidebarStats();
 }
@@ -214,11 +211,14 @@ window.showGraphHomeView = showGraphHomeView;
 window.updateHomeStats = updateHomeStats;
 
 window.toggleSidebar = toggleSidebar;
+window.toggleFileListSidebar = toggleFileListSidebar;
 window._deactivatePendingBtn = _deactivatePendingBtn;
 
 function _initSidebarDock() {
     var view = window.AppState.currentSidebarView || 'tree';
     switchSidebarView(view);
+    _restorePanelCollapsed('sidebar', 'sidebar-expand-btn', FOLDER_SIDEBAR_KEY, 'sidebar-resizer');
+    _restorePanelCollapsed('file-list-sidebar', 'file-list-expand-btn', FILE_LIST_SIDEBAR_KEY);
 }
 
 if (document.readyState === 'loading') {
@@ -228,4 +228,3 @@ if (document.readyState === 'loading') {
 }
 
 })();
-

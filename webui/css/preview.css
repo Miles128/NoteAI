@@ -35,8 +35,8 @@
 }
 
 .preview-resizer {
-    width: 6px;
-    min-width: 6px;
+    width: 1px;
+    min-width: 1px;
     height: 100%;
     cursor: col-resize;
     background: var(--border);
@@ -51,14 +51,14 @@
     content: '';
     position: absolute;
     top: 0;
-    left: -3px;
-    right: -3px;
+    left: -5px;
+    right: -5px;
     bottom: 0;
     z-index: 10;
 }
 
 .preview-resizer:hover {
-    background: var(--primary);
+    background: rgba(47, 52, 55, 0.18);
 }
 
 .preview-content-wrapper {
@@ -164,10 +164,11 @@
 }
 
 .preview-content {
+    font-family: var(--preview-font-family);
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px 24px;
+    padding: 52px 44px 72px;
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar) transparent;
 }
@@ -191,6 +192,7 @@
 
 /* Word / DOCX 排版预览（mammoth HTML） */
 .docx-preview {
+    font-family: var(--preview-font-family);
     max-width: 900px;
     margin: 0 auto;
     line-height: 1.75;
@@ -249,7 +251,7 @@
 }
 
 .preview-content > *:not(.preview-file-info) {
-    max-width: 900px;
+    max-width: 760px;
     margin: 0 auto;
 }
 
@@ -358,35 +360,38 @@
 .preview-content h4,
 .preview-content h5,
 .preview-content h6 {
-    margin-top: 24px;
-    margin-bottom: 16px;
+    margin-top: 28px;
+    margin-bottom: 18px;
     font-weight: 600;
     line-height: 1.25;
     color: var(--heading-color);
     background-color: var(--heading-bg);
-    padding: 0.3em 0.6em;
-    border-radius: 4px;
+    padding: 0;
+    letter-spacing: -0.015em;
 }
 
 .preview-content h1 {
-    font-size: 36px;
+    font-size: 34px;
     color: var(--h1-color);
-    padding-bottom: 12px;
+    padding-bottom: 20px;
     border-bottom: 1px solid var(--border);
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 38px;
 }
 
 .preview-content h2 {
-    font-size: 29px;
-    padding-bottom: 8px;
+    font-size: 24px;
+    padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
 }
 
 .preview-content h3 {
-    font-size: 24px;
+    font-size: 19px;
 }
 
 .preview-content h4 {
-    font-size: 21px;
+    font-size: 17px;
 }
 
 .preview-content strong,
@@ -398,15 +403,14 @@
 .preview-content em,
 .preview-content i {
     font-style: italic;
-    background-color: var(--italic-bg);
-    padding: 0.1em 0.2em;
-    border-radius: 2px;
+    background-color: transparent;
+    padding: 0;
 }
 
 .preview-content p {
     margin-bottom: 16px;
     line-height: 1.7;
-    font-size: 23px;
+    font-size: 16px;
 }
 
 .preview-content ul,
@@ -416,8 +420,13 @@
 }
 
 .preview-content li {
-    margin-bottom: 8px;
-    line-height: 1.6;
+    margin-bottom: 10px;
+    line-height: 1.68;
+    font-size: 16px;
+}
+
+.preview-content li::marker {
+    color: var(--primary);
 }
 
 .preview-content pre {

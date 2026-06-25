@@ -192,6 +192,32 @@ class TagsHandler(BaseHandler):
             "updated": updated_count
         }
 
+    def _add_tag_to_file(self, params):
+        file_path = params.get("file_path", "")
+        tag = (params.get("tag") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "未指定文件"}
+        if not tag:
+            return {"success": False, "message": "标签名不能为空"}
+
+        full_path = self._resolve_path(file_path)
+        if not full_path:
+            return {"success": False, "message": "路径无效"}
+
+        md_file = Path(full_path)
+        if md_file.suffix.lower() != ".md":
+            return {"success": False, "message": "只能给 Markdown 文件添加标签"}
+        if not md_file.exists():
+            return {"success": False, "message": "文件不存在"}
+
+        current_tags = self._read_tags(md_file)
+        if tag in current_tags:
+            return {"success": True, "updated": False, "message": "标签已存在"}
+        if not self._write_tags(md_file, [*current_tags, tag]):
+            return {"success": False, "message": "写入标签失败"}
+        self._invalidate_cache()
+        return {"success": True, "updated": True, "message": f"已添加标签「{tag}」"}
+
     def _collect_tag_map(self, workspace: str) -> dict[str, list[str]]:
         tag_map = {}
         for md_file in _iter_markdown_files(workspace):
@@ -274,3 +300,4 @@ class TagsHandler(BaseHandler):
         router.register("create_tag", self._create_tag)
         router.register("rename_tag", self._rename_tag)
         router.register("delete_tag", self._delete_tag)
+        router.register("add_tag_to_file", self._add_tag_to_file)

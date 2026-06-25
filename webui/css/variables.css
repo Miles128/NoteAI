@@ -19,12 +19,14 @@
     --statusbar-bg: #121a26;
     --card-shadow: 0 0 0 1px rgba(80, 120, 180, 0.08), 0 4px 16px rgba(0, 0, 0, 0.42);
     --card-radius: 12px;
-    --titlebar-height: calc(38px - 2pt);
+    --titlebar-height: 46px;
     --btn-radius: 8px;
     --input-radius: 8px;
     --glass-blur: none;
     --article-bg: #141c28;
     --font-scale: 1;
+    --sidebar-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    --preview-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     --sidebar-dock-height: 32px;
     --italic-bg: rgba(108, 99, 255, 0.08);
     --italic-color: #d1dae8;
@@ -98,62 +100,62 @@ html[data-font-size="large"] {
 
 /* ── Light / 中性毛玻璃 ── */
 [data-theme="light"] {
-    --bg: #ebebea;
-    --sidebar-bg: rgba(255, 255, 255, 0.55);
-    --surface: rgba(255, 255, 255, 0.74);
-    --surface-hover: rgba(255, 255, 255, 0.88);
-    --text: #1a1a1a;
-    --text-muted: #6e6e6e;
-    --primary: #2563eb;
-    --primary-dark: #1d4ed8;
-    --primary-light: rgba(0, 0, 0, 0.04);
-    --primary-hover: rgba(0, 0, 0, 0.06);
-    --border: rgba(0, 0, 0, 0.08);
-    --scrollbar: rgba(0, 0, 0, 0.12);
-    --topbar-bg: rgba(255, 255, 255, 0.6);
-    --statusbar-bg: rgba(255, 255, 255, 0.58);
-    --card-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 4px 20px rgba(0, 0, 0, 0.06);
+    --bg: #f6f6f4;
+    --sidebar-bg: #fbfbfa;
+    --surface: #ffffff;
+    --surface-hover: #f4f4f2;
+    --text: #242424;
+    --text-muted: #7a7a76;
+    --primary: #2563ff;
+    --primary-dark: #174ee8;
+    --primary-light: rgba(37, 99, 255, 0.09);
+    --primary-hover: rgba(37, 99, 255, 0.13);
+    --border: rgba(25, 25, 22, 0.075);
+    --scrollbar: rgba(25, 25, 22, 0.11);
+    --topbar-bg: #fbfbfa;
+    --statusbar-bg: #fbfbfa;
+    --card-shadow: none;
     --card-radius: 12px;
     --btn-radius: 8px;
     --input-radius: 8px;
-    --article-bg: rgba(255, 255, 255, 0.84);
-    --heading-color: #1a1a1a;
-    --h1-color: #0d0d0d;
-    --italic-color: #1a1a1a;
-    --bold-color: #0d0d0d;
-    --sidebar-text: #1a1a1a;
-    --sidebar-text-muted: #6e6e6e;
-    --sidebar-surface-hover: rgba(255, 255, 255, 0.78);
-    --sidebar-border: rgba(0, 0, 0, 0.06);
-    --sidebar-active: rgba(0, 0, 0, 0.05);
+    --article-bg: #ffffff;
+    --heading-color: #242424;
+    --h1-color: #171717;
+    --italic-color: #242424;
+    --bold-color: #171717;
+    --sidebar-text: #242424;
+    --sidebar-text-muted: #7a7a76;
+    --sidebar-surface-hover: #f1f1ef;
+    --sidebar-border: rgba(25, 25, 22, 0.055);
+    --sidebar-active: rgba(37, 99, 255, 0.12);
     --on-primary: #ffffff;
-    --switch-bg: #f0f0f0;
-    --switch-border: #d1d5db;
-    --switch-active: #2563eb;
-    --color-file: #2563eb;
-    --color-topic: #d97706;
-    --color-tag: #059669;
-    --color-change: #7c3aed;
+    --switch-bg: #eeeeec;
+    --switch-border: #d8d8d4;
+    --switch-active: #2563ff;
+    --color-file: #2563ff;
+    --color-topic: #9b6b26;
+    --color-tag: #4e7356;
+    --color-change: #6f5b9a;
     --color-danger: #dc2626;
     --color-danger-text: #dc2626;
     --color-pending: #d97706;
     --color-confirmed: #059669;
     --color-close: #dc2626;
     --color-progress-end: #60a5fa;
-    --glass-bg: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(0, 0, 0, 0.06);
-    --glass-blur: blur(20px) saturate(160%);
+    --glass-bg: #fbfbfa;
+    --glass-border: rgba(25, 25, 22, 0.055);
+    --glass-blur: none;
     --glow-cyan: transparent;
     --glow-purple: transparent;
-    --ai-panel-bg: rgba(255, 255, 255, 0.65);
-    --modal-bg: rgba(255, 255, 255, 0.8);
+    --ai-panel-bg: #fbfbfa;
+    --modal-bg: #ffffff;
     --success: #059669;
     --warning: #d97706;
     --error: #dc2626;
-    --color-dark-dot: #d1d5db;
-    --color-link-incoming: #2563eb;
-    --color-link-outgoing: #7c3aed;
-    --graph-color-file: #2563eb;
+    --color-dark-dot: #d8d8d4;
+    --color-link-incoming: #2563ff;
+    --color-link-outgoing: #6f5b9a;
+    --graph-color-file: #2563ff;
     --graph-color-topic: #d97706;
     --graph-color-tag: #059669;
     --heading-bg: transparent;
@@ -163,10 +165,7 @@ html[data-font-size="large"] {
 
 [data-theme="light"] body,
 body[data-theme="light"] {
-    background:
-        radial-gradient(ellipse 110% 75% at 0% 0%, rgba(255, 255, 255, 0.85) 0%, transparent 50%),
-        radial-gradient(ellipse 90% 65% at 100% 100%, rgba(0, 0, 0, 0.03) 0%, transparent 45%),
-        linear-gradient(160deg, #e6e6e4 0%, #f2f2f0 45%, #fafaf9 100%);
+    background: #f6f6f4;
 }
 
 /* ── Dark / 深蓝夜色 ── */

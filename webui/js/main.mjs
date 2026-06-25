@@ -68,10 +68,6 @@ async function loadModules() {
         window.toggleSidebar = function _toggleSidebarMissing() {};
     }
 
-    await import('./links.js');
-    const { LinksModule } = window;
-    window.LinksModule = LinksModule;
-
     await import('./tiptap-editor.js');
     const { TiptapEditorModule, TiptapEditor } = window;
     window.TiptapEditorModule = TiptapEditorModule;
@@ -124,12 +120,6 @@ async function loadModules() {
     window.onConfirmBtnClick = onConfirmBtnClick;
     window.hasTopicPending = hasTopicPending;
 
-    await import('./tags.js');
-    const { doAutoTag, onShowAddTagInput, loadTagsView } = window;
-    window.doAutoTag = doAutoTag;
-    window.onShowAddTagInput = onShowAddTagInput;
-    window.loadTagsView = loadTagsView;
-
     await import('./search.js');
     window.SearchModule = window.SearchModule || {};
 
@@ -156,11 +146,8 @@ async function loadModules() {
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
     await import('./app.js');
-    const { App, onLLMRewrite, onRewriteConfirm, onRewriteCancel, importFiles } = window;
+    const { App, importFiles } = window;
     window.App = App;
-    window.onLLMRewrite = onLLMRewrite;
-    window.onRewriteConfirm = onRewriteConfirm;
-    window.onRewriteCancel = onRewriteCancel;
     window.importFiles = importFiles;
 
     document.dispatchEvent(new Event('DOMContentLoaded'));

@@ -8,7 +8,15 @@ import pytest
 sys.modules["pymilvus"] = MagicMock()
 
 from sidecar.rag.index import (
+    _bm25_scores,
+    _build_bm25_index,
+    build_index,
+    delete_by_file,
     _escape_filter_value,
+    fetch_chunks_by_file,
+    hybrid_search,
+    index_exists,
+    _is_bm25_index,
     _purge_stale_sparse_ids,
     _sparse_index_path,
     filter_usable_chunks,
@@ -106,6 +114,104 @@ class TestPurgeStaleSparseIds:
         _purge_stale_sparse_ids(str(workspace), [])
         remaining = self._read_sparse_index(workspace)
         assert remaining == data
+
+    def test_removes_stale_ids_from_bm25_index(self, workspace: Path):
+        data = _build_bm25_index(
+            [{"id": "chunk_a"}, {"id": "chunk_b"}],
+            [
+                {"lexical_weights": {"alpha": 2, "beta": 1}},
+                {"lexical_weights": {"beta": 1}},
+            ],
+        )
+        self._write_sparse_index(workspace, data)
+        _purge_stale_sparse_ids(str(workspace), ["chunk_a"])
+        remaining = self._read_sparse_index(workspace)
+        assert _is_bm25_index(remaining)
+        assert "chunk_a" not in remaining["docs"]
+        assert "chunk_b" in remaining["docs"]
+        assert remaining["doc_count"] == 1
+        assert "alpha" not in remaining["df"]
+
+
+class TestBm25Index:
+    def test_builds_bm25_index_from_lexical_counts(self):
+        index = _build_bm25_index(
+            [{"id": "chunk_a"}, {"id": "chunk_b"}],
+            [
+                {"lexical_weights": {"zvec": 2, "rag": 1}},
+                {"lexical_weights": {"rag": 3}},
+            ],
+        )
+
+        assert _is_bm25_index(index)
+        assert index["doc_count"] == 2
+        assert index["df"]["zvec"] == 1
+        assert index["df"]["rag"] == 2
+        assert index["docs"]["chunk_a"]["doc_len"] == 3
+
+    def test_bm25_scores_prefer_more_relevant_document(self):
+        index = _build_bm25_index(
+            [{"id": "chunk_a"}, {"id": "chunk_b"}],
+            [
+                {"lexical_weights": {"zvec": 3, "rag": 1}},
+                {"lexical_weights": {"rag": 3}},
+            ],
+        )
+
+        scores = _bm25_scores({"zvec": 1}, index)
+
+        assert scores["chunk_a"] == 1.0
+        assert "chunk_b" not in scores
+
+
+class TestZvecBackend:
+    @pytest.fixture
+    def workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        monkeypatch.setenv("NOTEAI_VECTOR_STORE", "zvec")
+        return ws
+
+    def test_build_search_fetch_and_delete(self, workspace: Path):
+        chunks = [
+            {
+                "id": "chunk_a",
+                "content": "zvec 是 本地 向量 数据库",
+                "file_path": "Notes/a.md",
+                "topic": "AI",
+                "tags": ["zvec"],
+                "section_title": "A",
+            },
+            {
+                "id": "chunk_b",
+                "content": "BM25 适合 关键词 检索",
+                "file_path": "Notes/b.md",
+                "topic": "Search",
+                "tags": ["bm25"],
+                "section_title": "B",
+            },
+        ]
+        embeddings = [
+            {"dense_vec": [1.0] + [0.0] * 511, "lexical_weights": {"zvec": 2, "本地": 1}},
+            {"dense_vec": [0.0, 1.0] + [0.0] * 510, "lexical_weights": {"BM25": 2, "关键词": 1}},
+        ]
+
+        result = build_index(str(workspace), chunks, embeddings)
+
+        assert result["success"] is True
+        assert result["backend"] == "zvec"
+        assert index_exists(str(workspace)) is True
+
+        hits = hybrid_search(str(workspace), [1.0] + [0.0] * 511, {"zvec": 1}, top_k=5)
+        assert hits[0]["id"] == "chunk_a"
+        assert hits[0]["sparse_score"] > 0
+
+        rows = fetch_chunks_by_file(str(workspace), "Notes/a.md")
+        assert rows[0]["id"] == "chunk_a"
+
+        delete_by_file(str(workspace), "Notes/a.md")
+        hits_after_delete = hybrid_search(str(workspace), [1.0] + [0.0] * 511, {"zvec": 1}, top_k=5)
+        assert all(hit["id"] != "chunk_a" for hit in hits_after_delete)
 
 
 class TestEscapeFilterValue:

@@ -5,9 +5,13 @@ window.AssistantModule = (function() {
     var _isStreaming = false;
     var _indexBuilt = false;
     var _panelVisible = false;
+    var _mode = 'rag';
+    var _cliAgent = 'codex-cli';
+    var _MODE_KEY = 'noteai_assistant_mode';
+    var _CLI_AGENT_KEY = 'noteai_assistant_cli_agent';
     /** 打开 AI 侧栏收窄等 {@link _thawAILayout} */
     var _aiLayoutSnap = null;
-    var _AI_PANEL_DEFAULT_W = 300;
+    var _AI_PANEL_DEFAULT_W = 400;
 
     /**
      * 打开前：侧栏若为展开则缩至约 75%；AI 列宽约等于让出的宽幅。#content-panel 不再写死宽度，避免溢出被裁剪。
@@ -39,7 +43,7 @@ window.AssistantModule = (function() {
         sidebar.style.width = newSw + 'px';
         snap.didShrinkSidebar = true;
         var baseW = freed > 0 ? freed : Math.round(sw * 0.25);
-        panel.style.width = Math.min(420, Math.max(260, baseW)) + 'px';
+        panel.style.width = Math.min(560, Math.max(345, Math.round(baseW * 1.33))) + 'px';
 
         _aiLayoutSnap = snap;
     }
@@ -72,6 +76,53 @@ window.AssistantModule = (function() {
     var _aiBindingsDone = false;
     var _resizersInstalled = false;
 
+    function _loadToolPrefs() {
+        try {
+            var savedMode = localStorage.getItem(_MODE_KEY);
+            if (savedMode === 'rag' || savedMode === 'cli') _mode = savedMode;
+            var savedAgent = localStorage.getItem(_CLI_AGENT_KEY);
+            if (savedAgent) _cliAgent = savedAgent;
+        } catch (_e) {}
+    }
+
+    function _saveToolPrefs() {
+        try {
+            localStorage.setItem(_MODE_KEY, _mode);
+            localStorage.setItem(_CLI_AGENT_KEY, _cliAgent);
+        } catch (_e) {}
+    }
+
+    function _agentLabel(value) {
+        var map = {
+            'claude-code': 'Claude Code',
+            'codex-cli': 'Codex CLI',
+            'opencode': 'OpenCode',
+            'kimicode': 'KimiCode',
+            'gemini-cli': 'Gemini CLI',
+            'aider': 'Aider'
+        };
+        return map[value] || value || 'CLI';
+    }
+
+    function _applyToolMode() {
+        document.querySelectorAll('.ai-mode-btn').forEach(function(btn) {
+            btn.classList.toggle('active', btn.getAttribute('data-ai-mode') === _mode);
+        });
+
+        var select = document.getElementById('ai-cli-agent-select');
+        if (select) {
+            select.hidden = _mode !== 'cli';
+            select.value = _cliAgent;
+        }
+
+        var input = document.getElementById('ai-input');
+        if (input) {
+            input.placeholder = _mode === 'cli'
+                ? window.t('assistant.cli.placeholder', { agent: _agentLabel(_cliAgent) })
+                : window.t('assistant.ragPlaceholder');
+        }
+    }
+
     function ensureAiBindings() {
         if (_aiBindingsDone) return true;
 
@@ -93,7 +144,30 @@ window.AssistantModule = (function() {
             sendMessage();
         });
 
+        document.querySelectorAll('.ai-mode-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var mode = btn.getAttribute('data-ai-mode');
+                if (mode !== 'rag' && mode !== 'cli') return;
+                _mode = mode;
+                _saveToolPrefs();
+                _applyToolMode();
+                input.focus();
+            });
+        });
+
+        var cliSelect = document.getElementById('ai-cli-agent-select');
+        if (cliSelect) {
+            cliSelect.addEventListener('change', function() {
+                _cliAgent = cliSelect.value || 'codex-cli';
+                _saveToolPrefs();
+                _applyToolMode();
+                input.focus();
+            });
+        }
+
         _ensureResizersInstalled();
+        _loadToolPrefs();
+        _applyToolMode();
         _aiBindingsDone = true;
         return true;
     }
@@ -181,7 +255,7 @@ window.AssistantModule = (function() {
             } else {
                 newWidth = startWidth + dx;
             }
-            newWidth = Math.max(260, Math.min(520, newWidth));
+            newWidth = Math.max(345, Math.min(690, newWidth));
             panel.style.width = newWidth + 'px';
         }
 
@@ -246,6 +320,10 @@ window.AssistantModule = (function() {
         if (!question) return;
 
         input.value = '';
+        if (_mode === 'cli') {
+            sendCliCommand(question);
+            return;
+        }
         addUserMessage(question);
         _chatHistory.push({ role: 'user', content: question });
         _lastArchive = { question: question, answer: '', rowEl: null };
@@ -281,6 +359,12 @@ window.AssistantModule = (function() {
             assistantEl.textContent = window.t('assistant.requestFailedMsg', { message: msg });
             assistantEl.classList.remove('ai-typing');
         });
+    }
+
+    function sendCliCommand(command) {
+        var agent = _agentLabel(_cliAgent);
+        addUserMessage(agent + ' > ' + command);
+        addCliMessage(window.t('assistant.cli.pending', { agent: agent }));
     }
 
     function _extractTopics() {
@@ -397,6 +481,23 @@ window.AssistantModule = (function() {
         label.className = 'ai-msg-label';
         label.textContent = window.t('assistant.system');
         var content = document.createElement('div');
+        content.textContent = text;
+        div.appendChild(label);
+        div.appendChild(content);
+        container.appendChild(div);
+        _scrollToBottom();
+    }
+
+    function addCliMessage(text) {
+        var container = document.getElementById('ai-panel-messages');
+        if (!container) return;
+        var div = document.createElement('div');
+        div.className = 'ai-msg ai-cli';
+        var label = document.createElement('div');
+        label.className = 'ai-msg-label';
+        label.textContent = window.t('assistant.mode.cli');
+        var content = document.createElement('div');
+        content.className = 'ai-msg-content';
         content.textContent = text;
         div.appendChild(label);
         div.appendChild(content);

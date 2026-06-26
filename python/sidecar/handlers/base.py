@@ -34,6 +34,10 @@ class BaseHandler:
         return self._server._cached_or_compute
 
     @property
+    def _invalidate_cache(self):
+        return self._server._invalidate_cache
+
+    @property
     def _do_cascade_survey_update(self):
         return self._server._do_cascade_survey_update
 

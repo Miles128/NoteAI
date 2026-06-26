@@ -76,6 +76,8 @@ class ConfigHandler(BaseHandler):
             "auto_topic": self.config.auto_topic,
             "topic_list": self.config.topic_list,
             "font_size": self.config.font_size,
+            "sidebar_font_family": self.config.sidebar_font_family,
+            "preview_font_family": self.config.preview_font_family,
             "cloud_sync_experimental": self.config.cloud_sync_experimental,
             "assistant_agent_mode": self.config.assistant_agent_mode,
             "rag_enabled": self.config.rag_enabled,
@@ -97,6 +99,10 @@ class ConfigHandler(BaseHandler):
             self.config.topic_list = params["topic_list"]
         if "font_size" in params:
             self.config.font_size = params["font_size"]
+        if "sidebar_font_family" in params:
+            self.config.sidebar_font_family = str(params["sidebar_font_family"] or "system")
+        if "preview_font_family" in params:
+            self.config.preview_font_family = str(params["preview_font_family"] or "system")
         if "cloud_sync_experimental" in params:
             self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
         if "assistant_agent_mode" in params:

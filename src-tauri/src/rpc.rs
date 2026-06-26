@@ -2,6 +2,7 @@ use crate::sidecar;
 use crate::state::{AppState, PyRequest};
 
 static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
+    "add_tag_to_file",
     "ai_topic_analyze",
     "ai_topic_survey",
     "append_chat_to_survey",
@@ -79,6 +80,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "llm_rewrite_apply",
     "llm_rewrite_stream",
     "merge_duplicate_topics",
+    "move_file",
     "move_file_to_topic",
     "needs_schema_setup",
     "on_file_selected",

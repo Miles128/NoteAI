@@ -198,7 +198,57 @@ class TestWorkspaceTree:
         assert "hello" in log_path.read_text(encoding="utf-8")
 
 
+class TestFilesHandler:
+    def test_move_file_moves_within_workspace(self, workspace: Path) -> None:
+        source = workspace / "Notes" / "source.md"
+        target_dir = workspace / "Notes" / "Topic"
+        target_dir.mkdir(parents=True)
+        source.write_text("body", encoding="utf-8")
+        handler = FilesHandler(SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _resolve_path=resolve_workspace_path,
+        ))
+
+        result = handler._move_file({"file_path": "Notes/source.md", "target_folder": "Notes/Topic"})
+
+        assert result["success"] is True
+        assert not source.exists()
+        assert (target_dir / "source.md").exists()
+
+    def test_move_file_rejects_workspace_escape(self, workspace: Path) -> None:
+        source = workspace / "Notes" / "source.md"
+        source.write_text("body", encoding="utf-8")
+        outside = workspace.parent / "outside"
+        outside.mkdir()
+        handler = FilesHandler(SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _resolve_path=resolve_workspace_path,
+        ))
+
+        result = handler._move_file({"file_path": "Notes/source.md", "target_folder": str(outside)})
+
+        assert result["success"] is False
+        assert source.exists()
+
+
 class TestTagsHandler:
+    def test_add_tag_to_file_preserves_body(self, workspace: Path) -> None:
+        note = workspace / "Notes" / "tagged.md"
+        body = "\n# Title\n\nOriginal body\n"
+        note.write_text("---\ntags:\n- A\n---" + body, encoding="utf-8")
+        handler = TagsHandler(SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _resolve_path=resolve_workspace_path,
+            _invalidate_cache=lambda: None,
+        ))
+
+        result = handler._add_tag_to_file({"file_path": "Notes/tagged.md", "tag": "B"})
+
+        assert result["success"] is True
+        updated = note.read_text(encoding="utf-8")
+        assert "tags:\n- A\n- B" in updated
+        assert "# Title\n\nOriginal body" in updated
+
     def test_auto_tag_files_only_updates_frontmatter(self, workspace: Path) -> None:
         notes = workspace / "Notes"
         source = notes / "source.md"

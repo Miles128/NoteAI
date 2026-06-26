@@ -17,6 +17,8 @@
   "theme": "light",
   "theme_preference": "system",
   "font_size": "medium",
+  "sidebar_font_family": "system",
+  "preview_font_family": "system",
   "accent_color": "#4A90D9",
   "window_width": 1400,
   "window_height": 900,

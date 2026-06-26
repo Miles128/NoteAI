@@ -586,7 +586,7 @@ window.PreviewModule = {
     showEditButton
 };
 
-window.showTagsView = function() { window.switchSidebarView('tags'); };
+window.showTagsView = function() { window.switchSidebarView('tree'); };
 
 window.closePreview = closePreview;
 window.closePreviewPanel = closePreviewPanel;
@@ -603,4 +603,3 @@ window.showPreview = function(options) {
 };
 
 })();
-

@@ -129,6 +129,13 @@ def _is_recoverable_embed_load_err(err: BaseException) -> bool:
     )
 
 
+def reset_dense_model() -> None:
+    """Drop the cached dense model, mainly for tests or workspace switches."""
+    global _DENSE_MODEL
+    with _DENSE_MODEL_LOCK:
+        _DENSE_MODEL = None
+
+
 def _get_dense_model(download_callback=None):
     global _DENSE_MODEL
     _ensure_hf_env()
@@ -322,15 +329,28 @@ def get_model(download_callback=None):
     return _get_dense_model(download_callback)
 
 
-def encode(texts: list, download_callback=None) -> dict:
+def encode(
+    texts: list,
+    download_callback=None,
+    progress_callback=None,
+) -> dict:
     if not texts:
         return {"dense_vecs": [], "lexical_weights": []}
     texts = [t if t and t.strip() else " " for t in texts]
     model = _get_dense_model(download_callback=download_callback)
     prefixed = _bge_prefix(texts, is_query=False)
-    embeddings = list(model.embed(prefixed))
-    dense_vecs = np.array([e.tolist() for e in embeddings])
+
+    embeddings = []
+    total = len(prefixed)
+    for idx, emb in enumerate(model.embed(prefixed)):
+        embeddings.append(emb.tolist())
+        if progress_callback and total > 1 and idx % max(1, total // 10) == 0:
+            progress_callback(min(idx + 1, total), total, "正在生成 Embedding...")
+
+    dense_vecs = np.array(embeddings)
     sparse_weights = _compute_sparse(texts)
+    if progress_callback and total > 0:
+        progress_callback(total, total, "Embedding 生成完成")
     return {"dense_vecs": dense_vecs, "lexical_weights": sparse_weights}
 
 
@@ -345,10 +365,14 @@ def encode_query(query: str) -> dict:
     return {"dense_vec": dense, "lexical_weights": sparse}
 
 
-def encode_documents(texts: list, download_callback=None) -> list[dict]:
+def encode_documents(
+    texts: list,
+    download_callback=None,
+    progress_callback=None,
+) -> list[dict]:
     if not texts:
         return []
-    result = encode(texts, download_callback=download_callback)
+    result = encode(texts, download_callback=download_callback, progress_callback=progress_callback)
     output = []
     for i in range(len(texts)):
         dense = result["dense_vecs"][i].tolist()

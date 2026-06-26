@@ -275,12 +275,13 @@
         var resizer = document.getElementById('note-list-resizer');
         var topBtn = document.getElementById('titlebar-toggle-note-list');
         if (panel) {
-            panel.classList.add('collapsed');
-            panel.style.width = '6px';
-            panel.style.minWidth = '6px';
+            panel.classList.remove('collapsed');
+            panel.style.width = '';
+            panel.style.minWidth = '';
         }
-        if (resizer) resizer.style.display = 'none';
-        if (topBtn) topBtn.classList.remove('active');
+        if (resizer) resizer.style.display = '';
+        if (topBtn) topBtn.classList.add('active');
+        _initResizer();
 
         var searchInput = document.getElementById('note-list-search-input');
         if (searchInput) {

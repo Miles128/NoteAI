@@ -10,6 +10,8 @@ from utils.logger import logger
 
 MAX_RESULTS = 5
 MAX_CONTENT_CHARS = 2000
+_PAGE_FETCH_TIMEOUT_SECONDS = 10
+_SEARCH_TIMEOUT_SECONDS = 5
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -34,7 +36,7 @@ def duckduckgo_search(query: str) -> list:
         url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
         if not _is_safe_url(url):
             return []
-        resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+        resp = requests.get(url, headers=_HEADERS, timeout=_SEARCH_TIMEOUT_SECONDS, allow_redirects=True)
         if not _is_safe_url(resp.url):
             return []
         resp.raise_for_status()
@@ -78,7 +80,7 @@ def baidu_search(query: str) -> list:
         url = f"https://www.baidu.com/s?wd={quote_plus(query)}&rn={MAX_RESULTS}"
         if not _is_safe_url(url):
             return []
-        resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+        resp = requests.get(url, headers=_HEADERS, timeout=_SEARCH_TIMEOUT_SECONDS, allow_redirects=True)
         if not _is_safe_url(resp.url):
             return []
         resp.raise_for_status()
@@ -127,7 +129,7 @@ def baidu_search(query: str) -> list:
                     head_resp = requests.get(
                         urljoin("https://www.baidu.com", href),
                         headers=_HEADERS,
-                        timeout=3,
+                        timeout=_SEARCH_TIMEOUT_SECONDS,
                         allow_redirects=True,
                     )
                     href = str(head_resp.url) if _is_safe_url(head_resp.url) else ""
@@ -187,7 +189,7 @@ def fetch_page_content(url: str) -> str:
         from markdownify import markdownify as md
         from readability import Document
 
-        resp = requests.get(url, headers=_HEADERS, timeout=5, allow_redirects=True)
+        resp = requests.get(url, headers=_HEADERS, timeout=_PAGE_FETCH_TIMEOUT_SECONDS, allow_redirects=True)
         if not _is_safe_url(resp.url):
             return ""
         resp.raise_for_status()
@@ -217,9 +219,12 @@ def search_and_fetch(query: str, max_pages: int = 3) -> list:
     fetched = []
     with ThreadPoolExecutor(max_workers=max_pages) as executor:
         future_map = {executor.submit(fetch_page_content, r["url"]): r for r in results[:max_pages]}
-        for future in as_completed(future_map):
+        for future in as_completed(future_map, timeout=_PAGE_FETCH_TIMEOUT_SECONDS + 5):
             r = future_map[future]
-            content = future.result()
+            try:
+                content = future.result(timeout=_PAGE_FETCH_TIMEOUT_SECONDS)
+            except Exception:
+                content = ""
             if content:
                 fetched.append(
                     {

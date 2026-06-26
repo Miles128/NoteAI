@@ -26,7 +26,15 @@ _DENSE_METRIC = zvec.MetricType.COSINE
 _BM25_K1 = 1.5
 _BM25_B = 0.75
 
+_INDEX_BATCH_SIZE = 128
+_FETCH_BATCH_SIZE = 256
+
 _lock = threading.Lock()
+
+# Cache opened collections per workspace to avoid repeated zvec.open() cost
+# (zvec.open reloads the mmindex every time, which is expensive for large indices).
+_COLLECTION_CACHE: dict[str, zvec.Collection] = {}
+_COLLECTION_CACHE_LOCK = threading.Lock()
 
 
 def _rag_index_dir(workspace: str) -> Path:
@@ -71,12 +79,29 @@ def _build_schema() -> zvec.CollectionSchema:
 
 
 def _get_collection(workspace: str) -> zvec.Collection:
+    with _COLLECTION_CACHE_LOCK:
+        cached = _COLLECTION_CACHE.get(workspace)
+        if cached is not None:
+            return cached
+
     path = str(_collection_path(workspace))
     try:
-        return zvec.open(path)
+        collection = zvec.open(path)
     except Exception:
-        pass
-    return zvec.create_and_open(path, _build_schema())
+        collection = zvec.create_and_open(path, _build_schema())
+
+    with _COLLECTION_CACHE_LOCK:
+        _COLLECTION_CACHE[workspace] = collection
+    return collection
+
+
+def clear_collection_cache(workspace: str | None = None) -> None:
+    """Drop cached collection(s). Useful before/after full rebuilds or tests."""
+    with _COLLECTION_CACHE_LOCK:
+        if workspace is None:
+            _COLLECTION_CACHE.clear()
+        else:
+            _COLLECTION_CACHE.pop(workspace, None)
 
 
 def _escape_filter_value(value: str) -> str:
@@ -212,19 +237,21 @@ def _chunk_to_doc(chunk: dict, embedding: dict) -> zvec.Doc:
     )
 
 
+def _tags_from_fields(fields: dict) -> list[str]:
+    try:
+        return json.loads(fields.get("tags_json") or "[]")
+    except Exception:
+        return []
+
+
 def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
     fields = doc.fields or {}
-    tags = []
-    try:
-        tags = json.loads(fields.get("tags_json") or "[]")
-    except Exception:
-        pass
     return {
         "id": doc.id,
         "content": fields.get("content", ""),
         "file_path": fields.get("file_path", ""),
         "topic": fields.get("topic", ""),
-        "tags": tags,
+        "tags": _tags_from_fields(fields),
         "section_title": fields.get("section_title", ""),
         "dense_vec": None,
         "dense_score": score if score is not None else 0.0,
@@ -233,19 +260,44 @@ def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
     }
 
 
+def _bm25_corpus_from_retriever(retriever) -> list[dict]:
+    """Extract the document corpus from a loaded bm25s retriever."""
+    corpus = retriever.corpus
+    if isinstance(corpus, dict):
+        return corpus.get("documents", [])
+    return corpus or []
+
+
+def _build_and_save_bm25(corpus: list[dict], bm25_dir: Path) -> None:
+    """Tokenize, index and save a BM25s retriever with the given corpus."""
+    if not corpus:
+        if bm25_dir.exists():
+            for f in bm25_dir.iterdir():
+                f.unlink()
+        return
+    tokenized = bm25s.tokenize([c.get("content", "") for c in corpus], stopwords="zh")
+    retriever = bm25s.BM25(corpus=corpus, k1=_BM25_K1, b=_BM25_B)
+    retriever.index(tokenized)
+    retriever.save(bm25_dir, corpus=corpus)
+
+
 def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None) -> dict[str, Any]:
     index_dir = _rag_index_dir(workspace)
     index_dir.mkdir(parents=True, exist_ok=True)
 
     collection_path = _collection_path(workspace)
+    # Drop any cached collection before wiping the directory, then cache the new one.
+    clear_collection_cache(workspace)
     if collection_path.exists():
         shutil.rmtree(collection_path, ignore_errors=True)
     for old in index_dir.glob("*.tmp"):
         old.unlink()
 
     collection = zvec.create_and_open(str(collection_path), _build_schema())
+    with _COLLECTION_CACHE_LOCK:
+        _COLLECTION_CACHE[workspace] = collection
 
-    batch_size = 128
+    batch_size = _INDEX_BATCH_SIZE
     total = len(chunks)
 
     for i in range(0, total, batch_size):
@@ -263,13 +315,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     if progress_callback:
         progress_callback(total, total, "构建 BM25 索引...")
 
-    tokenized_corpus = bm25s.tokenize(
-        [c.get("content", "") for c in chunks],
-        stopwords="zh",
-    )
-    retriever = bm25s.BM25(corpus=chunks, k1=_BM25_K1, b=_BM25_B)
-    retriever.index(tokenized_corpus)
-    retriever.save(_bm25s_dir(workspace), corpus=chunks)
+    _build_and_save_bm25(chunks, _bm25s_dir(workspace))
 
     # Build metadata indices
     metadata = _empty_metadata()
@@ -306,9 +352,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> No
         bm25_dir = _bm25s_dir(workspace)
         if bm25_dir.exists() and any(bm25_dir.iterdir()):
             old_retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-            old_corpus = old_retriever.corpus
-            if isinstance(old_corpus, dict):
-                old_corpus = old_corpus.get("documents", [])
+            old_corpus = _bm25_corpus_from_retriever(old_retriever)
         else:
             old_corpus = []
 
@@ -318,41 +362,54 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> No
                 old_map[c["id"]] = c
         merged_corpus = list(old_map.values())
 
-        tokenized = bm25s.tokenize([c.get("content", "") for c in merged_corpus], stopwords="zh")
-        retriever = bm25s.BM25(corpus=merged_corpus, k1=_BM25_K1, b=_BM25_B)
-        retriever.index(tokenized)
-        retriever.save(bm25_dir, corpus=merged_corpus)
+        _build_and_save_bm25(merged_corpus, bm25_dir)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild failed: {e}\n")
 
 
-def delete_by_file(workspace: str, file_path: str) -> None:
-    collection = _get_collection(workspace)
+def delete_by_file(
+    workspace: str,
+    file_path: str,
+    collection: zvec.Collection | None = None,
+    *,
+    rebuild_bm25s: bool = True,
+) -> list[dict]:
+    """Delete all chunks belonging to a file.
+
+    Args:
+        workspace: target workspace.
+        file_path: relative file path stored in chunk metadata.
+        collection: optional opened zvec collection; if omitted, one is fetched.
+        rebuild_bm25s: when False, skip BM25s rebuild (callers that batch deletes
+            should rebuild once at the end).
+
+    Returns:
+        List of removed chunk dicts.
+    """
+    if collection is None:
+        collection = _get_collection(workspace)
     metadata = _load_metadata(workspace)
 
-    removed = []
+    removed: list[dict] = []
     try:
         filter_expr = f"file_path = {_escape_filter_value(file_path)}"
         docs = collection.query(filter=filter_expr, topk=10000, output_fields=["content", "file_path", "topic", "tags_json", "section_title"])
         for doc in docs:
             fields = doc.fields or {}
-            tags = []
-            try:
-                tags = json.loads(fields.get("tags_json") or "[]")
-            except Exception:
-                pass
             chunk = {
                 "id": doc.id,
                 "content": fields.get("content", ""),
                 "file_path": fields.get("file_path", ""),
                 "topic": fields.get("topic", ""),
-                "tags": tags,
+                "tags": _tags_from_fields(fields),
                 "section_title": fields.get("section_title", ""),
             }
             removed.append(chunk)
             _update_metadata_index(metadata, chunk, mode="remove")
     except Exception as e:
         logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
+        # Collection object may be in an inconsistent state; drop it from cache.
+        clear_collection_cache(workspace)
 
     if removed:
         ids = [c["id"] for c in removed]
@@ -362,26 +419,22 @@ def delete_by_file(workspace: str, file_path: str) -> None:
     _save_metadata(workspace, metadata)
 
     # Rebuild BM25s without deleted docs
+    if not rebuild_bm25s:
+        return removed
+
     try:
         bm25_dir = _bm25s_dir(workspace)
         if not bm25_dir.exists() or not any(bm25_dir.iterdir()):
-            return
+            return removed
         retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-        old_corpus = retriever.corpus
-        if isinstance(old_corpus, dict):
-            old_corpus = old_corpus.get("documents", [])
+        old_corpus = _bm25_corpus_from_retriever(retriever)
         removed_ids = {c["id"] for c in removed}
         new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
-        if not new_corpus:
-            for f in bm25_dir.iterdir():
-                f.unlink()
-            return
-        tokenized = bm25s.tokenize([c.get("content", "") for c in new_corpus], stopwords="zh")
-        new_retriever = bm25s.BM25(corpus=new_corpus, k1=_BM25_K1, b=_BM25_B)
-        new_retriever.index(tokenized)
-        new_retriever.save(bm25_dir, corpus=new_corpus)
+        _build_and_save_bm25(new_corpus, bm25_dir)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
+
+    return removed
 
 
 def _load_bm25_retriever(workspace: str):
@@ -390,10 +443,7 @@ def _load_bm25_retriever(workspace: str):
         return None, []
     try:
         retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-        corpus = retriever.corpus
-        if isinstance(corpus, dict):
-            corpus = corpus.get("documents", [])
-        return retriever, corpus
+        return retriever, _bm25_corpus_from_retriever(retriever)
     except Exception:
         return None, []
 
@@ -605,7 +655,7 @@ def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_ca
     collection = _get_collection(workspace)
     corpus: list[dict] = []
 
-    batch_size = 256
+    batch_size = _FETCH_BATCH_SIZE
     total = len(all_chunk_ids)
     for i in range(0, total, batch_size):
         batch = all_chunk_ids[i : i + batch_size]
@@ -616,18 +666,13 @@ def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_ca
         )
         for cid, doc in fetched.items():
             fields = doc.fields or {}
-            tags: list[str] = []
-            try:
-                tags = json.loads(fields.get("tags_json") or "[]")
-            except Exception:
-                pass
             corpus.append(
                 {
                     "id": cid,
                     "content": fields.get("content", ""),
                     "file_path": fields.get("file_path", ""),
                     "topic": fields.get("topic", ""),
-                    "tags": tags,
+                    "tags": _tags_from_fields(fields),
                     "section_title": fields.get("section_title", ""),
                 }
             )
@@ -646,10 +691,6 @@ def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_ca
     # Rebuild BM25s
     if progress_callback:
         progress_callback(total, total, "重建 BM25 索引")
-    bm25_dir = _bm25s_dir(workspace)
-    tokenized = bm25s.tokenize([c.get("content", "") for c in corpus], stopwords="zh")
-    retriever = bm25s.BM25(corpus=corpus, k1=_BM25_K1, b=_BM25_B)
-    retriever.index(tokenized)
-    retriever.save(bm25_dir, corpus=corpus)
+    _build_and_save_bm25(corpus, _bm25s_dir(workspace))
 
     return len(corpus)

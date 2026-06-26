@@ -8,6 +8,8 @@ from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 from utils.topic_assigner import sync_wiki_with_files
 
+_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MiB
+
 
 class FilesHandler(BaseHandler):
     PREVIEW_LARGE_RAW_UTF8_THRESHOLD = 512 * 1024
@@ -116,6 +118,9 @@ class FilesHandler(BaseHandler):
         full_path = self._resolve_path(path)
         if not full_path:
             return {"success": False, "message": "路径无效"}
+        content = params.get("content", "")
+        if len(content.encode("utf-8")) > _MAX_FILE_SIZE_BYTES:
+            return {"success": False, "message": "文件内容超过最大限制"}
         try:
             full = Path(full_path)
             rel_path = ""
@@ -125,7 +130,7 @@ class FilesHandler(BaseHandler):
                     rel_path = str(full.relative_to(Path(workspace)))
                 except ValueError:
                     rel_path = str(full_path)
-            full.write_text(params.get("content", ""), encoding="utf-8")
+            full.write_text(content, encoding="utf-8")
             if rel_path.lower().endswith(".md"):
                 self._start_task(
                     f"suggest_links_{Path(rel_path).stem}",
@@ -147,7 +152,10 @@ class FilesHandler(BaseHandler):
         if not full_path:
             return {"success": False, "message": "路径无效"}
         try:
-            raw_bytes = Path(full_path).read_bytes()
+            full = Path(full_path)
+            if full.exists() and full.stat().st_size > _MAX_FILE_SIZE_BYTES:
+                return {"success": False, "message": "文件超过最大读取限制"}
+            raw_bytes = full.read_bytes()
             return {
                 "success": True,
                 "content": base64.b64encode(raw_bytes).decode("utf-8"),
@@ -171,8 +179,8 @@ class FilesHandler(BaseHandler):
         if not resolved_path.exists():
             return {"success": False, "message": "解析后的路径不存在"}
 
-        # Reject paths with control characters that could confuse external commands.
-        if any(ord(ch) < 32 for ch in resolved):
+        # Reject paths with control characters or shell metacharacters that could confuse external commands.
+        if any(ord(ch) < 32 for ch in resolved) or '"' in resolved or '&' in resolved or '|' in resolved:
             return {"success": False, "message": "路径包含非法字符"}
 
         try:

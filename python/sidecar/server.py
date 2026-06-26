@@ -13,7 +13,6 @@ from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
-    AgentHandler,
     CliAgentHandler,
     CloudSyncHandler,
     ConfigHandler,
@@ -60,6 +59,7 @@ class SidecarServer(PathHelpersMixin):
         self._stdout_lock = threading.Lock()
         self._watcher_observer = None
         self._watcher_debounce_timer = None
+        self._watcher_debounce_generation = 0
         self._watcher_needs_wiki_sync = False
         self._watcher_changed_paths: set[str] = set()
         self._watcher_debounce_lock = threading.Lock()
@@ -80,7 +80,6 @@ class SidecarServer(PathHelpersMixin):
         self._cloud_sync_handler = CloudSyncHandler(self)
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
-        self._agent_handler = AgentHandler(self)
         self._cli_agent_handler = CliAgentHandler(self)
         self._build_router()
         self._start_workspace_watcher()
@@ -101,7 +100,6 @@ class SidecarServer(PathHelpersMixin):
         self._cloud_sync_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
-        self._agent_handler.register_routes(self._router)
         self._cli_agent_handler.register_routes(self._router)
 
     def _send_response(self, resp):
@@ -164,15 +162,19 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
-        # Temporarily skip auto RAG index on startup for fast UI verification.
-        # if config.rag_enabled and workspace and Path(workspace).exists():
-        #     self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
+        if config.rag_enabled and workspace and Path(workspace).exists():
+            self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
 
     def _auto_rebuild_rag_index(self):
         workspace = config.workspace_path
         if not workspace or not Path(workspace).exists():
             return
         try:
+            from sidecar.rag.retriever import is_index_up_to_date
+
+            if is_index_up_to_date(workspace):
+                logger.info("[startup] rag index is up to date, skipping rebuild")
+                return
             logger.info("[startup] auto checking rag index")
             self._rag_handler._init_rag_index({})
         except Exception as e:
@@ -370,12 +372,16 @@ class SidecarServer(PathHelpersMixin):
         with self._watcher_debounce_lock:
             if self._workspace_change_affects_wiki(change_type, file_path, src_path, is_directory=is_directory):
                 self._watcher_needs_wiki_sync = True
+            self._watcher_debounce_generation += 1
+            current_generation = self._watcher_debounce_generation
             if self._watcher_debounce_timer:
                 try:
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
                     logger.warning("[watcher] debounce timer already cancelled")
-            self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change)
+            self._watcher_debounce_timer = threading.Timer(
+                5.0, self._emit_workspace_change, args=(current_generation,)
+            )
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):
@@ -418,7 +424,11 @@ class SidecarServer(PathHelpersMixin):
 
         threading.Thread(target=_do, daemon=True).start()
 
-    def _emit_workspace_change(self):
+    def _emit_workspace_change(self, generation: int):
+        with self._watcher_debounce_lock:
+            if generation != self._watcher_debounce_generation:
+                # A newer timer has been scheduled; ignore this stale callback.
+                return
         self._invalidate_cache()
         needs_wiki_sync = False
         changed_paths: list[str] = []
@@ -454,6 +464,20 @@ class SidecarServer(PathHelpersMixin):
             except Exception:
                 pass
         self._router.shutdown(wait=False)
+        # Shutdown module-level thread pools
+        try:
+            from utils.llm_utils import _LLM_EXECUTOR
+
+            if _LLM_EXECUTOR is not None:
+                _LLM_EXECUTOR.shutdown(wait=False)
+        except Exception:
+            pass
+        try:
+            from sidecar.rag.retriever import _RETRIEVE_EXECUTOR
+
+            _RETRIEVE_EXECUTOR.shutdown(wait=False)
+        except Exception:
+            pass
 
 
 def main():

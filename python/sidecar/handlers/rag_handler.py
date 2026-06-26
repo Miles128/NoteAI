@@ -252,8 +252,6 @@ class RagHandler(BaseHandler):
             return self._answer_without_retrieval(question, compressed, intent=intent["intent"])
         if intent["intent"] == "web":
             return self._answer_without_retrieval(question, compressed, intent="web")
-        if intent["intent"] == "action":
-            return self._answer_with_agent(question, compressed)
 
         # workspace / unknown -> RAG retrieval
         return self._answer_with_rag(params, question, compressed, use_vector_rag=use_vector_rag)
@@ -347,35 +345,6 @@ class RagHandler(BaseHandler):
             RagHandler._record_error(f"LLM错误: {e}")
             return self._fail_rag(str(e))
 
-        return self._finish_chat(question, answer)
-
-    def _answer_with_agent(self, question: str, compressed_history: str) -> dict:
-        from sidecar.agent_runner import run_agent_chat
-
-        def _send_tool_event(payload: dict) -> None:
-            self._send_response({"id": "event", "result": payload})
-
-        try:
-            result = run_agent_chat(
-                question,
-                history=compressed_history,
-                agent_mode=True,
-                send_event=_send_tool_event,
-            )
-        except Exception as e:
-            RagHandler._record_error(f"Agent错误: {e}")
-            return self._fail_rag(str(e))
-
-        if not isinstance(result, dict) or not result.get("success"):
-            msg = result.get("message", "操作执行失败") if isinstance(result, dict) else "操作执行失败"
-            return self._fail_rag(msg)
-
-        answer = result.get("answer", "").strip()
-        if not answer:
-            answer = "已经帮你处理好了～"
-
-        # Emit the agent answer as a single chunk so the UI still gets a stream event.
-        self._send_chat_chunk(answer)
         return self._finish_chat(question, answer)
 
     def _answer_with_rag(self, params, question: str, compressed_history: str, *, use_vector_rag: bool) -> dict:
@@ -510,13 +479,6 @@ class RagHandler(BaseHandler):
 
         return "\n".join(parts)
 
-    # _filter_history, _build_messages_with_history, _compress_history removed — unused dead code
-
-    # _execute_single_action removed — LLM-generated code execution is a security risk
-
-    def _rag_chat_with_actions(self, params):
-        return self._rag_chat(params)
-
     def _rag_rebuild_index(self, params):
         """Manual full rebuild (settings / assistant); not run on app open."""
         return self._init_rag_index(params)
@@ -585,6 +547,5 @@ class RagHandler(BaseHandler):
         router.register("rag_add_chunks", self._rag_add_chunks)
         router.register("rag_remove_chunks", self._rag_remove_chunks)
         router.register("rag_chat", self._rag_chat, async_mode=True)
-        router.register("rag_chat_with_actions", self._rag_chat_with_actions, async_mode=True)
         router.register("rag_clear_memory", self._rag_clear_memory)
         router.register("rag_index_status", self._rag_index_status)

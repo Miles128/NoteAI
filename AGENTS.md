@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.) when working with this repository.
 
-> **CLAUDE.md was merged into this file** — both Claude Code and other agents use `AGENTS.md`.
+> **CLAUDE.md has been removed** — all AI coding agents (Claude Code, Codex, Jcode, etc.) use `AGENTS.md`.
 
 ## Build & Test
 
@@ -45,7 +45,7 @@ Tauri v2 shell (src-tauri/)
 
 - **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; zvec eventual consistency could lose track of sparse index entries).
 - **`rag/retriever.py:_rerank()`**: no longer overwrites `score` with `rerank_score` — both fields preserved. Sort post-rerank uses `rerank_score`.
-- **`rag_chat_with_actions`**: aliases `rag_chat` only; LLM code execution path removed.
+- **`rag_chat_with_actions`** RPC removed: was an alias for `rag_chat`. File operations now go through the CLI agent dialog (§3.8 of PRD). The built-in `agent_runner.py` / `agent_handler.py` (6 structured tools) have been deleted.
 - **`rag/index.py:hybrid_search()`**: sparse-only hits query zvec for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
 - **Embedder module** (`rag/embedder.py`): HF environment variables (`HF_ENDPOINT`, `NO_PROXY`) and `FASTEMBED_CACHE_PATH` are set lazily via `_ensure_hf_env()` / `_ensure_fastembed_cache()` on first model load, not at import time. Uses hf-mirror.com.
 - **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, `topic_pending.py`, and `topic_wiki_manager.py`; keep new topic logic in that cluster instead of growing handlers.

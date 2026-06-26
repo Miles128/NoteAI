@@ -2,7 +2,7 @@
 
 # 🧠 NoteAI
 
-**English** · **[中文](#中文)** · [📖 Docs](./docs/README.md) · [📋 PRD](./docs/PRD.md)
+**English** · **[中文](#中文)** · [📋 PRD](./docs/PRD.md)
 
 ---
 
@@ -208,7 +208,7 @@ uv sync --extra dev
 pytest
 ```
 
-See [docs/README.md](./docs/README.md) for API & usage details.
+See [docs/PRD.md](./docs/PRD.md) for product details & roadmap.
 
 ### 🗺️ Roadmap
 
@@ -227,7 +227,6 @@ Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.m
 
 - Report Bugs: [Issue Tracker](https://github.com/Miles128/NoteAI/issues)
 - Submit PRs: [Pull Requests](https://github.com/Miles128/NoteAI/pulls)
-- Code of Conduct: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ### 👤 Author & License
 
@@ -438,7 +437,7 @@ uv sync --extra dev
 pytest
 ```
 
-更多 API、配置与使用说明 → [docs/README.md](./docs/README.md)
+更多产品细节与路线图 → [docs/PRD.md](./docs/PRD.md)
 
 ### 🗺️ 路线图
 
@@ -457,7 +456,6 @@ pytest
 
 - 报告 Bug: [Issue Tracker](https://github.com/Miles128/NoteAI/issues)
 - 提交 PR: [Pull Requests](https://github.com/Miles128/NoteAI/pulls)
-- 行为准则: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ### 👤 作者与许可
 

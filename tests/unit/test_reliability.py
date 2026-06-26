@@ -7,8 +7,6 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
-from sidecar.agent_runner import execute_tool
-from sidecar.handlers.agent_handler import AgentHandler
 from sidecar.handlers.files_handler import FilesHandler
 from sidecar.handlers.ingest_handler import IngestHandler
 from sidecar.ingest_pipeline import save_ingest_state
@@ -31,30 +29,6 @@ def test_filter_usable_chunks_drops_empty() -> None:
     ]
     filtered = filter_usable_chunks(hits)
     assert [h["id"] for h in filtered] == ["a"]
-
-
-def test_agent_rejects_unknown_tool() -> None:
-    result = execute_tool("run_shell", {"cmd": "rm -rf /"})
-    assert result["success"] is False
-    assert "还不会这个操作" in result["message"]
-
-
-def test_agent_chat_rejects_empty_question() -> None:
-    srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
-    handler = AgentHandler(srv)
-    result = handler._agent_chat({"question": "   "})
-    assert result["success"] is False
-
-
-def test_rag_chat_with_actions_delegates_without_code_exec() -> None:
-    import inspect
-
-    from sidecar.handlers import rag_handler
-
-    source = inspect.getsource(rag_handler.RagHandler._rag_chat_with_actions)
-    assert "return self._rag_chat" in source
-    assert "exec(" not in source
-    assert "eval(" not in source
 
 
 @pytest.fixture

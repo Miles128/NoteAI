@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -17,9 +18,11 @@ HYDE_TRIGGER_BELOW_SCORE = 0.33
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 6
 _SKIP_RERANK_SCORE = 0.75
+_FETCH_BATCH_SIZE = 256
 
 _RERANKER = None
-_RERANKER_DISABLED = False
+_RERANKER_DISABLED_UNTIL: float = 0.0
+_RERANKER_COOLDOWN_SECONDS = 60
 _RERANKER_LOCK = threading.Lock()
 
 _RETRIEVE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_retrieve")
@@ -36,15 +39,16 @@ def _reranker_enabled() -> bool:
 
 
 def _get_reranker():
-    global _RERANKER, _RERANKER_DISABLED
+    global _RERANKER, _RERANKER_DISABLED_UNTIL
+
     if not _reranker_enabled():
         return None
-    if _RERANKER_DISABLED:
+    if time.time() < _RERANKER_DISABLED_UNTIL:
         return None
     if _RERANKER is not None:
         return _RERANKER
     with _RERANKER_LOCK:
-        if _RERANKER_DISABLED:
+        if time.time() < _RERANKER_DISABLED_UNTIL:
             return None
         if _RERANKER is not None:
             return _RERANKER
@@ -65,8 +69,8 @@ def _get_reranker():
             )
             return _RERANKER
         except Exception as e:
-            _RERANKER_DISABLED = True
-            logger.warning(f"[rag/retriever] reranker unavailable, using vector scores only: {e}\n")
+            _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
+            logger.warning(f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n")
             return None
 
 
@@ -334,6 +338,27 @@ def _scan_files(workspace_path: Path):
     return files
 
 
+def is_index_up_to_date(workspace: str | None = None) -> bool:
+    """Check whether the existing RAG index matches current workspace files."""
+    workspace = workspace or config.workspace_path
+    if not workspace:
+        return False
+    from sidecar.rag.index import index_exists, load_manifest
+
+    if not index_exists(workspace):
+        return False
+    wp = Path(workspace)
+    current_files = _scan_files(wp)
+    manifest = load_manifest(workspace).get("files", {})
+    if set(current_files.keys()) != set(manifest.keys()):
+        return False
+    for rel, info in current_files.items():
+        old = manifest.get(rel, {})
+        if old.get("mtime") != info["mtime"] or old.get("size") != info["size"]:
+            return False
+    return True
+
+
 def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:
     """Read and chunk a list of files in parallel."""
     from sidecar.rag.chunker import chunk_file
@@ -465,10 +490,15 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     if progress_callback:
         progress_callback(0, max(len(modified) + len(new_files) + len(deleted), 1), "准备增量更新...")
 
-    # Delete removed and modified files from the collection
+    # Delete removed and modified files from the collection.
+    # Reuse a single opened collection and defer BM25s rebuild to the end
+    # because zvec.open() reloads the mmindex every time and is expensive.
+    from sidecar.rag.index import _get_collection
+
+    collection = _get_collection(workspace)
     for rel_path in deleted + modified:
         try:
-            delete_by_file(workspace, rel_path)
+            delete_by_file(workspace, rel_path, collection=collection, rebuild_bm25s=False)
         except Exception as e:
             logger.warning(f"[rag/retriever] delete_by_file failed {rel_path}: {e}\n")
 
@@ -529,7 +559,9 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
 
     full_corpus: list[dict] = []
     if collection is not None:
-        batch_size = 256
+        from sidecar.rag.index import _tags_from_fields
+
+        batch_size = _FETCH_BATCH_SIZE
         for i in range(0, len(all_chunk_ids), batch_size):
             batch = all_chunk_ids[i : i + batch_size]
             fetched = collection.fetch(
@@ -539,18 +571,13 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
             )
             for doc in fetched.values():
                 fields = doc.fields or {}
-                tags = []
-                try:
-                    tags = json.loads(fields.get("tags_json") or "[]")
-                except Exception:
-                    pass
                 full_corpus.append(
                     {
                         "id": doc.id,
                         "content": fields.get("content", ""),
                         "file_path": fields.get("file_path", ""),
                         "topic": fields.get("topic", ""),
-                        "tags": tags,
+                        "tags": _tags_from_fields(fields),
                         "section_title": fields.get("section_title", ""),
                     }
                 )

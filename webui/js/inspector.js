@@ -55,7 +55,7 @@
      */
     function _parseFrontmatter(text) {
         var meta = {};
-        var body = text || '';
+        var body = String(text || '');
         var match = body.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
         if (!match) return { meta: meta, body: body };
 
@@ -103,8 +103,25 @@
             return;
         }
 
-        window.api.readFileRaw(filePath).then(function(content) {
-            var parsed = _parseFrontmatter(content);
+        window.api.readFileRaw(filePath).then(function(result) {
+            if (!result || !result.success) {
+                throw new Error((result && result.message) || '读取失败');
+            }
+
+            var rawContent = result.content || '';
+            var text = '';
+            try {
+                var bin = atob(rawContent);
+                var bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; i++) {
+                    bytes[i] = bin.charCodeAt(i);
+                }
+                text = new TextDecoder('utf-8').decode(bytes);
+            } catch (e) {
+                text = rawContent;
+            }
+
+            var parsed = _parseFrontmatter(text);
             var meta = parsed.meta;
             var html = '';
 

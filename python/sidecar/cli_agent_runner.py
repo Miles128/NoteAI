@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +44,26 @@ SUPPORTED_AGENTS: dict[str, dict[str, Any]] = {
         "description": "Google Gemini CLI",
     },
 }
+
+# 安全限制
+MAX_PROMPT_LENGTH = 10000
+
+
+def _validate_prompt(prompt: str) -> tuple[bool, str]:
+    """校验用户 prompt，避免被外部 CLI 参数解析器误解释。"""
+    if not prompt or not prompt.strip():
+        return False, "prompt 不能为空"
+    if len(prompt) > MAX_PROMPT_LENGTH:
+        return False, f"prompt 超过最大长度 {MAX_PROMPT_LENGTH}"
+    if "\x00" in prompt:
+        return False, "prompt 包含非法空字符"
+    # 控制字符仅允许常见空白，避免终端控制序列
+    if any(ch != "\n" and ch != "\r" and ch != "\t" and ord(ch) < 32 for ch in prompt):
+        return False, "prompt 包含非法控制字符"
+    # 防止被解析为 CLI 选项（如 opencode run -foo）
+    if prompt.lstrip().startswith("-"):
+        return False, "prompt 不能以 '-' 开头"
+    return True, ""
 
 
 def list_available_agents() -> list[dict[str, Any]]:
@@ -81,6 +100,10 @@ def run_cli_agent(
     """
     if agent_id not in SUPPORTED_AGENTS:
         return {"success": False, "message": f"不支持的 agent: {agent_id}"}
+
+    ok, msg = _validate_prompt(prompt)
+    if not ok:
+        return {"success": False, "message": msg}
 
     cfg = SUPPORTED_AGENTS[agent_id]
     command = cfg["command"]

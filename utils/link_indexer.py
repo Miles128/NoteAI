@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from config import config, is_ignored_dir
+from prompts import CROSS_REF_LLM_PROMPT, LINK_PAIR_JUDGE_PROMPT
 from utils.logger import logger
 from utils.text_utils import (
     _is_generic_word,
@@ -29,7 +30,8 @@ from utils.text_utils import (
     tokenize as tokenize_text,
 )
 
-_VECTOR_SEARCH_DISABLED = False
+_VECTOR_SEARCH_COOLDOWN_SECONDS = 60
+_vector_search_disabled_until: float = 0.0
 
 # 工作区文件元数据缓存：{workspace: {rel_path: (mtime, meta)}}
 _file_meta_cache: dict[str, dict[str, tuple[float, dict[str, Any] | None]]] = {}
@@ -43,15 +45,88 @@ def _get_links_path() -> Path | None:
     return Path(ws) / ".links.json"
 
 
+def _extract_json_array(text: str) -> list[Any] | None:
+    """从 LLM 响应中提取 JSON 数组；先尝试完整解析，再寻找最外层平衡 [...]。"""
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    depth = 0
+    start = -1
+    for i, ch in enumerate(text):
+        if ch == "[":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "]":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    try:
+                        return json.loads(text[start : i + 1])
+                    except Exception:
+                        pass
+    return None
+
+
+def _directed_link_key(from_path: str, to_path: str) -> tuple[str, str]:
+    """有向链接的唯一键。A->B 与 B->A 是两条不同的链接。"""
+    return (from_path, to_path)
+
+
+def _is_self_link(from_path: str, to_path: str) -> bool:
+    """自引用检查：同一文件的链接不存储。"""
+    return from_path == to_path
+
+
+def _dedupe_links(links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """按有向 from/to 去重，保留第一次出现且优先保留 confirmed 状态；同时丢弃自引用。"""
+    seen: dict[tuple[str, str], int] = {}
+    out: list[dict[str, Any]] = []
+    dropped_self = 0
+    for link in links:
+        from_path = link.get("from", "")
+        to_path = link.get("to", "")
+        if _is_self_link(from_path, to_path):
+            dropped_self += 1
+            continue
+        key = _directed_link_key(from_path, to_path)
+        if key in seen:
+            idx = seen[key]
+            existing = out[idx]
+            if existing.get("status") != "confirmed" and link.get("status") == "confirmed":
+                out[idx] = link
+            continue
+        seen[key] = len(out)
+        out.append(link)
+    if dropped_self:
+        logger.info(f"[link_indexer] 清理 {dropped_self} 条自引用链接")
+    return out
+
+
 def load_links() -> dict[str, Any]:
     path = _get_links_path()
     if not path or not path.exists():
         return {"links": [], "last_scan": None}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning(f"[link_indexer] 读取 .links.json 失败: {e}")
         return {"links": [], "last_scan": None}
+
+    links = data.get("links", []) or []
+    deduped = _dedupe_links(links)
+    if len(deduped) < len(links):
+        logger.info(f"[link_indexer] 清理 {len(links) - len(deduped)} 条重复/自引用链接")
+        data["links"] = deduped
+        save_links(data)
+    return data
 
 
 def save_links(data: dict[str, Any]) -> bool:
@@ -114,7 +189,10 @@ def _title_mentioned_in_text(title: str, body: str) -> bool:
 
 
 def _link_key(from_path: str, to_path: str) -> tuple[str, str]:
-    return tuple(sorted([from_path, to_path]))
+    """外部去重使用的有向键：方向不同视为不同链接，自引用返回 None 表示无效。"""
+    if _is_self_link(from_path, to_path):
+        return None
+    return _directed_link_key(from_path, to_path)
 
 
 def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[str, Any]:
@@ -140,7 +218,9 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         body = ""
 
     existing = load_links()
-    existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])}
+    existing_keys = {
+        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])) if k
+    }
     suggestions: list[tuple[dict, int, str]] = []
 
     all_metas = _load_all_metas_cached(ws)
@@ -148,7 +228,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         if other_rel == rel:
             continue
         key = _link_key(rel, other_rel)
-        if key in existing_keys:
+        if not key or key in existing_keys:
             continue
 
         reason = ""
@@ -171,7 +251,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     added = 0
     for other, _prio, reason in suggestions[:max_suggestions]:
         key = _link_key(rel, other["path"])
-        if key in existing_keys:
+        if not key or key in existing_keys:
             continue
         merged.append(
             {
@@ -195,8 +275,9 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     }
 
 
-CROSS_REF_MIN = 0
 CROSS_REF_MAX = 25  # soft cap when ranking very long candidate lists
+CROSS_REF_CANDIDATE_PREVIEW = 40
+CROSS_REF_LLM_BATCH_SIZE = 15
 
 
 def _vector_search_candidates(
@@ -215,8 +296,8 @@ def _vector_search_candidates(
     if not query:
         return []
 
-    global _VECTOR_SEARCH_DISABLED
-    if _VECTOR_SEARCH_DISABLED:
+    global _vector_search_disabled_until
+    if time.time() < _vector_search_disabled_until:
         return []
 
     try:
@@ -233,8 +314,8 @@ def _vector_search_candidates(
             top_k=limit + 5,
         )
     except Exception as e:
-        logger.warning(f"[link_indexer] vector search failed, disabling further attempts: {e}")
-        _VECTOR_SEARCH_DISABLED = True
+        logger.warning(f"[link_indexer] vector search failed, cooling down for {_VECTOR_SEARCH_COOLDOWN_SECONDS}s: {e}")
+        _vector_search_disabled_until = time.time() + _VECTOR_SEARCH_COOLDOWN_SECONDS
         return []
 
     out: list[tuple[str, float, str]] = []
@@ -286,29 +367,24 @@ def _llm_pick_cross_refs(
 
     lines = []
     idx_map: dict[int, dict[str, Any]] = {}
-    for i, c in enumerate(candidates[:40], start=1):
+    for i, c in enumerate(candidates[:CROSS_REF_CANDIDATE_PREVIEW], start=1):
         idx_map[i] = c
         lines.append(
             f"[{i}] 《{c.get('title', '')}》 topic={c.get('topic') or '-'} "
             f"tags={','.join(c.get('tags') or [])}\n    {c.get('summary', '')[:200]}"
         )
 
-    prompt = f"""你是知识库双向链接编辑。源文章：
-《{source_meta.get("title", "")}》
-摘要：{body_excerpt[:400]}
-
-从下列候选中选出**所有**与源文章有实质关联的笔记（概念重叠、补充、前置知识均可）。数量不设下限或上限，只排除弱相关。
-返回 JSON 数组，每项 {{"id": 编号, "reason": "10字内原因"}}。只返回 JSON。
-
-候选：
-{chr(10).join(lines)}"""
+    prompt = CROSS_REF_LLM_PROMPT.format(
+        title=source_meta.get("title", ""),
+        summary=body_excerpt[:400],
+        candidates=chr(10).join(lines),
+    )
 
     try:
         response = call_llm_raw(prompt, temperature=0.2)
-        json_match = re.search(r"\[[\s\S]*\]", response)
-        if not json_match:
+        picked = _extract_json_array(response)
+        if picked is None:
             return candidates[:max_links] if max_links > 0 else candidates
-        picked = json.loads(json_match.group(0))
         out: list[dict[str, Any]] = []
         for item in picked:
             idx = item.get("id")
@@ -327,7 +403,7 @@ def _llm_pick_cross_refs(
 def discover_cross_refs_for_file(
     file_path: str,
     *,
-    min_links: int = CROSS_REF_MIN,
+    min_links: int = 0,
     max_links: int = CROSS_REF_MAX,
     use_llm: bool = True,
 ) -> dict[str, Any]:
@@ -363,7 +439,9 @@ def discover_cross_refs_for_file(
 
     existing = load_links()
     existing_links = existing.get("links", [])
-    existing_keys = {_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links}
+    existing_keys = {
+        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k
+    }
 
     # 使用 mtime 缓存，避免每次保存都全量解析所有文件
     all_metas = _load_all_metas_cached(ws)
@@ -374,7 +452,7 @@ def discover_cross_refs_for_file(
         if path == rel or path not in all_metas:
             return
         key = _link_key(rel, path)
-        if key in existing_keys:
+        if not key or key in existing_keys:
             return
         prev = scored.get(path)
         if prev and prev["score"] >= score:
@@ -426,7 +504,7 @@ def discover_cross_refs_for_file(
     pending = 0
     for row in picked:
         key = _link_key(rel, row["path"])
-        if key in existing_keys:
+        if not key or key in existing_keys:
             continue
         auto = bool(row.get("auto_confirm") or row.get("score", 0) >= 90.0)
         if use_llm:
@@ -652,7 +730,7 @@ def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_c
         return []
 
     all_links = []
-    batch_size = 15
+    batch_size = CROSS_REF_LLM_BATCH_SIZE
 
     total_batches = (len(candidate_pairs) + batch_size - 1) // batch_size
 
@@ -670,41 +748,29 @@ def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_c
             lines.append(f"    摘要: {meta_b['summary']}")
             lines.append("")
 
-        prompt = f"""以下是为每对文章编号的列表。请判断每对文章之间是否存在内容重叠或相似之处。
-
-判断标准：
-- 两篇文章讨论相同的主题、技术、工具或概念
-- 一篇文章的内容是另一篇的补充、延伸或前置知识
-- 两篇文章有实质性的交叉引用价值
-
-请返回 JSON 数组，仅包含有关联的对：
-[{{"pair": [1, 2], "reason": "简述关联原因（10字以内）"}}, ...]
-
-如果某对没有关联，不要包含在结果中。只返回 JSON 数组，不要其他文字。
-
-{chr(10).join(lines)}"""
+        prompt = LINK_PAIR_JUDGE_PROMPT.format(candidates=chr(10).join(lines))
 
         try:
             response = call_llm_raw(prompt, temperature=0.3)
             # 提取 JSON
-            json_match = re.search(r"\[[\s\S]*\]", response)
-            if json_match:
-                results = json.loads(json_match.group(0))
-                for item in results:
-                    pair = item.get("pair", [])
-                    reason = item.get("reason", "")
-                    if len(pair) == 2:
-                        local_idx = pair[0]
-                        if local_idx in idx_map:
-                            meta_a, meta_b = idx_map[local_idx]
-                            all_links.append(
-                                {
-                                    "from": meta_a["path"],
-                                    "to": meta_b["path"],
-                                    "reason": reason,
-                                    "status": "pending",
-                                }
-                            )
+            results = _extract_json_array(response)
+            if not results:
+                continue
+            for item in results:
+                pair = item.get("pair", [])
+                reason = item.get("reason", "")
+                if len(pair) == 2:
+                    local_idx = pair[0]
+                    if local_idx in idx_map:
+                        meta_a, meta_b = idx_map[local_idx]
+                        all_links.append(
+                            {
+                                "from": meta_a["path"],
+                                "to": meta_b["path"],
+                                "reason": reason,
+                                "status": "pending",
+                            }
+                        )
         except Exception as e:
             logger.warning(f"[link_indexer] LLM batch error: {e}")
             continue
@@ -776,16 +842,17 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
     existing = load_links()
     existing_links = existing.get("links", [])
 
-    existing_keys = set()
-    for l in existing_links:
-        key = tuple(sorted([l["from"], l["to"]]))
-        existing_keys.add(key)
+    existing_keys = {
+        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k
+    }
 
     merged = list(existing_links)
     added_count = 0
     for link in new_links:
-        key = tuple(sorted([link["from"], link["to"]]))
-        if key not in existing_keys:
+        if _is_self_link(link.get("from", ""), link.get("to", "")):
+            continue
+        key = _link_key(link["from"], link["to"])
+        if key and key not in existing_keys:
             link["status"] = "confirmed"
             merged.append(link)
             existing_keys.add(key)
@@ -808,24 +875,25 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
 
 
 def get_backlinks(file_path: str) -> dict[str, Any]:
-    """获取指定文件的链接；file_path 为空时返回所有链接"""
+    """获取指定文件的链接；file_path 为空时返回所有链接。"""
     data = load_links()
-    all_links = data.get("links", [])
+    all_links = _dedupe_links(data.get("links", []))
+
+    def _to_view(link: dict[str, Any], center_file: str = "") -> dict[str, Any]:
+        is_incoming = center_file and link["to"] == center_file
+        other = link["from"] if is_incoming else link["to"]
+        return {
+            "from": link["from"],
+            "to": link["to"],
+            "file": other,
+            "other": other,
+            "reason": link.get("reason", ""),
+            "status": link.get("status", "pending"),
+            "direction": "incoming" if is_incoming else "outgoing",
+        }
 
     if not file_path:
-        links = []
-        for link in all_links:
-            links.append(
-                {
-                    "from": link["from"],
-                    "to": link["to"],
-                    "file": link["from"],
-                    "other": link["to"],
-                    "reason": link.get("reason", ""),
-                    "status": link.get("status", "pending"),
-                    "direction": "outgoing",
-                }
-            )
+        links = [_to_view(link) for link in all_links]
         return {
             "success": True,
             "file": "",
@@ -833,38 +901,25 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
             "count": len(links),
         }
 
-    incoming = []
-    for link in all_links:
-        if link["to"] == file_path or link["from"] == file_path:
-            other = link["from"] if link["to"] == file_path else link["to"]
-            incoming.append(
-                {
-                    "from": link["from"],
-                    "to": link["to"],
-                    "file": other,
-                    "reason": link.get("reason", ""),
-                    "status": link.get("status", "pending"),
-                    "direction": "incoming" if link["to"] == file_path else "outgoing",
-                }
-            )
+    related = [_to_view(link, center_file=file_path) for link in all_links if link["to"] == file_path or link["from"] == file_path]
 
     return {
         "success": True,
         "file": file_path,
-        "links": incoming,
-        "count": len(incoming),
+        "links": related,
+        "count": len(related),
     }
 
 
 def confirm_link(from_path: str, to_path: str) -> dict[str, Any]:
-    """确认一个链接"""
+    """确认一条有向链接。只匹配精确的 from->to 方向。"""
+    if _is_self_link(from_path, to_path):
+        return {"success": False, "message": "不能确认自引用链接"}
     data = load_links()
     links = data.get("links", [])
     found = False
     for link in links:
-        key1 = link["from"] == from_path and link["to"] == to_path
-        key2 = link["from"] == to_path and link["to"] == from_path
-        if key1 or key2:
+        if link.get("from") == from_path and link.get("to") == to_path:
             link["status"] = "confirmed"
             found = True
             break
@@ -875,15 +930,15 @@ def confirm_link(from_path: str, to_path: str) -> dict[str, Any]:
 
 
 def reject_link(from_path: str, to_path: str) -> dict[str, Any]:
-    """删除一个链接"""
+    """删除一条有向链接。只匹配精确的 from->to 方向。"""
+    if _is_self_link(from_path, to_path):
+        return {"success": False, "message": "不能删除自引用链接"}
     data = load_links()
     links = data.get("links", [])
     new_links = []
     removed = False
     for link in links:
-        key1 = link["from"] == from_path and link["to"] == to_path
-        key2 = link["from"] == to_path and link["to"] == from_path
-        if key1 or key2:
+        if link.get("from") == from_path and link.get("to") == to_path:
             removed = True
             continue
         new_links.append(link)

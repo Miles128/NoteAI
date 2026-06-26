@@ -11,12 +11,12 @@ import sidecar.rag.retriever as _mod
 @pytest.fixture(autouse=True)
 def _reset_reranker_globals():
     original_reranker = _mod._RERANKER
-    original_disabled = _mod._RERANKER_DISABLED
+    original_disabled_until = _mod._RERANKER_DISABLED_UNTIL
     _mod._RERANKER = None
-    _mod._RERANKER_DISABLED = False
+    _mod._RERANKER_DISABLED_UNTIL = 0.0
     yield
     _mod._RERANKER = original_reranker
-    _mod._RERANKER_DISABLED = original_disabled
+    _mod._RERANKER_DISABLED_UNTIL = original_disabled_until
 
 
 @pytest.fixture()
@@ -81,8 +81,10 @@ class TestGetReranker:
         assert _mod._get_reranker() is None
 
     def test_returns_none_when_disabled_flag_set(self, monkeypatch):
+        import time
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        _mod._RERANKER_DISABLED = True
+        _mod._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
 
     def test_returns_cached_reranker(self):
@@ -91,6 +93,8 @@ class TestGetReranker:
         assert _mod._get_reranker() is sentinel
 
     def test_sets_disabled_flag_on_import_error(self, monkeypatch, _mock_embedder_module):
+        import time
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         monkeypatch.setitem(sys.modules, "FlagEmbedding", None)
 
@@ -105,17 +109,21 @@ class TestGetReranker:
 
         result = _mod._get_reranker()
         assert result is None
-        assert _mod._RERANKER_DISABLED is True
+        assert _mod._RERANKER_DISABLED_UNTIL > time.time()
 
     def test_sets_disabled_flag_on_generic_exception(self, monkeypatch, _mock_embedder_module):
+        import time
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         _mock_embedder_module._ensure_hf_env = MagicMock(side_effect=RuntimeError("boom"))
 
         result = _mod._get_reranker()
         assert result is None
-        assert _mod._RERANKER_DISABLED is True
+        assert _mod._RERANKER_DISABLED_UNTIL > time.time()
 
     def test_returns_none_after_previous_failure(self, monkeypatch):
+        import time
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        _mod._RERANKER_DISABLED = True
+        _mod._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None

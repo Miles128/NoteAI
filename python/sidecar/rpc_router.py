@@ -60,24 +60,17 @@ class RpcRouter:
             self._send_error(req_id, f"Unknown method: {method}")
             return
 
-        if handler.async_mode:
-
-            def _run():
-                try:
-                    result = handler.fn(params)
-                    self._send_ok(req_id, result)
-                except Exception as e:
-                    logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
-                    self._send_error(req_id, _sanitize_error_message(str(e)))
-
-            self._executor.submit(_run)
-        else:
+        def _run():
             try:
                 result = handler.fn(params)
                 self._send_ok(req_id, result)
             except Exception as e:
                 logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
                 self._send_error(req_id, _sanitize_error_message(str(e)))
+
+        # Submit all handlers (sync and async) to the thread pool so the
+        # stdin read loop in main() is never blocked by a slow handler.
+        self._executor.submit(_run)
 
     def _send_ok(self, req_id: str, result: Any) -> None:
         if self.send_response is not None:

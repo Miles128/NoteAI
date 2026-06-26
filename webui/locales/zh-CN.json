@@ -753,7 +753,7 @@
     "createError": "创建标签出错: "
   },
   "about": {
-    "version": "版本 1.0.0",
+    "version": "版本 0.1.0",
     "desc": "AI 驱动的 Markdown 笔记知识库管理工具",
     "coreFeatures": "核心功能",
     "feature1": "Markdown 笔记管理与编辑",

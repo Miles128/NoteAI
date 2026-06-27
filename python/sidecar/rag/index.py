@@ -142,6 +142,19 @@ def _is_zvec_lock_error(exc: Exception) -> bool:
     return "lock" in str(exc).lower()
 
 
+def _take_cached_collection(workspace: str, *, destroy: bool = False) -> zvec.Collection | None:
+    """Remove a workspace collection from cache; optionally destroy it to release zvec lock."""
+    with _COLLECTION_CACHE_LOCK:
+        collection = _COLLECTION_CACHE.pop(workspace, None)
+    if collection is not None and destroy:
+        try:
+            collection.destroy()
+        except Exception as e:
+            log_exception("[rag/index] failed to destroy cached collection", e, level="warning", logger=logger)
+        gc.collect()
+    return collection
+
+
 def _open_or_create_collection(path: str) -> zvec.Collection:
     """Open an existing collection, retrying once after GC on in-process lock conflicts."""
     try:
@@ -165,21 +178,25 @@ def _get_collection(workspace: str) -> zvec.Collection:
         if cached is not None and _manifest_version_ok(workspace):
             return cached
 
-        # Version mismatch or no cache — drop stale entry before reopening.
-        _COLLECTION_CACHE.pop(workspace, None)
+    destroy = not _manifest_version_ok(workspace)
+    _take_cached_collection(workspace, destroy=destroy)
 
-        path = str(_collection_path(workspace))
-        if not _manifest_version_ok(workspace) and Path(path).exists():
-            logger.info("[RAG] index version mismatch, rebuilding collection")
-            shutil.rmtree(path, ignore_errors=True)
-            _bm25s = _bm25s_dir(workspace)
-            if _bm25s.exists():
-                shutil.rmtree(_bm25s, ignore_errors=True)
-
-        # zvec holds an OS lock until the previous Collection object is GC'd.
+    path = str(_collection_path(workspace))
+    if destroy and Path(path).exists():
+        logger.info("[RAG] index version mismatch, rebuilding collection")
+        shutil.rmtree(path, ignore_errors=True)
+        _bm25s = _bm25s_dir(workspace)
+        if _bm25s.exists():
+            shutil.rmtree(_bm25s, ignore_errors=True)
+    elif not destroy:
         gc.collect()
 
-        collection = _open_or_create_collection(path)
+    collection = _open_or_create_collection(path)
+
+    with _COLLECTION_CACHE_LOCK:
+        cached = _COLLECTION_CACHE.get(workspace)
+        if cached is not None and _manifest_version_ok(workspace):
+            return cached
         _COLLECTION_CACHE[workspace] = collection
         return collection
 
@@ -393,15 +410,14 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     index_dir.mkdir(parents=True, exist_ok=True)
 
     collection_path = _collection_path(workspace)
-    # Drop cached handle and release zvec lock before wiping the directory.
+    _take_cached_collection(workspace, destroy=True)
+    if collection_path.exists():
+        shutil.rmtree(collection_path, ignore_errors=True)
+    for old in index_dir.glob("*.tmp"):
+        old.unlink()
+
+    collection = zvec.create_and_open(str(collection_path), _build_schema())
     with _COLLECTION_CACHE_LOCK:
-        _COLLECTION_CACHE.pop(workspace, None)
-        if collection_path.exists():
-            shutil.rmtree(collection_path, ignore_errors=True)
-        for old in index_dir.glob("*.tmp"):
-            old.unlink()
-        gc.collect()
-        collection = zvec.create_and_open(str(collection_path), _build_schema())
         _COLLECTION_CACHE[workspace] = collection
 
     batch_size = _INDEX_BATCH_SIZE

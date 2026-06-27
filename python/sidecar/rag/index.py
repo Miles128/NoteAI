@@ -155,7 +155,10 @@ def _get_collection(workspace: str) -> zvec.Collection:
                 shutil.rmtree(_bm25s, ignore_errors=True)
         collection = zvec.open(path)
     except Exception as e:
-        log_exception("[rag/index] failed to open existing collection, creating new", e, level="info", logger=logger)
+        err = str(e)
+        if "lock" in err.lower() and Path(path).exists():
+            raise RuntimeError("RAG 索引文件被占用，请关闭其他 NoteAI 实例后重试") from e
+        log_exception("[rag/index] failed to open existing collection, creating new", e, level="warning", logger=logger)
         collection = zvec.create_and_open(path, _build_schema())
 
     with _COLLECTION_CACHE_LOCK:

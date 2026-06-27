@@ -1,8 +1,25 @@
 """Tests for the unified error handling utilities."""
 
+import logging
+
 import pytest
 
-from utils.error_handler import format_exc_compact, swallow
+from utils.error_handler import format_exc_compact, log_exception, swallow
+
+
+class TestLogException:
+    def test_info_level_does_not_raise(self):
+        logger = logging.getLogger("test.error_handler.info")
+        try:
+            raise ValueError("boom")
+        except ValueError as e:
+            log_exception("test context", e, level="info", logger=logger)
+
+    def test_unknown_level_falls_back_to_warning(self, caplog):
+        logger = logging.getLogger("test.error_handler.unknown")
+        with caplog.at_level(logging.WARNING, logger="test.error_handler.unknown"):
+            log_exception("fallback", level="not-a-level", logger=logger)
+        assert any("fallback" in r.message for r in caplog.records)
 
 
 class TestFormatExcCompact:

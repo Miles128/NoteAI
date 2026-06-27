@@ -23,7 +23,7 @@ def log_exception(
     Args:
         context: Description of the operation that failed.
         exc: The caught exception (for logging the original message).
-        level: Log level: 'debug', 'warning', or 'error'.
+        level: Log level: 'debug', 'info', 'warning', or 'error'.
         logger: Custom logger instance (uses module default if None).
     """
     use_logger = logger or _log
@@ -31,7 +31,12 @@ def log_exception(
     if exc:
         msg += f": {exc}"
 
-    log_fn = {"debug": use_logger.debug, "warning": use_logger.warning, "error": use_logger.error}[level]
+    log_fn = {
+        "debug": use_logger.debug,
+        "info": use_logger.info,
+        "warning": use_logger.warning,
+        "error": use_logger.error,
+    }.get(level, use_logger.warning)
     log_fn(msg)
 
 

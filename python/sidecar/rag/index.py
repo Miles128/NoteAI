@@ -8,6 +8,7 @@ Schema:
 
 from __future__ import annotations
 
+import gc
 import json
 import shutil
 import threading
@@ -137,33 +138,50 @@ def _build_schema() -> zvec.CollectionSchema:
     )
 
 
+def _is_zvec_lock_error(exc: Exception) -> bool:
+    return "lock" in str(exc).lower()
+
+
+def _open_or_create_collection(path: str) -> zvec.Collection:
+    """Open an existing collection, retrying once after GC on in-process lock conflicts."""
+    try:
+        return zvec.open(path)
+    except Exception as e:
+        if _is_zvec_lock_error(e) and Path(path).exists():
+            gc.collect()
+            try:
+                return zvec.open(path)
+            except Exception as retry_e:
+                if _is_zvec_lock_error(retry_e):
+                    raise RuntimeError("RAG 索引文件被占用，请关闭其他 NoteAI 实例后重试") from retry_e
+                raise
+        log_exception("[rag/index] failed to open existing collection, creating new", e, level="warning", logger=logger)
+        return zvec.create_and_open(path, _build_schema())
+
+
 def _get_collection(workspace: str) -> zvec.Collection:
     with _COLLECTION_CACHE_LOCK:
         cached = _COLLECTION_CACHE.get(workspace)
         if cached is not None and _manifest_version_ok(workspace):
             return cached
+
         # Version mismatch or no cache — drop stale entry before reopening.
         _COLLECTION_CACHE.pop(workspace, None)
 
-    path = str(_collection_path(workspace))
-    try:
+        path = str(_collection_path(workspace))
         if not _manifest_version_ok(workspace) and Path(path).exists():
             logger.info("[RAG] index version mismatch, rebuilding collection")
             shutil.rmtree(path, ignore_errors=True)
             _bm25s = _bm25s_dir(workspace)
             if _bm25s.exists():
                 shutil.rmtree(_bm25s, ignore_errors=True)
-        collection = zvec.open(path)
-    except Exception as e:
-        err = str(e)
-        if "lock" in err.lower() and Path(path).exists():
-            raise RuntimeError("RAG 索引文件被占用，请关闭其他 NoteAI 实例后重试") from e
-        log_exception("[rag/index] failed to open existing collection, creating new", e, level="warning", logger=logger)
-        collection = zvec.create_and_open(path, _build_schema())
 
-    with _COLLECTION_CACHE_LOCK:
+        # zvec holds an OS lock until the previous Collection object is GC'd.
+        gc.collect()
+
+        collection = _open_or_create_collection(path)
         _COLLECTION_CACHE[workspace] = collection
-    return collection
+        return collection
 
 
 def clear_bm25_cache(workspace: str | None = None) -> None:
@@ -182,6 +200,7 @@ def clear_collection_cache(workspace: str | None = None) -> None:
             _COLLECTION_CACHE.clear()
         else:
             _COLLECTION_CACHE.pop(workspace, None)
+    gc.collect()
     clear_bm25_cache(workspace)
 
 
@@ -238,10 +257,7 @@ def count_indexed_chunks(workspace: str) -> int:
 def _collection_count(workspace: str) -> int:
     """Query the zvec collection for total entity count, or -1 if unavailable."""
     try:
-        import zvec
-
-        collection = zvec.Collection(str(_collection_path(workspace)))
-        return int(collection.num_entities)
+        return int(_get_collection(workspace).stats.doc_count)
     except Exception as e:
         log_exception("[rag/index] failed to query collection count", e, level="debug", logger=logger)
         return -1
@@ -377,15 +393,15 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     index_dir.mkdir(parents=True, exist_ok=True)
 
     collection_path = _collection_path(workspace)
-    # Drop any cached collection before wiping the directory, then cache the new one.
-    clear_collection_cache(workspace)
-    if collection_path.exists():
-        shutil.rmtree(collection_path, ignore_errors=True)
-    for old in index_dir.glob("*.tmp"):
-        old.unlink()
-
-    collection = zvec.create_and_open(str(collection_path), _build_schema())
+    # Drop cached handle and release zvec lock before wiping the directory.
     with _COLLECTION_CACHE_LOCK:
+        _COLLECTION_CACHE.pop(workspace, None)
+        if collection_path.exists():
+            shutil.rmtree(collection_path, ignore_errors=True)
+        for old in index_dir.glob("*.tmp"):
+            old.unlink()
+        gc.collect()
+        collection = zvec.create_and_open(str(collection_path), _build_schema())
         _COLLECTION_CACHE[workspace] = collection
 
     batch_size = _INDEX_BATCH_SIZE
@@ -561,7 +577,7 @@ def ensure_bm25_index(workspace: str) -> bool:
             chunk_ids = _chunk_ids_from_metadata(workspace)
             if not chunk_ids:
                 try:
-                    if int(_get_collection(workspace).num_entities) == 0:
+                    if int(_get_collection(workspace).stats.doc_count) == 0:
                         return False
                 except Exception:
                     return False
@@ -821,12 +837,18 @@ def save_manifest(workspace: str, manifest: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_callback=None) -> int:
+def rebuild_search_indices(
+    workspace: str,
+    all_chunk_ids: list[str],
+    progress_callback=None,
+    collection: zvec.Collection | None = None,
+) -> int:
     """Rebuild BM25s and metadata from all chunks currently in the zvec collection.
 
     Returns the number of chunks in the rebuilt indices.
     """
-    collection = _get_collection(workspace)
+    if collection is None:
+        collection = _get_collection(workspace)
     corpus: list[dict] = []
 
     batch_size = _FETCH_BATCH_SIZE

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import zvec
 from sidecar.rag.index import (
     _empty_metadata,
     _filter_candidates,
@@ -256,3 +257,84 @@ class TestBuildAndSearch:
         assert hits
         assert hits[0].get("bm25_used") is True
         assert hits[0].get("sparse_score", 0) > 0
+
+
+class TestCollectionCache:
+    @pytest.fixture
+    def workspace(self, tmp_path: Path) -> Path:
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        return ws
+
+    def test_get_collection_reuses_cached_handle(self, workspace: Path, monkeypatch: pytest.MonkeyPatch):
+        from sidecar.rag.index import _get_collection, build_index, clear_collection_cache
+
+        chunks = [
+            {
+                "id": "c1",
+                "content": "缓存复用测试",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
+        build_index(str(workspace), chunks, embeddings)
+
+        real_open = zvec.open
+        open_calls: list[str] = []
+
+        def tracking_open(path: str):
+            open_calls.append(path)
+            return real_open(path)
+
+        monkeypatch.setattr("sidecar.rag.index.zvec.open", tracking_open)
+        clear_collection_cache(str(workspace))
+        # Re-prime cache without counting the priming open.
+        _get_collection(str(workspace))
+        open_calls.clear()
+
+        first = _get_collection(str(workspace))
+        second = _get_collection(str(workspace))
+
+        assert first is second
+        assert open_calls == []
+
+    def test_open_or_create_retries_after_in_process_lock(self, workspace: Path, monkeypatch: pytest.MonkeyPatch):
+        from sidecar.rag.index import _open_or_create_collection, build_index
+
+        chunks = [
+            {
+                "id": "c1",
+                "content": "锁重试测试",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
+        build_index(str(workspace), chunks, embeddings)
+
+        from sidecar.rag.index import clear_collection_cache
+
+        clear_collection_cache(str(workspace))
+
+        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+
+        path = str(workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "zvec_collection")
+        real_open = zvec.open
+        attempts = {"count": 0}
+
+        def flaky_open(p: str):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise RuntimeError(f"Can't lock read-write collection: {p}/LOCK")
+            return real_open(p)
+
+        monkeypatch.setattr("sidecar.rag.index.zvec.open", flaky_open)
+
+        collection = _open_or_create_collection(path)
+        assert collection is not None
+        assert attempts["count"] == 2

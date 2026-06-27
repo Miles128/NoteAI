@@ -552,17 +552,11 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         )
         entry["chunks"].append(c["id"])
 
-    chunk_count = rebuild_search_indices(workspace, all_chunk_ids, progress_callback=progress_callback)
+    chunk_count = rebuild_search_indices(
+        workspace, all_chunk_ids, progress_callback=progress_callback, collection=collection
+    )
 
     # Build global IDF from full corpus
-    collection = None
-    try:
-        from sidecar.rag.index import _get_collection
-
-        collection = _get_collection(workspace)
-    except Exception as e:
-        log_exception("[rag/retriever] failed to get collection for global IDF rebuild", e, level="warning", logger=logger)
-
     full_corpus: list[dict] = []
     if collection is not None:
         from sidecar.rag.index import _tags_from_fields

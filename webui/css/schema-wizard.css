@@ -21,7 +21,33 @@
     backdrop-filter: none;
 }
 
-.schema-wizard-progress {
+.schema-l1-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.schema-l1-tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: var(--bg-muted, rgba(255, 255, 255, 0.06));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+}
+
+.schema-option-list-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.schema-option-list-inline .schema-option-card {
+    flex: 1 1 auto;
+    min-width: 120px;
+}
+
     display: flex;
     gap: 6px;
     margin-bottom: 16px;

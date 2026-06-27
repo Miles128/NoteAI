@@ -48,8 +48,10 @@ async function openWorkspace() {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             await window.TreeModule.loadFileTree(true);
         }
-        if (window.SchemaWizard && window.SchemaWizard.maybePromptSchemaSetup) {
-            var prompted = await window.SchemaWizard.maybePromptSchemaSetup(result.needs_schema_setup);
+        if (window.OrganizeRulesModule && window.OrganizeRulesModule.maybePromptSetup) {
+            var prompted = await window.OrganizeRulesModule.maybePromptSetup(
+                result.needs_workspace_rules_setup || result.needs_schema_setup
+            );
             if (!prompted && typeof window.runPostWorkspaceSetup === 'function') {
                 window.runPostWorkspaceSetup();
             }
@@ -122,8 +124,10 @@ async function checkWorkspaceStatus() {
             const status = await window.api.getWorkspaceStatus();
             updateWorkspaceDisplay(status.is_set ? status.workspace_path : null);
             if (status.is_set) {
-                if (window.SchemaWizard && window.SchemaWizard.maybePromptSchemaSetup) {
-                    var prompted = await window.SchemaWizard.maybePromptSchemaSetup(status.needs_schema_setup);
+                if (window.OrganizeRulesModule && window.OrganizeRulesModule.maybePromptSetup) {
+                    var prompted = await window.OrganizeRulesModule.maybePromptSetup(
+                        status.needs_workspace_rules_setup || status.needs_schema_setup
+                    );
                     if (!prompted && typeof window.runPostWorkspaceSetup === 'function') {
                         window.runPostWorkspaceSetup();
                     }

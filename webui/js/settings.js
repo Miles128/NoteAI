@@ -112,8 +112,17 @@ function switchSettingsTab(tabName) {
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.toggle('active', tab.id === 'tab-' + tabName);
     });
-    if (tabName === 'profile') {
+    if (tabName === 'rag') {
         loadUserProfile();
+    }
+    if (tabName === 'cli') {
+        refreshCliAgentsSettings();
+    }
+    if (tabName === 'cloud-sync' && window.CloudSyncModule && window.CloudSyncModule.refresh) {
+        window.CloudSyncModule.refresh();
+    }
+    if (tabName === 'organize-rules' && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
+        window.OrganizeRulesModule.load();
     }
 }
 
@@ -135,7 +144,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    initAssistantSettings();
+    initRagSettings();
+    initCliSettings();
 });
 
 async function autoSaveConfig() {
@@ -240,27 +250,103 @@ async function loadUiConfigToForm() {
             document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
                 radio.checked = radio.value === loc;
             });
-            applyAssistantSettingsToForm(uiConfig);
+            applyRagSettingsToForm(uiConfig);
+            applyCliSettingsToForm(uiConfig);
         }
     } catch (e) {
         console.error('[Settings] Load UI config error:', e);
     }
 }
 
-function applyAssistantSettingsToForm(uiConfig) {
+function applyRagSettingsToForm(uiConfig) {
     var ragEl = document.getElementById('settings-assistant-rag-enabled');
     if (ragEl) {
         ragEl.checked = uiConfig.rag_enabled === true;
     }
-    var agentEl = document.getElementById('settings-assistant-agent-mode');
-    if (agentEl) {
-        agentEl.checked = uiConfig.assistant_agent_mode === true;
-    }
     updateRagIndexCardVisibility(uiConfig.rag_enabled === true);
+
+    var hydeEl = document.getElementById('settings-rag-hyde-enabled');
+    if (hydeEl) {
+        hydeEl.checked = uiConfig.rag_hyde_enabled !== false;
+    }
+    var hydeThresholdEl = document.getElementById('settings-rag-hyde-threshold');
+    if (hydeThresholdEl) {
+        hydeThresholdEl.value = uiConfig.rag_hyde_threshold != null ? uiConfig.rag_hyde_threshold : 0.33;
+    }
+    var rerankEl = document.getElementById('settings-rag-rerank-enabled');
+    if (rerankEl) {
+        rerankEl.checked = uiConfig.rag_rerank_enabled !== false;
+    }
+    var rerankSkipEl = document.getElementById('settings-rag-rerank-skip-score');
+    if (rerankSkipEl) {
+        rerankSkipEl.value = uiConfig.rag_rerank_skip_score != null ? uiConfig.rag_rerank_skip_score : 0.75;
+    }
+    var denseEl = document.getElementById('settings-rag-dense-weight');
+    if (denseEl) {
+        var denseWeight = uiConfig.rag_dense_weight != null ? uiConfig.rag_dense_weight : 0.7;
+        denseEl.value = Math.round(denseWeight * 100);
+    }
+    var topKEl = document.getElementById('settings-rag-top-k');
+    if (topKEl) {
+        topKEl.value = uiConfig.rag_top_k != null ? uiConfig.rag_top_k : 5;
+    }
+    var topKTagsEl = document.getElementById('settings-rag-top-k-tags');
+    if (topKTagsEl) {
+        topKTagsEl.value = uiConfig.rag_top_k_tags != null ? uiConfig.rag_top_k_tags : 7;
+    }
+    var rerankModelEl = document.getElementById('settings-rag-rerank-model');
+    if (rerankModelEl && uiConfig.rag_rerank_model) {
+        rerankModelEl.textContent = uiConfig.rag_rerank_model;
+    }
+    _updateDenseWeightHint();
+
     if (uiConfig.rag_enabled === true) {
         refreshRagIndexStatus();
     }
     refreshComponentsStatus();
+}
+
+function _updateDenseWeightHint() {
+    var denseEl = document.getElementById('settings-rag-dense-weight');
+    var hintEl = document.getElementById('settings-rag-dense-weight-hint');
+    if (!denseEl || !hintEl) return;
+    var densePct = parseInt(denseEl.value, 10);
+    if (isNaN(densePct)) densePct = 70;
+    densePct = Math.max(0, Math.min(100, densePct));
+    var sparsePct = 100 - densePct;
+    hintEl.textContent = window.t('settings.ragDenseWeightHint', {
+        dense: densePct,
+        sparse: sparsePct
+    });
+}
+
+function _readRagAdvancedConfig() {
+    var denseEl = document.getElementById('settings-rag-dense-weight');
+    var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
+    if (isNaN(densePct)) densePct = 70;
+    densePct = Math.max(0, Math.min(100, densePct));
+
+    return {
+        rag_hyde_enabled: document.getElementById('settings-rag-hyde-enabled')?.checked !== false,
+        rag_hyde_threshold: parseFloat(document.getElementById('settings-rag-hyde-threshold')?.value) || 0.33,
+        rag_rerank_enabled: document.getElementById('settings-rag-rerank-enabled')?.checked !== false,
+        rag_rerank_skip_score: parseFloat(document.getElementById('settings-rag-rerank-skip-score')?.value) || 0.75,
+        rag_dense_weight: densePct / 100,
+        rag_top_k: parseInt(document.getElementById('settings-rag-top-k')?.value, 10) || 5,
+        rag_top_k_tags: parseInt(document.getElementById('settings-rag-top-k-tags')?.value, 10) || 7,
+    };
+}
+
+function saveRagAdvancedConfig() {
+    _updateDenseWeightHint();
+    return saveAssistantUiConfig(_readRagAdvancedConfig());
+}
+
+function applyCliSettingsToForm(uiConfig) {
+    var selectEl = document.getElementById('settings-cli-agent-select');
+    if (selectEl && uiConfig.cli_agent_id) {
+        selectEl.value = uiConfig.cli_agent_id;
+    }
 }
 
 async function refreshComponentsStatus() {
@@ -377,6 +463,10 @@ function updateRagIndexCardVisibility(ragEnabled) {
     if (card) {
         card.style.display = ragEnabled ? '' : 'none';
     }
+    var advancedCard = document.getElementById('settings-rag-advanced-card');
+    if (advancedCard) {
+        advancedCard.style.display = ragEnabled ? '' : 'none';
+    }
 }
 
 async function saveAssistantUiConfig(partial) {
@@ -396,7 +486,138 @@ async function saveAssistantUiConfig(partial) {
     }
 }
 
-function initAssistantSettings() {
+async function refreshCliAgentsSettings() {
+    var listEl = document.getElementById('settings-cli-agents-list');
+    var selectEl = document.getElementById('settings-cli-agent-select');
+    if (!listEl || !window.api || !window.api.listCliAgents) return;
+
+    listEl.innerHTML = '<p class="settings-hint">' + window.escapeHtml(window.t('settings.cliAgentsLoading')) + '</p>';
+
+    try {
+        var result = await window.api.listCliAgents();
+        var agents = (result && result.success && Array.isArray(result.agents)) ? result.agents : [];
+        var uiConfig = window.api.getUiConfig ? await window.api.getUiConfig() : {};
+        var savedId = (uiConfig && uiConfig.cli_agent_id) ? String(uiConfig.cli_agent_id) : '';
+
+        if (selectEl) {
+            selectEl.innerHTML = '';
+            var placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = window.t('settings.cliDefaultPlaceholder');
+            selectEl.appendChild(placeholder);
+            agents.forEach(function(agent) {
+                var opt = document.createElement('option');
+                opt.value = agent.id;
+                opt.textContent = agent.name + (agent.installed ? '' : ' (' + window.t('settings.cliAgentNotInstalled') + ')');
+                opt.disabled = !agent.installed;
+                if (agent.resolved_path) {
+                    opt.title = agent.resolved_path;
+                }
+                selectEl.appendChild(opt);
+            });
+            if (savedId && agents.some(function(a) { return a.id === savedId && a.installed; })) {
+                selectEl.value = savedId;
+            }
+        }
+
+        if (!agents.length) {
+            listEl.innerHTML = '<p class="settings-hint">' + window.escapeHtml(window.t('settings.cliAgentsEmpty')) + '</p>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        agents.forEach(function(agent) {
+            var row = document.createElement('div');
+            row.className = 'settings-component-row settings-cli-agent-row';
+
+            var info = document.createElement('div');
+            info.className = 'settings-component-info';
+
+            var name = document.createElement('div');
+            name.className = 'settings-component-name';
+            name.textContent = agent.name;
+
+            var desc = document.createElement('p');
+            desc.className = 'settings-hint';
+            desc.textContent = agent.description || agent.command || '';
+
+            var badge = document.createElement('span');
+            badge.className = 'settings-component-badge' + (agent.installed ? ' is-ok' : '');
+            badge.textContent = agent.installed
+                ? window.t('settings.cliAgentInstalled')
+                : window.t('settings.cliAgentNotInstalled');
+
+            info.appendChild(name);
+            info.appendChild(desc);
+            info.appendChild(badge);
+            if (agent.resolved_path) {
+                var pathHint = document.createElement('p');
+                pathHint.className = 'settings-hint';
+                pathHint.style.fontSize = '11px';
+                pathHint.textContent = agent.resolved_path;
+                info.appendChild(pathHint);
+            }
+            row.appendChild(info);
+            listEl.appendChild(row);
+        });
+    } catch (e) {
+        listEl.innerHTML = '<p class="settings-hint" style="color:var(--danger,#c0392b)">' +
+            window.escapeHtml(window.t('settings.cliAgentsLoadFailed', { message: e.message || String(e) })) + '</p>';
+    }
+}
+
+function initCliSettings() {
+    var selectEl = document.getElementById('settings-cli-agent-select');
+    if (selectEl && !selectEl.dataset.bound) {
+        selectEl.dataset.bound = '1';
+        selectEl.addEventListener('change', function() {
+            var nextId = selectEl.value || '';
+            saveAssistantUiConfig({ cli_agent_id: nextId });
+            var tabSelector = document.getElementById('cli-agent-selector');
+            if (tabSelector && nextId) {
+                tabSelector.value = nextId;
+            }
+        });
+    }
+
+    var refreshBtn = document.getElementById('settings-cli-refresh-btn');
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+        refreshBtn.dataset.bound = '1';
+        refreshBtn.addEventListener('click', refreshCliAgentsSettings);
+    }
+
+    var mdBtn = document.getElementById('settings-cli-generate-md-btn');
+    if (mdBtn && !mdBtn.dataset.bound) {
+        mdBtn.dataset.bound = '1';
+        mdBtn.addEventListener('click', async function() {
+            var statusEl = document.getElementById('settings-cli-md-status');
+            if (!window.api || !window.api.generateVaultAgentsMd) return;
+            mdBtn.disabled = true;
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.textContent = window.t('settings.cliGenerateMdRunning');
+            }
+            try {
+                var result = await window.api.generateVaultAgentsMd();
+                if (statusEl) {
+                    statusEl.textContent = (result && result.success)
+                        ? window.t('settings.cliGenerateMdDone', { path: result.path || 'AGENTS.md' })
+                        : window.t('settings.cliGenerateMdFailed', {
+                            message: (result && result.message) || window.t('common.unknownError')
+                        });
+                }
+            } catch (e) {
+                if (statusEl) {
+                    statusEl.textContent = window.t('settings.cliGenerateMdFailed', { message: e.message || String(e) });
+                }
+            } finally {
+                mdBtn.disabled = false;
+            }
+        });
+    }
+}
+
+function initRagSettings() {
     var ragEl = document.getElementById('settings-assistant-rag-enabled');
     if (ragEl && !ragEl.dataset.bound) {
         ragEl.dataset.bound = '1';
@@ -410,14 +631,6 @@ function initAssistantSettings() {
                 var statusEl = document.getElementById('settings-assistant-index-status');
                 if (statusEl) statusEl.textContent = window.t('assistant.indexStatusDisabled');
             }
-        });
-    }
-
-    var agentEl = document.getElementById('settings-assistant-agent-mode');
-    if (agentEl && !agentEl.dataset.bound) {
-        agentEl.dataset.bound = '1';
-        agentEl.addEventListener('change', function() {
-            saveAssistantUiConfig({ assistant_agent_mode: agentEl.checked });
         });
     }
 
@@ -447,6 +660,8 @@ function initAssistantSettings() {
         ragRemoveBtn.dataset.bound = '1';
         ragRemoveBtn.addEventListener('click', removeRagComponent);
     }
+
+    _bindRagAdvancedControls();
 
     var rebuildBtn = document.getElementById('settings-assistant-rebuild-index-btn');
     if (rebuildBtn && !rebuildBtn.dataset.bound) {
@@ -503,6 +718,31 @@ function initAssistantSettings() {
     }
 }
 
+function _bindRagAdvancedControls() {
+    var denseEl = document.getElementById('settings-rag-dense-weight');
+    if (denseEl && !denseEl.dataset.bound) {
+        denseEl.dataset.bound = '1';
+        denseEl.addEventListener('input', function() {
+            _updateDenseWeightHint();
+        });
+        denseEl.addEventListener('change', saveRagAdvancedConfig);
+    }
+
+    [
+        'settings-rag-hyde-enabled',
+        'settings-rag-hyde-threshold',
+        'settings-rag-rerank-enabled',
+        'settings-rag-rerank-skip-score',
+        'settings-rag-top-k',
+        'settings-rag-top-k-tags',
+    ].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el || el.dataset.bound) return;
+        el.dataset.bound = '1';
+        el.addEventListener('change', saveRagAdvancedConfig);
+    });
+}
+
 function _estimateIndexTime() {
     var files = (window.AppState && window.AppState.files) ? window.AppState.files.length : 0;
     var seconds = files > 0 ? Math.max(10, files * 0.5) : 60;
@@ -525,8 +765,14 @@ window.SettingsModule = {
     saveFontFamily,
     loadUiConfigToForm,
     setLocale,
-    initAssistantSettings,
-    applyAssistantSettingsToForm,
+    initRagSettings,
+    initCliSettings,
+    applyRagSettingsToForm,
+    applyCliSettingsToForm,
+    refreshCliAgentsSettings,
+    // backward-compatible aliases
+    initAssistantSettings: initRagSettings,
+    applyAssistantSettingsToForm: applyRagSettingsToForm,
 };
 
 window.setLocale = setLocale;
@@ -543,17 +789,17 @@ async function saveUserProfile() {
         var result = await window.api.saveUserProfile(data);
         if (result && result.success) {
             if (statusEl) {
-                statusEl.innerHTML = '<span style="color: #38a169;">' + escapeHtml(window.t('settings.profileSaved')) + '</span>';
+                statusEl.innerHTML = '<span style="color: #38a169;">' + window.escapeHtml(window.t('settings.profileSaved')) + '</span>';
                 statusEl.style.display = 'block';
             }
         } else {
             if (statusEl) {
-                statusEl.innerHTML = '<span style="color: #e53e3e;">' + escapeHtml(window.t('settings.saveFailed')) + '</span>';
+                statusEl.innerHTML = '<span style="color: #e53e3e;">' + window.escapeHtml(window.t('settings.saveFailed')) + '</span>';
                 statusEl.style.display = 'block';
             }
         }
     } catch (e) {
-        if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">' + escapeHtml(e.message) + '</span>'; statusEl.style.display = 'block'; }
+        if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">' + window.escapeHtml(e.message) + '</span>'; statusEl.style.display = 'block'; }
     }
     setTimeout(function() { if (statusEl) statusEl.style.display = 'none'; }, 3000);
 }

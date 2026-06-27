@@ -121,6 +121,8 @@ def collect_topic_notes(topic: str) -> list[dict]:
         return []
 
     workspace_path = Path(workspace)
+    notes_dir = workspace_path / config.NOTES_FOLDER
+    topic_parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     notes = []
 
     for md_file in sorted(workspace_path.rglob("*.md")):
@@ -137,11 +139,34 @@ def collect_topic_notes(topic: str) -> list[dict]:
             topic_match = False
             if fm:
                 file_topic = fm.get("topic", "")
-                if isinstance(file_topic, str) and file_topic == topic:
-                    topic_match = True
+                if isinstance(file_topic, str):
+                    if file_topic == topic:
+                        topic_match = True
+                    elif topic_parts and file_topic.startswith(topic + TOPIC_SEP):
+                        topic_match = True
+                    elif len(topic_parts) == 1 and (
+                        file_topic == topic_parts[0]
+                        or file_topic.startswith(topic_parts[0] + TOPIC_SEP)
+                    ):
+                        topic_match = True
                 file_topics = fm.get("topics", [])
                 if isinstance(file_topics, list) and topic in file_topics:
                     topic_match = True
+
+            if not topic_match and topic_parts and notes_dir.exists():
+                try:
+                    rel = md_file.relative_to(notes_dir)
+                except ValueError:
+                    rel = None
+                if rel and rel.parts:
+                    if rel.parts[0] == topic_parts[0]:
+                        if len(topic_parts) == 1:
+                            topic_match = True
+                        elif len(rel.parts) >= 2 and rel.parts[1] == topic_parts[1]:
+                            if len(topic_parts) == 2:
+                                topic_match = True
+                            elif len(rel.parts) >= 3 and rel.parts[2] == topic_parts[2]:
+                                topic_match = True
 
             if topic_match:
                 content = body.strip()

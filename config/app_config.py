@@ -80,6 +80,13 @@ class AppConfig:
     assistant_agent_mode: bool = False
     cli_agent_id: str = ""
     rag_enabled: bool = True
+    rag_hyde_enabled: bool = True
+    rag_hyde_threshold: float = 0.33
+    rag_rerank_enabled: bool = True
+    rag_rerank_skip_score: float = 0.75
+    rag_dense_weight: float = 0.7
+    rag_top_k: int = 5
+    rag_top_k_tags: int = 7
     rag_error_cooldown_seconds: int = 180
     locale: str = "zh-CN"
 

@@ -66,21 +66,20 @@ class TestIngestState:
         assert is_cancelled() is False
 
 
-class TestSchemaSetup:
-    """Test schema management in ingest pipeline."""
+class TestWorkspaceRulesSetup:
+    """Test workspace rules in ingest pipeline."""
 
-    def test_needs_schema_when_missing(self, workspace: Path) -> None:
-        from sidecar.schema_manager import needs_schema_setup
+    def test_needs_rules_when_missing(self, workspace: Path) -> None:
+        from sidecar.workspace_rules import needs_workspace_rules_setup
 
-        assert needs_schema_setup(str(workspace)) is True
+        assert needs_workspace_rules_setup(str(workspace)) is True
 
-    def test_no_needs_schema_when_configured(self, workspace: Path) -> None:
-        from sidecar.schema_manager import needs_schema_setup
+    def test_no_needs_rules_when_configured(self, workspace: Path) -> None:
+        from sidecar.workspace_rules import needs_workspace_rules_setup
+        from tests.workspace_rules_helpers import write_workspace_rules
 
-        schema_content = "# Schema\n\nai_may_edit_wiki: true\n\n<!-- noteai-schema-configured -->\n"
-        (workspace / "schema.md").write_text(schema_content, encoding="utf-8")
-        result = needs_schema_setup(str(workspace))
-        assert result is False
+        write_workspace_rules(workspace)
+        assert needs_workspace_rules_setup(str(workspace)) is False
 
     def test_ensure_schema_renames_legacy(self, workspace: Path) -> None:
         from sidecar.schema_manager import ensure_schema
@@ -102,17 +101,17 @@ class TestPrepareAutoIngest:
         assert result["action"] == "none"
         config.workspace_path = str(workspace)
 
-    def test_needs_schema_returns_none(self, workspace: Path) -> None:
+    def test_needs_rules_returns_none(self, workspace: Path) -> None:
         from sidecar.ingest_pipeline import prepare_auto_ingest
 
         result = prepare_auto_ingest(workspace=str(workspace))
-        assert result.get("needs_schema") is True
+        assert result.get("needs_workspace_rules") is True
 
-    def test_with_file_paths_and_schema_returns_start(self, workspace: Path) -> None:
+    def test_with_file_paths_and_rules_returns_start(self, workspace: Path) -> None:
         from sidecar.ingest_pipeline import prepare_auto_ingest
+        from tests.workspace_rules_helpers import write_workspace_rules
 
-        schema_content = "# Schema\n\nai_may_edit_wiki: true\n\n<!-- noteai-schema-configured -->\n"
-        (workspace / "schema.md").write_text(schema_content, encoding="utf-8")
+        write_workspace_rules(workspace)
         (workspace / "Notes" / "test.md").write_text("# Test\n", encoding="utf-8")
         result = prepare_auto_ingest(
             workspace=str(workspace),

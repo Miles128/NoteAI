@@ -1,7 +1,8 @@
 (function() { 'use strict';
 
 var STAGE_LABELS = {
-    schema: window.t('ingest.stage.schema'),
+    rules: window.t('ingest.stage.rules'),
+    schema: window.t('ingest.stage.rules'),
     convert: window.t('ingest.stage.convert'),
     classify: window.t('ingest.stage.classify'),
     index: window.t('ingest.stage.index'),

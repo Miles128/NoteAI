@@ -88,9 +88,9 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
     prompt += f"\n\n文章内容预览：\n{content_preview}"
 
     try:
-        from sidecar.schema_manager import schema_prompt_snippet
+        from sidecar.workspace_rules import format_wiki_topic_structure_for_llm
 
-        prompt += "\n\n" + schema_prompt_snippet(800)
+        prompt += "\n\n" + format_wiki_topic_structure_for_llm(800)
     except Exception:
         pass
 

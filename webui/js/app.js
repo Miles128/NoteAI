@@ -264,12 +264,12 @@ async function importFiles() {
 }
 
 async function runPostWorkspaceSetup() {
-    if (window.api && window.api.needsSchemaSetup) {
+    if (window.api && window.api.needsWorkspaceRulesSetup) {
         try {
-            var st = await window.api.needsSchemaSetup();
+            var st = await window.api.needsWorkspaceRulesSetup();
             if (st && st.needs_setup) return;
         } catch (e) {
-            console.warn('[App] needs_schema_setup check:', e);
+            console.warn('[App] needs_workspace_rules_setup check:', e);
         }
     }
     // Use ensure_ingest on startup: it skips the whole pipeline if the workspace

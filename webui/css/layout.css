@@ -2320,6 +2320,33 @@ body {
     margin-bottom: 0;
 }
 
+#tab-ui .form-group {
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+
+.settings-rag-topk-grid,
+.settings-rag-rerank-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.settings-rag-topk-grid .form-label,
+.settings-rag-rerank-grid .form-label {
+    line-height: 1.4;
+    white-space: normal;
+    word-break: break-word;
+}
+
+@media (max-width: 520px) {
+    .settings-rag-topk-grid,
+    .settings-rag-rerank-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 #tab-ui .theme-option,
 #tab-ui .font-size-option {
     min-height: 34px;
@@ -2328,6 +2355,8 @@ body {
 }
 
 #tab-ui .font-size-option {
+    flex: none;
+    width: 100%;
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);

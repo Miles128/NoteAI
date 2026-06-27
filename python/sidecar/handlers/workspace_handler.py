@@ -51,9 +51,8 @@ class WorkspaceHandler(BaseHandler):
             self._setup_workspace()
             self._setup_watcher(path)
         if path and Path(path).exists():
-            from sidecar.schema_manager import ensure_schema, needs_schema_setup
+            from sidecar.workspace_rules import needs_workspace_rules_setup
 
-            ensure_schema(path)
             self.file_previewer.workspace_path = path
             return {
                 "is_set": True,
@@ -61,7 +60,8 @@ class WorkspaceHandler(BaseHandler):
                 "notes_folder": str(Path(path) / NOTES_FOLDER),
                 "organized_folder": str(Path(path) / ABSTRACT_FOLDER),
                 "saved_workspace": True,
-                "needs_schema_setup": needs_schema_setup(path),
+                "needs_workspace_rules_setup": needs_workspace_rules_setup(path),
+                "needs_schema_setup": needs_workspace_rules_setup(path),
             }
         return {"is_set": False, "saved_workspace": False}
 
@@ -82,22 +82,21 @@ class WorkspaceHandler(BaseHandler):
         path = params.get("path", "")
         if path and Path(path).exists():
             self.config._set_attr("workspace_path", path)
-            from sidecar.schema_manager import ensure_schema
-
-            ensure_schema(path)
             self.file_previewer.workspace_path = path
             self._setup_watcher(path)
             self._invalidate_cache()
             save_ok, save_msg = workspace_manager.save_workspace(path)
             if not save_ok:
                 return {"success": False, "message": save_msg}
-            from sidecar.schema_manager import needs_schema_setup
+            from sidecar.workspace_rules import needs_workspace_rules_setup
 
+            flag = needs_workspace_rules_setup(path)
             return {
                 "success": True,
                 "message": "工作区已设置",
                 "workspace_path": path,
-                "needs_schema_setup": needs_schema_setup(path),
+                "needs_workspace_rules_setup": flag,
+                "needs_schema_setup": flag,
             }
         return {"success": False, "message": "路径无效"}
 

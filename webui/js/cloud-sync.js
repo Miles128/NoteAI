@@ -299,6 +299,6 @@ function showProviderProgress(providerName, message, type) {
     }
 }
 
-window.CloudSyncModule = { init: initCloudSync };
+window.CloudSyncModule = { init: initCloudSync, refresh: loadProviderStatus };
 
 })();

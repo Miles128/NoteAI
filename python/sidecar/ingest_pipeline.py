@@ -12,12 +12,12 @@ from config import config, is_ignored_dir
 from config.settings import NOTES_FOLDER, RAW_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_converter import FileConverterManager
 from sidecar.cascade_runner import retry_failed_cascades, run_cascade_for_topics
-from sidecar.schema_manager import ensure_schema, needs_schema_setup
+from sidecar.workspace_rules import needs_workspace_rules_setup
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
 from utils.topic_file_ops import _check_topic_needs_processing
 from utils.wiki_manager import topic_from_notes_path
 
-STAGES = ("schema", "convert", "compile", "classify", "index", "crossref", "cascade", "lint", "sync")
+STAGES = ("rules", "convert", "compile", "classify", "index", "crossref", "cascade", "lint", "sync")
 
 _cancel_event = threading.Event()
 _state_lock = threading.Lock()
@@ -178,8 +178,8 @@ def prepare_auto_ingest(
     state = normalize_ingest_state()
     status = state.get("status", "idle")
 
-    if needs_schema_setup(ws):
-        return {"action": "none", "needs_schema": True}
+    if needs_workspace_rules_setup(ws):
+        return {"action": "none", "needs_workspace_rules": True}
 
     if file_paths:
         return {
@@ -413,7 +413,7 @@ def run_ingest(
     state = {
         "status": "running",
         "mode": mode,
-        "stage": "schema",
+        "stage": "rules",
         "started_at": time.time(),
         "stats": stats,
         "file_paths": list(file_paths or []),
@@ -446,9 +446,8 @@ def run_ingest(
     affected_topics: set[str] = set()
 
     try:
-        ensure_schema(workspace)
-        if needs_schema_setup(workspace):
-            state["status"] = "needs_schema"
+        if needs_workspace_rules_setup(workspace):
+            state["status"] = "needs_workspace_rules"
             save_ingest_state(state)
             if send_event:
                 send_event(
@@ -457,15 +456,19 @@ def run_ingest(
                         "result": {
                             "type": "ingest_complete",
                             "success": False,
-                            "needs_schema": True,
-                            "message": "请先完成工作区 Schema 配置",
+                            "needs_workspace_rules": True,
+                            "message": "请先在设置 → 整理规则中完成工作区配置",
                         },
                     }
                 )
-            return {"success": False, "needs_schema": True, "message": "请先完成工作区 Schema 配置"}
+            return {
+                "success": False,
+                "needs_workspace_rules": True,
+                "message": "请先在设置 → 整理规则中完成工作区配置",
+            }
 
-        prog("schema", 0.02, "schema.md 已就绪…")
-        mark_stage_done("schema")
+        prog("rules", 0.02, "整理规则已就绪…")
+        mark_stage_done("rules")
         if is_cancelled():
             raise _Cancelled()
 
@@ -642,7 +645,16 @@ def run_ingest(
         if stage_done("cascade"):
             prog("cascade", 0.85, "跳过综述（已完成）")
         else:
-            cascade_topics = sorted(affected_topics)
+            from sidecar.workspace_rules import load_workspace_rules, resolve_survey_topic
+
+            rules = load_workspace_rules()
+            if rules.get("auto_update_survey", True):
+                resolved = {
+                    resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
+                }
+                cascade_topics = sorted(resolved)
+            else:
+                cascade_topics = []
             if cascade_topics:
 
                 def cascade_prog(cur: int, tot: int, msg: str) -> None:

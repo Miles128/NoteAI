@@ -13,12 +13,17 @@ from utils.error_handler import log_exception
 from utils.logger import logger
 from utils.ttl_cache import TTLCache
 
-DEFAULT_TOP_K = 5
-SEARCH_TOP_K_TAGS = 7
-HYDE_TRIGGER_BELOW_SCORE = 0.33
+from sidecar.rag.rag_config import (
+    DEFAULT_TOP_K,
+    hyde_enabled,
+    hyde_threshold,
+    rerank_enabled,
+    rerank_skip_score,
+    top_k as rag_top_k,
+)
+
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 5
-_SKIP_RERANK_SCORE = 0.75
 _RERANK_MAX_CHARS = 512
 _FETCH_BATCH_SIZE = 256
 
@@ -34,10 +39,12 @@ _RETRIEVE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_r
 _query_cache = TTLCache(ttl=300, max_size=50)
 
 
+def clear_query_cache() -> None:
+    _query_cache.clear()
+
+
 def _reranker_enabled() -> bool:
-    if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
-        return False
-    return True
+    return rerank_enabled()
 
 
 def _get_reranker():
@@ -107,7 +114,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     if not query_emb.get("dense_vec"):
         return []
 
-    top_k = SEARCH_TOP_K_TAGS if (topics or tags) else DEFAULT_TOP_K
+    top_k = rag_top_k(has_filters=bool(topics or tags))
 
     # Profile rewrite runs in parallel (pure LLM call) but is only used as fallback.
     profile_future = _RETRIEVE_EXECUTOR.submit(_rewrite_profile, query)
@@ -122,8 +129,8 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
         tags=tags,
     )
 
-    # HyDE only if the original search is weak, avoiding a mandatory LLM call.
-    if not results or results[0].get("score", 0) < HYDE_TRIGGER_BELOW_SCORE:
+    # HyDE only if enabled and the original search is weak, avoiding a mandatory LLM call.
+    if hyde_enabled() and (not results or results[0].get("score", 0) < hyde_threshold()):
         try:
             hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
             if hyde_results:
@@ -158,7 +165,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     if len(results) >= 2:
         results = _mmr_dedup(results, top_k=DEFAULT_TOP_K)
 
-    if len(results) >= 2:
+    if len(results) >= 2 and rerank_enabled():
         results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=DEFAULT_TOP_K)
 
     results = filter_usable_chunks(results)[:DEFAULT_TOP_K]
@@ -204,7 +211,7 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
             query_dense=hyde_emb["dense_vec"],
             query_sparse=hyde_emb.get("lexical_weights", {}),
             query_text=hypo_answer,
-            top_k=DEFAULT_TOP_K,
+            top_k=rag_top_k(has_filters=bool(topics or tags)),
             topics=topics,
             tags=tags,
         )
@@ -283,7 +290,7 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
             return results[:top_k]
 
         # Skip reranking if the top result is already very strong
-        if results and results[0].get("score", 0) >= _SKIP_RERANK_SCORE:
+        if results and results[0].get("score", 0) >= rerank_skip_score():
             return results[:top_k]
 
         reranker = _get_reranker()

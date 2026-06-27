@@ -197,6 +197,11 @@ def auto_refresh_stale_surveys(
     if not ws:
         return {"success": False, "message": "未设置工作区", "topics": [], "updated": 0}
 
+    from sidecar.workspace_rules import load_workspace_rules
+
+    if not load_workspace_rules().get("auto_update_survey", True):
+        return {"success": True, "message": "已关闭自动更新综述", "topics": [], "updated": 0}
+
     root = Path(ws)
     topics = _find_stale_survey_topics(root)
     if not topics:

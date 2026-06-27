@@ -1,4 +1,4 @@
-"""RPC: schema.md and unified ingest pipeline."""
+"""RPC: ingest pipeline and legacy schema aliases."""
 
 from __future__ import annotations
 
@@ -16,9 +16,13 @@ from sidecar.schema_manager import (
     ensure_schema,
     finalize_schema_content,
     load_schema_text,
-    needs_schema_setup,
-    parse_schema_rules,
     save_schema_text,
+)
+from sidecar.workspace_rules import (
+    get_workspace_rules_options,
+    load_workspace_rules,
+    needs_workspace_rules_setup,
+    save_workspace_rules_options,
 )
 from utils.logger import logger
 
@@ -29,6 +33,8 @@ class IngestHandler(BaseHandler):
         router.register("get_schema", self._get_schema)
         router.register("save_schema", self._save_schema)
         router.register("get_schema_rules", self._get_schema_rules)
+        router.register("get_schema_options", self._get_schema_options)
+        router.register("save_schema_options", self._save_schema_options)
         router.register("needs_schema_setup", self._needs_schema_setup)
         router.register("get_schema_template", self._get_schema_template)
         router.register("start_ingest", self._start_ingest)
@@ -90,13 +96,28 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "schema.md 已保存", "needs_setup": False}
 
     def _needs_schema_setup(self, _params):
-        return {"success": True, "needs_setup": needs_schema_setup()}
+        flag = needs_workspace_rules_setup()
+        return {"success": True, "needs_setup": flag}
 
     def _get_schema_template(self, _params):
         return {"success": True, "content": _load_bundled_schema_template()}
 
     def _get_schema_rules(self, _params):
-        return {"success": True, "rules": parse_schema_rules()}
+        return {"success": True, "rules": load_workspace_rules()}
+
+    def _get_schema_options(self, _params):
+        opts = get_workspace_rules_options()
+        return {"success": True, **opts}
+
+    def _save_schema_options(self, params):
+        options = {
+            "max_topic_depth": params.get("max_topic_depth", 3),
+            "auto_update_survey": params.get("auto_update_survey", True),
+            "survey_at_level": params.get("survey_at_level", 2),
+        }
+        if not save_workspace_rules_options(options):
+            return {"success": False, "message": "未设置工作区"}
+        return {"success": True, "message": "整理规则已保存", "needs_setup": False}
 
     def _start_ingest(self, params):
         workspace = self.config.workspace_path

@@ -32,7 +32,6 @@ from sidecar.handlers import (
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
-from sidecar.schema_manager import ensure_schema
 from sidecar.service_context import ServiceContext
 from sidecar.wiki_utils import (
     sync_wiki_with_files,
@@ -161,14 +160,13 @@ class SidecarServer(PathHelpersMixin):
         if not workspace or not Path(workspace).exists():
             return
         try:
-            ensure_schema(workspace)
-            from sidecar.schema_manager import needs_schema_setup
+            from sidecar.workspace_rules import needs_workspace_rules_setup
 
-            if not needs_schema_setup(workspace):
+            if not needs_workspace_rules_setup(workspace):
                 sync_wiki_with_files()
                 logger.info("[startup] WIKI.md synced with workspace")
             else:
-                logger.info("[startup] schema setup pending, skip WIKI sync")
+                logger.info("[startup] workspace rules pending, skip WIKI sync")
         except Exception as e:
             logger.warning(f"[startup] sync failed: {e}")
         self._send_response(

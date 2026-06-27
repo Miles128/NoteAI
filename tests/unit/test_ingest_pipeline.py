@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 from sidecar.ingest_pipeline import clear_cancel, load_ingest_state, request_cancel, run_ingest
-from sidecar.schema_manager import SCHEMA_FILENAME
+from tests.workspace_rules_helpers import write_workspace_rules
 
 from config import config
 
@@ -17,11 +17,8 @@ def workspace(tmp_path: Path) -> Path:
     return d
 
 
-def test_run_ingest_creates_schema_and_completes(workspace: Path) -> None:
-    (workspace / SCHEMA_FILENAME).write_text(
-        "# test\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",
-        encoding="utf-8",
-    )
+def test_run_ingest_completes_when_rules_configured(workspace: Path) -> None:
+    write_workspace_rules(workspace)
     events: list[dict] = []
     stages: list[str] = []
 
@@ -41,17 +38,14 @@ def test_run_ingest_creates_schema_and_completes(workspace: Path) -> None:
         result = run_ingest(mode="full", send_progress=on_progress, send_event=on_event)
 
     assert result["success"] is True
-    assert "schema" in stages
+    assert "rules" in stages
     assert "sync" in stages
     assert any(e.get("type") == "ingest_complete" for e in events)
     assert load_ingest_state()["status"] == "complete"
 
 
 def test_run_ingest_respects_cancel(workspace: Path) -> None:
-    (workspace / SCHEMA_FILENAME).write_text(
-        "# test\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",
-        encoding="utf-8",
-    )
+    write_workspace_rules(workspace)
     request_cancel()
 
     with patch("sidecar.ingest_pipeline.clear_cancel"), patch("sidecar.ingest_pipeline.sync_wiki_with_files"):

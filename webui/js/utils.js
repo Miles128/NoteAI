@@ -64,13 +64,32 @@ window.formatFileSizeForTree = formatFileSizeForTree;
 window.Path_stem = Path_stem;
 window.getTauriEventAPI = getTauriEventAPI;
 
-/** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（sidebar.js 会覆盖） */
-if (typeof window.toggleSidebar !== 'function') {
-    window.toggleSidebar = function _toggleSidebarEarly() {};
-}
-if (typeof window.toggleFileListSidebar !== 'function') {
-    window.toggleFileListSidebar = function _toggleFileListSidebarEarly() {};
-}
+/** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
+function _noop() {}
+
+var _earlyGlobals = [
+    'toggleSidebar',
+    'toggleFileListSidebar',
+    'toggleNoteList',
+    'openWorkspace',
+    'showSettings',
+    'importFiles',
+    'switchTab',
+    'closePreviewPanel',
+    'togglePendingView',
+    'toggleEditMode',
+    'toggleGraphPanel',
+    'toggleSearchModal',
+    'toggleAIPanel',
+    'closeSettingsPanel',
+    'saveApiConfig',
+    'saveUserProfile',
+];
+_earlyGlobals.forEach(function(name) {
+    if (typeof window[name] !== 'function') {
+        window[name] = _noop;
+    }
+});
 
 window.utils = {
     escapeHtml: escapeHtml,

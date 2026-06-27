@@ -427,12 +427,12 @@ var API_DEFS = [
     { name: 'getProjectRules', method: 'get_project_rules', params: function() { return {}; } },
     { name: 'saveProjectRules', method: 'save_project_rules', params: function(rules) { return { rules: rules }; }, write: true },
 
-    // ---- Schema / Ingest ----
+    // ---- Workspace rules / Ingest ----
+    { name: 'getWorkspaceRules', method: 'get_workspace_rules', params: function() { return {}; } },
+    { name: 'saveWorkspaceRules', method: 'save_workspace_rules', params: function(opts) { return opts || {}; }, write: true },
+    { name: 'needsWorkspaceRulesSetup', method: 'needs_workspace_rules_setup', params: function() { return {}; } },
+    { name: 'needsSchemaSetup', method: 'needs_workspace_rules_setup', params: function() { return {}; } },
     { name: 'ensureSchema', method: 'ensure_schema', params: function() { return {}; } },
-    { name: 'getSchema', method: 'get_schema', params: function() { return {}; } },
-    { name: 'needsSchemaSetup', method: 'needs_schema_setup', params: function() { return {}; } },
-    { name: 'getSchemaTemplate', method: 'get_schema_template', params: function() { return {}; } },
-    { name: 'saveSchema', method: 'save_schema', params: function(content) { return { content: content }; }, write: true },
     { name: 'startIngest', method: 'start_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },
     { name: 'cancelIngest', method: 'cancel_ingest', params: function() { return {}; }, write: true },
     { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },

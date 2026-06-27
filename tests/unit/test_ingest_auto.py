@@ -35,7 +35,7 @@ def test_prepare_auto_ingest_resumes_interrupted(workspace: Path) -> None:
         {
             "status": "interrupted",
             "mode": "full",
-            "completed_stages": ["schema", "convert", "compile"],
+            "completed_stages": ["rules", "convert", "compile"],
         }
     )
     plan = prepare_auto_ingest(str(workspace))

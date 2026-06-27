@@ -17,6 +17,7 @@ from sidecar.cascade import (
     get_survey_path,
     update_existing_survey,
 )
+from sidecar.workspace_rules import load_workspace_rules, resolve_survey_topic
 from sidecar.schema_validator import check_wiki_writable
 from utils.logger import logger
 
@@ -78,6 +79,12 @@ def run_cascade_survey_update(
     """Update or create survey for *topic*; emit cascade_* events when send_response set."""
     if not topic or not config.workspace_path:
         return {"success": False, "message": "未设置工作区或主题为空"}
+
+    rules = load_workspace_rules()
+    if not rules.get("auto_update_survey", True):
+        return {"success": True, "message": "已关闭自动更新综述", "skipped": True}
+
+    topic = resolve_survey_topic(topic, rules.get("survey_at_level", 2))
 
     ok, msg = check_wiki_writable("更新主题综述")
     if not ok:

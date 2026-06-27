@@ -116,7 +116,7 @@ def check_dependencies():
             print("缺少 RAG 组件依赖（默认应随 uv sync 安装）：")
             print(f"  {', '.join(rag_missing)}")
             print(f"  请运行: {recommended_sync_command()}")
-            print("  若不需要向量检索，可在 设置 → 小忆助手 → 组件管理 中删除 RAG 组件")
+            print("  若不需要向量检索，可在 设置 → RAG 检索 → 组件管理 中删除 RAG 组件")
             return False
 
     return True

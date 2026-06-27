@@ -152,9 +152,9 @@ async function loadModules() {
     const { TabsModule } = window;
     window.TabsModule = TabsModule;
 
-    await import('./schema-wizard.js');
-    if (window.SchemaWizard && window.SchemaWizard.init) {
-        window.SchemaWizard.init();
+    await import('./workspace-rules.js');
+    if (window.OrganizeRulesModule && window.OrganizeRulesModule.init) {
+        window.OrganizeRulesModule.init();
     }
 
     await import('./ingest.js');

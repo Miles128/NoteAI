@@ -20,6 +20,7 @@ import bm25s
 import zvec
 
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from sidecar.rag.rag_config import hybrid_weights
 from utils.error_handler import log_exception
 from utils.logger import logger
 
@@ -766,13 +767,15 @@ def hybrid_search(
 
     dense_map = {r["id"]: r for r in dense_results}
 
+    dense_weight, sparse_weight = hybrid_weights()
+
     # Merge dense + sparse (BM25 normalized to 0..1 when active)
     results_map = {}
     for cid, r in dense_map.items():
         sparse = sparse_scores.get(cid, 0.0)
         r["sparse_score"] = sparse
         r["bm25_used"] = bm25_active
-        r["score"] = 0.7 * r["dense_score"] + 0.3 * sparse
+        r["score"] = dense_weight * r["dense_score"] + sparse_weight * sparse
         results_map[cid] = r
 
     # Add sparse-only hits
@@ -791,7 +794,7 @@ def hybrid_search(
                     r = _doc_to_result(doc)
                     r["sparse_score"] = sparse_scores[cid]
                     r["bm25_used"] = True
-                    r["score"] = 0.3 * sparse_scores[cid]
+                    r["score"] = sparse_weight * sparse_scores[cid]
                     results_map[cid] = r
             except Exception as e:
                 logger.warning(f"[rag/index] sparse-only fetch failed: {e}\n")

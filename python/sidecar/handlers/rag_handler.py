@@ -24,7 +24,7 @@ class RagHandler(BaseHandler):
 
     @staticmethod
     def _rag_disabled_message() -> str:
-        return "向量 RAG 未启用。请在 设置 → 小忆助手 中开启「向量 RAG 检索」"
+        return "向量 RAG 未启用。请在 设置 → RAG 检索 中开启「向量 RAG 检索」"
 
     def _init_rag_index(self, params):
         if not config.rag_enabled:

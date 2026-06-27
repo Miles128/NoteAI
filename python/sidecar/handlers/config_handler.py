@@ -2,6 +2,14 @@ from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
 from sidecar.rag.profile import load_profile, save_profile
+from sidecar.rag.rag_config import (
+    DEFAULT_DENSE_WEIGHT,
+    DEFAULT_HYDE_THRESHOLD,
+    DEFAULT_RERANK_SKIP_SCORE,
+    DEFAULT_TOP_K,
+    DEFAULT_TOP_K_TAGS,
+    RERANK_MODEL_NAME,
+)
 from utils.llm_utils import test_api_connection
 from utils.logger import logger
 
@@ -19,6 +27,9 @@ class ConfigHandler(BaseHandler):
         router.register("save_user_profile", self._save_user_profile)
         router.register("get_project_rules", self._get_project_rules)
         router.register("save_project_rules", self._save_project_rules)
+        router.register("get_workspace_rules", self._get_workspace_rules)
+        router.register("save_workspace_rules", self._save_workspace_rules)
+        router.register("needs_workspace_rules_setup", self._needs_workspace_rules_setup)
 
     def _get_api_config(self, params):
         api_key = self.config.api_key or ""
@@ -84,8 +95,42 @@ class ConfigHandler(BaseHandler):
             "assistant_agent_mode": self.config.assistant_agent_mode,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
+            "rag_hyde_enabled": self.config.rag_hyde_enabled,
+            "rag_hyde_threshold": self.config.rag_hyde_threshold,
+            "rag_rerank_enabled": self.config.rag_rerank_enabled,
+            "rag_rerank_skip_score": self.config.rag_rerank_skip_score,
+            "rag_dense_weight": self.config.rag_dense_weight,
+            "rag_top_k": self.config.rag_top_k,
+            "rag_top_k_tags": self.config.rag_top_k_tags,
+            "rag_rerank_model": RERANK_MODEL_NAME,
             "locale": self.config.locale,
         }
+
+    @staticmethod
+    def _coerce_bool(value, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("1", "true", "yes", "on")
+        if value is None:
+            return default
+        return bool(value)
+
+    @staticmethod
+    def _coerce_float(value, default: float, lo: float, hi: float) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return default
+        return max(lo, min(hi, parsed))
+
+    @staticmethod
+    def _coerce_int(value, default: int, lo: int, hi: int) -> int:
+        try:
+            parsed = int(float(value))
+        except (TypeError, ValueError):
+            return default
+        return max(lo, min(hi, parsed))
 
     def _save_ui_config(self, params):
         with self.config._lock:
@@ -115,12 +160,50 @@ class ConfigHandler(BaseHandler):
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:
                 self.config.rag_enabled = bool(params["rag_enabled"])
+            if "rag_hyde_enabled" in params:
+                self.config.rag_hyde_enabled = self._coerce_bool(params["rag_hyde_enabled"], True)
+            if "rag_hyde_threshold" in params:
+                self.config.rag_hyde_threshold = self._coerce_float(
+                    params["rag_hyde_threshold"], DEFAULT_HYDE_THRESHOLD, 0.0, 1.0
+                )
+            if "rag_rerank_enabled" in params:
+                self.config.rag_rerank_enabled = self._coerce_bool(params["rag_rerank_enabled"], True)
+            if "rag_rerank_skip_score" in params:
+                self.config.rag_rerank_skip_score = self._coerce_float(
+                    params["rag_rerank_skip_score"], DEFAULT_RERANK_SKIP_SCORE, 0.0, 1.0
+                )
+            if "rag_dense_weight" in params:
+                self.config.rag_dense_weight = self._coerce_float(
+                    params["rag_dense_weight"], DEFAULT_DENSE_WEIGHT, 0.0, 1.0
+                )
+            if "rag_top_k" in params:
+                self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, 1, 50)
+            if "rag_top_k_tags" in params:
+                self.config.rag_top_k_tags = self._coerce_int(
+                    params["rag_top_k_tags"], DEFAULT_TOP_K_TAGS, 1, 50
+                )
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"
             save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
+        rag_keys = (
+            "rag_hyde_enabled",
+            "rag_hyde_threshold",
+            "rag_rerank_enabled",
+            "rag_rerank_skip_score",
+            "rag_dense_weight",
+            "rag_top_k",
+            "rag_top_k_tags",
+        )
+        if any(k in params for k in rag_keys):
+            try:
+                from sidecar.rag.retriever import clear_query_cache
+
+                clear_query_cache()
+            except Exception:
+                pass
         return {"success": True, "message": "UI 配置已保存"}
 
     def _get_theme_preference(self, params):
@@ -201,3 +284,26 @@ class ConfigHandler(BaseHandler):
         rules_path.parent.mkdir(parents=True, exist_ok=True)
         rules_path.write_text(rules, encoding="utf-8")
         return {"success": True, "message": "项目规则已保存"}
+
+    def _get_workspace_rules(self, _params):
+        from sidecar.workspace_rules import get_workspace_rules_options
+
+        opts = get_workspace_rules_options()
+        return {"success": True, **opts}
+
+    def _save_workspace_rules(self, params):
+        from sidecar.workspace_rules import save_workspace_rules_options
+
+        options = {
+            "max_topic_depth": params.get("max_topic_depth", 3),
+            "auto_update_survey": params.get("auto_update_survey", True),
+            "survey_at_level": params.get("survey_at_level", 2),
+        }
+        if not save_workspace_rules_options(options):
+            return {"success": False, "message": "未设置工作区"}
+        return {"success": True, "message": "整理规则已保存", "configured": True}
+
+    def _needs_workspace_rules_setup(self, _params):
+        from sidecar.workspace_rules import needs_workspace_rules_setup
+
+        return {"success": True, "needs_setup": needs_workspace_rules_setup()}

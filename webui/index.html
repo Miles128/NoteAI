@@ -31,8 +31,8 @@
     <script type="module" src="js/main.mjs"></script>
 </head>
 <body>
-    <!-- 早于模块脚本：避免首屏点在 HTML onclick 上对 toggleSidebar 等产生 ReferenceError -->
-    <script>window.toggleSidebar = window.toggleSidebar || function(){ };</script>
+    <!-- 早于模块脚本：避免首屏 HTML onclick 产生 ReferenceError（utils.js 会补充更多占位） -->
+    <script>window.toggleSidebar = window.toggleSidebar || function(){};window.openWorkspace = window.openWorkspace || function(){};window.showSettings = window.showSettings || function(){};</script>
     <div id="app-scale-root">
     <div class="custom-titlebar" data-tauri-drag-region>
         <div class="titlebar-left" data-tauri-drag-region>
@@ -536,31 +536,36 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                             <span data-i18n="settings.nav.ui"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="assistant">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
-                            <span data-i18n="settings.nav.assistant"></span>
+                        <button class="settings-nav-btn" data-tab="rag">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
+                            <span data-i18n="settings.nav.rag"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="cli">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                            <span data-i18n="settings.nav.cli"></span>
                         </button>
                         <button class="settings-nav-btn" data-tab="activity-log">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
                             <span data-i18n="settings.nav.activityLog"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="schema">
+                        <button class="settings-nav-btn" data-tab="organize-rules">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
-                            <span data-i18n="settings.nav.schema"></span>
+                            <span data-i18n="settings.nav.organizeRules"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="cloud-sync" id="settings-nav-cloud-sync">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                            <span data-i18n="settings.nav.cloudSync"></span>
                         </button>
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                             <span data-i18n="settings.nav.about"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="cloud-sync" id="settings-nav-cloud-sync" style="display:none;">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
-                            <span data-i18n="settings.nav.cloudSync"></span>
-                        </button>
                     </div>
                     <div class="settings-content">
                         <div class="settings-tab active" id="tab-model">
                             <div class="card">
-                                <div class="card-title">LLM API</div>
+                                <div class="card-title" data-i18n="settings.llmApi"></div>
+                                <p class="settings-hint" style="margin-bottom:12px" data-i18n="settings.modelHint"></p>
                                 <div class="form-group">
                                     <div class="form-field"><div class="form-label">API Key</div><input type="password" id="api-key" class="form-input" placeholder=""></div>
                                 </div>
@@ -639,26 +644,42 @@
                                     </label>
                                 </div>
                             </div>
-                            <div class="card" style="margin-top:16px">
-                                <div class="card-title" data-i18n="settings.experimental"></div>
-                                <label class="font-size-option" style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer">
-                                    <input type="checkbox" id="cloud-sync-experimental" onchange="saveCloudSyncExperimental(this.checked)">
-                                    <span data-i18n="settings.cloudSyncExperimental"></span>
-                                </label>
-                                <p class="settings-hint" data-i18n="settings.cloudSyncExperimentalHint"></p>
-                            </div>
                         </div>
-                        <div class="settings-tab" id="tab-schema">
-                            <div class="card">
-                                <div class="card-title" data-i18n="settings.schemaTitle"></div>
-                                <p class="settings-hint" data-i18n="settings.schemaHint"></p>
-                                <div class="btn-group btn-group-spacing" style="margin-bottom:12px">
-                                    <button type="button" class="btn btn-secondary" id="settings-schema-wizard-btn" data-i18n="settings.schemaWizardBtn"></button>
-                                    <button type="button" class="btn btn-secondary" id="settings-schema-reload-btn" data-i18n="settings.schemaReloadBtn"></button>
+                        <div class="settings-tab" id="tab-organize-rules">
+                            <div class="card" id="settings-organize-rules-card">
+                                <div class="card-title" data-i18n="settings.organizeRulesTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.organizeRulesHint"></p>
+                                <p class="settings-hint" style="margin-top:8px" data-i18n="settings.organizeRulesTopicsHint"></p>
+                                <div id="settings-organize-rules-topics" class="schema-l1-tags settings-hint"></div>
+                                <div class="form-group" style="margin-top:16px">
+                                    <div class="form-label" data-i18n="settings.organizeRulesDepthLabel"></div>
+                                    <div class="schema-option-list schema-option-list-inline">
+                                        <label class="schema-option-card"><input type="radio" name="organize-rules-depth" value="1"> <span data-i18n="settings.organizeRulesDepth1"></span></label>
+                                        <label class="schema-option-card"><input type="radio" name="organize-rules-depth" value="2"> <span data-i18n="settings.organizeRulesDepth2"></span></label>
+                                        <label class="schema-option-card selected"><input type="radio" name="organize-rules-depth" value="3" checked> <span data-i18n="settings.organizeRulesDepth3"></span></label>
+                                    </div>
                                 </div>
-                                <textarea id="settings-schema-editor" class="form-input form-textarea" style="min-height:280px;font-family:var(--font-mono,monospace);font-size:12px" data-i18n-placeholder="settings.schemaEditorPlaceholder"></textarea>
-                                <button type="button" class="btn btn-primary" id="settings-schema-save-btn" style="margin-top:12px" data-i18n="settings.schemaSaveBtn"></button>
-                                <div id="settings-schema-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                                <div class="form-group" style="margin-top:16px">
+                                    <div class="form-label" data-i18n="settings.organizeRulesSurveyTitle"></div>
+                                    <label class="settings-toggle-row">
+                                        <span class="settings-toggle-label" data-i18n="settings.organizeRulesAutoSurveyLabel"></span>
+                                        <span class="settings-toggle-desc" data-i18n="settings.organizeRulesAutoSurveyDesc"></span>
+                                        <label class="switch-container">
+                                            <input type="checkbox" id="settings-organize-rules-auto-survey" class="switch-input" checked>
+                                            <span class="switch-slider"></span>
+                                        </label>
+                                    </label>
+                                    <div class="form-label" style="margin-top:12px" data-i18n="settings.organizeRulesSurveyLevelLabel"></div>
+                                    <div class="schema-option-list schema-option-list-inline">
+                                        <label class="schema-option-card"><input type="radio" name="organize-rules-survey-level" value="1"> <span data-i18n="settings.organizeRulesSurveyLevel1"></span></label>
+                                        <label class="schema-option-card selected"><input type="radio" name="organize-rules-survey-level" value="2" checked> <span data-i18n="settings.organizeRulesSurveyLevel2"></span></label>
+                                    </div>
+                                </div>
+                                <div class="btn-group btn-group-spacing" style="margin-top:16px">
+                                    <button type="button" class="btn btn-secondary" id="settings-organize-rules-setup-btn" data-i18n="settings.organizeRulesSetupBtn"></button>
+                                    <button type="button" class="btn btn-primary" id="settings-organize-rules-save-btn" data-i18n="settings.organizeRulesSaveBtn"></button>
+                                </div>
+                                <div id="settings-organize-rules-status" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.maintenanceTitle"></div>
@@ -667,18 +688,10 @@
                                 <div id="settings-raw-convert-status" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                         </div>
-                        <div class="settings-tab" id="tab-assistant">
-                            <div class="card settings-assistant-intro">
-                                <div class="card-title" data-i18n="settings.assistantIntroTitle"></div>
-                                <p class="settings-hint" data-i18n-html="settings.assistantIntro1"></p>
-                                <p class="settings-hint" style="margin-top:8px" data-i18n-html="settings.assistantIntro2"></p>
-                                <ul class="settings-assistant-capabilities">
-                                    <li data-i18n-html="settings.assistantCap1"></li>
-                                    <li data-i18n-html="settings.assistantCap2"></li>
-                                    <li data-i18n-html="settings.assistantCap3"></li>
-                                    <li data-i18n-html="settings.assistantCap4"></li>
-                                </ul>
-                                <p class="settings-hint" data-i18n="settings.assistantIntro3"></p>
+                        <div class="settings-tab" id="tab-rag">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.ragIntroTitle"></div>
+                                <p class="settings-hint" data-i18n-html="settings.ragIntro1"></p>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.ragModeTitle"></div>
@@ -690,6 +703,61 @@
                                         <span class="switch-slider"></span>
                                     </label>
                                 </label>
+                            </div>
+                            <div class="card" id="settings-rag-advanced-card" style="margin-top:16px;display:none">
+                                <div class="card-title" data-i18n="settings.ragAdvancedTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.ragAdvancedHint"></p>
+                                <div class="form-group form-row" style="margin-top:12px">
+                                    <div class="form-field flex-1">
+                                        <div class="form-label" data-i18n="settings.ragDenseWeightLabel"></div>
+                                        <input type="range" id="settings-rag-dense-weight" class="form-input" min="0" max="100" step="5" value="70">
+                                        <div class="settings-hint" id="settings-rag-dense-weight-hint"></div>
+                                    </div>
+                                </div>
+                                <div class="settings-rag-topk-grid">
+                                    <div class="form-field">
+                                        <div class="form-label" data-i18n="settings.ragTopKLabel"></div>
+                                        <input type="number" id="settings-rag-top-k" class="form-input" min="1" max="50" step="1" value="5">
+                                    </div>
+                                    <div class="form-field">
+                                        <div class="form-label" data-i18n="settings.ragTopKTagsLabel"></div>
+                                        <input type="number" id="settings-rag-top-k-tags" class="form-input" min="1" max="50" step="1" value="7">
+                                    </div>
+                                </div>
+                                <div class="card-title" style="margin-top:16px;font-size:13px" data-i18n="settings.ragHydeTitle"></div>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.ragHydeEnabledLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.ragHydeEnabledDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-rag-hyde-enabled" class="switch-input" checked>
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                                <div class="form-group" style="margin-top:8px">
+                                    <div class="form-field" style="width:160px">
+                                        <div class="form-label" data-i18n="settings.ragHydeThresholdLabel"></div>
+                                        <input type="number" id="settings-rag-hyde-threshold" class="form-input" min="0" max="1" step="0.01" value="0.33">
+                                    </div>
+                                </div>
+                                <div class="card-title" style="margin-top:16px;font-size:13px" data-i18n="settings.ragRerankTitle"></div>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.ragRerankEnabledLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.ragRerankEnabledDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-rag-rerank-enabled" class="switch-input" checked>
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                                <div class="settings-rag-rerank-grid" style="margin-top:8px">
+                                    <div class="form-field">
+                                        <div class="form-label" data-i18n="settings.ragRerankSkipLabel"></div>
+                                        <input type="number" id="settings-rag-rerank-skip-score" class="form-input" min="0" max="1" step="0.01" value="0.75">
+                                    </div>
+                                    <div class="form-field">
+                                        <div class="form-label" data-i18n="settings.ragRerankModelLabel"></div>
+                                        <div class="settings-hint" id="settings-rag-rerank-model" style="margin-top:4px">BAAI/bge-reranker-v2-m3</div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="card" id="settings-components-card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.componentsTitle"></div>
@@ -707,29 +775,6 @@
                                 </div>
                                 <div id="settings-component-rag-msg" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
-                            <div class="card" style="margin-top:16px">
-                                <div class="card-title" data-i18n="settings.agentModeTitle"></div>
-                                <label class="settings-toggle-row">
-                                    <span class="settings-toggle-label" data-i18n="settings.agentModeLabel"></span>
-                                    <span class="settings-toggle-desc" data-i18n="settings.agentModeDesc"></span>
-                                    <label class="switch-container">
-                                        <input type="checkbox" id="settings-assistant-agent-mode" class="switch-input">
-                                        <span class="switch-slider"></span>
-                                    </label>
-                                </label>
-                                <div id="settings-assistant-agent-status" class="settings-hint" style="display:none;margin-top:8px"></div>
-                            </div>
-                            <div class="card settings-profile-card" style="margin-top:16px">
-                                <div class="card-title" data-i18n="settings.profileTitle"></div>
-                                <p class="settings-hint" data-i18n="settings.profileHint"></p>
-                                <div class="form-group" style="flex:1;display:flex;flex-direction:column">
-                                    <div class="form-field" style="flex:1;display:flex;flex-direction:column">
-                                        <textarea id="profile-md" class="form-input form-textarea settings-assistant-profile" data-i18n-placeholder="settings.profilePlaceholder"></textarea>
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary" onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>
-                                <div id="profile-status" class="settings-hint" style="display: none;"></div>
-                            </div>
                             <div class="card" id="settings-assistant-rag-index-card" style="margin-top:16px;display:none">
                                 <div class="card-title" data-i18n="settings.indexTitle"></div>
                                 <div id="settings-assistant-index-status" class="settings-hint" style="margin-bottom:10px"></div>
@@ -743,6 +788,43 @@
                                     <div id="settings-assistant-rebuild-progress-text" class="settings-hint" style="margin-top:6px;font-size:12px"></div>
                                 </div>
                             </div>
+                            <div class="card settings-profile-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.profileTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.profileHint"></p>
+                                <div class="form-group" style="flex:1;display:flex;flex-direction:column">
+                                    <div class="form-field" style="flex:1;display:flex;flex-direction:column">
+                                        <textarea id="profile-md" class="form-input form-textarea settings-assistant-profile" data-i18n-placeholder="settings.profilePlaceholder"></textarea>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>
+                                <div id="profile-status" class="settings-hint" style="display: none;"></div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-cli">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.cliIntroTitle"></div>
+                                <p class="settings-hint" data-i18n-html="settings.cliIntro1"></p>
+                                <p class="settings-hint" style="margin-top:8px" data-i18n="settings.cliIntro2"></p>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.cliDefaultTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.cliDefaultDesc"></p>
+                                <div class="form-group" style="margin-top:8px">
+                                    <select id="settings-cli-agent-select" class="form-input" style="max-width:320px"></select>
+                                </div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.cliAgentsTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.cliAgentsHint"></p>
+                                <div id="settings-cli-agents-list"></div>
+                                <button type="button" class="btn btn-secondary" id="settings-cli-refresh-btn" style="margin-top:12px" data-i18n="settings.cliRefreshBtn"></button>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.cliVaultTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.cliVaultHint"></p>
+                                <button type="button" class="btn btn-secondary" id="settings-cli-generate-md-btn" data-i18n="settings.cliGenerateMdBtn"></button>
+                                <div id="settings-cli-md-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
                         </div>
                         <div class="settings-tab" id="tab-activity-log">
                             <div class="card settings-activity-log-card">
@@ -752,6 +834,13 @@
                                     <div class="settings-activity-log-empty" data-i18n="settings.activityLogLoading"></div>
                                 </div>
                             </div>
+                        </div>
+                        <div class="settings-tab" id="tab-cloud-sync">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.cloudSyncIntroTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.cloudSyncIntroHint"></p>
+                            </div>
+                            <div id="cloud-sync-providers" style="margin-top:16px"></div>
                         </div>
                         <div class="settings-tab" id="tab-about">
                             <div class="card" style="text-align:center;padding:40px">
@@ -770,9 +859,6 @@
                                     <p style="margin-top:8px" data-i18n="settings.aboutTechDesc"></p>
                                 </div>
                             </div>
-                        </div>
-                        <div class="settings-tab" id="tab-cloud-sync">
-                            <div id="cloud-sync-providers"></div>
                         </div>
                     </div>
                 </div>
@@ -864,104 +950,43 @@
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
 
-    <div class="modal-overlay" id="schema-wizard-modal" style="display:none;">
+    <div class="modal-overlay" id="organize-rules-modal" style="display:none;">
         <div class="modal-dialog">
             <div class="modal-header">
-                <h3 data-i18n="schemaWizard.modalTitle"></h3>
+                <h3 data-i18n="organizeRules.modalTitle"></h3>
             </div>
             <div class="modal-body">
-                <div class="schema-wizard-progress" aria-hidden="true">
-                    <div class="schema-wizard-dot active"></div>
-                    <div class="schema-wizard-dot"></div>
-                    <div class="schema-wizard-dot"></div>
-                    <div class="schema-wizard-dot"></div>
-                    <div class="schema-wizard-dot"></div>
-                </div>
-
-                <div class="schema-wizard-step active" data-step="0">
-                    <h4 data-i18n="schemaWizard.stepPurpose"></h4>
-                    <p class="hint" data-i18n="schemaWizard.stepPurposeHint"></p>
-                    <div class="schema-option-list">
-                        <label class="schema-option-card selected">
-                            <input type="radio" name="schema-purpose" value="personal" checked>
-                            <span data-i18n="schemaWizard.purposePersonal"></span>
-                        </label>
-                        <label class="schema-option-card">
-                            <input type="radio" name="schema-purpose" value="project">
-                            <span data-i18n="schemaWizard.purposeProject"></span>
-                        </label>
-                        <label class="schema-option-card">
-                            <input type="radio" name="schema-purpose" value="research">
-                            <span data-i18n="schemaWizard.purposeResearch"></span>
-                        </label>
+                <p class="hint" data-i18n="settings.organizeRulesTopicsHint"></p>
+                <div id="organize-rules-modal-topics" class="schema-l1-tags hint"></div>
+                <div class="form-group" style="margin-top:16px">
+                    <div class="form-label" data-i18n="settings.organizeRulesDepthLabel"></div>
+                    <div class="schema-option-list schema-option-list-inline">
+                        <label class="schema-option-card"><input type="radio" name="organize-rules-modal-depth" value="1"> <span data-i18n="settings.organizeRulesDepth1"></span></label>
+                        <label class="schema-option-card"><input type="radio" name="organize-rules-modal-depth" value="2"> <span data-i18n="settings.organizeRulesDepth2"></span></label>
+                        <label class="schema-option-card selected"><input type="radio" name="organize-rules-modal-depth" value="3" checked> <span data-i18n="settings.organizeRulesDepth3"></span></label>
                     </div>
                 </div>
-
-                <div class="schema-wizard-step" data-step="1">
-                    <h4 data-i18n="schemaWizard.stepDomains"></h4>
-                    <p class="hint" data-i18n="schemaWizard.stepDomainsHint"></p>
-                    <div class="schema-option-grid">
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="agent" checked> AI Agent</label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="rag" checked> <span data-i18n="schemaWizard.domainRag"></span></label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-domain value="product" checked> <span data-i18n="schemaWizard.domainProduct"></span></label>
-                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="llm"> <span data-i18n="schemaWizard.domainLlm"></span></label>
-                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="tools"> <span data-i18n="schemaWizard.domainTools"></span></label>
-                        <label class="schema-option-card"><input type="checkbox" data-schema-domain value="career"> <span data-i18n="schemaWizard.domainCareer"></span></label>
-                    </div>
-                    <div class="schema-wizard-custom">
-                        <input type="text" id="schema-wizard-custom-domains" class="form-input" data-i18n-placeholder="schemaWizard.customDomainsPlaceholder">
-                    </div>
-                </div>
-
-                <div class="schema-wizard-step" data-step="2">
-                    <h4 data-i18n="schemaWizard.stepDepth"></h4>
-                    <p class="hint" data-i18n="schemaWizard.stepDepthHint"></p>
-                    <div class="schema-option-list">
-                        <label class="schema-option-card">
-                            <input type="radio" name="schema-depth" value="2">
-                            <span data-i18n="schemaWizard.depth2"></span>
+                <div class="form-group" style="margin-top:16px">
+                    <div class="form-label" data-i18n="settings.organizeRulesSurveyTitle"></div>
+                    <label class="settings-toggle-row">
+                        <span class="settings-toggle-label" data-i18n="settings.organizeRulesAutoSurveyLabel"></span>
+                        <span class="settings-toggle-desc" data-i18n="settings.organizeRulesAutoSurveyDesc"></span>
+                        <label class="switch-container">
+                            <input type="checkbox" id="organize-rules-modal-auto-survey" class="switch-input" checked>
+                            <span class="switch-slider"></span>
                         </label>
-                        <label class="schema-option-card selected">
-                            <input type="radio" name="schema-depth" value="3" checked>
-                            <span data-i18n="schemaWizard.depth3"></span>
-                        </label>
+                    </label>
+                    <div class="form-label" style="margin-top:12px" data-i18n="settings.organizeRulesSurveyLevelLabel"></div>
+                    <div class="schema-option-list schema-option-list-inline">
+                        <label class="schema-option-card"><input type="radio" name="organize-rules-modal-survey-level" value="1"> <span data-i18n="settings.organizeRulesSurveyLevel1"></span></label>
+                        <label class="schema-option-card selected"><input type="radio" name="organize-rules-modal-survey-level" value="2" checked> <span data-i18n="settings.organizeRulesSurveyLevel2"></span></label>
                     </div>
-                    <div class="schema-option-list" style="margin-top:12px">
-                        <label class="schema-option-card selected">
-                            <input type="radio" name="schema-language" value="zh" checked>
-                            <span data-i18n="schemaWizard.langZh"></span>
-                        </label>
-                        <label class="schema-option-card">
-                            <input type="radio" name="schema-language" value="mixed">
-                            <span data-i18n="schemaWizard.langMixed"></span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="schema-wizard-step" data-step="3">
-                    <h4 data-i18n="schemaWizard.stepHabits"></h4>
-                    <p class="hint" data-i18n="schemaWizard.stepHabitsHint"></p>
-                    <div class="schema-option-list">
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="folder_truth" checked> <span data-i18n="schemaWizard.habitFolderTruth"></span></label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="pending" checked> <span data-i18n="schemaWizard.habitPending"></span></label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="survey_only" checked> <span data-i18n="schemaWizard.habitSurveyOnly"></span></label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="auto_convert" checked> <span data-i18n="schemaWizard.habitAutoConvert"></span></label>
-                        <label class="schema-option-card selected"><input type="checkbox" data-schema-habit value="tags_cn" checked> <span data-i18n="schemaWizard.habitTagsCn"></span></label>
-                    </div>
-                </div>
-
-                <div class="schema-wizard-step" data-step="4">
-                    <h4 data-i18n="schemaWizard.stepConfirm"></h4>
-                    <p class="hint" data-i18n="schemaWizard.stepConfirmHint"></p>
-                    <textarea id="schema-wizard-preview" class="form-input form-textarea"></textarea>
                 </div>
             </div>
             <div class="modal-footer schema-wizard-footer">
-                <button type="button" class="btn btn-secondary" id="schema-wizard-use-default" data-i18n="schemaWizard.useDefault"></button>
+                <button type="button" class="btn btn-secondary" id="organize-rules-use-default" data-i18n="organizeRules.useDefault"></button>
                 <div class="right">
-                    <button type="button" class="btn btn-secondary" id="schema-wizard-back" data-i18n="schemaWizard.back"></button>
-                    <button type="button" class="btn btn-primary" id="schema-wizard-next" data-i18n="schemaWizard.next"></button>
-                    <button type="button" class="btn btn-primary" id="schema-wizard-save" style="display:none" data-i18n="schemaWizard.finish"></button>
+                    <button type="button" class="btn btn-primary" id="organize-rules-modal-save" data-i18n="organizeRules.finish"></button>
                 </div>
             </div>
         </div>

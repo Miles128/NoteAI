@@ -82,6 +82,7 @@ class ConfigHandler(BaseHandler):
             "preview_font_family": self.config.preview_font_family,
             "cloud_sync_experimental": self.config.cloud_sync_experimental,
             "assistant_agent_mode": self.config.assistant_agent_mode,
+            "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "locale": self.config.locale,
         }
@@ -110,6 +111,8 @@ class ConfigHandler(BaseHandler):
                 self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
             if "assistant_agent_mode" in params:
                 self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
+            if "cli_agent_id" in params:
+                self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:
                 self.config.rag_enabled = bool(params["rag_enabled"])
             if "locale" in params:

@@ -78,6 +78,7 @@ class AppConfig:
     topic_list: str = ""
     cloud_sync_experimental: bool = False
     assistant_agent_mode: bool = False
+    cli_agent_id: str = ""
     rag_enabled: bool = True
     rag_error_cooldown_seconds: int = 180
     locale: str = "zh-CN"

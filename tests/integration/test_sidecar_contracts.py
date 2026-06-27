@@ -466,6 +466,30 @@ class TestWorkspaceTreeContract:
         file_names = [c["name"] for c in raw.get("children", []) if c.get("type") == "file"]
         assert "paper.docx" in file_names
 
+    def test_get_workspace_tree_hides_root_md_files(self, workspace: Path) -> None:
+        (workspace / "schema.md").write_text("# schema\n", encoding="utf-8")
+        (workspace / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+        topic_dir = workspace / "Notes" / "topic"
+        topic_dir.mkdir(parents=True)
+        (topic_dir / "nested.md").write_text("# nested\n", encoding="utf-8")
+        (workspace / "Notes" / "loose.md").write_text("# loose\n", encoding="utf-8")
+
+        srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
+        handler = WorkspaceHandler(srv)
+        tree = handler._get_workspace_tree({})
+
+        top_names = {item["name"] for item in tree}
+        assert "schema.md" not in top_names
+        assert "AGENTS.md" not in top_names
+
+        notes = next(item for item in tree if item["name"] == "Notes")
+        note_paths = {c["path"] for c in notes.get("children", []) if c.get("type") == "file"}
+        assert "Notes/loose.md" not in note_paths
+
+        topic = next(c for c in notes.get("children", []) if c.get("name") == "topic")
+        nested_paths = {c["path"] for c in topic.get("children", []) if c.get("type") == "file"}
+        assert "Notes/topic/nested.md" in nested_paths
+
 
 class TestFilesHandlerPreviewContract:
     """FilesHandler preview RPC contract for DOCX (frontend preview path)."""

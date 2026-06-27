@@ -25,7 +25,6 @@ FILE_TREE_IGNORED_DIRS = {
     ".obsidian",
 }
 ALLOWED_ROOT_DIRS = {NOTES_FOLDER, RAW_FOLDER, ABSTRACT_FOLDER}
-PINNED_ROOT_FILES = ("schema.md",)
 
 
 class WorkspaceHandler(BaseHandler):
@@ -112,7 +111,6 @@ class WorkspaceHandler(BaseHandler):
 
         ws = Path(workspace)
         items = []
-        pinned: list[dict] = []
         root_files: list[dict] = []
 
         try:
@@ -137,22 +135,22 @@ class WorkspaceHandler(BaseHandler):
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
                         continue
+                    if entry.suffix.lower() == ".md":
+                        continue
                     stat = entry.stat()
-                    node = {
-                        "name": entry.name,
-                        "path": str(entry.relative_to(ws)),
-                        "type": "file",
-                        "size": stat.st_size,
-                        "modified": stat.st_mtime,
-                    }
-                    if entry.name.lower() in PINNED_ROOT_FILES:
-                        pinned.append(node)
-                    else:
-                        root_files.append(node)
+                    root_files.append(
+                        {
+                            "name": entry.name,
+                            "path": str(entry.relative_to(ws)),
+                            "type": "file",
+                            "size": stat.st_size,
+                            "modified": stat.st_mtime,
+                        }
+                    )
         except PermissionError as e:
             logger.warning(f"[workspace_handler] building workspace tree: {e}")
 
-        return pinned + items + root_files
+        return items + root_files
 
     def _build_flat_tree(self, dir_path: Path, workspace: Path):
         items = []
@@ -208,6 +206,8 @@ class WorkspaceHandler(BaseHandler):
                     )
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                        continue
+                    if dir_path.name == NOTES_FOLDER and entry.suffix.lower() == ".md":
                         continue
                     if not entry.exists():
                         continue

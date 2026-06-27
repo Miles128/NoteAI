@@ -185,7 +185,7 @@ const TopicTree3Tier = {
             panel.style.display = 'block';
 
             if (!result || !result.files) {
-                panel.innerHTML = `<h4>${name}</h4><p>加载失败或无文件</p>`;
+                panel.innerHTML = `<h4>${window.escapeHtml(name)}</h4><p>加载失败或无文件</p>`;
                 return;
             }
 
@@ -218,7 +218,7 @@ const TopicTree3Tier = {
             console.error('加载文件列表失败:', e);
             const panel = document.getElementById('topic-files-panel');
             if (panel) {
-                panel.innerHTML = `<h4>${name}</h4><p>加载失败: ${e.message || window.t('common.unknownError')}</p>`;
+                panel.innerHTML = `<h4>${window.escapeHtml(name)}</h4><p>加载失败: ${window.escapeHtml(e.message || window.t('common.unknownError'))}</p>`;
             }
         }
     },

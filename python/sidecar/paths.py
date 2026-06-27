@@ -6,12 +6,35 @@ from config import config
 from utils.logger import logger
 
 
+def _has_path_traversal(path: str) -> bool:
+    """Check for control characters and traversal sequences that could escape the workspace."""
+    if not path:
+        return True
+    if "\x00" in path or any(ord(ch) < 32 for ch in path):
+        return True
+    # Reject absolute paths and explicit parent-dir traversal.
+    normalized = Path(path).as_posix().replace("\\", "/")
+    parts = [p for p in normalized.split("/") if p not in ("", ".")]
+    depth = 0
+    for part in parts:
+        if part == "..":
+            depth -= 1
+        else:
+            depth += 1
+        if depth < 0:
+            return True
+    return False
+
+
 def resolve_workspace_path(path: str) -> str | None:
     if not path:
         return None
     workspace = config.workspace_path
     if not workspace:
         logger.warning("resolve_workspace_path: workspace not set")
+        return None
+    if _has_path_traversal(path):
+        logger.warning(f"resolve_workspace_path: path contains traversal or control chars: {path}")
         return None
     try:
         workspace_abs = Path(workspace).resolve()

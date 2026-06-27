@@ -734,6 +734,10 @@ function selectFile(path, fileName) {
     if (window.InspectorModule && window.InspectorModule.onFileSelected) {
         window.InspectorModule.onFileSelected(path);
     }
+    // 触发底部状态栏更新
+    if (window.StatusbarModule && window.StatusbarModule.onFileSelected) {
+        window.StatusbarModule.onFileSelected(path);
+    }
 
     var container = document.getElementById('tiptap-editor-container');
     var statusBar = document.getElementById('editor-status-bar');

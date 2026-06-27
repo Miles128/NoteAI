@@ -49,8 +49,8 @@ class WorkspaceHandler(BaseHandler):
         path = saved_path if saved_path and Path(saved_path).exists() else ""
         if path and path != self.config.workspace_path:
             self.config._set_attr("workspace_path", path)
-            self.config.setup_workspace_folders()
-            self._server._setup_watcher(path)
+            self._setup_workspace()
+            self._setup_watcher(path)
         if path and Path(path).exists():
             from sidecar.schema_manager import ensure_schema, needs_schema_setup
 
@@ -87,8 +87,8 @@ class WorkspaceHandler(BaseHandler):
 
             ensure_schema(path)
             self.file_previewer.workspace_path = path
-            self._server._setup_watcher(path)
-            self._server._invalidate_cache()
+            self._setup_watcher(path)
+            self._invalidate_cache()
             save_ok, save_msg = workspace_manager.save_workspace(path)
             if not save_ok:
                 return {"success": False, "message": save_msg}

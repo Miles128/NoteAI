@@ -2,9 +2,7 @@
 
 This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.) when working with this repository.
 
-> **CLAUDE.md has been removed** — all AI coding agents (Claude Code, Codex, Jcode, etc.) use `AGENTS.md`.
-
-## Build & Test
+> # Build & Test
 
 ```bash
 uv sync                    # install deps
@@ -58,13 +56,12 @@ Tauri v2 shell (src-tauri/)
 
 - **`webui/js/`**: vanilla JS IIFE modules on `window.*`, no bundler, no virtual DOM. State in `window.AppState` and `window.state`. `main.mjs` is the only ES module.
 - **Tauri sidecar**: configured in `src-tauri/tauri.conf.json`. Python binary resolved via `python/main.py` → `sidecar.server.main()`.
-- **Test coverage**: ~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
+- **Test coverage**: \~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
 - **Prompts**: Python constants in `prompts/` with parallel `prompts/yaml/` (loader supports both).
 - **Sidecar Python**: dev uses project `.venv`; release can bundle `src-tauri/resources/sidecar-python` via `scripts/bundle_sidecar_python.sh`, or set `NOTEAI_PYTHON`.
 - **`rag_enabled`**: default `True` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
 
-
----
+***
 
 # NoteAI 通用 AI 行为规范
 
@@ -108,7 +105,7 @@ Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
 
 - YAML frontmatter: `topic: 一级 > 二级 > 三级`
 - 文件系统: `Notes/一级/二级/三级/文件名.md`
-- 分隔符: ` > `
+- 分隔符: `>`
 - 最多三层，三级下不再设子题
 
 ## 两层记忆体系
@@ -146,3 +143,4 @@ NoteAI 有两层 Memory，均与工作区绑定（切换工作区即切换画像
 ```
 
 > 旧文档中的 `NoteAI/`、`NoteAI/profile.md` 为别名，请以 `.noteai`、`.ai_memory` 为准。
+

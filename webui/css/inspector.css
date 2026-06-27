@@ -204,27 +204,29 @@
     border-bottom: 1px solid var(--border);
     background: var(--sidebar-bg);
     flex-shrink: 0;
-    padding: 0 4px;
-    gap: 0;
-    min-height: 36px;
+    padding: 5px 8px;
+    gap: 2px;
+    min-height: 42px;
 }
 
 .inspector-tab {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 4px;
-    padding: 8px 10px;
+    padding: 4px 10px;
     background: transparent;
     color: var(--text-muted);
-    border: none;
-    border-bottom: 2px solid transparent;
+    border: 1px solid transparent;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     transition: all 0.12s;
+    white-space: nowrap;
+    border-radius: var(--btn-radius);
+    flex: 1 1 auto;
+    min-width: 0;
     -webkit-app-region: no-drag;
-    flex-shrink: 0;
-    border-radius: 0;
 }
 
 .inspector-tab:hover {
@@ -234,7 +236,8 @@
 
 .inspector-tab.is-active {
     color: var(--primary);
-    border-bottom-color: var(--primary);
+    background: var(--primary-light);
+    border-color: var(--primary);
 }
 
 .inspector-tab svg {
@@ -402,7 +405,9 @@
     cursor: pointer;
     outline: none;
     margin-left: 8px;
-    max-width: 100px;
+    max-width: 140px;
+    min-width: 80px;
+    flex-shrink: 1;
 }
 
 .cli-agent-selector:hover {
@@ -435,10 +440,23 @@
     border-color: var(--primary);
 }
 
-.ai-mode-badge.cli-agent-active {
+.ai-mode-badge.cli-agent-active,
+.cli-mode-badge.cli-agent-active {
     background: var(--primary);
     color: var(--on-primary, #fff);
     border-color: var(--primary);
+}
+
+.cli-mode-badge {
+    margin-left: auto;
+    margin-right: 8px;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 /* CLI Agent 输出样式 */
@@ -471,13 +489,15 @@
     grid-template-rows: auto 1fr !important;
 }
 
-.inspector-panel .inspector-tab-content#inspector-content-ai {
+.inspector-panel .inspector-tab-content#inspector-content-ai,
+.inspector-panel .inspector-tab-content#inspector-content-cli {
     display: none;
     grid-template-rows: auto 1fr auto;
     gap: 0;
 }
 
-.inspector-panel .inspector-tab-content#inspector-content-ai.is-active {
+.inspector-panel .inspector-tab-content#inspector-content-ai.is-active,
+.inspector-panel .inspector-tab-content#inspector-content-cli.is-active {
     display: grid;
 }
 

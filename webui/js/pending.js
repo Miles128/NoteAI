@@ -121,7 +121,7 @@ function loadPendingItems() {
         renderPendingActivityLog(seq, logResult, countEl, count);
     }).catch(function(e) {
         if (seq !== _pendingLoadSeq) return;
-        listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.loadFailed', { error: String(e) }) + '</div>';
+        listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.loadFailed', { error: window.escapeHtml(String(e)) }) + '</div>';
     });
 }
 

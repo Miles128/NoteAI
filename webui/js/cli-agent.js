@@ -1,15 +1,16 @@
 /**
  * CLI Agent Module (前端)
  *
- * 在 Inspector AI Tab 中集成第三方 CLI agent（Claude Code / OpenCode / Codex / Gemini）。
- * 对标 Tolaria 的 AiPanel + CLI agent 选择器。
+ * 在 Inspector 的独立 CLI Tab 中集成第三方 CLI agent（Claude Code / OpenCode / Codex / Gemini）。
+ * 与小忆助手的 RAG 问答完全分离：AI Tab 只走内置助手，CLI Tab 只走外部 CLI agent。
  */
 (function() {
     'use strict';
 
     var _availableAgents = [];
-    var _selectedAgent = null; // null = 使用内置小忆；否则为 agent id
+    var _selectedAgent = null;
     var _isRunning = false;
+    var _bindingsDone = false;
 
     function _escapeHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
@@ -34,50 +35,59 @@
     }
 
     /**
-     * 渲染 agent 选择器到 AI Panel header
+     * 渲染 agent 选择器到 CLI Tab header
      */
     function renderAgentSelector() {
-        var header = document.querySelector('#inspector-content-ai .ai-panel-header');
+        var header = document.querySelector('#inspector-content-cli .ai-panel-header');
         if (!header) return;
 
-        // 移除已有的选择器
         var existing = document.getElementById('cli-agent-selector');
         if (existing) existing.remove();
 
         var installedAgents = _availableAgents.filter(function(a) { return a.installed; });
-        if (installedAgents.length === 0) return; // 没有已安装的 agent 则不显示选择器
 
         var selector = document.createElement('select');
         selector.id = 'cli-agent-selector';
         selector.className = 'cli-agent-selector';
-        selector.title = '选择 AI Agent';
+        selector.title = window.t ? window.t('cliAgent.selectAgent') : '选择 AI Agent';
 
-        // 内置小忆选项
+        // 未安装任何 agent 时仍然保留选择器占位，但提示未安装
         var defaultOption = document.createElement('option');
         defaultOption.value = '';
-        defaultOption.textContent = '小忆';
+        defaultOption.textContent = window.t ? window.t('cli.defaultName') : '小忆';
         selector.appendChild(defaultOption);
 
-        // 已安装的 CLI agent
         installedAgents.forEach(function(agent) {
             var opt = document.createElement('option');
             opt.value = agent.id;
             opt.textContent = agent.name;
+            if (agent.resolved_path) {
+                opt.title = '已安装：' + agent.resolved_path;
+            }
             selector.appendChild(opt);
         });
+
+        if (installedAgents.length === 0) {
+            selector.disabled = true;
+            selector.title = window.t ? window.t('cli.noAgent') : '未检测到已安装的 CLI Agent';
+        }
 
         selector.addEventListener('change', function() {
             _selectedAgent = this.value || null;
             _updateModeBadge();
+            _updateInputPlaceholder();
         });
 
         header.appendChild(selector);
 
-        // 添加生成 AGENTS.md 按钮
+        // 生成 AGENTS.md 按钮
+        var existingBtn = document.getElementById('cli-agent-generate-md');
+        if (existingBtn) existingBtn.remove();
+
         var generateBtn = document.createElement('button');
         generateBtn.id = 'cli-agent-generate-md';
         generateBtn.className = 'cli-agent-generate-btn';
-        generateBtn.title = '生成 AGENTS.md（供 CLI agent 读取）';
+        generateBtn.title = window.t ? window.t('cliAgent.generateMd') : '生成 AGENTS.md';
         generateBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
         generateBtn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -88,24 +98,28 @@
     }
 
     function _updateModeBadge() {
-        var badge = document.getElementById('ai-mode-badge');
+        var badge = document.getElementById('cli-mode-badge');
         if (!badge) return;
 
         if (_selectedAgent) {
             var agent = _availableAgents.find(function(a) { return a.id === _selectedAgent; });
-            if (agent) {
-                badge.textContent = agent.name;
-                badge.classList.add('cli-agent-active');
-                return;
-            }
+            badge.textContent = agent ? agent.name : _selectedAgent;
+            badge.classList.add('cli-agent-active');
+        } else {
+            badge.textContent = window.t ? window.t('cli.defaultName') : '小忆';
+            badge.classList.remove('cli-agent-active');
         }
-        badge.classList.remove('cli-agent-active');
-        // 恢复原有模式显示
-        if (window.AssistantModule && window.AssistantModule.getMode) {
-            var mode = window.AssistantModule.getMode();
-            badge.textContent = mode === 'agent' ?
-                (window.t ? window.t('assistant.mode.agent') : '助手模式') :
-                (window.t ? window.t('assistant.mode.qa') : '问答模式');
+    }
+
+    function _updateInputPlaceholder() {
+        var input = document.getElementById('cli-input');
+        if (!input) return;
+        if (_selectedAgent) {
+            var agent = _availableAgents.find(function(a) { return a.id === _selectedAgent; });
+            var name = agent ? agent.name : _selectedAgent;
+            input.placeholder = window.t ? window.t('assistant.cli.placeholder', { agent: name }) : ('发送给 ' + name + '...');
+        } else {
+            input.placeholder = window.t ? window.t('cli.inputPlaceholder') : '输入指令...';
         }
     }
 
@@ -121,65 +135,26 @@
         }
 
         if (window.ToastModule && window.ToastModule.show) {
-            window.ToastModule.show('正在生成 AGENTS.md...', 'info');
+            window.ToastModule.show(window.t ? window.t('cliAgent.generating') : '正在生成 AGENTS.md...', 'info');
         }
 
         window.api.generateVaultAgentsMd().then(function(result) {
             if (result && result.success) {
-                var msg = 'AGENTS.md 已生成' + (result.note_count !== undefined ?
+                var msg = (window.t ? window.t('cliAgent.generateSuccess') : 'AGENTS.md 已生成') +
+                    (result.note_count !== undefined ?
                     '（' + result.note_count + ' 篇笔记，' + result.topic_count + ' 个主题）' : '');
                 if (window.ToastModule && window.ToastModule.show) {
                     window.ToastModule.show(msg, 'success');
                 }
             } else {
                 if (window.ToastModule && window.ToastModule.show) {
-                    window.ToastModule.show(result && result.message || '生成失败', 'error');
+                    window.ToastModule.show(result && result.message || (window.t ? window.t('cliAgent.generateFailed') : '生成失败'), 'error');
                 }
             }
         }).catch(function(err) {
             if (window.ToastModule && window.ToastModule.show) {
-                window.ToastModule.show('生成失败: ' + (err.message || ''), 'error');
+                window.ToastModule.show((window.t ? window.t('cliAgent.generateFailed') : '生成失败') + ': ' + (err.message || ''), 'error');
             }
-        });
-    }
-
-    /**
-     * 发送消息（根据选择的 agent 分发）
-     */
-    function sendMessage(prompt) {
-        if (_isRunning) {
-            return Promise.resolve({ success: false, message: '上一个任务还在运行' });
-        }
-
-        if (!_selectedAgent) {
-            // 使用内置小忆
-            return Promise.resolve({ success: true, use_builtin: true });
-        }
-
-        // 使用 CLI agent
-        _isRunning = true;
-        var messagesEl = document.getElementById('ai-panel-messages');
-        if (messagesEl) {
-            _appendCliMessage('user', prompt);
-            _appendCliMessage('system', '正在启动 ' + _getAgentName(_selectedAgent) + '...');
-        }
-
-        return window.api.runCliAgent(_selectedAgent, prompt).then(function(result) {
-            if (result && result.success && result.started) {
-                // 流式输出通过事件回调处理
-                return { success: true };
-            }
-            _isRunning = false;
-            if (messagesEl) {
-                _appendCliMessage('error', (result && result.message) || '启动失败');
-            }
-            return { success: false, message: result && result.message };
-        }).catch(function(err) {
-            _isRunning = false;
-            if (messagesEl) {
-                _appendCliMessage('error', err.message || '执行异常');
-            }
-            return { success: false, message: err.message };
         });
     }
 
@@ -189,7 +164,7 @@
     }
 
     function _appendCliMessage(role, content) {
-        var messagesEl = document.getElementById('ai-panel-messages');
+        var messagesEl = document.getElementById('cli-panel-messages');
         if (!messagesEl) return;
 
         var msg = document.createElement('div');
@@ -199,7 +174,6 @@
         } else if (role === 'error') {
             msg.innerHTML = '<div class="ai-msg-content">' + _escapeHtml(content) + '</div>';
         } else {
-            // CLI agent 输出（可能含多行）
             var pre = document.createElement('pre');
             pre.className = 'cli-agent-output';
             pre.textContent = content;
@@ -210,21 +184,55 @@
     }
 
     /**
-     * 处理 CLI agent 事件（由 assistant.js 的事件监听器调用）
+     * 发送消息（CLI Tab 专用）
+     */
+    function sendCliMessage(prompt) {
+        if (_isRunning) {
+            if (window.ToastModule && window.ToastModule.show) {
+                window.ToastModule.show(window.t ? window.t('cliAgent.starting') : '上一个任务还在运行', 'warning');
+            }
+            return Promise.resolve({ success: false, message: '上一个任务还在运行' });
+        }
+
+        if (!_selectedAgent) {
+            if (window.ToastModule && window.ToastModule.show) {
+                window.ToastModule.show(window.t ? window.t('cliAgent.selectAgent') : '请先选择 CLI Agent', 'warning');
+            }
+            return Promise.resolve({ success: false, message: '未选择 CLI Agent' });
+        }
+
+        _isRunning = true;
+        _appendCliMessage('user', prompt);
+        _appendCliMessage('system', (window.t ? window.t('cliAgent.starting') : '正在启动') + ' ' + _getAgentName(_selectedAgent) + '...');
+
+        return window.api.runCliAgent(_selectedAgent, prompt).then(function(result) {
+            if (result && result.success && result.started) {
+                return { success: true };
+            }
+            _isRunning = false;
+            _appendCliMessage('error', (result && result.message) || (window.t ? window.t('cliAgent.failed') : '启动失败'));
+            return { success: false, message: result && result.message };
+        }).catch(function(err) {
+            _isRunning = false;
+            _appendCliMessage('error', err.message || '执行异常');
+            return { success: false, message: err.message };
+        });
+    }
+
+    /**
+     * 处理 CLI agent 事件
      */
     function handleEvent(payload) {
         if (!payload || typeof payload !== 'object') return;
 
         var type = payload.type;
-        var messagesEl = document.getElementById('ai-panel-messages');
 
         if (type === 'cli_agent_start') {
-            if (messagesEl) {
-                _appendCliMessage('system', '⚡ ' + (payload.agent_name || payload.agent) + ' 已启动');
-            }
+            _appendCliMessage('system', '⚡ ' + (payload.agent_name || payload.agent) + ' ' + (window.t ? window.t('cliAgent.starting') : '已启动'));
         } else if (type === 'cli_agent_output') {
-            if (messagesEl && payload.content) {
-                // 追加到最后一个 CLI 输出消息，或创建新的
+            if (payload.content) {
+                var messagesEl = document.getElementById('cli-panel-messages');
+                if (!messagesEl) return;
                 var lastMsg = messagesEl.lastElementChild;
                 var lastPre = lastMsg && lastMsg.querySelector('pre.cli-agent-output');
                 if (lastPre) {
@@ -236,30 +244,47 @@
             }
         } else if (type === 'cli_agent_done') {
             _isRunning = false;
-            if (messagesEl) {
-                _appendCliMessage('system', '✓ ' + (payload.agent_name || 'Agent') + ' 完成');
-            }
+            _appendCliMessage('system', '✓ ' + (payload.agent_name || 'Agent') + ' ' + (window.t ? window.t('cliAgent.completed') : '完成'));
         } else if (type === 'cli_agent_error') {
             _isRunning = false;
-            if (messagesEl) {
-                _appendCliMessage('error', payload.message || 'CLI agent 执行失败');
-            }
+            _appendCliMessage('error', payload.message || (window.t ? window.t('cliAgent.failed') : 'CLI agent 执行失败'));
         }
     }
 
-    function getSelectedAgent() {
-        return _selectedAgent;
-    }
+    function _ensureBindings() {
+        if (_bindingsDone) return;
 
-    function isRunning() {
-        return _isRunning;
+        var input = document.getElementById('cli-input');
+        var sendBtn = document.getElementById('cli-send-btn');
+        if (!input || !sendBtn) return;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            if (e.shiftKey) return;
+            e.preventDefault();
+            var prompt = input.value.trim();
+            if (!prompt) return;
+            input.value = '';
+            sendCliMessage(prompt);
+        });
+
+        sendBtn.addEventListener('click', function() {
+            var prompt = input.value.trim();
+            if (!prompt) return;
+            input.value = '';
+            sendCliMessage(prompt);
+        });
+
+        _bindingsDone = true;
     }
 
     function init() {
-        // 延迟加载，等待 AI panel 渲染完成
+        _ensureBindings();
         setTimeout(function() {
             loadAgents().then(function() {
                 renderAgentSelector();
+                _updateModeBadge();
+                _updateInputPlaceholder();
             });
         }, 1000);
     }
@@ -268,10 +293,10 @@
         init: init,
         loadAgents: loadAgents,
         renderAgentSelector: renderAgentSelector,
-        sendMessage: sendMessage,
+        sendMessage: sendCliMessage,
         handleEvent: handleEvent,
-        getSelectedAgent: getSelectedAgent,
-        isRunning: isRunning,
+        getSelectedAgent: function() { return _selectedAgent; },
+        isRunning: function() { return _isRunning; },
         isCliAgentMode: function() { return _selectedAgent !== null; }
     };
 

@@ -10,6 +10,7 @@ import numpy as np
 
 from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.error_handler import log_exception
 
 _HF_ENV_CONFIGURED = False
 _FASTEMBED_CACHE_PATH_CONFIGURED = False
@@ -249,7 +250,8 @@ def _load_global_idf(workspace: str | None = None) -> dict[str, float] | None:
 
         data = json.loads(path.read_text(encoding="utf-8"))
         return {k: float(v) for k, v in data.items()}
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/embedder] failed to load global IDF", e, level="debug", logger=logger)
         return None
 
 
@@ -321,8 +323,8 @@ def update_global_idf_incremental(
                 pass
         # For simplicity, just mark IDF as stale so next full rebuild picks it up
         # Incremental IDF updates are best-effort
-    except Exception:
-        pass
+    except Exception as e:
+        log_exception("[rag/embedder] incremental IDF update failed (best-effort)", e, level="debug", logger=logger)
 
 
 def get_model(download_callback=None):

@@ -860,8 +860,9 @@
     "searchPlaceholder": "Search notes..."
   },
   "inspector": {
-    "ai": "AI",
-    "properties": "Properties",
+    "ai": "Chat",
+    "cli": "CLI",
+    "properties": "Props",
     "backlinks": "Links",
     "propertiesEmpty": "Select a note to view properties",
     "backlinksEmpty": "No backlinks",
@@ -870,6 +871,13 @@
     "basicInfo": "Basic Info",
     "frontmatter": "Frontmatter",
     "stats": "Statistics"
+  },
+  "cli": {
+    "panelTitle": "CLI Agent",
+    "inputPlaceholder": "Send a command to the selected CLI Agent...",
+    "emptyHint": "Select an installed CLI Agent and enter a command. Supports Claude Code, OpenCode, Codex CLI, and Gemini CLI. If connection fails, make sure you have logged in or configured the API key for the CLI.",
+    "defaultName": "XiaoYi",
+    "noAgent": "No installed CLI Agent detected. Please install one first."
   },
   "cliAgent": {
     "selectAgent": "Select Agent",

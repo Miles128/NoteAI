@@ -58,7 +58,7 @@ function doSearch(query) {
     resultsEl.innerHTML =
         '<div class="search-loading">' + window.t('search.loading') + '</div>';
 
-    window.api.invoke('search_files', { query: query.trim() })
+    window.api.searchFiles(query.trim())
         .then(function (result) {
             console.log('[Search] result:', JSON.stringify(result).substring(0, 500));
             if (result && result.success) {

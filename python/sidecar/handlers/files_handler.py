@@ -131,6 +131,12 @@ class FilesHandler(BaseHandler):
                     rel_path = str(full.relative_to(Path(workspace)))
                 except ValueError:
                     rel_path = str(full_path)
+            # Protect runtime/system directories from being overwritten by file saves.
+            if rel_path:
+                protected_roots = {".noteai", ".ai_memory", ".git", ".trash", "trash"}
+                first_part = Path(rel_path).parts[0].lower()
+                if first_part in protected_roots:
+                    return {"success": False, "message": "不能保存到系统或运行时目录"}
             full.write_text(content, encoding="utf-8")
             if rel_path.lower().endswith(".md"):
                 self._start_task(
@@ -181,7 +187,8 @@ class FilesHandler(BaseHandler):
             return {"success": False, "message": "解析后的路径不存在"}
 
         # Reject paths with control characters or shell metacharacters that could confuse external commands.
-        if any(ord(ch) < 32 for ch in resolved) or '"' in resolved or '&' in resolved or '|' in resolved:
+        illegal_chars = '"&|<>%^'
+        if any(ord(ch) < 32 for ch in resolved) or any(ch in resolved for ch in illegal_chars):
             return {"success": False, "message": "路径包含非法字符"}
 
         try:
@@ -195,8 +202,8 @@ class FilesHandler(BaseHandler):
                 cmd = shutil.which("explorer")
                 if not cmd:
                     return {"success": False, "message": "系统未找到 explorer 命令"}
-                # Quote the path so explorer sees it as a single argument.
-                subprocess.Popen([cmd, f'/select,"{resolved_path}"'])
+                # Pass path as a separate argument; subprocess handles quoting safely.
+                subprocess.Popen([cmd, "/select,", str(resolved_path)])
             else:
                 cmd = shutil.which("xdg-open") or shutil.which("nautilus") or shutil.which("dolphin")
                 if not cmd:

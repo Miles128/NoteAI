@@ -35,6 +35,7 @@ from sidecar.service_context import ServiceContext
 from sidecar.wiki_utils import (
     sync_wiki_with_files,
 )
+from utils.error_handler import log_exception
 from utils.fulltext_index import fulltext_index
 from utils.logger import logger
 from utils.topic_assigner import (
@@ -82,6 +83,14 @@ class SidecarServer(PathHelpersMixin):
         self._kb_handler = KbHandler(self)
         self._cli_agent_handler = CliAgentHandler(self)
         self._build_router()
+
+    def start(self):
+        """Start background side-effects after construction.
+
+        Keeping I/O side-effects out of __init__ makes the server easier to
+        instantiate in tests and avoids starting threads/watchers before the
+        process is fully initialized.
+        """
         self._start_workspace_watcher()
         self._start_rss_polling()
         self._startup_sync()
@@ -240,9 +249,11 @@ class SidecarServer(PathHelpersMixin):
         """文件变更时失效所有缓存"""
         self._cache.clear()
         fulltext_index.mark_dirty()
+        from sidecar.rag.index import clear_collection_cache
         from sidecar.rag.retriever import _query_cache
 
         _query_cache.clear()
+        clear_collection_cache(None)
 
     def _start_rss_polling(self):
         """Start periodic RSS feed polling (every 30 minutes)."""
@@ -461,8 +472,8 @@ class SidecarServer(PathHelpersMixin):
         if self._rss_poll_timer:
             try:
                 self._rss_poll_timer.cancel()
-            except Exception:
-                pass
+            except Exception as e:
+                log_exception("[shutdown] failed to cancel rss poll timer", e, level="debug", logger=logger)
         self._router.shutdown(wait=False)
         # Shutdown module-level thread pools
         try:
@@ -470,18 +481,19 @@ class SidecarServer(PathHelpersMixin):
 
             if _LLM_EXECUTOR is not None:
                 _LLM_EXECUTOR.shutdown(wait=False)
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception("[shutdown] failed to shutdown LLM executor", e, level="debug", logger=logger)
         try:
             from sidecar.rag.retriever import _RETRIEVE_EXECUTOR
 
             _RETRIEVE_EXECUTOR.shutdown(wait=False)
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception("[shutdown] failed to shutdown retriever executor", e, level="debug", logger=logger)
 
 
 def main():
     server = SidecarServer()
+    server.start()
     logger.warning("[Python Sidecar] Ready")
 
     ModelWarmupManager.start_preload()

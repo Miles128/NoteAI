@@ -28,13 +28,89 @@ body {
     top: var(--titlebar-height);
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--statusbar-height);
     width: 100%;
     height: auto;
     margin-top: 0;
     overflow: hidden;
     background: var(--bg);
     padding: 0;
+}
+
+.app-statusbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--statusbar-height);
+    background: var(--statusbar-bg);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    z-index: 100;
+    gap: 12px;
+}
+
+.app-statusbar .statusbar-left,
+.app-statusbar .statusbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.app-statusbar .statusbar-left {
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.app-statusbar .statusbar-right {
+    flex-shrink: 0;
+}
+
+.app-statusbar .statusbar-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.app-statusbar .statusbar-filename {
+    color: var(--text);
+    font-weight: 500;
+    max-width: 240px;
+}
+
+.app-statusbar .statusbar-separator {
+    width: 1px;
+    height: 14px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+.app-statusbar .statusbar-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--color-tag);
+    color: #fff;
+    font-size: 11px;
+    margin-right: 4px;
+}
+
+.app-statusbar .statusbar-topic-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--color-topic);
+    color: #1a1a1a;
+    font-size: 11px;
+    margin-right: 4px;
     box-sizing: border-box;
     gap: 0;
 }
@@ -289,11 +365,6 @@ body {
 
 .titlebar-btn-close:hover svg {
     stroke: currentColor;
-}
-
-.titlebar-btn#titlebar-ai-toggle-btn.active {
-    color: var(--primary);
-    background: rgba(74, 144, 217, 0.1);
 }
 
 .titlebar-btn#titlebar-pending-btn.has-pending {

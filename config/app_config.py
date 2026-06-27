@@ -19,6 +19,7 @@ from .constants import (
     WORKSPACE_STATE_FILE,
 )
 from .security import _restrict_file_permissions
+from utils.error_handler import log_exception
 
 _logger = logging.getLogger("NoteAI")
 
@@ -57,6 +58,8 @@ class AppConfig:
     theme_preference: str = "system"
     font_size: str = "small"
     accent_color: str = "#4A90D9"
+    sidebar_font_family: str = "system"
+    preview_font_family: str = "system"
     window_width: int = 1400
     window_height: int = 900
 
@@ -237,7 +240,8 @@ class AppConfig:
                 state_workspace = state_data.get("workspace_path", "")
                 if state_workspace and Path(state_workspace).exists():
                     workspace_default = state_workspace
-        except Exception:
+        except Exception as e:
+            log_exception("[config] failed to load workspace state", e, level="debug", logger=_logger)
             workspace_default = ""
 
         env_mappings = {
@@ -275,7 +279,11 @@ class AppConfig:
         init_kwargs = {}
         for key, (env_var, config_default) in env_mappings.items():
             env_value = os.environ.get(env_var)
-            init_kwargs[key] = _coerce(key, env_value, config_default) if env_value is not None else config_default
+            # Treat empty env values as unset so config defaults are preserved.
+            if env_value is not None and env_value != "":
+                init_kwargs[key] = _coerce(key, env_value, config_default)
+            else:
+                init_kwargs[key] = config_default
 
         for key, value in file_data.items():
             if key == "workspace_path":
@@ -292,13 +300,8 @@ class AppConfig:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
-        os.environ["NOTEAI_API_BASE"] = self.api_base
-        os.environ["NOTEAI_MODEL_NAME"] = self.model_name
-        os.environ["NOTEAI_TEMPERATURE"] = str(self.temperature)
-        os.environ["NOTEAI_MAX_TOKENS"] = str(self.max_tokens)
-        os.environ["NOTEAI_MAX_CONTEXT"] = str(self.max_context_tokens)
-        # NOTE: API key is intentionally NOT written to environ — children
-        # should obtain it from the keyring or api_config.json, not inherit it.
+        # Do not mutate os.environ on save. Environment variables are an external
+        # configuration source and should remain read-only for the running process.
 
         api_fields = {
             "api_key",

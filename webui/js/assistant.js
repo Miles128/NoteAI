@@ -7,7 +7,7 @@ window.AssistantModule = (function() {
     var _panelVisible = false;
     /** 打开 AI 侧栏收窄等 {@link _thawAILayout} */
     var _aiLayoutSnap = null;
-    var _AI_PANEL_DEFAULT_W = 300;
+    var _AI_PANEL_DEFAULT_W = 380;
 
     /**
      * 打开前：侧栏若为展开则缩至约 75%；AI 列宽约等于让出的宽幅。#content-panel 不再写死宽度，避免溢出被裁剪。
@@ -39,7 +39,7 @@ window.AssistantModule = (function() {
         sidebar.style.width = newSw + 'px';
         snap.didShrinkSidebar = true;
         var baseW = freed > 0 ? freed : Math.round(sw * 0.25);
-        panel.style.width = Math.min(420, Math.max(260, baseW)) + 'px';
+        panel.style.width = Math.min(520, Math.max(320, baseW)) + 'px';
 
         _aiLayoutSnap = snap;
     }
@@ -114,7 +114,10 @@ window.AssistantModule = (function() {
             panel.classList.add('ai-panel-visible');
             _setRightAreaAiOpen(true);
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
-            if (toggleBtn) toggleBtn.classList.add('active');
+            if (toggleBtn) {
+                toggleBtn.classList.add('active');
+                toggleBtn.setAttribute('aria-pressed', 'true');
+            }
             _scrollToBottom();
             window.requestAnimationFrame(function() {
                 var el = document.getElementById('ai-input');
@@ -130,7 +133,10 @@ window.AssistantModule = (function() {
             panel.classList.remove('ai-panel-visible');
             _setRightAreaAiOpen(false);
             var toggleBtn = document.getElementById('titlebar-ai-toggle-btn');
-            if (toggleBtn) toggleBtn.classList.remove('active');
+            if (toggleBtn) {
+                toggleBtn.classList.remove('active');
+                toggleBtn.setAttribute('aria-pressed', 'false');
+            }
         }
     }
 
@@ -181,7 +187,7 @@ window.AssistantModule = (function() {
             } else {
                 newWidth = startWidth + dx;
             }
-            newWidth = Math.max(260, Math.min(520, newWidth));
+            newWidth = Math.max(320, Math.min(640, newWidth));
             panel.style.width = newWidth + 'px';
         }
 
@@ -246,12 +252,6 @@ window.AssistantModule = (function() {
         if (!question) return;
 
         input.value = '';
-
-        // CLI Agent 模式：转发到 CliAgentModule
-        if (window.CliAgentModule && window.CliAgentModule.isCliAgentMode && window.CliAgentModule.isCliAgentMode()) {
-            window.CliAgentModule.sendMessage(question);
-            return;
-        }
 
         addUserMessage(question);
         _chatHistory.push({ role: 'user', content: question });
@@ -470,12 +470,6 @@ window.AssistantModule = (function() {
             addSystemMessage(window.t('assistant.indexProgress', { percent: pct, message: msg }));
         }
 
-        // CLI Agent 事件转发
-        if (eventData.type && eventData.type.indexOf('cli_agent_') === 0) {
-            if (window.CliAgentModule && window.CliAgentModule.handleEvent) {
-                window.CliAgentModule.handleEvent(eventData);
-            }
-        }
     }
 
     function _estimateIndexTime() {

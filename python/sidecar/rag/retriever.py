@@ -9,6 +9,7 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 from config import config, is_ignored_dir
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.error_handler import log_exception
 from utils.logger import logger
 from utils.ttl_cache import TTLCache
 
@@ -132,8 +133,8 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
                         existing_ids.add(r.get("id"))
                 results.sort(key=lambda x: x.get("score", 0), reverse=True)
                 results = results[:top_k]
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception("[rag/retriever] HyDE search failed", e, level="debug", logger=logger)
 
     # Profile fallback only if main search returned nothing.
     profile_query = profile_future.result()
@@ -175,7 +176,8 @@ def _rewrite_profile(query: str) -> str:
         from sidecar.rag.profile import rewrite_query_with_profile
 
         return rewrite_query_with_profile(query)
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/retriever] profile rewrite failed", e, level="debug", logger=logger)
         return query
 
 
@@ -554,8 +556,8 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         from sidecar.rag.index import _get_collection
 
         collection = _get_collection(workspace)
-    except Exception:
-        pass
+    except Exception as e:
+        log_exception("[rag/retriever] failed to get collection for global IDF rebuild", e, level="warning", logger=logger)
 
     full_corpus: list[dict] = []
     if collection is not None:

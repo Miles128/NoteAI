@@ -860,7 +860,8 @@
     "searchPlaceholder": "搜索笔记..."
   },
   "inspector": {
-    "ai": "AI",
+    "ai": "问答",
+    "cli": "CLI",
     "properties": "属性",
     "backlinks": "链接",
     "propertiesEmpty": "选择一篇笔记查看属性",
@@ -870,6 +871,13 @@
     "basicInfo": "基本信息",
     "frontmatter": "Frontmatter",
     "stats": "统计"
+  },
+  "cli": {
+    "panelTitle": "CLI Agent",
+    "inputPlaceholder": "输入指令发送给选中的 CLI Agent...",
+    "emptyHint": "选择一个已安装的 CLI Agent 并输入指令。支持 Claude Code、OpenCode、Codex CLI、Gemini CLI。若连接失败，请确认已在对应 CLI 中完成登录或配置 API key。",
+    "defaultName": "小忆",
+    "noAgent": "未检测到已安装的 CLI Agent，请先在系统中安装。"
   },
   "cliAgent": {
     "selectAgent": "选择 Agent",

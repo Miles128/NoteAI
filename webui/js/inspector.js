@@ -47,6 +47,14 @@
             loadProperties(_currentFilePath);
         } else if (tabName === 'backlinks' && _currentFilePath) {
             loadBacklinks(_currentFilePath);
+        } else if (tabName === 'cli') {
+            if (window.CliAgentModule && window.CliAgentModule.loadAgents) {
+                window.CliAgentModule.loadAgents().then(function() {
+                    if (window.CliAgentModule.renderAgentSelector) {
+                        window.CliAgentModule.renderAgentSelector();
+                    }
+                });
+            }
         }
     }
 

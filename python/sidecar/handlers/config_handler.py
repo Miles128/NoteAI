@@ -45,7 +45,7 @@ class ConfigHandler(BaseHandler):
         model_name = params.get("model_name", "gpt-4")
 
         if "■■■■" in api_key:
-            api_key = self.config.api_key
+            api_key = self.config._get_attr("api_key")
 
         if not api_key or not api_key.strip():
             return {"success": False, "message": "API Key 不能为空"}
@@ -54,15 +54,17 @@ class ConfigHandler(BaseHandler):
         if not connected:
             return {"success": False, "message": conn_msg}
 
-        self.config.api_key = api_key
-        self.config.api_base = api_base
-        self.config.model_name = model_name
-        self.config.temperature = params.get("temperature", 0.7)
-        self.config.max_tokens = params.get("max_tokens", 32000)
-        self.config.max_context_tokens = params.get("max_context_tokens", 128000)
-        self.config.disable_thinking = params.get("disable_thinking", True)
+        # Apply all config changes under the config lock to keep the update atomic.
+        with self.config._lock:
+            self.config.api_key = api_key
+            self.config.api_base = api_base
+            self.config.model_name = model_name
+            self.config.temperature = params.get("temperature", 0.7)
+            self.config.max_tokens = params.get("max_tokens", 32000)
+            self.config.max_context_tokens = params.get("max_context_tokens", 128000)
+            self.config.disable_thinking = params.get("disable_thinking", True)
 
-        save_ok, save_msg = self.config.save()
+            save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": f"配置已保存，{conn_msg}"}
@@ -85,34 +87,35 @@ class ConfigHandler(BaseHandler):
         }
 
     def _save_ui_config(self, params):
-        if "web_ai_assist" in params:
-            self.config.web_ai_assist = params["web_ai_assist"]
-        if "web_include_images" in params:
-            self.config.web_include_images = params["web_include_images"]
-        if "conv_ai_assist" in params:
-            self.config.conv_ai_assist = params["conv_ai_assist"]
-        if "integration_strategy" in params:
-            self.config.integration_strategy = params["integration_strategy"]
-        if "auto_topic" in params:
-            self.config.auto_topic = params["auto_topic"]
-        if "topic_list" in params:
-            self.config.topic_list = params["topic_list"]
-        if "font_size" in params:
-            self.config.font_size = params["font_size"]
-        if "sidebar_font_family" in params:
-            self.config.sidebar_font_family = str(params["sidebar_font_family"] or "system")
-        if "preview_font_family" in params:
-            self.config.preview_font_family = str(params["preview_font_family"] or "system")
-        if "cloud_sync_experimental" in params:
-            self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
-        if "assistant_agent_mode" in params:
-            self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
-        if "rag_enabled" in params:
-            self.config.rag_enabled = bool(params["rag_enabled"])
-        if "locale" in params:
-            loc = str(params["locale"]).strip()
-            self.config.locale = "en" if loc == "en" else "zh-CN"
-        save_ok, save_msg = self.config.save()
+        with self.config._lock:
+            if "web_ai_assist" in params:
+                self.config.web_ai_assist = params["web_ai_assist"]
+            if "web_include_images" in params:
+                self.config.web_include_images = params["web_include_images"]
+            if "conv_ai_assist" in params:
+                self.config.conv_ai_assist = params["conv_ai_assist"]
+            if "integration_strategy" in params:
+                self.config.integration_strategy = params["integration_strategy"]
+            if "auto_topic" in params:
+                self.config.auto_topic = params["auto_topic"]
+            if "topic_list" in params:
+                self.config.topic_list = params["topic_list"]
+            if "font_size" in params:
+                self.config.font_size = params["font_size"]
+            if "sidebar_font_family" in params:
+                self.config.sidebar_font_family = str(params["sidebar_font_family"] or "system")
+            if "preview_font_family" in params:
+                self.config.preview_font_family = str(params["preview_font_family"] or "system")
+            if "cloud_sync_experimental" in params:
+                self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
+            if "assistant_agent_mode" in params:
+                self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
+            if "rag_enabled" in params:
+                self.config.rag_enabled = bool(params["rag_enabled"])
+            if "locale" in params:
+                loc = str(params["locale"]).strip()
+                self.config.locale = "en" if loc == "en" else "zh-CN"
+            save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": "UI 配置已保存"}
@@ -121,8 +124,9 @@ class ConfigHandler(BaseHandler):
         return self.config.theme_preference
 
     def _save_theme_preference(self, params):
-        self.config.theme_preference = params.get("theme", "system")
-        save_ok, save_msg = self.config.save()
+        with self.config._lock:
+            self.config.theme_preference = params.get("theme", "system")
+            save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True}

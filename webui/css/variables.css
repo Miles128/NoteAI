@@ -25,6 +25,7 @@
     --card-shadow: none;
     --card-radius: 4px;
     --titlebar-height: calc(38px - 2pt);
+    --statusbar-height: 28px;
     --btn-radius: 4px;
     --input-radius: 4px;
     --glass-blur: none;

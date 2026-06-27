@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import tempfile
+from pathlib import Path
 
 _log = logging.getLogger("NoteAI")
 
@@ -199,6 +200,102 @@ def delete_api_key() -> bool:
     if not _fallback_delete():
         ok = False
     return ok
+
+
+def store_credential(service: str, account: str, value: str) -> bool:
+    """Store an arbitrary credential in the OS keychain or the fallback file."""
+    if not value:
+        return False
+    if _HAS_KEYRING:
+        try:
+            keyring.set_password(service, account, value)
+            return True
+        except Exception as e:
+            _log.warning("Keyring store failed for %s/%s, using fallback: %s", service, account, e)
+    return _fallback_write_credential(service, account, value)
+
+
+def load_credential(service: str, account: str) -> str:
+    """Load an arbitrary credential from the OS keychain or the fallback file."""
+    if _HAS_KEYRING:
+        try:
+            key = keyring.get_password(service, account)
+            if key is not None:
+                return key
+        except Exception as e:
+            _log.warning("Keyring load failed for %s/%s, using fallback: %s", service, account, e)
+    return _fallback_read_credential(service, account)
+
+
+def delete_credential(service: str, account: str) -> bool:
+    """Delete an arbitrary credential from the OS keychain and fallback file."""
+    ok = True
+    if _HAS_KEYRING:
+        try:
+            keyring.delete_password(service, account)
+        except Exception as e:
+            _log.warning("Keyring delete failed for %s/%s: %s", service, account, e)
+            ok = False
+    if not _fallback_delete_credential(service, account):
+        ok = False
+    return ok
+
+
+def _credential_fallback_path(service: str, account: str) -> Path:
+    from config.settings import SYSTEM_APP_DATA_DIR
+
+    safe_service = base64.urlsafe_b64encode(hashlib.sha256(service.encode()).digest()).decode()[:16]
+    safe_account = base64.urlsafe_b64encode(hashlib.sha256(account.encode()).digest()).decode()[:16]
+    SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return SYSTEM_APP_DATA_DIR / f"cred_{safe_service}_{safe_account}.dat"
+
+
+def _fallback_write_credential(service: str, account: str, value: str) -> bool:
+    path = _credential_fallback_path(service, account)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".cred_")
+        try:
+            os.write(fd, _encrypt(value))
+        finally:
+            os.close(fd)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, str(path))
+        return True
+    except Exception as e:
+        _log.warning("Failed to write credential fallback for %s/%s: %s", service, account, e)
+        return False
+
+
+def _fallback_read_credential(service: str, account: str) -> str:
+    path = _credential_fallback_path(service, account)
+    if not path.exists():
+        return ""
+    try:
+        data = path.read_bytes()
+        os.chmod(path, 0o600)
+        install_secret = _load_or_create_install_secret()
+        try:
+            return _decrypt(data, install_secret)
+        except Exception:
+            try:
+                return _legacy_decrypt(data)
+            except Exception:
+                return base64.b64decode(data).decode("utf-8")
+    except Exception as e:
+        _log.warning("Failed to read credential fallback for %s/%s: %s", service, account, e)
+        return ""
+
+
+def _fallback_delete_credential(service: str, account: str) -> bool:
+    try:
+        path = _credential_fallback_path(service, account)
+        if path.exists():
+            path.unlink()
+        return True
+    except Exception as e:
+        _log.warning("Failed to delete credential fallback for %s/%s: %s", service, account, e)
+        return False
 
 
 def is_keyring_available() -> bool:

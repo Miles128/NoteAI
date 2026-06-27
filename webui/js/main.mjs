@@ -71,6 +71,9 @@ async function loadModules() {
     window.CliAgentModule = window.CliAgentModule || {};
     if (window.CliAgentModule.init) window.CliAgentModule.init();
 
+    await import('./statusbar.js');
+    window.StatusbarModule = window.StatusbarModule || {};
+
     await import('./sidebar.js');
     window.switchSidebarView = window.switchSidebarView;
     window.updateSidebarStats = window.updateSidebarStats;
@@ -157,13 +160,6 @@ async function loadModules() {
     const { IngestModule } = window;
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
-
-    await import('./rewrite.js');
-    const { RewriteManager } = window;
-    window.RewriteManager = RewriteManager;
-    window.onLLMRewrite = RewriteManager.onLLMRewrite;
-    window.onRewriteConfirm = RewriteManager.onRewriteConfirm;
-    window.onRewriteCancel = RewriteManager.onRewriteCancel;
 
     await import('./event-listeners.js');
     const { EventListeners } = window;

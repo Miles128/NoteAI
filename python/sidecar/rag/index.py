@@ -18,6 +18,7 @@ import bm25s
 import zvec
 
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.error_handler import log_exception
 from utils.logger import logger
 
 _COLLECTION_NAME = "noteai_chunks"
@@ -57,6 +58,54 @@ def _metadata_path(workspace: str) -> Path:
     return _rag_index_dir(workspace) / "metadata.json"
 
 
+def _manifest_path(workspace: str) -> Path:
+    return _rag_index_dir(workspace) / "manifest.json"
+
+
+_INDEX_VERSION = 2
+
+
+def _read_manifest(workspace: str) -> dict:
+    """Read the index manifest, returning a default if missing or invalid."""
+    path = _manifest_path(workspace)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_manifest(workspace: str, data: dict) -> None:
+    """Atomically write the index manifest."""
+    import tempfile as _tempfile
+
+    path = _manifest_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+    except OSError as e:
+        log_exception("[rag/index] failed to write manifest", e, level="warning", logger=logger)
+
+
+def _manifest_version_ok(workspace: str) -> bool:
+    """Check whether the on-disk index version matches the current schema version."""
+    manifest = _read_manifest(workspace)
+    return manifest.get("version") == _INDEX_VERSION
+
+
+def _bump_manifest_version(workspace: str) -> None:
+    manifest = _read_manifest(workspace)
+    manifest["version"] = _INDEX_VERSION
+    manifest["schema_version"] = _INDEX_VERSION
+    import time as _time
+
+    manifest["last_rebuilt"] = _time.time()
+    _write_manifest(workspace, manifest)
+
+
 def _build_schema() -> zvec.CollectionSchema:
     return zvec.CollectionSchema(
         name=_COLLECTION_NAME,
@@ -81,13 +130,22 @@ def _build_schema() -> zvec.CollectionSchema:
 def _get_collection(workspace: str) -> zvec.Collection:
     with _COLLECTION_CACHE_LOCK:
         cached = _COLLECTION_CACHE.get(workspace)
-        if cached is not None:
+        if cached is not None and _manifest_version_ok(workspace):
             return cached
+        # Version mismatch or no cache — drop stale entry before reopening.
+        _COLLECTION_CACHE.pop(workspace, None)
 
     path = str(_collection_path(workspace))
     try:
+        if not _manifest_version_ok(workspace) and Path(path).exists():
+            logger.info("[RAG] index version mismatch, rebuilding collection")
+            shutil.rmtree(path, ignore_errors=True)
+            _bm25s = _bm25s_dir(workspace)
+            if _bm25s.exists():
+                shutil.rmtree(_bm25s, ignore_errors=True)
         collection = zvec.open(path)
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/index] failed to open existing collection, creating new", e, level="info", logger=logger)
         collection = zvec.create_and_open(path, _build_schema())
 
     with _COLLECTION_CACHE_LOCK:
@@ -106,7 +164,12 @@ def clear_collection_cache(workspace: str | None = None) -> None:
 
 def _escape_filter_value(value: str) -> str:
     """Escape a string for use in a zvec filter expression."""
-    return "'" + str(value).replace("'", "''") + "'"
+    text = str(value)
+    if "\x00" in text:
+        raise ValueError("filter value contains null byte")
+    if any(ord(ch) < 32 for ch in text):
+        raise ValueError("filter value contains control characters")
+    return "'" + text.replace("'", "''") + "'"
 
 
 def is_usable_chunk(result: dict) -> bool:
@@ -136,7 +199,8 @@ def count_indexed_chunks(workspace: str) -> int:
 
     try:
         collection_count = _collection_count(workspace)
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/index] failed to get collection count", e, level="debug", logger=logger)
         collection_count = -1
 
     if collection_count >= 0 and metadata_total != collection_count:
@@ -155,7 +219,8 @@ def _collection_count(workspace: str) -> int:
 
         collection = zvec.Collection(str(_collection_path(workspace)))
         return int(collection.num_entities)
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/index] failed to query collection count", e, level="debug", logger=logger)
         return -1
 
 
@@ -175,8 +240,8 @@ def _load_metadata(workspace: str) -> dict[str, Any]:
                 data.setdefault("tags", {})
                 data.setdefault("files", {})
                 return data
-    except Exception:
-        pass
+    except Exception as e:
+        log_exception("[rag/index] failed to load metadata", e, level="warning", logger=logger)
     return _empty_metadata()
 
 
@@ -240,7 +305,8 @@ def _chunk_to_doc(chunk: dict, embedding: dict) -> zvec.Doc:
 def _tags_from_fields(fields: dict) -> list[str]:
     try:
         return json.loads(fields.get("tags_json") or "[]")
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        log_exception("[rag/index] failed to parse tags_json", e, level="debug", logger=logger)
         return []
 
 
@@ -322,6 +388,8 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     for chunk in chunks:
         _update_metadata_index(metadata, chunk, mode="add")
     _save_metadata(workspace, metadata)
+
+    _bump_manifest_version(workspace)
 
     return {"success": True, "chunk_count": total}
 
@@ -444,7 +512,8 @@ def _load_bm25_retriever(workspace: str):
     try:
         retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
         return retriever, _bm25_corpus_from_retriever(retriever)
-    except Exception:
+    except Exception as e:
+        log_exception("[rag/index] failed to load BM25 retriever", e, level="warning", logger=logger)
         return None, []
 
 
@@ -601,7 +670,8 @@ def _get_chunks_by_file(workspace: str, file_path: str) -> list[dict]:
         filter_expr = f"file_path = {_escape_filter_value(file_path)}"
         docs = collection.query(filter=filter_expr, topk=10000, output_fields=[])
         return [{"id": doc.id} for doc in docs]
-    except Exception:
+    except Exception as e:
+        log_exception(f"[rag/index] failed to get chunks for file {file_path}", e, level="warning", logger=logger)
         return []
 
 
@@ -633,8 +703,8 @@ def load_manifest(workspace: str) -> dict[str, Any]:
         if isinstance(data, dict) and "files" in data:
             data.setdefault("version", 1)
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        log_exception("[rag/index] failed to load file manifest", e, level="warning", logger=logger)
     return {"version": 1, "files": {}}
 
 

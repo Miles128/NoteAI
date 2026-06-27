@@ -50,7 +50,10 @@ class TestRpcRouter:
         router.handle({"id": "2", "method": "nonexistent", "params": {}})
         assert len(cap.responses) == 1
         assert "error" in cap.responses[0]
-        assert "Unknown method" in cap.responses[0]["error"]
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        assert err["code"] == "METHOD_NOT_FOUND"
+        assert "Unknown method" in err["message"]
 
     def test_async_method(self, captured):
         import threading
@@ -78,7 +81,10 @@ class TestRpcRouter:
         router.handle({"id": "4", "method": "fail", "params": {}})
         _wait_for_responses(cap)
         assert "error" in cap.responses[0]
-        assert "boom" in cap.responses[0]["error"]
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        assert err["code"] == "INTERNAL_ERROR"
+        assert "boom" in err["message"]
 
     def test_error_message_sanitizes_workspace_and_home_paths(self, captured, tmp_path):
         router, cap = captured
@@ -97,11 +103,13 @@ class TestRpcRouter:
         router.handle({"id": "5", "method": "fail_paths", "params": {}})
         _wait_for_responses(cap)
         assert "error" in cap.responses[0]
-        error = cap.responses[0]["error"]
-        assert str(ws) not in error
-        assert str(home) not in error
-        assert "<workspace>" in error
-        assert "<home>" in error
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        msg = err["message"]
+        assert str(ws) not in msg
+        assert str(home) not in msg
+        assert "<workspace>" in msg
+        assert "<home>" in msg
 
 
 def test_sanitize_error_message_replaces_paths():

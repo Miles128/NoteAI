@@ -22,7 +22,7 @@ async function saveApiConfig() {
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
     const showStatus = (msg, isError = false) => {
-        const displayMsg = isError ? `<span style="color: #e53e3e;">${escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${escapeHtml(msg)}</span>`;
+        const displayMsg = isError ? `<span style="color: #e53e3e;">${window.escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${window.escapeHtml(msg)}</span>`;
         if (statusEl) {
             statusEl.innerHTML = displayMsg;
             statusEl.style.display = 'block';

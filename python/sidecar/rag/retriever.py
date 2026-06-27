@@ -17,8 +17,9 @@ DEFAULT_TOP_K = 5
 SEARCH_TOP_K_TAGS = 7
 HYDE_TRIGGER_BELOW_SCORE = 0.33
 _MMR_CANDIDATE_CAP = 10
-_RERANK_CANDIDATE_CAP = 6
+_RERANK_CANDIDATE_CAP = 5
 _SKIP_RERANK_SCORE = 0.75
+_RERANK_MAX_CHARS = 512
 _FETCH_BATCH_SIZE = 256
 
 _RERANKER = None
@@ -278,6 +279,9 @@ def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list
 
 def _rerank(query: str, results: list, top_k: int = 5) -> list:
     try:
+        if len(results) <= 1:
+            return results[:top_k]
+
         # Skip reranking if the top result is already very strong
         if results and results[0].get("score", 0) >= _SKIP_RERANK_SCORE:
             return results[:top_k]
@@ -286,17 +290,17 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
         if reranker is None:
             return results[:top_k]
 
-        pairs = [[query, r.get("content", "")] for r in results if r.get("content")]
-        if not pairs:
+        scored = [(r, (r.get("content") or "")[:_RERANK_MAX_CHARS]) for r in results if r.get("content")]
+        if not scored:
             return results[:top_k]
 
+        pairs = [[query, text] for _, text in scored]
         scores = reranker.compute_score(pairs, normalize=True)
         if isinstance(scores, float):
             scores = [scores]
 
-        for i, score in enumerate(scores):
-            if i < len(results):
-                results[i]["rerank_score"] = float(score)
+        for (row, _), score in zip(scored, scores, strict=False):
+            row["rerank_score"] = float(score)
 
         results.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
         return results[:top_k]

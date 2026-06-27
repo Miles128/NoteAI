@@ -8,7 +8,10 @@ from sidecar.rag.index import (
     _load_metadata,
     _save_metadata,
     _update_metadata_index,
+    bm25_index_ready,
     build_index,
+    clear_bm25_cache,
+    ensure_bm25_index,
     filter_usable_chunks,
     hybrid_search,
     index_exists,
@@ -202,3 +205,54 @@ class TestBuildAndSearch:
         )
         assert len(hits) == 1
         assert hits[0]["id"] == "c1"
+
+    def test_bm25_ready_after_build(self, workspace: Path):
+        chunks = [
+            {
+                "id": "c1",
+                "content": "关键词匹配测试内容",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
+        build_index(str(workspace), chunks, embeddings)
+        assert bm25_index_ready(str(workspace)) is True
+
+    def test_ensure_bm25_rebuilds_when_dir_missing(self, workspace: Path):
+        chunks = [
+            {
+                "id": "c1",
+                "content": "重建 BM25 索引测试",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
+        build_index(str(workspace), chunks, embeddings)
+        ws = str(workspace)
+
+        import shutil
+
+        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+
+        bm25_dir = workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "bm25s"
+        shutil.rmtree(bm25_dir)
+        clear_bm25_cache(ws)
+
+        assert bm25_index_ready(ws) is False
+        assert ensure_bm25_index(ws) is True
+
+        hits = hybrid_search(
+            ws,
+            query_dense=embeddings[0]["dense_vec"],
+            query_text="重建 BM25",
+            top_k=1,
+        )
+        assert hits
+        assert hits[0].get("bm25_used") is True
+        assert hits[0].get("sparse_score", 0) > 0

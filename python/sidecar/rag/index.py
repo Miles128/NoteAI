@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,9 @@ _BM25_B = 0.75
 
 _INDEX_BATCH_SIZE = 128
 _FETCH_BATCH_SIZE = 256
+_HYBRID_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_hybrid")
+_DENSE_EF_CAP = 128
+_DENSE_EF_MULTIPLIER = 8
 
 _lock = threading.Lock()
 
@@ -36,6 +40,12 @@ _lock = threading.Lock()
 # (zvec.open reloads the mmindex every time, which is expensive for large indices).
 _COLLECTION_CACHE: dict[str, zvec.Collection] = {}
 _COLLECTION_CACHE_LOCK = threading.Lock()
+
+# In-memory BM25 retriever cache (bm25s.load is costly on every query).
+_BM25_CACHE: dict[str, tuple[Any, list[dict]]] = {}
+_BM25_CACHE_LOCK = threading.Lock()
+_ENSURE_BM25_LOCK = threading.Lock()
+_ENSURE_BM25_IN_PROGRESS: set[str] = set()
 
 
 def _rag_index_dir(workspace: str) -> Path:
@@ -153,6 +163,15 @@ def _get_collection(workspace: str) -> zvec.Collection:
     return collection
 
 
+def clear_bm25_cache(workspace: str | None = None) -> None:
+    """Drop cached BM25 retriever(s)."""
+    with _BM25_CACHE_LOCK:
+        if workspace is None:
+            _BM25_CACHE.clear()
+        else:
+            _BM25_CACHE.pop(workspace, None)
+
+
 def clear_collection_cache(workspace: str | None = None) -> None:
     """Drop cached collection(s). Useful before/after full rebuilds or tests."""
     with _COLLECTION_CACHE_LOCK:
@@ -160,6 +179,7 @@ def clear_collection_cache(workspace: str | None = None) -> None:
             _COLLECTION_CACHE.clear()
         else:
             _COLLECTION_CACHE.pop(workspace, None)
+    clear_bm25_cache(workspace)
 
 
 def _escape_filter_value(value: str) -> str:
@@ -334,17 +354,19 @@ def _bm25_corpus_from_retriever(retriever) -> list[dict]:
     return corpus or []
 
 
-def _build_and_save_bm25(corpus: list[dict], bm25_dir: Path) -> None:
+def _build_and_save_bm25(corpus: list[dict], bm25_dir: Path, workspace: str) -> None:
     """Tokenize, index and save a BM25s retriever with the given corpus."""
     if not corpus:
         if bm25_dir.exists():
             for f in bm25_dir.iterdir():
                 f.unlink()
+        clear_bm25_cache(workspace)
         return
     tokenized = bm25s.tokenize([c.get("content", "") for c in corpus], stopwords="zh")
     retriever = bm25s.BM25(corpus=corpus, k1=_BM25_K1, b=_BM25_B)
     retriever.index(tokenized)
     retriever.save(bm25_dir, corpus=corpus)
+    clear_bm25_cache(workspace)
 
 
 def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None) -> dict[str, Any]:
@@ -381,7 +403,7 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     if progress_callback:
         progress_callback(total, total, "构建 BM25 索引...")
 
-    _build_and_save_bm25(chunks, _bm25s_dir(workspace))
+    _build_and_save_bm25(chunks, _bm25s_dir(workspace), workspace)
 
     # Build metadata indices
     metadata = _empty_metadata()
@@ -430,7 +452,7 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> No
                 old_map[c["id"]] = c
         merged_corpus = list(old_map.values())
 
-        _build_and_save_bm25(merged_corpus, bm25_dir)
+        _build_and_save_bm25(merged_corpus, bm25_dir, workspace)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild failed: {e}\n")
 
@@ -498,23 +520,91 @@ def delete_by_file(
         old_corpus = _bm25_corpus_from_retriever(retriever)
         removed_ids = {c["id"] for c in removed}
         new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
-        _build_and_save_bm25(new_corpus, bm25_dir)
+        _build_and_save_bm25(new_corpus, bm25_dir, workspace)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
 
     return removed
 
 
+def _chunk_ids_from_metadata(workspace: str) -> list[str]:
+    """Collect all chunk ids tracked in metadata inverted indices."""
+    metadata = _load_metadata(workspace)
+    ids: set[str] = set()
+    for bucket in (metadata.get("topics", {}), metadata.get("tags", {}), metadata.get("files", {})):
+        for id_list in bucket.values():
+            ids.update(id_list)
+    return sorted(ids)
+
+
+def bm25_index_ready(workspace: str) -> bool:
+    """Return True when a non-empty BM25 index is loadable for *workspace*."""
+    retriever, corpus = _load_bm25_retriever(workspace)
+    return retriever is not None and bool(corpus)
+
+
+def ensure_bm25_index(workspace: str) -> bool:
+    """Ensure BM25 index exists; rebuild from zvec when missing but vectors are present."""
+    if bm25_index_ready(workspace):
+        return True
+
+    with _ENSURE_BM25_LOCK:
+        if bm25_index_ready(workspace):
+            return True
+        if workspace in _ENSURE_BM25_IN_PROGRESS:
+            return bm25_index_ready(workspace)
+        _ENSURE_BM25_IN_PROGRESS.add(workspace)
+        try:
+            chunk_ids = _chunk_ids_from_metadata(workspace)
+            if not chunk_ids:
+                try:
+                    if int(_get_collection(workspace).num_entities) == 0:
+                        return False
+                except Exception:
+                    return False
+                logger.warning("[rag/index] BM25 missing and metadata has no chunk ids")
+                return False
+
+            logger.info(f"[rag/index] BM25 index missing — rebuilding from {len(chunk_ids)} chunks")
+            rebuild_search_indices(workspace, chunk_ids)
+            return bm25_index_ready(workspace)
+        except Exception as e:
+            log_exception("[rag/index] ensure_bm25_index failed", e, level="warning", logger=logger)
+            return False
+        finally:
+            _ENSURE_BM25_IN_PROGRESS.discard(workspace)
+
+
 def _load_bm25_retriever(workspace: str):
+    with _BM25_CACHE_LOCK:
+        cached = _BM25_CACHE.get(workspace)
+        if cached is not None:
+            return cached
+
     bm25_dir = _bm25s_dir(workspace)
     if not bm25_dir.exists() or not any(bm25_dir.iterdir()):
         return None, []
     try:
         retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-        return retriever, _bm25_corpus_from_retriever(retriever)
+        corpus = _bm25_corpus_from_retriever(retriever)
+        if retriever is not None and corpus:
+            with _BM25_CACHE_LOCK:
+                _BM25_CACHE[workspace] = (retriever, corpus)
+            return retriever, corpus
+        return None, []
     except Exception as e:
         log_exception("[rag/index] failed to load BM25 retriever", e, level="warning", logger=logger)
         return None, []
+
+
+def _normalize_sparse_scores(scores: dict[str, float]) -> dict[str, float]:
+    """Scale BM25 scores to 0..1 for stable hybrid fusion."""
+    if not scores:
+        return scores
+    peak = max(scores.values())
+    if peak <= 0:
+        return scores
+    return {cid: val / peak for cid, val in scores.items()}
 
 
 def _dense_search(
@@ -529,7 +619,7 @@ def _dense_search(
     query = zvec.Query(
         field_name="dense",
         vector=query_dense,
-        param=zvec.HnswQueryParam(ef=min(top_k * 10, 200)),
+        param=zvec.HnswQueryParam(ef=min(top_k * _DENSE_EF_MULTIPLIER, _DENSE_EF_CAP)),
     )
 
     # zvec filters do not operate on the primary id.  Query a larger pool and
@@ -621,23 +711,33 @@ def hybrid_search(
 
     candidates = _filter_candidates(workspace, topics, tags)
 
-    dense_results = _dense_search(collection, query_dense, candidates, top_k)
-    dense_map = {r["id"]: r for r in dense_results}
-
-    # Use query_text for BM25; fallback to reconstructing from sparse dict
     if not query_text and query_sparse:
         query_text = " ".join(str(k) for k, v in query_sparse.items() if v > 0)
 
-    sparse_scores: dict[str, float] = {}
+    bm25_active = False
     if query_text:
-        sparse_scores = _sparse_search(workspace, query_text, candidates, top_k)
+        bm25_active = ensure_bm25_index(workspace)
+        if not bm25_active:
+            logger.warning("[rag/index] BM25 unavailable after ensure — dense-only fallback")
 
-    # Merge dense + sparse
+    dense_future = _HYBRID_POOL.submit(_dense_search, collection, query_dense, candidates, top_k)
+    sparse_future = None
+    if query_text and bm25_active:
+        sparse_future = _HYBRID_POOL.submit(_sparse_search, workspace, query_text, candidates, top_k)
+
+    dense_results = dense_future.result()
+    sparse_scores: dict[str, float] = sparse_future.result() if sparse_future else {}
+    sparse_scores = _normalize_sparse_scores(sparse_scores)
+
+    dense_map = {r["id"]: r for r in dense_results}
+
+    # Merge dense + sparse (BM25 normalized to 0..1 when active)
     results_map = {}
     for cid, r in dense_map.items():
         sparse = sparse_scores.get(cid, 0.0)
         r["sparse_score"] = sparse
-        r["score"] = 0.7 * r["dense_score"] + 0.3 * min(sparse, 1.0)
+        r["bm25_used"] = bm25_active
+        r["score"] = 0.7 * r["dense_score"] + 0.3 * sparse
         results_map[cid] = r
 
     # Add sparse-only hits
@@ -655,7 +755,8 @@ def hybrid_search(
                         continue
                     r = _doc_to_result(doc)
                     r["sparse_score"] = sparse_scores[cid]
-                    r["score"] = 0.3 * min(sparse_scores[cid], 1.0)
+                    r["bm25_used"] = True
+                    r["score"] = 0.3 * sparse_scores[cid]
                     results_map[cid] = r
             except Exception as e:
                 logger.warning(f"[rag/index] sparse-only fetch failed: {e}\n")
@@ -761,6 +862,6 @@ def rebuild_search_indices(workspace: str, all_chunk_ids: list[str], progress_ca
     # Rebuild BM25s
     if progress_callback:
         progress_callback(total, total, "重建 BM25 索引")
-    _build_and_save_bm25(corpus, _bm25s_dir(workspace))
+    _build_and_save_bm25(corpus, _bm25s_dir(workspace), workspace)
 
     return len(corpus)

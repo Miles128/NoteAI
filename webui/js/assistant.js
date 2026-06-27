@@ -241,7 +241,36 @@ window.AssistantModule = (function() {
     }
 
     var _currentStreamEl = null;
+    var _streamRawText = '';
     var _lastArchive = null;
+
+    function _renderMarkdownHtml(text) {
+        if (!text) return '';
+        if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
+            return window.EditorModule.renderMarkdownPreview(text);
+        }
+        if (typeof marked !== 'undefined') {
+            try {
+                var rawHtml = marked.parse(text);
+                return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(text);
+            } catch (e) {
+                console.error('[Assistant] Markdown parse error:', e);
+            }
+        }
+        return '<pre>' + window.escapeHtml(text) + '</pre>';
+    }
+
+    function _setAssistantMarkdown(contentEl, text) {
+        if (!contentEl) return;
+        contentEl.classList.add('ai-msg-md', 'preview-content');
+        contentEl.innerHTML = _renderMarkdownHtml(text);
+    }
+
+    function _setPlainText(contentEl, text) {
+        if (!contentEl) return;
+        contentEl.classList.remove('ai-msg-md', 'preview-content');
+        contentEl.textContent = text || '';
+    }
 
     function sendMessage() {
         if (_isStreaming) return;
@@ -258,6 +287,7 @@ window.AssistantModule = (function() {
         _lastArchive = { question: question, answer: '', rowEl: null };
 
         _isStreaming = true;
+        _streamRawText = '';
         var assistantEl = addAssistantMessage();
         _currentStreamEl = assistantEl;
 
@@ -268,9 +298,9 @@ window.AssistantModule = (function() {
         window.api.ragChat(question, topics, tags, currentFile).then(function(result) {
             if (result && result.started) {
                 setTimeout(function() {
-                    if (_isStreaming && _currentStreamEl === assistantEl && !assistantEl.textContent) {
+                    if (_isStreaming && _currentStreamEl === assistantEl && !_streamRawText) {
                         _isStreaming = false;
-                        assistantEl.textContent = window.t('assistant.timeout');
+                        _setPlainText(assistantEl, window.t('assistant.timeout'));
                         assistantEl.classList.remove('ai-typing');
                         _currentStreamEl = null;
                     }
@@ -279,13 +309,13 @@ window.AssistantModule = (function() {
             }
             if (result && result.success === false) {
                 _isStreaming = false;
-                assistantEl.textContent = result.message || window.t('assistant.requestFailed');
+                _setPlainText(assistantEl, result.message || window.t('assistant.requestFailed'));
                 assistantEl.classList.remove('ai-typing');
             }
         }).catch(function(err) {
             _isStreaming = false;
             var msg = (err && err.message) ? err.message : String(err || window.t('common.unknownError'));
-            assistantEl.textContent = window.t('assistant.requestFailedMsg', { message: msg });
+            _setPlainText(assistantEl, window.t('assistant.requestFailedMsg', { message: msg }));
             assistantEl.classList.remove('ai-typing');
         });
     }
@@ -388,17 +418,19 @@ window.AssistantModule = (function() {
 
         if (eventData.type === 'rag_chat_chunk') {
             if (_currentStreamEl) {
-                _currentStreamEl.textContent += eventData.token || '';
+                _streamRawText += eventData.token || '';
+                _setAssistantMarkdown(_currentStreamEl, _streamRawText);
                 _scrollToBottom();
             }
         } else if (eventData.type === 'rag_chat_done') {
             _isStreaming = false;
             if (_currentStreamEl) {
                 _currentStreamEl.classList.remove('ai-typing');
-                var answerText = eventData.answer || _currentStreamEl.textContent || '';
-                _currentStreamEl.textContent = answerText;
+                var answerText = eventData.answer || _streamRawText || '';
+                _setAssistantMarkdown(_currentStreamEl, answerText);
                 _chatHistory.push({ role: 'assistant', content: answerText });
                 if (eventData.citations && eventData.citations.length > 0) {
+                    _linkifyCitationRefs(_currentStreamEl, eventData.citations);
                     _renderCitations(_currentStreamEl, eventData.citations);
                 }
                 if (_lastArchive) {
@@ -408,13 +440,15 @@ window.AssistantModule = (function() {
                     }
                 }
             }
+            _streamRawText = '';
             _currentStreamEl = null;
         } else if (eventData.type === 'rag_error') {
             _isStreaming = false;
             if (_currentStreamEl) {
-                _currentStreamEl.textContent = eventData.message || window.t('assistant.requestFailed');
+                _setPlainText(_currentStreamEl, eventData.message || window.t('assistant.requestFailed'));
                 _currentStreamEl.classList.remove('ai-typing');
             }
+            _streamRawText = '';
             _currentStreamEl = null;
         } else if (eventData.type === 'rag_index_built') {
             var indexPayload = eventData.data || eventData;
@@ -497,6 +531,78 @@ window.AssistantModule = (function() {
         archive.rowEl = bubble;
     }
 
+    function _openNoteFromPath(filePath, displayName) {
+        if (!filePath) return;
+        var name = displayName || filePath.split('/').pop() || filePath;
+        if (window.TreeModule && window.TreeModule.selectFile) {
+            window.TreeModule.selectFile(filePath, name);
+            return;
+        }
+        if (window.api && window.api.onFileSelected) {
+            window.api.onFileSelected(filePath);
+        }
+    }
+
+    function _linkifyCitationRefs(contentEl, citations) {
+        if (!contentEl || !citations || !citations.length) return;
+
+        var byIndex = {};
+        citations.forEach(function(cite) {
+            if (cite && cite.index != null && cite.file_path) {
+                byIndex[cite.index] = cite;
+            }
+        });
+        if (!Object.keys(byIndex).length) return;
+
+        var re = /\[(\d+)\]/g;
+        var walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, null);
+        var textNodes = [];
+        while (walker.nextNode()) {
+            textNodes.push(walker.currentNode);
+        }
+
+        textNodes.forEach(function(node) {
+            var text = node.textContent || '';
+            if (!/\[\d+\]/.test(text)) return;
+
+            var frag = document.createDocumentFragment();
+            var last = 0;
+            var match;
+            re.lastIndex = 0;
+            while ((match = re.exec(text)) !== null) {
+                if (match.index > last) {
+                    frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+                }
+                var idx = parseInt(match[1], 10);
+                var cite = byIndex[idx];
+                if (cite) {
+                    var ref = document.createElement('button');
+                    ref.type = 'button';
+                    ref.className = 'ai-citation-ref';
+                    ref.textContent = match[0];
+                    ref.title = cite.source_label || cite.file_name || cite.file_path;
+                    (function(c) {
+                        ref.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            _openNoteFromPath(
+                                c.file_path,
+                                c.source_label || c.file_name || ''
+                            );
+                        });
+                    })(cite);
+                    frag.appendChild(ref);
+                } else {
+                    frag.appendChild(document.createTextNode(match[0]));
+                }
+                last = re.lastIndex;
+            }
+            if (last < text.length) {
+                frag.appendChild(document.createTextNode(text.slice(last)));
+            }
+            node.parentNode.replaceChild(frag, node);
+        });
+    }
+
     function _renderCitations(contentEl, citations) {
         if (!contentEl || !citations || citations.length === 0) return;
         var bubble = contentEl.closest('.ai-msg');
@@ -541,10 +647,10 @@ window.AssistantModule = (function() {
             item.appendChild(info);
 
             item.addEventListener('click', function() {
-                var filePath = cite.file_path;
-                if (filePath && window.api && window.api.onFileSelected) {
-                    window.api.onFileSelected(filePath);
-                }
+                _openNoteFromPath(
+                    cite.file_path,
+                    cite.source_label || cite.file_name || ''
+                );
             });
 
             list.appendChild(item);

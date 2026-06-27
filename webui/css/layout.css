@@ -1339,6 +1339,25 @@ body {
     display: inline;
 }
 
+.ai-panel-messages .ai-msg.ai-assistant > .ai-msg-content.ai-msg-md {
+    display: block;
+    white-space: normal;
+    margin-top: 4px;
+}
+
+.ai-panel-messages .ai-msg-content.ai-msg-md.preview-content {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.ai-panel-messages .ai-msg-content.ai-msg-md.preview-content > *:first-child {
+    margin-top: 0;
+}
+
+.ai-panel-messages .ai-msg-content.ai-msg-md.preview-content > *:last-child {
+    margin-bottom: 0;
+}
+
 .ai-panel-messages .ai-msg.ai-assistant > .ai-citations,
 .ai-panel-messages .ai-msg.ai-assistant > .ai-msg-actions {
     display: block;
@@ -1560,6 +1579,26 @@ body {
 
 .ai-citation-item:hover {
     background: var(--surface-hover);
+}
+
+.ai-citation-ref {
+    display: inline;
+    padding: 0 2px;
+    margin: 0 1px;
+    border: none;
+    border-radius: 3px;
+    background: var(--primary-light);
+    color: var(--primary);
+    font: inherit;
+    font-size: 0.92em;
+    font-weight: 600;
+    cursor: pointer;
+    vertical-align: baseline;
+}
+
+.ai-citation-ref:hover {
+    background: var(--primary);
+    color: var(--surface);
 }
 
 .ai-citation-index {

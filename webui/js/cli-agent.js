@@ -9,6 +9,7 @@
 
     var _availableAgents = [];
     var _selectedAgent = null;
+    var _savedCliAgentId = '';
     var _isRunning = false;
     var _bindingsDone = false;
     var _streamPre = null;
@@ -320,6 +321,51 @@
             .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function _loadSavedCliAgentId() {
+        if (!window.api || !window.api.getUiConfig) {
+            return Promise.resolve('');
+        }
+        return window.api.getUiConfig().then(function(cfg) {
+            return (cfg && cfg.cli_agent_id) ? String(cfg.cli_agent_id) : '';
+        }).catch(function(err) {
+            console.warn('[CliAgent] load cli_agent_id failed:', err);
+            return '';
+        });
+    }
+
+    function _persistCliAgentSelection(agentId) {
+        var nextId = agentId || '';
+        _savedCliAgentId = nextId;
+        if (nextId) {
+            _dismissEmptyHint();
+        }
+        if (!window.api || !window.api.saveUiConfig) return;
+        window.api.saveUiConfig({ cli_agent_id: nextId }).catch(function(err) {
+            console.warn('[CliAgent] save cli_agent_id failed:', err);
+        });
+    }
+
+    function _resolveSavedCliAgentId() {
+        if (!_savedCliAgentId) return null;
+        var match = _availableAgents.find(function(a) {
+            return a.id === _savedCliAgentId && a.installed;
+        });
+        return match ? match.id : null;
+    }
+
+    function _applyCliAgentSelection(agentId) {
+        _selectedAgent = agentId || null;
+        var selector = document.getElementById('cli-agent-selector');
+        if (selector) {
+            selector.value = _selectedAgent || '';
+        }
+        _updateModeBadge();
+        _updateInputPlaceholder();
+        if (_selectedAgent || _savedCliAgentId) {
+            _dismissEmptyHint();
+        }
+    }
+
     /**
      * 加载可用的 CLI agent 列表
      */
@@ -385,12 +431,16 @@
         }
 
         selector.addEventListener('change', function() {
-            _selectedAgent = this.value || null;
-            _updateModeBadge();
-            _updateInputPlaceholder();
+            _applyCliAgentSelection(this.value || null);
+            _persistCliAgentSelection(_selectedAgent || '');
         });
 
         header.appendChild(selector);
+
+        var restored = _resolveSavedCliAgentId();
+        if (restored) {
+            _applyCliAgentSelection(restored);
+        }
 
         // 生成 AGENTS.md 按钮
         var existingBtn = document.getElementById('cli-agent-generate-md');
@@ -607,11 +657,19 @@
     function init() {
         _ensureBindings();
         _updateModeBadge();
+        _loadSavedCliAgentId().then(function(savedId) {
+            _savedCliAgentId = savedId || '';
+            if (_savedCliAgentId) {
+                _dismissEmptyHint();
+            }
+        });
         setTimeout(function() {
-            loadAgents().then(function() {
+            Promise.all([loadAgents(), _loadSavedCliAgentId()]).then(function(results) {
+                _savedCliAgentId = results[1] || '';
+                if (_savedCliAgentId) {
+                    _dismissEmptyHint();
+                }
                 renderAgentSelector();
-                _updateModeBadge();
-                _updateInputPlaceholder();
             });
         }, 1000);
     }

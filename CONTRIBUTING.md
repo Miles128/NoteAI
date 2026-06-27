@@ -10,7 +10,7 @@ git clone https://github.com/<your-username>/NoteAI.git
 cd NoteAI
 
 # 2. 安装依赖
-uv sync --extra dev
+uv sync --extra dev --extra rag
 npm ci
 
 # 3. 启动开发环境

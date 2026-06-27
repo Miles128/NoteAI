@@ -162,6 +162,16 @@ function initRagEventListener() {
             if (typeof window.updateStatus === 'function') {
                 window.updateStatus(data.message || window.t('app.checkingSurveys'));
             }
+        } else if (data.type === 'progress' && data.element_id === 'component-install') {
+            var compMsg = document.getElementById('settings-component-rag-msg');
+            if (compMsg) {
+                compMsg.style.display = 'block';
+                compMsg.textContent = (data.message || window.t('settings.componentInstalling'))
+                    + (data.progress ? ' (' + Math.round(data.progress) + '%)' : '');
+            }
+        } else if (data.type === 'component_installed') {
+            var compEvent = new CustomEvent('component_installed', { detail: data });
+            document.dispatchEvent(compEvent);
         } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done'
             || data.type === 'rag_error' || data.type === 'rag_index_built') {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {

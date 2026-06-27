@@ -47,7 +47,7 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 ```bash
 git clone https://github.com/Miles128/NoteAI.git
 cd NoteAI
-uv sync
+uv sync --extra dev --extra rag
 python run.py
 ```
 
@@ -204,7 +204,7 @@ NoteAI/
 ### 🧪 Dev & Test
 
 ```bash
-uv sync --extra dev
+          uv sync --extra dev --extra rag
 pytest
 ```
 
@@ -275,7 +275,7 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 ```bash
 git clone https://github.com/Miles128/NoteAI.git
 cd NoteAI
-uv sync
+uv sync --extra dev --extra rag
 python run.py
 ```
 
@@ -433,7 +433,7 @@ NoteAI/
 ### 🧪 开发与测试
 
 ```bash
-uv sync --extra dev
+          uv sync --extra dev --extra rag
 pytest
 ```
 

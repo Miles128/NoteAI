@@ -315,88 +315,46 @@ window.AssistantModule = (function() {
         return window.AppState.selectedFilePath;
     }
 
-    /* 小忆：萌妹子半身像 */
-    var _BOT_AVATAR_SVG = '<svg class="ai-avatar-svg" viewBox="0 0 48 48" aria-hidden="true">'
-        + '<defs><linearGradient id="xy-hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5b3d7a"/><stop offset="100%" stop-color="#3d2858"/></linearGradient></defs>'
-        + '<path d="M8 22 C8 10 16 4 24 4 C32 4 40 10 40 22 L40 30 C40 38 34 44 24 44 C14 44 8 38 8 30 Z" fill="url(#xy-hair)"/>'
-        + '<path d="M12 18 C12 12 17 8 24 8 C31 8 36 12 36 18 L36 26 C36 32 31 36 24 36 C17 36 12 32 12 26 Z" fill="#ffe8dc"/>'
-        + '<ellipse cx="17" cy="22" rx="3.2" ry="4" fill="#2d1f3d"/>'
-        + '<ellipse cx="31" cy="22" rx="3.2" ry="4" fill="#2d1f3d"/>'
-        + '<circle cx="18" cy="20.5" r="1.3" fill="#fff"/>'
-        + '<circle cx="32" cy="20.5" r="1.3" fill="#fff"/>'
-        + '<circle cx="18.8" cy="21.2" r="0.5" fill="#f9a8d4"/>'
-        + '<circle cx="32.8" cy="21.2" r="0.5" fill="#f9a8d4"/>'
-        + '<ellipse cx="14" cy="26" rx="2.2" ry="1.2" fill="#fda4c8" opacity="0.75"/>'
-        + '<ellipse cx="34" cy="26" rx="2.2" ry="1.2" fill="#fda4c8" opacity="0.75"/>'
-        + '<path d="M21 28 Q24 30.5 27 28" stroke="#d9468f" stroke-width="1.2" fill="none" stroke-linecap="round"/>'
-        + '<path d="M10 14 Q24 6 38 14" fill="url(#xy-hair)"/>'
-        + '<path d="M6 20 L10 16 L12 22 Z" fill="#7c5cbf"/>'
-        + '<path d="M42 20 L38 16 L36 22 Z" fill="#7c5cbf"/>'
-        + '<ellipse cx="24" cy="10" rx="4" ry="2.5" fill="#f472b6" opacity="0.9"/>'
-        + '</svg>';
-
-    /* 用户：机器狗 */
-    var _USER_AVATAR_SVG = '<svg class="ai-avatar-svg" viewBox="0 0 48 48" aria-hidden="true">'
-        + '<defs><linearGradient id="dog-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#64748b"/></linearGradient></defs>'
-        + '<rect x="10" y="14" width="28" height="24" rx="8" fill="url(#dog-metal)" stroke="#475569" stroke-width="1"/>'
-        + '<path d="M8 18 L4 10 L12 16 Z" fill="#64748b" stroke="#475569" stroke-width="0.8"/>'
-        + '<path d="M40 18 L44 10 L36 16 Z" fill="#64748b" stroke="#475569" stroke-width="0.8"/>'
-        + '<line x1="24" y1="8" x2="24" y2="14" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<circle cx="24" cy="6" r="2.5" fill="#38bdf8" stroke="#0ea5e9" stroke-width="0.8"/>'
-        + '<rect x="15" y="20" width="7" height="6" rx="2" fill="#0f172a"/>'
-        + '<rect x="26" y="20" width="7" height="6" rx="2" fill="#0f172a"/>'
-        + '<circle cx="18.5" cy="23" r="1.8" fill="#22d3ee"/>'
-        + '<circle cx="29.5" cy="23" r="1.8" fill="#22d3ee"/>'
-        + '<rect x="20" y="30" width="8" height="4" rx="2" fill="#334155"/>'
-        + '<circle cx="24" cy="32" r="1.2" fill="#f97316"/>'
-        + '<path d="M14 36 L18 40 M34 36 L30 40" stroke="#475569" stroke-width="1.5" stroke-linecap="round"/>'
-        + '<rect x="6" y="34" width="6" height="3" rx="1" fill="#94a3b8"/>'
-        + '<rect x="36" y="34" width="6" height="3" rx="1" fill="#94a3b8"/>'
-        + '</svg>';
-
-    function _createAvatar(type) {
-        var uid = 'av' + String(Math.random()).slice(2, 8);
-        var svg = type === 'bot' ? _BOT_AVATAR_SVG : _USER_AVATAR_SVG;
-        svg = svg.replace(/id="xy-hair"/g, 'id="xy-hair-' + uid + '"')
-            .replace(/url\(#xy-hair\)/g, 'url(#xy-hair-' + uid + ')')
-            .replace(/id="dog-metal"/g, 'id="dog-metal-' + uid + '"')
-            .replace(/url\(#dog-metal\)/g, 'url(#dog-metal-' + uid + ')');
-        var avatar = document.createElement('div');
-        avatar.className = 'ai-avatar ai-avatar-' + type;
-        avatar.setAttribute('title', type === 'bot' ? window.t('assistant.name') : window.t('assistant.userAvatar'));
-        avatar.innerHTML = svg;
-        return avatar;
+    function _speakerLabel(role) {
+        if (role === 'user') {
+            return (window.t && window.t('assistant.userLabel')) || '你';
+        }
+        if (role === 'system') {
+            return (window.t && window.t('assistant.system')) || '系统';
+        }
+        return (window.t && window.t('assistant.name')) || '小忆';
     }
 
     function addUserMessage(text) {
         var container = document.getElementById('ai-panel-messages');
         if (!container) return;
-        var row = document.createElement('div');
-        row.className = 'ai-msg-row ai-msg-row-user';
         var bubble = document.createElement('div');
-        bubble.className = 'ai-msg ai-user';
-        var content = document.createElement('div');
+        bubble.className = 'ai-chat-line ai-msg ai-user';
+        var speaker = document.createElement('span');
+        speaker.className = 'ai-msg-speaker';
+        speaker.textContent = _speakerLabel('user') + '：';
+        var content = document.createElement('span');
+        content.className = 'ai-msg-content';
         content.textContent = text;
+        bubble.appendChild(speaker);
         bubble.appendChild(content);
-        row.appendChild(bubble);
-        row.appendChild(_createAvatar('user'));
-        container.appendChild(row);
+        container.appendChild(bubble);
         _scrollToBottom();
     }
 
     function addAssistantMessage() {
         var container = document.getElementById('ai-panel-messages');
         if (!container) return null;
-        var row = document.createElement('div');
-        row.className = 'ai-msg-row ai-msg-row-bot';
-        row.appendChild(_createAvatar('bot'));
         var bubble = document.createElement('div');
-        bubble.className = 'ai-msg ai-assistant';
+        bubble.className = 'ai-chat-line ai-msg ai-assistant';
+        var speaker = document.createElement('span');
+        speaker.className = 'ai-msg-speaker';
+        speaker.textContent = _speakerLabel('assistant') + '：';
         var content = document.createElement('div');
         content.className = 'ai-msg-content ai-typing';
+        bubble.appendChild(speaker);
         bubble.appendChild(content);
-        row.appendChild(bubble);
-        container.appendChild(row);
+        container.appendChild(bubble);
         _scrollToBottom();
         return content;
     }
@@ -405,11 +363,12 @@ window.AssistantModule = (function() {
         var container = document.getElementById('ai-panel-messages');
         if (!container) return;
         var div = document.createElement('div');
-        div.className = 'ai-msg ai-system';
-        var label = document.createElement('div');
-        label.className = 'ai-msg-label';
-        label.textContent = window.t('assistant.system');
-        var content = document.createElement('div');
+        div.className = 'ai-chat-line ai-msg ai-system';
+        var label = document.createElement('span');
+        label.className = 'ai-msg-speaker';
+        label.textContent = ((window.t && window.t('assistant.system')) || '系统') + '：';
+        var content = document.createElement('span');
+        content.className = 'ai-msg-content';
         content.textContent = text;
         div.appendChild(label);
         div.appendChild(content);
@@ -419,7 +378,8 @@ window.AssistantModule = (function() {
 
     function _scrollToBottom() {
         /* 实际滚动容器是 .ai-panel-body（overflow-y:auto），不是 .ai-panel-messages */
-        var sc = document.querySelector('#ai-panel .ai-panel-body');
+        var sc = document.querySelector('#inspector-content-ai .ai-panel-body')
+            || document.querySelector('#ai-panel .ai-panel-body');
         if (sc) sc.scrollTop = sc.scrollHeight;
     }
 

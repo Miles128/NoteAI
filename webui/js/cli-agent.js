@@ -216,8 +216,13 @@
     }
 
     function _scrollCliMessages() {
-        var messagesEl = document.getElementById('cli-panel-messages');
-        if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+        var sc = document.querySelector('#inspector-content-cli .ai-panel-body');
+        if (sc) sc.scrollTop = sc.scrollHeight;
+    }
+
+    function _dismissEmptyHint() {
+        var hint = document.getElementById('cli-empty-hint');
+        if (hint) hint.remove();
     }
 
     function _resetStreamPre() {
@@ -235,7 +240,11 @@
         if (!messagesEl) return null;
 
         _streamMsg = document.createElement('div');
-        _streamMsg.className = 'ai-msg ai-assistant cli-agent-stream';
+        _streamMsg.className = 'ai-chat-line ai-msg ai-assistant cli-agent-stream';
+        var speaker = document.createElement('span');
+        speaker.className = 'ai-msg-speaker';
+        speaker.textContent = _cliSpeakerLabel('assistant') + '：';
+        _streamMsg.appendChild(speaker);
         messagesEl.appendChild(_streamMsg);
         _scrollCliMessages();
         return _streamMsg;
@@ -249,7 +258,7 @@
         }
 
         _streamPre = document.createElement('pre');
-        _streamPre.className = 'cli-agent-output';
+        _streamPre.className = 'cli-agent-output cli-agent-output-inline';
         container.appendChild(_streamPre);
         return _streamPre;
     }
@@ -468,24 +477,41 @@
         return agent ? agent.name : agentId;
     }
 
+    function _cliSpeakerLabel(role) {
+        if (role === 'user') {
+            return (window.t && window.t('assistant.userLabel')) || '你';
+        }
+        if (role === 'error') {
+            return (window.t && window.t('assistant.system')) || '系统';
+        }
+        return _getAgentName(_selectedAgent) || 'CLI';
+    }
+
     function _appendCliMessage(role, content) {
         var messagesEl = document.getElementById('cli-panel-messages');
         if (!messagesEl) return;
 
         var msg = document.createElement('div');
-        msg.className = 'ai-msg ai-' + role;
-        if (role === 'user') {
-            msg.innerHTML = '<div class="ai-msg-author">你</div><div class="ai-msg-content">' + _escapeHtml(content) + '</div>';
-        } else if (role === 'error') {
-            msg.innerHTML = '<div class="ai-msg-content">' + _escapeHtml(content) + '</div>';
+        msg.className = 'ai-chat-line ai-msg ai-' + role;
+        var speaker = document.createElement('span');
+        speaker.className = 'ai-msg-speaker';
+        speaker.textContent = _cliSpeakerLabel(role) + '：';
+
+        if (role === 'user' || role === 'error') {
+            var body = document.createElement('span');
+            body.className = 'ai-msg-content';
+            body.textContent = content;
+            msg.appendChild(speaker);
+            msg.appendChild(body);
         } else {
             var pre = document.createElement('pre');
-            pre.className = 'cli-agent-output';
+            pre.className = 'cli-agent-output cli-agent-output-inline';
             pre.textContent = content;
+            msg.appendChild(speaker);
             msg.appendChild(pre);
         }
         messagesEl.appendChild(msg);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        _scrollCliMessages();
     }
 
     /**
@@ -506,6 +532,7 @@
             return Promise.resolve({ success: false, message: '未选择 CLI Agent' });
         }
 
+        _dismissEmptyHint();
         _setRunningState(true);
         _resetStreamPre();
         _appendCliMessage('user', prompt);
@@ -579,6 +606,7 @@
 
     function init() {
         _ensureBindings();
+        _updateModeBadge();
         setTimeout(function() {
             loadAgents().then(function() {
                 renderAgentSelector();

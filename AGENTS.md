@@ -5,8 +5,8 @@ This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.
 > # Build & Test
 
 ```bash
-uv sync                    # install deps
-uv sync --extra dev        # include test deps
+uv sync --extra dev --extra rag   # install deps (RAG included by default; see Settings → Components to remove)
+uv sync --extra dev               # after removing RAG in Settings only
 pytest                     # run all tests (40+ test modules)
 python run.py              # start Tauri dev mode (checks deps + cargo tauri dev)
 ```

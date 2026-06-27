@@ -18,7 +18,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev
+          uv sync --python 3.10 --extra dev --extra rag
 
       - name: Ruff check
         run: uv run ruff check .
@@ -63,7 +63,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev
+          uv sync --python 3.10 --extra dev --extra rag
 
       - name: Tests
         run: uv run pytest --tb=short -ra

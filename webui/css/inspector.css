@@ -457,15 +457,23 @@
 }
 
 .cli-agent-stream {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: block;
     width: 100%;
+}
+
+.cli-agent-stream > .ai-msg-speaker {
+    display: inline;
+}
+
+.cli-agent-stream > .cli-agent-output,
+.cli-agent-stream > .cli-tool-activity {
+    display: block;
+    margin-top: 4px;
 }
 
 .cli-tool-activity {
     border: 1px solid var(--border);
-    border-radius: var(--card-radius);
+    border-radius: 0;
     background: var(--surface);
     font-size: 12px;
     line-height: 1.45;
@@ -523,19 +531,26 @@
     font-size: 12px;
     line-height: 1.5;
     color: var(--text);
-    background: var(--surface);
-    padding: 8px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--card-radius);
+    background: transparent;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 4px 0;
-    max-height: 400px;
-    overflow-y: auto;
+}
+
+.cli-agent-output-inline {
+    display: inline;
+    font-family: inherit;
+    font-size: inherit;
+    background: transparent;
+    padding: 0;
+    border: none;
 }
 
 .ai-msg.ai-assistant .cli-agent-output {
-    background: var(--surface);
+    background: transparent;
 }
 
 .ai-msg.ai-system .cli-agent-output {

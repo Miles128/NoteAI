@@ -15,6 +15,7 @@ from modules.web_downloader import WebDownloader
 from sidecar.handlers import (
     CliAgentHandler,
     CloudSyncHandler,
+    ComponentHandler,
     ConfigHandler,
     FilesHandler,
     IngestHandler,
@@ -71,6 +72,7 @@ class SidecarServer(PathHelpersMixin):
         self._router = RpcRouter(send_response=self._send_response)
         self._ctx = ServiceContext(config=config, logger=logger)
         self._config_handler = ConfigHandler(self)
+        self._component_handler = ComponentHandler(self)
         self._workspace_handler = WorkspaceHandler(self)
         self._transfer_handler = TransferHandler(self)
         self._files_handler = FilesHandler(self)
@@ -99,6 +101,7 @@ class SidecarServer(PathHelpersMixin):
 
     def _build_router(self):
         self._config_handler.register_routes(self._router)
+        self._component_handler.register_routes(self._router)
         self._workspace_handler.register_routes(self._router)
         self._transfer_handler.register_routes(self._router)
         self._files_handler.register_routes(self._router)

@@ -485,11 +485,11 @@
                     <div class="ai-panel-header">
                         <span class="ai-panel-header-dot"></span>
                         <span class="ai-panel-header-title" data-i18n="cli.panelTitle"></span>
-                        <span class="cli-mode-badge" id="cli-mode-badge" data-i18n="cliAgent.selectAgent"></span>
+                        <span class="cli-mode-badge" id="cli-mode-badge" hidden></span>
                     </div>
                     <div class="ai-panel-body">
                         <div class="ai-panel-messages" id="cli-panel-messages">
-                            <div class="ai-msg ai-system"><div class="ai-msg-content" data-i18n="cli.emptyHint"></div></div>
+                            <p class="ai-chat-line ai-msg ai-system" id="cli-empty-hint"><span class="ai-msg-speaker" data-i18n="assistant.system"></span>：<span class="ai-msg-content" data-i18n="cli.emptyHint"></span></p>
                         </div>
                     </div>
                     <div class="ai-panel-input">
@@ -690,6 +690,22 @@
                                         <span class="switch-slider"></span>
                                     </label>
                                 </label>
+                            </div>
+                            <div class="card" id="settings-components-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.componentsTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.componentsHint"></p>
+                                <div class="settings-component-row" id="settings-component-rag">
+                                    <div class="settings-component-info">
+                                        <div class="settings-component-name" data-i18n="settings.componentRagName"></div>
+                                        <p class="settings-hint" data-i18n="settings.componentRagDesc"></p>
+                                        <span id="settings-component-rag-status" class="settings-component-badge"></span>
+                                    </div>
+                                    <div class="settings-component-actions">
+                                        <button type="button" class="btn btn-secondary" id="settings-component-rag-install" data-i18n="settings.componentInstallBtn"></button>
+                                        <button type="button" class="btn btn-secondary" id="settings-component-rag-remove" data-i18n="settings.componentRemoveBtn"></button>
+                                    </div>
+                                </div>
+                                <div id="settings-component-rag-msg" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.agentModeTitle"></div>

@@ -15,6 +15,31 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
+_RAG_IMPORTS = (
+    ("bm25s", "bm25s"),
+    ("fastembed", "fastembed"),
+    ("zvec", "zvec"),
+    ("FlagEmbedding", "FlagEmbedding"),
+)
+
+
+def _rag_deps_required() -> bool:
+    try:
+        from utils.component_state import is_component_removed
+
+        return not is_component_removed("rag")
+    except Exception:
+        return True
+
+
+def recommended_sync_command() -> str:
+    try:
+        from utils.deps_sync import recommended_sync_command as _cmd
+
+        return _cmd()
+    except Exception:
+        return "uv sync --extra dev --extra rag"
+
 
 def check_dependencies():
     """从 pyproject.toml 读取依赖列表并检查是否已安装"""
@@ -76,9 +101,23 @@ def check_dependencies():
 
     if missing:
         print("缺少以下依赖包，请先安装：")
-        print("  uv sync")
+        print(f"  {recommended_sync_command()}")
         print(f"  （或 pip install {' '.join(missing)}）")
         return False
+
+    if _rag_deps_required():
+        rag_missing = []
+        for pkg_name, import_name in _RAG_IMPORTS:
+            try:
+                __import__(import_name)
+            except ImportError:
+                rag_missing.append(pkg_name)
+        if rag_missing:
+            print("缺少 RAG 组件依赖（默认应随 uv sync 安装）：")
+            print(f"  {', '.join(rag_missing)}")
+            print(f"  请运行: {recommended_sync_command()}")
+            print("  若不需要向量检索，可在 设置 → 小忆助手 → 组件管理 中删除 RAG 组件")
+            return False
 
     return True
 

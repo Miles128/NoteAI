@@ -1,6 +1,7 @@
 from .base import BaseHandler
 from .cli_agent_handler import CliAgentHandler
 from .cloud_sync_handler import CloudSyncHandler
+from .component_handler import ComponentHandler
 from .config_handler import ConfigHandler
 from .files_handler import FilesHandler
 from .ingest_handler import IngestHandler
@@ -16,6 +17,7 @@ from .workspace_handler import WorkspaceHandler
 
 __all__ = [
     "BaseHandler",
+    "ComponentHandler",
     "ConfigHandler",
     "WorkspaceHandler",
     "TransferHandler",

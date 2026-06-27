@@ -260,6 +260,86 @@ function applyAssistantSettingsToForm(uiConfig) {
     if (uiConfig.rag_enabled === true) {
         refreshRagIndexStatus();
     }
+    refreshComponentsStatus();
+}
+
+async function refreshComponentsStatus() {
+    if (!window.api || !window.api.getComponentsStatus) return;
+    var statusEl = document.getElementById('settings-component-rag-status');
+    var installBtn = document.getElementById('settings-component-rag-install');
+    var removeBtn = document.getElementById('settings-component-rag-remove');
+    if (!statusEl) return;
+    try {
+        var result = await window.api.getComponentsStatus();
+        var components = (result && result.components) || [];
+        var rag = components.find(function(c) { return c.id === 'rag'; });
+        if (!rag) {
+            statusEl.textContent = window.t('common.unknownError');
+            return;
+        }
+        statusEl.className = 'settings-component-badge';
+        if (rag.installed) {
+            statusEl.textContent = window.t('settings.componentInstalled');
+            statusEl.classList.add('is-ok');
+        } else if (rag.user_removed) {
+            statusEl.textContent = window.t('settings.componentRemovedByUser');
+            statusEl.classList.add('is-warn');
+        } else {
+            statusEl.textContent = window.t('settings.componentNotInstalled');
+        }
+        if (installBtn) installBtn.disabled = !!rag.installed;
+        if (removeBtn) removeBtn.disabled = !rag.installed;
+    } catch (e) {
+        statusEl.textContent = e.message || String(e);
+    }
+}
+
+function _showComponentMsg(text, isError) {
+    var msgEl = document.getElementById('settings-component-rag-msg');
+    if (!msgEl) return;
+    msgEl.textContent = text;
+    msgEl.style.display = 'block';
+    msgEl.style.color = isError ? 'var(--danger, #c0392b)' : 'var(--text-muted)';
+}
+
+async function installRagComponent() {
+    if (!window.api || !window.api.installComponent) return;
+    var installBtn = document.getElementById('settings-component-rag-install');
+    if (installBtn) installBtn.disabled = true;
+    _showComponentMsg(window.t('settings.componentInstalling'), false);
+    try {
+        await window.api.installComponent({ id: 'rag' });
+    } catch (e) {
+        _showComponentMsg(window.t('settings.componentInstallFailed', { message: e.message }), true);
+        if (installBtn) installBtn.disabled = false;
+    }
+}
+
+async function removeRagComponent() {
+    if (!window.confirm(window.t('settings.componentRemoveConfirm'))) return;
+    if (!window.api || !window.api.uninstallComponent) return;
+    var removeBtn = document.getElementById('settings-component-rag-remove');
+    if (removeBtn) removeBtn.disabled = true;
+    try {
+        var result = await window.api.uninstallComponent({ id: 'rag' });
+        if (result && result.success) {
+            _showComponentMsg(window.t('settings.componentRemoveDone'), false);
+            var ragEl = document.getElementById('settings-assistant-rag-enabled');
+            if (ragEl) {
+                ragEl.checked = false;
+                updateRagIndexCardVisibility(false);
+            }
+            await refreshComponentsStatus();
+        } else {
+            _showComponentMsg(window.t('settings.componentRemoveFailed', {
+                message: (result && result.message) || window.t('common.unknownError')
+            }), true);
+            if (removeBtn) removeBtn.disabled = false;
+        }
+    } catch (e) {
+        _showComponentMsg(window.t('settings.componentRemoveFailed', { message: e.message }), true);
+        if (removeBtn) removeBtn.disabled = false;
+    }
 }
 
 async function refreshRagIndexStatus() {
@@ -339,6 +419,33 @@ function initAssistantSettings() {
         agentEl.addEventListener('change', function() {
             saveAssistantUiConfig({ assistant_agent_mode: agentEl.checked });
         });
+    }
+
+    if (!window.__componentInstallBound) {
+        window.__componentInstallBound = true;
+        document.addEventListener('component_installed', function(e) {
+            var data = e.detail || {};
+            if (data.id !== 'rag') return;
+            if (data.success) {
+                _showComponentMsg(window.t('settings.componentInstallDone'), false);
+            } else {
+                _showComponentMsg(window.t('settings.componentInstallFailed', {
+                    message: data.message || window.t('common.unknownError')
+                }), true);
+            }
+            refreshComponentsStatus();
+        });
+    }
+
+    var ragInstallBtn = document.getElementById('settings-component-rag-install');
+    if (ragInstallBtn && !ragInstallBtn.dataset.bound) {
+        ragInstallBtn.dataset.bound = '1';
+        ragInstallBtn.addEventListener('click', installRagComponent);
+    }
+    var ragRemoveBtn = document.getElementById('settings-component-rag-remove');
+    if (ragRemoveBtn && !ragRemoveBtn.dataset.bound) {
+        ragRemoveBtn.dataset.bound = '1';
+        ragRemoveBtn.addEventListener('click', removeRagComponent);
     }
 
     var rebuildBtn = document.getElementById('settings-assistant-rebuild-index-btn');

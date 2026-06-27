@@ -360,6 +360,9 @@ var API_DEFS = [
     { name: 'saveApiConfig', method: 'save_api_config', params: function(cfg) { return cfg; }, write: true },
     { name: 'getUiConfig', method: 'get_ui_config' },
     { name: 'saveUiConfig', method: 'save_ui_config', params: function(cfg) { return cfg; }, write: true },
+    { name: 'getComponentsStatus', method: 'get_components_status' },
+    { name: 'installComponent', method: 'install_component', params: function(p) { return p; }, write: true },
+    { name: 'uninstallComponent', method: 'uninstall_component', params: function(p) { return p; }, write: true },
     { name: 'getThemePreference', method: 'get_theme_preference' },
     { name: 'saveThemePreference', method: 'save_theme_preference', params: function(theme) { return { theme: theme }; }, write: true },
 

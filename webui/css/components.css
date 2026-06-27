@@ -1644,15 +1644,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 10px;
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    min-height: 32px;
     gap: 10px;
     position: relative;
     z-index: 30;
     background: var(--bg-primary);
-    box-sizing: border-box;
 }
 
 .graph-header-left {

@@ -47,12 +47,26 @@ body {
     border-top: 1px solid var(--border);
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 12px;
+    padding: 0 8px 0 6px;
     font-size: 12px;
     color: var(--text-muted);
     z-index: 100;
-    gap: 12px;
+    gap: 8px;
+}
+
+.statusbar-dock {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.statusbar-separator-dock {
+    flex-shrink: 0;
+}
+
+.app-statusbar.ingest-active .statusbar-message {
+    display: none;
 }
 
 .app-statusbar .statusbar-left,
@@ -66,10 +80,17 @@ body {
 .app-statusbar .statusbar-left {
     flex: 1 1 auto;
     overflow: hidden;
+    min-width: 0;
+}
+
+.app-statusbar .statusbar-ingest {
+    flex: 1.5 1 auto;
+    min-width: 0;
 }
 
 .app-statusbar .statusbar-right {
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .app-statusbar .statusbar-item {
@@ -113,6 +134,147 @@ body {
     margin-right: 4px;
     box-sizing: border-box;
     gap: 0;
+}
+
+/* 文件列表 / 知识图谱 / 预览工具栏 — 统一顶栏高度与左右内边距 */
+.note-list-header,
+.graph-panel-header,
+.tiptap-toolbar,
+.preview-header,
+.sidebar-workspace-header {
+    width: 100%;
+    height: var(--column-header-height);
+    min-height: var(--column-header-height);
+    max-height: var(--column-header-height);
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: var(--column-header-padding-x);
+    padding-right: var(--column-header-padding-x);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.sidebar-workspace-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar-bg);
+    -webkit-app-region: no-drag;
+}
+
+.sidebar-workspace-switch-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-workspace-switch-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text);
+}
+
+.sidebar-workspace-switch-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.sidebar-workspace-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.sidebar-workspace-name.is-empty {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.statusbar-frontmatter-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--statusbar-height);
+    z-index: 99;
+    border-top: 1px solid var(--border);
+    background: var(--background-secondary);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.statusbar-frontmatter-panel .frontmatter-textarea {
+    display: block;
+    width: calc(100% - 24px);
+    min-height: 96px;
+    max-height: 180px;
+    resize: vertical;
+    margin: 8px 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: 12px/1.6 'Iosevka Web', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.statusbar-frontmatter-panel .frontmatter-textarea:focus {
+    border-color: var(--primary);
+}
+
+.statusbar-metadata-toggle {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1;
+    padding: 2px 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.statusbar-metadata-toggle:hover,
+.statusbar-metadata-toggle.is-active {
+    color: var(--text);
+    border-color: var(--primary);
+    background: rgba(232, 145, 58, 0.08);
+}
+
+.statusbar-save-status.saving {
+    color: var(--primary);
+}
+
+.statusbar-save-status.saved {
+    color: var(--success);
+}
+
+.statusbar-save-status.error {
+    color: var(--error);
+}
+
+.statusbar-message.rewriting {
+    color: var(--color-topic);
+}
+
+.app-statusbar.rewriting {
+    color: var(--color-topic);
+    background: rgba(232, 145, 58, 0.06);
 }
 
 .custom-titlebar {
@@ -212,14 +374,6 @@ body {
     width: 17.4px;
     height: 17.4px;
     color: inherit;
-}
-
-#workspace-name-display {
-    max-width: 600px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 1;
 }
 
 .titlebar-controls {
@@ -507,6 +661,10 @@ body {
     background: var(--bg);
 }
 
+.sidebar.collapsed .sidebar-workspace-header {
+    display: none;
+}
+
 /* -- no longer used, button moved to .sidebar-footer -- */
 .sidebar-collapse-btn {
     display: none;
@@ -579,42 +737,32 @@ body {
     flex: 0 0 auto;
 }
 
-.sidebar-dock {
-    flex: 0 0 auto;
-    min-height: 0;
-    width: 100%;
-    z-index: 5;
-    background: var(--sidebar-bg);
-    border-top: 1px solid var(--border);
-    box-shadow: none;
-    overflow: visible;
-}
-
-.sidebar-dock-panel {
+.statusbar-dock .sidebar-dock-panel {
     display: none;
     align-items: center;
-    min-height: 0;
+    gap: 2px;
+    min-width: 0;
     height: auto;
 }
 
-.sidebar-dock-panel.is-active:not([hidden]) {
+.statusbar-dock .sidebar-dock-panel.is-active:not([hidden]) {
     display: flex;
 }
 
-.sidebar-dock-panel[hidden] {
+.statusbar-dock .sidebar-dock-panel[hidden] {
     display: none !important;
 }
 
 .sidebar-footer {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: 2px;
+    padding: 0;
     height: auto;
-    min-height: 32px;
-    width: 100%;
+    min-height: 0;
+    width: auto;
     box-sizing: border-box;
-    background: var(--sidebar-bg);
+    background: transparent;
     flex-shrink: 0;
     overflow: visible;
 }
@@ -623,12 +771,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: 4px;
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s ease;
@@ -636,8 +784,8 @@ body {
 }
 
 .sidebar-footer-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
 }
 
 .sidebar-footer-btn:hover {
@@ -652,7 +800,7 @@ body {
 }
 
 .sidebar-footer-status {
-    flex: 1;
+    max-width: 120px;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1085,6 +1233,52 @@ body {
 
 .multi-source-pane[hidden] {
     display: none !important;
+}
+
+.rss-sub-list {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 6px;
+}
+
+.rss-sub-empty {
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 8px 0;
+}
+
+.rss-sub-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+}
+
+.rss-sub-url {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.rss-sub-remove {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.rss-sub-remove:hover {
+    color: var(--text);
 }
 
 @keyframes ai-pulse {
@@ -2419,8 +2613,7 @@ body {
 }
 
 [data-theme="light"] .sidebar,
-[data-theme="light"] .sidebar-expand-btn,
-[data-theme="light"] .sidebar-dock {
+[data-theme="light"] .sidebar-expand-btn {
     background: var(--sidebar-bg);
     box-shadow: none;
 }

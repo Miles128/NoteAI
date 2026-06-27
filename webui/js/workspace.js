@@ -1,7 +1,11 @@
 (function() { 'use strict';
 
 function updateStatus(text) {
-    var statusBar = document.getElementById('status-bar') || document.getElementById('editor-status-bar');
+    if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
+        window.StatusbarModule.updateMessage(text || '');
+        return;
+    }
+    var statusBar = document.getElementById('status-bar') || document.getElementById('statusbar-message');
     if (statusBar) {
         statusBar.textContent = text;
     }
@@ -57,15 +61,23 @@ async function openWorkspace() {
 
 function updateWorkspaceDisplay(workspacePath) {
     const container = document.getElementById('workspace-container');
-    const titlebarDisplay = document.getElementById('workspace-name-display');
+    const nameDisplay = document.getElementById('workspace-name-display');
 
-    if (titlebarDisplay) {
+    if (nameDisplay) {
         if (workspacePath) {
             const workspaceName = workspacePath.split(/[/\\]/).pop();
-            titlebarDisplay.textContent = workspaceName;
+            nameDisplay.textContent = workspaceName;
+            nameDisplay.title = workspacePath;
+            nameDisplay.classList.remove('is-empty');
         } else {
-            titlebarDisplay.textContent = '';
+            nameDisplay.textContent = window.t ? window.t('common.noWorkspace') : '暂无工作区';
+            nameDisplay.title = '';
+            nameDisplay.classList.add('is-empty');
         }
+    }
+
+    if (window.DownloaderModule && window.DownloaderModule.loadRssSubscriptions) {
+        window.DownloaderModule.loadRssSubscriptions();
     }
 
     if (container) {
@@ -241,6 +253,14 @@ function showLog() {
         window.SettingsModule.refreshLog();
     }
 }
+
+document.addEventListener('localechange', function() {
+    if (window.api && window.api.getWorkspaceStatus) {
+        window.api.getWorkspaceStatus().then(function(status) {
+            updateWorkspaceDisplay(status.is_set ? status.workspace_path : null);
+        }).catch(function() {});
+    }
+});
 
 window.WorkspaceModule = {
     updateStatus,

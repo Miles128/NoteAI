@@ -26,6 +26,9 @@
     --card-radius: 4px;
     --titlebar-height: calc(38px - 2pt);
     --statusbar-height: 28px;
+    /* 中栏文件列表 / 图谱 / 预览编辑器等列顶栏统一尺寸 */
+    --column-header-height: 40px;
+    --column-header-padding-x: 12px;
     --btn-radius: 4px;
     --input-radius: 4px;
     --glass-blur: none;

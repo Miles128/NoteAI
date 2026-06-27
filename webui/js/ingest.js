@@ -12,12 +12,16 @@ var STAGE_LABELS = {
 
 function showBar() {
     var bar = document.getElementById('ingest-pipeline-bar');
+    var appBar = document.getElementById('app-statusbar');
     if (bar) bar.classList.add('visible');
+    if (appBar) appBar.classList.add('ingest-active');
 }
 
 function hideBar() {
     var bar = document.getElementById('ingest-pipeline-bar');
+    var appBar = document.getElementById('app-statusbar');
     if (bar) bar.classList.remove('visible');
+    if (appBar) appBar.classList.remove('ingest-active');
 }
 
 function updateBar(stage, progress, message) {

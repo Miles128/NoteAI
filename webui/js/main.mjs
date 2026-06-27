@@ -67,6 +67,7 @@ async function loadModules() {
     window.InspectorModule = window.InspectorModule || {};
     if (window.InspectorModule.init) window.InspectorModule.init();
 
+    await import('./cli-tool-summary.js');
     await import('./cli-agent.js');
     window.CliAgentModule = window.CliAgentModule || {};
     if (window.CliAgentModule.init) window.CliAgentModule.init();

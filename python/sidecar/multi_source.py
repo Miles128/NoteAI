@@ -212,7 +212,9 @@ def save_subscription(workspace: str, url: str, name: str = "") -> None:
 def remove_subscription(workspace: str, url: str) -> None:
     subs = load_subscriptions(workspace)
     subs = [s for s in subs if s["url"] != url]
-    _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+    path = _subs_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def fetch_all_subscriptions(workspace: str) -> dict:

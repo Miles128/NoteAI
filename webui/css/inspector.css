@@ -33,11 +33,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px;
     border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
     gap: 8px;
-    min-height: 36px;
 }
 
 .note-list-title {
@@ -457,6 +454,67 @@
     color: var(--text-muted);
     white-space: nowrap;
     flex-shrink: 0;
+}
+
+.cli-agent-stream {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+}
+
+.cli-tool-activity {
+    border: 1px solid var(--border);
+    border-radius: var(--card-radius);
+    background: var(--surface);
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 2px 0;
+}
+
+.cli-tool-activity.is-running {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.cli-tool-activity.is-done .cli-tool-summary {
+    color: var(--text-muted);
+}
+
+.cli-tool-summary {
+    cursor: pointer;
+    padding: 6px 10px;
+    list-style: none;
+    user-select: none;
+}
+
+.cli-tool-summary::-webkit-details-marker {
+    display: none;
+}
+
+.cli-tool-summary::before {
+    content: '▸';
+    display: inline-block;
+    width: 1em;
+    margin-right: 4px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+}
+
+.cli-tool-activity[open] .cli-tool-summary::before {
+    transform: rotate(90deg);
+}
+
+.cli-tool-detail {
+    padding: 6px 10px 8px 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.cli-mode-badge.cli-agent-running {
+    opacity: 0.75;
+    font-style: italic;
 }
 
 /* CLI Agent 输出样式 */

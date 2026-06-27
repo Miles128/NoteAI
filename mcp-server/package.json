@@ -1,0 +1,22 @@
+{
+  "name": "@noteai/mcp-server",
+  "version": "0.1.0",
+  "description": "NoteAI vault MCP server for external CLI agents (Claude Code / Cursor / OpenCode / Codex)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "noteai-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "node --check src/index.js",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

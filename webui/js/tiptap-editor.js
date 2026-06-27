@@ -15,9 +15,13 @@
     var VIRT_SCROLL_LINES = 160;
 
     function updateSaveStatus(status, text) {
-        var statusEl = document.getElementById('editor-status-bar');
+        if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
+            window.StatusbarModule.updateSaveStatus(status, text);
+            return;
+        }
+        var statusEl = document.getElementById('statusbar-save-status');
         if (!statusEl) return;
-        statusEl.className = 'editor-status-bar ' + (status || '');
+        statusEl.className = 'statusbar-item statusbar-save-status' + (status ? ' ' + status : '');
         statusEl.textContent = text || '';
     }
 
@@ -226,7 +230,11 @@
                                 self.scheduleAutoSave(md || '');
                             }
                             if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
-                                window.StatusbarModule.updateFromContent(md || '', null, null);
+                                window.StatusbarModule.updateFromContent(
+                                    self.getFullContent(md || ''),
+                                    self.filePath,
+                                    null
+                                );
                             }
                             if (callback) {
                                 callback(md || '');
@@ -270,7 +278,7 @@
 
                 self.bindToolbar();
                 self.updateToolbarState();
-                updateSaveStatus('saved', '已保存');
+                updateSaveStatus('saved', window.t ? window.t('editor.saveSaved') : '已保存');
             }
 
             if (!deferHeavy) {
@@ -364,15 +372,18 @@
             if (!panel) return;
             if (!this.frontmatterText.trim()) {
                 panel.style.display = 'none';
+                panel.hidden = true;
+                panel.classList.remove('is-open');
                 panel.innerHTML = '';
+                if (window.StatusbarModule && window.StatusbarModule.setMetadataToggleVisible) {
+                    window.StatusbarModule.setMetadataToggleVisible(false);
+                }
                 return;
             }
-            panel.style.display = 'block';
-            panel.innerHTML = ''
-                + '<details class="frontmatter-details">'
-                + '<summary class="frontmatter-summary">元数据</summary>'
-                + '<textarea class="frontmatter-textarea" spellcheck="false"></textarea>'
-                + '</details>';
+            if (window.StatusbarModule && window.StatusbarModule.setMetadataToggleVisible) {
+                window.StatusbarModule.setMetadataToggleVisible(true);
+            }
+            panel.innerHTML = '<textarea class="frontmatter-textarea" spellcheck="false"></textarea>';
             var textarea = panel.querySelector('.frontmatter-textarea');
             if (!textarea) return;
             var self = this;
@@ -381,6 +392,13 @@
                 self.frontmatterText = textarea.value;
                 self.userEdited = true;
                 self.scheduleAutoSave(self.getContent() || '');
+                if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
+                    window.StatusbarModule.updateFromContent(
+                        self.getFullContent(self.getContent() || ''),
+                        self.filePath,
+                        null
+                    );
+                }
             });
         },
 
@@ -388,7 +406,12 @@
             var panel = document.getElementById('frontmatter-panel');
             if (!panel) return;
             panel.style.display = 'none';
+            panel.hidden = true;
+            panel.classList.remove('is-open');
             panel.innerHTML = '';
+            if (window.StatusbarModule && window.StatusbarModule.setMetadataToggleVisible) {
+                window.StatusbarModule.setMetadataToggleVisible(false);
+            }
         },
 
         _createTextareaFallback: function(editorEl, content) {
@@ -414,7 +437,7 @@
             if (this.saveTimer) {
                 clearTimeout(this.saveTimer);
             }
-            updateSaveStatus('saving', '有未保存更改...');
+            updateSaveStatus('saving', window.t ? window.t('editor.unsavedChanges') : '有未保存更改...');
             this.saveTimer = setTimeout(function() {
                 self.performSave(content);
             }, SAVE_DELAY_MS);
@@ -450,19 +473,19 @@
 
             var self = this;
             this.savePromise = (async function() {
-                updateSaveStatus('saving', '保存中...');
+                updateSaveStatus('saving', window.t ? window.t('editor.saving') : '保存中...');
                 try {
                     var fullContent = self.getFullContent(content);
                     var result = await window.api.saveFileContent(filePath, fullContent);
                     if (result && result.success) {
                         self.originalContent = fullContent;
                         refreshPreviewState(fullContent);
-                        updateSaveStatus('saved', '已保存');
+                        updateSaveStatus('saved', window.t ? window.t('editor.saveSaved') : '已保存');
                     } else {
-                        updateSaveStatus('error', '保存失败');
+                        updateSaveStatus('error', window.t ? window.t('editor.saveFailed') : '保存失败');
                     }
                 } catch (e) {
-                    updateSaveStatus('error', '保存失败');
+                    updateSaveStatus('error', window.t ? window.t('editor.saveFailed') : '保存失败');
                 } finally {
                     self.savePromise = null;
                 }

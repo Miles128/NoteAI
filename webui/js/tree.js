@@ -740,16 +740,19 @@ function selectFile(path, fileName) {
     }
 
     var container = document.getElementById('tiptap-editor-container');
-    var statusBar = document.getElementById('editor-status-bar');
     if (window._rewritingFilePath && path !== window._rewritingFilePath) {
         if (container) container.classList.remove('rewriting');
-        if (statusBar) { statusBar.classList.remove('rewriting'); statusBar.textContent = ''; }
+        if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
+            window.StatusbarModule.setRewriting(false);
+        }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(true);
         }
     } else if (window._rewritingFilePath && path === window._rewritingFilePath) {
         if (container) container.classList.add('rewriting');
-        if (statusBar) { statusBar.classList.add('rewriting'); statusBar.textContent = window.t('app.llmRewriting'); }
+        if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
+            window.StatusbarModule.setRewriting(true, window.t('app.llmRewriting'));
+        }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(false);
         }

@@ -364,8 +364,6 @@ CLI agent 对话界面是 NoteAI 中 **执行文件操作的入口**，与小忆
 - 变更写入 **`wiki/log.md`**；前端 `cascade_survey_chunk` / `cascade_done`。
 - **Ingest 统一任务条**：转换 → 分类 → 索引 → 综述 → Lint → WIKI 同步（可取消/重试）。
 
-**未实现**：Karpathy 式「单源触及 10–15 页」的全自动交叉引用网。
-
 ### 3.10 记录与日志
 
 | 文件 | 内容 |
@@ -394,7 +392,7 @@ CLI agent 对话界面是 NoteAI 中 **执行文件操作的入口**，与小忆
 
 | 项 | 现状 |
 |----|------|
-| 编译模式 | Ingest 统一流水线 + 事件触发级联；非 7×24 持续守护 |
+| 编译模式 | Ingest 统一流水线 + 事件触发级联 |
 | WIKI.md | **每主题一行摘要**（综述/首段摘录）+ 文件列表 |
 | Query → Archive | 笔记 / wiki / **追加综述**（LLM 合并） |
 | Lint | 健康检查 + 入库末尾；**自动删断链、自动更新过时综述** |
@@ -418,15 +416,15 @@ CLI agent 对话界面是 NoteAI 中 **执行文件操作的入口**，与小忆
 | 概念 | NoteAI 现状 | 差距 |
 |------|-------------|------|
 | Raw Sources | `Raw/` 归档 | 缺少「不可变」语义与版本策略 |
-| Wiki 编译层 | `wiki/*_综述.md` + 级联更新 | 有触发式更新，无全库联动与交叉引用网 |
+| Wiki 编译层 | `wiki/*_综述.md` + 级联更新 | 有触发式更新，无全库联动 |
 | Schema | `project_rules.md` + `prompts/` | 无统一 `schema.md` |
-| Ingest | 八阶段可恢复流水线（convert→…→lint→sync） | 非 7×24 持续守护 |
+| Ingest | 八阶段可恢复流水线（convert→…→lint→sync） | 事件触发 + 批处理 |
 | Query → Archive | 笔记 / wiki / 追加综述 | 非全自动 wiki 页沉淀 |
 | Lint | 断链/孤儿/过时综述 + 自动修复 | 需打开应用触发 |
 | index 摘要 | WIKI.md 每主题 `>` 摘要行 | 与 Karpathy 一行摘要仍有风格差 |
 | log | `wiki/log.md` 按日分组 | 旧 `.noteai` 日志可迁移 |
 
-**结论**：P0/P1 闭环已落地；距离「持续自我维护的编译器」仍差 **Raw 版本语义、全自动交叉引用网、7×24 守护**。
+**结论**：P0/P1 闭环已落地；Raw Sources 的「不可变」语义与版本策略仍是可补齐的方向。
 
 ---
 
@@ -454,7 +452,6 @@ CLI agent 对话界面是 NoteAI 中 **执行文件操作的入口**，与小忆
 | 转换可感知 | 失败队列 + 待办重试 | ✅ |
 | 云盘同步 | 实验开关，默认隐藏 | ✅ |
 | 检索扩展 | 向量 + 反链 1-hop + 综述 | ✅（已有） |
-| Karpathy 交叉引用网 | 单源 8–15 页自动建链（保存/入库触发） | ✅ |
 | Tolaria 式四栏布局 | 文件夹侧栏 / 笔记列表 / 编辑器 / Inspector | ✅ |
 | CLI Agent 桥接 | Claude Code / OpenCode / Codex / Gemini + `AGENTS.md` | ✅ |
 
@@ -472,16 +469,15 @@ CLI agent 对话界面是 NoteAI 中 **执行文件操作的入口**，与小忆
 
 ### P3 — 生态
 
-- 本地模型（Ollama 等）。
 - 移动端只读 + 同步。
 - 发布导出、协作空间。
 
 ### 优先级（开发排序）
 
 1. P0：schema.md → Ingest UI → 级联可靠性 → Lint → Query→Archive  
-2. P1：交叉引用、搜索、WIKI 摘要、云同步决策  
+2. P1：搜索、WIKI 摘要、云同步决策  
 3. P2：Agent、多源采集、Memory 升级  
-4. P3：Local AI、移动端、发布
+4. P3：移动端、发布
 
 ---
 

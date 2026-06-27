@@ -6,26 +6,6 @@
     overflow: hidden;
 }
 
-.editor-status-bar {
-    height: 24px;
-    min-height: 24px;
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    font-size: 11px;
-    color: var(--text-muted);
-    background: var(--background-secondary);
-    border-top: 1px solid var(--border);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.editor-status-bar.rewriting {
-    color: var(--color-topic);
-    background: rgba(232, 145, 58, 0.06);
-}
-
 .tiptap-editor-container.rewriting .tiptap-editor-content {
     opacity: 0.45;
     pointer-events: none;
@@ -33,11 +13,6 @@
 
 .tiptap-editor-container.rewriting .ProseMirror {
     color: var(--text-muted);
-}
-
-.tiptap-editor-container.rewriting #frontmatter-panel {
-    opacity: 0.45;
-    pointer-events: none;
 }
 
 .obsidian-properties {
@@ -319,12 +294,9 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
-    flex-shrink: 0;
     overflow-x: auto;
-    min-height: 40px;
 }
 
 .tiptap-toolbar .tiptap-spacer {
@@ -402,61 +374,6 @@
 
 .tiptap-editor-content.tiptap-fallback-mode {
     overflow: hidden;
-}
-
-#frontmatter-panel {
-    flex-shrink: 0;
-    border-top: 1px solid var(--border);
-    background: var(--background-secondary);
-}
-
-.frontmatter-details {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 0 20px;
-}
-
-.frontmatter-summary {
-    cursor: pointer;
-    list-style: none;
-    padding: 8px 0;
-    color: var(--text-muted);
-    font-size: 12px;
-    user-select: none;
-}
-
-.frontmatter-summary::-webkit-details-marker {
-    display: none;
-}
-
-.frontmatter-summary::before {
-    content: '▸';
-    display: inline-block;
-    margin-right: 6px;
-    transition: transform 0.15s ease;
-}
-
-.frontmatter-details[open] .frontmatter-summary::before {
-    transform: rotate(90deg);
-}
-
-.frontmatter-textarea {
-    width: 100%;
-    min-height: 120px;
-    max-height: 240px;
-    resize: vertical;
-    margin: 0 0 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface);
-    color: var(--text);
-    font: 12px/1.6 'Iosevka Web', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
-    outline: none;
-}
-
-.frontmatter-textarea:focus {
-    border-color: var(--primary);
 }
 
 .tiptap-prose {

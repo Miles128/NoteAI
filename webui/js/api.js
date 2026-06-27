@@ -376,6 +376,10 @@ var API_DEFS = [
     { name: 'readFileRaw', method: 'read_file_raw', params: function(path) { return { path: path }; } },
     { name: 'importFilesDirect', method: 'import_files', params: function(files) { return { files: files }; }, write: true },
     { name: 'importRssFeed', method: 'import_rss_feed', params: function(url, maxItems, fetchArticles) { return { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles }; }, write: true },
+    { name: 'listRssSubscriptions', method: 'list_rss_subscriptions', params: function() { return {}; } },
+    { name: 'saveRssSubscription', method: 'save_rss_subscription', params: function(url, name) { return { url: url, name: name || '' }; }, write: true },
+    { name: 'removeRssSubscription', method: 'remove_rss_subscription', params: function(url) { return { url: url }; }, write: true },
+    { name: 'fetchAllRss', method: 'fetch_all_rss', params: function() { return {}; }, write: true },
     { name: 'importTranscript', method: 'import_transcript', params: function(title, content, source) { return { title: title, content: content, source: source }; }, write: true },
 
     // ---- 知识图谱 / 链接 ----

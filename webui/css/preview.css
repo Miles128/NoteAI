@@ -90,10 +90,8 @@
 .preview-header {
     display: flex;
     align-items: center;
-    padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     gap: 10px;
-    min-height: 44px;
 }
 
 .preview-title {

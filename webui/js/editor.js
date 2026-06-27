@@ -60,9 +60,13 @@ function updateHljsTheme() {
 }
 
 function updateSaveStatus(status, text) {
-    const statusEl = document.getElementById('editor-save-status');
+    if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
+        window.StatusbarModule.updateSaveStatus(status, text);
+        return;
+    }
+    const statusEl = document.getElementById('statusbar-save-status');
     if (!statusEl) return;
-    statusEl.className = 'editor-save-status ' + status;
+    statusEl.className = 'statusbar-item statusbar-save-status ' + status;
     statusEl.textContent = text || '';
 }
 

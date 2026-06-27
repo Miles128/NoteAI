@@ -1,72 +1,60 @@
-#ingest-pipeline-bar {
-    position: fixed;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    z-index: 9000;
+.statusbar-ingest {
     display: none;
     align-items: center;
-    gap: 12px;
-    padding: 10px 14px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--card-radius);
-    box-shadow: none;
-    font-size: 13px;
+    gap: 8px;
+    min-width: 0;
+    font-size: 11px;
 }
 
-#ingest-pipeline-bar.visible {
+.statusbar-ingest.visible {
     display: flex;
 }
 
-[data-theme="light"] #ingest-pipeline-bar {
-    background: var(--surface);
-    border-color: var(--border);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-}
-
-#ingest-pipeline-bar .ingest-track {
+.statusbar-ingest .ingest-track {
     flex: 1;
-    min-width: 120px;
-    height: 6px;
+    min-width: 72px;
+    max-width: 180px;
+    height: 4px;
     background: var(--border);
-    border-radius: 3px;
+    border-radius: 2px;
     overflow: hidden;
 }
 
-#ingest-pipeline-bar .ingest-fill {
+.statusbar-ingest .ingest-fill {
     height: 100%;
     width: 0%;
     background: var(--primary);
     transition: width 0.25s ease;
 }
 
-#ingest-pipeline-bar .ingest-label {
+.statusbar-ingest .ingest-label {
     color: var(--text-muted, #aaa);
     white-space: nowrap;
-    min-width: 4.5em;
+    flex-shrink: 0;
 }
 
-#ingest-pipeline-bar .ingest-message {
-    flex: 2;
+.statusbar-ingest .ingest-message {
+    flex: 1;
+    min-width: 0;
     color: var(--text, #eee);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-#ingest-pipeline-bar button {
+.statusbar-ingest button {
     background: transparent;
     color: var(--text-muted, #aaa);
     border: 1px solid var(--border, #444);
     border-radius: 4px;
-    padding: 4px 10px;
+    padding: 1px 8px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
+    line-height: 1.4;
+    flex-shrink: 0;
 }
 
-#ingest-pipeline-bar button:hover {
+.statusbar-ingest button:hover {
     color: var(--text, #fff);
     border-color: var(--text-muted, #888);
 }

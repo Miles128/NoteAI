@@ -9,22 +9,23 @@ window._rewriteFlushTimer = null;
 
 function setEditorRewriting(filePath, isRewriting) {
     var container = document.getElementById('tiptap-editor-container');
-    var statusBar = document.getElementById('editor-status-bar');
-    if (!container || !statusBar) return;
+    if (!container) return;
 
     if (isRewriting) {
         window._rewritingFilePath = filePath;
         container.classList.add('rewriting');
-        statusBar.classList.add('rewriting');
-        statusBar.textContent = window.t('app.llmRewriting');
+        if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
+            window.StatusbarModule.setRewriting(true, window.t('app.llmRewriting'));
+        }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(false);
         }
     } else {
         window._rewritingFilePath = null;
         container.classList.remove('rewriting');
-        statusBar.classList.remove('rewriting');
-        statusBar.textContent = '';
+        if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
+            window.StatusbarModule.setRewriting(false);
+        }
         if (window.TiptapEditor && window.TiptapEditor.instance) {
             window.TiptapEditor.instance.setEditable(true);
         }
@@ -46,9 +47,11 @@ function _flushRewriteBuffer() {
     var take = window._rewriteBuffer.substring(0, chunkSize);
     window._rewriteBuffer = window._rewriteBuffer.substring(chunkSize);
     window._rewriteDisplayText += take;
-    var statusBar = document.getElementById('editor-status-bar');
-    if (statusBar) {
-        statusBar.textContent = window.t('app.rewritingChars', { count: window._rewriteDisplayText.length });
+    if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
+        window.StatusbarModule.updateMessage(
+            window.t('app.rewritingChars', { count: window._rewriteDisplayText.length }),
+            { className: 'rewriting' }
+        );
     }
     if (window.TiptapEditor && window.TiptapEditor.instance) {
         if (window.marked) {
@@ -174,10 +177,13 @@ async function onRewriteConfirm() {
             if (typeof window.updateStatus === 'function') {
                 window.updateStatus(window.t('common.saved'));
             }
-            var statusBar = document.getElementById('editor-status-bar');
-            if (statusBar) {
-                statusBar.textContent = window.t('common.saved');
-                setTimeout(function() { statusBar.textContent = ''; }, 3000);
+            if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
+                window.StatusbarModule.updateSaveStatus('saved', window.t('common.saved'));
+                setTimeout(function() {
+                    if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
+                        window.StatusbarModule.updateSaveStatus('', '');
+                    }
+                }, 3000);
             }
         } else {
             alert(window.t('app.saveFailed', { message: result ? result.message || window.t('common.unknownError') : window.t('common.unknownError') }));
@@ -203,10 +209,11 @@ async function onRewriteConfirm() {
 function onRewriteCancel() {
     window._rewritePendingFilePath = null;
     window._rewritePendingText = null;
-    var statusBar = document.getElementById('editor-status-bar');
-    if (statusBar) {
-        statusBar.textContent = window.t('app.rewriteCancelled');
-        setTimeout(function() { statusBar.textContent = ''; }, 3000);
+    if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
+        window.StatusbarModule.updateMessage(
+            window.t('app.rewriteCancelled'),
+            { duration: 3000 }
+        );
     }
     if (typeof window.updateStatus === 'function') {
         window.updateStatus(window.t('app.rewriteCancelled'));
@@ -283,11 +290,14 @@ async function onLLMRewrite() {
         if (typeof window.updateStatus === 'function') {
             window.updateStatus(window.t('app.rewriteError', { message: e.message || e }));
         }
-        var statusBar3 = document.getElementById('editor-status-bar');
-        if (statusBar3) {
-            statusBar3.textContent = window.t('app.rewriteError', { message: e.message || e });
-            statusBar3.classList.remove('rewriting');
-            setTimeout(function() { statusBar3.textContent = ''; }, 3000);
+        if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
+            window.StatusbarModule.setRewriting(false);
+        }
+        if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
+            window.StatusbarModule.updateMessage(
+                window.t('app.rewriteError', { message: e.message || e }),
+                { duration: 3000 }
+            );
         }
         _cleanupRewriteState();
     } finally {

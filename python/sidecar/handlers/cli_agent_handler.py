@@ -1,4 +1,4 @@
-"""CLI Agent Handler — 桥接第三方 CLI agent（claude/opencode/codex/gemini）。
+"""CLI Agent Handler — 桥接第三方 CLI agent（claude/opencode/codex/gemini/kimi）。
 
 提供两个 RPC 路由：
 1. list_cli_agents — 列出可用 agent 及安装状态

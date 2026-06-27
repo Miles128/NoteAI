@@ -2,7 +2,11 @@
     'use strict';
 
     function updateStatus(text) {
-        const el = document.getElementById('status-bar');
+        if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
+            window.StatusbarModule.updateMessage(text || '');
+            return;
+        }
+        const el = document.getElementById('status-bar') || document.getElementById('statusbar-message');
         if (el) {
             el.textContent = text;
         }

@@ -170,7 +170,8 @@ function initRagEventListener() {
             var assistantEvent = new CustomEvent(data.type, { detail: data.data || data });
             document.dispatchEvent(assistantEvent);
             if (data.type === 'rag_index_built') {
-                if (data.data && data.data.success) {
+                var indexPayload = data.data || data;
+                if (indexPayload.success) {
                     if (typeof window.updateStatus === 'function') {
                         window.updateStatus('RAG Ready');
                     }

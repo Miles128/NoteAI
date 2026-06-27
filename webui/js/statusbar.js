@@ -101,7 +101,83 @@
         _setPlain('statusbar-words', '0 词');
         _setPlain('statusbar-lines', '0 行');
         _setPlain('statusbar-cursor', 'Ln 1, Col 1');
+        updateSaveStatus('', '');
+        updateMessage('');
+        setMetadataToggleVisible(false);
     }
+
+    function updateSaveStatus(status, text) {
+        var el = document.getElementById('statusbar-save-status');
+        if (!el) return;
+        el.className = 'statusbar-item statusbar-save-status' + (status ? ' ' + status : '');
+        el.textContent = text || '';
+    }
+
+    var _messageTimer = null;
+
+    function updateMessage(text, options) {
+        var el = document.getElementById('statusbar-message');
+        if (!el) return;
+        options = options || {};
+        if (_messageTimer) {
+            clearTimeout(_messageTimer);
+            _messageTimer = null;
+        }
+        el.className = 'statusbar-item statusbar-message' + (options.className ? ' ' + options.className : '');
+        el.textContent = text || '';
+        if (text && options.duration) {
+            _messageTimer = setTimeout(function() {
+                el.textContent = '';
+                el.className = 'statusbar-item statusbar-message';
+                _messageTimer = null;
+            }, options.duration);
+        }
+    }
+
+    function setRewriting(isRewriting, text) {
+        var appBar = document.getElementById('app-statusbar');
+        var container = document.getElementById('tiptap-editor-container');
+        if (isRewriting) {
+            if (appBar) appBar.classList.add('rewriting');
+            if (container) container.classList.add('rewriting');
+            updateMessage(text || (window.t ? window.t('app.llmRewriting') : ''), { className: 'rewriting' });
+        } else {
+            if (appBar) appBar.classList.remove('rewriting');
+            if (container) container.classList.remove('rewriting');
+            updateMessage('');
+        }
+    }
+
+    function setMetadataToggleVisible(visible) {
+        var toggle = document.getElementById('statusbar-metadata-toggle');
+        if (!toggle) return;
+        toggle.style.display = visible ? '' : 'none';
+        toggle.hidden = !visible;
+        if (!visible) {
+            var panel = document.getElementById('frontmatter-panel');
+            if (panel) {
+                panel.style.display = 'none';
+                panel.hidden = true;
+                panel.classList.remove('is-open');
+            }
+        }
+    }
+
+    function bindMetadataToggle() {
+        var toggle = document.getElementById('statusbar-metadata-toggle');
+        var panel = document.getElementById('frontmatter-panel');
+        if (!toggle || !panel || toggle.dataset.bound === 'true') return;
+        toggle.dataset.bound = 'true';
+        toggle.addEventListener('click', function() {
+            var open = !panel.classList.contains('is-open');
+            panel.classList.toggle('is-open', open);
+            panel.style.display = open ? 'block' : 'none';
+            panel.hidden = !open;
+            toggle.classList.toggle('is-active', open);
+        });
+    }
+
+    bindMetadataToggle();
 
     function updateCursor(line, col) {
         _setPlain('statusbar-cursor', 'Ln ' + (line || 1) + ', Col ' + (col || 1));
@@ -149,6 +225,10 @@
         onFileSelected: onFileSelected,
         updateFromContent: updateFromContent,
         updateCursor: updateCursor,
-        clearStats: clearStats
+        clearStats: clearStats,
+        updateSaveStatus: updateSaveStatus,
+        updateMessage: updateMessage,
+        setRewriting: setRewriting,
+        setMetadataToggleVisible: setMetadataToggleVisible
     };
 })();

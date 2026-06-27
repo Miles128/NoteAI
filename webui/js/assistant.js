@@ -457,11 +457,12 @@ window.AssistantModule = (function() {
             }
             _currentStreamEl = null;
         } else if (eventData.type === 'rag_index_built') {
-            _indexBuilt = eventData.data && eventData.data.success;
+            var indexPayload = eventData.data || eventData;
+            _indexBuilt = !!indexPayload.success;
             if (_indexBuilt) {
-                addSystemMessage(window.t('assistant.indexBuildDone', { count: eventData.data.chunk_count || 0 }));
+                addSystemMessage(window.t('assistant.indexBuildDone', { count: indexPayload.chunk_count || 0 }));
             } else {
-                var failMessage = (eventData.data && eventData.data.message) || window.t('common.unknownError');
+                var failMessage = indexPayload.message || window.t('common.unknownError');
                 addSystemMessage(window.t('assistant.indexBuildFailed', { message: failMessage }));
             }
         } else if (eventData.type === 'rag-index-progress') {

@@ -55,6 +55,16 @@ function handleGlobalDownloadEvent(event) {
         handleDownloadCompleteEvent(data);
     } else if (data.type === 'web_download_error') {
         handleDownloadErrorEvent(data);
+    } else if (data.type === 'rss_poll_complete') {
+        var imported = data.data && data.data.imported ? data.data.imported : 0;
+        if (imported > 0) {
+            if (typeof window.updateStatus === 'function') {
+                window.updateStatus(window.t('download.rssFetchAllDone', { count: imported }));
+            }
+            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                window.TreeModule.loadFileTree(true);
+            }
+        }
     }
 }
 
@@ -490,6 +500,7 @@ window.DownloaderModule = {
     closeDownloadModal,
     autoSaveModalConfig,
     startDownloadFromModal,
+    loadRssSubscriptions,
     getDownloadState: function() { return _downloadState; }
 };
 
@@ -497,11 +508,27 @@ window.closeDownloadModal = closeDownloadModal;
 window.startDownloadFromModal = startDownloadFromModal;
 
 // ── RSS Tab ──
+var _RSS_LEGACY_KEY = 'noteai_rss_subscriptions';
+
+function _rssT(key, params) {
+    return window.t ? window.t(key, params) : key;
+}
+
+function _escapeHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function initRssTab() {
   var rssImportBtn = document.getElementById('ms-rss-import-btn');
   if (rssImportBtn && !rssImportBtn._rssBound) {
     rssImportBtn.addEventListener('click', startRssImport);
     rssImportBtn._rssBound = true;
+  }
+  var fetchAllBtn = document.getElementById('ms-rss-fetch-all-btn');
+  if (fetchAllBtn && !fetchAllBtn._rssBound) {
+    fetchAllBtn.addEventListener('click', fetchAllRssSubscriptions);
+    fetchAllBtn._rssBound = true;
   }
   var transcriptBtn = document.getElementById('ms-transcript-import-btn');
   if (transcriptBtn && !transcriptBtn._trBound) {
@@ -516,23 +543,49 @@ async function startRssImport() {
   var maxEl = document.getElementById('ms-rss-max');
   var fetchEl = document.getElementById('ms-rss-fetch');
   var url = urlEl ? urlEl.value.trim() : '';
-  if (!url) { alert('请输入 RSS URL'); return; }
-  var maxItems = maxEl ? parseInt(maxEl.value) || 10 : 10;
+  if (!url) { alert(_rssT('download.rssPlaceholder')); return; }
+  var maxItems = maxEl ? parseInt(maxEl.value, 10) || 10 : 10;
   var fetchArticles = fetchEl ? fetchEl.checked : true;
   var btn = document.getElementById('ms-rss-import-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '导入中...'; }
+  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssImporting'); }
   try {
     var result = await window.api.importRssFeed(url, maxItems, fetchArticles);
     if (result && result.success) {
-      alert(result.message || 'RSS 导入成功');
-      urlEl.value = '';
-      saveRssSubscription(url);
-      if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+      alert(result.message || _rssT('download.importRss'));
+      if (urlEl) urlEl.value = '';
+      await saveRssSubscription(url);
+      if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree(true);
     } else {
-      alert('RSS 导入失败: ' + (result && result.message || '未知错误'));
+      alert('RSS: ' + (result && result.message || _rssT('download.failed', { message: '' })));
     }
-  } catch(e) { alert('RSS 导入失败: ' + e.message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '导入 RSS'; } }
+  } catch(e) { alert('RSS: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = _rssT('download.importRss'); } }
+}
+
+async function fetchAllRssSubscriptions() {
+  if (!window.api || !window.api.fetchAllRss) return;
+  var btn = document.getElementById('ms-rss-fetch-all-btn');
+  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssUpdating'); }
+  try {
+    var result = await window.api.fetchAllRss();
+    if (!result || !result.success) {
+      alert('RSS: ' + (result && result.message || _rssT('common.unknownError')));
+      return;
+    }
+    var imported = 0;
+    (result.results || []).forEach(function(r) { imported += r.imported || 0; });
+    alert(imported > 0
+      ? _rssT('download.rssFetchAllDone', { count: imported })
+      : _rssT('download.rssFetchAllNone'));
+    if (imported > 0 && window.TreeModule && window.TreeModule.loadFileTree) {
+      window.TreeModule.loadFileTree(true);
+    }
+    await loadRssSubscriptions();
+  } catch (e) {
+    alert('RSS: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssFetchAll'); }
+  }
 }
 
 async function startTranscriptImport() {
@@ -553,38 +606,78 @@ async function startTranscriptImport() {
   } catch(e) { alert('保存失败: ' + e.message); }
 }
 
-function getRssStorageKey() { return 'noteai_rss_subscriptions'; }
+function getRssStorageKey() { return _RSS_LEGACY_KEY; }
 
-function loadRssSubscriptions() {
-  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
-  updateRssSubList(subs);
+async function _migrateLegacyRssSubscriptions() {
+  if (!window.Storage || !window.api || !window.api.saveRssSubscription) return;
+  var legacy = window.Storage.getItem(_RSS_LEGACY_KEY, [], { silent: true });
+  if (!legacy || !legacy.length) return;
+  for (var i = 0; i < legacy.length; i++) {
+    var url = legacy[i];
+    if (url) {
+      try { await window.api.saveRssSubscription(url, ''); } catch (_e) {}
+    }
+  }
+  window.Storage.setItem(_RSS_LEGACY_KEY, [], { silent: true });
 }
 
-function saveRssSubscription(url) {
-  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
-  if (subs.indexOf(url) === -1) { subs.push(url); window.Storage.setItem(getRssStorageKey(), subs, { silent: true }); updateRssSubList(subs); }
+async function loadRssSubscriptions() {
+  if (!window.api || !window.api.listRssSubscriptions) {
+    updateRssSubList([]);
+    return;
+  }
+  await _migrateLegacyRssSubscriptions();
+  try {
+    var result = await window.api.listRssSubscriptions();
+    var subs = (result && result.success && result.subscriptions) ? result.subscriptions : [];
+    updateRssSubList(subs);
+  } catch (_e) {
+    updateRssSubList([]);
+  }
 }
 
-function removeRssSubscription(url) {
-  var subs = window.Storage.getItem(getRssStorageKey(), [], { silent: true });
-  subs = subs.filter(function(u) { return u !== url; });
-  window.Storage.setItem(getRssStorageKey(), subs, { silent: true });
-  updateRssSubList(subs);
+async function saveRssSubscription(url) {
+  if (!url || !window.api || !window.api.saveRssSubscription) return;
+  try {
+    await window.api.saveRssSubscription(url, '');
+    await loadRssSubscriptions();
+  } catch (_e) {}
+}
+
+async function removeRssSubscription(url) {
+  if (!url || !window.api || !window.api.removeRssSubscription) return;
+  try {
+    await window.api.removeRssSubscription(url);
+    await loadRssSubscriptions();
+  } catch (e) {
+    alert('RSS: ' + e.message);
+  }
 }
 
 function updateRssSubList(subs) {
   var container = document.getElementById('ms-rss-sub-list');
   if (!container) return;
-  if (!subs || subs.length === 0) { container.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px 0;">暂无订阅</div>'; return; }
+  if (!subs || subs.length === 0) {
+    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.rssNoSubscriptions')) + '</div>';
+    return;
+  }
   var html = '';
-  subs.forEach(function(url) {
+  subs.forEach(function(sub) {
+    var url = (sub && sub.url) ? sub.url : String(sub || '');
+    if (!url) return;
     var short = url.length > 50 ? url.substring(0, 50) + '...' : url;
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">';
-    html += '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);" title="' + url + '">' + short + '</span>';
-    html += '<button onclick="removeRssSubscription(\'' + url.replace(/'/g, "\\'") + '\')" title="删除" style="margin-left:8px;padding:2px 6px;background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:14px;">✕</button>';
+    html += '<div class="rss-sub-item" data-url="' + encodeURIComponent(url) + '">';
+    html += '<span class="rss-sub-url" title="' + _escapeHtml(url) + '">' + _escapeHtml(short) + '</span>';
+    html += '<button type="button" class="rss-sub-remove" title="' + _escapeHtml(_rssT('download.rssRemove')) + '">✕</button>';
     html += '</div>';
   });
   container.innerHTML = html;
+  container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var row = btn.closest('.rss-sub-item');
+      if (row && row.dataset.url) removeRssSubscription(decodeURIComponent(row.dataset.url));
+    });
+  });
 }
 
 window.removeRssSubscription = removeRssSubscription;

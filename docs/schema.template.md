@@ -193,7 +193,7 @@ max_topic_depth: 3
 |------|----------|
 | `schema.md`（本文件） | 结构、边界、入库与级联原则 |
 | `.ai_memory/project_rules.md` | 本库主题树示例、禁止归类清单、行业黑话表 |
-| `NoteAI/profile.md`（项目根） | 个人身份与回答偏好（跨工作区） |
+| `.ai_memory/user_profile.json`（工作区） | 个人身份与回答偏好（工作区级） |
 
 ---
 

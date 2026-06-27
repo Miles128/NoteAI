@@ -225,12 +225,28 @@
                             if (self.userEdited && !window._rewritingFilePath) {
                                 self.scheduleAutoSave(md || '');
                             }
+                            if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
+                                window.StatusbarModule.updateFromContent(md || '', null, null);
+                            }
                             if (callback) {
                                 callback(md || '');
                             }
                         },
                         onSelectionUpdate: function() {
                             self.updateToolbarState();
+                            if (window.StatusbarModule && window.StatusbarModule.updateCursor) {
+                                var pos = self.editor && self.editor.state && self.editor.state.selection
+                                    ? self.editor.state.selection.from
+                                    : 0;
+                                var textBefore = '';
+                                try {
+                                    textBefore = self.editor.state.doc.textBetween(0, pos, '\n');
+                                } catch (_e) {}
+                                var lines = textBefore.split('\n');
+                                var line = lines.length;
+                                var col = lines[lines.length - 1].length + 1;
+                                window.StatusbarModule.updateCursor(line, col);
+                            }
                         },
                         onFocus: function() {
                             self.updateToolbarState();

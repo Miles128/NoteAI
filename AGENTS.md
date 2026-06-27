@@ -2,9 +2,7 @@
 
 This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.) when working with this repository.
 
-> **CLAUDE.md was merged into this file** — both Claude Code and other agents use `AGENTS.md`.
-
-## Build & Test
+> # Build & Test
 
 ```bash
 uv sync                    # install deps
@@ -45,7 +43,7 @@ Tauri v2 shell (src-tauri/)
 
 - **`rag/index.py:delete_by_file()`**: queries chunks BEFORE deleting (was delete-then-query; zvec eventual consistency could lose track of sparse index entries).
 - **`rag/retriever.py:_rerank()`**: no longer overwrites `score` with `rerank_score` — both fields preserved. Sort post-rerank uses `rerank_score`.
-- **`rag_chat_with_actions`**: aliases `rag_chat` only; LLM code execution path removed.
+- **`rag_chat_with_actions`** RPC removed: was an alias for `rag_chat`. File operations now go through the CLI agent dialog (§3.8 of PRD). The built-in `agent_runner.py` / `agent_handler.py` (6 structured tools) have been deleted.
 - **`rag/index.py:hybrid_search()`**: sparse-only hits query zvec for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
 - **Embedder module** (`rag/embedder.py`): HF environment variables (`HF_ENDPOINT`, `NO_PROXY`) and `FASTEMBED_CACHE_PATH` are set lazily via `_ensure_hf_env()` / `_ensure_fastembed_cache()` on first model load, not at import time. Uses hf-mirror.com.
 - **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, `topic_pending.py`, and `topic_wiki_manager.py`; keep new topic logic in that cluster instead of growing handlers.
@@ -58,13 +56,12 @@ Tauri v2 shell (src-tauri/)
 
 - **`webui/js/`**: vanilla JS IIFE modules on `window.*`, no bundler, no virtual DOM. State in `window.AppState` and `window.state`. `main.mjs` is the only ES module.
 - **Tauri sidecar**: configured in `src-tauri/tauri.conf.json`. Python binary resolved via `python/main.py` → `sidecar.server.main()`.
-- **Test coverage**: ~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
+- **Test coverage**: \~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
 - **Prompts**: Python constants in `prompts/` with parallel `prompts/yaml/` (loader supports both).
 - **Sidecar Python**: dev uses project `.venv`; release can bundle `src-tauri/resources/sidecar-python` via `scripts/bundle_sidecar_python.sh`, or set `NOTEAI_PYTHON`.
 - **`rag_enabled`**: default `True` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
 
-
----
+***
 
 # NoteAI 通用 AI 行为规范
 
@@ -108,7 +105,7 @@ Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
 
 - YAML frontmatter: `topic: 一级 > 二级 > 三级`
 - 文件系统: `Notes/一级/二级/三级/文件名.md`
-- 分隔符: ` > `
+- 分隔符: `>`
 - 最多三层，三级下不再设子题
 
 ## 两层记忆体系
@@ -146,3 +143,4 @@ NoteAI 有两层 Memory，均与工作区绑定（切换工作区即切换画像
 ```
 
 > 旧文档中的 `NoteAI/`、`NoteAI/profile.md` 为别名，请以 `.noteai`、`.ai_memory` 为准。
+

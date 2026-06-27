@@ -1,12 +1,15 @@
 import base64
 import importlib
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 from utils.topic_assigner import sync_wiki_with_files
+
+_MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MiB
 
 
 class FilesHandler(BaseHandler):
@@ -116,6 +119,9 @@ class FilesHandler(BaseHandler):
         full_path = self._resolve_path(path)
         if not full_path:
             return {"success": False, "message": "路径无效"}
+        content = params.get("content", "")
+        if len(content.encode("utf-8")) > _MAX_FILE_SIZE_BYTES:
+            return {"success": False, "message": "文件内容超过最大限制"}
         try:
             full = Path(full_path)
             rel_path = ""
@@ -125,7 +131,13 @@ class FilesHandler(BaseHandler):
                     rel_path = str(full.relative_to(Path(workspace)))
                 except ValueError:
                     rel_path = str(full_path)
-            full.write_text(params.get("content", ""), encoding="utf-8")
+            # Protect runtime/system directories from being overwritten by file saves.
+            if rel_path:
+                protected_roots = {".noteai", ".ai_memory", ".git", ".trash", "trash"}
+                first_part = Path(rel_path).parts[0].lower()
+                if first_part in protected_roots:
+                    return {"success": False, "message": "不能保存到系统或运行时目录"}
+            full.write_text(content, encoding="utf-8")
             if rel_path.lower().endswith(".md"):
                 self._start_task(
                     f"suggest_links_{Path(rel_path).stem}",
@@ -147,7 +159,10 @@ class FilesHandler(BaseHandler):
         if not full_path:
             return {"success": False, "message": "路径无效"}
         try:
-            raw_bytes = Path(full_path).read_bytes()
+            full = Path(full_path)
+            if full.exists() and full.stat().st_size > _MAX_FILE_SIZE_BYTES:
+                return {"success": False, "message": "文件超过最大读取限制"}
+            raw_bytes = full.read_bytes()
             return {
                 "success": True,
                 "content": base64.b64encode(raw_bytes).decode("utf-8"),
@@ -171,8 +186,9 @@ class FilesHandler(BaseHandler):
         if not resolved_path.exists():
             return {"success": False, "message": "解析后的路径不存在"}
 
-        # Reject paths with control characters that could confuse external commands.
-        if any(ord(ch) < 32 for ch in resolved):
+        # Reject paths with control characters or shell metacharacters that could confuse external commands.
+        illegal_chars = '"&|<>%^'
+        if any(ord(ch) < 32 for ch in resolved) or any(ch in resolved for ch in illegal_chars):
             return {"success": False, "message": "路径包含非法字符"}
 
         try:
@@ -186,8 +202,8 @@ class FilesHandler(BaseHandler):
                 cmd = shutil.which("explorer")
                 if not cmd:
                     return {"success": False, "message": "系统未找到 explorer 命令"}
-                # Quote the path so explorer sees it as a single argument.
-                subprocess.Popen([cmd, f'/select,"{resolved_path}"'])
+                # Pass path as a separate argument; subprocess handles quoting safely.
+                subprocess.Popen([cmd, "/select,", str(resolved_path)])
             else:
                 cmd = shutil.which("xdg-open") or shutil.which("nautilus") or shutil.which("dolphin")
                 if not cmd:
@@ -263,6 +279,49 @@ class FilesHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def _move_file(self, params):
+        src_path = params.get("file_path", "")
+        target_folder = params.get("target_folder", "")
+        if not src_path or not target_folder:
+            return {"success": False, "message": "源文件和目标文件夹不能为空"}
+
+        src = self._resolve_path(src_path)
+        dest_dir = self._resolve_path(target_folder)
+        if not src or not dest_dir:
+            return {"success": False, "message": "路径无效"}
+
+        src = Path(src)
+        dest_dir = Path(dest_dir)
+        if not src.exists():
+            return {"success": False, "message": "源文件不存在"}
+        if not dest_dir.is_dir():
+            return {"success": False, "message": "目标不是文件夹"}
+        if src.resolve() == dest_dir.resolve():
+            return {"success": False, "message": "不能移动到自身"}
+        if src.is_dir():
+            try:
+                dest_dir.resolve().relative_to(src.resolve())
+                return {"success": False, "message": "不能移动到子目录"}
+            except ValueError:
+                pass
+
+        dest = dest_dir / src.name
+        if dest.exists():
+            return {"success": False, "message": "目标位置已存在同名文件"}
+
+        try:
+            shutil.move(str(src), str(dest))
+            if src.suffix.lower() == ".md" or dest.suffix.lower() == ".md" or src.is_dir():
+                try:
+                    sync_wiki_with_files()
+                except Exception as e:
+                    logger.warning(f"[files_handler] syncing WIKI after move: {e}\n")
+            workspace = self.config.workspace_path
+            rel = str(dest.relative_to(Path(workspace))) if workspace else str(dest)
+            return {"success": True, "path": rel, "message": "已移动"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
     def _create_note(self, params):
         from config.constants import TOPIC_SEP
         from config.settings import NOTES_FOLDER
@@ -331,3 +390,4 @@ class FilesHandler(BaseHandler):
         router.register("read_file_raw", self._read_file_raw)
         router.register("reveal_in_finder", self._reveal_in_finder)
         router.register("delete_file", self._delete_file)
+        router.register("move_file", self._move_file)

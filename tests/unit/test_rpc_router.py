@@ -1,9 +1,20 @@
 """Tests for RPC router."""
 
+import time
 from pathlib import Path
 
 import pytest
 from sidecar.rpc_router import RpcRouter, _sanitize_error_message
+
+
+def _wait_for_responses(cap, count=1, timeout=2.0):
+    """Poll until at least `count` responses arrive (handlers run async)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if len(cap.responses) >= count:
+            return
+        time.sleep(0.005)
+    raise AssertionError(f"Timed out waiting for {count} response(s), got {len(cap.responses)}")
 
 
 class TestRpcRouter:
@@ -29,6 +40,7 @@ class TestRpcRouter:
         router.register("echo", echo)
         router.handle({"id": "1", "method": "echo", "params": {"text": "hello"}})
 
+        _wait_for_responses(cap)
         assert len(cap.responses) == 1
         assert cap.responses[0]["id"] == "1"
         assert cap.responses[0]["result"] == {"msg": "hello"}
@@ -38,7 +50,10 @@ class TestRpcRouter:
         router.handle({"id": "2", "method": "nonexistent", "params": {}})
         assert len(cap.responses) == 1
         assert "error" in cap.responses[0]
-        assert "Unknown method" in cap.responses[0]["error"]
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        assert err["code"] == "METHOD_NOT_FOUND"
+        assert "Unknown method" in err["message"]
 
     def test_async_method(self, captured):
         import threading
@@ -64,8 +79,12 @@ class TestRpcRouter:
 
         router.register("fail", failing)
         router.handle({"id": "4", "method": "fail", "params": {}})
+        _wait_for_responses(cap)
         assert "error" in cap.responses[0]
-        assert "boom" in cap.responses[0]["error"]
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        assert err["code"] == "INTERNAL_ERROR"
+        assert "boom" in err["message"]
 
     def test_error_message_sanitizes_workspace_and_home_paths(self, captured, tmp_path):
         router, cap = captured
@@ -82,12 +101,15 @@ class TestRpcRouter:
 
         router.register("fail_paths", failing_with_paths)
         router.handle({"id": "5", "method": "fail_paths", "params": {}})
+        _wait_for_responses(cap)
         assert "error" in cap.responses[0]
-        error = cap.responses[0]["error"]
-        assert str(ws) not in error
-        assert str(home) not in error
-        assert "<workspace>" in error
-        assert "<home>" in error
+        err = cap.responses[0]["error"]
+        assert isinstance(err, dict)
+        msg = err["message"]
+        assert str(ws) not in msg
+        assert str(home) not in msg
+        assert "<workspace>" in msg
+        assert "<home>" in msg
 
 
 def test_sanitize_error_message_replaces_paths():

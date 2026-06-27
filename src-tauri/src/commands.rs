@@ -5,21 +5,66 @@ use tauri::Manager;
 use crate::state::AppState;
 
 fn normalize_path(path: &std::path::Path) -> std::path::PathBuf {
-    let mut stack = Vec::new();
+    let mut stack: Vec<std::path::Component> = Vec::new();
     for component in path.components() {
         match component {
-            std::path::Component::Normal(name) => stack.push(name),
+            std::path::Component::Normal(_) => stack.push(component),
             std::path::Component::ParentDir => {
-                stack.pop();
+                // Only pop normal components; never pop a root/prefix component
+                // so that excessive ".." segments collapse to the root instead of panicking.
+                if matches!(stack.last(), Some(std::path::Component::Normal(_))) {
+                    stack.pop();
+                }
             }
             std::path::Component::RootDir | std::path::Component::Prefix(_) => {
                 stack.clear();
-                stack.push(component.as_os_str());
+                stack.push(component);
             }
             std::path::Component::CurDir => {}
         }
     }
-    stack.iter().collect()
+    stack.iter().map(|c| c.as_os_str()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn normalize_simple_path() {
+        let p = PathBuf::from("/a/b/c");
+        assert_eq!(normalize_path(&p), PathBuf::from("/a/b/c"));
+    }
+
+    #[test]
+    fn normalize_strips_curdir() {
+        let p = PathBuf::from("/a/./b");
+        assert_eq!(normalize_path(&p), PathBuf::from("/a/b"));
+    }
+
+    #[test]
+    fn normalize_resolves_parentdir() {
+        let p = PathBuf::from("/a/b/c/../d");
+        assert_eq!(normalize_path(&p), PathBuf::from("/a/b/d"));
+    }
+
+    #[test]
+    fn normalize_excessive_parentdir_does_not_panic() {
+        // Excessive ".." beyond the root should collapse to root, not panic.
+        let p = PathBuf::from("/a/../../..");
+        let result = normalize_path(&p);
+        assert!(result.starts_with("/"), "result should remain under root: {:?}", result);
+    }
+
+    #[test]
+    fn normalize_relative_excessive_parentdir() {
+        let p = PathBuf::from("../../etc/passwd");
+        let result = normalize_path(&p);
+        // Relative paths with excessive ".." should not contain ".." segments.
+        let s = result.to_string_lossy();
+        assert!(!s.contains(".."), "result should not contain '..': {:?}", result);
+    }
 }
 
 fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Result<String, String> {

@@ -2,6 +2,83 @@
     display: none;
 }
 
+.ai-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: auto;
+    height: 24px;
+    padding: 2px 8px 2px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+}
+
+.ai-toggle-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text);
+}
+
+.ai-toggle-btn.active {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.ai-toggle-btn.active .ai-toggle-track {
+    background: var(--primary);
+}
+
+.ai-toggle-btn.active .ai-toggle-thumb {
+    transform: translateX(10px);
+}
+
+.ai-toggle-label {
+    white-space: nowrap;
+}
+
+.ai-toggle-track {
+    display: inline-block;
+    width: 22px;
+    height: 12px;
+    background: var(--border);
+    border-radius: 999px;
+    position: relative;
+    transition: background 0.15s ease;
+}
+
+.ai-toggle-thumb {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+.ai-panel-toggle-btn {
+    color: var(--text-muted);
+}
+
+.ai-panel-toggle-btn:hover {
+    color: var(--text);
+}
+
+.ai-panel-toggle-btn.active {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;

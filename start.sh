@@ -29,38 +29,12 @@ check_python_deps() {
         uv sync --directory "$PROJECT_DIR"
     fi
 
+    # 复用 run.py 的依赖检查逻辑（读取 pyproject.toml 全部依赖），避免维护两份列表
     uv run --directory "$PROJECT_DIR" python -c "
-deps = [
-    ('langchain_openai', 'langchain-openai'),
-    ('langchain_core', 'langchain-core'),
-    ('requests', 'requests'),
-    ('bs4', 'beautifulsoup4'),
-    ('readability', 'readability-lxml'),
-    ('docx', 'python-docx'),
-    ('fitz', 'PyMuPDF'),
-    ('mammoth', 'mammoth'),
-    ('validators', 'validators'),
-    ('pydantic', 'pydantic'),
-    ('tiktoken', 'tiktoken'),
-    ('markdownify', 'markdownify'),
-    ('yaml', 'PyYAML'),
-    ('markdown', 'markdown'),
-    ('jieba', 'jieba'),
-    ('PIL', 'pillow'),
-    ('html2text', 'html2text'),
-    ('watchdog', 'watchdog'),
-    ('send2trash', 'send2trash'),
-]
 import sys
-missing = []
-for mod, pkg in deps:
-    try:
-        __import__(mod)
-    except ImportError:
-        missing.append(pkg)
-if missing:
-    print('缺少 Python 依赖: ' + ' '.join(missing))
-    print('请运行: uv sync')
+sys.path.insert(0, '$PROJECT_DIR')
+from run import check_dependencies
+if not check_dependencies():
     sys.exit(1)
 print('Python 依赖检查通过')
 " || { echo "Python 依赖不全，请先运行: uv sync"; exit 1; }

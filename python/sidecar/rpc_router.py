@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+from utils.error_codes import ErrorCode, NoteAIError, make_error
 from utils.logger import logger
 
 
@@ -21,7 +22,7 @@ def _sanitize_error_message(message: str) -> str:
 
         workspace = (config.workspace_path or "").strip()
     except Exception:
-        pass
+        workspace = ""
     for prefix in [workspace, home]:
         if prefix:
             message = message.replace(prefix, "<workspace>" if prefix == workspace else "<home>")
@@ -57,35 +58,40 @@ class RpcRouter:
 
         handler = self._handlers.get(method)
         if handler is None:
-            self._send_error(req_id, f"Unknown method: {method}")
+            err = make_error(ErrorCode.METHOD_NOT_FOUND, f"Unknown method: {method}")
+            self._send_error(req_id, err)
             return
 
-        if handler.async_mode:
-
-            def _run():
-                try:
-                    result = handler.fn(params)
-                    self._send_ok(req_id, result)
-                except Exception as e:
-                    logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
-                    self._send_error(req_id, _sanitize_error_message(str(e)))
-
-            self._executor.submit(_run)
-        else:
+        def _run():
             try:
                 result = handler.fn(params)
                 self._send_ok(req_id, result)
+            except NoteAIError as e:
+                err = make_error(e.code, _sanitize_error_message(e.message), details=e.details)
+                self._send_error(req_id, err)
             except Exception as e:
                 logger.error(f"[ERROR] {method}: {e}\n{traceback.format_exc()}")
-                self._send_error(req_id, _sanitize_error_message(str(e)))
+                err = make_error(
+                    ErrorCode.INTERNAL_ERROR,
+                    _sanitize_error_message(str(e) or ErrorCode.INTERNAL_ERROR.value),
+                )
+                self._send_error(req_id, err)
+
+        # Submit all handlers (sync and async) to the thread pool so the
+        # stdin read loop in main() is never blocked by a slow handler.
+        self._executor.submit(_run)
 
     def _send_ok(self, req_id: str, result: Any) -> None:
         if self.send_response is not None:
             self.send_response({"id": req_id, "result": result})
 
-    def _send_error(self, req_id: str, message: str) -> None:
+    def _send_error(self, req_id: str, error: dict | str) -> None:
         if self.send_response is not None:
-            self.send_response({"id": req_id, "error": message})
+            if isinstance(error, str):
+                err = make_error(ErrorCode.INTERNAL_ERROR, error)
+            else:
+                err = error
+            self.send_response({"id": req_id, "error": err})
 
     @property
     def methods(self):

@@ -22,7 +22,7 @@ async function saveApiConfig() {
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
     const showStatus = (msg, isError = false) => {
-        const displayMsg = isError ? `<span style="color: #e53e3e;">${escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${escapeHtml(msg)}</span>`;
+        const displayMsg = isError ? `<span style="color: #e53e3e;">${window.escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${window.escapeHtml(msg)}</span>`;
         if (statusEl) {
             statusEl.innerHTML = displayMsg;
             statusEl.style.display = 'block';
@@ -188,6 +188,19 @@ async function saveFontSize(size) {
     }
 }
 
+async function saveFontFamily(key, value) {
+    try {
+        var payload = {};
+        payload[key] = value;
+        var result = await window.api.saveUiConfig(payload);
+        if (!result || !result.success) {
+            console.error('[Settings] save font family failed:', result);
+        }
+    } catch (e) {
+        console.error('[Settings] save font family error:', e);
+    }
+}
+
 async function setLocale(locale) {
     if (!window.I18nModule || !window.I18nModule.setLocale) return;
     try {
@@ -214,6 +227,15 @@ async function loadUiConfigToForm() {
             document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
                 radio.checked = radio.value === savedFontSize;
             });
+            var sidebarFont = uiConfig.sidebar_font_family || 'system';
+            var previewFont = uiConfig.preview_font_family || 'system';
+            if (window.ThemeModule && window.ThemeModule.applyContentFonts) {
+                window.ThemeModule.applyContentFonts(sidebarFont, previewFont);
+                try {
+                    localStorage.setItem('noteai_sidebar_font_family', sidebarFont);
+                    localStorage.setItem('noteai_preview_font_family', previewFont);
+                } catch (_e) {}
+            }
             var loc = uiConfig.locale === 'en' ? 'en' : 'zh-CN';
             document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
                 radio.checked = radio.value === loc;
@@ -393,6 +415,7 @@ window.SettingsModule = {
     saveUserProfile,
     loadUserProfile,
     saveFontSize,
+    saveFontFamily,
     loadUiConfigToForm,
     setLocale,
     initAssistantSettings,
@@ -468,4 +491,3 @@ window.resetApiConfig = resetApiConfig;
 window.saveUserProfile = saveUserProfile;
 
 })();
-

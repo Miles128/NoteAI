@@ -129,6 +129,7 @@ function renderFileTree(treeData, container) {
             var path = this.getAttribute('data-path');
             var name = this.getAttribute('data-name');
             if (this.classList.contains('folder')) {
+                setActiveTreeItem(this);
                 window.TreeModule.toggleTreeFolder(this);
                 // 触发 Note List 显示该主题下的笔记
                 if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
@@ -548,6 +549,8 @@ function renderVirtualTree(container) {
             saveTreeState();
             _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
             renderVirtualTree(container);
+            var refreshedItem = container.querySelector('.tree-item[data-path="' + path.replace(/"/g, '&quot;') + '"]');
+            if (refreshedItem) setActiveTreeItem(refreshedItem);
             if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
                 window.NoteListModule.showTopicNotes(path, name);
             }
@@ -586,6 +589,22 @@ function extractFileSet(treeData) {
     }
     walk(treeData);
     return files;
+}
+
+function _findFirstFolderWithFiles(nodes) {
+    if (!nodes) return null;
+    for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (node.type === 'folder') {
+            var hasFileChild = node.children && node.children.some(function(child) {
+                return child.type === 'file' && child.name && child.name.toLowerCase().endsWith('.md');
+            });
+            if (hasFileChild) return node;
+            var found = _findFirstFolderWithFiles(node.children);
+            if (found) return found;
+        }
+    }
+    return null;
 }
 
 var _lastFileSet = null;
@@ -667,11 +686,26 @@ async function _loadFileTreeOnce(force) {
         console.warn('[Tree] refreshPendingBtnState failed:', _describeTreeLoadError(e), e);
     }
     try {
-        if (window.NoteListModule && window.NoteListModule.showAllNotes) {
-            window.NoteListModule.showAllNotes();
+        if (window.NoteListModule) {
+            var currentTopic = window.NoteListModule.getCurrentTopic && window.NoteListModule.getCurrentTopic();
+            if (currentTopic) {
+                window.NoteListModule.refresh();
+            } else {
+                var defaultFolder = _findFirstFolderWithFiles(treeData);
+                if (!defaultFolder && _flatVisibleNodes && _flatVisibleNodes.length) {
+                    defaultFolder = _flatVisibleNodes[0];
+                }
+                if (defaultFolder) {
+                    var item = container.querySelector('.tree-item[data-path="' + defaultFolder.path.replace(/"/g, '&quot;') + '"]');
+                    if (item) setActiveTreeItem(item);
+                    window.NoteListModule.showTopicNotes(defaultFolder.path, defaultFolder.name);
+                } else if (window.NoteListModule.showAllNotes) {
+                    window.NoteListModule.showAllNotes();
+                }
+            }
         }
     } catch (e) {
-        console.warn('[Tree] NoteListModule.showAllNotes failed:', e);
+        console.warn('[Tree] NoteListModule init failed:', e);
     }
 }
 
@@ -699,6 +733,10 @@ function selectFile(path, fileName) {
     // 触发 Inspector 更新属性/Backlinks
     if (window.InspectorModule && window.InspectorModule.onFileSelected) {
         window.InspectorModule.onFileSelected(path);
+    }
+    // 触发底部状态栏更新
+    if (window.StatusbarModule && window.StatusbarModule.onFileSelected) {
+        window.StatusbarModule.onFileSelected(path);
     }
 
     var container = document.getElementById('tiptap-editor-container');

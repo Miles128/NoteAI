@@ -68,6 +68,9 @@ window.getTauriEventAPI = getTauriEventAPI;
 if (typeof window.toggleSidebar !== 'function') {
     window.toggleSidebar = function _toggleSidebarEarly() {};
 }
+if (typeof window.toggleFileListSidebar !== 'function') {
+    window.toggleFileListSidebar = function _toggleFileListSidebarEarly() {};
+}
 
 window.utils = {
     escapeHtml: escapeHtml,

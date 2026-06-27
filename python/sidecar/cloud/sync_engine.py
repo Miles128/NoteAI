@@ -4,11 +4,26 @@ import os
 import time
 
 from sidecar.cloud.providers import PROVIDER_MAP, CloudProvider
+from utils.keyring_store import delete_credential, load_credential, store_credential
 from utils.logger import logger
 
 SYNC_DIRS = ["Notes", "wiki"]
 STATE_FILE = "cloud_sync_state.json"
 CONFIG_FILE = "cloud_sync_config.json"
+
+_CLOUD_SYNC_CREDENTIAL_SERVICE = "NoteAI/cloud_sync"
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lower = key.lower()
+    return any(
+        token in lower
+        for token in ("password", "secret", "token", "key", "credential", "auth")
+    )
+
+
+def _credential_account(provider_name: str, key: str) -> str:
+    return f"{provider_name}/{key}"
 
 
 class SyncEngine:
@@ -235,7 +250,19 @@ class SyncEngine:
         try:
             with open(config_path, encoding="utf-8") as f:
                 all_configs = json.load(f)
-            return all_configs.get(provider_name, {})
+            config = all_configs.get(provider_name, {})
+            # Restore sensitive values from the OS keychain / fallback file.
+            restored = {}
+            for key, value in config.items():
+                placeholder = f"__encrypted__:{key}"
+                if value == placeholder and _is_sensitive_key(key):
+                    restored[key] = load_credential(
+                        _CLOUD_SYNC_CREDENTIAL_SERVICE,
+                        _credential_account(provider_name, key),
+                    )
+                else:
+                    restored[key] = value
+            return restored
         except Exception:
             return {}
 
@@ -251,7 +278,28 @@ class SyncEngine:
                     all_configs = json.load(f)
             except Exception:
                 all_configs = {}
-        all_configs[provider_name] = config
+
+        # Persist sensitive values in the OS keychain / fallback file and store
+        # only placeholders in the workspace JSON.
+        stored_config = {}
+        old_config = all_configs.get(provider_name, {})
+        for key, value in config.items():
+            if _is_sensitive_key(key) and isinstance(value, str) and value:
+                account = _credential_account(provider_name, key)
+                store_credential(_CLOUD_SYNC_CREDENTIAL_SERVICE, account, value)
+                stored_config[key] = f"__encrypted__:{key}"
+            else:
+                stored_config[key] = value
+
+        # Clean up credentials that are no longer present.
+        for key in old_config:
+            if _is_sensitive_key(key) and key not in config:
+                delete_credential(
+                    _CLOUD_SYNC_CREDENTIAL_SERVICE,
+                    _credential_account(provider_name, key),
+                )
+
+        all_configs[provider_name] = stored_config
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(all_configs, f, ensure_ascii=False, indent=2)
 

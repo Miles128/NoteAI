@@ -4,18 +4,15 @@ function toggleSidebar() {
     var sidebar = document.getElementById('sidebar');
     var expandBtn = document.getElementById('sidebar-expand-btn');
     var resizer = document.getElementById('sidebar-resizer');
-    var topBtn = document.getElementById('titlebar-toggle-folder-sidebar');
     if (!sidebar) return;
     if (sidebar.classList.contains('collapsed')) {
         sidebar.classList.remove('collapsed');
         if (expandBtn) expandBtn.style.display = 'none';
         if (resizer) resizer.style.display = '';
-        if (topBtn) topBtn.classList.add('active');
     } else {
         sidebar.classList.add('collapsed');
         if (expandBtn) expandBtn.style.display = 'flex';
         if (resizer) resizer.style.display = 'none';
-        if (topBtn) topBtn.classList.remove('active');
     }
 }
 
@@ -223,16 +220,14 @@ function _initSidebarDock() {
     var view = window.AppState.currentSidebarView || 'tree';
     switchSidebarView(view);
 
-    // 默认收起文件夹侧栏，以极窄线条显示
+    // 默认展开文件夹侧栏
     var sidebar = document.getElementById('sidebar');
     var resizer = document.getElementById('sidebar-resizer');
     var expandBtn = document.getElementById('sidebar-expand-btn');
-    var topBtn = document.getElementById('titlebar-toggle-folder-sidebar');
-    if (sidebar && !sidebar.classList.contains('collapsed')) {
-        sidebar.classList.add('collapsed');
-        if (resizer) resizer.style.display = 'none';
-        if (expandBtn) expandBtn.style.display = 'flex';
-        if (topBtn) topBtn.classList.remove('active');
+    if (sidebar && sidebar.classList.contains('collapsed')) {
+        sidebar.classList.remove('collapsed');
+        if (resizer) resizer.style.display = '';
+        if (expandBtn) expandBtn.style.display = 'none';
     }
 }
 

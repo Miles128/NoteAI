@@ -71,6 +71,9 @@ async function loadModules() {
     window.CliAgentModule = window.CliAgentModule || {};
     if (window.CliAgentModule.init) window.CliAgentModule.init();
 
+    await import('./statusbar.js');
+    window.StatusbarModule = window.StatusbarModule || {};
+
     await import('./sidebar.js');
     window.switchSidebarView = window.switchSidebarView;
     window.updateSidebarStats = window.updateSidebarStats;
@@ -80,10 +83,6 @@ async function loadModules() {
     if (typeof window.toggleSidebar !== 'function') {
         window.toggleSidebar = function _toggleSidebarMissing() {};
     }
-
-    await import('./links.js');
-    const { LinksModule } = window;
-    window.LinksModule = LinksModule;
 
     await import('./tiptap-editor.js');
     const { TiptapEditorModule, TiptapEditor } = window;
@@ -137,12 +136,6 @@ async function loadModules() {
     window.onConfirmBtnClick = onConfirmBtnClick;
     window.hasTopicPending = hasTopicPending;
 
-    await import('./tags.js');
-    const { doAutoTag, onShowAddTagInput, loadTagsView } = window;
-    window.doAutoTag = doAutoTag;
-    window.onShowAddTagInput = onShowAddTagInput;
-    window.loadTagsView = loadTagsView;
-
     await import('./search.js');
     window.SearchModule = window.SearchModule || {};
 
@@ -167,13 +160,6 @@ async function loadModules() {
     const { IngestModule } = window;
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
-
-    await import('./rewrite.js');
-    const { RewriteManager } = window;
-    window.RewriteManager = RewriteManager;
-    window.onLLMRewrite = RewriteManager.onLLMRewrite;
-    window.onRewriteConfirm = RewriteManager.onRewriteConfirm;
-    window.onRewriteCancel = RewriteManager.onRewriteCancel;
 
     await import('./event-listeners.js');
     const { EventListeners } = window;

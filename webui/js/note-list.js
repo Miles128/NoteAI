@@ -11,7 +11,6 @@
     var _currentTopicName = '';
     var _currentNotes = [];
     var _activeFilePath = null;
-    var _searchQuery = '';
 
     function _escapeHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
@@ -155,35 +154,25 @@
         var body = document.getElementById('note-list-body');
         var titleEl = document.getElementById('note-list-title');
         var countEl = document.getElementById('note-list-count');
-        var searchWrap = document.getElementById('note-list-search-wrap');
         if (body) body.innerHTML = '<div class="note-list-empty">' + (window.t ? window.t('noteList.empty') : '暂无笔记') + '</div>';
         if (titleEl) titleEl.textContent = _currentTopicName || (window.t ? window.t('noteList.title') : '笔记列表');
         if (countEl) countEl.textContent = '0';
-        if (searchWrap) searchWrap.style.display = 'none';
     }
 
     function render() {
         var body = document.getElementById('note-list-body');
         var titleEl = document.getElementById('note-list-title');
         var countEl = document.getElementById('note-list-count');
-        var searchWrap = document.getElementById('note-list-search-wrap');
         if (!body) return;
 
         var filtered = _currentNotes;
-        if (_searchQuery) {
-            var q = _searchQuery.toLowerCase();
-            filtered = _currentNotes.filter(function(n) {
-                return (n.name || '').toLowerCase().indexOf(q) >= 0;
-            });
-        }
 
         if (titleEl) titleEl.textContent = _currentTopicName || (window.t ? window.t('noteList.title') : '笔记列表');
         if (countEl) countEl.textContent = String(filtered.length);
-        if (searchWrap) searchWrap.style.display = _currentNotes.length > 0 ? '' : 'none';
 
         if (filtered.length === 0) {
             body.innerHTML = '<div class="note-list-empty">' +
-                (_searchQuery ? (window.t ? window.t('noteList.noSearchResult') : '无匹配笔记') : (window.t ? window.t('noteList.emptyTopic') : '该主题下暂无笔记')) +
+                (window.t ? window.t('noteList.emptyTopic') : '该主题下暂无笔记') +
                 '</div>';
             return;
         }
@@ -235,9 +224,6 @@
     }
 
     function clearSelection() {
-        _searchQuery = '';
-        var searchInput = document.getElementById('note-list-search-input');
-        if (searchInput) searchInput.value = '';
         showAllNotes();
     }
 
@@ -275,20 +261,14 @@
         var resizer = document.getElementById('note-list-resizer');
         var topBtn = document.getElementById('titlebar-toggle-note-list');
         if (panel) {
-            panel.classList.add('collapsed');
-            panel.style.width = '6px';
-            panel.style.minWidth = '6px';
+            panel.classList.remove('collapsed');
+            panel.style.width = '';
+            panel.style.minWidth = '';
         }
-        if (resizer) resizer.style.display = 'none';
-        if (topBtn) topBtn.classList.remove('active');
+        if (resizer) resizer.style.display = '';
+        if (topBtn) topBtn.classList.add('active');
+        _initResizer();
 
-        var searchInput = document.getElementById('note-list-search-input');
-        if (searchInput) {
-            searchInput.addEventListener('input', function() {
-                _searchQuery = this.value || '';
-                render();
-            });
-        }
     }
 
     function _initResizer() {

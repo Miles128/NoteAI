@@ -33,11 +33,16 @@ function _localeFile(locale) {
 
 async function loadLocale(locale) {
     var lang = locale === 'en' ? 'en' : 'zh-CN';
-    var resp = await fetch('locales/' + _localeFile(lang));
-    if (!resp.ok) {
-        throw new Error('Failed to load locale: ' + lang);
+    try {
+        var resp = await fetch('locales/' + _localeFile(lang));
+        if (!resp.ok) {
+            throw new Error('Failed to load locale: ' + lang);
+        }
+        _messages = await resp.json();
+    } catch (e) {
+        console.warn('[i18n] ' + e.message + ', falling back to raw keys');
+        _messages = {};
     }
-    _messages = await resp.json();
     _locale = lang;
     document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
     applyDomI18n();

@@ -8,7 +8,7 @@ from typing import Any
 
 from utils.logger import logger
 
-_INTENT_ORDER = ("chat", "general", "workspace", "action", "web", "unknown")
+_INTENT_ORDER = ("chat", "general", "workspace", "web", "unknown")
 
 
 def _parse_intent_json(text: str) -> dict[str, Any] | None:
@@ -61,13 +61,6 @@ def classify_intent(question: str, history: str = "") -> dict[str, Any]:
     )
     if any(ind in lowered for ind in workspace_indicators):
         return {"intent": "workspace", "confidence": "high", "reason": "workspace keyword detected"}
-
-    action_indicators = (
-        "移到", "移动到", "移动", "创建主题", "新建主题", "添加标签", "删除标签",
-        "更新综述", "生成综述", "整理一下", "归档", "重命名",
-    )
-    if any(ind in lowered for ind in action_indicators):
-        return {"intent": "action", "confidence": "high", "reason": "action keyword detected"}
 
     web_indicators = (
         "上网查", "搜索网络", "搜一下", "最新新闻", "今天天气", "股价", "行情",

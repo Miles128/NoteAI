@@ -71,7 +71,7 @@
 
 ### 3.1 检索开关
 
-- 配置项：`config.rag_enabled`，默认 `false`。
+- 配置项：`config.rag_enabled`，默认 `true`。
 - 当 `rag_enabled=false` 时，`_answer_with_rag` 使用 `sidecar.classic_retriever.retrieve`（主题树 + 全文搜索）。
 - 当 `rag_enabled=true` 时，使用 `sidecar.rag.retriever.retrieve`（向量 + BM25 混合检索 + 重排序）。
 
@@ -176,9 +176,9 @@ retrieve(query, topics, tags)
 
 ### 7.1 设计层
 
-1. **RAG 默认关闭，新用户无感知**
-   - `rag_enabled` 默认 `false`，新用户不手动开启则一直用 classic 检索。
-   - 即使 classic 检索也无法做语义匹配，对「同义不同词」的问题召回率低。
+1. **~~RAG 默认关闭~~（已修复：默认开启）**
+   - `rag_enabled` 现默认 `true`，新用户开箱即用向量检索。
+   - classic 检索仍作为 fallback（用户手动关闭 RAG 时使用）。
 
 2. **索引不会自动建立**
    - 打开工作区后不会自动触发 `init_rag_index`。

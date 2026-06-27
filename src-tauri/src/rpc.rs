@@ -2,6 +2,7 @@ use crate::sidecar;
 use crate::state::{AppState, PyRequest};
 
 static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
+    "add_tag_to_file",
     "ai_topic_analyze",
     "ai_topic_survey",
     "append_chat_to_survey",
@@ -79,12 +80,12 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "llm_rewrite_apply",
     "llm_rewrite_stream",
     "merge_duplicate_topics",
+    "move_file",
     "move_file_to_topic",
     "needs_schema_setup",
     "on_file_selected",
     "rag_add_chunks",
     "rag_chat",
-    "rag_chat_with_actions",
     "rag_clear_memory",
     "rag_rebuild_index",
     "rag_remove_chunks",
@@ -129,7 +130,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
-        "rag_chat" | "rag_chat_with_actions" | "agent_chat" => 60,
+        "rag_chat" => 60,
         "start_ingest" | "ensure_ingest" | "retry_ingest"
         | "init_rag_index" | "rag_rebuild_index" | "cancel_ingest" => 120,
         _ => 60,

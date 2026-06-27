@@ -23,6 +23,12 @@ function getTauriInvoke() {
     return null;
 }
 
+function getTauriEventAPI() {
+    if (window.__TAURI__ && window.__TAURI__.event) return window.__TAURI__.event;
+    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event) return window.__TAURI_INTERNALS__.event;
+    return null;
+}
+
 var _pyCallRetries = 2;
 var _pyCallRetryDelayMs = 300;
 
@@ -53,15 +59,17 @@ function _translateError(e) {
     return e;
 }
 
-async function pyCall(method, params) {
+async function pyCall(method, params, options) {
     if (!checkIsTauri()) {
         throw _translateError(new Error('Not running in Tauri'));
     }
     var invoke = getTauriInvoke();
     if (!invoke) throw _translateError(new Error('Tauri invoke not available'));
 
+    var opts = options || {};
+    var retries = opts.noRetry ? 0 : _pyCallRetries;
     var lastError = null;
-    for (var attempt = 0; attempt <= _pyCallRetries; attempt++) {
+    for (var attempt = 0; attempt <= retries; attempt++) {
         try {
             var result = await invoke('py_call', {
                 method: method,
@@ -70,7 +78,7 @@ async function pyCall(method, params) {
             return result;
         } catch (e) {
             lastError = e;
-            if (attempt < _pyCallRetries && _isRetryableError(e)) {
+            if (attempt < retries && _isRetryableError(e)) {
                 console.warn('[API] pyCall retry:', method, attempt + 1, e);
                 await new Promise(function(resolve) { setTimeout(resolve, _pyCallRetryDelayMs * (attempt + 1)); });
                 continue;
@@ -317,7 +325,7 @@ async function openFileInNewWindow(path, name) {
 function createApiFunction(def) {
     return async function() {
         var params = def.params ? def.params.apply(null, arguments) : {};
-        return pyCall(def.method, params);
+        return pyCall(def.method, params, { noRetry: !!def.write });
     };
 }
 
@@ -343,17 +351,17 @@ var API_DEFS = [
     { name: 'deleteTopic', method: 'delete_topic', params: function(topicName) { return { topic_name: topicName }; } },
     { name: 'renameTag', method: 'rename_tag', params: function(oldTag, newTag) { return { old_tag: oldTag, new_tag: newTag }; } },
     { name: 'deleteTag', method: 'delete_tag', params: function(tagName) { return { tag_name: tagName }; } },
-    { name: 'moveFileToTopic', method: 'move_file_to_topic', params: function(filePath, newTopic) { return { file_path: filePath, new_topic: newTopic }; } },
-    { name: 'moveFile', method: 'move_file', params: function(filePath, targetFolder) { return { file_path: filePath, target_folder: targetFolder }; } },
-    { name: 'addTagToFile', method: 'add_tag_to_file', params: function(filePath, tag) { return { file_path: filePath, tag: tag }; } },
+    { name: 'moveFileToTopic', method: 'move_file_to_topic', params: function(filePath, newTopic) { return { file_path: filePath, new_topic: newTopic }; }, write: true },
+    { name: 'moveFile', method: 'move_file', params: function(filePath, targetFolder) { return { file_path: filePath, target_folder: targetFolder }; }, write: true },
+    { name: 'addTagToFile', method: 'add_tag_to_file', params: function(filePath, tag) { return { file_path: filePath, tag: tag }; }, write: true },
 
     // ---- 配置 ----
     { name: 'getApiConfig', method: 'get_api_config' },
-    { name: 'saveApiConfig', method: 'save_api_config', params: function(cfg) { return cfg; } },
+    { name: 'saveApiConfig', method: 'save_api_config', params: function(cfg) { return cfg; }, write: true },
     { name: 'getUiConfig', method: 'get_ui_config' },
-    { name: 'saveUiConfig', method: 'save_ui_config', params: function(cfg) { return cfg; } },
+    { name: 'saveUiConfig', method: 'save_ui_config', params: function(cfg) { return cfg; }, write: true },
     { name: 'getThemePreference', method: 'get_theme_preference' },
-    { name: 'saveThemePreference', method: 'save_theme_preference', params: function(theme) { return { theme: theme }; } },
+    { name: 'saveThemePreference', method: 'save_theme_preference', params: function(theme) { return { theme: theme }; }, write: true },
 
     // ---- 下载 / 转换 / 整合 ----
     { name: 'startWebDownload', method: 'start_web_download', params: function(urls, aiAssist, includeImages) { return { urls: urls, ai_assist: aiAssist, include_images: includeImages }; } },
@@ -364,75 +372,78 @@ var API_DEFS = [
     { name: 'refreshLog', method: 'refresh_log' },
     { name: 'onFileSelected', method: 'on_file_selected', params: function(path) { return { path: path }; } },
     { name: 'canPreviewFile', method: 'can_preview_file', params: function(path) { return { path: path }; } },
-    { name: 'saveFileContent', method: 'save_file_content', params: function(path, content) { return { path: path, content: content }; } },
+    { name: 'saveFileContent', method: 'save_file_content', params: function(path, content) { return { path: path, content: content }; }, write: true },
     { name: 'readFileRaw', method: 'read_file_raw', params: function(path) { return { path: path }; } },
-    { name: 'importFilesDirect', method: 'import_files', params: function(files) { return { files: files }; } },
-    { name: 'importRssFeed', method: 'import_rss_feed', params: function(url, maxItems, fetchArticles) { return { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles }; } },
-    { name: 'importTranscript', method: 'import_transcript', params: function(title, content, source) { return { title: title, content: content, source: source }; } },
+    { name: 'importFilesDirect', method: 'import_files', params: function(files) { return { files: files }; }, write: true },
+    { name: 'importRssFeed', method: 'import_rss_feed', params: function(url, maxItems, fetchArticles) { return { feed_url: url, max_items: maxItems, fetch_articles: fetchArticles }; }, write: true },
+    { name: 'importTranscript', method: 'import_transcript', params: function(title, content, source) { return { title: title, content: content, source: source }; }, write: true },
 
     // ---- 知识图谱 / 链接 ----
     { name: 'discoverLinks', method: 'discover_links', params: function() { return {}; } },
     { name: 'getBacklinks', method: 'get_backlinks', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'getLinkStats', method: 'get_link_stats', params: function() { return {}; } },
     { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
-    { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; } },
-    { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; } },
-    { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; } },
-    { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; } },
+    { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
+    { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
+    { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
+    { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
     { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
-    { name: 'generateAbstract', method: 'generate_abstract', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
+    { name: 'generateAbstract', method: 'generate_abstract', params: function(topicName, level) { return { topic_name: topicName, level: level }; }, write: true },
 
     // ---- LLM 改写 ----
     { name: 'llmRewrite', method: 'llm_rewrite', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'llmRewriteStream', method: 'llm_rewrite_stream', params: function(filePath) { return { file_path: filePath }; } },
-    { name: 'llmRewriteApply', method: 'llm_rewrite_apply', params: function(filePath, rewrittenText) { return { file_path: filePath, rewritten_text: rewrittenText }; } },
+    { name: 'llmRewriteApply', method: 'llm_rewrite_apply', params: function(filePath, rewrittenText) { return { file_path: filePath, rewritten_text: rewrittenText }; }, write: true },
 
     // ---- AI 主题 ----
     { name: 'aiTopicAnalyze', method: 'ai_topic_analyze', params: function() { return {}; } },
-    { name: 'aiTopicSurvey', method: 'ai_topic_survey', params: function(topic) { return { topic: topic }; } },
-    { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; } },
+    { name: 'aiTopicSurvey', method: 'ai_topic_survey', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; }, write: true },
 
     // ---- RAG ----
     { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile) { return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null }; } },
-    { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; } },
+    { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; }, write: true },
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
-    { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; } },
-    { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; } },
+    { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },
+    { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; }, write: true },
     { name: 'getChangelog', method: 'get_changelog', params: function(limit) { return { limit: limit || 50 }; } },
-    { name: 'checkAndGenerateSurveys', method: 'check_and_generate_surveys', params: function() { return {}; } },
+    { name: 'checkAndGenerateSurveys', method: 'check_and_generate_surveys', params: function() { return {}; }, write: true },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },
-    { name: 'runCliAgent', method: 'run_cli_agent', params: function(agentId, prompt, workspacePath) { return { agent_id: agentId, prompt: prompt, workspace_path: workspacePath || '' }; } },
-    { name: 'generateVaultAgentsMd', method: 'generate_vault_agents_md', params: function() { return {}; } },
+    { name: 'runCliAgent', method: 'run_cli_agent', params: function(agentId, prompt, workspacePath) { return { agent_id: agentId, prompt: prompt, workspace_path: workspacePath || '' }; }, write: true },
+    { name: 'generateVaultAgentsMd', method: 'generate_vault_agents_md', params: function() { return {}; }, write: true },
 
     // ---- 用户画像 / 规则 ----
     { name: 'getUserProfile', method: 'get_user_profile', params: function() { return {}; } },
-    { name: 'saveUserProfile', method: 'save_user_profile', params: function(data) { return data; } },
+    { name: 'saveUserProfile', method: 'save_user_profile', params: function(data) { return data; }, write: true },
     { name: 'getProjectRules', method: 'get_project_rules', params: function() { return {}; } },
-    { name: 'saveProjectRules', method: 'save_project_rules', params: function(rules) { return { rules: rules }; } },
+    { name: 'saveProjectRules', method: 'save_project_rules', params: function(rules) { return { rules: rules }; }, write: true },
 
     // ---- Schema / Ingest ----
     { name: 'ensureSchema', method: 'ensure_schema', params: function() { return {}; } },
     { name: 'getSchema', method: 'get_schema', params: function() { return {}; } },
     { name: 'needsSchemaSetup', method: 'needs_schema_setup', params: function() { return {}; } },
     { name: 'getSchemaTemplate', method: 'get_schema_template', params: function() { return {}; } },
-    { name: 'saveSchema', method: 'save_schema', params: function(content) { return { content: content }; } },
-    { name: 'startIngest', method: 'start_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; } },
-    { name: 'cancelIngest', method: 'cancel_ingest', params: function() { return {}; } },
-    { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; } },
+    { name: 'saveSchema', method: 'save_schema', params: function(content) { return { content: content }; }, write: true },
+    { name: 'startIngest', method: 'start_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },
+    { name: 'cancelIngest', method: 'cancel_ingest', params: function() { return {}; }, write: true },
+    { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },
     { name: 'getIngestStatus', method: 'get_ingest_status', params: function() { return {}; } },
-    { name: 'ensureIngest', method: 'ensure_ingest', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; } },
+    { name: 'ensureIngest', method: 'ensure_ingest', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; }, write: true },
+
+    // ---- 搜索 ----
+    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },
 
     // ---- 云同步 ----
     { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' },
-    { name: 'cloudSyncAuth', method: 'cloud_sync_auth', params: function(provider, credentials) { return { provider_name: provider, credentials: credentials }; } },
-    { name: 'cloudSyncPush', method: 'cloud_sync_push', params: function(provider) { return { provider_name: provider }; } },
-    { name: 'cloudSyncPull', method: 'cloud_sync_pull', params: function(provider) { return { provider_name: provider }; } },
+    { name: 'cloudSyncAuth', method: 'cloud_sync_auth', params: function(provider, credentials) { return { provider_name: provider, credentials: credentials }; }, write: true },
+    { name: 'cloudSyncPush', method: 'cloud_sync_push', params: function(provider) { return { provider_name: provider }; }, write: true },
+    { name: 'cloudSyncPull', method: 'cloud_sync_pull', params: function(provider) { return { provider_name: provider }; }, write: true },
     { name: 'cloudSyncStatus', method: 'cloud_sync_status', params: function(provider) { return { provider_name: provider }; } },
-    { name: 'cloudSyncSaveConfig', method: 'cloud_sync_save_config', params: function(provider, config) { return { provider_name: provider, config: config }; } },
+    { name: 'cloudSyncSaveConfig', method: 'cloud_sync_save_config', params: function(provider, config) { return { provider_name: provider, config: config }; }, write: true },
     { name: 'cloudSyncLoadConfig', method: 'cloud_sync_load_config', params: function(provider) { return { provider_name: provider }; } },
-    { name: 'cloudSyncDisconnect', method: 'cloud_sync_disconnect', params: function(provider) { return { provider_name: provider }; } }
+    { name: 'cloudSyncDisconnect', method: 'cloud_sync_disconnect', params: function(provider) { return { provider_name: provider }; }, write: true }
 ];
 
 var generatedApi = {};
@@ -459,6 +470,8 @@ window.api = Object.assign({}, generatedApi, {
     closeWindow: closeWindow,
     openFileInNewWindow: openFileInNewWindow
 });
+
+window.getTauriEventAPI = getTauriEventAPI;
 
 })();
 

@@ -5,12 +5,8 @@ var _workspaceWatcherDebounce = null;
 var _hasRunInitialIngest = false;
 
 function initWorkspaceFileWatcher() {
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
-        ? window.__TAURI__.event
-        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
-            ? window.__TAURI_INTERNALS__.event
-            : null);
-    if (!eventAPI) return;
+    var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
+    if (!eventAPI || typeof eventAPI.listen !== 'function') return;
 
     if (_workspaceWatcherUnlisten) {
         _workspaceWatcherUnlisten();
@@ -112,12 +108,8 @@ function refreshKnowledgeGraph() {
 }
 
 function initSidecarErrorListener() {
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen
-        ? window.__TAURI__.event
-        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
-            ? window.__TAURI_INTERNALS__.event
-            : null);
-    if (!eventAPI) return;
+    var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
+    if (!eventAPI || typeof eventAPI.listen !== 'function') return;
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
@@ -154,12 +146,8 @@ function initSidecarErrorListener() {
 }
 
 function initRagEventListener() {
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event
-        ? window.__TAURI__.event
-        : (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && window.__TAURI_INTERNALS__.event.listen
-            ? window.__TAURI_INTERNALS__.event
-            : null);
-    if (!eventAPI) return;
+    var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
+    if (!eventAPI || typeof eventAPI.listen !== 'function') return;
 
     eventAPI.listen('python-event', function(event) {
         var data = event.payload;
@@ -230,6 +218,10 @@ function initRagEventListener() {
                 if (window.TreeModule && window.TreeModule.loadFileTree) {
                     window.TreeModule.loadFileTree();
                 }
+            }
+        } else if (data.type && data.type.indexOf('cli_agent_') === 0) {
+            if (window.CliAgentModule && window.CliAgentModule.handleEvent) {
+                window.CliAgentModule.handleEvent(data);
             }
         }
     });

@@ -881,21 +881,42 @@ const Graph3Tier = {
 
     _legendItem(color, size, labelKey) {
         var label = window.t(labelKey);
-        return '<span class="graph-legend-item" title="' + label.replace(/"/g, '&quot;') + '">' +
-            '<span class="graph-legend-dot" style="background:' + color + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;display:inline-block;"></span>' +
-            '<span class="graph-legend-label">' + label + '</span></span>';
+        var item = document.createElement('span');
+        item.className = 'graph-legend-item';
+        item.title = label;
+        var dot = document.createElement('span');
+        dot.className = 'graph-legend-dot';
+        dot.style.background = color;
+        dot.style.width = size + 'px';
+        dot.style.height = size + 'px';
+        dot.style.borderRadius = '50%';
+        dot.style.display = 'inline-block';
+        var text = document.createElement('span');
+        text.className = 'graph-legend-label';
+        text.textContent = label;
+        item.appendChild(dot);
+        item.appendChild(text);
+        return item;
     },
 
     _updateLegend() {
         const el = document.getElementById('graph-legend');
         if (!el) return;
-        if (this.filter === 'tag') {
-            el.innerHTML = this._legendItem('#7c4dff', 8, 'graph.legend.tags') + this._legendItem('#81c784', 6, 'graph.legend.notes');
-        } else if (this.filter === 'all') {
-            el.innerHTML = this._legendItem('#7c4dff', 8, 'graph.legend.tags') + this._legendItem('#81c784', 6, 'graph.legend.notes');
+        el.innerHTML = '';
+        var items = [];
+        if (this.filter === 'tag' || this.filter === 'all') {
+            items = [
+                this._legendItem('#7c4dff', 8, 'graph.legend.tags'),
+                this._legendItem('#81c784', 6, 'graph.legend.notes')
+            ];
         } else {
-            el.innerHTML = this._legendItem('#ea8600', 6, 'graph.legend.l2') + this._legendItem('#f4a930', 5, 'graph.legend.l3') + this._legendItem('#81c784', 4, 'graph.legend.notes');
+            items = [
+                this._legendItem('#ea8600', 6, 'graph.legend.l2'),
+                this._legendItem('#f4a930', 5, 'graph.legend.l3'),
+                this._legendItem('#81c784', 4, 'graph.legend.notes')
+            ];
         }
+        items.forEach(function(item) { el.appendChild(item); });
     },
 
     _updateStats() {
@@ -1090,10 +1111,6 @@ const Graph3Tier = {
                         self.zoom.transform,
                         d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(scale).translate(-d.x, -d.y)
                     );
-                }
-            } else if (d.type === 'tag' && self.filter === 'tag') {
-                if (typeof switchSidebarView === 'function') {
-                    switchSidebarView('tags');
                 }
             }
         });

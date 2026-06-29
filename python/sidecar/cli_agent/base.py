@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import threading
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable
@@ -14,6 +12,12 @@ from sidecar.cli_agent.env import (
     resolve_command,
     resolve_workspace,
     validate_prompt,
+)
+from sidecar.cli_agent.process_control import CliProcessHandle, TimeoutWatcher, clear, register
+from sidecar.cli_agent.workspace_bounds import (
+    append_workspace_boundary,
+    apply_workspace_bounds_env,
+    boundary_block,
 )
 from sidecar.mcp_config_manager import get_mcp_config_path, register_mcp_server
 from utils.logger import logger
@@ -63,9 +67,11 @@ class BaseCliAgent(ABC):
     env_keys: list[str] | None = None
     # 非空时在 run() 前自动注册 NoteAI vault MCP server
     mcp_target: str | None = None
+    # 是否支持 CLI 原生 session/continue（不支持则每次独立 run）
+    supports_cli_session: bool = True
 
-    # 默认超时：idle 60s / total 5min
-    idle_timeout_s: float = 60.0
+    # 默认超时：idle 180s / total 5min
+    idle_timeout_s: float = 180.0
     total_timeout_s: float = 300.0
 
     def __init__(self) -> None:
@@ -111,6 +117,8 @@ class BaseCliAgent(ABC):
         prompt: str,
         workspace: Path,
         skip_permissions: bool = True,
+        *,
+        continue_session: bool = False,
     ) -> list[str]:
         """构建传给 CLI 的参数列表（不含命令本身）。"""
 
@@ -166,8 +174,16 @@ class BaseCliAgent(ABC):
         workspace_path: str | None = None,
         send_event: EventEmitter | None = None,
         skip_permissions: bool = True,
+        *,
+        new_session: bool = False,
     ) -> AgentResult:
         """统一执行入口：解析命令、校验、启动子进程、流式输出、超时控制。"""
+        from sidecar.cli_agent.session_store import (
+            clear_session,
+            has_session,
+            mark_session,
+        )
+
         command = self.resolved_path
         logger.info(f"CLI agent {self.agent_id} 解析命令: {command}")
 
@@ -189,19 +205,33 @@ class BaseCliAgent(ABC):
         if error:
             return error
         assert ws_path is not None
+        ws_key = str(ws_path)
+
+        if new_session and self.supports_cli_session:
+            clear_session(self.agent_id, ws_key)
+
+        continue_session = (
+            self.supports_cli_session and has_session(self.agent_id, ws_key)
+        )
 
         mcp_error = self._ensure_mcp_registered(ws_path)
         if mcp_error:
             return AgentResult(False, mcp_error)
 
         try:
-            args = self.build_args(prompt, ws_path, skip_permissions)
+            args = self.build_args(
+                prompt,
+                ws_path,
+                skip_permissions,
+                continue_session=continue_session,
+            )
         except ValueError as e:
             return AgentResult(False, f"参数构建失败: {e}")
 
         full_cmd = [command] + args
         logger.info(
-            f"CLI agent {self.agent_id} 启动命令: {' '.join(full_cmd)} (cwd={ws_path})"
+            f"CLI agent {self.agent_id} 启动命令: {' '.join(full_cmd)} "
+            f"(cwd={ws_path}, continue={continue_session})"
         )
 
         self._emit(
@@ -210,12 +240,14 @@ class BaseCliAgent(ABC):
                 "agent": self.agent_id,
                 "agent_name": self.display_name,
                 "command": command,
+                "continue_session": continue_session,
             },
             send_event,
         )
 
         try:
             env = build_agent_env(self.env_keys)
+            env = apply_workspace_bounds_env(env, self.agent_id, ws_path)
             proc = subprocess.Popen(
                 full_cmd,
                 cwd=str(ws_path),
@@ -227,17 +259,23 @@ class BaseCliAgent(ABC):
                 env=env,
             )
 
-            killed = self._stream_output(proc, send_event)
+            handle = register(proc, self.agent_id, self.display_name)
+            try:
+                killed = self._stream_output(proc, send_event, handle)
+            finally:
+                clear(handle)
             output = killed.get("output", "")
 
             if killed["reason"]:
-                logger.warning(f"CLI agent {self.agent_id} 被超时终止: {killed['reason']}")
+                logger.warning(f"CLI agent {self.agent_id} 终止: {killed['reason']}")
+                stopped = killed["reason"] == "用户已停止"
                 self._emit(
                     {
                         "type": "cli_agent_error",
                         "agent": self.agent_id,
                         "message": killed["reason"],
                         "output": output,
+                        "stopped_by_user": stopped,
                     },
                     send_event,
                 )
@@ -252,6 +290,8 @@ class BaseCliAgent(ABC):
                 logger.warning(
                     f"CLI agent {self.agent_id} 非零退出 ({return_code}): {output[:500]}"
                 )
+                if self.supports_cli_session:
+                    clear_session(self.agent_id, ws_key)
                 self._emit(
                     {
                         "type": "cli_agent_error",
@@ -267,12 +307,16 @@ class BaseCliAgent(ABC):
                     return_code,
                 )
 
+            if self.supports_cli_session:
+                mark_session(self.agent_id, ws_key)
+
             self._emit(
                 {
                     "type": "cli_agent_done",
                     "agent": self.agent_id,
                     "agent_name": self.display_name,
                     "output": output,
+                    "continue_session": True,
                 },
                 send_event,
             )
@@ -291,42 +335,26 @@ class BaseCliAgent(ABC):
         self,
         proc: subprocess.Popen[str],
         send_event: EventEmitter | None,
+        handle: CliProcessHandle,
     ) -> dict[str, Any]:
         """读取子进程输出并发送事件，返回 {reason, output}。"""
-        last_output_time = time.time()
-        start_time = last_output_time
         killed: dict[str, Any] = {"reason": None, "output": ""}
         output_lines: list[str] = []
 
-        def _check_timeout() -> None:
-            nonlocal last_output_time
-            while proc.poll() is None:
-                now = time.time()
-                if now - last_output_time > self.idle_timeout_s:
-                    killed["reason"] = f"idle 超过 {int(self.idle_timeout_s)}s 无输出"
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                    return
-                if now - start_time > self.total_timeout_s:
-                    killed["reason"] = f"总运行时间超过 {int(self.total_timeout_s)}s"
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                    return
-                time.sleep(1.0)
-
-        timeout_thread = threading.Thread(target=_check_timeout, daemon=True)
-        timeout_thread.start()
+        watcher = TimeoutWatcher(
+            handle,
+            self.idle_timeout_s,
+            self.total_timeout_s,
+            lambda event: self._emit(event, send_event),
+        )
+        watcher.start()
 
         try:
             assert proc.stdout is not None
             for line in iter(proc.stdout.readline, ""):
                 if not line:
                     break
-                last_output_time = time.time()
+                watcher.note_output()
                 output_lines.append(line)
                 self._emit(
                     {
@@ -343,9 +371,12 @@ class BaseCliAgent(ABC):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 return_code = proc.wait()
-            # 如果超时线程已经设了 reason，保留；否则用实际退出码
-            if killed["reason"] is None and return_code != 0:
-                # 未触发超时但执行失败，由调用方处理
+
+            if watcher.kill_reason:
+                killed["reason"] = watcher.kill_reason
+            elif handle.stop_event.is_set():
+                killed["reason"] = "用户已停止"
+            elif return_code != 0 and killed["reason"] is None:
                 pass
 
         killed["output"] = "".join(output_lines)

@@ -116,6 +116,7 @@ function switchSettingsTab(tabName) {
         loadUserProfile();
     }
     if (tabName === 'cli') {
+        initCliSettings();
         refreshCliAgentsSettings();
     }
     if (tabName === 'cloud-sync' && window.CloudSyncModule && window.CloudSyncModule.refresh) {
@@ -344,10 +345,77 @@ function saveRagAdvancedConfig() {
 
 function applyCliSettingsToForm(uiConfig) {
     var selectEl = document.getElementById('settings-cli-agent-select');
-    if (selectEl && uiConfig.cli_agent_id) {
-        selectEl.value = uiConfig.cli_agent_id;
+    if (selectEl && uiConfig && uiConfig.cli_agent_id) {
+        if (selectEl.querySelector('option[value="' + uiConfig.cli_agent_id + '"]')) {
+            selectEl.value = uiConfig.cli_agent_id;
+        }
     }
 }
+
+function _showCliAgentSaveStatus(message, isError) {
+    var statusEl = document.getElementById('settings-cli-save-status');
+    if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.color = isError ? '#e53e3e' : 'var(--text-muted)';
+        statusEl.textContent = message;
+    }
+    if (window.ToastModule && window.ToastModule.show && isError) {
+        window.ToastModule.show(message, 'error');
+    }
+}
+
+function _syncCliAgentSelectors(agentId) {
+    var nextId = agentId || '';
+    var settingsSel = document.getElementById('settings-cli-agent-select');
+    var tabSel = document.getElementById('cli-agent-selector');
+    if (settingsSel) {
+        if (nextId && settingsSel.querySelector('option[value="' + nextId + '"]')) {
+            settingsSel.value = nextId;
+        } else if (!nextId) {
+            settingsSel.value = '';
+        }
+    }
+    if (tabSel) {
+        if (nextId && tabSel.querySelector('option[value="' + nextId + '"]')) {
+            tabSel.value = nextId;
+        } else if (!nextId) {
+            tabSel.value = '';
+        }
+    }
+    if (window.CliAgentModule && window.CliAgentModule.applySavedAgentId) {
+        window.CliAgentModule.applySavedAgentId(nextId);
+    }
+}
+
+async function persistCliAgentId(agentId) {
+    var nextId = String(agentId || '').trim();
+    try {
+        var saver = (window.state && window.state.saveUiConfig)
+            ? window.state.saveUiConfig.bind(window.state)
+            : window.api.saveUiConfig.bind(window.api);
+        var result = await saver({ cli_agent_id: nextId });
+        if (result && result.success) {
+            _syncCliAgentSelectors(nextId);
+            _showCliAgentSaveStatus(window.t('settings.autoSaved'), false);
+            updateStatus(window.t('settings.autoSaved'));
+            return result;
+        }
+        var failMsg = window.t('settings.autoSaveFailed', {
+            message: (result && result.message) || window.t('common.unknownError'),
+        });
+        _showCliAgentSaveStatus(failMsg, true);
+        updateStatus(failMsg);
+        return result;
+    } catch (e) {
+        console.error('[Settings] persist cli_agent_id error:', e);
+        var errMsg = window.t('settings.autoSaveFailed', { message: e.message || String(e) });
+        _showCliAgentSaveStatus(errMsg, true);
+        updateStatus(errMsg);
+        return null;
+    }
+}
+
+var _cliAgentsRefreshGen = 0;
 
 async function refreshComponentsStatus() {
     if (!window.api || !window.api.getComponentsStatus) return;
@@ -491,13 +559,25 @@ async function refreshCliAgentsSettings() {
     var selectEl = document.getElementById('settings-cli-agent-select');
     if (!listEl || !window.api || !window.api.listCliAgents) return;
 
+    var refreshGen = ++_cliAgentsRefreshGen;
     listEl.innerHTML = '<p class="settings-hint">' + window.escapeHtml(window.t('settings.cliAgentsLoading')) + '</p>';
 
     try {
         var result = await window.api.listCliAgents();
+        if (refreshGen !== _cliAgentsRefreshGen) return;
+
         var agents = (result && result.success && Array.isArray(result.agents)) ? result.agents : [];
-        var uiConfig = window.api.getUiConfig ? await window.api.getUiConfig() : {};
-        var savedId = (uiConfig && uiConfig.cli_agent_id) ? String(uiConfig.cli_agent_id) : '';
+        var uiConfig = {};
+        if (window.state && window.state.getState) {
+            uiConfig = window.state.getState().uiConfig || {};
+        }
+        if (!uiConfig.cli_agent_id && window.api.getUiConfig) {
+            uiConfig = await window.api.getUiConfig();
+        }
+        if (refreshGen !== _cliAgentsRefreshGen) return;
+
+        var pendingId = (selectEl && selectEl.dataset.pendingValue) ? String(selectEl.dataset.pendingValue) : '';
+        var savedId = pendingId || ((uiConfig && uiConfig.cli_agent_id) ? String(uiConfig.cli_agent_id) : '');
 
         if (selectEl) {
             selectEl.innerHTML = '';
@@ -572,11 +652,12 @@ function initCliSettings() {
         selectEl.dataset.bound = '1';
         selectEl.addEventListener('change', function() {
             var nextId = selectEl.value || '';
-            saveAssistantUiConfig({ cli_agent_id: nextId });
-            var tabSelector = document.getElementById('cli-agent-selector');
-            if (tabSelector && nextId) {
-                tabSelector.value = nextId;
-            }
+            selectEl.dataset.pendingValue = nextId;
+            persistCliAgentId(nextId).finally(function() {
+                if (selectEl.dataset.pendingValue === nextId) {
+                    delete selectEl.dataset.pendingValue;
+                }
+            });
         });
     }
 
@@ -770,6 +851,8 @@ window.SettingsModule = {
     applyRagSettingsToForm,
     applyCliSettingsToForm,
     refreshCliAgentsSettings,
+    persistCliAgentId,
+    syncCliAgentSelectors: _syncCliAgentSelectors,
     // backward-compatible aliases
     initAssistantSettings: initRagSettings,
     applyAssistantSettingsToForm: applyRagSettingsToForm,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sidecar.cli_agent.base import BaseCliAgent
+from sidecar.cli_agent.workspace_bounds import append_workspace_boundary
 
 
 class CodexAgent(BaseCliAgent):
@@ -21,6 +22,15 @@ class CodexAgent(BaseCliAgent):
         prompt: str,
         workspace: Path,
         skip_permissions: bool = True,
+        *,
+        continue_session: bool = False,
     ) -> list[str]:
-        # 注意：--full-auto 必须放在 exec 之后
-        return ["exec", "--full-auto", prompt]
+        scoped_prompt = append_workspace_boundary(
+            prompt,
+            workspace,
+            continue_session=continue_session,
+        )
+        common = ["exec", "--sandbox", "workspace-write", "-C", str(workspace)]
+        if continue_session:
+            return common + ["resume", "--last", scoped_prompt]
+        return common + [scoped_prompt]

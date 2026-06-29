@@ -520,13 +520,151 @@
     word-break: break-word;
 }
 
+.cli-workflow-block {
+    display: block;
+    margin-top: 4px;
+}
+
+.cli-workflow-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    cursor: pointer;
+    list-style: none;
+}
+
+.cli-workflow-status::-webkit-details-marker {
+    display: none;
+}
+
+.cli-workflow-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-color, var(--primary));
+    flex-shrink: 0;
+}
+
+.cli-workflow-activity.is-running .cli-workflow-pulse {
+    animation: cli-workflow-pulse 1.2s ease-in-out infinite;
+}
+
+.cli-workflow-activity.is-done .cli-workflow-pulse {
+    background: var(--text-muted);
+    animation: none;
+}
+
+@keyframes cli-workflow-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.cli-workflow-status-label {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.cli-workflow-status-hint {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cli-workflow-status-chevron {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.cli-workflow-block[open] .cli-workflow-status-chevron::before {
+    content: '▾ ';
+}
+
+.cli-workflow-block:not([open]) .cli-workflow-status-chevron::before {
+    content: '▸ ';
+}
+
+.cli-workflow-block.is-done .cli-workflow-status-label {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.cli-timeout-notice {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid color-mix(in srgb, var(--accent-color, var(--primary)) 35%, var(--border));
+    background: color-mix(in srgb, var(--accent-color, var(--primary)) 8%, var(--surface));
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.cli-panel-send.cli-stop-btn,
+.ai-panel-send.cli-stop-btn,
+#cli-send-btn.cli-stop-btn {
+    color: #e53e3e;
+    border-color: color-mix(in srgb, #e53e3e 40%, var(--border));
+}
+
+#cli-send-btn.cli-stop-btn:hover {
+    background: color-mix(in srgb, #e53e3e 12%, var(--surface-hover));
+}
+
+.cli-workflow-steps {
+    padding: 4px 10px 8px 24px;
+    border-top: 1px solid var(--border);
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.cli-workflow-step {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-muted);
+    padding: 2px 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.cli-workflow-step.is-error {
+    color: #e53e3e;
+}
+
+.cli-workflow-step.is-done {
+    opacity: 0.85;
+}
+
+.cli-session-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent-color, var(--primary)) 12%, var(--surface));
+    color: var(--accent-color, var(--primary));
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.cli-agent-new-session-btn {
+    width: auto !important;
+    min-width: 0;
+    padding: 0 8px !important;
+    font-size: 11px;
+    line-height: 1;
+}
+
 .cli-mode-badge.cli-agent-running {
     opacity: 0.75;
     font-style: italic;
 }
 
-/* CLI Agent 输出样式 */
-.cli-agent-output {
+/* CLI Agent 输出样式（纯文本 fallback） */
+.cli-agent-output:not(.ai-msg-md) {
     font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
     font-size: 12px;
     line-height: 1.5;
@@ -540,7 +678,7 @@
     word-break: break-word;
 }
 
-.cli-agent-output-inline {
+.cli-agent-output-inline:not(.ai-msg-md) {
     display: inline;
     font-family: inherit;
     font-size: inherit;
@@ -549,11 +687,11 @@
     border: none;
 }
 
-.ai-msg.ai-assistant .cli-agent-output {
+.ai-msg.ai-assistant .cli-agent-output:not(.ai-msg-md) {
     background: transparent;
 }
 
-.ai-msg.ai-system .cli-agent-output {
+.ai-msg.ai-system .cli-agent-output:not(.ai-msg-md) {
     background: transparent;
     border: none;
     padding: 0;

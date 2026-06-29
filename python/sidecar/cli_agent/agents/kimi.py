@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from sidecar.cli_agent.base import BaseCliAgent
+from sidecar.cli_agent.workspace_bounds import append_workspace_boundary
 
 
 class KimiAgent(BaseCliAgent):
@@ -25,9 +26,18 @@ class KimiAgent(BaseCliAgent):
         prompt: str,
         workspace: Path,
         skip_permissions: bool = True,
+        *,
+        continue_session: bool = False,
     ) -> list[str]:
-        args: list[str] = ["run"]
+        args: list[str] = []
+        if continue_session:
+            args.append("-C")
         if skip_permissions:
-            args.append("--dangerously-skip-permissions")
-        args.append(prompt)
+            args.append("-y")
+        scoped = append_workspace_boundary(
+            prompt,
+            workspace,
+            continue_session=continue_session,
+        )
+        args.extend(["-p", scoped])
         return args

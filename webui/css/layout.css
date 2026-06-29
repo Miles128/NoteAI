@@ -1382,6 +1382,25 @@ body {
     white-space: pre-wrap;
 }
 
+.ai-panel-messages .cli-agent-output.ai-msg-md {
+    display: block;
+    white-space: normal;
+    margin-top: 4px;
+}
+
+.ai-panel-messages .cli-agent-output.ai-msg-md.preview-content {
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.ai-panel-messages .cli-agent-output.ai-msg-md.preview-content > *:first-child {
+    margin-top: 0;
+}
+
+.ai-panel-messages .cli-agent-output.ai-msg-md.preview-content > *:last-child {
+    margin-bottom: 0;
+}
+
 .ai-panel-messages .cli-agent-stream {
     display: block;
 }

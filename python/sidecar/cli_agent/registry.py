@@ -57,6 +57,8 @@ class AgentRegistry:
         workspace_path: str | None = None,
         send_event: Any | None = None,
         skip_permissions: bool = True,
+        *,
+        new_session: bool = False,
     ) -> dict[str, Any]:
         """执行指定 agent。"""
         agent = self._get(agent_id)
@@ -70,6 +72,7 @@ class AgentRegistry:
             workspace_path=workspace_path,
             send_event=send_event,
             skip_permissions=skip_permissions,
+            new_session=new_session,
         )
         return result.to_dict()
 
@@ -97,6 +100,8 @@ def run_cli_agent(
     workspace_path: str | None = None,
     send_event: Any | None = None,
     skip_permissions: bool = True,
+    *,
+    new_session: bool = False,
 ) -> dict[str, Any]:
     """启动 CLI agent 处理用户请求。"""
     return get_registry().run(
@@ -105,4 +110,5 @@ def run_cli_agent(
         workspace_path=workspace_path,
         send_event=send_event,
         skip_permissions=skip_permissions,
+        new_session=new_session,
     )

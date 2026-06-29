@@ -2,7 +2,7 @@
  * CLI Agent Module (前端)
  *
  * 在 Inspector 的独立 CLI Tab 中集成第三方 CLI agent（Claude Code / OpenCode / Codex / Gemini）。
- * 与小忆助手的 RAG 问答完全分离：AI Tab 只走内置助手，CLI Tab 只走外部 CLI agent。
+ * 与 RAG 助手的问答完全分离：AI Tab 只走内置 RAG，CLI Tab 只走外部 CLI agent。
  */
 (function() {
     'use strict';
@@ -12,14 +12,215 @@
     var _savedCliAgentId = '';
     var _isRunning = false;
     var _bindingsDone = false;
-    var _streamPre = null;
+    var _streamContentEl = null;
+    var _streamRawText = '';
     var _streamMsg = null;
     var _lineBuffer = '';
     var _toolCards = {};
     var _toolCtx = {};
+    var _workflowDetails = null;
+    var _workflowCount = 0;
+    var _workflowLatestText = '';
+    var _timeoutNoticeEl = null;
+    var _sessionActive = false;
+    var _sendBtnDefaultHtml = '';
+
+    var _SEND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+    var _STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>';
 
     function _summary() {
         return window.CliToolSummary || {};
+    }
+
+    function _stripAnsi(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+            .replace(/\x9B[0-?]*[ -/]*[@-~]/g, '')
+            .replace(/\[(?:\d{1,3}(?:;\d{1,3})*)?m/g, '');
+    }
+
+    function _isOpenCodeWorkflowLine(trimmed) {
+        if (!trimmed || _selectedAgent !== 'opencode') return false;
+        if (/^>\s/.test(trimmed)) return true;
+        if (/^[⚙✱✗→•✓]/.test(trimmed)) return true;
+        if (/^noteai-vault_/i.test(trimmed)) return true;
+        if (/^\$\s/.test(trimmed)) return true;
+        if (/\b(Explore Agent|General Agent|Build Agent)\b/.test(trimmed)) return true;
+        if (/^Error:/i.test(trimmed)) return true;
+        if (/^Glob "/i.test(trimmed)) return true;
+        if (/^\d+ matches?$/.test(trimmed)) return true;
+        if (/^Read .+ failed$/i.test(trimmed)) return true;
+        return false;
+    }
+
+    function _updateSessionBadge() {
+        var badge = document.getElementById('cli-session-badge');
+        if (!badge) return;
+        if (_sessionActive && _selectedAgent) {
+            badge.textContent = window.t ? window.t('cliAgent.sessionContinue') : '续聊中';
+            badge.hidden = false;
+        } else {
+            badge.hidden = true;
+        }
+    }
+
+    function startNewCliSession() {
+        if (!_selectedAgent || !window.api || !window.api.clearCliAgentSession) {
+            return Promise.resolve({ success: false });
+        }
+        return window.api.clearCliAgentSession(_selectedAgent).then(function(result) {
+            _sessionActive = false;
+            _updateSessionBadge();
+            if (result && result.success && window.ToastModule && window.ToastModule.show) {
+                window.ToastModule.show(
+                    window.t ? window.t('cliAgent.newSessionDone') : '已开始新对话',
+                    'info'
+                );
+            }
+            return result;
+        });
+    }
+
+    function _truncateText(text, maxLen) {
+        var s = String(text || '').trim();
+        if (s.length <= maxLen) return s;
+        return s.slice(0, maxLen - 1) + '…';
+    }
+
+    function _workflowStatusLabel() {
+        if (_workflowCount > 0) {
+            return (window.t ? window.t('cliAgent.workflowRunning') : '运行中') +
+                ' · ' + (window.t ? window.t('cliAgent.workflowStepsShort', { count: _workflowCount }) : (_workflowCount + ' 步'));
+        }
+        return window.t ? window.t('cliAgent.workflowRunning') : '运行中';
+    }
+
+    function _updateWorkflowSummary() {
+        if (!_workflowDetails || !_workflowDetails.isConnected) return;
+        var labelEl = _workflowDetails.querySelector('.cli-workflow-status-label');
+        var hintEl = _workflowDetails.querySelector('.cli-workflow-status-hint');
+        if (labelEl) labelEl.textContent = _workflowStatusLabel();
+        if (hintEl) {
+            hintEl.textContent = _workflowLatestText ? _truncateText(_workflowLatestText, 72) : '';
+            hintEl.hidden = !_workflowLatestText;
+        }
+    }
+
+    function _ensureWorkflowDetails() {
+        var container = _ensureStreamContainer();
+        if (!container) return null;
+        if (_workflowDetails && _workflowDetails.isConnected) {
+            return _workflowDetails;
+        }
+
+        _workflowDetails = document.createElement('details');
+        _workflowDetails.className = 'cli-workflow-block cli-tool-activity cli-workflow-activity is-running';
+        _workflowDetails.open = false;
+
+        var summary = document.createElement('summary');
+        summary.className = 'cli-workflow-status cli-tool-summary';
+
+        var pulse = document.createElement('span');
+        pulse.className = 'cli-workflow-pulse';
+        pulse.setAttribute('aria-hidden', 'true');
+        summary.appendChild(pulse);
+
+        var label = document.createElement('span');
+        label.className = 'cli-workflow-status-label';
+        label.textContent = _workflowStatusLabel();
+        summary.appendChild(label);
+
+        var hint = document.createElement('span');
+        hint.className = 'cli-workflow-status-hint';
+        hint.hidden = true;
+        summary.appendChild(hint);
+
+        var chevron = document.createElement('span');
+        chevron.className = 'cli-workflow-status-chevron';
+        chevron.textContent = window.t ? window.t('cliAgent.workflowDetails') : '详情';
+        summary.appendChild(chevron);
+
+        _workflowDetails.appendChild(summary);
+
+        var body = document.createElement('div');
+        body.className = 'cli-workflow-steps';
+        _workflowDetails.appendChild(body);
+
+        container.appendChild(_workflowDetails);
+        _streamContentEl = null;
+        return _workflowDetails;
+    }
+
+    function _showRunningWorkflow() {
+        _ensureWorkflowDetails();
+        _updateWorkflowSummary();
+    }
+
+    function _appendWorkflowStep(text) {
+        var details = _ensureWorkflowDetails();
+        if (!details) return;
+
+        _workflowCount += 1;
+        _workflowLatestText = text;
+        var body = details.querySelector('.cli-workflow-steps');
+        if (!body) return;
+
+        var step = document.createElement('div');
+        step.className = 'cli-workflow-step';
+        if (/^✗|^Error:/i.test(text)) {
+            step.classList.add('is-error');
+        } else if (/^✓/.test(text)) {
+            step.classList.add('is-done');
+        }
+        step.textContent = text;
+        body.appendChild(step);
+        body.scrollTop = body.scrollHeight;
+
+        details.classList.add('is-running');
+        details.classList.remove('is-done');
+        _updateWorkflowSummary();
+        _scrollCliMessages();
+    }
+
+    function _finalizeWorkflow() {
+        if (!_workflowDetails || !_workflowDetails.isConnected) return;
+        _workflowDetails.classList.remove('is-running');
+        _workflowDetails.classList.add('is-done');
+        _workflowDetails.open = false;
+        _updateWorkflowSummary();
+    }
+
+    function _ensureTimeoutNotice() {
+        var body = document.querySelector('#inspector-content-cli .ai-panel-body');
+        if (!body) return null;
+        if (_timeoutNoticeEl && _timeoutNoticeEl.isConnected) {
+            return _timeoutNoticeEl;
+        }
+        _timeoutNoticeEl = document.createElement('div');
+        _timeoutNoticeEl.className = 'cli-timeout-notice';
+        _timeoutNoticeEl.hidden = true;
+        body.insertBefore(_timeoutNoticeEl, body.firstChild);
+        return _timeoutNoticeEl;
+    }
+
+    function _showTimeoutNotice(payload) {
+        var notice = _ensureTimeoutNotice();
+        if (!notice) return;
+        var seconds = payload.seconds || 0;
+        var key = payload.kind === 'idle' ? 'cliAgent.timeoutWarningIdle' : 'cliAgent.timeoutWarningTotal';
+        var fallback = payload.kind === 'idle'
+            ? ('已超过 ' + seconds + ' 秒无新输出，Agent 可能仍在处理。可随时点击停止。')
+            : ('任务已运行超过 ' + seconds + ' 秒，仍在继续。可随时点击停止。');
+        notice.textContent = window.t ? window.t(key, { seconds: seconds }) : fallback;
+        notice.hidden = false;
+    }
+
+    function _hideTimeoutNotice() {
+        if (_timeoutNoticeEl) {
+            _timeoutNoticeEl.hidden = true;
+            _timeoutNoticeEl.textContent = '';
+        }
     }
 
     function _filterCliOutput(content) {
@@ -27,6 +228,7 @@
         var trimmed = content.trim();
         if (!trimmed) return '';
 
+        if (_isOpenCodeWorkflowLine(trimmed)) return '';
         if (/^\$\s/.test(trimmed)) return '';
         if (/^\[thinking\]/i.test(trimmed)) return '';
         if (/^\[tool:/i.test(trimmed)) return '';
@@ -187,7 +389,7 @@
                 _toolCards[payload.tool_id] = card;
             }
             container.appendChild(card);
-            _streamPre = null;
+            _streamContentEl = null;
             _scrollCliMessages();
             return;
         }
@@ -210,10 +412,32 @@
                 doneCard.dataset.tool = payload.tool || '';
                 _toolCards[key] = doneCard;
                 container.appendChild(doneCard);
-                _streamPre = null;
+                _streamContentEl = null;
             }
             _scrollCliMessages();
         }
+    }
+
+    function _renderMarkdownHtml(text) {
+        if (!text) return '';
+        if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
+            return window.EditorModule.renderMarkdownPreview(text);
+        }
+        if (typeof marked !== 'undefined') {
+            try {
+                var rawHtml = marked.parse(text);
+                return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : _escapeHtml(text);
+            } catch (e) {
+                console.error('[CliAgent] Markdown parse error:', e);
+            }
+        }
+        return '<pre>' + _escapeHtml(text) + '</pre>';
+    }
+
+    function _setCliMarkdown(contentEl, text) {
+        if (!contentEl) return;
+        contentEl.classList.add('ai-msg-content', 'ai-msg-md', 'preview-content');
+        contentEl.innerHTML = _renderMarkdownHtml(text);
     }
 
     function _scrollCliMessages() {
@@ -227,11 +451,16 @@
     }
 
     function _resetStreamPre() {
-        _streamPre = null;
+        _streamContentEl = null;
+        _streamRawText = '';
         _streamMsg = null;
         _lineBuffer = '';
         _toolCards = {};
         _toolCtx = {};
+        _workflowDetails = null;
+        _workflowCount = 0;
+        _workflowLatestText = '';
+        _hideTimeoutNotice();
     }
 
     function _ensureStreamContainer() {
@@ -251,30 +480,39 @@
         return _streamMsg;
     }
 
-    function _ensureStreamPre() {
+    function _ensureStreamContent() {
         var container = _ensureStreamContainer();
         if (!container) return null;
-        if (_streamPre && _streamPre.isConnected && _streamPre.parentElement === container) {
-            return _streamPre;
+        if (_streamContentEl && _streamContentEl.isConnected && _streamContentEl.parentElement === container) {
+            return _streamContentEl;
         }
 
-        _streamPre = document.createElement('pre');
-        _streamPre.className = 'cli-agent-output cli-agent-output-inline';
-        container.appendChild(_streamPre);
-        return _streamPre;
+        _streamContentEl = document.createElement('div');
+        _streamContentEl.className = 'cli-agent-output cli-agent-output-inline';
+        container.appendChild(_streamContentEl);
+        return _streamContentEl;
     }
 
     function _processOutputLine(line) {
-        var toolPayload = _tryParseToolLine(line);
+        line = _stripAnsi(line || '');
+        var trimmed = line.trim();
+        if (!trimmed) return;
+
+        var toolPayload = _tryParseToolLine(trimmed);
         if (toolPayload) {
             _upsertToolCard(toolPayload);
             return;
         }
+        if (_isOpenCodeWorkflowLine(trimmed)) {
+            _appendWorkflowStep(trimmed);
+            return;
+        }
         var filtered = _filterCliOutput(line ? line + '\n' : '');
         if (!filtered) return;
-        var pre = _ensureStreamPre();
-        if (!pre) return;
-        pre.textContent += filtered;
+        var contentEl = _ensureStreamContent();
+        if (!contentEl) return;
+        _streamRawText += _stripAnsi(filtered);
+        _setCliMarkdown(contentEl, _streamRawText);
     }
 
     function _appendAssistantOutput(content) {
@@ -298,7 +536,24 @@
         _isRunning = running;
         var btn = document.getElementById('cli-send-btn');
         var badge = document.getElementById('cli-mode-badge');
-        if (btn) btn.disabled = !!running;
+        var input = document.getElementById('cli-input');
+
+        if (btn) {
+            if (!_sendBtnDefaultHtml) {
+                _sendBtnDefaultHtml = btn.innerHTML;
+            }
+            btn.disabled = false;
+            btn.classList.toggle('cli-stop-btn', !!running);
+            btn.innerHTML = running ? _STOP_ICON : (_sendBtnDefaultHtml || _SEND_ICON);
+            btn.title = running
+                ? ((window.t && window.t('cliAgent.stop')) || '停止')
+                : ((window.t && window.t('assistant.send')) || '发送');
+            btn.setAttribute('aria-label', btn.title);
+        }
+        if (input) {
+            input.disabled = !!running;
+        }
+
         if (!badge || !_selectedAgent) return;
 
         if (running) {
@@ -316,12 +571,35 @@
         }
     }
 
+    function stopCliAgent() {
+        if (!_isRunning || !window.api || !window.api.stopCliAgent) {
+            return Promise.resolve({ success: false });
+        }
+        return window.api.stopCliAgent().then(function(result) {
+            if (result && !result.success && window.ToastModule && window.ToastModule.show) {
+                window.ToastModule.show(result.message || '无法停止', 'warning');
+            }
+            return result;
+        }).catch(function(err) {
+            if (window.ToastModule && window.ToastModule.show) {
+                window.ToastModule.show(err.message || '停止失败', 'error');
+            }
+            return { success: false };
+        });
+    }
+
     function _escapeHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function _loadSavedCliAgentId() {
+        if (window.state && window.state.getState) {
+            var cached = window.state.getState().uiConfig;
+            if (cached && cached.cli_agent_id) {
+                return Promise.resolve(String(cached.cli_agent_id));
+            }
+        }
         if (!window.api || !window.api.getUiConfig) {
             return Promise.resolve('');
         }
@@ -339,10 +617,28 @@
         if (nextId) {
             _dismissEmptyHint();
         }
-        if (!window.api || !window.api.saveUiConfig) return;
-        window.api.saveUiConfig({ cli_agent_id: nextId }).catch(function(err) {
+        if (window.SettingsModule && window.SettingsModule.persistCliAgentId) {
+            return window.SettingsModule.persistCliAgentId(nextId);
+        }
+        if (!window.api || !window.api.saveUiConfig) return Promise.resolve(null);
+        var saver = (window.state && window.state.saveUiConfig)
+            ? window.state.saveUiConfig.bind(window.state)
+            : window.api.saveUiConfig.bind(window.api);
+        return saver({ cli_agent_id: nextId }).catch(function(err) {
             console.warn('[CliAgent] save cli_agent_id failed:', err);
+            return null;
         });
+    }
+
+    function applySavedAgentId(agentId) {
+        var nextId = agentId || '';
+        _savedCliAgentId = nextId;
+        if (nextId) {
+            _applyCliAgentSelection(_resolveSavedCliAgentId() || nextId);
+            _dismissEmptyHint();
+            return;
+        }
+        _applyCliAgentSelection(null);
     }
 
     function _resolveSavedCliAgentId() {
@@ -355,11 +651,13 @@
 
     function _applyCliAgentSelection(agentId) {
         _selectedAgent = agentId || null;
+        _sessionActive = false;
         var selector = document.getElementById('cli-agent-selector');
         if (selector) {
             selector.value = _selectedAgent || '';
         }
         _updateModeBadge();
+        _updateSessionBadge();
         _updateInputPlaceholder();
         if (_selectedAgent || _savedCliAgentId) {
             _dismissEmptyHint();
@@ -436,6 +734,28 @@
         });
 
         header.appendChild(selector);
+
+        var existingSessionBadge = document.getElementById('cli-session-badge');
+        if (existingSessionBadge) existingSessionBadge.remove();
+        var sessionBadge = document.createElement('span');
+        sessionBadge.id = 'cli-session-badge';
+        sessionBadge.className = 'cli-session-badge';
+        sessionBadge.hidden = true;
+        header.appendChild(sessionBadge);
+
+        var existingNewBtn = document.getElementById('cli-agent-new-session');
+        if (existingNewBtn) existingNewBtn.remove();
+        var newSessionBtn = document.createElement('button');
+        newSessionBtn.id = 'cli-agent-new-session';
+        newSessionBtn.type = 'button';
+        newSessionBtn.className = 'cli-agent-generate-btn cli-agent-new-session-btn';
+        newSessionBtn.title = window.t ? window.t('cliAgent.newSession') : '新对话';
+        newSessionBtn.textContent = window.t ? window.t('cliAgent.newSession') : '新对话';
+        newSessionBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            startNewCliSession();
+        });
+        header.appendChild(newSessionBtn);
 
         var restored = _resolveSavedCliAgentId();
         if (restored) {
@@ -531,7 +851,7 @@
         if (role === 'user') {
             return (window.t && window.t('assistant.userLabel')) || '你';
         }
-        if (role === 'error') {
+        if (role === 'error' || role === 'system') {
             return (window.t && window.t('assistant.system')) || '系统';
         }
         return _getAgentName(_selectedAgent) || 'CLI';
@@ -547,18 +867,18 @@
         speaker.className = 'ai-msg-speaker';
         speaker.textContent = _cliSpeakerLabel(role) + '：';
 
-        if (role === 'user' || role === 'error') {
+        if (role === 'user' || role === 'error' || role === 'system') {
             var body = document.createElement('span');
             body.className = 'ai-msg-content';
             body.textContent = content;
             msg.appendChild(speaker);
             msg.appendChild(body);
         } else {
-            var pre = document.createElement('pre');
-            pre.className = 'cli-agent-output cli-agent-output-inline';
-            pre.textContent = content;
+            var body = document.createElement('div');
+            body.className = 'cli-agent-output cli-agent-output-inline';
+            _setCliMarkdown(body, content);
             msg.appendChild(speaker);
-            msg.appendChild(pre);
+            msg.appendChild(body);
         }
         messagesEl.appendChild(msg);
         _scrollCliMessages();
@@ -567,7 +887,7 @@
     /**
      * 发送消息（CLI Tab 专用）
      */
-    function sendCliMessage(prompt) {
+    function sendCliMessage(prompt, options) {
         if (_isRunning) {
             if (window.ToastModule && window.ToastModule.show) {
                 window.ToastModule.show(window.t ? window.t('cliAgent.starting') : '上一个任务还在运行', 'warning');
@@ -582,12 +902,16 @@
             return Promise.resolve({ success: false, message: '未选择 CLI Agent' });
         }
 
+        var opts = options || {};
+
         _dismissEmptyHint();
         _setRunningState(true);
         _resetStreamPre();
         _appendCliMessage('user', prompt);
 
-        return window.api.runCliAgent(_selectedAgent, prompt).then(function(result) {
+        return window.api.runCliAgent(_selectedAgent, prompt, '', {
+            newSession: !!opts.newSession
+        }).then(function(result) {
             if (result && result.success && result.started) {
                 return { success: true };
             }
@@ -611,19 +935,38 @@
 
         if (type === 'cli_agent_start') {
             _setRunningState(true);
+            _showRunningWorkflow();
+            if (payload.continue_session) {
+                _sessionActive = true;
+                _updateSessionBadge();
+            }
         } else if (type === 'cli_agent_tool') {
             _upsertToolCard(payload);
         } else if (type === 'cli_agent_output') {
             _appendAssistantOutput(payload.content || '');
+        } else if (type === 'cli_agent_timeout_warning') {
+            _showTimeoutNotice(payload);
         } else if (type === 'cli_agent_done') {
             _flushOutputBuffer();
+            _finalizeWorkflow();
+            _hideTimeoutNotice();
+            _sessionActive = true;
+            _updateSessionBadge();
             _setRunningState(false);
             _resetStreamPre();
         } else if (type === 'cli_agent_error') {
             _flushOutputBuffer();
+            _finalizeWorkflow();
+            _hideTimeoutNotice();
             _setRunningState(false);
             _resetStreamPre();
-            _appendCliMessage('error', payload.message || (window.t ? window.t('cliAgent.failed') : 'CLI agent 执行失败'));
+            if (payload.stopped_by_user) {
+                _appendCliMessage('system', window.t ? window.t('cliAgent.stopped') : '任务已停止');
+            } else {
+                _sessionActive = false;
+                _updateSessionBadge();
+                _appendCliMessage('error', payload.message || (window.t ? window.t('cliAgent.failed') : 'CLI agent 执行失败'));
+            }
         }
     }
 
@@ -645,6 +988,10 @@
         });
 
         sendBtn.addEventListener('click', function() {
+            if (_isRunning) {
+                stopCliAgent();
+                return;
+            }
             var prompt = input.value.trim();
             if (!prompt) return;
             input.value = '';
@@ -679,7 +1026,10 @@
         loadAgents: loadAgents,
         renderAgentSelector: renderAgentSelector,
         sendMessage: sendCliMessage,
+        stopMessage: stopCliAgent,
+        startNewSession: startNewCliSession,
         handleEvent: handleEvent,
+        applySavedAgentId: applySavedAgentId,
         getSelectedAgent: function() { return _selectedAgent; },
         isRunning: function() { return _isRunning; },
         isCliAgentMode: function() { return _selectedAgent !== null; }

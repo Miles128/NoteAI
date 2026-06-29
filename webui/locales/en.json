@@ -243,7 +243,7 @@
     "saveFailed": "Save failed"
   },
   "assistant": {
-    "panelTitle": "XiaoYi Assistant",
+    "panelTitle": "RAG Assistant",
     "mode": {
       "rag": "RAG",
       "cli": "CLI",
@@ -252,10 +252,10 @@
       "badgeHint": "Q&A mode (use CLI tab for file operations)"
     },
     "send": "Send",
-    "name": "XiaoYi",
+    "name": "RAG Assistant",
     "userLabel": "You",
     "system": "System",
-    "welcome": "Hi! I'm XiaoYi, your knowledge assistant. Ask me about your notes or anything else.",
+    "welcome": "Hi! I'm the RAG Assistant. I search your notes and surveys to answer questions—just ask.",
     "ragPlaceholder": "Ask this knowledge base...",
     "cli": {
       "selectTitle": "Choose external AI agent CLI",
@@ -278,7 +278,7 @@
     "insightHint": "Save this insightful reply as a note?",
     "saveAsNote": "Save as note",
     "saving": "Saving…",
-    "savedToNotes": "Saved to Notes/XiaoYi chats",
+    "savedToNotes": "Saved to Notes/RAG chats",
     "saveFailed": "Save failed: {message}",
     "sources": "Sources"
   },
@@ -377,8 +377,8 @@
     "cliGenerateMdRunning": "Generating…",
     "cliGenerateMdDone": "Generated: {path}",
     "cliGenerateMdFailed": "Generation failed: {message}",
-    "assistantIntro1": "XiaoYi is your knowledge Q&A partner. By default she uses <strong>topic tree + full-text search</strong> over notes and surveys—no vector index. Enable vector RAG for semantic similarity search.",
-    "assistantIntro2": "With <strong>Agent mode</strong>, XiaoYi can <strong>modify your workspace</strong>, for example:",
+    "assistantIntro1": "The RAG Assistant is your knowledge Q&A partner. By default it uses <strong>topic tree + full-text search</strong> over notes and surveys—no vector index. Enable vector RAG for semantic similarity search.",
+    "assistantIntro2": "With <strong>Agent mode</strong>, the RAG Assistant can <strong>modify your workspace</strong>, for example:",
     "assistantCap1": "<strong>Create topics</strong> — L1 or L2; L2 requires you to specify the L1 parent",
     "assistantCap2": "<strong>Move notes</strong> — assign a note to a topic",
     "assistantCap3": "<strong>Update surveys</strong> — regenerate topic surveys",
@@ -924,6 +924,20 @@
     "notInstalled": "Not installed",
     "starting": "Starting",
     "running": "Running…",
+    "stop": "Stop",
+    "stopped": "Task stopped",
+    "stopHint": "Click Stop to interrupt the current task",
+    "timeoutWarningTotal": "Running for over {seconds}s — still in progress. You can stop anytime.",
+    "timeoutWarningIdle": "No new output for {seconds}s — the agent may still be working. You can stop anytime.",
+    "workflow": "Workflow",
+    "workflowRunning": "Running",
+    "workflowSteps": "Workflow ({count} steps)",
+    "workflowStepsShort": "{count} steps",
+    "workflowDetails": "Details",
+    "newSession": "New chat",
+    "newSessionDone": "Started a new chat",
+    "sessionContinue": "Continuing",
+    "sessionFresh": "New chat",
     "completed": "Completed",
     "failed": "Failed",
     "tool": {

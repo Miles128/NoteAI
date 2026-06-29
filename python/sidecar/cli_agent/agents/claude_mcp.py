@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import subprocess
-import threading
-import time
 from pathlib import Path
 from typing import Any
 
 from sidecar.cli_agent.base import AgentResult, BaseCliAgent, EventEmitter
 from sidecar.cli_agent.env import build_agent_env, resolve_command
+from sidecar.cli_agent.process_control import TimeoutWatcher, clear, register
+from sidecar.cli_agent.workspace_bounds import (
+    append_workspace_boundary,
+    apply_workspace_bounds_env,
+)
 from sidecar.cli_agent.tool_events import (
     ToolStreamTracker,
     emit_tool_events,
@@ -41,6 +44,8 @@ class ClaudeMcpAgent(BaseCliAgent):
         prompt: str,
         workspace: Path,
         skip_permissions: bool = True,
+        *,
+        continue_session: bool = False,
     ) -> list[str]:
         # 由 run() 直接构造完整命令，这里只返回最简参数
         return ["-p", prompt]
@@ -58,7 +63,15 @@ class ClaudeMcpAgent(BaseCliAgent):
         workspace_path: str | None = None,
         send_event: EventEmitter | None = None,
         skip_permissions: bool = True,
+        *,
+        new_session: bool = False,
     ) -> AgentResult:
+        from sidecar.cli_agent.session_store import (
+            clear_session,
+            has_session,
+            mark_session,
+        )
+
         command = self.resolved_path
         if command is None:
             return AgentResult(
@@ -78,6 +91,11 @@ class ClaudeMcpAgent(BaseCliAgent):
         ws_path, ws_err = resolve_workspace(ws)
         if ws_path is None:
             return AgentResult(False, ws_err)
+        ws_key = str(ws_path)
+
+        if new_session:
+            clear_session(self.agent_id, ws_key)
+        continue_session = has_session(self.agent_id, ws_key)
 
         mcp_config_path = self._ensure_mcp_config(ws_path)
         if mcp_config_path is None or not mcp_config_path.exists():
@@ -87,14 +105,22 @@ class ClaudeMcpAgent(BaseCliAgent):
             "--output-format", "stream-json",
             "--verbose",
             "--mcp-config", str(mcp_config_path),
-            "-p", prompt,
         ]
+        if continue_session:
+            args.append("-c")
+        scoped_prompt = append_workspace_boundary(
+            prompt,
+            ws_path,
+            continue_session=continue_session,
+        )
+        args.extend(["-p", scoped_prompt])
         if skip_permissions:
-            args.extend(["--dangerously-skip-permissions", "--no-session-persistence"])
+            args.extend(["--permission-mode", "acceptEdits"])
 
         full_cmd = [command] + args
         logger.info(
-            f"Claude MCP agent 启动命令: {' '.join(full_cmd)} (cwd={ws_path})"
+            f"Claude MCP agent 启动命令: {' '.join(full_cmd)} "
+            f"(cwd={ws_path}, continue={continue_session})"
         )
 
         self._emit(
@@ -103,12 +129,14 @@ class ClaudeMcpAgent(BaseCliAgent):
                 "agent": self.agent_id,
                 "agent_name": self.display_name,
                 "command": command,
+                "continue_session": continue_session,
             },
             send_event,
         )
 
         try:
             env = build_agent_env(self.env_keys)
+            env = apply_workspace_bounds_env(env, self.agent_id, ws_path)
             proc = subprocess.Popen(
                 full_cmd,
                 cwd=str(ws_path),
@@ -120,7 +148,17 @@ class ClaudeMcpAgent(BaseCliAgent):
                 env=env,
             )
 
-            return self._stream_ndjson(proc, send_event)
+            handle = register(proc, self.agent_id, self.display_name)
+            try:
+                result = self._stream_ndjson(proc, send_event, handle)
+            finally:
+                clear(handle)
+
+            if result.success:
+                mark_session(self.agent_id, ws_key)
+            elif "用户已停止" not in (result.message or ""):
+                clear_session(self.agent_id, ws_key)
+            return result
 
         except FileNotFoundError:
             return AgentResult(False, f"未找到 {command} 命令")
@@ -140,46 +178,29 @@ class ClaudeMcpAgent(BaseCliAgent):
         self,
         proc: subprocess.Popen[str],
         send_event: EventEmitter | None,
+        handle: Any,
     ) -> AgentResult:
         """解析 Claude CLI 的 NDJSON 流并转换为现有 CLI agent 事件。"""
-        idle_timeout_s = self.idle_timeout_s
-        total_timeout_s = self.total_timeout_s
-        last_output_time = time.time()
-        start_time = last_output_time
         killed = {"reason": None}
         output_lines: list[str] = []
         text_buffer = ""
         tool_tracker = ToolStreamTracker()
         tool_context: dict[str, dict[str, Any]] = {}
 
-        def _check_timeout() -> None:
-            while proc.poll() is None:
-                now = time.time()
-                if now - last_output_time > idle_timeout_s:
-                    killed["reason"] = f"idle 超过 {int(idle_timeout_s)}s 无输出"
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                    return
-                if now - start_time > total_timeout_s:
-                    killed["reason"] = f"总运行时间超过 {int(total_timeout_s)}s"
-                    try:
-                        proc.kill()
-                    except Exception:
-                        pass
-                    return
-                time.sleep(1.0)
-
-        timeout_thread = threading.Thread(target=_check_timeout, daemon=True)
-        timeout_thread.start()
+        watcher = TimeoutWatcher(
+            handle,
+            self.idle_timeout_s,
+            self.total_timeout_s,
+            lambda event: self._emit(event, send_event),
+        )
+        watcher.start()
 
         try:
             assert proc.stdout is not None
             for line in iter(proc.stdout.readline, ""):
                 if not line:
                     break
-                last_output_time = time.time()
+                watcher.note_output()
                 output_lines.append(line)
 
                 event = self._parse_ndjson_line(line)
@@ -202,17 +223,35 @@ class ClaudeMcpAgent(BaseCliAgent):
 
         output = "".join(output_lines)
 
-        if killed["reason"]:
+        if watcher.kill_reason:
+            stopped = watcher.kill_reason == "用户已停止"
             self._emit(
                 {
                     "type": "cli_agent_error",
                     "agent": self.agent_id,
-                    "message": killed["reason"],
+                    "message": watcher.kill_reason,
                     "output": output,
+                    "stopped_by_user": stopped,
                 },
                 send_event,
             )
-            return AgentResult(False, f"{self.display_name} {killed['reason']}", output)
+            return AgentResult(
+                False,
+                f"{self.display_name} {watcher.kill_reason}",
+                output,
+            )
+        if handle.stop_event.is_set():
+            self._emit(
+                {
+                    "type": "cli_agent_error",
+                    "agent": self.agent_id,
+                    "message": "用户已停止",
+                    "output": output,
+                    "stopped_by_user": True,
+                },
+                send_event,
+            )
+            return AgentResult(False, f"{self.display_name} 用户已停止", output)
 
         self._emit(
             {
@@ -220,6 +259,7 @@ class ClaudeMcpAgent(BaseCliAgent):
                 "agent": self.agent_id,
                 "agent_name": self.display_name,
                 "output": text_buffer or output,
+                "continue_session": True,
             },
             send_event,
         )

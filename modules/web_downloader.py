@@ -492,12 +492,7 @@ class WebDownloader:
                         except Exception as e:
                             logger.warning(f"保存HTML失败: {e}")
 
-                    try:
-                        from utils.topic_assigner import auto_assign_topic_for_file
 
-                        auto_assign_topic_for_file(str(file_path))
-                    except Exception as e:
-                        logger.warning(f"自动分配主题失败: {e}")
 
                     result["file_path"] = str(file_path)
                     result["tags"] = tags

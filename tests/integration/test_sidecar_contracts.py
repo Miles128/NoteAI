@@ -490,6 +490,28 @@ class TestWorkspaceTreeContract:
         nested_paths = {c["path"] for c in topic.get("children", []) if c.get("type") == "file"}
         assert "Notes/topic/nested.md" in nested_paths
 
+    def test_folder_file_count_is_recursive(self, workspace: Path) -> None:
+        topic = workspace / "Notes" / "topic"
+        sub = topic / "sub"
+        sub.mkdir(parents=True)
+        (sub / "a.md").write_text("# a\n", encoding="utf-8")
+        (sub / "b.md").write_text("# b\n", encoding="utf-8")
+        (topic / "c.md").write_text("# c\n", encoding="utf-8")
+        (workspace / "Notes" / "loose.md").write_text("# loose\n", encoding="utf-8")
+
+        srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
+        handler = WorkspaceHandler(srv)
+        tree = handler._get_workspace_tree({})
+
+        notes = next(item for item in tree if item["name"] == "Notes")
+        assert notes.get("file_count") == 4
+
+        topic_node = next(c for c in notes["children"] if c["name"] == "topic")
+        assert topic_node.get("file_count") == 3
+
+        sub_node = next(c for c in topic_node["children"] if c["name"] == "sub")
+        assert sub_node.get("file_count") == 2
+
 
 class TestFilesHandlerPreviewContract:
     """FilesHandler preview RPC contract for DOCX (frontend preview path)."""

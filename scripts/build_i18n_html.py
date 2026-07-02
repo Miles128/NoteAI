@@ -63,7 +63,7 @@ TITLE_MAP: dict[str, str] = {
     "撤销": "editor.undo",
     "重做": "editor.redo",
     "LLM 改写：用中立客观风格重写文档": "editor.llmRewrite",
-    "在设置 → 小忆助手中切换": "assistant.modeBadgeHint",
+    "在设置 → RAG助手中切换": "assistant.modeBadgeHint",
     "发送": "assistant.send",
     "提取主题：从网页内容中提取关键主题": "integrator.extractTopicsHint",
     "开始整合：将内容整合到笔记中": "integrator.startHint",

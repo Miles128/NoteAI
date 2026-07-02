@@ -39,6 +39,7 @@ class RagHandler(BaseHandler):
 
         def build():
             try:
+                RagHandler._clear_error_reset()
                 self._send_progress("rag-index-progress", 0, "正在扫描文件...")
 
                 def progress_cb(cur, tot, msg):

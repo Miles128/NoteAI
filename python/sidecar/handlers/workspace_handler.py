@@ -129,6 +129,7 @@ class WorkspaceHandler(BaseHandler):
                             "path": str(entry.relative_to(ws)),
                             "type": "folder",
                             "children": children,
+                            "file_count": self._folder_file_count(entry, children),
                         }
                     )
                 else:
@@ -150,6 +151,20 @@ class WorkspaceHandler(BaseHandler):
             logger.warning(f"[workspace_handler] building workspace tree: {e}")
 
         return items + root_files
+
+    @staticmethod
+    def _folder_file_count(dir_path: Path, children: list) -> int:
+        """Recursive supported-file count for folder badge (includes Notes/*.md not in tree)."""
+        count = sum(1 for c in children if c.get("type") == "file")
+        count += sum(int(c.get("file_count") or 0) for c in children if c.get("type") == "folder")
+        if dir_path.name == NOTES_FOLDER:
+            try:
+                for entry in dir_path.iterdir():
+                    if entry.is_file() and entry.suffix.lower() == ".md":
+                        count += 1
+            except PermissionError as e:
+                logger.warning(f"[workspace_handler] counting Notes root files: {e}")
+        return count
 
     def _build_flat_tree(self, dir_path: Path, workspace: Path):
         items = []
@@ -201,6 +216,7 @@ class WorkspaceHandler(BaseHandler):
                             "path": rel,
                             "type": "folder",
                             "children": children,
+                            "file_count": self._folder_file_count(entry, children),
                         }
                     )
                 else:

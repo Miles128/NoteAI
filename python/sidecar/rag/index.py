@@ -12,6 +12,7 @@ import gc
 import json
 import shutil
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ _lock = threading.Lock()
 # (zvec.open reloads the mmindex every time, which is expensive for large indices).
 _COLLECTION_CACHE: dict[str, zvec.Collection] = {}
 _COLLECTION_CACHE_LOCK = threading.Lock()
+_COLLECTION_IO_LOCK = threading.RLock()
 
 # In-memory BM25 retriever cache (bm25s.load is costly on every query).
 _BM25_CACHE: dict[str, tuple[Any, list[dict]]] = {}
@@ -50,8 +52,12 @@ _ENSURE_BM25_LOCK = threading.Lock()
 _ENSURE_BM25_IN_PROGRESS: set[str] = set()
 
 
+def _normalize_workspace(workspace: str) -> str:
+    return str(Path(workspace).expanduser().resolve())
+
+
 def _rag_index_dir(workspace: str) -> Path:
-    return Path(workspace) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
+    return Path(_normalize_workspace(workspace)) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
 
 
 def _collection_path(workspace: str) -> Path:
@@ -140,13 +146,33 @@ def _build_schema() -> zvec.CollectionSchema:
 
 
 def _is_zvec_lock_error(exc: Exception) -> bool:
-    return "lock" in str(exc).lower()
+    msg = str(exc).lower()
+    return "lock" in msg or "被占用" in str(exc)
+
+
+def _collection_lock_error(workspace: str | None = None) -> RuntimeError:
+    hint = "请稍候重试"
+    if workspace:
+        try:
+            import psutil
+
+            lock_root = _collection_path(workspace)
+            for lock_file in lock_root.rglob("LOCK"):
+                content = lock_file.read_text().strip() if lock_file.stat().st_size else ""
+                if content and content.isdigit() and psutil.pid_exists(int(content)):
+                    if int(content) != psutil.Process().pid:
+                        hint = "请关闭其他 NoteAI 实例后重试"
+                    break
+        except Exception:
+            pass
+    return RuntimeError(f"RAG 索引文件被占用，{hint}")
 
 
 def _take_cached_collection(workspace: str, *, destroy: bool = False) -> zvec.Collection | None:
     """Remove a workspace collection from cache; optionally destroy it to release zvec lock."""
+    ws = _normalize_workspace(workspace)
     with _COLLECTION_CACHE_LOCK:
-        collection = _COLLECTION_CACHE.pop(workspace, None)
+        collection = _COLLECTION_CACHE.pop(ws, None)
     if collection is not None and destroy:
         try:
             collection.destroy()
@@ -156,50 +182,109 @@ def _take_cached_collection(workspace: str, *, destroy: bool = False) -> zvec.Co
     return collection
 
 
-def _open_or_create_collection(path: str) -> zvec.Collection:
-    """Open an existing collection, retrying once after GC on in-process lock conflicts."""
-    try:
-        return zvec.open(path)
-    except Exception as e:
-        if _is_zvec_lock_error(e) and Path(path).exists():
-            gc.collect()
+def _remove_stale_lock(path: str) -> bool:
+    """Remove stale zvec/rocksdb LOCK files under a collection directory."""
+    root = Path(path)
+    if not root.exists():
+        return False
+    removed = False
+    for lock_file in root.rglob("LOCK"):
+        try:
+            if lock_file.stat().st_size == 0:
+                lock_file.unlink()
+                logger.info(f"[rag/index] removed stale 0-byte LOCK: {lock_file}")
+                removed = True
+                continue
+            content = lock_file.read_text().strip()
+            if content:
+                import psutil
+
+                pid = int(content)
+                if not psutil.pid_exists(pid):
+                    lock_file.unlink()
+                    logger.info(f"[rag/index] removed stale LOCK from dead PID {pid}: {lock_file}")
+                    removed = True
+        except Exception:
             try:
-                return zvec.open(path)
-            except Exception as retry_e:
-                if _is_zvec_lock_error(retry_e):
-                    raise RuntimeError("RAG 索引文件被占用，请关闭其他 NoteAI 实例后重试") from retry_e
-                raise
-        log_exception("[rag/index] failed to open existing collection, creating new", e, level="warning", logger=logger)
-        return zvec.create_and_open(path, _build_schema())
+                lock_file.unlink()
+                logger.info(f"[rag/index] forcibly removed LOCK: {lock_file}")
+                removed = True
+            except Exception:
+                pass
+    return removed
+
+
+def _release_collection(workspace: str, *, remove_data: bool = False) -> None:
+    """Destroy cached zvec handle and optionally wipe on-disk collection data."""
+    ws = _normalize_workspace(workspace)
+    _take_cached_collection(ws, destroy=True)
+    path = _collection_path(ws)
+    if remove_data and path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    elif path.exists():
+        _remove_stale_lock(str(path))
+    gc.collect()
+
+
+def _open_or_create_collection(path: str, workspace: str | None = None) -> zvec.Collection:
+    """Open an existing collection, retrying after GC / stale-lock cleanup / force release."""
+    ws = _normalize_workspace(workspace) if workspace else None
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            return zvec.open(path)
+        except Exception as e:
+            last_err = e
+            if not _is_zvec_lock_error(e) or not Path(path).exists():
+                break
+            gc.collect()
+            if attempt == 0:
+                continue
+            if _remove_stale_lock(path):
+                gc.collect()
+                continue
+            if ws is not None:
+                _release_collection(ws)
+                gc.collect()
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            break
+    if last_err and _is_zvec_lock_error(last_err) and Path(path).exists():
+        raise _collection_lock_error(ws) from last_err
+    log_exception("[rag/index] failed to open existing collection, creating new", last_err, level="warning", logger=logger)
+    return zvec.create_and_open(path, _build_schema())
 
 
 def _get_collection(workspace: str) -> zvec.Collection:
-    with _COLLECTION_CACHE_LOCK:
-        cached = _COLLECTION_CACHE.get(workspace)
-        if cached is not None and _manifest_version_ok(workspace):
-            return cached
+    ws = _normalize_workspace(workspace)
+    with _COLLECTION_IO_LOCK:
+        with _COLLECTION_CACHE_LOCK:
+            cached = _COLLECTION_CACHE.get(ws)
+            if cached is not None and _manifest_version_ok(ws):
+                return cached
 
-    destroy = not _manifest_version_ok(workspace)
-    _take_cached_collection(workspace, destroy=destroy)
+        destroy = not _manifest_version_ok(ws)
+        _take_cached_collection(ws, destroy=destroy)
 
-    path = str(_collection_path(workspace))
-    if destroy and Path(path).exists():
-        logger.info("[RAG] index version mismatch, rebuilding collection")
-        shutil.rmtree(path, ignore_errors=True)
-        _bm25s = _bm25s_dir(workspace)
-        if _bm25s.exists():
-            shutil.rmtree(_bm25s, ignore_errors=True)
-    elif not destroy:
-        gc.collect()
+        path = str(_collection_path(ws))
+        if destroy and Path(path).exists():
+            logger.info("[RAG] index version mismatch, rebuilding collection")
+            shutil.rmtree(path, ignore_errors=True)
+            bm25s = _bm25s_dir(ws)
+            if bm25s.exists():
+                shutil.rmtree(bm25s, ignore_errors=True)
+            _remove_stale_lock(path)
+        elif not destroy:
+            gc.collect()
 
-    collection = _open_or_create_collection(path)
+        collection = _open_or_create_collection(path, ws)
 
-    with _COLLECTION_CACHE_LOCK:
-        cached = _COLLECTION_CACHE.get(workspace)
-        if cached is not None and _manifest_version_ok(workspace):
-            return cached
-        _COLLECTION_CACHE[workspace] = collection
-        return collection
+        with _COLLECTION_CACHE_LOCK:
+            cached = _COLLECTION_CACHE.get(ws)
+            if cached is not None and _manifest_version_ok(ws):
+                return cached
+            _COLLECTION_CACHE[ws] = collection
+            return collection
 
 
 def clear_bm25_cache(workspace: str | None = None) -> None:
@@ -212,14 +297,19 @@ def clear_bm25_cache(workspace: str | None = None) -> None:
 
 
 def clear_collection_cache(workspace: str | None = None) -> None:
-    """Drop cached collection(s). Useful before/after full rebuilds or tests."""
-    with _COLLECTION_CACHE_LOCK:
-        if workspace is None:
-            _COLLECTION_CACHE.clear()
-        else:
-            _COLLECTION_CACHE.pop(workspace, None)
-    gc.collect()
-    clear_bm25_cache(workspace)
+    """Drop cached collection(s), destroying handles so zvec locks are released."""
+    with _COLLECTION_IO_LOCK:
+        with _COLLECTION_CACHE_LOCK:
+            workspaces = [_normalize_workspace(ws) for ws in _COLLECTION_CACHE.keys()] if workspace is None else [_normalize_workspace(workspace)]
+        for ws in workspaces:
+            _take_cached_collection(ws, destroy=True)
+        with _COLLECTION_CACHE_LOCK:
+            if workspace is None:
+                _COLLECTION_CACHE.clear()
+            else:
+                _COLLECTION_CACHE.pop(_normalize_workspace(workspace), None)
+        gc.collect()
+        clear_bm25_cache(workspace)
 
 
 def _escape_filter_value(value: str) -> str:
@@ -407,49 +497,64 @@ def _build_and_save_bm25(corpus: list[dict], bm25_dir: Path, workspace: str) -> 
 
 
 def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None) -> dict[str, Any]:
-    index_dir = _rag_index_dir(workspace)
+    ws = _normalize_workspace(workspace)
+    index_dir = _rag_index_dir(ws)
     index_dir.mkdir(parents=True, exist_ok=True)
 
-    collection_path = _collection_path(workspace)
-    _take_cached_collection(workspace, destroy=True)
-    if collection_path.exists():
-        shutil.rmtree(collection_path, ignore_errors=True)
-    for old in index_dir.glob("*.tmp"):
-        old.unlink()
+    with _COLLECTION_IO_LOCK:
+        collection_path = _collection_path(ws)
+        _release_collection(ws, remove_data=True)
+        for old in index_dir.glob("*.tmp"):
+            old.unlink()
 
-    collection = zvec.create_and_open(str(collection_path), _build_schema())
-    with _COLLECTION_CACHE_LOCK:
-        _COLLECTION_CACHE[workspace] = collection
+        last_err: Exception | None = None
+        collection = None
+        for attempt in range(3):
+            try:
+                collection = zvec.create_and_open(str(collection_path), _build_schema())
+                break
+            except Exception as e:
+                last_err = e
+                if not _is_zvec_lock_error(e):
+                    raise
+                _remove_stale_lock(str(collection_path))
+                gc.collect()
+                time.sleep(0.08 * (attempt + 1))
+        if collection is None:
+            raise _collection_lock_error(ws) from last_err
 
-    batch_size = _INDEX_BATCH_SIZE
-    total = len(chunks)
+        with _COLLECTION_CACHE_LOCK:
+            _COLLECTION_CACHE[ws] = collection
 
-    for i in range(0, total, batch_size):
-        batch_chunks = chunks[i : i + batch_size]
-        batch_embeds = embeddings[i : i + batch_size]
-        docs = [_chunk_to_doc(c, e) for c, e in zip(batch_chunks, batch_embeds, strict=False)]
-        if docs:
-            collection.insert(docs)
+        batch_size = _INDEX_BATCH_SIZE
+        total = len(chunks)
+
+        for i in range(0, total, batch_size):
+            batch_chunks = chunks[i : i + batch_size]
+            batch_embeds = embeddings[i : i + batch_size]
+            docs = [_chunk_to_doc(c, e) for c, e in zip(batch_chunks, batch_embeds, strict=False)]
+            if docs:
+                collection.insert(docs)
+            if progress_callback:
+                progress_callback(min(i + batch_size, total), total, "写入索引")
+
+        collection.flush()
+
+        # Build BM25s index
         if progress_callback:
-            progress_callback(min(i + batch_size, total), total, "写入索引")
+            progress_callback(total, total, "构建 BM25 索引...")
 
-    collection.flush()
+        _build_and_save_bm25(chunks, _bm25s_dir(ws), ws)
 
-    # Build BM25s index
-    if progress_callback:
-        progress_callback(total, total, "构建 BM25 索引...")
+        # Build metadata indices
+        metadata = _empty_metadata()
+        for chunk in chunks:
+            _update_metadata_index(metadata, chunk, mode="add")
+        _save_metadata(ws, metadata)
 
-    _build_and_save_bm25(chunks, _bm25s_dir(workspace), workspace)
+        _bump_manifest_version(ws)
 
-    # Build metadata indices
-    metadata = _empty_metadata()
-    for chunk in chunks:
-        _update_metadata_index(metadata, chunk, mode="add")
-    _save_metadata(workspace, metadata)
-
-    _bump_manifest_version(workspace)
-
-    return {"success": True, "chunk_count": total}
+    return {"success": True, "chunk_count": total, "_collection": collection}
 
 
 def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> None:

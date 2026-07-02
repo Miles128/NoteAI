@@ -239,6 +239,9 @@ function showSettings() {
     if (window.SettingsModule && window.SettingsModule.loadUiConfigToForm) {
         window.SettingsModule.loadUiConfigToForm();
     }
+    if (window.TreeModule && window.TreeModule.initTreeFileCountSetting) {
+        window.TreeModule.initTreeFileCountSetting();
+    }
     if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
         window.SettingsModule.switchSettingsTab('model');
     }

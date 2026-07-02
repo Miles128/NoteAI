@@ -62,4 +62,4 @@ def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None
         }
     )
     assert result["success"] is True
-    assert (workspace / "Notes" / "小忆对话").exists()
+    assert (workspace / "Notes" / "RAG对话").exists()

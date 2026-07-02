@@ -18,7 +18,7 @@ _SAVE_MARKER_RE = re.compile(r"\n?【存档建议】[：:]?\s*(是|否)\s*$", re
 
 
 def parse_save_suggestion(text: str) -> tuple[str, bool]:
-    """Strip 小忆 self-assessment marker; return (clean_answer, suggest_save)."""
+    """Strip RAG assistant self-assessment marker; return (clean_answer, suggest_save)."""
     raw = (text or "").strip()
     if not raw:
         return "", False
@@ -73,18 +73,18 @@ def archive_chat_answer(
         ok, err = check_wiki_writable("保存对话到 wiki")
         if not ok:
             return {"success": False, "message": err}
-        out_dir = ws / ABSTRACT_FOLDER / "小忆对话"
+        out_dir = ws / ABSTRACT_FOLDER / "RAG对话"
         log_action = "query_wiki"
         log_prefix = "保存对话到 wiki"
-        success_hint = f"已保存到 {ABSTRACT_FOLDER}/小忆对话/"
+        success_hint = f"已保存到 {ABSTRACT_FOLDER}/RAG对话/"
     else:
         ok, err = check_notes_writable("保存对话笔记")
         if not ok:
             return {"success": False, "message": err}
-        out_dir = ws / NOTES_FOLDER / "小忆对话"
+        out_dir = ws / NOTES_FOLDER / "RAG对话"
         log_action = "query"
         log_prefix = "保存对话笔记"
-        success_hint = "已保存到 Notes/小忆对话/"
+        success_hint = "已保存到 Notes/RAG对话/"
 
     if resolved_topic:
         ok, err = require_topic(resolved_topic)
@@ -102,7 +102,7 @@ def archive_chat_answer(
     fm = (
         "---\n"
         f"{topic_line}"
-        "source: xiaoyi_chat\n"
+        "source: rag_chat\n"
         f'archived_at: "{datetime.now().isoformat(timespec="seconds")}"\n'
         f'target: "{save_target}"\n'
         "---\n\n"

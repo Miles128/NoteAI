@@ -115,17 +115,17 @@ CATALOG: list[tuple[str, str, str]] = [
     ("editor.redo", "重做", "Redo"),
     ("editor.llmRewrite", "LLM 改写：用中立客观风格重写文档", "LLM rewrite: neutral objective style"),
     # assistant
-    ("assistant.panelTitle", "小忆助手", "XiaoYi Assistant"),
+    ("assistant.panelTitle", "RAG助手", "RAG Assistant"),
     ("assistant.mode.qa", "问答模式", "Q&A mode"),
     ("assistant.mode.agent", "助手模式", "Agent mode"),
-    ("assistant.mode.badgeHint", "在设置 → 小忆助手中切换", "Switch in Settings → XiaoYi Assistant"),
+    ("assistant.mode.badgeHint", "在设置 → RAG助手中切换", "Switch in Settings → RAG Assistant"),
     ("assistant.send", "发送", "Send"),
-    ("assistant.name", "小忆", "XiaoYi"),
+    ("assistant.name", "RAG助手", "RAG Assistant"),
     ("assistant.system", "系统", "System"),
     (
         "assistant.welcome",
-        "你好呀～我是小忆，你的知识小助手。想查笔记、理清思路，或有任何问题，直接告诉我就好～",
-        "Hi! I'm XiaoYi, your knowledge assistant. Ask me about your notes or anything else.",
+        "你好，我是 RAG 助手，帮你从知识库检索笔记与综述来回答问题。有想问的直接告诉我就好。",
+        "Hi! I'm the RAG Assistant. I search your notes and surveys to answer questions—just ask.",
     ),
     ("assistant.requestFailed", "请求失败", "Request failed"),
     ("assistant.timeout", "响应超时，请检查 API 配置或稍后重试", "Request timed out. Check API settings or try again."),
@@ -133,7 +133,7 @@ CATALOG: list[tuple[str, str, str]] = [
     ("settings.title", "设置", "Settings"),
     ("settings.nav.model", "模型", "Model"),
     ("settings.nav.ui", "界面", "Appearance"),
-    ("settings.nav.assistant", "小忆助手", "XiaoYi Assistant"),
+    ("settings.nav.assistant", "RAG助手", "RAG Assistant"),
     ("settings.nav.activityLog", "操作记录", "Activity log"),
     ("settings.nav.schema", "Schema", "Schema"),
     ("settings.nav.about", "关于", "About"),
@@ -295,20 +295,20 @@ CATALOG: list[tuple[str, str, str]] = [
         "Re-convert PDF, Word, etc. in Raw/ to Markdown notes.",
     ),
     ("settings.rawConvertBtn", "Raw 批量重转", "Batch re-convert Raw"),
-    ("settings.assistantIntroTitle", "小忆助手", "XiaoYi Assistant"),
+    ("settings.assistantIntroTitle", "RAG助手", "RAG Assistant"),
     (
         "settings.assistantIntro1",
-        "小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。",
-        "XiaoYi is your knowledge Q&A partner. In default <strong>Q&A mode</strong>, she searches notes and surveys, and can <strong>search notes and list topics</strong> without Agent mode.",
+        "RAG 助手是你的知识库问答伙伴。默认<strong>问答模式</strong>下，它会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。",
+        "The RAG Assistant is your knowledge Q&A partner. In default <strong>Q&A mode</strong>, it searches notes and surveys, and can <strong>search notes and list topics</strong> without Agent mode.",
     ),
     (
         "settings.assistantIntro2",
-        "开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：",
-        "With <strong>Agent mode</strong>, XiaoYi can <strong>modify your workspace</strong>, for example:",
+        "开启<strong>助手模式</strong>后，RAG 助手还可以在你的工作区里<strong>动手修改</strong>，例如：",
+        "With <strong>Agent mode</strong>, the RAG Assistant can <strong>modify your workspace</strong>, for example:",
     ),
     (
         "settings.assistantCap1",
-        "<strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测",
+        "<strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，RAG 助手不会自动猜测",
         "<strong>Create topics</strong> — L1 or L2; L2 requires you to specify the L1 parent",
     ),
     (
@@ -341,7 +341,7 @@ CATALOG: list[tuple[str, str, str]] = [
     ("settings.profileTitle", "用户画像", "User profile"),
     (
         "settings.profileHint",
-        "用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。",
+        "用 Markdown 描述你的背景与偏好，RAG 助手会在问答和助手模式中参考这些内容调整回答风格。",
         "Describe your background and preferences in Markdown for personalized answers.",
     ),
     ("settings.profileSaveBtn", "保存画像", "Save profile"),
@@ -665,10 +665,10 @@ CATALOG: list[tuple[str, str, str]] = [
         "Building knowledge index… (manual full rebuild)",
     ),
     ("assistant.indexRequestFailed", "索引构建请求失败: {message}", "Index build request failed: {message}"),
-    ("assistant.insightHint", "小忆觉得这段回答有洞见，可以单独存成笔记", "Save this insightful reply as a note?"),
+    ("assistant.insightHint", "RAG 助手觉得这段回答有洞见，可以单独存成笔记", "Save this insightful reply as a note?"),
     ("assistant.saveAsNote", "保存为笔记", "Save as note"),
     ("assistant.saving", "保存中", "Saving…"),
-    ("assistant.savedToNotes", "已保存到 Notes/小忆对话", "Saved to Notes/XiaoYi chats"),
+    ("assistant.savedToNotes", "已保存到 Notes/RAG对话", "Saved to Notes/RAG chats"),
     ("assistant.saveFailed", "保存失败: {message}", "Save failed: {message}"),
     # app
     ("app.importing", "正在导入 {count} 个文件", "Importing {count} files…"),
@@ -945,7 +945,7 @@ def patch_html() -> None:
         "撤销": "editor.undo",
         "重做": "editor.redo",
         "LLM 改写：用中立客观风格重写文档": "editor.llmRewrite",
-        "在设置 → 小忆助手中切换": "assistant.mode.badgeHint",
+        "在设置 → RAG助手中切换": "assistant.mode.badgeHint",
         "发送": "assistant.send",
         "重新入库": "ingest.retryTitle",
         "取消入库": "ingest.cancelTitle",
@@ -996,11 +996,11 @@ def patch_html() -> None:
             '<div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>',
         ),
         (
-            '<span class="ai-panel-header-title">小忆助手</span>',
+            '<span class="ai-panel-header-title">RAG助手</span>',
             '<span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>',
         ),
         (
-            '<span class="ai-mode-badge" id="ai-mode-badge" title="在设置 → 小忆助手中切换">问答模式</span>',
+            '<span class="ai-mode-badge" id="ai-mode-badge" title="在设置 → RAG助手中切换">问答模式</span>',
             '<span class="ai-mode-badge" id="ai-mode-badge" data-i18n-title="assistant.mode.badgeHint" data-i18n="assistant.mode.qa"></span>',
         ),
         ("<h2>设置</h2>", '<h2 data-i18n="settings.title"></h2>'),
@@ -1214,7 +1214,7 @@ def patch_html() -> None:
             'id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>',
         ),
         (
-            '<div class="card-title">小忆助手</div>',
+            '<div class="card-title">RAG助手</div>',
             '<div class="card-title" data-i18n="settings.assistantIntroTitle"></div>',
         ),
         (
@@ -1231,7 +1231,7 @@ def patch_html() -> None:
         ),
         ('<div class="card-title">用户画像</div>', '<div class="card-title" data-i18n="settings.profileTitle"></div>'),
         (
-            '<p class="settings-hint">用 Markdown 描述你的背景与偏好，小忆会在问答和助手模式中参考这些内容调整回答风格。</p>',
+            '<p class="settings-hint">用 Markdown 描述你的背景与偏好，RAG 助手会在问答和助手模式中参考这些内容调整回答风格。</p>',
             '<p class="settings-hint" data-i18n="settings.profileHint"></p>',
         ),
         (
@@ -1290,15 +1290,15 @@ def patch_html() -> None:
 
     assistant_intro = [
         (
-            '<p class="settings-hint">小忆是你的知识库问答伙伴。默认<strong>问答模式</strong>下，她会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。</p>',
+            '<p class="settings-hint">RAG 助手是你的知识库问答伙伴。默认<strong>问答模式</strong>下，它会检索笔记与综述来回答，并可<strong>搜索笔记、查看主题列表</strong>，无需开启助手模式。</p>',
             '<p class="settings-hint" data-i18n-html="settings.assistantIntro1"></p>',
         ),
         (
-            '<p class="settings-hint" style="margin-top:8px">开启<strong>助手模式</strong>后，小忆还可以在你的工作区里<strong>动手修改</strong>，例如：</p>',
+            '<p class="settings-hint" style="margin-top:8px">开启<strong>助手模式</strong>后，RAG 助手还可以在你的工作区里<strong>动手修改</strong>，例如：</p>',
             '<p class="settings-hint" style="margin-top:8px" data-i18n-html="settings.assistantIntro2"></p>',
         ),
         (
-            "<li><strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，小忆不会自动猜测</li>",
+            "<li><strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，RAG 助手不会自动猜测</li>",
             '<li data-i18n-html="settings.assistantCap1"></li>',
         ),
         (
@@ -1507,7 +1507,7 @@ def patch_html() -> None:
         '<button class="settings-nav-btn" data-tab="assistant">',
         '<button class="settings-nav-btn" data-tab="assistant">',
     )
-    html = html.replace("<span>小忆助手</span>", '<span data-i18n="settings.nav.assistant"></span>', 1)
+    html = html.replace("<span>RAG助手</span>", '<span data-i18n="settings.nav.assistant"></span>', 1)
     html = html.replace("<span>操作记录</span>", '<span data-i18n="settings.nav.activityLog"></span>')
     html = html.replace("<span>Schema</span>", '<span data-i18n="settings.nav.schema"></span>')
     html = html.replace("<span>关于</span>", '<span data-i18n="settings.nav.about"></span>')

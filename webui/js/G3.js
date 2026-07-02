@@ -18,6 +18,8 @@ function _collectDescendantIds(rootId, childMap) {
 const _GRAPH_TAU = Math.PI * 2;
 const _GRAPH_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const GRAPH_LAYOUT_STORAGE_KEY = window.Storage.KEYS.GRAPH_LAYOUT;
+/** 节点圆半径显示缩放（相对布局配置值） */
+const _GRAPH_RADIUS_DISPLAY_SCALE = 0.75;
 
 /** @type {Record<string, number>} */
 const GRAPH_LAYOUT_DEFAULTS = {
@@ -157,6 +159,12 @@ function loadGraphLayoutConfig() {
         });
     }
     return cfg;
+}
+
+/** 图谱节点实际渲染半径（配置值 × 显示缩放） */
+function _graphNodeRadius(d, lc) {
+    const base = (d.type === 'topic' && d.level === 1) ? lc.radiusL1 : lc.radiusOther;
+    return base * _GRAPH_RADIUS_DISPLAY_SCALE;
 }
 
 function saveGraphLayoutConfig(cfg) {
@@ -990,10 +998,7 @@ const Graph3Tier = {
         }));
 
         const lc = this.layoutConfig;
-        const getRadius = d => {
-            if (d.type === 'topic' && d.level === 1) return lc.radiusL1;
-            return lc.radiusOther;
-        };
+        const getRadius = d => _graphNodeRadius(d, lc);
 
         const getColor = d => {
             if (d.type === 'topic') {
@@ -1231,10 +1236,7 @@ const Graph3Tier = {
         this.g.selectAll('*').remove();
 
         var lc = self.layoutConfig;
-        var getRadius = function(d) {
-            if (d.type === 'topic' && d.level === 1) return lc.radiusL1;
-            return lc.radiusOther;
-        };
+        var getRadius = function(d) { return _graphNodeRadius(d, lc); };
         var getColor = function(d) {
             if (d.type === 'topic') return d.level === 1 ? '#e85d3a' : d.level === 2 ? '#ea8600' : '#f4a930';
             if (d.type === 'tag') return '#7c4dff';

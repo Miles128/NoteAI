@@ -9,11 +9,12 @@
     var Storage = {
         // 存储键名常量，集中管理避免冲突
         KEYS: {
-            GRAPH_LAYOUT: 'noteai.graphLayout.v1',
+            GRAPH_LAYOUT: 'noteai.graphLayout.v2',
             THEME: 'noteai_theme',
             DOWNLOADER_CONFIG: 'downloader-config',
             CONVERTER_CONFIG: 'converter-config',
             TREE_STATE: 'tree-expanded-state',
+            TREE_SHOW_FILE_COUNT: 'noteai.treeShowFileCount',
             SIDEBAR_WIDTH: 'sidebar-width',
             FONT_SIZE: 'noteai_font_size'
         },

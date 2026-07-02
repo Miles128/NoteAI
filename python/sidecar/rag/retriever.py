@@ -426,11 +426,14 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     if progress_callback:
         progress_callback(len(all_chunks) // 2, len(all_chunks), "正在构建索引...")
 
-    build_index(workspace, all_chunks, embeddings, progress_callback=progress_callback)
+    build_result = build_index(workspace, all_chunks, embeddings, progress_callback=progress_callback)
+    collection = build_result.pop("_collection", None)
 
     # Build search indices and manifest from the new collection
     all_chunk_ids = [c["id"] for c in all_chunks]
-    chunk_count = rebuild_search_indices(workspace, all_chunk_ids, progress_callback=progress_callback)
+    chunk_count = rebuild_search_indices(
+        workspace, all_chunk_ids, progress_callback=progress_callback, collection=collection
+    )
     build_and_save_global_idf(all_chunks, workspace)
 
     manifest = {"version": 1, "files": {}}
@@ -452,9 +455,12 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
 
 
 def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
-    workspace = workspace or config.workspace_path
-    if not workspace:
+    from sidecar.rag.index import _normalize_workspace
+
+    raw_workspace = workspace or config.workspace_path
+    if not raw_workspace:
         return {"success": False, "message": "未设置工作区"}
+    workspace = _normalize_workspace(raw_workspace)
 
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import (

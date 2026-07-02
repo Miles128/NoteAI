@@ -25,7 +25,7 @@ Tauri v2 shell (src-tauri/)
 
 **Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 14 handlers, each a subclass of `BaseHandler`. `BaseHandler` uses explicit `@property` accessors to proxy server attributes (e.g. `config`, `_send_response`, `_resolve_path`, `_link_discovery_lock`) — add new properties in `base.py` when handlers need access to new server attributes. Each handler registers routes with `RpcRouter`.
 
-**RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → zvec hybrid search (dense 0.7 + BM25 0.3 via bm25s; `ensure_bm25_index` auto-rebuilds missing BM25) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. `lexical_weights` in embedder is jieba TF-IDF (query fallback text only).
+**RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → zvec hybrid search (dense 0.7 + BM25 0.3 via bm25s; `ensure_bm25_index` auto-rebuilds missing BM25) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. Note: `lexical_weights` in `embedder.py` is computed from jieba TF-IDF but is currently unused for retrieval; sparse search uses bm25s on raw query text.
 
 **Three-layer knowledge architecture**: `Notes/` (raw markdown, immutable source) → `wiki/` (AI-compiled structured knowledge) → `Raw/` (original PDF/DOCX archives). Config: `ABSTRACT_FOLDER = "wiki"`.
 

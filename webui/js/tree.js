@@ -29,6 +29,76 @@ function saveTreeState() {
     window.Storage.setItem(window.Storage.KEYS.TREE_STATE, treeExpandedState);
 }
 
+function isTreeFileCountEnabled() {
+    return !!window.Storage.getItem(window.Storage.KEYS.TREE_SHOW_FILE_COUNT, false, { silent: true });
+}
+
+function setTreeFileCountEnabled(enabled) {
+    window.Storage.setItem(window.Storage.KEYS.TREE_SHOW_FILE_COUNT, !!enabled);
+    refreshTreeDisplay();
+}
+
+function refreshTreeDisplay() {
+    var container = document.getElementById('file-tree');
+    if (!container || !_lastTreeData) return;
+    loadTreeState();
+    _flatVisibleNodes = flattenVisibleNodes(_lastTreeData);
+    renderVirtualTree(container);
+}
+
+function _treeFileCountForNode(node) {
+    if (node.file_count != null && Number.isFinite(Number(node.file_count))) {
+        return Number(node.file_count);
+    }
+    return _countFilesInTreeNode(node);
+}
+
+function _countFilesInTreeNode(node) {
+    if (!node || node.type !== 'folder') return 0;
+    var count = 0;
+    if (node.children) {
+        for (var i = 0; i < node.children.length; i++) {
+            var child = node.children[i];
+            if (child.type === 'file') count++;
+            else if (child.type === 'folder') count += _treeFileCountForNode(child);
+        }
+    }
+    return count;
+}
+
+function _buildTreeFileCountMap(treeData) {
+    var map = {};
+    function walk(nodes) {
+        if (!nodes) return;
+        for (var i = 0; i < nodes.length; i++) {
+            var node = nodes[i];
+            if (node.type !== 'folder') continue;
+            map[node.path] = _treeFileCountForNode(node);
+            walk(node.children);
+        }
+    }
+    walk(treeData);
+    return map;
+}
+
+function _treeFileCountBadge(count) {
+    if (!isTreeFileCountEnabled()) return '';
+    var n = Number(count);
+    if (!Number.isFinite(n) || n < 0) n = 0;
+    var cls = 'tree-file-count' + (n === 0 ? ' is-zero' : '');
+    return '<span class="' + cls + '">' + n + '</span>';
+}
+
+function initTreeFileCountSetting() {
+    var el = document.getElementById('settings-tree-file-count');
+    if (!el || el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.checked = isTreeFileCountEnabled();
+    el.addEventListener('change', function() {
+        setTreeFileCountEnabled(el.checked);
+    });
+}
+
 function toggleTreeFolder(element) {
     var children = element.nextElementSibling;
     if (!children || !children.classList.contains('tree-children')) return;
@@ -112,6 +182,7 @@ function renderFileTree(treeData, container) {
             html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '" onclick="event.stopPropagation(); TreeModule.toggleTreeFolder(this.parentElement);">' + window.Icons.get('chevron') + '</span>';
             html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
             html += '<span class="tree-name">' + en + '</span>';
+            html += _treeFileCountBadge(_treeFileCountForNode(node));
             html += '</div>';
 
             if (hasChildren) {
@@ -460,6 +531,7 @@ document.addEventListener('contextmenu', function(e) {
 
 var _virtualScrollRAF = null;
 document.addEventListener('DOMContentLoaded', function() {
+    initTreeFileCountSetting();
     var container = document.getElementById('file-tree');
     if (container) {
         container.addEventListener('scroll', function() {
@@ -481,6 +553,7 @@ var _virtualScrollVisibleCount = 0;
 var _virtualScrollStartIdx = 0;
 
 function flattenVisibleNodes(treeData) {
+    var countMap = _buildTreeFileCountMap(treeData);
     var result = [];
     function walk(nodes, depth) {
         if (!nodes) return;
@@ -489,7 +562,17 @@ function flattenVisibleNodes(treeData) {
             // 侧边栏仅展示文件夹层级，跳过具体文件
             if (node.type !== 'folder') continue;
             var expanded = treeExpandedState.hasOwnProperty(node.path) ? treeExpandedState[node.path] : true;
-            result.push({ path: node.path, name: node.name, type: node.type, depth: depth, modified: node.modified, expanded: expanded });
+            var fileCount = countMap[node.path];
+            if (fileCount == null) fileCount = _treeFileCountForNode(node);
+            result.push({
+                path: node.path,
+                name: node.name,
+                type: node.type,
+                depth: depth,
+                modified: node.modified,
+                expanded: expanded,
+                fileCount: fileCount
+            });
             if (expanded && node.children) {
                 walk(node.children, depth + 1);
             }
@@ -531,6 +614,7 @@ function renderVirtualTree(container) {
         html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '">' + window.Icons.get('chevron') + '</span>';
         html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
         html += '<span class="tree-name">' + en + '</span>';
+        html += _treeFileCountBadge(node.fileCount);
         html += '</div>';
     }
 
@@ -793,6 +877,10 @@ window.TreeModule = {
     loadFileTree: loadFileTree,
     selectFile: selectFile,
     setSelectedFile: setSelectedFile,
+    isTreeFileCountEnabled: isTreeFileCountEnabled,
+    setTreeFileCountEnabled: setTreeFileCountEnabled,
+    refreshTreeDisplay: refreshTreeDisplay,
+    initTreeFileCountSetting: initTreeFileCountSetting,
     hasTopicPending: function() { return window.hasTopicPending ? window.hasTopicPending() : false; },
     updateWebAIStatus: function() {},
     updateConvAIStatus: function() {}

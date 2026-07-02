@@ -48,7 +48,7 @@ def test_archive_chat_answer_to_notes(workspace: Path) -> None:
     result = archive_chat_answer("问题?", "回答内容", title="测试")
     assert result["success"] is True
     assert result["target"] == "note"
-    saved = list((workspace / "Notes" / "小忆对话").glob("*.md"))
+    saved = list((workspace / "Notes" / "RAG对话").glob("*.md"))
     assert len(saved) == 1
     text = saved[0].read_text(encoding="utf-8")
     assert "问题?" in text
@@ -66,6 +66,6 @@ def test_archive_chat_answer_to_wiki_with_topic_from_context(workspace: Path) ->
     )
     assert result["success"] is True
     assert result["target"] == "wiki"
-    saved = list((workspace / "wiki" / "小忆对话").glob("*.md"))
+    saved = list((workspace / "wiki" / "RAG对话").glob("*.md"))
     assert len(saved) == 1
     assert 'topic: "AI > 基础"' in saved[0].read_text(encoding="utf-8")

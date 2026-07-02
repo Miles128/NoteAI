@@ -302,7 +302,12 @@ class TestCollectionCache:
         assert open_calls == []
 
     def test_open_or_create_retries_after_in_process_lock(self, workspace: Path, monkeypatch: pytest.MonkeyPatch):
-        from sidecar.rag.index import _open_or_create_collection, build_index
+        from sidecar.rag.index import (
+            _COLLECTION_CACHE,
+            _COLLECTION_CACHE_LOCK,
+            _open_or_create_collection,
+            build_index,
+        )
 
         chunks = [
             {
@@ -317,9 +322,9 @@ class TestCollectionCache:
         embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
         build_index(str(workspace), chunks, embeddings)
 
-        from sidecar.rag.index import clear_collection_cache
-
-        clear_collection_cache(str(workspace))
+        # Simulate old cache clear without destroy: orphaned handle still holds zvec lock.
+        with _COLLECTION_CACHE_LOCK:
+            _COLLECTION_CACHE.pop(str(workspace))
 
         from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 
@@ -335,6 +340,38 @@ class TestCollectionCache:
 
         monkeypatch.setattr("sidecar.rag.index.zvec.open", flaky_open)
 
-        collection = _open_or_create_collection(path)
+        collection = _open_or_create_collection(path, str(workspace))
         assert collection is not None
-        assert attempts["count"] == 2
+        assert attempts["count"] >= 2
+
+    def test_clear_collection_cache_releases_lock_for_reopen(self, workspace: Path):
+        from sidecar.rag.index import _get_collection, build_index, clear_collection_cache
+
+        chunks = [
+            {
+                "id": "c1",
+                "content": "destroy on cache clear",
+                "file_path": "a.md",
+                "topic": "T1",
+                "tags": [],
+                "section_title": "",
+            },
+        ]
+        embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
+        build_index(str(workspace), chunks, embeddings)
+        first = _get_collection(str(workspace))
+        clear_collection_cache(str(workspace))
+        second = _get_collection(str(workspace))
+        assert first is not second
+
+    def test_remove_stale_lock_cleans_nested_zero_byte_locks(self, workspace: Path):
+        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+        from sidecar.rag.index import _remove_stale_lock
+
+        path = workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "zvec_collection"
+        nested = path / "stale_test"
+        nested.mkdir(parents=True)
+        (nested / "LOCK").write_bytes(b"")
+
+        assert _remove_stale_lock(str(path)) is True
+        assert not (nested / "LOCK").exists()

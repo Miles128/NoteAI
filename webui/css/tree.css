@@ -157,6 +157,30 @@
     line-height: 22px;
 }
 
+.tree-file-count {
+    flex-shrink: 0;
+    margin-left: 6px;
+    padding: 0 6px;
+    min-width: 18px;
+    height: 18px;
+    line-height: 18px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.tree-file-count.is-zero {
+    opacity: 0.55;
+}
+
+.tree-item.is-active .tree-file-count {
+    color: var(--primary);
+    background: rgba(74, 144, 217, 0.12);
+}
+
 .tree-modified {
     font-size: 12px;
     color: var(--text-muted);

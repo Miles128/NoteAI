@@ -352,7 +352,7 @@ window.AssistantModule = (function() {
         if (role === 'system') {
             return (window.t && window.t('assistant.system')) || '系统';
         }
-        return (window.t && window.t('assistant.name')) || '小忆';
+        return (window.t && window.t('assistant.name')) || 'RAG助手';
     }
 
     function addUserMessage(text) {

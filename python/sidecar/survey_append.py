@@ -73,7 +73,7 @@ def append_chat_to_survey(
         return {"success": False, "message": f"读取综述失败: {e}"}
 
     _fm, existing_body = parse_frontmatter(existing_text)
-    chat_block = f"### 小忆对话摘录\n\n**问：** {q}\n\n**答：** {a}\n"
+    chat_block = f"### RAG对话摘录\n\n**问：** {q}\n\n**答：** {a}\n"
 
     from utils.llm_utils import APIConfigError, check_api_config, create_llm
 
@@ -91,14 +91,9 @@ def append_chat_to_survey(
     )
 
     try:
-        from langchain_core.prompts import PromptTemplate
+        from utils.llm_utils import call_llm_raw
 
-        llm = create_llm(temperature=0.3)
-        pt = PromptTemplate(template=prompt, input_variables=[])
-        chain = pt | llm
-        result = chain.invoke({})
-        full_text = result.content if hasattr(result, "content") else str(result)
-        merged = full_text.strip()
+        merged = call_llm_raw(prompt, temperature=0.3).strip()
         if not merged:
             return {"success": False, "message": "LLM 未返回有效内容"}
     except Exception as e:
@@ -106,7 +101,7 @@ def append_chat_to_survey(
 
     survey_path.write_text(_add_survey_frontmatter(resolved, merged), encoding="utf-8")
     rel = str(survey_path.relative_to(ws))
-    append_changelog(f"小忆对话追加到综述: {resolved}")
+    append_changelog(f"RAG对话追加到综述: {resolved}")
     append_log("survey", f"对话追加到综述: {resolved}", rel)
 
     return {

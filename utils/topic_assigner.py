@@ -32,6 +32,67 @@ from utils.wiki_manager import (
 from utils.wiki_sync import _write_file_topic_from_folder, topic_from_notes_path
 
 
+def is_inbox_orphan_path(file_path, workspace: str | None = None) -> bool:
+    from sidecar.workspace_meta import is_inbox_orphan_path as _impl
+
+    return _impl(file_path, workspace)
+
+
+def sync_topic_from_folder_if_needed(file_path) -> dict | None:
+    """Write topic from Notes/ folder path when file sits in a topic subfolder."""
+    workspace = config.workspace_path
+    if not workspace:
+        return None
+    full_path = Path(file_path)
+    if not full_path.exists():
+        return None
+    if is_inbox_orphan_path(full_path, workspace):
+        return None
+
+    folder_topic = _infer_topic_from_notes_folder(full_path, workspace)
+    if not folder_topic:
+        return None
+
+    text, meta, title, tags = _load_assignment_text(full_path)
+    if text is None:
+        return None
+    if meta is not None and not _check_topic_needs_processing(meta):
+        current = meta.get("topic")
+        if isinstance(current, list):
+            current = current[0] if len(current) == 1 else None
+        if isinstance(current, str) and current.strip() == folder_topic:
+            return None
+
+    return _apply_auto_topic(full_path, workspace, folder_topic, title, "folder_path", False)
+
+
+def sync_all_folder_topics(workspace: str | None = None) -> int:
+    """Batch-assign topic from folder path for Notes subfolder files."""
+    ws = workspace or config.workspace_path
+    if not ws:
+        return 0
+    notes_root = Path(ws) / config.NOTES_FOLDER
+    if not notes_root.exists():
+        return 0
+    updated = 0
+    for md in notes_root.rglob("*.md"):
+        if md.name.startswith("."):
+            continue
+        from sidecar.workspace_meta import is_workspace_meta_path
+
+        if is_workspace_meta_path(md):
+            continue
+        try:
+            rel_parts = md.relative_to(notes_root).parts
+        except ValueError:
+            continue
+        if len(rel_parts) < 2:
+            continue
+        if sync_topic_from_folder_if_needed(md):
+            updated += 1
+    return updated
+
+
 def _infer_topic_from_notes_folder(full_path: Path, workspace: str) -> str | None:
     ws = Path(workspace).resolve()
     try:
@@ -191,6 +252,9 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if folder_topic:
         return _apply_auto_topic(full_path, workspace, folder_topic, title, "folder_path", format_optimized)
 
+    if not is_inbox_orphan_path(full_path, workspace):
+        return None
+
     headings = parse_wiki_headings()
     if not headings:
         return _save_pending_assignment(full_path, workspace, title, tags, [], "none", format_optimized)
@@ -262,6 +326,9 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
                         mark_wiki_sync()
             except Exception as e:
                 logger.warning(f"[watcher] align topic from folder failed for {file_path}: {e}\n")
+        return
+
+    if not is_inbox_orphan_path(path):
         return
 
     if meta is None or _check_topic_needs_processing(meta):

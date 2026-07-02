@@ -644,6 +644,17 @@
                                     </label>
                                 </div>
                             </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.sidebarTitle"></div>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.treeFileCountLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.treeFileCountDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-tree-file-count" class="switch-input">
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
                         </div>
                         <div class="settings-tab" id="tab-organize-rules">
                             <div class="card" id="settings-organize-rules-card">
@@ -680,6 +691,15 @@
                                     <button type="button" class="btn btn-primary" id="settings-organize-rules-save-btn" data-i18n="settings.organizeRulesSaveBtn"></button>
                                 </div>
                                 <div id="settings-organize-rules-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.projectRulesTitle"></div>
+                                <p class="settings-hint" data-i18n="projectRules.desc"></p>
+                                <textarea id="settings-project-rules-input" class="form-input form-textarea" rows="14" data-i18n-placeholder="projectRules.placeholder"></textarea>
+                                <div class="btn-group btn-group-spacing" style="margin-top:12px">
+                                    <button type="button" class="btn btn-primary" id="settings-project-rules-save-btn" data-i18n="projectRules.save"></button>
+                                </div>
+                                <div id="settings-project-rules-status" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.maintenanceTitle"></div>

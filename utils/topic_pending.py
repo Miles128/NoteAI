@@ -72,6 +72,17 @@ def cleanup_stale_pending():
         if not full.exists():
             logger.info(f"[topic_assigner] 清理无效待办: {file_path} 文件已不存在")
             continue
+        from sidecar.workspace_meta import is_inbox_orphan_path
+
+        if not is_inbox_orphan_path(full, workspace):
+            try:
+                from utils.topic_assigner import sync_topic_from_folder_if_needed
+
+                sync_topic_from_folder_if_needed(full)
+            except Exception:
+                pass
+            logger.info(f"[topic_assigner] 清理非收件箱待办: {file_path}")
+            continue
         try:
             text = full.read_text(encoding="utf-8")
             meta, _ = parse_frontmatter(text)

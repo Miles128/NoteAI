@@ -135,6 +135,8 @@ function renderPendingList(items, listEl) {
     items.forEach(function(item, idx) {
         if (item.type === 'topic') {
             html += renderPendingTopicItem(item, idx);
+        } else if (item.type === 'link_batch') {
+            html += renderPendingLinkBatchItem(item, idx);
         } else if (item.type === 'link') {
             html += renderPendingLinkItem(item, idx);
         } else if (item.type === 'lint') {
@@ -194,6 +196,20 @@ function renderPendingTopicItem(item, idx) {
     html += '<button class="pending-assign-btn" data-action="resolve-topic">' + window.t('common.confirm') + '</button>';
     html += '</div>';
 
+    html += '</div>';
+    return html;
+}
+
+function renderPendingLinkBatchItem(item, idx) {
+    var count = item.count || 0;
+    var message = item.message || window.t('pending.linkBatchSummary', { count: count });
+    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '">';
+    html += '<span class="pending-item-type type-link">' + window.t('pending.typeLink') + '</span>';
+    html += '<div class="pending-item-title">' + window.escapeHtml(message) + '</div>';
+    html += '<div class="pending-item-actions">';
+    html += '<button data-action="open-links-panel">' + window.t('pending.openLinksPanel') + '</button>';
+    html += '<button data-action="confirm-all-links">' + window.t('links.confirmAllBtn') + '</button>';
+    html += '</div>';
     html += '</div>';
     return html;
 }
@@ -265,6 +281,12 @@ function _handlePendingClick(e) {
         resolvePendingTopicItem(info.filePath, topic, info.idx);
     } else if (action === 'confirm-link') {
         confirmPendingLink(info.source, info.target, info.idx);
+    } else if (action === 'open-links-panel') {
+        if (typeof window.togglePendingLinksPanel === 'function') {
+            window.togglePendingLinksPanel(true);
+        }
+    } else if (action === 'confirm-all-links') {
+        confirmAllPendingLinks(info.idx);
     } else if (action === 'reject-link') {
         rejectPendingLink(info.source, info.target, info.idx);
     }
@@ -298,6 +320,21 @@ function confirmPendingLink(fromPath, toPath, idx) {
         }
     }).catch(function(e) {
         console.warn('[PendingView] confirm link failed:', e);
+        loadPendingItems();
+    });
+}
+
+function confirmAllPendingLinks(idx) {
+    if (!window.api || !window.api.confirmAllLinks) return;
+    window.api.confirmAllLinks().then(function(result) {
+        if (result && result.success) {
+            removePendingItem(idx);
+            refreshPendingBtnState();
+        } else {
+            loadPendingItems();
+        }
+    }).catch(function(e) {
+        console.warn('[PendingView] confirm all links failed:', e);
         loadPendingItems();
     });
 }

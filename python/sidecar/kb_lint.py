@@ -142,16 +142,11 @@ def _find_stale_survey_topics(root: Path) -> list[str]:
 
 def auto_fix_broken_links(workspace: str | Path | None = None) -> dict:
     """Remove [[broken]] wikilinks from Notes markdown."""
-    from sidecar.schema_validator import check_notes_writable
     from utils.workspace_log import append_log
 
     ws = workspace or config.workspace_path
     if not ws:
         return {"success": False, "message": "未设置工作区", "removed": 0, "files": []}
-
-    ok, msg = check_notes_writable("自动删除断链")
-    if not ok:
-        return {"success": False, "message": msg, "removed": 0, "files": []}
 
     root = Path(ws)
     names = _all_md_names(root)
@@ -242,6 +237,13 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
         if isinstance(topic, list):
             topic = topic[0] if topic else ""
         if not str(topic).strip():
+            from sidecar.workspace_meta import is_inbox_orphan_path, is_workspace_meta_path
+
+            if is_workspace_meta_path(md):
+                continue
+            derived = topic_from_notes_path(md)
+            if derived or not is_inbox_orphan_path(md, root):
+                continue
             issues.append(
                 LintIssue(
                     kind="orphan_topic",
@@ -453,6 +455,92 @@ def log_lint_report(report: dict, *, max_items: int = 20) -> None:
     remaining = len(issues) - max_items
     if remaining > 0:
         append_log("lint", f"… 另有 {remaining} 项未列出（见待办或再次运行健康检查）")
+
+
+def filter_stale_lint_issues(issues: list[dict], root: Path) -> list[dict]:
+    """Drop cached lint rows that no longer apply (file gone or issue fixed)."""
+    if not issues:
+        return []
+
+    names = _all_md_names(root)
+    survey_by_topic: dict[str, Path] = {}
+    wiki = root / config.ABSTRACT_FOLDER
+    if wiki.exists():
+        for survey in wiki.glob("*_综述.md"):
+            survey_by_topic[survey.stem.replace("_综述", "")] = survey
+
+    notes_by_topic_mtime: dict[str, float] = {}
+    for md in _iter_notes_md(root):
+        try:
+            fm, _ = parse_frontmatter(md.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        t = topic_from_notes_path(md) or (fm.get("topic") if fm else "")
+        if isinstance(t, list):
+            t = t[0] if t else ""
+        t = str(t).strip()
+        if not t:
+            continue
+        leaf = t.rsplit(TOPIC_SEP, maxsplit=1)[-1]
+        mtime = md.stat().st_mtime
+        notes_by_topic_mtime[leaf] = max(notes_by_topic_mtime.get(leaf, 0), mtime)
+        notes_by_topic_mtime[t] = max(notes_by_topic_mtime.get(t, 0), mtime)
+
+    live: list[dict] = []
+    for issue in issues:
+        kind = (issue.get("kind") or "").strip()
+        if kind == "pending_topics":
+            continue
+
+        rel = (issue.get("file_path") or "").strip()
+        if rel and rel not in (".pending_topics.json",):
+            full = root / rel
+            if not full.exists():
+                continue
+
+        if kind == "orphan_topic":
+            if not rel:
+                continue
+            try:
+                text = (root / rel).read_text(encoding="utf-8")
+                fm, _ = parse_frontmatter(text)
+                topic = topic_from_notes_path(root / rel) or (fm.get("topic") if fm else "") or ""
+                if isinstance(topic, list):
+                    topic = topic[0] if topic else ""
+                if str(topic).strip():
+                    continue
+            except OSError:
+                continue
+
+        elif kind == "broken_link":
+            if not rel:
+                continue
+            msg = issue.get("message") or ""
+            m = re.search(r"\[\[([^\]]+)\]\]", msg)
+            if not m:
+                live.append(issue)
+                continue
+            target = m.group(1)
+            try:
+                _, body = parse_frontmatter((root / rel).read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            if target not in _WIKILINK.findall(body):
+                continue
+            if _wikilink_target_exists(target, names):
+                continue
+
+        elif kind == "stale_survey":
+            topic_key = (issue.get("topic") or "").strip()
+            survey_path = survey_by_topic.get(topic_key)
+            if not survey_path or not survey_path.exists():
+                continue
+            note_mtime = notes_by_topic_mtime.get(topic_key, 0)
+            if not note_mtime or survey_path.stat().st_mtime >= note_mtime - 1:
+                continue
+
+        live.append(issue)
+    return live
 
 
 def load_lint_report(workspace: str | None = None) -> dict:

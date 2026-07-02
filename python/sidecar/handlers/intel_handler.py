@@ -372,18 +372,9 @@ class IntelHandler(BaseHandler):
             )
 
         try:
-            from langchain_core.prompts import PromptTemplate
+            from utils.llm_utils import call_llm_raw_stream
 
-            from utils.llm_utils import create_llm
-
-            llm = create_llm(temperature=0.3)
-            pt = PromptTemplate(template=prompt, input_variables=[])
-            chain = pt | llm
-
-            for chunk in chain.stream({}):
-                token = chunk.content if hasattr(chunk, "content") else str(chunk)
-                full_text += token
-                on_chunk(token)
+            full_text = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_chunk)
 
             safe_name = "".join(
                 c for c in topic_name if c.isalnum() or c in ("_", "-", ".", " ") or "\u4e00" <= c <= "\u9fff"

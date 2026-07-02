@@ -58,6 +58,28 @@ def clear_convert_failure(file_path: str) -> None:
     save_convert_failures(items)
 
 
+def cleanup_stale_convert_failures() -> int:
+    ws = config.workspace_path
+    if not ws:
+        return 0
+    root = Path(ws)
+    original = load_convert_failures()
+    if not original:
+        return 0
+    valid = []
+    for item in original:
+        rel = (item.get("file") or "").strip()
+        if not rel:
+            continue
+        full = root / rel if not Path(rel).is_absolute() else Path(rel)
+        if full.exists():
+            valid.append(item)
+    removed = len(original) - len(valid)
+    if removed:
+        save_convert_failures(valid)
+    return removed
+
+
 def record_convert_batch_results(results: list[dict]) -> int:
     """Record failed entries from convert_batch result list. Returns failure count."""
     failed = 0

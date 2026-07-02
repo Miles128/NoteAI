@@ -97,11 +97,16 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not config.workspace_path:
             return {"success": False, "message": "未设置工作区或工作区不存在"}
 
+        from sidecar.workspace_meta import is_inbox_orphan_path
+
         ws = Path(config.workspace_path)
         md_files = [
             f
             for f in ws.rglob("*.md")
-            if not f.name.startswith(".") and "wiki" not in f.parts and not is_ignored_dir(f.parent.name)
+            if not f.name.startswith(".")
+            and "wiki" not in f.parts
+            and not is_ignored_dir(f.parent.name)
+            and is_inbox_orphan_path(f)
         ]
         total = len(md_files)
         auto_assigned = 0
@@ -354,8 +359,12 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not topic_name or not workspace or not workspace_path.exists():
             return {"success": True, "files": []}
         files = []
+        from sidecar.workspace_meta import is_workspace_meta_path
+
         for md_file in sorted(workspace_path.rglob("*.md")):
             if md_file.name.startswith(".") or "wiki" in md_file.parts:
+                continue
+            if is_workspace_meta_path(md_file):
                 continue
             try:
                 text = md_file.read_text(encoding="utf-8")

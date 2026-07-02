@@ -286,12 +286,20 @@ def _scan_classify_pending(workspace: str) -> list[Path]:
             continue
         if md.name == "schema.md" or NOTES_FOLDER not in md.parts:
             continue
+        from sidecar.workspace_meta import is_inbox_orphan_path, is_workspace_meta_path
+
+        if is_workspace_meta_path(md):
+            continue
+        if not is_inbox_orphan_path(md, workspace):
+            continue
         try:
             from sidecar.textutils import parse_frontmatter
 
             text = md.read_text(encoding="utf-8")
             fm, _ = parse_frontmatter(text)
             if topic_from_notes_path(md):
+                continue
+            if not is_inbox_orphan_path(md, workspace):
                 continue
             if fm is None or _check_topic_needs_processing(fm):
                 out.append(md)
@@ -615,7 +623,9 @@ def run_ingest(
             prog("crossref", 0.7, "跳过交叉引用（已完成）")
         else:
             crossref_paths = indexed_paths or state.get("pending_crossref_paths") or []
-            if crossref_paths:
+            # Skip cross-ref for single file (e.g. web download) — new files have no
+            # meaningful vector neighbors yet, so LLM cross-ref produces poor results.
+            if crossref_paths and len(crossref_paths) > 1:
                 from utils.link_indexer import discover_cross_refs_for_file
 
                 total_x = len(crossref_paths)
@@ -642,13 +652,16 @@ def run_ingest(
             raise _Cancelled()
 
         # 6. Cascade — only topics touched this run (+ prior failures via retry)
+        # Skip for single-file ingest (e.g. web download) to avoid expensive LLM
+        # survey generation on every individual file; cascade will run on next
+        # full/batch ingest when more context is available.
         if stage_done("cascade"):
             prog("cascade", 0.85, "跳过综述（已完成）")
         else:
             from sidecar.workspace_rules import load_workspace_rules, resolve_survey_topic
 
             rules = load_workspace_rules()
-            if rules.get("auto_update_survey", True):
+            if rules.get("auto_update_survey", True) and len(file_paths or []) > 1:
                 resolved = {
                     resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
                 }

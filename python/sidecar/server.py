@@ -160,8 +160,14 @@ class SidecarServer(PathHelpersMixin):
         if not workspace or not Path(workspace).exists():
             return
         try:
+            from sidecar.kb_lint import auto_fix_broken_links
+            from sidecar.workspace_meta import merge_meta_docs_into_project_rules
             from sidecar.workspace_rules import needs_workspace_rules_setup
+            from utils.topic_assigner import sync_all_folder_topics
 
+            merge_meta_docs_into_project_rules(workspace)
+            sync_all_folder_topics(workspace)
+            auto_fix_broken_links(workspace)
             if not needs_workspace_rules_setup(workspace):
                 sync_wiki_with_files()
                 logger.info("[startup] WIKI.md synced with workspace")
@@ -250,14 +256,12 @@ class SidecarServer(PathHelpersMixin):
             self._watcher_observer = None
 
     def _invalidate_cache(self):
-        """文件变更时失效所有缓存"""
+        """文件变更时失效 RPC / 全文检索缓存（保留 zvec 集合句柄，避免锁冲突）"""
         self._cache.clear()
         fulltext_index.mark_dirty()
-        from sidecar.rag.index import clear_collection_cache
         from sidecar.rag.retriever import _query_cache
 
         _query_cache.clear()
-        clear_collection_cache(None)
 
     def _start_rss_polling(self):
         """Start periodic RSS feed polling (every 30 minutes)."""
@@ -493,6 +497,12 @@ class SidecarServer(PathHelpersMixin):
             _RETRIEVE_EXECUTOR.shutdown(wait=False)
         except Exception as e:
             log_exception("[shutdown] failed to shutdown retriever executor", e, level="debug", logger=logger)
+        try:
+            from sidecar.rag.index import clear_collection_cache
+
+            clear_collection_cache(None)
+        except Exception as e:
+            log_exception("[shutdown] failed to clear RAG collection cache", e, level="debug", logger=logger)
 
 
 def main():

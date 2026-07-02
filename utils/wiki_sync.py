@@ -143,6 +143,10 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
                 continue
             if _is_hidden_path(Path(*rel_parts)) or md_file.name in ("WIKI.md", "tags.md"):
                 continue
+            from sidecar.workspace_meta import is_workspace_meta_path
+
+            if is_workspace_meta_path(md_file):
+                continue
             topic_dir_parts = rel_parts[:-1]
             if not topic_dir_parts:
                 root_md_files.append(md_file)

@@ -317,7 +317,7 @@ def fix_existing_survey_topics() -> dict:
 
 def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
     from prompts import CASCADE_SURVEY_NEW_PROMPT
-    from utils.llm_utils import APIConfigError, check_api_config, create_llm
+    from utils.llm_utils import APIConfigError, check_api_config
 
     try:
         is_valid, error_msg = check_api_config()
@@ -332,19 +332,10 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
     prompt = CASCADE_SURVEY_NEW_PROMPT.format(topic_name=topic, notes_content=notes_content)
 
-    full_text = ""
     try:
-        from langchain_core.prompts import PromptTemplate
+        from utils.llm_utils import call_llm_raw_stream
 
-        llm = create_llm(temperature=0.3)
-        pt = PromptTemplate(template=prompt, input_variables=[])
-        chain = pt | llm
-
-        for chunk in chain.stream({}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            if on_chunk:
-                on_chunk(token)
+        full_text = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_chunk)
 
         survey_path = get_survey_path(topic)
         if not survey_path:
@@ -362,7 +353,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
 def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> dict:
     from prompts import CASCADE_SURVEY_UPDATE_PROMPT
-    from utils.llm_utils import APIConfigError, check_api_config, create_llm
+    from utils.llm_utils import APIConfigError, check_api_config
 
     survey_path = get_survey_path(topic)
     if not survey_path or not survey_path.exists():
@@ -386,19 +377,10 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
         topic_name=topic, existing_survey=existing_body, new_notes=new_notes_content
     )
 
-    full_text = ""
     try:
-        from langchain_core.prompts import PromptTemplate
+        from utils.llm_utils import call_llm_raw_stream
 
-        llm = create_llm(temperature=0.3)
-        pt = PromptTemplate(template=prompt, input_variables=[])
-        chain = pt | llm
-
-        for chunk in chain.stream({}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            if on_chunk:
-                on_chunk(token)
+        full_text = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_chunk)
 
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
         survey_path.write_text(survey_content, encoding="utf-8")

@@ -432,6 +432,10 @@ class TopicManager:
         count = 0
         for f in p.iterdir():
             if f.is_file() and not f.name.startswith(".") and f.name not in ("综述.md", "WIKI.md", "tags.md"):
+                from sidecar.workspace_meta import is_workspace_meta_path
+
+                if is_workspace_meta_path(f):
+                    continue
                 count += 1
         return count
 

@@ -103,9 +103,28 @@ async function loadOrganizeRules() {
         if (!result || !result.success) return;
         applyOptionsToForm(result, 'organize-rules');
         renderTopics(result.l1_topics, 'settings-organize-rules-topics');
+        if (window.api && window.api.getProjectRules) {
+            var rulesResult = await window.api.getProjectRules();
+            var input = $('settings-project-rules-input');
+            if (input && rulesResult && rulesResult.success) {
+                input.value = rulesResult.rules || '';
+            }
+        }
     } catch (e) {
         console.error('[OrganizeRules] load:', e);
     }
+}
+
+async function saveProjectRulesFromSettings() {
+    var input = $('settings-project-rules-input');
+    if (!input || !window.api || !window.api.saveProjectRules) {
+        throw new Error(window.t('organizeRules.saveUnavailable'));
+    }
+    var result = await window.api.saveProjectRules(input.value || '');
+    if (!result || !result.success) {
+        throw new Error((result && result.message) || window.t('organizeRules.saveFailed', { message: '' }));
+    }
+    return result;
 }
 
 async function saveOrganizeRules(fromModal) {
@@ -240,6 +259,32 @@ function initOrganizeRules() {
                 }
             } catch (e) {
                 showStatus(e.message, true);
+            }
+        });
+    }
+
+    var rulesSaveBtn = $('settings-project-rules-save-btn');
+    if (rulesSaveBtn && !rulesSaveBtn.dataset.bound) {
+        rulesSaveBtn.dataset.bound = '1';
+        rulesSaveBtn.addEventListener('click', async function() {
+            var statusEl = $('settings-project-rules-status');
+            try {
+                await saveProjectRulesFromSettings();
+                if (statusEl) {
+                    statusEl.textContent = window.t('settings.projectRulesSaved');
+                    statusEl.style.display = 'block';
+                    statusEl.style.color = '';
+                    setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
+                }
+                if (typeof window.updateStatus === 'function') {
+                    window.updateStatus(window.t('settings.projectRulesSaved'));
+                }
+            } catch (e) {
+                if (statusEl) {
+                    statusEl.textContent = e.message || String(e);
+                    statusEl.style.display = 'block';
+                    statusEl.style.color = '#e53e3e';
+                }
             }
         });
     }

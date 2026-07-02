@@ -166,10 +166,10 @@ def cleanup_stale_links() -> int:
         if link.get("status") == "pending":
             from_topic = _read_file_topic(from_full)
             to_topic = _read_file_topic(to_full)
-            if from_topic and to_topic:
+            if from_topic and from_topic == to_topic:
                 link["status"] = "confirmed"
                 auto_confirmed += 1
-                logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path} (主题: {from_topic} / {to_topic})")
+                logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path} (主题: {from_topic})")
         valid.append(link)
     changed = (original_count - len(valid)) + auto_confirmed
     if changed > 0:

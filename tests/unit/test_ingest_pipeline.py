@@ -29,8 +29,6 @@ def test_run_ingest_completes_when_rules_configured(workspace: Path) -> None:
         events.append(resp.get("result", {}))
 
     with (
-        patch("sidecar.ingest_pipeline.run_cascade_for_topics", return_value={"updated": 0, "failed": []}),
-        patch("sidecar.ingest_pipeline.retry_failed_cascades", return_value={"updated": 0}),
         patch("sidecar.ingest_pipeline.sync_wiki_with_files"),
         patch("utils.note_compiler.compile_notes_batch", return_value=(0, [])),
         patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(0, [])),

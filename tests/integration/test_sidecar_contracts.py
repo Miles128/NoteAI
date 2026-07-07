@@ -108,7 +108,7 @@ class TestWorkspaceTree:
         notes_node = next(node for node in tree if node["name"] == "Notes")
         names = {node["name"] for node in notes_node["children"]}
 
-        assert names == {"a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
+        assert names == {"b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
         root_names = {node["name"] for node in tree}
         assert "empty" not in root_names
         assert ".hidden" not in root_names

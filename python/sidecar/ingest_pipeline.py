@@ -11,7 +11,6 @@ from pathlib import Path
 from config import config, is_ignored_dir
 from config.settings import NOTES_FOLDER, RAW_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_converter import FileConverterManager
-from sidecar.cascade_runner import retry_failed_cascades, run_cascade_for_topics
 from sidecar.workspace_rules import needs_workspace_rules_setup
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
 from utils.topic_file_ops import _check_topic_needs_processing
@@ -174,6 +173,9 @@ def prepare_auto_ingest(
     ws = workspace or config.workspace_path
     if not ws:
         return {"action": "none", "message": "未设置工作区"}
+
+    if not config.ingest_auto_enabled:
+        return {"action": "none", "reason": "auto_disabled"}
 
     state = normalize_ingest_state()
     status = state.get("status", "idle")
@@ -386,6 +388,7 @@ def run_ingest(
         "indexed_files": 0,
         "cascade_updated": 0,
         "cascade_failed": [],
+        "cascade_topics": [],
     }
     if resume and isinstance(prev.get("stats"), dict):
         stats.update({k: prev["stats"].get(k, v) for k, v in stats.items() if k in prev["stats"]})
@@ -651,17 +654,16 @@ def run_ingest(
         if is_cancelled():
             raise _Cancelled()
 
-        # 6. Cascade — only topics touched this run (+ prior failures via retry)
-        # Skip for single-file ingest (e.g. web download) to avoid expensive LLM
-        # survey generation on every individual file; cascade will run on next
-        # full/batch ingest when more context is available.
+        # 6. Cascade — collect touched survey topics. The actual LLM survey work
+        # runs after ingest completes so conversion/classification/indexing do not
+        # block on long survey generation.
         if stage_done("cascade"):
-            prog("cascade", 0.85, "跳过综述（已完成）")
+            prog("cascade", 0.85, "跳过综述计划（已完成）")
         else:
             from sidecar.workspace_rules import load_workspace_rules, resolve_survey_topic
 
             rules = load_workspace_rules()
-            if rules.get("auto_update_survey", True) and len(file_paths or []) > 1:
+            if rules.get("auto_update_survey", True):
                 resolved = {
                     resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
                 }
@@ -669,22 +671,11 @@ def run_ingest(
             else:
                 cascade_topics = []
             if cascade_topics:
+                stats["cascade_topics"] = cascade_topics
+                prog("cascade", 0.85, f"已安排后台综述: {len(cascade_topics)} 个主题")
+            else:
+                prog("cascade", 0.85, "无需更新综述")
 
-                def cascade_prog(cur: int, tot: int, msg: str) -> None:
-                    prog("cascade", 0.7 + 0.25 * cur / max(tot, 1), msg)
-
-                cascade_result = run_cascade_for_topics(
-                    cascade_topics,
-                    send_response=send_event,
-                    progress_cb=cascade_prog,
-                    cancel_check=is_cancelled,
-                )
-                stats["cascade_updated"] = cascade_result.get("updated", 0)
-                stats["cascade_failed"] = cascade_result.get("failed", [])
-
-            if not is_cancelled():
-                retry_result = retry_failed_cascades(send_response=send_event)
-                stats["cascade_updated"] += retry_result.get("updated", 0)
             mark_stage_done("cascade")
         if is_cancelled():
             raise _Cancelled()
@@ -733,6 +724,7 @@ def run_ingest(
                         "type": "ingest_complete",
                         "success": True,
                         "stats": stats,
+                        "cascade_topics": stats.get("cascade_topics", []),
                     },
                 }
             )

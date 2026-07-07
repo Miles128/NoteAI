@@ -158,6 +158,8 @@ function initRagEventListener() {
                 var msg = data.message || window.t('app.indexBuilding');
                 window.updateStatus(pct > 0 ? msg + ' (' + pct + '%)' : msg);
             }
+        } else if (data.type === 'job_update') {
+            document.dispatchEvent(new CustomEvent('job_update', { detail: data.job || data }));
         } else if (data.type === 'progress' && data.element_id === 'survey_check') {
             if (typeof window.updateStatus === 'function') {
                 window.updateStatus(data.message || window.t('app.checkingSurveys'));
@@ -196,7 +198,12 @@ function initRagEventListener() {
                 detail: { percent: data.progress || 0, message: data.message || '' }
             });
             document.dispatchEvent(progressEvent);
-        } else if (data.type === 'ingest_progress' || data.type === 'ingest_complete') {
+        } else if (
+            data.type === 'ingest_progress'
+            || data.type === 'ingest_complete'
+            || data.type === 'ingest_cascade_started'
+            || data.type === 'ingest_cascade_complete'
+        ) {
             if (window.IngestModule && window.IngestModule.handleEvent) {
                 window.IngestModule.handleEvent(data);
             }

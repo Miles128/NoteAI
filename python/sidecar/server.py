@@ -20,6 +20,7 @@ from sidecar.handlers import (
     FilesHandler,
     IngestHandler,
     IntelHandler,
+    JobHandler,
     KbHandler,
     LinksHandler,
     McpConfigHandler,
@@ -29,6 +30,7 @@ from sidecar.handlers import (
     TransferHandler,
     WorkspaceHandler,
 )
+from sidecar import job_status
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
@@ -79,6 +81,7 @@ class SidecarServer(PathHelpersMixin):
         self._topics_handler = TopicsHandler(self)
         self._links_handler = LinksHandler(self)
         self._intel_handler = IntelHandler(self)
+        self._job_handler = JobHandler(self)
         self._rag_handler = RagHandler(self)
         self._cloud_sync_handler = CloudSyncHandler(self)
         self._ingest_handler = IngestHandler(self)
@@ -109,6 +112,7 @@ class SidecarServer(PathHelpersMixin):
         self._topics_handler.register_routes_3tier(self._router)
         self._links_handler.register_routes(self._router)
         self._intel_handler.register_routes(self._router)
+        self._job_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
         self._cloud_sync_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
@@ -122,6 +126,7 @@ class SidecarServer(PathHelpersMixin):
             sys.stdout.flush()
 
     def _send_progress(self, element_id, progress, message):
+        self._send_job_update(element_id, progress=progress, message=message)
         self._send_response(
             {
                 "id": "event",
@@ -134,16 +139,71 @@ class SidecarServer(PathHelpersMixin):
             }
         )
 
-    def _start_task(self, task_name, target, args=(), kwargs=None):
+    def _send_job_update(self, job_id, *, progress=None, message=None, status=None, metadata=None):
+        if job_status.get_job(job_id) is None and status not in ("complete", "failed", "cancelled"):
+            job_status.start_job(
+                job_id,
+                kind=(metadata or {}).get("kind", "progress"),
+                label=job_id,
+                message=message or "",
+                metadata=metadata,
+                send_event=self._send_response,
+            )
+        if status == "complete":
+            return job_status.complete_job(
+                job_id,
+                message=message or "",
+                metadata=metadata,
+                send_event=self._send_response,
+            )
+        if status == "failed":
+            return job_status.fail_job(
+                job_id,
+                message or "任务失败",
+                metadata=metadata,
+                send_event=self._send_response,
+            )
+        if status == "cancelled":
+            return job_status.cancel_job(
+                job_id,
+                message=message or "已取消",
+                send_event=self._send_response,
+            )
+        return job_status.update_job(
+            job_id,
+            progress=progress,
+            message=message,
+            status=status,
+            metadata=metadata,
+            send_event=self._send_response,
+        )
+
+    def _start_task(self, task_name, target, args=(), kwargs=None, kind="task", label=None):
         with self._running_tasks_lock:
             if task_name in self._running_tasks:
                 return False
             self._running_tasks.add(task_name)
+        job_status.start_job(
+            task_name,
+            kind=kind,
+            label=label or task_name,
+            message="任务已开始",
+            send_event=self._send_response,
+        )
 
         def _wrapped():
+            failed = False
             try:
                 target(*args, **(kwargs or {}))
+            except Exception as e:
+                failed = True
+                job_status.fail_job(task_name, str(e), send_event=self._send_response)
+                logger.exception("[task] %s failed", task_name)
             finally:
+                if not failed:
+                    current = job_status.get_job(task_name)
+                    if current and current.get("status") == "running":
+                        job_status.complete_job(task_name, message="任务已完成", send_event=self._send_response)
                 with self._running_tasks_lock:
                     self._running_tasks.discard(task_name)
 
@@ -181,7 +241,7 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
-        if config.rag_enabled and workspace and Path(workspace).exists():
+        if config.ingest_auto_enabled and config.rag_enabled and workspace and Path(workspace).exists():
             self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
 
     def _auto_rebuild_rag_index(self):
@@ -375,13 +435,18 @@ class SidecarServer(PathHelpersMixin):
                 self._track_watcher_path(src_path)
 
         path = Path(file_path)
-        if not is_directory and change_type in ("created", "moved") and path.suffix.lower() == ".md":
+        if (
+            config.ingest_auto_enabled
+            and not is_directory
+            and change_type in ("created", "moved")
+            and path.suffix.lower() == ".md"
+        ):
             rel_parts = self._rel_parts(path)
             if not self._is_hidden_or_ignored(rel_parts):
                 self._auto_process_md_file(str(path))
 
         # Auto-convert non-markdown files when they appear in workspace
-        if not is_directory and change_type in ("created", "moved"):
+        if config.ingest_auto_enabled and not is_directory and change_type in ("created", "moved"):
             ext = path.suffix.lower()
             if ext in (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".html", ".htm", ".txt"):
                 rp = self._rel_parts(path)

@@ -45,7 +45,11 @@ class TransferHandler(BaseHandler):
             return {"success": False, "message": "请输入至少一个URL"}
 
         if not self._start_task(
-            "web_download", self._do_web_download, args=(urls, save_path, ai_assist, include_images)
+            "web_download",
+            self._do_web_download,
+            args=(urls, save_path, ai_assist, include_images),
+            kind="ingest",
+            label="Web download",
         ):
             return {"success": False, "message": "下载任务正在进行中，请稍后"}
 
@@ -117,7 +121,13 @@ class TransferHandler(BaseHandler):
         if not copied:
             return {"success": False, "message": "没有可导入的文件", "skipped": skipped}
 
-        if not self._start_task("file_import", self._do_file_import, args=(copied, workspace, skipped)):
+        if not self._start_task(
+            "file_import",
+            self._do_file_import,
+            args=(copied, workspace, skipped),
+            kind="conversion",
+            label="File import",
+        ):
             return {"success": False, "message": "导入任务正在进行中，请稍后"}
 
         return {"success": True, "message": "导入已开始", "file_count": len(copied)}
@@ -159,7 +169,13 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        if not self._start_task("file_conversion", self._do_file_conversion, args=(workspace, ai_assist)):
+        if not self._start_task(
+            "file_conversion",
+            self._do_file_conversion,
+            args=(workspace, ai_assist),
+            kind="conversion",
+            label="File conversion",
+        ):
             return {"success": False, "message": "转换任务正在进行中，请稍后"}
 
         return {"success": True, "message": "转换已开始"}
@@ -201,7 +217,13 @@ class TransferHandler(BaseHandler):
         if not pending:
             return {"success": True, "pending": 0, "converted": 0}
 
-        if not self._start_task("auto_convert", self._do_auto_convert, args=(workspace, pending)):
+        if not self._start_task(
+            "auto_convert",
+            self._do_auto_convert,
+            args=(workspace, pending),
+            kind="conversion",
+            label="Auto convert",
+        ):
             return {"success": False, "pending": len(pending), "converted": 0, "message": "转换任务正在进行中"}
 
         return {"success": True, "pending": len(pending), "converted": 0}
@@ -264,7 +286,13 @@ class TransferHandler(BaseHandler):
         workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
-        if not self._start_task("convert_retry_all", self._do_retry_all_converts, args=(files, workspace)):
+        if not self._start_task(
+            "convert_retry_all",
+            self._do_retry_all_converts,
+            args=(files, workspace),
+            kind="conversion",
+            label="Retry conversions",
+        ):
             return {"success": False, "message": "转换任务正在进行中"}
         return {"success": True, "message": f"已开始重试 {len(files)} 个文件"}
 
@@ -308,7 +336,13 @@ class TransferHandler(BaseHandler):
 
         self._note_integration = NoteIntegration()
 
-        if not self._start_task("note_integration", self._do_note_integration, args=(workspace, auto_topic, topics)):
+        if not self._start_task(
+            "note_integration",
+            self._do_note_integration,
+            args=(workspace, auto_topic, topics),
+            kind="ingest",
+            label="Note integration",
+        ):
             return {"success": False, "message": "整合任务正在进行中，请稍后"}
 
         return {"success": True, "message": "整合已开始"}
@@ -360,7 +394,13 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "message": "请先设置工作区"}
 
-        if not self._start_task("convert_raw", self._do_convert_raw_archive, args=(workspace,)):
+        if not self._start_task(
+            "convert_raw",
+            self._do_convert_raw_archive,
+            args=(workspace,),
+            kind="conversion",
+            label="Raw conversion",
+        ):
             return {"success": False, "message": "转换任务正在进行中"}
 
         return {"success": True, "message": "Raw 批量转换已开始", "status": "started"}

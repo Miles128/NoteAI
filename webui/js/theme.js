@@ -269,7 +269,7 @@ function showAboutPanel() {
             </ul>
         </div>
         <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">${window.t('about.author')}</p>
-        <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">myx28@qq.com</p>
+        <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">mai.yuxiang@foxmail.com</p>
         <p class="about-tech" style="margin-top: 4px;">${window.t('about.opensource')}</p>
     `;
 

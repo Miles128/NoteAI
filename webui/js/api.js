@@ -440,6 +440,8 @@ var API_DEFS = [
     { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },
     { name: 'getIngestStatus', method: 'get_ingest_status', params: function() { return {}; } },
     { name: 'ensureIngest', method: 'ensure_ingest', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; }, write: true },
+    { name: 'getJobs', method: 'get_jobs', params: function(options) { var opts = options || {}; return { include_finished: opts.include_finished !== false, limit: opts.limit || 50 }; } },
+    { name: 'getJob', method: 'get_job', params: function(jobId) { return { job_id: jobId }; } },
 
     // ---- 搜索 ----
     { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },

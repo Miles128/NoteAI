@@ -57,7 +57,13 @@ class IngestHandler(BaseHandler):
         mode = plan.get("mode", "incremental")
         paths = plan.get("file_paths") or []
         resume = bool(plan.get("resume"))
-        if self._start_task("ingest_pipeline", self._do_ingest, args=(mode, paths, resume)):
+        if self._start_task(
+            "ingest_pipeline",
+            self._do_ingest,
+            args=(mode, paths, resume),
+            kind="ingest",
+            label="Ingest pipeline",
+        ):
             return {
                 "success": True,
                 "started": True,
@@ -127,13 +133,25 @@ class IngestHandler(BaseHandler):
         mode = params.get("mode", "full")
         file_paths = params.get("file_paths") or []
         resume = bool(params.get("resume"))
-        if not self._start_task("ingest_pipeline", self._do_ingest, args=(mode, file_paths, resume)):
+        if not self._start_task(
+            "ingest_pipeline",
+            self._do_ingest,
+            args=(mode, file_paths, resume),
+            kind="ingest",
+            label="Ingest pipeline",
+        ):
             return {"success": False, "message": "入库流水线正在运行中"}
 
         return {"success": True, "message": "入库流水线已开始", "mode": mode}
 
     def _do_ingest(self, mode: str, file_paths: list, resume: bool = False) -> None:
         def send_progress(stage: str, progress: float, message: str, extra: dict | None = None) -> None:
+            self._send_job_update(
+                "ingest_pipeline",
+                progress=progress,
+                message=message,
+                metadata={"stage": stage, **(extra or {})},
+            )
             payload = {
                 "type": "ingest_progress",
                 "stage": stage,
@@ -148,13 +166,32 @@ class IngestHandler(BaseHandler):
             self._send_response(resp)
 
         try:
-            run_ingest(
+            result = run_ingest(
                 mode=mode,
                 file_paths=file_paths or None,
                 send_progress=send_progress,
                 send_event=send_event,
                 resume=resume,
             )
+            if result.get("success"):
+                cascade_topics = result.get("stats", {}).get("cascade_topics") or []
+                self._send_job_update(
+                    "ingest_pipeline",
+                    progress=1.0,
+                    message="入库流水线完成",
+                    status="complete",
+                    metadata={"stats": result.get("stats", {})},
+                )
+                self._start_background_surveys(cascade_topics)
+            elif result.get("cancelled"):
+                self._send_job_update("ingest_pipeline", status="cancelled", message="入库已取消")
+            else:
+                self._send_job_update(
+                    "ingest_pipeline",
+                    status="failed",
+                    message=result.get("message", "入库失败"),
+                    metadata={"stats": result.get("stats", {})},
+                )
         except Exception as e:
             logger.warning(f"[ingest] pipeline error: {e}\n{traceback.format_exc()}")
             self._send_response(
@@ -164,8 +201,93 @@ class IngestHandler(BaseHandler):
                 }
             )
 
+    def _start_background_surveys(self, topics: list[str]) -> None:
+        unique_topics = []
+        seen: set[str] = set()
+        for topic in topics or []:
+            topic = str(topic or "").strip()
+            if topic and topic not in seen:
+                seen.add(topic)
+                unique_topics.append(topic)
+        if not unique_topics:
+            return
+        self._start_task(
+            "ingest_cascade_surveys",
+            self._do_background_surveys,
+            args=(unique_topics,),
+            kind="survey",
+            label="Background surveys",
+        )
+
+    def _do_background_surveys(self, topics: list[str]) -> None:
+        from sidecar.cascade_runner import retry_failed_cascades, run_cascade_for_topics
+        from sidecar.ingest_pipeline import load_ingest_state, save_ingest_state
+
+        def progress_cb(cur: int, total: int, message: str) -> None:
+            progress = cur / total if total else 1
+            self._send_job_update(
+                "ingest_cascade_surveys",
+                progress=progress,
+                message=message,
+                metadata={"topics": topics},
+            )
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {
+                        "type": "ingest_progress",
+                        "stage": "cascade",
+                        "progress": progress,
+                        "message": message,
+                        "background": True,
+                    },
+                }
+            )
+
+        def send_event(resp: dict) -> None:
+            self._send_response(resp)
+
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "ingest_cascade_started",
+                    "topics": topics,
+                },
+            }
+        )
+        result = run_cascade_for_topics(topics, send_response=send_event, progress_cb=progress_cb)
+        retry_result = retry_failed_cascades(send_response=send_event)
+        updated = result.get("updated", 0) + retry_result.get("updated", 0)
+        failed = list(result.get("failed") or []) + list(retry_result.get("failed") or [])
+        state = load_ingest_state()
+        stats = state.get("stats") if isinstance(state.get("stats"), dict) else {}
+        stats["cascade_updated"] = updated
+        stats["cascade_failed"] = failed
+        state["stats"] = stats
+        save_ingest_state(state)
+        self._send_job_update(
+            "ingest_cascade_surveys",
+            progress=1.0,
+            status="failed" if failed else "complete",
+            message="后台综述完成" if not failed else "后台综述部分失败",
+            metadata={"updated": updated, "failed": failed},
+        )
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "ingest_cascade_complete",
+                    "success": not failed,
+                    "updated": updated,
+                    "failed": failed,
+                },
+            }
+        )
+
     def _cancel_ingest(self, _params):
         request_cancel()
+        self._send_job_update("ingest_pipeline", status="cancelled", message="已请求取消")
         return {"success": True, "message": "已请求取消"}
 
     def _retry_ingest(self, params):

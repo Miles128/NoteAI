@@ -167,6 +167,63 @@ function _graphNodeRadius(d, lc) {
     return base * _GRAPH_RADIUS_DISPLAY_SCALE;
 }
 
+function _graphNodeColor(d) {
+    if (d.type === 'topic') {
+        if (d.level === 1) return '#e85d3a';
+        if (d.level === 2) return '#ea8600';
+        return '#f4a930';
+    }
+    if (d.type === 'tag') return '#7c4dff';
+    return '#81c784';
+}
+
+function _graphNodeStroke(d) {
+    if (d.has_abstract) return '#e6c200';
+    if (d.type === 'tag') return 'rgba(124,77,255,0.4)';
+    return d.type === 'topic' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)';
+}
+
+function _graphNodeStrokeWidth(d) {
+    return d.has_abstract ? 3 : 0.8;
+}
+
+function _graphNodeFontSize(d) {
+    if (d.type === 'topic' && d.level === 1) return '10px';
+    if (d.type === 'topic' && d.level === 2) return '9px';
+    if (d.type === 'tag') return '9px';
+    return '8px';
+}
+
+function _graphNodeTextFill(d) {
+    if (d.type === 'topic') return 'var(--text-muted, #555)';
+    if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
+    return 'var(--text-muted, #777)';
+}
+
+function _graphNodeTextDisplay(d, showFilenames) {
+    if (d.type === 'topic') return '';
+    if (d.type === 'tag') return '';
+    return showFilenames ? '' : 'none';
+}
+
+function _createGraphNode(nodeSelection, getRadius, showFilenames) {
+    nodeSelection.append('circle')
+        .attr('r', d => getRadius(d))
+        .attr('fill', _graphNodeColor)
+        .attr('stroke', _graphNodeStroke)
+        .attr('stroke-width', _graphNodeStrokeWidth);
+
+    nodeSelection.append('text')
+        .text(d => d.name || '')
+        .attr('text-anchor', 'middle')
+        .attr('dy', d => -(getRadius(d) + 4))
+        .style('font-size', _graphNodeFontSize)
+        .style('font-weight', d => d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal')
+        .style('fill', _graphNodeTextFill)
+        .style('pointer-events', 'none')
+        .style('display', d => _graphNodeTextDisplay(d, showFilenames));
+}
+
 function saveGraphLayoutConfig(cfg) {
     window.Storage.setItem(GRAPH_LAYOUT_STORAGE_KEY, cfg);
 }
@@ -1000,16 +1057,6 @@ const Graph3Tier = {
         const lc = this.layoutConfig;
         const getRadius = d => _graphNodeRadius(d, lc);
 
-        const getColor = d => {
-            if (d.type === 'topic') {
-                if (d.level === 1) return '#e85d3a';
-                if (d.level === 2) return '#ea8600';
-                return '#f4a930';
-            }
-            if (d.type === 'tag') return '#7c4dff';
-            return '#81c784';
-        };
-
         // ===== Constellation layout: L1 spread out, children cluster around L1 =====
         const childMap = {};
         const parentMap = {};
@@ -1039,40 +1086,7 @@ const Graph3Tier = {
             .join('g')
             .attr('cursor', 'pointer');
 
-        // Single circle per node - solid yellow stroke for abstract, no dashed
-        node.append('circle')
-            .attr('r', d => getRadius(d))
-            .attr('fill', d => getColor(d))
-            .attr('stroke', d => {
-                if (d.has_abstract) return '#e6c200';
-                if (d.type === 'tag') return 'rgba(124,77,255,0.4)';
-                return d.type === 'topic' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)';
-            })
-            .attr('stroke-width', d => d.has_abstract ? 3 : 0.8);
-
-        // Labels - show full names
-        const label = node.append('text')
-            .text(d => d.name || '')
-            .attr('text-anchor', 'middle')
-            .attr('dy', d => -(getRadius(d) + 4))
-            .style('font-size', d => {
-                if (d.type === 'topic' && d.level === 1) return '10px';
-                if (d.type === 'topic' && d.level === 2) return '9px';
-                if (d.type === 'tag') return '9px';
-                return '8px';
-            })
-            .style('font-weight', d => d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal')
-            .style('fill', d => {
-                if (d.type === 'topic') return 'var(--text-muted, #555)';
-                if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
-                return 'var(--text-muted, #777)';
-            })
-            .style('pointer-events', 'none')
-            .style('display', d => {
-                if (d.type === 'topic') return '';
-                if (d.type === 'tag') return '';
-                return self.showFilenames ? '' : 'none';
-            });
+        _createGraphNode(node, getRadius, self.showFilenames);
 
         const updateNodePos = function() {
             node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
@@ -1237,11 +1251,6 @@ const Graph3Tier = {
 
         var lc = self.layoutConfig;
         var getRadius = function(d) { return _graphNodeRadius(d, lc); };
-        var getColor = function(d) {
-            if (d.type === 'topic') return d.level === 1 ? '#e85d3a' : d.level === 2 ? '#ea8600' : '#f4a930';
-            if (d.type === 'tag') return '#7c4dff';
-            return '#81c784';
-        };
 
         // Create all elements hidden initially
         var nodeGroup = self.g.append('g').attr('class', 'graph-nodes');
@@ -1251,34 +1260,7 @@ const Graph3Tier = {
             .attr('opacity', 0)
             .attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
 
-        nodeSel.append('circle')
-            .attr('r', function(d) { return getRadius(d); })
-            .attr('fill', function(d) { return getColor(d); })
-            .attr('stroke', function(d) { return d.has_abstract ? '#e6c200' : 'rgba(255,255,255,0.3)'; })
-            .attr('stroke-width', function(d) { return d.has_abstract ? 3 : 0.8; });
-
-        nodeSel.append('text')
-            .text(function(d) { return d.name || ''; })
-            .attr('text-anchor', 'middle')
-            .attr('dy', function(d) { return -(getRadius(d) + 4); })
-            .style('font-size', function(d) {
-                if (d.type === 'topic' && d.level === 1) return '10px';
-                if (d.type === 'topic' && d.level === 2) return '9px';
-                if (d.type === 'tag') return '9px';
-                return '8px';
-            })
-            .style('font-weight', function(d) { return d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal'; })
-            .style('fill', function(d) {
-                if (d.type === 'topic') return 'var(--text-muted, #555)';
-                if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
-                return 'var(--text-muted, #777)';
-            })
-            .style('pointer-events', 'none')
-            .style('display', function(d) {
-                if (d.type === 'topic') return '';
-                if (d.type === 'tag') return '';
-                return self.showFilenames ? '' : 'none';
-            });
+        _createGraphNode(nodeSel, getRadius, self.showFilenames);
 
         var rc = self.layoutConfig;
         var depthRevealInterval = Math.max(rc.replayRevealMinMs,

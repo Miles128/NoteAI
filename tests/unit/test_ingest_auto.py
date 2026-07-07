@@ -44,6 +44,21 @@ def test_prepare_auto_ingest_resumes_interrupted(workspace: Path) -> None:
     assert plan["mode"] == "full"
 
 
+def test_prepare_auto_ingest_respects_global_switch(workspace: Path) -> None:
+    (workspace / SCHEMA_FILENAME).write_text(
+        "# ok\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",
+        encoding="utf-8",
+    )
+    original = config.ingest_auto_enabled
+    config.ingest_auto_enabled = False
+    try:
+        plan = prepare_auto_ingest(str(workspace), file_paths=["Notes/new.md"])
+    finally:
+        config.ingest_auto_enabled = original
+    assert plan["action"] == "none"
+    assert plan["reason"] == "auto_disabled"
+
+
 def test_prepare_auto_ingest_idle_when_up_to_date(workspace: Path) -> None:
     (workspace / SCHEMA_FILENAME).write_text(
         "# ok\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",

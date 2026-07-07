@@ -13,6 +13,7 @@ import threading
 from sidecar.cli_agent.process_control import stop_active
 from sidecar.cli_agent.session_store import clear_session
 from sidecar.cli_agent_runner import list_available_agents, run_cli_agent
+from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
 from sidecar.vault_agents_md import generate_vault_agents_md
 
@@ -45,9 +46,42 @@ class CliAgentHandler(BaseHandler):
         if not self._cli_agent_lock.acquire(blocking=False):
             return {"success": False, "message": "上一个 CLI agent 任务还在运行，请稍等"}
 
+        job_id = "cli_agent"
+        job_status.start_job(
+            job_id,
+            kind="cli_agent",
+            label=f"CLI agent: {agent_id}",
+            message="CLI agent 已启动",
+            metadata={"agent": agent_id},
+            send_event=self._send_response,
+        )
+
         def _worker() -> None:
             try:
                 def send_event(payload: dict) -> None:
+                    event_type = payload.get("type")
+                    if event_type == "cli_agent_start":
+                        job_status.update_job(
+                            job_id,
+                            progress=0.05,
+                            message="CLI agent 正在运行",
+                            metadata={"agent": agent_id},
+                            send_event=self._send_response,
+                        )
+                    elif event_type == "cli_agent_output":
+                        job_status.update_job(
+                            job_id,
+                            progress=0.5,
+                            message="CLI agent 正在输出",
+                            send_event=self._send_response,
+                        )
+                    elif event_type == "cli_agent_tool":
+                        job_status.update_job(
+                            job_id,
+                            progress=0.6,
+                            message=payload.get("name") or "CLI agent 正在调用工具",
+                            send_event=self._send_response,
+                        )
                     self._send_response({"id": "event", "result": payload})
 
                 result = run_cli_agent(
@@ -61,6 +95,7 @@ class CliAgentHandler(BaseHandler):
                 if not result.get("success"):
                     message = result.get("message", "CLI agent 执行失败")
                     if "用户已停止" not in message:
+                        job_status.fail_job(job_id, message, send_event=self._send_response)
                         self._send_response({
                             "id": "event",
                             "result": {
@@ -69,8 +104,11 @@ class CliAgentHandler(BaseHandler):
                                 "message": message,
                             },
                         })
+                    else:
+                        job_status.cancel_job(job_id, message=message, send_event=self._send_response)
                     return
 
+                job_status.complete_job(job_id, message="CLI agent 执行完成", send_event=self._send_response)
                 self._send_response({
                     "id": "event",
                     "result": {
@@ -80,6 +118,7 @@ class CliAgentHandler(BaseHandler):
                     },
                 })
             except Exception as e:
+                job_status.fail_job(job_id, str(e), send_event=self._send_response)
                 self._send_response({
                     "id": "event",
                     "result": {
@@ -96,7 +135,10 @@ class CliAgentHandler(BaseHandler):
 
     def _stop_agent(self, _params):
         """用户主动停止正在运行的 CLI agent。"""
-        return stop_active()
+        result = stop_active()
+        if result.get("success"):
+            job_status.cancel_job("cli_agent", message="用户已请求停止", send_event=self._send_response)
+        return result
 
     def _clear_session(self, params):
         """清除 CLI agent 多轮会话状态（下次发送将开启新 session）。"""

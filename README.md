@@ -2,7 +2,7 @@
 
 # 🧠 NoteAI
 
-**English** · **[中文](#中文)** · [📋 PRD](./documents/prd/PRD.md)
+**English** · **[中文](#中文)** · [📋 PRD](./documents/PRD.md)
 
 ---
 
@@ -208,11 +208,11 @@ NoteAI/
 pytest
 ```
 
-See [PRD](./documents/prd/PRD.md) for product details & roadmap.
+See [PRD](./documents/PRD.md) for product details & roadmap.
 
 ### 🗺️ Roadmap
 
-Aligned with [PRD](./documents/prd/PRD.md) — evolve from batch tool to **continuous knowledge compiler**.
+Aligned with [PRD](./documents/PRD.md) — evolve from batch tool to **continuous knowledge compiler**.
 
 | Priority | Focus |
 |----------|--------|
@@ -437,11 +437,11 @@ NoteAI/
 pytest
 ```
 
-更多产品细节与路线图 → [PRD](./documents/prd/PRD.md)
+更多产品细节与路线图 → [PRD](./documents/PRD.md)
 
 ### 🗺️ 路线图
 
-与 [PRD](./documents/prd/PRD.md) 对齐 — 从「批处理工具」进化为 **持续维护的知识编译器**。
+与 [PRD](./documents/PRD.md) 对齐 — 从「批处理工具」进化为 **持续维护的知识编译器**。
 
 | 优先级 | 方向 |
 |--------|------|

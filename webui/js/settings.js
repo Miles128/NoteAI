@@ -147,6 +147,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initRagSettings();
     initCliSettings();
+    initIngestAutoSettings();
 });
 
 async function autoSaveConfig() {
@@ -251,6 +252,10 @@ async function loadUiConfigToForm() {
             document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
                 radio.checked = radio.value === loc;
             });
+            var ingestAutoEl = document.getElementById('settings-ingest-auto-enabled');
+            if (ingestAutoEl) {
+                ingestAutoEl.checked = uiConfig.ingest_auto_enabled !== false;
+            }
             applyRagSettingsToForm(uiConfig);
             applyCliSettingsToForm(uiConfig);
         }
@@ -799,6 +804,15 @@ function initRagSettings() {
     }
 }
 
+function initIngestAutoSettings() {
+    var el = document.getElementById('settings-ingest-auto-enabled');
+    if (!el || el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('change', function() {
+        saveAssistantUiConfig({ ingest_auto_enabled: el.checked });
+    });
+}
+
 function _bindRagAdvancedControls() {
     var denseEl = document.getElementById('settings-rag-dense-weight');
     if (denseEl && !denseEl.dataset.bound) {
@@ -847,6 +861,7 @@ window.SettingsModule = {
     loadUiConfigToForm,
     setLocale,
     initRagSettings,
+    initIngestAutoSettings,
     initCliSettings,
     applyRagSettingsToForm,
     applyCliSettingsToForm,

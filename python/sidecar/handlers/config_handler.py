@@ -92,6 +92,7 @@ class ConfigHandler(BaseHandler):
             "sidebar_font_family": self.config.sidebar_font_family,
             "preview_font_family": self.config.preview_font_family,
             "cloud_sync_experimental": self.config.cloud_sync_experimental,
+            "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "assistant_agent_mode": self.config.assistant_agent_mode,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
@@ -154,6 +155,8 @@ class ConfigHandler(BaseHandler):
                 self.config.preview_font_family = str(params["preview_font_family"] or "system")
             if "cloud_sync_experimental" in params:
                 self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
+            if "ingest_auto_enabled" in params:
+                self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "assistant_agent_mode" in params:
                 self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
             if "cli_agent_id" in params:

@@ -22,6 +22,10 @@ class BaseHandler:
         return self._server._send_progress
 
     @property
+    def _send_job_update(self):
+        return self._server._send_job_update
+
+    @property
     def _start_task(self):
         return self._server._start_task
 

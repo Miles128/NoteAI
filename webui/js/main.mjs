@@ -162,6 +162,14 @@ async function loadModules() {
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
+    await import('./job-center.js');
+    window.JobCenterModule = window.JobCenterModule || {};
+    if (window.JobCenterModule.refresh) {
+        window.JobCenterModule.refresh({ include_finished: true, limit: 50 }).catch(function(err) {
+            console.warn('[JobCenter] initial refresh failed:', err);
+        });
+    }
+
     await import('./event-listeners.js');
     const { EventListeners } = window;
     window.EventListeners = EventListeners;

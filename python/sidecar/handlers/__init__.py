@@ -6,6 +6,7 @@ from .config_handler import ConfigHandler
 from .files_handler import FilesHandler
 from .ingest_handler import IngestHandler
 from .intel_handler import IntelHandler
+from .job_handler import JobHandler
 from .kb_handler import KbHandler
 from .links_handler import LinksHandler
 from .mcp_config_handler import McpConfigHandler
@@ -26,6 +27,7 @@ __all__ = [
     "TopicsHandler",
     "LinksHandler",
     "IntelHandler",
+    "JobHandler",
     "RagHandler",
     "CloudSyncHandler",
     "IngestHandler",

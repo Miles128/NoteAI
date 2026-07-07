@@ -7,6 +7,7 @@ from pathlib import Path
 from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.handlers.base import BaseHandler
+from sidecar import job_status
 from utils.logger import logger
 
 try:
@@ -37,6 +38,15 @@ class RagHandler(BaseHandler):
         if not self._rag_build_lock.acquire(blocking=False):
             return {"success": False, "message": "索引构建正在进行中"}
 
+        job_id = "rag-index-progress"
+        job_status.start_job(
+            job_id,
+            kind="rag_index",
+            label="RAG index",
+            message="正在扫描文件...",
+            send_event=self._send_response,
+        )
+
         def build():
             try:
                 RagHandler._clear_error_reset()
@@ -56,6 +66,11 @@ class RagHandler(BaseHandler):
                 result = rebuild_index(progress_callback=progress_cb, workspace=workspace)
 
                 if result.get("success") is False:
+                    job_status.fail_job(
+                        job_id,
+                        result.get("message", "索引构建失败"),
+                        send_event=self._send_response,
+                    )
                     self._send_response(
                         {
                             "id": "event",
@@ -67,6 +82,15 @@ class RagHandler(BaseHandler):
                         }
                     )
                 else:
+                    job_status.complete_job(
+                        job_id,
+                        message="索引构建完成",
+                        metadata={
+                            "chunk_count": result.get("chunk_count", 0),
+                            "file_count": result.get("file_count", 0),
+                        },
+                        send_event=self._send_response,
+                    )
                     self._send_response(
                         {
                             "id": "event",
@@ -79,6 +103,7 @@ class RagHandler(BaseHandler):
                         }
                     )
             except Exception as e:
+                job_status.fail_job(job_id, str(e), send_event=self._send_response)
                 self._send_response(
                     {"id": "event", "result": {"type": "rag_index_built", "success": False, "message": str(e)}}
                 )
@@ -221,7 +246,6 @@ class RagHandler(BaseHandler):
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
         from sidecar.intent_router import classify_intent
-        from sidecar.rag.memory import load_short_memory
         from utils.llm_utils import APIConfigError, check_api_config
 
         question = params.get("question", "").strip()
@@ -243,10 +267,8 @@ class RagHandler(BaseHandler):
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
 
-        history = load_short_memory() or ""
-        compressed = self._extractive_compress(history)
-
-        intent = classify_intent(question, history=compressed)
+        compressed = ""
+        intent = classify_intent(question, history="")
         logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
 
         if intent["intent"] in ("chat", "general"):
@@ -267,25 +289,12 @@ class RagHandler(BaseHandler):
 
     def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
         from sidecar.archive_wiki import parse_save_suggestion
-        from sidecar.rag.memory import load_short_memory, save_short_memory, update_long_memory
 
         display_answer, suggest_save_note = parse_save_suggestion(answer)
         if not display_answer.strip():
             return self._fail_rag("AI 未生成回复")
 
         RagHandler._clear_error_reset()
-
-        history = load_short_memory() or ""
-        updated_history = (
-            f"{history}\n用户: {question}\n助手: {display_answer}"
-            if history
-            else f"用户: {question}\n助手: {display_answer}"
-        )
-        save_short_memory(updated_history)
-        try:
-            update_long_memory(question)
-        except Exception:
-            pass
 
         self._send_response(
             {

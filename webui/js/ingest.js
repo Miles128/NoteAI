@@ -4,8 +4,10 @@ var STAGE_LABELS = {
     rules: window.t('ingest.stage.rules'),
     schema: window.t('ingest.stage.rules'),
     convert: window.t('ingest.stage.convert'),
+    compile: window.t('ingest.stage.compile'),
     classify: window.t('ingest.stage.classify'),
     index: window.t('ingest.stage.index'),
+    crossref: window.t('ingest.stage.crossref'),
     cascade: window.t('ingest.stage.cascade'),
     lint: window.t('ingest.stage.lint'),
     sync: window.t('ingest.stage.sync')
@@ -76,6 +78,17 @@ function handleEvent(data) {
         updateBar(data.stage, data.progress, data.message);
     } else if (data.type === 'ingest_complete') {
         onIngestComplete(data);
+    } else if (data.type === 'ingest_cascade_started') {
+        updateBar('cascade', 0, window.t('ingest.cascadeBackgroundStarted'));
+    } else if (data.type === 'ingest_cascade_complete') {
+        hideBar();
+        if (typeof window.updateStatus === 'function') {
+            if (data.success) {
+                window.updateStatus(window.t('ingest.cascadeBackgroundDone', { count: data.updated || 0 }));
+            } else {
+                window.updateStatus(window.t('ingest.cascadeBackgroundFailed', { count: (data.failed || []).length }));
+            }
+        }
     }
 }
 

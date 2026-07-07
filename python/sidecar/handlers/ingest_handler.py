@@ -43,6 +43,7 @@ class IngestHandler(BaseHandler):
         router.register("cancel_ingest", self._cancel_ingest)
         router.register("retry_ingest", self._retry_ingest)
         router.register("get_ingest_status", self._get_ingest_status)
+        router.register("check_ingest_updates", self._check_ingest_updates)
 
     def ensure_running(self, file_paths: list | None = None) -> dict:
         """Start ingest when needed; safe to call on every app/workspace open."""
@@ -293,6 +294,20 @@ class IngestHandler(BaseHandler):
     def _retry_ingest(self, params):
         normalize_ingest_state()
         return self.ensure_running(file_paths=params.get("file_paths") or None)
+
+    def _check_ingest_updates(self, params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "请先设置工作区", "has_updates": False}
+
+        plan = prepare_auto_ingest(workspace, file_paths=params.get("file_paths") or None)
+        has_updates = plan.get("action") == "start"
+        return {
+            "success": True,
+            "has_updates": has_updates,
+            "message": "发现可整理更新" if has_updates else "已是最新",
+            **plan,
+        }
 
     def _get_ingest_status(self, _params):
         state = normalize_ingest_state()

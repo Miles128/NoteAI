@@ -18,11 +18,13 @@ function showContentView() {
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
     const graphPanel = document.getElementById('graph-panel');
     const pendingView = document.getElementById('pending-view');
+    const home = document.getElementById('home-dashboard');
 
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
     if (graphPanel) graphPanel.style.display = 'none';
     if (pendingView) pendingView.style.display = 'none';
+    if (home) home.style.display = 'none';
     if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
     if (titlebarFileName) {
         titlebarFileName.style.display = 'none';
@@ -31,7 +33,7 @@ function showContentView() {
     if (titlebarSplitBtn) titlebarSplitBtn.style.display = 'none';
     if (titlebarCloseBtn) titlebarCloseBtn.style.display = 'none';
 
-    var graphHome = document.getElementById('graph-home-view');
+    var graphHome = document.getElementById('home-dashboard') || document.getElementById('graph-home-view');
     var contentArea = document.getElementById('content-area');
     if (window.AppState.selectedFilePath) {
         if (graphHome) graphHome.style.display = 'none';

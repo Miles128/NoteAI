@@ -19,7 +19,7 @@ function togglePendingView() {
 
 function showPendingViewContent() {
     // Hide ALL other right-panel views — no splits
-    var views = ['graph-home-view', 'graph-panel', 'content-area', 'preview-panel',
+    var views = ['home-dashboard', 'graph-home-view', 'graph-panel', 'content-area', 'preview-panel',
                  'topic-pending-panel', 'ai-suggestion-panel'];
     views.forEach(function(id) {
         var el = document.getElementById(id);
@@ -43,14 +43,16 @@ function hidePendingView() {
         if (contentArea) contentArea.style.display = 'none';
         if (previewPanel) previewPanel.style.display = 'flex';
     } else {
-        // Default back to knowledge graph
+        // Default back to workspace home
         var contentPanel = document.getElementById('content-panel');
         var graphPanel = document.getElementById('graph-panel');
+        var home = document.getElementById('home-dashboard');
         if (contentPanel) contentPanel.style.display = 'flex';
-        if (graphPanel) graphPanel.style.display = 'flex';
+        if (graphPanel) graphPanel.style.display = 'none';
+        if (home) home.style.display = '';
         window.updateHomeStats();
-        if (window.Graph3Tier && window.Graph3Tier.load) {
-            window.Graph3Tier.load();
+        if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+            window.HomeDashboardModule.refresh();
         }
     }
 }

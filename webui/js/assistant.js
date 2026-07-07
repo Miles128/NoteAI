@@ -262,13 +262,14 @@ window.AssistantModule = (function() {
 
     function _setAssistantMarkdown(contentEl, text) {
         if (!contentEl) return;
-        contentEl.classList.add('ai-msg-md', 'preview-content');
+        contentEl.classList.add('ai-msg-md', 'ai-chat-md');
+        contentEl.classList.remove('preview-content');
         contentEl.innerHTML = _renderMarkdownHtml(text);
     }
 
     function _setPlainText(contentEl, text) {
         if (!contentEl) return;
-        contentEl.classList.remove('ai-msg-md', 'preview-content');
+        contentEl.classList.remove('ai-msg-md', 'ai-chat-md', 'preview-content');
         contentEl.textContent = text || '';
     }
 
@@ -360,13 +361,10 @@ window.AssistantModule = (function() {
         if (!container) return;
         var bubble = document.createElement('div');
         bubble.className = 'ai-chat-line ai-msg ai-user';
-        var speaker = document.createElement('span');
-        speaker.className = 'ai-msg-speaker';
-        speaker.textContent = _speakerLabel('user') + '：';
-        var content = document.createElement('span');
+        bubble.setAttribute('aria-label', _speakerLabel('user'));
+        var content = document.createElement('div');
         content.className = 'ai-msg-content';
         content.textContent = text;
-        bubble.appendChild(speaker);
         bubble.appendChild(content);
         container.appendChild(bubble);
         _scrollToBottom();
@@ -377,12 +375,9 @@ window.AssistantModule = (function() {
         if (!container) return null;
         var bubble = document.createElement('div');
         bubble.className = 'ai-chat-line ai-msg ai-assistant';
-        var speaker = document.createElement('span');
-        speaker.className = 'ai-msg-speaker';
-        speaker.textContent = _speakerLabel('assistant') + '：';
+        bubble.setAttribute('aria-label', _speakerLabel('assistant'));
         var content = document.createElement('div');
         content.className = 'ai-msg-content ai-typing';
-        bubble.appendChild(speaker);
         bubble.appendChild(content);
         container.appendChild(bubble);
         _scrollToBottom();
@@ -394,13 +389,9 @@ window.AssistantModule = (function() {
         if (!container) return;
         var div = document.createElement('div');
         div.className = 'ai-chat-line ai-msg ai-system';
-        var label = document.createElement('span');
-        label.className = 'ai-msg-speaker';
-        label.textContent = ((window.t && window.t('assistant.system')) || '系统') + '：';
         var content = document.createElement('span');
         content.className = 'ai-msg-content';
         content.textContent = text;
-        div.appendChild(label);
         div.appendChild(content);
         container.appendChild(div);
         _scrollToBottom();

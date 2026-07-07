@@ -59,6 +59,9 @@
         editor: null,
         instance: null,
         filePath: null,
+        draftId: null,
+        draftTitle: '',
+        draftTopic: '',
         originalContent: '',
         saveTimer: null,
         savePromise: null,
@@ -153,7 +156,7 @@
             });
         },
 
-        init: function(editorEl, content, filePath, callback) {
+        init: function(editorEl, content, filePath, callback, draftMeta) {
             var self = this;
             if (!editorEl) {
                 console.error('[Tiptap] No editor element provided');
@@ -166,10 +169,19 @@
 
             var parts = splitFrontmatter(content || '');
             this.filePath = filePath || null;
+            this.draftId = draftMeta && draftMeta.draftId ? draftMeta.draftId : null;
+            this.draftTitle = draftMeta && draftMeta.draftTitle ? draftMeta.draftTitle : '';
+            this.draftTopic = draftMeta && draftMeta.draftTopic ? draftMeta.draftTopic : '';
             this.frontmatterText = parts.yaml;
             this.originalContent = composeMarkdown(this.frontmatterText, parts.body);
             this.fallbackTextarea = null;
             this.userEdited = false;
+
+            if (this.draftId && window.NoteDraftModule && window.NoteDraftModule.setActiveDraft) {
+                window.NoteDraftModule.setActiveDraft(this.draftId);
+            } else if (window.NoteDraftModule && window.NoteDraftModule.clearActiveDraft) {
+                window.NoteDraftModule.clearActiveDraft();
+            }
 
             if (this.editor) {
                 this.editor.destroy();
@@ -278,7 +290,11 @@
 
                 self.bindToolbar();
                 self.updateToolbarState();
-                updateSaveStatus('saved', window.t ? window.t('editor.saveSaved') : '已保存');
+                if (self.draftId) {
+                    updateSaveStatus('', window.t ? window.t('editor.draftMode') : '草稿模式');
+                } else {
+                    updateSaveStatus('saved', window.t ? window.t('editor.saveSaved') : '已保存');
+                }
             }
 
             if (!deferHeavy) {
@@ -351,11 +367,17 @@
             }
             this.fallbackTextarea = null;
             this.filePath = null;
+            this.draftId = null;
+            this.draftTitle = '';
+            this.draftTopic = '';
             this.originalContent = '';
             this.frontmatterText = '';
             this.userEdited = false;
             this.isActive = false;
             this.clearFrontmatterPanel();
+            if (window.NoteDraftModule && window.NoteDraftModule.clearActiveDraft) {
+                window.NoteDraftModule.clearActiveDraft();
+            }
 
             var staleEl = document.getElementById('tiptap-editor');
             if (staleEl && !this.editor && !this.fallbackTextarea) {
@@ -432,11 +454,30 @@
             updateSaveStatus('error', '编辑器未加载，请重启应用');
         },
 
+        persistDraft: function(content) {
+            if (!this.draftId || !window.NoteDraftModule || !window.NoteDraftModule.updateDraft) return;
+            var fullContent = this.getFullContent(content || '');
+            window.NoteDraftModule.updateDraft(this.draftId, { content: fullContent });
+            if (window.NoteDraftModule.refreshDraftChrome) {
+                window.NoteDraftModule.refreshDraftChrome(fullContent);
+            }
+            updateSaveStatus('saved', window.t ? window.t('editor.draftAutoSaved') : '草稿已自动保存');
+        },
+
         scheduleAutoSave: function(content) {
             var self = this;
             if (this.saveTimer) {
                 clearTimeout(this.saveTimer);
             }
+
+            if (this.draftId) {
+                updateSaveStatus('', window.t ? window.t('editor.draftUnsaved') : '草稿未保存到工作区');
+                this.saveTimer = setTimeout(function() {
+                    self.persistDraft(content);
+                }, SAVE_DELAY_MS);
+                return;
+            }
+
             updateSaveStatus('saving', window.t ? window.t('editor.unsavedChanges') : '有未保存更改...');
             this.saveTimer = setTimeout(function() {
                 self.performSave(content);
@@ -447,6 +488,15 @@
             if (this.saveTimer) {
                 clearTimeout(this.saveTimer);
                 this.saveTimer = null;
+            }
+            if (this.draftId) {
+                if (this.userEdited) {
+                    var draftContent = this.getContent();
+                    if (draftContent !== null) {
+                        this.persistDraft(draftContent);
+                    }
+                }
+                return;
             }
             if (!this.userEdited) {
                 if (this.savePromise) {
@@ -464,6 +514,10 @@
         },
 
         performSave: async function(content) {
+            if (this.draftId) {
+                this.persistDraft(content);
+                return;
+            }
             var filePath = getActiveFilePath();
             if (!filePath || !window.api || !window.api.saveFileContent) return;
 
@@ -557,7 +611,7 @@
     };
 
     var TiptapEditorModule = {
-        openMarkdownInEditor: async function(content, path) {
+        openMarkdownInEditor: async function(content, path, draftMeta) {
             var tiptapContainer = document.getElementById('tiptap-editor-container');
             var toolbar = document.getElementById('tiptap-toolbar');
             var previewContent = document.getElementById('preview-content');
@@ -581,7 +635,7 @@
 
             return new Promise(function(resolve) {
                 requestAnimationFrame(function() {
-                    var ok = TiptapEditor.init(editorEl, content, path, function() {});
+                    var ok = TiptapEditor.init(editorEl, content, path, function() {}, draftMeta || null);
                     resolve(!!ok && !TiptapEditor.fallbackTextarea);
                 });
             });

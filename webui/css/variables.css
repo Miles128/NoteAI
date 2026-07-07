@@ -71,6 +71,7 @@
     --glow-cyan: transparent;
     --glow-purple: transparent;
     --ai-panel-bg: #252525;
+    --chat-user-bg: rgba(255, 255, 255, 0.08);
     --modal-bg: #2d2d2d;
 }
 
@@ -155,6 +156,7 @@ html[data-font-size="large"] {
     --glow-cyan: transparent;
     --glow-purple: transparent;
     --ai-panel-bg: #fafafa;
+    --chat-user-bg: #f0f0f0;
     --modal-bg: #ffffff;
     --success: #059669;
     --warning: #d97706;
@@ -219,6 +221,7 @@ body[data-theme="light"] {
     --glow-cyan: transparent;
     --glow-purple: transparent;
     --ai-panel-bg: #252525;
+    --chat-user-bg: rgba(255, 255, 255, 0.08);
     --modal-bg: #2d2d2d;
 }
 
@@ -276,6 +279,7 @@ body[data-theme="light"] {
     --glow-cyan: transparent;
     --glow-purple: transparent;
     --ai-panel-bg: #ede8dc;
+    --chat-user-bg: #e8e2d4;
     --modal-bg: #f9f5ec;
     --success: #048056;
     --warning: #c9710a;

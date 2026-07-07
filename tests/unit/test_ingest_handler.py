@@ -3,7 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 from sidecar.handlers.ingest_handler import IngestHandler
+from sidecar.ingest_pipeline import save_ingest_state
 from sidecar.schema_manager import SCHEMA_FILENAME
+from tests.workspace_rules_helpers import write_workspace_rules
 
 from config import config
 
@@ -58,3 +60,27 @@ def test_ensure_running_respects_auto_ingest_switch(workspace: Path, ingest_hand
     assert result["success"] is True
     assert result["started"] is False
     assert result["reason"] == "auto_disabled"
+
+
+def test_check_ingest_updates_reports_up_to_date(workspace: Path, ingest_handler: IngestHandler) -> None:
+    write_workspace_rules(workspace)
+    save_ingest_state({"status": "complete", "last_complete_at": 1.0})
+
+    result = ingest_handler._check_ingest_updates({})
+
+    assert result["success"] is True
+    assert result["has_updates"] is False
+    assert result["action"] == "none"
+    assert result["reason"] == "up_to_date"
+
+
+def test_check_ingest_updates_reports_start_for_file_paths(workspace: Path, ingest_handler: IngestHandler) -> None:
+    write_workspace_rules(workspace)
+
+    result = ingest_handler._check_ingest_updates({"file_paths": ["Notes/new.md"]})
+
+    assert result["success"] is True
+    assert result["has_updates"] is True
+    assert result["action"] == "start"
+    assert result["mode"] == "incremental"
+    assert result["file_paths"] == ["Notes/new.md"]

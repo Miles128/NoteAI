@@ -178,6 +178,7 @@
         <div class="note-list-panel" id="note-list-panel">
             <div class="note-list-header">
                 <span class="note-list-title" id="note-list-title" data-i18n="noteList.title"></span>
+                <button type="button" class="note-list-add-btn" onclick="createNoteFromNoteList()" data-i18n-title="sidebar.newNote" data-i18n-aria="sidebar.newNote">+</button>
                 <span class="note-list-count" id="note-list-count">0</span>
             </div>
             <div class="note-list-body" id="note-list-body">
@@ -189,6 +190,101 @@
 
         <div class="right-area" id="right-area">
             <div class="content-panel" id="content-panel">
+                <div class="home-dashboard" id="home-dashboard">
+                    <div class="home-dashboard-header">
+                        <div>
+                            <span class="home-eyebrow" data-i18n="home.eyebrow"></span>
+                            <h2 data-i18n="home.title"></h2>
+                            <p data-i18n="home.subtitle"></p>
+                        </div>
+                        <button type="button" class="home-refresh-btn" id="home-refresh-btn" data-i18n="home.refresh"></button>
+                    </div>
+                    <div class="home-command-panel">
+                        <div class="home-command-copy">
+                            <span class="home-command-kicker" data-i18n="home.commandKicker"></span>
+                            <strong id="home-command-title" data-i18n="home.commandTitle"></strong>
+                            <span id="home-command-desc" data-i18n="home.commandDesc"></span>
+                        </div>
+                        <div class="home-vital-stack">
+                            <div class="home-vital-row is-pending">
+                                <span data-i18n="home.vitals.pending"></span>
+                                <strong id="home-vital-pending">0</strong>
+                            </div>
+                            <div class="home-vital-row is-organize">
+                                <span data-i18n="home.vitals.organize"></span>
+                                <strong id="home-vital-organize" data-i18n="home.statusComplete"></strong>
+                            </div>
+                            <div class="home-vital-row is-compile">
+                                <span data-i18n="home.vitals.compile"></span>
+                                <strong id="home-vital-compile" data-i18n="home.statusComplete"></strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="home-stat-grid">
+                        <div class="home-stat-tile">
+                            <span class="home-stat-label" data-i18n="home.stats.notes"></span>
+                            <span class="home-stat-value" id="home-stat-notes">0</span>
+                        </div>
+                        <div class="home-stat-tile">
+                            <span class="home-stat-label" data-i18n="home.stats.topics"></span>
+                            <span class="home-stat-value" id="home-stat-topics">0</span>
+                        </div>
+                        <div class="home-stat-tile">
+                            <span class="home-stat-label" data-i18n="home.stats.pending"></span>
+                            <span class="home-stat-value" id="home-stat-pending">0</span>
+                        </div>
+                        <div class="home-stat-tile">
+                            <span class="home-stat-label" data-i18n="home.stats.running"></span>
+                            <span class="home-stat-value" id="home-stat-running">0</span>
+                        </div>
+                    </div>
+                    <div class="home-flow-map">
+                        <div class="home-flow-track">
+                            <div class="home-flow-node" data-home-stage="ingest">
+                                <span class="home-flow-dot"></span>
+                                <strong data-i18n="home.flow.ingest"></strong>
+                                <small id="home-flow-ingest" data-i18n="home.flow.idle"></small>
+                            </div>
+                            <div class="home-flow-node" data-home-stage="classify">
+                                <span class="home-flow-dot"></span>
+                                <strong data-i18n="home.flow.classify"></strong>
+                                <small id="home-flow-classify" data-i18n="home.flow.idle"></small>
+                            </div>
+                            <div class="home-flow-node" data-home-stage="survey">
+                                <span class="home-flow-dot"></span>
+                                <strong data-i18n="home.flow.survey"></strong>
+                                <small id="home-flow-survey" data-i18n="home.flow.idle"></small>
+                            </div>
+                            <div class="home-flow-node" data-home-stage="index">
+                                <span class="home-flow-dot"></span>
+                                <strong data-i18n="home.flow.index"></strong>
+                                <small id="home-flow-index" data-i18n="home.flow.idle"></small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="home-section-grid">
+                        <section class="home-section">
+                            <div class="home-section-header">
+                                <h3 data-i18n="home.pendingTitle"></h3>
+                                <button type="button" class="home-section-action" onclick="togglePendingView()" data-i18n="home.openPending"></button>
+                            </div>
+                            <div class="home-section-body" id="home-pending-body"></div>
+                        </section>
+                        <section class="home-section">
+                            <div class="home-section-header">
+                                <h3 data-i18n="home.organizeTitle"></h3>
+                                <button type="button" class="home-section-action" id="home-start-ingest-btn" data-i18n="home.checkUpdates"></button>
+                            </div>
+                            <div class="home-section-body" id="home-organize-body"></div>
+                        </section>
+                        <section class="home-section">
+                            <div class="home-section-header">
+                                <h3 data-i18n="home.compileTitle"></h3>
+                            </div>
+                            <div class="home-section-body" id="home-compile-body"></div>
+                        </section>
+                    </div>
+                </div>
                 <div class="pending-view" id="pending-view" style="display:none;">
                     <div class="pending-view-header">
                         <h2 data-i18n="pending.title"></h2>
@@ -1050,18 +1146,9 @@
                 <button type="button" class="quick-create-close" onclick="QuickCreateModule.close()" data-i18n-title="common.close">&times;</button>
             </div>
             <div class="quick-create-tabs">
-                <button type="button" class="qc-tab active" data-qc-tab="note" data-i18n="quickCreate.tabNote"></button>
-                <button type="button" class="qc-tab" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>
+                <button type="button" class="qc-tab active" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>
             </div>
-            <div class="qc-pane" data-qc-pane="note">
-                <label class="qc-label" data-i18n="quickCreate.noteTitle"></label>
-                <input type="text" id="qc-note-title" class="form-input form-input-full" data-i18n-placeholder="quickCreate.noteTitlePlaceholder">
-                <label class="qc-label" data-i18n="quickCreate.noteTopic"></label>
-                <select id="qc-note-topic" class="form-input form-input-full"></select>
-                <p class="qc-hint" data-i18n="quickCreate.noteUncategorizedHint"></p>
-                <button type="button" class="btn btn-primary qc-submit" id="qc-note-submit" data-i18n="quickCreate.createAndOpen"></button>
-            </div>
-            <div class="qc-pane" data-qc-pane="topic" hidden>
+            <div class="qc-pane" data-qc-pane="topic">
                 <label class="qc-label" data-i18n="quickCreate.topicName"></label>
                 <input type="text" id="qc-topic-name" class="form-input form-input-full" data-i18n-placeholder="quickCreate.topicNamePlaceholder">
                 <label class="qc-label" data-i18n="quickCreate.topicParent"></label>
@@ -1094,9 +1181,6 @@
                 </button>
                 <button type="button" class="sidebar-footer-btn" id="btn-add-topic-filetree" onclick="openQuickCreate('topic')" data-i18n-title="sidebar.newTopic">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-                </button>
-                <button type="button" class="sidebar-footer-btn" id="btn-add-note-filetree" onclick="openQuickCreate('note')" data-i18n-title="sidebar.newNote">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                 </button>
                 <span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>
             </div>
@@ -1132,6 +1216,7 @@
             <button type="button" id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle" data-i18n="common.cancel"></button>
         </div>
         <div class="statusbar-right">
+            <button type="button" class="statusbar-save-btn" id="statusbar-save-btn" hidden data-i18n="common.save"></button>
             <span class="statusbar-item statusbar-save-status" id="statusbar-save-status"></span>
             <span class="statusbar-item statusbar-message" id="statusbar-message"></span>
             <span class="statusbar-item" id="statusbar-chars" title="字符数">0 字符</span>

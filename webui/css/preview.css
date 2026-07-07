@@ -191,8 +191,7 @@
 /* Word / DOCX 排版预览（mammoth HTML） */
 .docx-preview {
     font-family: var(--preview-font-family);
-    max-width: 900px;
-    margin: 0 auto;
+    width: 100%;
     line-height: 1.75;
     color: var(--text);
     font-size: 15px;
@@ -249,8 +248,9 @@
 }
 
 .preview-content > *:not(.preview-file-info) {
-    max-width: 760px;
-    margin: 0 auto;
+    max-width: none;
+    width: 100%;
+    margin: 0;
 }
 
 .preview-empty {

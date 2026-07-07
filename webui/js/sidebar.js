@@ -35,17 +35,17 @@ function showGraphHomeView() {
     var contentArea = document.getElementById('content-area');
     var graphPanel = document.getElementById('graph-panel');
     var pendingView = document.getElementById('pending-view');
+    var home = document.getElementById('home-dashboard');
     if (contentPanel) contentPanel.style.display = 'flex';
     if (previewPanel) previewPanel.style.display = 'none';
-    if (graphPanel) graphPanel.style.display = 'flex';
+    if (graphPanel) graphPanel.style.display = 'none';
     if (contentArea) contentArea.style.display = 'none';
     if (pendingView) pendingView.style.display = 'none';
-    var gh = document.getElementById('graph-home-view');
-    if (gh) gh.style.display = 'none';
+    if (home) home.style.display = '';
     _deactivatePendingBtn();
     updateHomeStats();
-    if (window.Graph3Tier && window.Graph3Tier.load) {
-        window.Graph3Tier.load();
+    if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+        window.HomeDashboardModule.refresh();
     }
 }
 
@@ -59,6 +59,9 @@ function updateHomeStats() {
     var el3 = document.getElementById('home-stat-links');
     if (el1) el1.textContent = fileCount;
     if (el2) el2.textContent = topicCount;
+    if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+        window.HomeDashboardModule.refresh();
+    }
 
     // Graph header stats
     var gs1 = document.getElementById('graph-stat-notes');
@@ -180,6 +183,7 @@ function switchSidebarView(view) {
     var previewPanel = document.getElementById('preview-panel');
     var contentArea = document.getElementById('content-area');
     var graphPanel = document.getElementById('graph-panel');
+    var home = document.getElementById('home-dashboard');
 
     var isPreviewShowing = previewPanel && previewPanel.style.display !== 'none';
 
@@ -189,9 +193,15 @@ function switchSidebarView(view) {
         if (contentPanel) contentPanel.style.display = 'flex';
         if (window.AppState.selectedFilePath) {
             if (graphPanel) graphPanel.style.display = 'none';
+            if (home) home.style.display = 'none';
             if (contentArea) contentArea.style.display = '';
         } else {
             if (contentArea) contentArea.style.display = 'none';
+            if (graphPanel) graphPanel.style.display = 'none';
+            if (home) home.style.display = '';
+            if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+                window.HomeDashboardModule.refresh();
+            }
         }
     }
 
@@ -244,4 +254,3 @@ if (document.readyState === 'loading') {
 }
 
 })();
-

@@ -170,6 +170,18 @@ async function loadModules() {
         });
     }
 
+    await import('./home.js');
+    window.HomeDashboardModule = window.HomeDashboardModule || {};
+    if (window.HomeDashboardModule.init) window.HomeDashboardModule.init();
+
+    await import('./note-draft.js');
+    window.NoteDraftModule = window.NoteDraftModule || {};
+
+    await import('./quick-create.js');
+    if (window.QuickCreateModule && window.QuickCreateModule.init) {
+        window.QuickCreateModule.init();
+    }
+
     await import('./event-listeners.js');
     const { EventListeners } = window;
     window.EventListeners = EventListeners;

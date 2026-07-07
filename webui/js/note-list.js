@@ -97,6 +97,15 @@
         return null;
     }
 
+    function _pathToTopic(folderPath) {
+        if (!folderPath) return '';
+        var norm = String(folderPath).replace(/\\/g, '/');
+        if (norm.indexOf('Notes/') !== 0) return '';
+        var rel = norm.slice('Notes/'.length);
+        if (!rel || rel === '_未分类') return '';
+        return rel.split('/').filter(Boolean).join(' > ');
+    }
+
     /**
      * 当点击树中的文件夹时调用
      */
@@ -318,7 +327,20 @@
         refresh: refresh,
         init: init,
         toggleNoteList: toggleNoteList,
-        getCurrentTopic: function() { return _currentTopicPath; }
+        getCurrentTopic: function() { return _currentTopicPath; },
+        getCurrentTopicInfo: function() {
+            return {
+                folderPath: _currentTopicPath,
+                folderName: _currentTopicName,
+                topic: _pathToTopic(_currentTopicPath)
+            };
+        }
+    };
+
+    window.createNoteFromNoteList = function() {
+        if (window.NoteDraftModule && window.NoteDraftModule.createNoteInContext) {
+            window.NoteDraftModule.createNoteInContext();
+        }
     };
 
     window.toggleNoteList = toggleNoteList;

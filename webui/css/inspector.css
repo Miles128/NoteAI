@@ -62,6 +62,30 @@
     text-align: center;
 }
 
+.note-list-add-btn {
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 17px;
+    line-height: 20px;
+    padding: 0;
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background 180ms cubic-bezier(0.32, 0.72, 0, 1), color 180ms cubic-bezier(0.32, 0.72, 0, 1), transform 180ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.note-list-add-btn:hover {
+    background: color-mix(in srgb, var(--primary, #2563eb) 12%, transparent);
+    color: var(--primary, #2563eb);
+}
+
+.note-list-add-btn:active {
+    transform: scale(0.94);
+}
+
 .note-list-search {
     padding: 6px 10px;
     border-bottom: 1px solid var(--border);

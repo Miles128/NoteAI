@@ -242,7 +242,21 @@
     "previewParseError": "Preview parse error",
     "surveyEmbed": "📄 {topic} survey",
     "saving": "Saving…",
-    "saveFailed": "Save failed"
+    "saveFailed": "Save failed",
+    "draftMode": "Draft mode · use H1 as the note title, then Save to write into the current folder",
+    "draftUnsaved": "Draft not saved to workspace",
+    "draftAutoSaved": "Draft auto-saved"
+  },
+  "noteDraft": {
+    "labelSuffix": "(draft)",
+    "untitled": "Untitled",
+    "editorUnavailable": "Editor unavailable; cannot open draft",
+    "moduleUnavailable": "Draft module not loaded",
+    "apiUnavailable": "Save API unavailable",
+    "noActiveDraft": "No draft to save",
+    "savedToWorkspace": "Note saved to {path}",
+    "selectFolderFirst": "Select a topic folder in the sidebar before creating a note",
+    "openedInFolder": "Editing new note in {folder}. Set the title using the H1 heading."
   },
   "assistant": {
     "panelTitle": "RAG Assistant",
@@ -513,6 +527,66 @@
     "waiting": "Downloading — please wait",
     "reasonPrefix": "   Reason: "
   },
+  "home": {
+    "eyebrow": "Knowledge Base",
+    "title": "Source stats",
+    "subtitle": "Track pending sources, organization status, and compilation status.",
+    "refresh": "Refresh",
+    "commandKicker": "Knowledge base state",
+    "commandTitle": "Knowledge base is healthy",
+    "commandDesc": "Sources, organization, surveys, and indexes are stable. You can keep reading or add new material.",
+    "commandTitleAttention": "Sources need attention",
+    "commandDescAttention": "{count} items are waiting for review or repair. Handle the pending queue first.",
+    "commandTitleRunning": "Background work is running",
+    "commandDescRunning": "{count} jobs are updating the knowledge base. Status will refresh automatically.",
+    "commandTitleChecking": "Checking for updates",
+    "commandDescChecking": "Scanning for new files, changed sources, failures, and resumable work.",
+    "commandTitleUpToDate": "Knowledge base is up to date",
+    "commandDescUpToDate": "No new sources, pending conversions, or resumable jobs were found.",
+    "commandTitleUpdateFound": "Updates found, organizing",
+    "commandDescUpdateFound": "Work was found and incremental organization is starting.",
+    "commandTitleCheckFailed": "Check failed",
+    "commandDescCheckFailed": "{message}",
+    "vitals": {
+      "pending": "Pending",
+      "organize": "Organize",
+      "compile": "Compile"
+    },
+    "stats": {
+      "notes": "Notes",
+      "topics": "Topics",
+      "pending": "Pending",
+      "running": "Running"
+    },
+    "pendingTitle": "Pending sources",
+    "openPending": "Open",
+    "pendingEmpty": "No pending sources",
+    "organizeTitle": "Organization status",
+    "organizeIdle": "No organization jobs are running",
+    "organizeComplete": "Organization complete",
+    "organizeNeedsResume": "Organization needs resume",
+    "compileTitle": "Compilation status",
+    "compileIdle": "No compilation jobs are running",
+    "jobUnknown": "Job",
+    "statusRunning": "Running",
+    "statusComplete": "Complete",
+    "statusFailed": "Failed",
+    "statusCancelled": "Cancelled",
+    "startIngest": "Start organizing",
+    "checkUpdates": "Check updates",
+    "checkingUpdates": "Checking…",
+    "flow": {
+      "ingest": "Ingest",
+      "classify": "Classify",
+      "survey": "Survey",
+      "index": "Index",
+      "idle": "Idle",
+      "ready": "Ready",
+      "running": "Running",
+      "failed": "Failed",
+      "needsReview": "Review"
+    }
+  },
   "ingest": {
     "label": "Ingest",
     "retry": "Retry",
@@ -603,6 +677,7 @@
     "noteTopic": "Topic (optional)",
     "noteUncategorizedHint": "Saved to Notes/_uncategorized/ if no topic",
     "createAndOpen": "Create & open",
+    "createDraft": "Create draft",
     "topicName": "Topic name",
     "topicNamePlaceholder": "e.g. Agent basics",
     "topicParent": "Parent topic (optional)",
@@ -613,6 +688,7 @@
     "enterNoteTitle": "Enter a note title",
     "topicCreated": "Topic created",
     "noteCreated": "Note created",
+    "draftOpened": "Draft opened. Edits auto-save locally when you pause; click Save in the status bar to write to the workspace.",
     "createFailed": "Create failed: {message}"
   },
   "organizeRules": {

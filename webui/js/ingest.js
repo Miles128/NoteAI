@@ -92,13 +92,15 @@ function handleEvent(data) {
     }
 }
 
-async function startIngest(mode, filePaths) {
+async function startIngest(mode, filePaths, options) {
     if (!window.api || !window.api.startIngest) return { success: false };
+    var opts = options || {};
     showBar();
     updateBar('schema', 0, window.t('ingest.starting'));
     return window.api.startIngest({
         mode: mode || 'full',
-        file_paths: filePaths || []
+        file_paths: filePaths || [],
+        resume: !!opts.resume
     });
 }
 

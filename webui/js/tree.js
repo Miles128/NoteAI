@@ -796,7 +796,7 @@ async function _loadFileTreeOnce(force) {
 function selectFile(path, fileName) {
     setSelectedFile(path, fileName);
 
-    var graphHome = document.getElementById('graph-home-view');
+    var graphHome = document.getElementById('home-dashboard') || document.getElementById('graph-home-view');
     var graphPanel = document.getElementById('graph-panel');
     var contentArea = document.getElementById('content-area');
     var pendingView = document.getElementById('pending-view');
@@ -888,34 +888,40 @@ window.TreeModule = {
 
 window.switchSidebarView = window.switchSidebarView;
 window.toggleGraphPanel = function() {
-    var panel = document.getElementById('graph-panel');
-    if (!panel) return;
-    if (panel.style.display === 'none') {
-        var contentPanel = document.getElementById('content-panel');
-        var previewPanel = document.getElementById('preview-panel');
-        var pendingView = document.getElementById('pending-view');
-        if (contentPanel) contentPanel.style.display = 'flex';
-        if (previewPanel) previewPanel.style.display = 'none';
-        if (pendingView) pendingView.style.display = 'none';
-        if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
-        panel.style.display = 'flex';
-        var graphHome = document.getElementById('graph-home-view');
+        var panel = document.getElementById('graph-panel');
+        if (!panel) return;
+        if (panel.style.display === 'none') {
+            var contentPanel = document.getElementById('content-panel');
+            var previewPanel = document.getElementById('preview-panel');
+            var pendingView = document.getElementById('pending-view');
+            var home = document.getElementById('home-dashboard');
+            if (contentPanel) contentPanel.style.display = 'flex';
+            if (previewPanel) previewPanel.style.display = 'none';
+            if (pendingView) pendingView.style.display = 'none';
+            if (home) home.style.display = 'none';
+            if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
+            panel.style.display = 'flex';
+        var graphHome = document.getElementById('home-dashboard') || document.getElementById('graph-home-view');
         var contentArea = document.getElementById('content-area');
         if (graphHome) graphHome.style.display = 'none';
         if (contentArea) contentArea.style.display = 'none';
         if (window.Graph3Tier && window.Graph3Tier.load) {
             window.Graph3Tier.load();
         }
-    } else {
-        // Closing graph — go to pending/log panel
-        panel.style.display = 'none';
-        if (window.AppState.selectedFilePath) {
-            var contentArea = document.getElementById('content-area');
-            if (contentArea) contentArea.style.display = '';
         } else {
-            if (typeof window.togglePendingView === 'function') window.togglePendingView();
+            // Closing graph — return to editor or home
+            panel.style.display = 'none';
+            if (window.AppState.selectedFilePath) {
+                var contentArea = document.getElementById('content-area');
+                if (contentArea) contentArea.style.display = '';
+            } else {
+                var home = document.getElementById('home-dashboard');
+                if (home) home.style.display = '';
+                if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+                    window.HomeDashboardModule.refresh();
+                }
+            }
         }
-    }
 };
 window.togglePendingLinksPanel = function() { window.LinksModule && window.LinksModule.togglePendingLinksPanel(); };
 window.loadRelationGraphData = function() {
@@ -939,4 +945,3 @@ window.showTreeContextMenu = showTreeContextMenu;
 window.onAddTopicFromFileTree = onAddTopicFromFileTree;
 
 })();
-

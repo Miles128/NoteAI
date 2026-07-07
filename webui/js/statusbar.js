@@ -102,6 +102,7 @@
         _setPlain('statusbar-lines', '0 行');
         _setPlain('statusbar-cursor', 'Ln 1, Col 1');
         updateSaveStatus('', '');
+        setSaveButtonVisible(false);
         updateMessage('');
         setMetadataToggleVisible(false);
     }
@@ -112,6 +113,26 @@
         el.className = 'statusbar-item statusbar-save-status' + (status ? ' ' + status : '');
         el.textContent = text || '';
     }
+
+    function setSaveButtonVisible(visible) {
+        var btn = document.getElementById('statusbar-save-btn');
+        if (!btn) return;
+        btn.hidden = !visible;
+        btn.style.display = visible ? '' : 'none';
+    }
+
+    function bindSaveButton() {
+        var btn = document.getElementById('statusbar-save-btn');
+        if (!btn || btn.dataset.bound === 'true') return;
+        btn.dataset.bound = 'true';
+        btn.addEventListener('click', function() {
+            if (window.NoteDraftModule && window.NoteDraftModule.commitCurrentDraft) {
+                window.NoteDraftModule.commitCurrentDraft();
+            }
+        });
+    }
+
+    bindSaveButton();
 
     var _messageTimer = null;
 
@@ -227,6 +248,7 @@
         updateCursor: updateCursor,
         clearStats: clearStats,
         updateSaveStatus: updateSaveStatus,
+        setSaveButtonVisible: setSaveButtonVisible,
         updateMessage: updateMessage,
         setRewriting: setRewriting,
         setMetadataToggleVisible: setMetadataToggleVisible

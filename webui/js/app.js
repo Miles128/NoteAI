@@ -63,16 +63,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             await window.TreeModule.loadFileTree();
         }
 
-        // Default: show knowledge graph (full right panel, no splits)
+        // Default: show workspace status home
         var ca = document.getElementById('content-area');
         var gp = document.getElementById('graph-panel');
         var cp = document.getElementById('content-panel');
+        var home = document.getElementById('home-dashboard');
         if (ca) ca.style.display = 'none';
         if (cp) cp.style.display = 'flex';
-        if (gp) gp.style.display = 'flex';
-        window.updateHomeStats();
-        if (window.Graph3Tier && window.Graph3Tier.load) {
-            window.Graph3Tier.load();
+        if (gp) gp.style.display = 'none';
+        if (home) home.style.display = '';
+        if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
+            window.HomeDashboardModule.refresh();
+        } else {
+            window.updateHomeStats();
         }
 
         if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {

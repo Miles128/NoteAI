@@ -242,7 +242,21 @@
     "previewParseError": "预览解析出错",
     "surveyEmbed": "📄 {topic} 综述",
     "saving": "保存中...",
-    "saveFailed": "保存失败"
+    "saveFailed": "保存失败",
+    "draftMode": "草稿模式 · 用一级标题作为笔记名，点击保存写入当前文件夹",
+    "draftUnsaved": "草稿未保存到工作区",
+    "draftAutoSaved": "草稿已自动保存"
+  },
+  "noteDraft": {
+    "labelSuffix": "(草稿)",
+    "untitled": "未命名",
+    "editorUnavailable": "编辑器不可用，无法打开草稿",
+    "moduleUnavailable": "草稿模块未加载",
+    "apiUnavailable": "保存接口不可用",
+    "noActiveDraft": "没有可保存的草稿",
+    "savedToWorkspace": "笔记已保存到 {path}",
+    "selectFolderFirst": "请先在左侧选择主题文件夹，再新建笔记",
+    "openedInFolder": "已在新笔记中编辑：{folder}，标题请填写正文一级标题"
   },
   "assistant": {
     "panelTitle": "RAG助手",
@@ -513,6 +527,66 @@
     "waiting": "正在下载，请稍候",
     "reasonPrefix": "   原因: "
   },
+  "home": {
+    "eyebrow": "Knowledge Base",
+    "title": "资料统计",
+    "subtitle": "查看待处理资料、整理状态与编译状态。",
+    "refresh": "刷新",
+    "commandKicker": "知识库状态",
+    "commandTitle": "知识库运行良好",
+    "commandDesc": "资料、整理、综述与索引处于稳定状态，可以继续阅读或追加资料。",
+    "commandTitleAttention": "有资料需要处理",
+    "commandDescAttention": "{count} 项资料等待确认或修复，建议先处理待办队列。",
+    "commandTitleRunning": "后台任务正在运行",
+    "commandDescRunning": "{count} 个任务正在更新知识库，完成后状态会自动刷新。",
+    "commandTitleChecking": "正在检查更新",
+    "commandDescChecking": "正在快速扫描新增、修改、失败和待续跑项目。",
+    "commandTitleUpToDate": "知识库已是最新",
+    "commandDescUpToDate": "没有发现新增资料、待转换文件或需要续跑的任务。",
+    "commandTitleUpdateFound": "发现更新，开始整理",
+    "commandDescUpdateFound": "已发现需要处理的资料，正在启动增量整理。",
+    "commandTitleCheckFailed": "检查失败",
+    "commandDescCheckFailed": "{message}",
+    "vitals": {
+      "pending": "待处理",
+      "organize": "整理",
+      "compile": "编译"
+    },
+    "stats": {
+      "notes": "笔记",
+      "topics": "主题",
+      "pending": "待处理",
+      "running": "运行中"
+    },
+    "pendingTitle": "待处理资料",
+    "openPending": "查看",
+    "pendingEmpty": "没有待处理资料",
+    "organizeTitle": "整理状态",
+    "organizeIdle": "当前没有整理任务",
+    "organizeComplete": "整理已完成",
+    "organizeNeedsResume": "整理需要续跑",
+    "compileTitle": "编译状态",
+    "compileIdle": "当前没有编译任务",
+    "jobUnknown": "任务",
+    "statusRunning": "运行中",
+    "statusComplete": "完成",
+    "statusFailed": "失败",
+    "statusCancelled": "已取消",
+    "startIngest": "开始整理",
+    "checkUpdates": "检查更新",
+    "checkingUpdates": "检查中…",
+    "flow": {
+      "ingest": "入库",
+      "classify": "分类",
+      "survey": "综述",
+      "index": "索引",
+      "idle": "待命",
+      "ready": "就绪",
+      "running": "运行中",
+      "failed": "失败",
+      "needsReview": "需处理"
+    }
+  },
   "ingest": {
     "label": "入库",
     "retry": "重试",
@@ -603,6 +677,7 @@
     "noteTopic": "主题（可选）",
     "noteUncategorizedHint": "未选主题时保存到 Notes/_未分类/",
     "createAndOpen": "创建并打开",
+    "createDraft": "创建草稿",
     "topicName": "主题名称",
     "topicNamePlaceholder": "例如：Agent 入门",
     "topicParent": "上级主题（可选）",
@@ -613,6 +688,7 @@
     "enterNoteTitle": "请输入笔记标题",
     "topicCreated": "主题已创建",
     "noteCreated": "笔记已创建",
+    "draftOpened": "草稿已打开；停止输入后会自动保存草稿，点击底部「保存」写入工作区",
     "createFailed": "创建失败: {message}"
   },
   "organizeRules": {

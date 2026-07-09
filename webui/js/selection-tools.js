@@ -50,6 +50,7 @@
         _bar.hidden = true;
         _bar.innerHTML = [
             '<button type="button" data-action="rag"></button>',
+            '<button type="button" data-action="local"></button>',
             '<button type="button" data-action="web"></button>',
             '<button type="button" data-action="copy"></button>'
         ].join('');
@@ -63,6 +64,8 @@
             var action = btn.getAttribute('data-action');
             if (action === 'rag') {
                 askKnowledge(_selectedText);
+            } else if (action === 'local') {
+                searchNotes(_selectedText);
             } else if (action === 'web') {
                 webSearch(_selectedText);
             } else if (action === 'copy') {
@@ -76,9 +79,11 @@
     function _labelButtons() {
         var bar = _ensureBar();
         var rag = bar.querySelector('[data-action="rag"]');
+        var local = bar.querySelector('[data-action="local"]');
         var web = bar.querySelector('[data-action="web"]');
         var copy = bar.querySelector('[data-action="copy"]');
         if (rag) rag.textContent = _t('selectionTools.askKb', '问知识库');
+        if (local) local.textContent = _t('selectionTools.searchNotes', '搜笔记');
         if (web) web.textContent = _t('selectionTools.webSearch', '联网搜索');
         if (copy) copy.textContent = _t('selectionTools.copy', '复制');
     }
@@ -145,6 +150,16 @@
         }
     }
 
+    function searchNotes(text) {
+        var selected = _normalizeSelectionText(text);
+        if (!selected) return;
+        if (typeof window.openSearchModal === 'function') {
+            window.openSearchModal(selected);
+        } else if (typeof window.toggleSearchModal === 'function') {
+            window.toggleSearchModal();
+        }
+    }
+
     function copySelection(text) {
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
@@ -182,6 +197,7 @@
         init: init,
         hide: hide,
         askKnowledge: askKnowledge,
+        searchNotes: searchNotes,
         webSearch: webSearch
     };
 })();

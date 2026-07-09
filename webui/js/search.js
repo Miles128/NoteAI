@@ -11,7 +11,7 @@ function toggleSearchModal() {
     }
 }
 
-function openSearchModal() {
+function openSearchModal(initialQuery) {
     var overlay = document.getElementById('search-modal');
     var input = document.getElementById('search-input');
     if (!overlay || !input) return;
@@ -19,8 +19,11 @@ function openSearchModal() {
     overlay.style.display = 'flex';
     _searchVisible = true;
 
-    input.value = '';
+    input.value = initialQuery ? String(initialQuery) : '';
     document.getElementById('search-results').innerHTML = '';
+    if (input.value.trim()) {
+        doSearch(input.value);
+    }
 
     setTimeout(function () {
         input.focus();
@@ -203,8 +206,8 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 window.toggleSearchModal = toggleSearchModal;
+window.openSearchModal = openSearchModal;
 window.closeSearchModal = closeSearchModal;
 window.onSearchResultClick = onSearchResultClick;
 
 })();
-

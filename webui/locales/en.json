@@ -323,9 +323,10 @@
   },
   "selectionTools": {
     "askKb": "Ask KB",
+    "searchNotes": "Search notes",
     "webSearch": "Web search",
     "copy": "Copy",
-    "ragPrompt": "Explain this passage using the knowledge base and cite sources: {text}"
+    "ragPrompt": "Explain the selected term or sentence using the knowledge base:\n\n{text}\n\nFirst explain the meaning, then connect it to related topics or notes in this workspace, with citations."
   },
   "settings": {
     "title": "Settings",

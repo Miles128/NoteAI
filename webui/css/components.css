@@ -1862,6 +1862,28 @@
     display: none;
 }
 
+.graph-tree-toggle-node circle {
+    fill: var(--surface);
+    stroke: var(--border);
+    stroke-width: 1;
+}
+
+.graph-tree-toggle-node path {
+    fill: none;
+    stroke: var(--text-muted);
+    stroke-width: 1.3;
+    stroke-linecap: round;
+}
+
+.graph-tree-toggle-node:hover circle {
+    fill: var(--surface-hover);
+    stroke: var(--primary);
+}
+
+.graph-tree-toggle-node:hover path {
+    stroke: var(--primary);
+}
+
 .graph-legend-float {
     position: absolute;
     left: 50%;

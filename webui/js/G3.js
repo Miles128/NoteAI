@@ -218,10 +218,13 @@ function _graphNodeSubtitle(d) {
         var count = Number(d.file_count || 0);
         var text = count + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
         if (d.has_abstract) text += ' · ' + ((window.t && window.t('graph.stats.survey')) || 'Survey');
+        if (d._collapsed) text += ' · ' + ((window.t && window.t('graph.tree.collapsed')) || 'Collapsed');
         return text;
     }
     if (d.type === 'tag') {
-        return Number(d.file_count || 0) + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
+        var tagText = Number(d.file_count || 0) + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
+        if (d._collapsed) tagText += ' · ' + ((window.t && window.t('graph.tree.collapsed')) || 'Collapsed');
+        return tagText;
     }
     return (window.t && window.t('graph.tree.noteType')) || 'Note';
 }
@@ -675,6 +678,7 @@ const Graph3Tier = {
     simulation: null,
     filter: 'topic',
     layoutMode: 'constellation',
+    treeCollapsedIds: new Set(),
     layoutConfig: loadGraphLayoutConfig(),
     _graphBodyResizeObserver: null,
     _resizePaused: false,
@@ -1000,6 +1004,18 @@ const Graph3Tier = {
         }
     },
 
+    toggleTreeNodeCollapsed(nodeId) {
+        if (!nodeId) return;
+        if (this.treeCollapsedIds.has(nodeId)) {
+            this.treeCollapsedIds.delete(nodeId);
+        } else {
+            this.treeCollapsedIds.add(nodeId);
+        }
+        if (this.layoutMode === 'tree' && this.data && this.svg) {
+            this.renderTreeLayout();
+        }
+    },
+
     _legendItem(color, size, labelKey) {
         var label = window.t(labelKey);
         var item = document.createElement('span');
@@ -1248,14 +1264,38 @@ const Graph3Tier = {
         });
         const rootNodes = orderedNodes.filter(n => !hasParent.has(n.id));
         const visited = new Set();
+        const collapsed = this.treeCollapsedIds;
+        const markDescendantsVisited = (nodeId) => {
+            (childrenByParent[nodeId] || []).forEach(childId => {
+                if (visited.has(childId)) return;
+                visited.add(childId);
+                markDescendantsVisited(childId);
+            });
+        };
         const toTreeNode = (n) => {
             visited.add(n.id);
-            const childIds = (childrenByParent[n.id] || []).filter(id => nodeMap[id] && !visited.has(id));
+            const rawChildIds = (childrenByParent[n.id] || []).filter(id => nodeMap[id]);
+            const isCollapsed = collapsed.has(n.id) && rawChildIds.length > 0;
+            if (isCollapsed) {
+                markDescendantsVisited(n.id);
+                return Object.assign({}, n, {
+                    children: [],
+                    _hasChildren: true,
+                    _childCount: rawChildIds.length,
+                    _collapsed: true,
+                });
+            }
+            const childIds = rawChildIds.filter(id => !visited.has(id));
             const children = childIds
                 .map(id => nodeMap[id])
                 .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN'))
                 .map(child => toTreeNode(child));
-            return Object.assign({}, n, { children });
+            return Object.assign({}, n, {
+                children,
+                _hasChildren: rawChildIds.length > 0,
+                _childCount: rawChildIds.length,
+                _collapsed: false,
+            });
         };
 
         const rootCandidates = rootNodes.length ? rootNodes : orderedNodes;
@@ -1364,6 +1404,25 @@ const Graph3Tier = {
             .attr('x', d => getRadius(d) + 8)
             .attr('dy', '1.65em')
             .text(_graphNodeSubtitle);
+
+        const toggles = node.filter(d => d._hasChildren)
+            .append('g')
+            .attr('class', 'graph-tree-toggle-node')
+            .attr('transform', d => 'translate(' + (-(getRadius(d) + 12)) + ',0)')
+            .attr('cursor', 'pointer');
+        toggles.append('circle')
+            .attr('r', 6);
+        toggles.append('path')
+            .attr('class', 'graph-tree-toggle-minus')
+            .attr('d', 'M-3,0H3');
+        toggles.append('path')
+            .attr('class', 'graph-tree-toggle-plus')
+            .attr('d', 'M0,-3V3')
+            .style('display', d => d._collapsed ? '' : 'none');
+        toggles.on('click', function(e, d) {
+            e.stopPropagation();
+            self.toggleTreeNodeCollapsed(d.id);
+        });
 
         const pathByNode = {};
         visibleNodes.forEach(function(d) {

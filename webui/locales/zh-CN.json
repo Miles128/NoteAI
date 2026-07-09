@@ -323,9 +323,10 @@
   },
   "selectionTools": {
     "askKb": "问知识库",
+    "searchNotes": "搜笔记",
     "webSearch": "联网搜索",
     "copy": "复制",
-    "ragPrompt": "请基于知识库解释这段内容，并给出引用：{text}"
+    "ragPrompt": "请基于知识库解释下面选中的词语或句子：\n\n{text}\n\n要求：先解释含义，再说明它在当前知识库中可能关联的主题或资料，并给出引用。"
   },
   "settings": {
     "title": "设置",

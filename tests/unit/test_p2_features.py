@@ -38,6 +38,25 @@ def test_discover_cross_refs_finds_related(workspace: Path) -> None:
     links = load_links().get("links", [])
     outgoing = [l for l in links if l.get("from") == rel]
     assert len(outgoing) >= 1
+    assert {l.get("status") for l in outgoing} == {"confirmed"}
+
+
+def test_discover_cross_refs_ignores_readme_notes(workspace: Path) -> None:
+    readme_rel = "Notes/AI/子题/README.md"
+    (workspace / readme_rel).write_text(
+        "---\ntopic: AI > 子题\ntags: [RAG]\n---\n\n# README\n\n目录说明，不是知识笔记。\n",
+        encoding="utf-8",
+    )
+
+    readme_result = discover_cross_refs_for_file(readme_rel, max_links=8, use_llm=False)
+    assert readme_result["success"] is True
+    assert readme_result["added"] == 0
+
+    rel = "Notes/AI/子题/源文章.md"
+    result = discover_cross_refs_for_file(rel, max_links=8, use_llm=False)
+    assert result["success"] is True
+    links = load_links().get("links", [])
+    assert not any("README.md" in (l.get("from", "") + l.get("to", "")) for l in links)
 
 
 def test_import_transcript(workspace: Path) -> None:

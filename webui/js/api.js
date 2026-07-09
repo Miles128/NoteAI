@@ -342,9 +342,11 @@ var API_DEFS = [
     { name: 'createTopic', method: 'create_topic', params: function(name, parent) { return { name: name, parent: parent || '' }; } },
     { name: 'createTopicFolder', method: 'create_topic_folder', params: function(name, parentPath, level) { return { name: name, parent_path: parentPath || '', level: level || 0 }; } },
     { name: 'createNote', method: 'create_note', params: function(title, topic) { return { title: title, topic: topic || '' }; }, write: true },
+    { name: 'createNoteFromDraft', method: 'create_note_from_draft', params: function(title, topic, content) { return { title: title, topic: topic || '', content: content || '' }; }, write: true },
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
     { name: 'getPendingTopics', method: 'get_pending_topics' },
     { name: 'getAllPending', method: 'get_all_pending' },
+    { name: 'getDashboardStatus', method: 'get_dashboard_status' },
     { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; } },
     { name: 'mergeDuplicateTopics', method: 'merge_duplicate_topics', params: function() { return {}; } },
@@ -424,9 +426,7 @@ var API_DEFS = [
     { name: 'clearCliAgentSession', method: 'clear_cli_agent_session', params: function(agentId, workspacePath) { return { agent_id: agentId || '', workspace_path: workspacePath || '' }; }, write: true },
     { name: 'generateVaultAgentsMd', method: 'generate_vault_agents_md', params: function() { return {}; }, write: true },
 
-    // ---- 用户画像 / 规则 ----
-    { name: 'getUserProfile', method: 'get_user_profile', params: function() { return {}; } },
-    { name: 'saveUserProfile', method: 'save_user_profile', params: function(data) { return data; }, write: true },
+    // ---- 规则 ----
     { name: 'getProjectRules', method: 'get_project_rules', params: function() { return {}; } },
     { name: 'saveProjectRules', method: 'save_project_rules', params: function(rules) { return { rules: rules }; }, write: true },
 
@@ -448,15 +448,8 @@ var API_DEFS = [
     // ---- 搜索 ----
     { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },
 
-    // ---- 云同步 ----
-    { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' },
-    { name: 'cloudSyncAuth', method: 'cloud_sync_auth', params: function(provider, credentials) { return { provider_name: provider, credentials: credentials }; }, write: true },
-    { name: 'cloudSyncPush', method: 'cloud_sync_push', params: function(provider) { return { provider_name: provider }; }, write: true },
-    { name: 'cloudSyncPull', method: 'cloud_sync_pull', params: function(provider) { return { provider_name: provider }; }, write: true },
-    { name: 'cloudSyncStatus', method: 'cloud_sync_status', params: function(provider) { return { provider_name: provider }; } },
-    { name: 'cloudSyncSaveConfig', method: 'cloud_sync_save_config', params: function(provider, config) { return { provider_name: provider, config: config }; }, write: true },
-    { name: 'cloudSyncLoadConfig', method: 'cloud_sync_load_config', params: function(provider) { return { provider_name: provider }; } },
-    { name: 'cloudSyncDisconnect', method: 'cloud_sync_disconnect', params: function(provider) { return { provider_name: provider }; }, write: true }
+    // ---- 云同步占位 ----
+    { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' }
 ];
 
 var generatedApi = {};

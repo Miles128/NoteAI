@@ -73,10 +73,11 @@ NoteAI 使用三级主题分类：
 4. **知识问答**: 优先从知识库检索，结合工作区的主题体系给出回答
 5. **级联更新**: 新资料入库时，主动检查并更新受影响的已有综述
 
-## 两层记忆体系
+## 运行时记忆
 
-- **L1 用户画像**: `<工作区>/.ai_memory/user_profile.json`
-- **L2 工作区 Memory**: `<工作区>/.noteai/memory/`（RAG 会话记忆）
+- **工作区 Memory**: `<工作区>/.noteai/memory/`（RAG 会话记忆）
+- **项目规则**: `<工作区>/.ai_memory/project_rules.md`
+- 用户画像功能已关闭；RAG 不读取或改写用户画像。
 
 ## Agent 操作建议
 
@@ -106,7 +107,7 @@ def _count_notes(notes_path: Path) -> int:
     if not notes_path.exists():
         return 0
     try:
-        return sum(1 for _ in notes_path.rglob("*.md"))
+        return sum(1 for f in notes_path.rglob("*.md") if f.stem.casefold() != "readme")
     except Exception:
         return 0
 

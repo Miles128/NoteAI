@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
-from sidecar.rag.profile import load_profile, save_profile
 from sidecar.rag.rag_config import (
     DEFAULT_DENSE_WEIGHT,
     DEFAULT_HYDE_THRESHOLD,
@@ -23,8 +22,6 @@ class ConfigHandler(BaseHandler):
         router.register("get_theme_preference", self._get_theme_preference)
         router.register("save_theme_preference", self._save_theme_preference)
         router.register("test_api_connection", self._test_api_connection)
-        router.register("get_user_profile", self._get_user_profile)
-        router.register("save_user_profile", self._save_user_profile)
         router.register("get_project_rules", self._get_project_rules)
         router.register("save_project_rules", self._save_project_rules)
         router.register("get_workspace_rules", self._get_workspace_rules)
@@ -91,6 +88,7 @@ class ConfigHandler(BaseHandler):
             "font_size": self.config.font_size,
             "sidebar_font_family": self.config.sidebar_font_family,
             "preview_font_family": self.config.preview_font_family,
+            "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "cloud_sync_experimental": self.config.cloud_sync_experimental,
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "assistant_agent_mode": self.config.assistant_agent_mode,
@@ -153,6 +151,8 @@ class ConfigHandler(BaseHandler):
                 self.config.sidebar_font_family = str(params["sidebar_font_family"] or "system")
             if "preview_font_family" in params:
                 self.config.preview_font_family = str(params["preview_font_family"] or "system")
+            if "typography" in params:
+                self.config.typography = params["typography"] if isinstance(params["typography"], dict) else {}
             if "cloud_sync_experimental" in params:
                 self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
             if "ingest_auto_enabled" in params:
@@ -233,38 +233,6 @@ class ConfigHandler(BaseHandler):
             return {"success": False, "message": conn_msg}
         except Exception as e:
             return {"success": False, "message": str(e)}
-
-    def _get_user_profile(self, params):
-        return {"success": True, "profile": load_profile()}
-
-    def _save_user_profile(self, params):
-        profile = load_profile()
-
-        if "profile_md" in params:
-            profile["profile_md"] = params["profile_md"]
-            save_profile(profile)
-            return {"success": True, "message": "用户画像已保存"}
-
-        identity = profile.get("identity", {})
-        if "profession" in params:
-            identity["profession"] = params["profession"]
-        if "expertise_areas" in params:
-            identity["expertise_areas"] = params["expertise_areas"]
-        if "interests" in params:
-            identity["interests"] = params["interests"]
-        if "learning_goals" in params:
-            identity["learning_goals"] = params["learning_goals"]
-        profile["identity"] = identity
-
-        prefs = profile.get("preferences", {})
-        if "answer_style" in params:
-            prefs["answer_style"] = params["answer_style"]
-        if "detail_level" in params:
-            prefs["detail_level"] = params["detail_level"]
-        profile["preferences"] = prefs
-
-        save_profile(profile)
-        return {"success": True, "message": "用户画像已保存"}
 
     def _get_project_rules(self, params):
         workspace = self.config.workspace_path

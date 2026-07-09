@@ -1,6 +1,25 @@
 (function() { 'use strict';
 
 var THEME_STORAGE_KEY = window.Storage.KEYS.THEME;
+var ACCENT_STORAGE_KEY = window.Storage.KEYS.ACCENT_COLOR;
+var TYPOGRAPHY_STORAGE_KEY = 'noteai_typography_settings';
+var ACCENT_VALUES = new Set(['theme', 'blue', 'rust', 'teal', 'plum']);
+var currentAccentColor = 'theme';
+var FONT_FAMILIES = {
+    system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif',
+    sans: '"Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+    serif: '"Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
+    mono: '"Iosevka Web", "iA Writer Mono S", "JetBrains Mono", "SF Mono", Consolas, monospace'
+};
+var FONT_STYLE_VALUES = new Set(['normal', 'bold', 'italic', 'bold-italic']);
+var TYPOGRAPHY_ROLES = ['h1', 'h2', 'h3', 'body', 'quote'];
+var DEFAULT_TYPOGRAPHY = {
+    h1: { family: 'serif', style: 'bold' },
+    h2: { family: 'sans', style: 'bold' },
+    h3: { family: 'sans', style: 'bold' },
+    body: { family: 'system', style: 'normal' },
+    quote: { family: 'serif', style: 'italic' }
+};
 
 function persistThemeLocal(theme) {
     window.Storage.setRaw(THEME_STORAGE_KEY, theme, { silent: true });
@@ -9,7 +28,100 @@ function persistThemeLocal(theme) {
 function syncThemeRadioInputs(theme) {
     document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(function(radio) {
         radio.checked = radio.value === theme;
+        var option = radio.closest('.theme-option');
+        if (option) option.classList.toggle('active', radio.checked);
     });
+}
+
+function normalizeAccentColor(accent) {
+    return ACCENT_VALUES.has(accent) ? accent : 'theme';
+}
+
+function syncAccentInputs(accent) {
+    document.querySelectorAll('input[name="accent-color"]').forEach(function(radio) {
+        radio.checked = radio.value === accent;
+        var option = radio.closest('.accent-option');
+        if (option) option.classList.toggle('active', radio.checked);
+    });
+}
+
+function applyAccentColor(accent) {
+    accent = normalizeAccentColor(accent);
+    currentAccentColor = accent;
+    const html = document.documentElement;
+    if (accent === 'theme') {
+        html.removeAttribute('data-accent');
+    } else {
+        html.setAttribute('data-accent', accent);
+    }
+    syncAccentInputs(accent);
+}
+
+function setAccentColor(accent) {
+    accent = normalizeAccentColor(accent);
+    applyAccentColor(accent);
+    window.Storage.setRaw(ACCENT_STORAGE_KEY, accent, { silent: true });
+}
+
+function applyAccentBootstrap() {
+    var accent = window.Storage.getRaw(ACCENT_STORAGE_KEY, 'theme', { silent: true });
+    applyAccentColor(accent);
+}
+
+function normalizeFontFamily(value) {
+    return Object.prototype.hasOwnProperty.call(FONT_FAMILIES, value) ? value : 'system';
+}
+
+function normalizeFontStyle(value) {
+    return FONT_STYLE_VALUES.has(value) ? value : 'normal';
+}
+
+function fontWeightForStyle(style) {
+    return style === 'bold' || style === 'bold-italic' ? '700' : '400';
+}
+
+function fontStyleForStyle(style) {
+    return style === 'italic' || style === 'bold-italic' ? 'italic' : 'normal';
+}
+
+function normalizeTypography(input) {
+    var source = input && typeof input === 'object' ? input : {};
+    var out = {};
+    TYPOGRAPHY_ROLES.forEach(function(role) {
+        var defaults = DEFAULT_TYPOGRAPHY[role];
+        var row = source[role] && typeof source[role] === 'object' ? source[role] : {};
+        out[role] = {
+            family: normalizeFontFamily(row.family || defaults.family),
+            style: normalizeFontStyle(row.style || defaults.style)
+        };
+    });
+    return out;
+}
+
+function applyContentFonts(sidebarFont, previewFont) {
+    var root = document.documentElement;
+    var sidebar = normalizeFontFamily(sidebarFont);
+    var preview = normalizeFontFamily(previewFont);
+    root.style.setProperty('--sidebar-font-family', FONT_FAMILIES[sidebar]);
+    root.style.setProperty('--preview-font-family', FONT_FAMILIES[preview]);
+}
+
+function applyTypography(settings) {
+    var typography = normalizeTypography(settings);
+    var root = document.documentElement;
+    TYPOGRAPHY_ROLES.forEach(function(role) {
+        var row = typography[role];
+        root.style.setProperty('--typo-' + role + '-font-family', FONT_FAMILIES[row.family]);
+        root.style.setProperty('--typo-' + role + '-font-weight', fontWeightForStyle(row.style));
+        root.style.setProperty('--typo-' + role + '-font-style', fontStyleForStyle(row.style));
+    });
+    window.Storage.setItem(TYPOGRAPHY_STORAGE_KEY, typography, { silent: true });
+    return typography;
+}
+
+function restoreTypography() {
+    var saved = window.Storage.getItem(TYPOGRAPHY_STORAGE_KEY, DEFAULT_TYPOGRAPHY, { silent: true });
+    return applyTypography(saved);
 }
 
 function toggleTheme() {
@@ -29,6 +141,7 @@ function toggleTheme() {
     }
 
     var next = html.getAttribute('data-theme') || 'dark';
+    syncThemeRadioInputs(next);
     persistThemeLocal(next);
     if (window.api) {
         window.api.saveThemePreference(next).catch(function(err) {
@@ -107,6 +220,8 @@ async function applyThemeBootstrap() {
     } else {
         applyTheme(pref);
     }
+    applyAccentBootstrap();
+    restoreTypography();
 
     if (window.EditorModule && window.EditorModule.updateEditorTheme) {
         window.EditorModule.updateEditorTheme();
@@ -282,7 +397,14 @@ function hideAboutPanel() {
 }
 
 window.setTheme = setTheme;
+window.setAccentColor = setAccentColor;
 window.setFontSize = applyFontSize;
+
+document.addEventListener('DOMContentLoaded', function() {
+    var savedTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true });
+    syncThemeRadioInputs(savedTheme);
+    syncAccentInputs(currentAccentColor);
+});
 
 var FONT_SCALE_MAP = { small: 1, medium: 1.15, large: 1.3 };
 
@@ -314,10 +436,17 @@ window.ThemeModule = {
     initSystemThemeListener,
     applyTheme,
     syncThemeRadioInputs,
+    applyAccentColor,
+    setAccentColor,
+    applyAccentBootstrap,
     persistThemeLocal,
     applyThemeBootstrap,
     setFontSize: applyFontSize,
     restoreFontSize,
+    applyContentFonts,
+    applyTypography,
+    restoreTypography,
+    normalizeTypography,
     restoreSidebarWidth,
     initResizer,
     initPreviewResizer,
@@ -326,4 +455,3 @@ window.ThemeModule = {
 };
 
 })();
-

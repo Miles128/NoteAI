@@ -233,9 +233,6 @@ function showSettings() {
     if (window.SettingsModule && window.SettingsModule.loadApiConfigToForm) {
         window.SettingsModule.loadApiConfigToForm();
     }
-    if (window.SettingsModule && window.SettingsModule.loadUserProfile) {
-        window.SettingsModule.loadUserProfile();
-    }
     if (window.SettingsModule && window.SettingsModule.loadUiConfigToForm) {
         window.SettingsModule.loadUiConfigToForm();
     }
@@ -294,4 +291,3 @@ window.showSettings = showSettings;
 window.showAbout = showAbout;
 
 })();
-

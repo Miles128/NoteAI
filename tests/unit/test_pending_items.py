@@ -35,7 +35,7 @@ def test_collect_pending_includes_lint_and_cascade(workspace: Path) -> None:
     assert "cascade_fail" in kinds
 
 
-def test_collect_pending_aggregates_links_and_cleans_stale(workspace: Path) -> None:
+def test_collect_pending_auto_confirms_links_and_cleans_stale(workspace: Path) -> None:
     note_a = workspace / "Notes" / "a.md"
     note_b = workspace / "Notes" / "b.md"
     note_a.write_text("---\ntopic: AI > 测试\n---\n", encoding="utf-8")
@@ -62,15 +62,13 @@ def test_collect_pending_aggregates_links_and_cleans_stale(workspace: Path) -> N
 
     items = collect_pending_items(str(workspace))
     types = [i.get("type") for i in items]
-    link_batch = next(i for i in items if i.get("type") == "link_batch")
 
-    assert types.count("link_batch") == 1
-    assert link_batch["count"] == 1
+    assert "link_batch" not in types
     assert "link" not in types
     assert types.count("topic") == 0
     links = {(l["from"], l["to"]): l["status"] for l in load_links()["links"]}
     assert links[("Notes/a.md", "Notes/b.md")] == "confirmed"
-    assert links[("Notes/c.md", "Notes/b.md")] == "pending"
+    assert links[("Notes/c.md", "Notes/b.md")] == "confirmed"
     assert ("Notes/missing.md", "Notes/b.md") not in links
 
 

@@ -7,12 +7,14 @@ from sidecar.cascade_runner import (
     retry_failed_cascades,
 )
 from sidecar.handlers.base import BaseHandler
+from sidecar.dashboard_status import get_dashboard_status
 from sidecar.kb_lint import load_lint_report, log_lint_report, run_kb_lint
 from sidecar.survey_append import append_chat_to_survey
 
 
 class KbHandler(BaseHandler):
     def register_routes(self, router) -> None:
+        router.register("get_dashboard_status", self._get_dashboard_status)
         router.register("run_kb_lint", self._run_kb_lint)
         router.register("get_lint_report", self._get_lint_report)
         router.register("archive_chat_answer", self._archive_chat_answer)
@@ -21,6 +23,12 @@ class KbHandler(BaseHandler):
         router.register("retry_cascade_topic", self._retry_cascade_topic)
         router.register("retry_all_cascade_failures", self._retry_all_cascade_failures)
         router.register("dismiss_cascade_failure", self._dismiss_cascade_failure)
+
+    def _get_dashboard_status(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        return get_dashboard_status(workspace)
 
     def _run_kb_lint(self, _params):
         report = run_kb_lint(send_response=self._send_response)

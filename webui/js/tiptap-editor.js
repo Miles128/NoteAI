@@ -441,7 +441,7 @@
             var ta = document.createElement('textarea');
             ta.className = 'tiptap-fallback';
             ta.value = content || '';
-            ta.style.cssText = 'width:100%;height:100%;border:none;padding:12px 12px calc(80px * var(--font-scale, 1));font-family:monospace;font-size:14px;line-height:1.7;resize:none;background:var(--bg, #fff);color:var(--text, #333);overflow-y:auto;';
+            ta.style.cssText = 'width:100%;height:100%;border:none;padding:21px 21px calc(140px * var(--font-scale, 1));font-family:monospace;font-size:14px;line-height:1.7;resize:none;background:var(--bg, #fff);color:var(--text, #333);overflow-y:auto;';
             ta.addEventListener('input', function() {
                 self.userEdited = true;
                 self.scheduleAutoSave(ta.value);

@@ -140,6 +140,15 @@ window.AssistantModule = (function() {
         }
     }
 
+    function ensureOpen() {
+        var panel = document.getElementById('ai-panel');
+        if (!panel) return;
+        ensureAiBindings();
+        if (!_panelVisible) {
+            toggle();
+        }
+    }
+
     function _ensureResizersInstalled() {
         if (_resizersInstalled) return;
 
@@ -273,15 +282,15 @@ window.AssistantModule = (function() {
         contentEl.textContent = text || '';
     }
 
-    function sendMessage() {
+    function sendMessage(questionOverride) {
         if (_isStreaming) return;
 
         var input = document.getElementById('ai-input');
         if (!input) return;
-        var question = input.value.trim();
+        var question = String(questionOverride || input.value || '').trim();
         if (!question) return;
 
-        input.value = '';
+        if (!questionOverride) input.value = '';
 
         addUserMessage(question);
         _chatHistory.push({ role: 'user', content: question });
@@ -319,6 +328,13 @@ window.AssistantModule = (function() {
             _setPlainText(assistantEl, window.t('assistant.requestFailedMsg', { message: msg }));
             assistantEl.classList.remove('ai-typing');
         });
+    }
+
+    function ask(question) {
+        ensureOpen();
+        var input = document.getElementById('ai-input');
+        if (input) input.value = '';
+        sendMessage(question);
     }
 
     function _extractTopics() {
@@ -422,7 +438,7 @@ window.AssistantModule = (function() {
                 _chatHistory.push({ role: 'assistant', content: answerText });
                 if (eventData.citations && eventData.citations.length > 0) {
                     _linkifyCitationRefs(_currentStreamEl, eventData.citations);
-                    _renderCitations(_currentStreamEl, eventData.citations);
+                    _renderCitations(_currentStreamEl, eventData.citations, eventData.citation_quality);
                 }
                 if (_lastArchive) {
                     _lastArchive.answer = answerText;
@@ -594,7 +610,15 @@ window.AssistantModule = (function() {
         });
     }
 
-    function _renderCitations(contentEl, citations) {
+    function _citationQualityText(quality, citationCount) {
+        var q = quality || {};
+        var level = q.level || (citationCount ? 'balanced' : 'none');
+        var count = q.source_count || citationCount || 0;
+        var key = 'assistant.citationQuality.' + level;
+        return window.t ? window.t(key, { count: count }) : '';
+    }
+
+    function _renderCitations(contentEl, citations, quality) {
         if (!contentEl || !citations || citations.length === 0) return;
         var bubble = contentEl.closest('.ai-msg');
         if (!bubble) return;
@@ -604,7 +628,13 @@ window.AssistantModule = (function() {
 
         var header = document.createElement('div');
         header.className = 'ai-citations-header';
-        header.textContent = window.t('assistant.sources') || '参考来源';
+        var title = document.createElement('span');
+        title.textContent = window.t('assistant.sources') || '参考来源';
+        header.appendChild(title);
+        var badge = document.createElement('span');
+        badge.className = 'ai-citation-quality';
+        badge.textContent = _citationQualityText(quality, citations.length);
+        header.appendChild(badge);
         container.appendChild(header);
 
         var list = document.createElement('div');
@@ -655,7 +685,9 @@ window.AssistantModule = (function() {
         init: init,
         handleEvent: handleEvent,
         rebuildIndex: rebuildIndex,
-        toggle: toggle
+        toggle: toggle,
+        ensureOpen: ensureOpen,
+        ask: ask
     };
 })();
 

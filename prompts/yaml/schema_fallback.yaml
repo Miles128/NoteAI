@@ -1,7 +1,7 @@
 SCHEMA_FALLBACK_PROMPT: |-
   # NoteAI 工作区 Schema — 四海
 
-  > 本工作区知识库宪法。个人画像见 `.ai_memory/user_profile.json`（设置 → 用户画像）。
+  > 本工作区知识库宪法。项目规则见 `.ai_memory/project_rules.md`。
 
   ## 1. 定位
 

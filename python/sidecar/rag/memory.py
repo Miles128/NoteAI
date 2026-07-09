@@ -131,10 +131,6 @@ def compress_text_sync(text, prompt_template):
 
 def update_long_memory(user_message):
     with _LOCK:
-        from sidecar.rag.profile import update_profile_from_message
-
-        update_profile_from_message(user_message)
-
         new_info = extract_user_info_sync(user_message)
         if not new_info:
             return
@@ -172,15 +168,9 @@ def update_short_memory(chat_history):
 
 
 def build_memory_section():
-    from sidecar.rag.profile import get_profile_summary
-
-    profile_summary = get_profile_summary()
-
     long_mem = load_long_memory()
     short_mem = load_short_memory()
     parts = []
-    if profile_summary:
-        parts.append(f"[用户画像]\n{profile_summary}")
     if long_mem:
         parts.append(f"[关于用户的长期记忆]\n{long_mem}")
     if short_mem:

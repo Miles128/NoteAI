@@ -129,7 +129,9 @@ function removeDraft(id) {
 
 function setActiveDraft(id) {
     _activeDraftId = id || null;
-    if (window.StatusbarModule && window.StatusbarModule.setSaveButtonVisible) {
+    if (window.StatusbarModule && window.StatusbarModule.setDraftActionsVisible) {
+        window.StatusbarModule.setDraftActionsVisible(!!id);
+    } else if (window.StatusbarModule && window.StatusbarModule.setSaveButtonVisible) {
         window.StatusbarModule.setSaveButtonVisible(!!id);
     }
 }
@@ -150,6 +152,17 @@ function refreshDraftChrome(content) {
     if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
         window.StatusbarModule.updateFromContent(content, null, label);
     }
+}
+
+function isDraftEffectivelyEmpty(content) {
+    var text = String(content || '');
+    var body = text;
+    var fm = text.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/);
+    if (fm) {
+        body = text.slice(fm[0].length);
+    }
+    body = body.replace(/^#\s*\r?\n?/, '');
+    return body.trim() === '';
 }
 
 async function openDraft(draft) {
@@ -221,7 +234,7 @@ async function commitCurrentDraft() {
     if (!editor || !editor.draftId) {
         return { success: false, message: (window.t && window.t('noteDraft.noActiveDraft')) || '没有可保存的草稿' };
     }
-    if (!window.api || !window.api.createNote || !window.api.saveFileContent) {
+    if (!window.api || !window.api.createNoteFromDraft) {
         return { success: false, message: (window.t && window.t('noteDraft.apiUnavailable')) || '保存接口不可用' };
     }
 
@@ -237,7 +250,7 @@ async function commitCurrentDraft() {
         var topic = String(editor.draftTopic || '').trim();
         var draftId = editor.draftId;
 
-        var createRes = await window.api.createNote(title, topic);
+        var createRes = await window.api.createNoteFromDraft(title, topic, fullContent);
         if (!createRes || !createRes.success || !createRes.path) {
             var createMsg = (createRes && createRes.message) || window.t('common.unknownError');
             if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
@@ -247,18 +260,6 @@ async function commitCurrentDraft() {
                 window.updateStatus(window.t('quickCreate.createFailed', { message: createMsg }));
             }
             return { success: false, message: createMsg };
-        }
-
-        var saveRes = await window.api.saveFileContent(createRes.path, fullContent);
-        if (!saveRes || !saveRes.success) {
-            var saveMsg = (saveRes && saveRes.message) || window.t('common.unknownError');
-            if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
-                window.StatusbarModule.updateSaveStatus('error', window.t('editor.saveFailed'));
-            }
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('quickCreate.createFailed', { message: saveMsg }));
-            }
-            return { success: false, message: saveMsg };
         }
 
         removeDraft(draftId);
@@ -312,6 +313,49 @@ async function commitCurrentDraft() {
     }
 }
 
+async function discardCurrentDraft() {
+    var editor = window.TiptapEditor;
+    var draftId = _activeDraftId || (editor && editor.draftId);
+    if (!draftId) {
+        return { success: false, message: (window.t && window.t('noteDraft.noActiveDraft')) || '没有可保存的草稿' };
+    }
+
+    var fullContent = '';
+    if (editor && editor.draftId === draftId && editor.getContent && editor.getFullContent) {
+        fullContent = editor.getFullContent(editor.getContent() || '');
+    } else {
+        var draft = getDraft(draftId);
+        fullContent = draft && draft.content ? draft.content : '';
+    }
+
+    if (!isDraftEffectivelyEmpty(fullContent) && typeof window.confirm === 'function') {
+        var ok = window.confirm((window.t && window.t('noteDraft.discardConfirm')) || '确定作废当前草稿吗？');
+        if (!ok) return { success: false, cancelled: true };
+    }
+
+    removeDraft(draftId);
+    if (editor && editor.draftId === draftId) {
+        editor.draftId = null;
+        editor.draftTitle = '';
+        editor.draftTopic = '';
+    }
+    clearActiveDraft();
+
+    if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
+        await window.TiptapEditorModule.hideEditorUI();
+    }
+    if (window.PreviewModule && window.PreviewModule.closePreview) {
+        window.PreviewModule.closePreview();
+    }
+    if (window.StatusbarModule && window.StatusbarModule.clearStats) {
+        window.StatusbarModule.clearStats();
+    }
+    if (typeof window.updateStatus === 'function') {
+        window.updateStatus((window.t && window.t('noteDraft.discarded')) || '草稿已作废');
+    }
+    return { success: true };
+}
+
 function bindShortcuts() {
     if (document.body.dataset.noteDraftBound) return;
     document.body.dataset.noteDraftBound = '1';
@@ -338,6 +382,7 @@ window.NoteDraftModule = {
     openDraft: openDraft,
     createNoteInContext: createNoteInContext,
     commitCurrentDraft: commitCurrentDraft,
+    discardCurrentDraft: discardCurrentDraft,
     bindShortcuts: bindShortcuts
 };
 

@@ -167,12 +167,98 @@ function renderFlow(summary, ingestStatus, jobs) {
         indexFailed ? window.t('home.flow.failed') : (indexRunning ? window.t('home.flow.running') : window.t('home.flow.ready')));
 }
 
-function setCommand(titleKey, descKey, params) {
-    setText('home-command-title', window.t(titleKey));
-    setText('home-command-desc', window.t(descKey, params || {}));
+function setCommand(command) {
+    var cmd = command || {};
+    setText('home-command-title', window.t(cmd.titleKey || 'home.commandTitle'));
+    setText('home-command-desc', window.t(cmd.descKey || 'home.commandDesc', cmd.params || {}));
+    var btn = document.getElementById('home-command-action-btn');
+    if (!btn) return;
+    btn.dataset.homeAction = cmd.action || 'refresh';
+    btn.textContent = window.t(cmd.actionTextKey || 'home.actionRefresh');
+    btn.disabled = cmd.action === 'running';
 }
 
-function refresh() {
+function command(titleKey, descKey, params, action, actionTextKey) {
+    return {
+        titleKey: titleKey,
+        descKey: descKey,
+        params: params || {},
+        action: action || 'refresh',
+        actionTextKey: actionTextKey || 'home.actionRefresh'
+    };
+}
+
+function deriveRecommendation(summary, ingestStatus, jobs, updatePlan, indexStatus) {
+    var running = (jobs || []).filter(function(job) { return job.status === 'running'; });
+    if (running.length) {
+        return command('home.commandTitleRunning', 'home.commandDescRunning', { count: running.length }, 'running', 'home.actionRunning');
+    }
+    if (summary && summary.count > 0) {
+        return command('home.commandTitleAttention', 'home.commandDescAttention', { count: summary.count }, 'pending', 'home.actionOpenPending');
+    }
+    if (ingestStatus && ingestStatus.needs_resume) {
+        return command('home.commandTitleResume', 'home.commandDescResume', {}, 'organize', 'home.actionResume');
+    }
+    if (updatePlan && updatePlan.action === 'start') {
+        return command('home.commandTitleUpdateFound', 'home.commandDescUpdateFound', {}, 'organize', 'home.actionOrganize');
+    }
+    if (indexStatus && indexStatus.success && indexStatus.enabled && !indexStatus.built) {
+        return command('home.commandTitleIndexMissing', 'home.commandDescIndexMissing', {}, 'rebuild_index', 'home.actionRebuildIndex');
+    }
+    return command('home.commandTitle', 'home.commandDesc', {}, 'refresh', 'home.actionRefresh');
+}
+
+function runRecommendedAction() {
+    var btn = document.getElementById('home-command-action-btn');
+    var action = btn && btn.dataset.homeAction || 'refresh';
+    if (action === 'pending') {
+        if (typeof window.togglePendingView === 'function') window.togglePendingView();
+        return;
+    }
+    if (action === 'organize') {
+        checkUpdates();
+        return;
+    }
+    if (action === 'rebuild_index') {
+        if (window.api && window.api.ragRebuildIndex) {
+            window.api.ragRebuildIndex();
+            scheduleRefresh();
+        }
+        return;
+    }
+    refresh();
+}
+
+function renderDashboardStatus(status) {
+    var summary = status.pending_summary || summarizePending(status.pending || {});
+    var jobs = status.jobs || [];
+    var ingestStatus = status.ingest || {};
+    var running = jobs.filter(function(job) { return job.status === 'running'; });
+    var stats = status.stats || {};
+    _lastPending = status.pending || _lastPending || {};
+    if (window.JobCenterModule && window.JobCenterModule.replaceJobs) {
+        window.JobCenterModule.replaceJobs(jobs);
+    }
+
+    setText('home-stat-notes', stats.notes || 0);
+    setText('home-stat-topics', stats.topics || 0);
+    setText('home-stat-pending', summary.count || 0);
+    setText('home-stat-running', running.length);
+    setText('home-vital-pending', summary.count || 0);
+    setText('home-vital-organize', running.some(function(job) { return job.kind === 'ingest' || job.kind === 'conversion'; })
+        ? window.t('home.statusRunning')
+        : window.t('home.statusComplete'));
+    setText('home-vital-compile', running.some(function(job) { return job.kind === 'survey' || job.kind === 'rag_index'; })
+        ? window.t('home.statusRunning')
+        : window.t('home.statusComplete'));
+    setCommand(deriveRecommendation(summary, ingestStatus, jobs, status.update_plan, status.index));
+    renderPending(summary);
+    renderOrganize(ingestStatus, jobs);
+    renderCompile(jobs);
+    renderFlow(summary, ingestStatus, jobs);
+}
+
+function refreshFallback() {
     var tree = window.AppState && window.AppState.lastFileTreeData ? window.AppState.lastFileTreeData : [];
     setText('home-stat-notes', countFiles(tree));
     setText('home-stat-topics', countTopics(tree));
@@ -182,34 +268,38 @@ function refresh() {
     var jobsP = window.JobCenterModule && window.JobCenterModule.refresh
         ? window.JobCenterModule.refresh({ include_finished: true, limit: 50 })
         : Promise.resolve([]);
+    var updatePlanP = (window.api && window.api.checkIngestUpdates)
+        ? window.api.checkIngestUpdates().catch(function() { return null; })
+        : Promise.resolve(null);
+    var indexP = (window.api && window.api.ragIndexStatus)
+        ? window.api.ragIndexStatus().catch(function() { return null; })
+        : Promise.resolve(null);
 
-    return Promise.all([pendingP, ingestP, jobsP]).then(function(results) {
-        _lastPending = results[0] || {};
-        var summary = summarizePending(_lastPending);
-        var jobs = results[2] || [];
-        var running = jobs.filter(function(job) { return job.status === 'running'; });
-        setText('home-stat-pending', summary.count);
-        setText('home-stat-running', running.length);
-        setText('home-vital-pending', summary.count);
-        setText('home-vital-organize', running.some(function(job) { return job.kind === 'ingest' || job.kind === 'conversion'; })
-            ? window.t('home.statusRunning')
-            : window.t('home.statusComplete'));
-        setText('home-vital-compile', running.some(function(job) { return job.kind === 'survey' || job.kind === 'rag_index'; })
-            ? window.t('home.statusRunning')
-            : window.t('home.statusComplete'));
-        if (summary.count > 0) {
-            setCommand('home.commandTitleAttention', 'home.commandDescAttention', { count: summary.count });
-        } else if (running.length) {
-            setCommand('home.commandTitleRunning', 'home.commandDescRunning', { count: running.length });
-        } else {
-            setCommand('home.commandTitle', 'home.commandDesc');
-        }
-        renderPending(summary);
-        renderOrganize(results[1] || {}, jobs);
-        renderCompile(jobs);
-        renderFlow(summary, results[1] || {}, jobs);
+    return Promise.all([pendingP, ingestP, jobsP, updatePlanP, indexP]).then(function(results) {
+        renderDashboardStatus({
+            stats: { notes: countFiles(tree), topics: countTopics(tree) },
+            pending: results[0] || {},
+            pending_summary: summarizePending(results[0] || {}),
+            ingest: results[1] || {},
+            jobs: results[2] || [],
+            update_plan: results[3],
+            index: results[4]
+        });
+    });
+}
+
+function refresh() {
+    if (!window.api || !window.api.getDashboardStatus) {
+        return refreshFallback().catch(function(err) {
+            console.warn('[Home] refresh failed:', err);
+        });
+    }
+    return window.api.getDashboardStatus().then(function(status) {
+        if (!status || !status.success) return refreshFallback();
+        renderDashboardStatus(status);
     }).catch(function(err) {
         console.warn('[Home] refresh failed:', err);
+        return refreshFallback();
     });
 }
 
@@ -219,21 +309,21 @@ async function checkUpdates() {
         startBtn.disabled = true;
         startBtn.textContent = window.t('home.checkingUpdates');
     }
-    setCommand('home.commandTitleChecking', 'home.commandDescChecking');
+    setCommand(command('home.commandTitleChecking', 'home.commandDescChecking', {}, 'running', 'home.actionRunning'));
     try {
         var plan = window.api && window.api.checkIngestUpdates
             ? await window.api.checkIngestUpdates()
             : { success: true, action: 'start', mode: 'incremental', file_paths: [] };
         if (!plan || !plan.success) {
-            setCommand('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: (plan && plan.message) || window.t('common.unknownError') });
+            setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: (plan && plan.message) || window.t('common.unknownError') }));
             return plan;
         }
         if (plan.action !== 'start') {
             await refresh();
-            setCommand('home.commandTitleUpToDate', 'home.commandDescUpToDate');
+            setCommand(command('home.commandTitleUpToDate', 'home.commandDescUpToDate'));
             return plan;
         }
-        setCommand('home.commandTitleUpdateFound', 'home.commandDescUpdateFound');
+        setCommand(command('home.commandTitleUpdateFound', 'home.commandDescUpdateFound', {}, 'running', 'home.actionRunning'));
         if (window.IngestModule && window.IngestModule.startIngest) {
             await window.IngestModule.startIngest(plan.mode || 'incremental', plan.file_paths || [], { resume: !!plan.resume });
         } else if (window.api && window.api.startIngest) {
@@ -246,7 +336,7 @@ async function checkUpdates() {
         await refresh();
         return plan;
     } catch (err) {
-        setCommand('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: err && err.message ? err.message : String(err) });
+        setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: err && err.message ? err.message : String(err) }));
         return { success: false, message: err && err.message ? err.message : String(err) };
     } finally {
         if (startBtn) {
@@ -291,6 +381,11 @@ function init() {
         startBtn.dataset.bound = '1';
         startBtn.addEventListener('click', checkUpdates);
     }
+    var actionBtn = document.getElementById('home-command-action-btn');
+    if (actionBtn && !actionBtn.dataset.bound) {
+        actionBtn.dataset.bound = '1';
+        actionBtn.addEventListener('click', runRecommendedAction);
+    }
     document.addEventListener('noteai_jobs_changed', scheduleRefresh);
     document.addEventListener('localechange', scheduleRefresh);
     refresh();
@@ -301,6 +396,8 @@ window.HomeDashboardModule = {
     refresh: refresh,
     show: show,
     checkUpdates: checkUpdates,
+    runRecommendedAction: runRecommendedAction,
+    deriveRecommendation: deriveRecommendation,
     countFiles: countFiles,
     countTopics: countTopics
 };

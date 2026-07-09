@@ -287,6 +287,28 @@ class RagHandler(BaseHandler):
             }
         )
 
+    def _citation_quality(self, citations: list | None) -> dict:
+        cites = citations or []
+        scored = []
+        for cite in cites:
+            try:
+                scored.append(float(cite.get("score")))
+            except (TypeError, ValueError):
+                continue
+        source_count = len([c for c in cites if c.get("file_path")])
+        top_score = max(scored) if scored else None
+        if source_count == 0:
+            level = "none"
+        elif top_score is not None and top_score < 0.22:
+            level = "weak"
+        elif source_count >= 6:
+            level = "broad"
+        elif source_count <= 3 and (top_score is None or top_score >= 0.72):
+            level = "focused"
+        else:
+            level = "balanced"
+        return {"source_count": source_count, "level": level, "top_score": top_score}
+
     def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
         from sidecar.archive_wiki import parse_save_suggestion
 
@@ -304,6 +326,7 @@ class RagHandler(BaseHandler):
                     "answer": display_answer,
                     "suggest_save_note": suggest_save_note,
                     "citations": citations or [],
+                    "citation_quality": self._citation_quality(citations),
                 },
             }
         )
@@ -400,6 +423,7 @@ class RagHandler(BaseHandler):
                                 "source_label": label,
                                 "section_title": "",
                                 "topic": "",
+                                "source_type": "current",
                             }
                         )
             except Exception:
@@ -425,6 +449,8 @@ class RagHandler(BaseHandler):
                     "source_label": r.get("source_label") or "",
                     "section_title": r.get("section_title") or "",
                     "topic": r.get("topic") or "",
+                    "source_type": r.get("source_type") or "vector",
+                    "score": r.get("rerank_score", r.get("score")),
                 }
             )
         context = "\n\n".join(context_parts)

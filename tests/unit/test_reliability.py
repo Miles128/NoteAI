@@ -49,6 +49,16 @@ def test_create_note_writes_file(workspace: Path) -> None:
     assert "可靠笔记" in path.read_text(encoding="utf-8")
 
 
+def test_create_note_from_draft_writes_complete_content(workspace: Path) -> None:
+    srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
+    handler = FilesHandler(srv)
+    content = "---\ntopic: \n---\n\n# 一次写入\n\n正文不会经历半成品文件。\n"
+    res = handler._create_note_from_draft({"title": "一次写入", "topic": "", "content": content})
+    assert res["success"] is True
+    path = workspace / res["path"]
+    assert path.read_text(encoding="utf-8") == content
+
+
 def test_get_ingest_status_includes_progress(workspace: Path) -> None:
     save_ingest_state(
         {

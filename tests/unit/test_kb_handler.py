@@ -63,3 +63,36 @@ def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None
     )
     assert result["success"] is True
     assert (workspace / "Notes" / "RAG对话").exists()
+
+
+def test_get_dashboard_status_aggregates_home_data(workspace: Path, kb_handler: KbHandler) -> None:
+    note_dir = workspace / "Notes" / "AI" / "RAG"
+    note_dir.mkdir(parents=True)
+    (note_dir / "动态引用.md").write_text("---\ntopic: AI > RAG\n---\n\n# 动态引用\n", encoding="utf-8")
+    (note_dir / "README.md").write_text("# 目录说明\n", encoding="utf-8")
+
+    result = kb_handler._get_dashboard_status({})
+
+    assert result["success"] is True
+    assert result["stats"]["notes"] == 1
+    assert result["stats"]["topics"] >= 2
+    assert "pending_summary" in result
+    assert "ingest" in result
+    assert "jobs" in result
+    assert "update_plan" in result
+    assert "index" in result
+
+
+def test_cloud_sync_handler_is_placeholder(workspace: Path) -> None:
+    from sidecar.handlers.cloud_sync_handler import CloudSyncHandler
+
+    handler = CloudSyncHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+    listed = handler._list_providers({})
+    pushed = handler._disabled({})
+
+    assert listed["success"] is True
+    assert listed["enabled"] is False
+    assert listed["providers"] == []
+    assert pushed["success"] is False
+    assert pushed["enabled"] is False

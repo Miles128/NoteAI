@@ -496,6 +496,7 @@ class TestWorkspaceTreeContract:
         sub.mkdir(parents=True)
         (sub / "a.md").write_text("# a\n", encoding="utf-8")
         (sub / "b.md").write_text("# b\n", encoding="utf-8")
+        (sub / "README.md").write_text("# readme\n", encoding="utf-8")
         (topic / "c.md").write_text("# c\n", encoding="utf-8")
         (workspace / "Notes" / "loose.md").write_text("# loose\n", encoding="utf-8")
 
@@ -511,6 +512,7 @@ class TestWorkspaceTreeContract:
 
         sub_node = next(c for c in topic_node["children"] if c["name"] == "sub")
         assert sub_node.get("file_count") == 2
+        assert "README.md" not in {c["name"] for c in sub_node.get("children", [])}
 
 
 class TestFilesHandlerPreviewContract:

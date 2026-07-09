@@ -1,3 +1,36 @@
+.cloud-sync-placeholder {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 20px;
+}
+
+.cloud-sync-placeholder-title {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.cloud-sync-placeholder p {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 0 0 14px;
+}
+
+.cloud-sync-placeholder span {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    padding: 6px 9px;
+}
+
 .cloud-sync-card {
     background: var(--surface);
     border: 1px solid var(--border);

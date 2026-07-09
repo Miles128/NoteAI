@@ -368,8 +368,8 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 20px 20px calc(80px * var(--font-scale, 1));
-    scroll-padding-bottom: calc(80px * var(--font-scale, 1));
+    padding: 35px 35px calc(140px * var(--font-scale, 1));
+    scroll-padding-bottom: calc(140px * var(--font-scale, 1));
 }
 
 .tiptap-editor-content.tiptap-fallback-mode {
@@ -432,6 +432,9 @@
 }
 
 .tiptap-prose p {
+    font-family: var(--typo-body-font-family);
+    font-weight: var(--typo-body-font-weight);
+    font-style: var(--typo-body-font-style);
     margin: 0 0 1em 0;
 }
 
@@ -455,10 +458,13 @@
     color: var(--heading-color);
     background-color: var(--heading-bg);
     padding: 0;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
 }
 
 .tiptap-prose h1 {
+    font-family: var(--typo-h1-font-family);
+    font-weight: var(--typo-h1-font-weight);
+    font-style: var(--typo-h1-font-style);
     font-size: 34px;
     color: var(--h1-color);
     border-bottom: 1px solid var(--border);
@@ -469,12 +475,18 @@
 }
 
 .tiptap-prose h2 {
+    font-family: var(--typo-h2-font-family);
+    font-weight: var(--typo-h2-font-weight);
+    font-style: var(--typo-h2-font-style);
     font-size: 24px;
     border-bottom: 1px solid var(--border);
     padding-bottom: 10px;
 }
 
 .tiptap-prose h3 {
+    font-family: var(--typo-h3-font-family);
+    font-weight: var(--typo-h3-font-weight);
+    font-style: var(--typo-h3-font-style);
     font-size: 19px;
 }
 
@@ -531,6 +543,9 @@
 }
 
 .tiptap-prose li {
+    font-family: var(--typo-body-font-family);
+    font-weight: var(--typo-body-font-weight);
+    font-style: var(--typo-body-font-style);
     margin: 0.3em 0;
 }
 
@@ -581,6 +596,9 @@
 }
 
 .tiptap-prose blockquote {
+    font-family: var(--typo-quote-font-family);
+    font-weight: var(--typo-quote-font-weight);
+    font-style: var(--typo-quote-font-style);
     margin: 1em 0;
     padding: 0.5em 1em;
     border-left: 4px solid var(--primary);

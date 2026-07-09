@@ -27,7 +27,7 @@ async function loadModules() {
     await import('./settings.js');
     const {
         SettingsModule, saveApiConfig, refreshLog, closeSettingsPanel,
-        closeLogPanel, resetApiConfig, saveUserProfile,
+        closeLogPanel, resetApiConfig,
     } = window;
     window.SettingsModule = SettingsModule;
     window.saveApiConfig = saveApiConfig;
@@ -35,7 +35,6 @@ async function loadModules() {
     window.closeSettingsPanel = closeSettingsPanel;
     window.closeLogPanel = closeLogPanel;
     window.resetApiConfig = resetApiConfig;
-    window.saveUserProfile = saveUserProfile;
 
     await import('./cloud-sync.js');
     const { CloudSyncModule } = window;
@@ -96,6 +95,10 @@ async function loadModules() {
     window.closePreview = closePreview;
     window.closePreviewPanel = closePreviewPanel;
     window.backToContent = backToContent;
+
+    await import('./selection-tools.js');
+    window.SelectionToolsModule = window.SelectionToolsModule || {};
+    if (window.SelectionToolsModule.init) window.SelectionToolsModule.init();
 
     await import('./editor.js');
 

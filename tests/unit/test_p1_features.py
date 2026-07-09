@@ -49,4 +49,20 @@ def test_suggest_links_same_topic(workspace: Path) -> None:
     assert result["success"] is True
     assert result["added"] >= 1
     links = load_links().get("links", [])
-    assert any(l.get("status") == "pending" for l in links)
+    assert any(l.get("status") == "confirmed" for l in links)
+
+
+def test_suggest_links_ignores_readme(workspace: Path) -> None:
+    readme = workspace / "Notes" / "AI" / "README.md"
+    note = workspace / "Notes" / "AI" / "note.md"
+    readme.write_text("---\ntopic: AI > 测试\n---\n\n目录说明\n", encoding="utf-8")
+    note.write_text("---\ntopic: AI > 测试\n---\n\n其他\n", encoding="utf-8")
+
+    result = suggest_links_for_file(str(note.relative_to(workspace)))
+    assert result["success"] is True
+    links = load_links().get("links", [])
+    assert not any("README.md" in (l.get("from", "") + l.get("to", "")) for l in links)
+
+    readme_result = suggest_links_for_file(str(readme.relative_to(workspace)))
+    assert readme_result["success"] is True
+    assert readme_result["added"] == 0

@@ -206,7 +206,39 @@ function _graphNodeTextDisplay(d, showFilenames) {
     return showFilenames ? '' : 'none';
 }
 
+function _graphNodeClass(d) {
+    var parts = ['graph-node', 'graph-node-' + (d.type || 'unknown')];
+    if (d.type === 'topic') parts.push('graph-node-level-' + (d.level || 0));
+    if (d.has_abstract) parts.push('has-survey');
+    return parts.join(' ');
+}
+
+function _graphNodeSubtitle(d) {
+    if (d.type === 'topic') {
+        var count = Number(d.file_count || 0);
+        var text = count + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
+        if (d.has_abstract) text += ' · ' + ((window.t && window.t('graph.stats.survey')) || 'Survey');
+        return text;
+    }
+    if (d.type === 'tag') {
+        return Number(d.file_count || 0) + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
+    }
+    return (window.t && window.t('graph.tree.noteType')) || 'Note';
+}
+
+function _treeDepthLabel(depth, rows) {
+    const types = new Set((rows || []).map(function(d) { return d.data && d.data.type; }));
+    if (types.size === 1 && types.has('tag')) return (window.t && window.t('graph.tree.depthTags')) || 'Tags';
+    if (types.size === 1 && types.has('file')) return (window.t && window.t('graph.tree.depthNotes')) || 'Notes';
+    if (depth === 1) return (window.t && window.t('graph.tree.depthL1')) || 'L1';
+    if (depth === 2) return (window.t && window.t('graph.tree.depthL2')) || 'L2';
+    if (depth === 3) return (window.t && window.t('graph.tree.depthL3')) || 'L3';
+    return (window.t && window.t('graph.tree.depthNotes')) || 'Notes';
+}
+
 function _createGraphNode(nodeSelection, getRadius, showFilenames) {
+    nodeSelection.attr('class', _graphNodeClass);
+
     nodeSelection.append('circle')
         .attr('r', d => getRadius(d))
         .attr('fill', _graphNodeColor)
@@ -222,6 +254,11 @@ function _createGraphNode(nodeSelection, getRadius, showFilenames) {
         .style('fill', _graphNodeTextFill)
         .style('pointer-events', 'none')
         .style('display', d => _graphNodeTextDisplay(d, showFilenames));
+
+    nodeSelection.append('title')
+        .text(function(d) {
+            return (d.name || '') + '\n' + _graphNodeSubtitle(d);
+        });
 }
 
 function saveGraphLayoutConfig(cfg) {
@@ -637,6 +674,7 @@ const Graph3Tier = {
     showFilenames: false,
     simulation: null,
     filter: 'topic',
+    layoutMode: 'constellation',
     layoutConfig: loadGraphLayoutConfig(),
     _graphBodyResizeObserver: null,
     _resizePaused: false,
@@ -928,6 +966,7 @@ const Graph3Tier = {
             if (hash === this._lastDataHash && this.svg) return;
             this._lastDataHash = hash;
             this._updateFilterBtns();
+            this._updateLayoutModeBtns();
             this._updateLegend();
             this._updateStats();
             this.initD3();
@@ -942,6 +981,23 @@ const Graph3Tier = {
         document.querySelectorAll('#graph-filter-bar .graph-filter-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.filter === this.filter);
         });
+    },
+
+    _updateLayoutModeBtns() {
+        document.querySelectorAll('#graph-layout-mode .graph-layout-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.layoutMode === this.layoutMode);
+        });
+    },
+
+    setLayoutMode(mode) {
+        const nextMode = mode === 'tree' ? 'tree' : 'constellation';
+        if (nextMode === this.layoutMode) return;
+        this.layoutMode = nextMode;
+        this._updateLayoutModeBtns();
+        if (this.data && this.svg) {
+            this.initD3();
+            this.render();
+        }
     },
 
     _legendItem(color, size, labelKey) {
@@ -1041,6 +1097,11 @@ const Graph3Tier = {
     render() {
         if (!this.svg || !this.data) return;
         this.g.selectAll('*').remove();
+
+        if (this.layoutMode === 'tree') {
+            this.renderTreeLayout();
+            return;
+        }
 
         const svgW = +this.svg.attr('width');
         const svgH = +this.svg.attr('height');
@@ -1145,6 +1206,226 @@ const Graph3Tier = {
         this.svg.on('click', () => {});
     },
 
+    _graphNodeClick(e, d) {
+        e.stopPropagation();
+        if (d.type === 'file' && d.full_path && typeof showPreview === 'function') {
+            showPreview({ path: d.full_path, name: d.name });
+        } else if (d.type === 'topic' && d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
+            showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' ' + window.t('graph.stats.survey') });
+        }
+    },
+
+    renderTreeLayout() {
+        if (!this.svg || !this.data) return;
+        if (this.simulation) this.simulation.stop();
+        this.simulation = null;
+
+        const svgW = +this.svg.attr('width');
+        const svgH = +this.svg.attr('height');
+        const nodes = (this.data.nodes || []).map(n => Object.assign({}, n));
+        const edges = (this.data.edges || []).map(e => ({
+            source: typeof e.source === 'string' ? e.source : e.source.id || e.source,
+            target: typeof e.target === 'string' ? e.target : e.target.id || e.target,
+        }));
+        if (!nodes.length) return;
+
+        const nodeMap = {};
+        nodes.forEach(n => { nodeMap[n.id] = n; });
+
+        const childrenByParent = {};
+        const hasParent = new Set();
+        edges.forEach(e => {
+            if (!nodeMap[e.source] || !nodeMap[e.target] || e.source === e.target) return;
+            if (!childrenByParent[e.source]) childrenByParent[e.source] = [];
+            childrenByParent[e.source].push(e.target);
+            hasParent.add(e.target);
+        });
+
+        const orderedNodes = nodes.slice().sort((a, b) => {
+            const la = a.type === 'topic' ? (a.level || 0) : 9;
+            const lb = b.type === 'topic' ? (b.level || 0) : 9;
+            return la - lb || String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN');
+        });
+        const rootNodes = orderedNodes.filter(n => !hasParent.has(n.id));
+        const visited = new Set();
+        const toTreeNode = (n) => {
+            visited.add(n.id);
+            const childIds = (childrenByParent[n.id] || []).filter(id => nodeMap[id] && !visited.has(id));
+            const children = childIds
+                .map(id => nodeMap[id])
+                .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN'))
+                .map(child => toTreeNode(child));
+            return Object.assign({}, n, { children });
+        };
+
+        const rootCandidates = rootNodes.length ? rootNodes : orderedNodes;
+        const roots = [];
+        rootCandidates.forEach(n => {
+            if (!visited.has(n.id)) roots.push(toTreeNode(n));
+        });
+        orderedNodes.forEach(n => {
+            if (!visited.has(n.id)) roots.push(toTreeNode(n));
+        });
+
+        const root = d3.hierarchy({ id: '__root__', name: '', children: roots });
+        const visibleNodes = root.descendants().filter(d => d.data.id !== '__root__');
+        const maxDepth = d3.max(visibleNodes, d => d.depth) || 1;
+        const leafCount = Math.max(visibleNodes.filter(d => !d.children || !d.children.length).length, 1);
+        const rowGap = Math.max(26, Math.min(42, (svgH - 96) / Math.max(leafCount, 1)));
+        const colGap = Math.max(150, Math.min(230, (svgW - 140) / Math.max(maxDepth, 1)));
+
+        d3.tree().nodeSize([rowGap, colGap])(root);
+
+        const minX = d3.min(visibleNodes, d => d.x) || 0;
+        const maxX = d3.max(visibleNodes, d => d.x) || 0;
+        const minY = d3.min(visibleNodes, d => d.y) || 0;
+        const maxY = d3.max(visibleNodes, d => d.y) || 0;
+        const offsetX = 72 - minY;
+        const offsetY = (svgH - (maxX - minX)) / 2 - minX;
+        visibleNodes.forEach(d => {
+            d.data.x = d.y + offsetX;
+            d.data.y = d.x + offsetY;
+            d.data.treeDepth = d.depth;
+        });
+
+        const lc = this.layoutConfig;
+        const getRadius = d => _graphNodeRadius(d, lc);
+        const links = root.links().filter(link => link.source.data.id !== '__root__');
+
+        this.g.selectAll('*').remove();
+        const depthValues = Array.from(new Set(visibleNodes.map(d => d.depth))).sort((a, b) => a - b);
+        const nodesByDepth = {};
+        visibleNodes.forEach(function(d) {
+            if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
+            nodesByDepth[d.depth].push(d);
+        });
+        const minTreeY = d3.min(visibleNodes, d => d.data.y) || 0;
+        const maxTreeY = d3.max(visibleNodes, d => d.data.y) || 0;
+        const bandTop = minTreeY - rowGap;
+        const bandHeight = Math.max(rowGap * 2, maxTreeY - minTreeY + rowGap * 2);
+        const bandWidth = Math.max(130, colGap - 18);
+        this.g.append('g')
+            .attr('class', 'graph-tree-depth-bands')
+            .selectAll('g')
+            .data(depthValues)
+            .join('g')
+            .attr('class', 'graph-tree-depth-band')
+            .attr('transform', depth => {
+                const x = (depth * colGap) + offsetX - bandWidth / 2;
+                return 'translate(' + x + ',' + bandTop + ')';
+            })
+            .each(function(depth) {
+                const band = d3.select(this);
+                band.append('rect')
+                    .attr('width', bandWidth)
+                    .attr('height', bandHeight)
+                    .attr('rx', 8);
+                band.append('text')
+                    .attr('x', 10)
+                    .attr('y', 18)
+                    .text(_treeDepthLabel(depth, nodesByDepth[depth] || []));
+            });
+
+        this.g.append('g')
+            .attr('class', 'graph-tree-links')
+            .selectAll('path')
+            .data(links)
+            .join('path')
+            .attr('class', 'graph-tree-link')
+            .attr('fill', 'none')
+            .attr('d', link => {
+                const sx = link.source.data.x;
+                const sy = link.source.data.y;
+                const tx = link.target.data.x;
+                const ty = link.target.data.y;
+                const mid = (sx + tx) / 2;
+                return 'M' + sx + ',' + sy + 'C' + mid + ',' + sy + ' ' + mid + ',' + ty + ' ' + tx + ',' + ty;
+            });
+
+        const self = this;
+        const node = this.g.append('g')
+            .attr('class', 'graph-nodes graph-tree-nodes')
+            .selectAll('g')
+            .data(visibleNodes.map(d => d.data))
+            .join('g')
+            .attr('cursor', 'pointer')
+            .attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+
+        _createGraphNode(node, getRadius, true);
+        node.selectAll('text')
+            .attr('text-anchor', 'start')
+            .attr('x', d => getRadius(d) + 8)
+            .attr('dy', '0.32em')
+            .style('display', '');
+
+        node.append('text')
+            .attr('class', 'graph-tree-subtitle')
+            .attr('text-anchor', 'start')
+            .attr('x', d => getRadius(d) + 8)
+            .attr('dy', '1.65em')
+            .text(_graphNodeSubtitle);
+
+        const pathByNode = {};
+        visibleNodes.forEach(function(d) {
+            const ids = new Set();
+            let cur = d;
+            while (cur && cur.data && cur.data.id !== '__root__') {
+                ids.add(cur.data.id);
+                cur = cur.parent;
+            }
+            d.descendants().forEach(function(child) {
+                if (child.data && child.data.id !== '__root__') ids.add(child.data.id);
+            });
+            pathByNode[d.data.id] = ids;
+        });
+
+        function setTreeFocus(targetId) {
+            const pathSet = pathByNode[targetId] || new Set();
+            node.classed('is-dimmed', function(d) { return !pathSet.has(d.id) && d.id !== targetId; });
+            node.classed('is-path', function(d) { return pathSet.has(d.id); });
+            node.classed('is-focus', function(d) { return d.id === targetId; });
+            self.g.selectAll('.graph-tree-link')
+                .classed('is-dimmed', function(link) {
+                    return !pathSet.has(link.source.data.id) || !pathSet.has(link.target.data.id);
+                })
+                .classed('is-path', function(link) {
+                    return pathSet.has(link.source.data.id) && pathSet.has(link.target.data.id);
+                });
+        }
+
+        function clearTreeFocus() {
+            node.classed('is-dimmed', false).classed('is-path', false).classed('is-focus', false);
+            self.g.selectAll('.graph-tree-link').classed('is-dimmed', false).classed('is-path', false);
+        }
+
+        node.on('mouseenter', function(e, d) {
+            setTreeFocus(d.id);
+            d3.select(this).select('circle').transition().duration(120).attr('r', getRadius(d) * 1.25);
+        }).on('mouseleave', function(e, d) {
+            clearTreeFocus();
+            d3.select(this).select('circle').transition().duration(120).attr('r', getRadius(d));
+        });
+        node.on('click', (e, d) => self._graphNodeClick(e, d));
+        node.on('dblclick', (e, d) => self._graphNodeClick(e, d));
+
+        const boundsNodes = visibleNodes.map(d => d.data);
+        const bounds = {
+            x1: d3.min(boundsNodes, d => d.x) || 0,
+            y1: d3.min(boundsNodes, d => d.y) || 0,
+            x2: (d3.max(boundsNodes, d => d.x) || 0) + Math.max(120, maxY - minY > 0 ? 80 : 120),
+            y2: d3.max(boundsNodes, d => d.y) || 0,
+        };
+        const bw = Math.max(120, bounds.x2 - bounds.x1);
+        const bh = Math.max(120, bounds.y2 - bounds.y1);
+        const scale = Math.min((svgW - 80) / bw, (svgH - 80) / bh, 1.35);
+        const midX = (bounds.x1 + bounds.x2) / 2;
+        const midY = (bounds.y1 + bounds.y2) / 2;
+        this.svg.transition().duration(300).call(
+            this.zoom.transform,
+            d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+        );
+    },
+
     resize() {
         if (!this.svg || !this.data) return;
         const container = document.getElementById('graph-panel-body');
@@ -1161,6 +1442,11 @@ const Graph3Tier = {
         if (newW === oldW && newH === oldH) return;
 
         this.svg.attr('width', newW).attr('height', newH);
+
+        if (this.layoutMode === 'tree') {
+            this.renderTreeLayout();
+            return;
+        }
 
         if (!this.simulation) return;
 
@@ -1203,6 +1489,10 @@ const Graph3Tier = {
 
     replay() {
         if (!this.svg || !this.data) return;
+        if (this.layoutMode === 'tree') {
+            this.renderTreeLayout();
+            return;
+        }
         if (this.simulation) this.simulation.stop();
         this.simulation = null;
 
@@ -1317,10 +1607,15 @@ function graphZoomIn() { Graph3Tier.zoomIn(); }
 function graphZoomOut() { Graph3Tier.zoomOut(); }
 function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
+function graphSetLayoutMode(mode) { Graph3Tier.setLayoutMode(mode); }
 function graphToggleFilenames() {
     Graph3Tier.showFilenames = !Graph3Tier.showFilenames;
     var btn = document.getElementById('graph-toggle-filenames');
     if (btn) btn.classList.toggle('active', Graph3Tier.showFilenames);
+    if (Graph3Tier.layoutMode === 'tree') {
+        Graph3Tier.renderTreeLayout();
+        return;
+    }
     if (Graph3Tier.g) {
         Graph3Tier.g.selectAll('.graph-nodes text').style('display', function(d) {
             if (d.type === 'topic') return '';
@@ -1333,6 +1628,7 @@ window.graphZoomIn = graphZoomIn;
 window.graphZoomOut = graphZoomOut;
 window.graphReplay = graphReplay;
 window.loadRelationGraphData = loadRelationGraphData;
+window.graphSetLayoutMode = graphSetLayoutMode;
 window.graphToggleFilenames = graphToggleFilenames;
 
 function graphOpenLayoutSettings() { Graph3Tier.openLayoutSettings(); }
@@ -1358,6 +1654,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', function () {
             const f = this.dataset.filter;
             Graph3Tier.load(f);
+        });
+    });
+    document.querySelectorAll('#graph-layout-mode .graph-layout-mode-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+            Graph3Tier.setLayoutMode(this.dataset.layoutMode);
         });
     });
 });

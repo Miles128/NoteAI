@@ -102,7 +102,7 @@
         _setPlain('statusbar-lines', '0 行');
         _setPlain('statusbar-cursor', 'Ln 1, Col 1');
         updateSaveStatus('', '');
-        setSaveButtonVisible(false);
+        setDraftActionsVisible(false);
         updateMessage('');
         setMetadataToggleVisible(false);
     }
@@ -121,6 +121,18 @@
         btn.style.display = visible ? '' : 'none';
     }
 
+    function setDiscardButtonVisible(visible) {
+        var btn = document.getElementById('statusbar-discard-btn');
+        if (!btn) return;
+        btn.hidden = !visible;
+        btn.style.display = visible ? '' : 'none';
+    }
+
+    function setDraftActionsVisible(visible) {
+        setSaveButtonVisible(visible);
+        setDiscardButtonVisible(visible);
+    }
+
     function bindSaveButton() {
         var btn = document.getElementById('statusbar-save-btn');
         if (!btn || btn.dataset.bound === 'true') return;
@@ -132,7 +144,19 @@
         });
     }
 
+    function bindDiscardButton() {
+        var btn = document.getElementById('statusbar-discard-btn');
+        if (!btn || btn.dataset.bound === 'true') return;
+        btn.dataset.bound = 'true';
+        btn.addEventListener('click', function() {
+            if (window.NoteDraftModule && window.NoteDraftModule.discardCurrentDraft) {
+                window.NoteDraftModule.discardCurrentDraft();
+            }
+        });
+    }
+
     bindSaveButton();
+    bindDiscardButton();
 
     var _messageTimer = null;
 
@@ -249,6 +273,8 @@
         clearStats: clearStats,
         updateSaveStatus: updateSaveStatus,
         setSaveButtonVisible: setSaveButtonVisible,
+        setDiscardButtonVisible: setDiscardButtonVisible,
+        setDraftActionsVisible: setDraftActionsVisible,
         updateMessage: updateMessage,
         setRewriting: setRewriting,
         setMetadataToggleVisible: setMetadataToggleVisible

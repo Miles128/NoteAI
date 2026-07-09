@@ -7,7 +7,6 @@ from pathlib import Path
 from config import config
 from sidecar.cascade_runner import load_cascade_failures
 from sidecar.kb_lint import auto_fix_broken_links, filter_stale_lint_issues, load_lint_report
-from utils.link_indexer import load_links
 from utils.topic_assigner import load_pending
 
 
@@ -75,19 +74,6 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "source": p.get("source", ""),
             }
         )
-
-    try:
-        pending_links = [link for link in load_links().get("links", []) if link.get("status") == "pending"]
-        if pending_links:
-            items.append(
-                {
-                    "type": "link_batch",
-                    "count": len(pending_links),
-                    "message": f"{len(pending_links)} 条待确认链接",
-                }
-            )
-    except Exception:
-        pass
 
     root = Path(ws) if ws else None
     lint_report = load_lint_report(ws)

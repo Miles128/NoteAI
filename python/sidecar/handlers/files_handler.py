@@ -322,25 +322,23 @@ class FilesHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def _create_note(self, params):
+    def _note_target_path(self, title: str, topic: str):
         from config.constants import TOPIC_SEP
         from config.settings import NOTES_FOLDER
         from sidecar.schema_validator import require_topic
         from utils.helpers import sanitize_filename
 
-        title = (params.get("title") or "").strip()
-        topic = (params.get("topic") or "").strip()
         if not title:
-            return {"success": False, "message": "标题不能为空"}
+            return None, {"success": False, "message": "标题不能为空"}
 
         workspace = self.config.workspace_path
         if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+            return None, {"success": False, "message": "未设置工作区"}
 
         if topic:
             ok, err = require_topic(topic)
             if not ok:
-                return {"success": False, "message": err}
+                return None, {"success": False, "message": err}
 
         ws = Path(workspace)
         notes_root = ws / NOTES_FOLDER
@@ -360,6 +358,14 @@ class FilesHandler(BaseHandler):
             while candidate.exists():
                 candidate = target_dir / f"{stem}_{n}.md"
                 n += 1
+        return candidate, None
+
+    def _create_note(self, params):
+        title = (params.get("title") or "").strip()
+        topic = (params.get("topic") or "").strip()
+        candidate, err = self._note_target_path(title, topic)
+        if err:
+            return err
 
         fm_lines = ["---"]
         if topic:
@@ -367,12 +373,36 @@ class FilesHandler(BaseHandler):
         fm_lines.append("---")
         body = f"# {title}\n\n"
         candidate.write_text("\n".join(fm_lines) + "\n\n" + body, encoding="utf-8")
-        rel = str(candidate.relative_to(ws))
+        rel = str(candidate.relative_to(Path(self.config.workspace_path)))
 
         from sidecar.cascade import append_changelog
 
         append_changelog(f"新建笔记: {rel}" + (f"（{topic}）" if topic else ""))
 
+        return {
+            "success": True,
+            "path": rel,
+            "title": title,
+            "topic": topic,
+            "message": f"已创建 {rel}",
+        }
+
+    def _create_note_from_draft(self, params):
+        title = (params.get("title") or "").strip()
+        topic = (params.get("topic") or "").strip()
+        content = params.get("content")
+        if content is None:
+            return {"success": False, "message": "内容不能为空"}
+        candidate, err = self._note_target_path(title, topic)
+        if err:
+            return err
+
+        candidate.write_text(str(content), encoding="utf-8")
+        rel = str(candidate.relative_to(Path(self.config.workspace_path)))
+
+        from sidecar.cascade import append_changelog
+
+        append_changelog(f"新建笔记: {rel}" + (f"（{topic}）" if topic else ""))
         return {
             "success": True,
             "path": rel,
@@ -387,6 +417,7 @@ class FilesHandler(BaseHandler):
         router.register("can_preview_file", self._can_preview_file)
         router.register("save_file_content", self._save_file_content)
         router.register("create_note", self._create_note)
+        router.register("create_note_from_draft", self._create_note_from_draft)
         router.register("read_file_raw", self._read_file_raw)
         router.register("reveal_in_finder", self._reveal_in_finder)
         router.register("delete_file", self._delete_file)

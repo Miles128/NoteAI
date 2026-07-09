@@ -285,6 +285,26 @@ body {
     color: var(--on-primary);
 }
 
+.statusbar-discard-btn {
+    width: 20px;
+    height: 20px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 18px;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.statusbar-discard-btn:hover {
+    color: var(--error);
+    border-color: var(--border);
+    background: var(--surface-hover);
+}
+
 .statusbar-message.rewriting {
     color: var(--color-topic);
 }
@@ -1766,11 +1786,22 @@ body {
 }
 
 .ai-citations-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     font-size: 11px;
     color: var(--text-muted);
     margin-bottom: 8px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.ai-citation-quality {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--primary);
+    font-weight: 650;
 }
 
 .ai-citations-list {
@@ -1974,12 +2005,41 @@ body {
     line-height: 1.18;
 }
 
-.home-command-copy span:last-child {
+#home-command-desc {
     margin-top: 8px;
     color: var(--home-muted);
     font-size: 13px;
     line-height: 1.5;
     max-width: 680px;
+}
+
+.home-command-action {
+    align-self: flex-start;
+    margin-top: 14px;
+    border: 1px solid color-mix(in srgb, var(--home-blue) 34%, var(--home-line));
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--home-blue) 8%, var(--home-panel));
+    color: var(--home-blue);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 9px 12px;
+    cursor: pointer;
+    transition: background 180ms ease, transform 180ms ease;
+}
+
+.home-command-action:hover {
+    background: color-mix(in srgb, var(--home-blue) 14%, var(--home-panel));
+}
+
+.home-command-action:active {
+    transform: scale(0.98);
+}
+
+.home-command-action:disabled {
+    cursor: default;
+    opacity: 0.62;
+    transform: none;
 }
 
 .home-vital-stack {
@@ -3029,6 +3089,46 @@ body {
     accent-color: var(--primary);
 }
 
+.typography-settings-grid {
+    display: grid;
+    grid-template-columns: minmax(72px, 0.8fr) minmax(118px, 1fr) minmax(118px, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+    align-items: center;
+}
+
+.typography-settings-head {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.3;
+}
+
+.typography-role {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.35;
+}
+
+.typography-select {
+    min-height: 32px;
+    font-size: 12px;
+    padding: 5px 8px;
+}
+
+@media (max-width: 620px) {
+    .typography-settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .typography-settings-head {
+        display: none;
+    }
+
+    .typography-role {
+        margin-top: 8px;
+    }
+}
+
 .settings-assistant-capabilities {
     margin: 8px 0 0;
     padding-left: 1.25em;
@@ -3044,11 +3144,6 @@ body {
 .settings-assistant-capabilities strong {
     color: var(--text);
     font-weight: 600;
-}
-
-.settings-assistant-profile {
-    min-height: 200px;
-    flex: 1;
 }
 
 .settings-component-row {
@@ -3119,12 +3214,6 @@ body {
 .settings-toggle-row .switch-container {
     grid-column: 2;
     grid-row: 1 / span 2;
-}
-
-.settings-profile-card {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
 }
 
 .about-panel-close {
@@ -3392,6 +3481,42 @@ body {
 
 [data-theme="light"] .app-container {
     background: transparent;
+}
+
+[data-theme="light"] .custom-titlebar,
+[data-theme="paper"] .custom-titlebar,
+[data-theme="light"] .app-statusbar,
+[data-theme="paper"] .app-statusbar {
+    border-color: rgba(35, 31, 25, 0.06);
+}
+
+[data-theme="paper"] .sidebar,
+[data-theme="paper"] .sidebar-expand-btn {
+    background: var(--sidebar-bg);
+    box-shadow: none;
+}
+
+[data-theme="paper"] .content-panel,
+[data-theme="paper"] .right-area > .preview-panel {
+    background: var(--article-bg);
+    border: none;
+    box-shadow: none;
+}
+
+[data-theme="light"] .note-list-header,
+[data-theme="paper"] .note-list-header,
+[data-theme="light"] .graph-panel-header,
+[data-theme="paper"] .graph-panel-header,
+[data-theme="light"] .preview-header,
+[data-theme="paper"] .preview-header,
+[data-theme="light"] .sidebar-workspace-header,
+[data-theme="paper"] .sidebar-workspace-header {
+    border-color: rgba(35, 31, 25, 0.06);
+}
+
+[data-theme="light"] .app-container,
+[data-theme="paper"] .app-container {
+    background: var(--bg);
 }
 
 /* Drop overlay */

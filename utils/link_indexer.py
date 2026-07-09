@@ -85,6 +85,29 @@ def _is_self_link(from_path: str, to_path: str) -> bool:
     return from_path == to_path
 
 
+def _is_readme_note(path: str | Path) -> bool:
+    """README 是目录说明，不参与笔记链接图。"""
+    return Path(str(path)).stem.casefold() == "readme"
+
+
+def _normalize_links(links: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Drop README links and auto-confirm all remaining link records."""
+    normalized: list[dict[str, Any]] = []
+    changed = 0
+    for link in links:
+        from_path = link.get("from", "")
+        to_path = link.get("to", "")
+        if _is_readme_note(from_path) or _is_readme_note(to_path):
+            changed += 1
+            continue
+        if link.get("status") != "confirmed":
+            link = dict(link)
+            link["status"] = "confirmed"
+            changed += 1
+        normalized.append(link)
+    return normalized, changed
+
+
 def _dedupe_links(links: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """按有向 from/to 去重，保留第一次出现且优先保留 confirmed 状态；同时丢弃自引用。"""
     seen: dict[tuple[str, str], int] = {}
@@ -122,9 +145,11 @@ def load_links() -> dict[str, Any]:
 
     links = data.get("links", []) or []
     deduped = _dedupe_links(links)
-    if len(deduped) < len(links):
-        logger.info(f"[link_indexer] 清理 {len(links) - len(deduped)} 条重复/自引用链接")
-        data["links"] = deduped
+    normalized, normalized_changes = _normalize_links(deduped)
+    dedupe_changes = len(links) - len(deduped)
+    if dedupe_changes or normalized_changes:
+        logger.info(f"[link_indexer] 归一链接索引: 去重/自引用 {dedupe_changes} 条，自动确认/忽略 README {normalized_changes} 条")
+        data["links"] = normalized
         save_links(data)
     return data
 
@@ -158,18 +183,18 @@ def cleanup_stale_links() -> int:
     for link in links:
         from_path = link.get("from", "")
         to_path = link.get("to", "")
+        if _is_readme_note(from_path) or _is_readme_note(to_path):
+            logger.info(f"[link_indexer] 清理 README 链接: {from_path} -> {to_path}")
+            continue
         from_full = ws / from_path if not Path(from_path).is_absolute() else Path(from_path)
         to_full = ws / to_path if not Path(to_path).is_absolute() else Path(to_path)
         if not from_full.exists() or not to_full.exists():
             logger.info(f"[link_indexer] 清理无效链接: {from_path} -> {to_path}")
             continue
-        if link.get("status") == "pending":
-            from_topic = _read_file_topic(from_full)
-            to_topic = _read_file_topic(to_full)
-            if from_topic and from_topic == to_topic:
-                link["status"] = "confirmed"
-                auto_confirmed += 1
-                logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path} (主题: {from_topic})")
+        if link.get("status") != "confirmed":
+            link["status"] = "confirmed"
+            auto_confirmed += 1
+            logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path}")
         valid.append(link)
     changed = (original_count - len(valid)) + auto_confirmed
     if changed > 0:
@@ -196,7 +221,7 @@ def _link_key(from_path: str, to_path: str) -> tuple[str, str]:
 
 
 def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[str, Any]:
-    """After save: local heuristics → pending links (same topic / title mention)."""
+    """After save: local heuristics → confirmed links (same topic / title mention)."""
     workspace = config.workspace_path
     if not workspace:
         return {"success": False, "message": "未设置工作区", "added": 0}
@@ -205,6 +230,8 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     full = ws / file_path if not Path(file_path).is_absolute() else Path(file_path)
     if not full.exists() or full.suffix.lower() != ".md":
         return {"success": False, "message": "非 Markdown 文件", "added": 0}
+    if _is_readme_note(full):
+        return {"success": True, "message": "README 笔记已忽略", "added": 0}
 
     rel = str(full.relative_to(ws))
     _invalidate_meta_cache(rel)
@@ -258,7 +285,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
                 "from": rel,
                 "to": other["path"],
                 "reason": reason,
-                "status": "pending",
+                "status": "confirmed",
             }
         )
         existing_keys.add(key)
@@ -271,7 +298,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         "success": True,
         "added": added,
         "file": rel,
-        "message": f"建议 {added} 条待确认链接" if added else "无新链接建议",
+        "message": f"新增 {added} 条关联" if added else "无新链接建议",
     }
 
 
@@ -322,7 +349,7 @@ def _vector_search_candidates(
     seen: set[str] = set()
     for hit in hits:
         rel = hit.get("file_path", "")
-        if not rel or rel == exclude_rel or rel in seen:
+        if not rel or rel == exclude_rel or rel in seen or _is_readme_note(rel):
             continue
         seen.add(rel)
         score = float(hit.get("score") or hit.get("dense_score") or 0.0)
@@ -343,7 +370,7 @@ def _one_hop_neighbors(rel_path: str, links: list[dict]) -> list[tuple[str, str]
             other = link.get("to", "")
         elif link.get("to") == rel_path:
             other = link.get("from", "")
-        if other:
+        if other and not _is_readme_note(other):
             neighbors.append((other, "已确认链接的邻居"))
     return neighbors
 
@@ -422,6 +449,8 @@ def discover_cross_refs_for_file(
     full = ws / file_path if not Path(file_path).is_absolute() else Path(file_path)
     if not full.exists() or full.suffix.lower() != ".md":
         return {"success": False, "message": "非 Markdown 文件", "added": 0}
+    if _is_readme_note(full):
+        return {"success": True, "message": "README 笔记已忽略", "added": 0}
 
     rel = str(full.relative_to(ws))
 
@@ -501,29 +530,21 @@ def discover_cross_refs_for_file(
     merged = list(existing_links)
     added = 0
     confirmed = 0
-    pending = 0
     for row in picked:
         key = _link_key(rel, row["path"])
         if not key or key in existing_keys:
             continue
-        auto = bool(row.get("auto_confirm") or row.get("score", 0) >= 90.0)
-        if use_llm:
-            auto = True
-        status = "confirmed" if auto else "pending"
         merged.append(
             {
                 "from": rel,
                 "to": row["path"],
                 "reason": row.get("reason", "交叉引用"),
-                "status": status,
+                "status": "confirmed",
             }
         )
         existing_keys.add(key)
         added += 1
-        if status == "confirmed":
-            confirmed += 1
-        else:
-            pending += 1
+        confirmed += 1
 
     if added:
         save_links({"links": merged, "last_scan": existing.get("last_scan")})
@@ -532,10 +553,10 @@ def discover_cross_refs_for_file(
         "success": True,
         "added": added,
         "confirmed": confirmed,
-        "pending": pending,
+        "pending": 0,
         "file": rel,
         "candidates": len(ranked),
-        "message": f"交叉引用 {added} 条（确认 {confirmed}，待办 {pending}）" if added else "无新交叉引用",
+        "message": f"交叉引用 {added} 条（已确认 {confirmed}）" if added else "无新交叉引用",
     }
 
 
@@ -567,13 +588,15 @@ def _iter_md_files(workspace: Path) -> list[Path]:
         if is_ignored_dir(folder.name):
             continue
         for md_file in folder.rglob("*.md"):
-            if md_file.name.startswith("."):
+            if md_file.name.startswith(".") or _is_readme_note(md_file):
                 continue
             files.append(md_file)
     return files
 
 
 def _parse_file_meta(md_file: Path) -> dict[str, Any]:
+    if _is_readme_note(md_file):
+        return None
     try:
         text = md_file.read_text(encoding="utf-8")
     except Exception as e:
@@ -768,7 +791,7 @@ def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_c
                                 "from": meta_a["path"],
                                 "to": meta_b["path"],
                                 "reason": reason,
-                                "status": "pending",
+                                "status": "confirmed",
                             }
                         )
         except Exception as e:
@@ -788,7 +811,7 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
     1. 收集所有文件元数据
     2. 粗筛候选对
     3. AI 精判
-    4. 合并到已有链接（保留已确认的，新增 pending）
+    4. 合并到已有链接（保留已确认的，新增 confirmed）
     5. 存入 .links.json
     """
     workspace = Path(config.workspace_path)
@@ -888,7 +911,7 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
             "file": other,
             "other": other,
             "reason": link.get("reason", ""),
-            "status": link.get("status", "pending"),
+            "status": link.get("status", "confirmed"),
             "direction": "incoming" if is_incoming else "outgoing",
         }
 

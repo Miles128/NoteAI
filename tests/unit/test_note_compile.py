@@ -56,3 +56,4 @@ def test_discover_cross_refs_no_forced_minimum(workspace: Path) -> None:
     outgoing = [l for l in links if l.get("from") == rel]
     assert len(outgoing) >= 1
     assert len(outgoing) <= 25
+    assert {l.get("status") for l in outgoing} == {"confirmed"}

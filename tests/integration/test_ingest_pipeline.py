@@ -227,3 +227,28 @@ class TestTransferHandler:
         result = handler._auto_convert_pending({})
         assert result.get("success") is True
         assert result.get("converted", 0) == 0
+
+    def test_fetch_all_rss_records_job(self, workspace: Path, monkeypatch) -> None:
+        from sidecar import job_status
+        from sidecar.handlers.transfer_handler import TransferHandler
+
+        job_status.clear_jobs()
+        events = []
+        srv = SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _send_response=lambda resp: events.append(resp),
+        )
+        handler = TransferHandler(srv)
+
+        monkeypatch.setattr(
+            "sidecar.multi_source.fetch_all_subscriptions",
+            lambda _workspace: {"success": True, "results": [{"imported": 2}]},
+        )
+
+        result = handler._fetch_all_rss({})
+        job = job_status.get_job("rss_fetch_all")
+
+        assert result["success"] is True
+        assert job["status"] == "complete"
+        assert job["metadata"]["imported"] == 2
+        assert any(e.get("result", {}).get("type") == "job_update" for e in events)

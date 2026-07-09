@@ -83,7 +83,6 @@ var _earlyGlobals = [
     'toggleAIPanel',
     'closeSettingsPanel',
     'saveApiConfig',
-    'saveUserProfile',
 ];
 _earlyGlobals.forEach(function(name) {
     if (typeof window[name] !== 'function') {

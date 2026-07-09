@@ -11,6 +11,7 @@
         KEYS: {
             GRAPH_LAYOUT: 'noteai.graphLayout.v2',
             THEME: 'noteai_theme',
+            ACCENT_COLOR: 'noteai_accent_color',
             DOWNLOADER_CONFIG: 'downloader-config',
             CONVERTER_CONFIG: 'converter-config',
             TREE_STATE: 'tree-expanded-state',

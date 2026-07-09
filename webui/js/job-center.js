@@ -50,6 +50,13 @@ function handleJobUpdate(job) {
     document.dispatchEvent(new CustomEvent('noteai_jobs_changed', { detail: { jobs: getJobs() } }));
 }
 
+function replaceJobs(jobs) {
+    _byId = {};
+    _jobs = [];
+    (jobs || []).forEach(_remember);
+    return _jobs;
+}
+
 document.addEventListener('job_update', function(e) {
     handleJobUpdate(e.detail || {});
 });
@@ -58,7 +65,8 @@ window.JobCenterModule = {
     refresh: refresh,
     getJobs: getJobs,
     getJob: getJob,
-    handleJobUpdate: handleJobUpdate
+    handleJobUpdate: handleJobUpdate,
+    replaceJobs: replaceJobs
 };
 
 })();

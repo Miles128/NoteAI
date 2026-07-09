@@ -204,6 +204,7 @@
                             <span class="home-command-kicker" data-i18n="home.commandKicker"></span>
                             <strong id="home-command-title" data-i18n="home.commandTitle"></strong>
                             <span id="home-command-desc" data-i18n="home.commandDesc"></span>
+                            <button type="button" class="home-command-action" id="home-command-action-btn" data-home-action="refresh" data-i18n="home.actionRefresh"></button>
                         </div>
                         <div class="home-vital-stack">
                             <div class="home-vital-row is-pending">
@@ -356,6 +357,10 @@
                             <span class="graph-stat-chip"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
                         </div>
                         <div class="graph-header-controls">
+                            <div class="graph-layout-mode" id="graph-layout-mode">
+                                <button class="graph-layout-mode-btn active" data-layout-mode="constellation" data-i18n="graph.layoutMode.constellation" data-i18n-title="graph.layoutMode.constellation"></button>
+                                <button class="graph-layout-mode-btn" data-layout-mode="tree" data-i18n="graph.layoutMode.tree" data-i18n-title="graph.layoutMode.tree"></button>
+                            </div>
                             <div class="graph-filter-bar" id="graph-filter-bar">
                                 <button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic" data-i18n-title="graph.filter.topic"></button>
                                 <button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag" data-i18n-title="graph.filter.tag"></button>
@@ -706,6 +711,34 @@
                                         <span data-i18n="settings.themeSystem"></span>
                                     </label>
                                 </div>
+                                <div class="settings-subtitle" data-i18n="settings.accentColor"></div>
+                                <div class="accent-options">
+                                    <label class="accent-option">
+                                        <input type="radio" name="accent-color" value="theme" onchange="setAccentColor('theme')">
+                                        <span class="accent-swatch accent-theme"></span>
+                                        <span data-i18n="settings.accentTheme"></span>
+                                    </label>
+                                    <label class="accent-option">
+                                        <input type="radio" name="accent-color" value="rust" onchange="setAccentColor('rust')">
+                                        <span class="accent-swatch accent-rust"></span>
+                                        <span data-i18n="settings.accentRust"></span>
+                                    </label>
+                                    <label class="accent-option">
+                                        <input type="radio" name="accent-color" value="teal" onchange="setAccentColor('teal')">
+                                        <span class="accent-swatch accent-teal"></span>
+                                        <span data-i18n="settings.accentTeal"></span>
+                                    </label>
+                                    <label class="accent-option">
+                                        <input type="radio" name="accent-color" value="blue" onchange="setAccentColor('blue')">
+                                        <span class="accent-swatch accent-blue"></span>
+                                        <span data-i18n="settings.accentBlue"></span>
+                                    </label>
+                                    <label class="accent-option">
+                                        <input type="radio" name="accent-color" value="plum" onchange="setAccentColor('plum')">
+                                        <span class="accent-swatch accent-plum"></span>
+                                        <span data-i18n="settings.accentPlum"></span>
+                                    </label>
+                                </div>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.language"></div>
@@ -738,6 +771,85 @@
                                         <span data-i18n="settings.fontLarge"></span>
                                         <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>
                                     </label>
+                                </div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.typographyTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.typographyHint"></p>
+                                <div class="typography-settings-grid">
+                                    <div class="typography-settings-head" data-i18n="settings.typographyRole"></div>
+                                    <div class="typography-settings-head" data-i18n="settings.typographyFont"></div>
+                                    <div class="typography-settings-head" data-i18n="settings.typographyStyle"></div>
+
+                                    <div class="typography-role" data-i18n="settings.typographyH1"></div>
+                                    <select id="typography-h1-family" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                    <select id="typography-h1-style" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="normal" data-i18n="settings.fontStyleNormal"></option>
+                                        <option value="bold" data-i18n="settings.fontStyleBold"></option>
+                                        <option value="italic" data-i18n="settings.fontStyleItalic"></option>
+                                        <option value="bold-italic" data-i18n="settings.fontStyleBoldItalic"></option>
+                                    </select>
+
+                                    <div class="typography-role" data-i18n="settings.typographyH2"></div>
+                                    <select id="typography-h2-family" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                    <select id="typography-h2-style" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="normal" data-i18n="settings.fontStyleNormal"></option>
+                                        <option value="bold" data-i18n="settings.fontStyleBold"></option>
+                                        <option value="italic" data-i18n="settings.fontStyleItalic"></option>
+                                        <option value="bold-italic" data-i18n="settings.fontStyleBoldItalic"></option>
+                                    </select>
+
+                                    <div class="typography-role" data-i18n="settings.typographyH3"></div>
+                                    <select id="typography-h3-family" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                    <select id="typography-h3-style" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="normal" data-i18n="settings.fontStyleNormal"></option>
+                                        <option value="bold" data-i18n="settings.fontStyleBold"></option>
+                                        <option value="italic" data-i18n="settings.fontStyleItalic"></option>
+                                        <option value="bold-italic" data-i18n="settings.fontStyleBoldItalic"></option>
+                                    </select>
+
+                                    <div class="typography-role" data-i18n="settings.typographyBody"></div>
+                                    <select id="typography-body-family" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                    <select id="typography-body-style" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="normal" data-i18n="settings.fontStyleNormal"></option>
+                                        <option value="bold" data-i18n="settings.fontStyleBold"></option>
+                                        <option value="italic" data-i18n="settings.fontStyleItalic"></option>
+                                        <option value="bold-italic" data-i18n="settings.fontStyleBoldItalic"></option>
+                                    </select>
+
+                                    <div class="typography-role" data-i18n="settings.typographyQuote"></div>
+                                    <select id="typography-quote-family" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                    <select id="typography-quote-style" class="form-input typography-select" onchange="saveTypographySettings()">
+                                        <option value="normal" data-i18n="settings.fontStyleNormal"></option>
+                                        <option value="bold" data-i18n="settings.fontStyleBold"></option>
+                                        <option value="italic" data-i18n="settings.fontStyleItalic"></option>
+                                        <option value="bold-italic" data-i18n="settings.fontStyleBoldItalic"></option>
+                                    </select>
                                 </div>
                             </div>
                             <div class="card" style="margin-top:16px">
@@ -911,17 +1023,6 @@
                                     </div>
                                     <div id="settings-assistant-rebuild-progress-text" class="settings-hint" style="margin-top:6px;font-size:12px"></div>
                                 </div>
-                            </div>
-                            <div class="card settings-profile-card" style="margin-top:16px">
-                                <div class="card-title" data-i18n="settings.profileTitle"></div>
-                                <p class="settings-hint" data-i18n="settings.profileHint"></p>
-                                <div class="form-group" style="flex:1;display:flex;flex-direction:column">
-                                    <div class="form-field" style="flex:1;display:flex;flex-direction:column">
-                                        <textarea id="profile-md" class="form-input form-textarea settings-assistant-profile" data-i18n-placeholder="settings.profilePlaceholder"></textarea>
-                                    </div>
-                                </div>
-                                <button class="btn btn-primary" onclick="saveUserProfile()" data-i18n="settings.profileSaveBtn"></button>
-                                <div id="profile-status" class="settings-hint" style="display: none;"></div>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-cli">
@@ -1217,6 +1318,7 @@
         </div>
         <div class="statusbar-right">
             <button type="button" class="statusbar-save-btn" id="statusbar-save-btn" hidden data-i18n="common.save"></button>
+            <button type="button" class="statusbar-discard-btn" id="statusbar-discard-btn" hidden data-i18n-title="noteDraft.discard" data-i18n-aria="noteDraft.discard">×</button>
             <span class="statusbar-item statusbar-save-status" id="statusbar-save-status"></span>
             <span class="statusbar-item statusbar-message" id="statusbar-message"></span>
             <span class="statusbar-item" id="statusbar-chars" title="字符数">0 字符</span>

@@ -112,9 +112,6 @@ function switchSettingsTab(tabName) {
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.toggle('active', tab.id === 'tab-' + tabName);
     });
-    if (tabName === 'rag') {
-        loadUserProfile();
-    }
     if (tabName === 'cli') {
         initCliSettings();
         refreshCliAgentsSettings();
@@ -213,6 +210,49 @@ async function saveFontFamily(key, value) {
     }
 }
 
+function getTypographyFromForm() {
+    var roles = ['h1', 'h2', 'h3', 'body', 'quote'];
+    var next = {};
+    roles.forEach(function(role) {
+        var familyEl = document.getElementById('typography-' + role + '-family');
+        var styleEl = document.getElementById('typography-' + role + '-style');
+        next[role] = {
+            family: familyEl ? familyEl.value : 'system',
+            style: styleEl ? styleEl.value : 'normal'
+        };
+    });
+    return window.ThemeModule && window.ThemeModule.normalizeTypography
+        ? window.ThemeModule.normalizeTypography(next)
+        : next;
+}
+
+function applyTypographyToForm(typography) {
+    var normalized = window.ThemeModule && window.ThemeModule.normalizeTypography
+        ? window.ThemeModule.normalizeTypography(typography)
+        : (typography || {});
+    Object.keys(normalized).forEach(function(role) {
+        var familyEl = document.getElementById('typography-' + role + '-family');
+        var styleEl = document.getElementById('typography-' + role + '-style');
+        if (familyEl) familyEl.value = normalized[role].family;
+        if (styleEl) styleEl.value = normalized[role].style;
+    });
+}
+
+async function saveTypographySettings() {
+    var typography = getTypographyFromForm();
+    if (window.ThemeModule && window.ThemeModule.applyTypography) {
+        window.ThemeModule.applyTypography(typography);
+    }
+    try {
+        var result = await window.api.saveUiConfig({ typography: typography });
+        if (!result || !result.success) {
+            console.error('[Settings] save typography failed:', result);
+        }
+    } catch (e) {
+        console.error('[Settings] save typography error:', e);
+    }
+}
+
 async function setLocale(locale) {
     if (!window.I18nModule || !window.I18nModule.setLocale) return;
     try {
@@ -248,6 +288,11 @@ async function loadUiConfigToForm() {
                     localStorage.setItem('noteai_preview_font_family', previewFont);
                 } catch (_e) {}
             }
+            var typography = uiConfig.typography || {};
+            if (window.ThemeModule && window.ThemeModule.applyTypography) {
+                typography = window.ThemeModule.applyTypography(typography);
+            }
+            applyTypographyToForm(typography);
             var loc = uiConfig.locale === 'en' ? 'en' : 'zh-CN';
             document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
                 radio.checked = radio.value === loc;
@@ -854,10 +899,10 @@ window.SettingsModule = {
     switchSettingsTab,
     autoSaveConfig,
     resetApiConfig,
-    saveUserProfile,
-    loadUserProfile,
     saveFontSize,
     saveFontFamily,
+    saveTypographySettings,
+    applyTypographyToForm,
     loadUiConfigToForm,
     setLocale,
     initRagSettings,
@@ -874,71 +919,12 @@ window.SettingsModule = {
 };
 
 window.setLocale = setLocale;
-
-async function saveUserProfile() {
-    var profileMd = document.getElementById('profile-md')?.value || '';
-
-    var data = {
-        profile_md: profileMd,
-    };
-
-    var statusEl = document.getElementById('profile-status');
-    try {
-        var result = await window.api.saveUserProfile(data);
-        if (result && result.success) {
-            if (statusEl) {
-                statusEl.innerHTML = '<span style="color: #38a169;">' + window.escapeHtml(window.t('settings.profileSaved')) + '</span>';
-                statusEl.style.display = 'block';
-            }
-        } else {
-            if (statusEl) {
-                statusEl.innerHTML = '<span style="color: #e53e3e;">' + window.escapeHtml(window.t('settings.saveFailed')) + '</span>';
-                statusEl.style.display = 'block';
-            }
-        }
-    } catch (e) {
-        if (statusEl) { statusEl.innerHTML = '<span style="color: #e53e3e;">' + window.escapeHtml(e.message) + '</span>'; statusEl.style.display = 'block'; }
-    }
-    setTimeout(function() { if (statusEl) statusEl.style.display = 'none'; }, 3000);
-}
-
-async function loadUserProfile() {
-    try {
-        var result = await window.api.getUserProfile();
-        if (result && result.success && result.profile) {
-            var profileMd = result.profile.profile_md || '';
-
-            if (!profileMd) {
-                var identity = result.profile.identity || {};
-                var prefs = result.profile.preferences || {};
-                var lines = [];
-                lines.push('## 关于我');
-                lines.push('');
-                if (identity.profession) lines.push('- 职业：' + identity.profession);
-                if (identity.expertise_areas && identity.expertise_areas.length) lines.push('- 专业领域：' + identity.expertise_areas.join(', '));
-                if (identity.interests && identity.interests.length) lines.push('- 兴趣：' + identity.interests.join(', '));
-                if (identity.learning_goals && identity.learning_goals.length) lines.push('- 学习目标：' + identity.learning_goals.join(', '));
-                lines.push('');
-                lines.push('## 偏好');
-                lines.push('');
-                lines.push('- 回答风格：' + (prefs.answer_style === 'detailed' ? '详细' : '简洁'));
-                lines.push('- 回答深度：' + (prefs.detail_level === 'general' ? '通俗向' : '技术向'));
-                profileMd = lines.join('\n');
-            }
-
-            var mdEl = document.getElementById('profile-md');
-            if (mdEl) mdEl.value = profileMd;
-        }
-    } catch (e) {
-        console.error('[Settings] Load user profile error:', e);
-    }
-}
+window.saveTypographySettings = saveTypographySettings;
 
 window.saveApiConfig = saveApiConfig;
 window.refreshLog = refreshLog;
 window.closeSettingsPanel = closeSettingsPanel;
 window.closeLogPanel = closeLogPanel;
 window.resetApiConfig = resetApiConfig;
-window.saveUserProfile = saveUserProfile;
 
 })();

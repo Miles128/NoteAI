@@ -27,6 +27,10 @@ FILE_TREE_IGNORED_DIRS = {
 ALLOWED_ROOT_DIRS = {NOTES_FOLDER, RAW_FOLDER, ABSTRACT_FOLDER}
 
 
+def _is_readme_note(path: Path) -> bool:
+    return path.suffix.lower() == ".md" and path.stem.casefold() == "readme"
+
+
 class WorkspaceHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_workspace_status", self._get_workspace_status)
@@ -160,7 +164,7 @@ class WorkspaceHandler(BaseHandler):
         if dir_path.name == NOTES_FOLDER:
             try:
                 for entry in dir_path.iterdir():
-                    if entry.is_file() and entry.suffix.lower() == ".md":
+                    if entry.is_file() and entry.suffix.lower() == ".md" and not _is_readme_note(entry):
                         count += 1
             except PermissionError as e:
                 logger.warning(f"[workspace_handler] counting Notes root files: {e}")
@@ -221,6 +225,8 @@ class WorkspaceHandler(BaseHandler):
                     )
                 else:
                     if entry.suffix.lower() not in FILE_TREE_SUFFIXES:
+                        continue
+                    if _is_readme_note(entry):
                         continue
                     if dir_path.name == NOTES_FOLDER and entry.suffix.lower() == ".md":
                         continue

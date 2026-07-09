@@ -5,6 +5,7 @@ from pathlib import Path
 from config.settings import NOTES_FOLDER, RAW_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
+from sidecar import job_status
 from sidecar.convert_failures import (
     clear_convert_failure,
     load_convert_failures,
@@ -33,6 +34,42 @@ class TransferHandler(BaseHandler):
         router.register("remove_rss_subscription", self._remove_rss_subscription)
         router.register("list_rss_subscriptions", self._list_rss_subscriptions)
         router.register("fetch_all_rss", self._fetch_all_rss)
+
+    def _run_sync_job(
+        self,
+        job_id: str,
+        *,
+        kind: str,
+        label: str,
+        message: str,
+        metadata: dict | None,
+        fn,
+        complete_message,
+        complete_metadata=None,
+    ):
+        job_status.start_job(
+            job_id,
+            kind=kind,
+            label=label,
+            message=message,
+            metadata=metadata,
+            send_event=self._send_response,
+        )
+        try:
+            result = fn()
+            if result.get("success"):
+                job_status.complete_job(
+                    job_id,
+                    message=complete_message(result),
+                    metadata=complete_metadata(result) if complete_metadata else None,
+                    send_event=self._send_response,
+                )
+                return result
+            job_status.fail_job(job_id, result.get("message", "任务失败"), send_event=self._send_response)
+            return result
+        except Exception as e:
+            job_status.fail_job(job_id, str(e), send_event=self._send_response)
+            raise
 
     def _start_web_download(self, params):
         urls = params.get("urls", [])
@@ -374,7 +411,16 @@ class TransferHandler(BaseHandler):
         fetch_articles = bool(params.get("fetch_articles", True))
         if not self.config.workspace_path:
             return {"success": False, "message": "请先设置工作区"}
-        return import_rss_feed(url, max_items=max_items, fetch_articles=fetch_articles)
+        return self._run_sync_job(
+            "rss_import",
+            kind="ingest",
+            label="RSS import",
+            message="正在手动导入 RSS",
+            metadata={"experimental": True, "url": url},
+            fn=lambda: import_rss_feed(url, max_items=max_items, fetch_articles=fetch_articles),
+            complete_message=lambda result: f"RSS 导入完成: {result.get('imported', 0)} 条",
+            complete_metadata=lambda result: {"imported": result.get("imported", 0)},
+        )
 
     def _import_transcript(self, params):
         from sidecar.multi_source import import_transcript
@@ -481,4 +527,19 @@ class TransferHandler(BaseHandler):
             return {"success": False, "message": "请先设置工作区"}
         from sidecar.multi_source import fetch_all_subscriptions
 
-        return fetch_all_subscriptions(workspace)
+        def imported_count(result):
+            total = 0
+            for item in result.get("results", []) if isinstance(result, dict) else []:
+                total += int(item.get("imported") or 0)
+            return total
+
+        return self._run_sync_job(
+            "rss_fetch_all",
+            kind="ingest",
+            label="RSS manual fetch",
+            message="正在手动拉取 RSS 订阅",
+            metadata={"experimental": True},
+            fn=lambda: fetch_all_subscriptions(workspace),
+            complete_message=lambda result: f"RSS 手动拉取完成: {imported_count(result)} 条",
+            complete_metadata=lambda result: {"imported": imported_count(result)},
+        )

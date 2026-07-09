@@ -166,7 +166,7 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 52px 44px 72px;
+    padding: 91px 77px 126px;
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar) transparent;
 }
@@ -365,10 +365,13 @@
     color: var(--heading-color);
     background-color: var(--heading-bg);
     padding: 0;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
 }
 
 .preview-content h1 {
+    font-family: var(--typo-h1-font-family);
+    font-weight: var(--typo-h1-font-weight);
+    font-style: var(--typo-h1-font-style);
     font-size: 34px;
     color: var(--h1-color);
     padding-bottom: 20px;
@@ -379,12 +382,18 @@
 }
 
 .preview-content h2 {
+    font-family: var(--typo-h2-font-family);
+    font-weight: var(--typo-h2-font-weight);
+    font-style: var(--typo-h2-font-style);
     font-size: 24px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
 }
 
 .preview-content h3 {
+    font-family: var(--typo-h3-font-family);
+    font-weight: var(--typo-h3-font-weight);
+    font-style: var(--typo-h3-font-style);
     font-size: 19px;
 }
 
@@ -406,6 +415,9 @@
 }
 
 .preview-content p {
+    font-family: var(--typo-body-font-family);
+    font-weight: var(--typo-body-font-weight);
+    font-style: var(--typo-body-font-style);
     margin-bottom: 16px;
     line-height: 1.7;
     font-size: 16px;
@@ -418,6 +430,9 @@
 }
 
 .preview-content li {
+    font-family: var(--typo-body-font-family);
+    font-weight: var(--typo-body-font-weight);
+    font-style: var(--typo-body-font-style);
     margin-bottom: 10px;
     line-height: 1.68;
     font-size: 16px;
@@ -457,6 +472,9 @@
 }
 
 .preview-content blockquote {
+    font-family: var(--typo-quote-font-family);
+    font-weight: var(--typo-quote-font-weight);
+    font-style: var(--typo-quote-font-style);
     border-left: 4px solid var(--primary);
     padding-left: 16px;
     margin: 16px 0;

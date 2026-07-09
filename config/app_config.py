@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +60,7 @@ class AppConfig:
     accent_color: str = "#4A90D9"
     sidebar_font_family: str = "system"
     preview_font_family: str = "system"
+    typography: dict[str, Any] = field(default_factory=dict)
     window_width: int = 1400
     window_height: int = 900
 

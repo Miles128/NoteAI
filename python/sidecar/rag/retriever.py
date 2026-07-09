@@ -14,16 +14,16 @@ from utils.logger import logger
 from utils.ttl_cache import TTLCache
 
 from sidecar.rag.rag_config import (
-    DEFAULT_TOP_K,
     hyde_enabled,
     hyde_threshold,
     rerank_enabled,
     rerank_skip_score,
     top_k as rag_top_k,
 )
+from sidecar.rag.retrieval_policy import limit_unique_sources, select_dynamic_top_k
 
 _MMR_CANDIDATE_CAP = 10
-_RERANK_CANDIDATE_CAP = 5
+_RERANK_CANDIDATE_CAP = 10
 _RERANK_MAX_CHARS = 512
 _FETCH_BATCH_SIZE = 256
 
@@ -114,17 +114,15 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     if not query_emb.get("dense_vec"):
         return []
 
-    top_k = rag_top_k(has_filters=bool(topics or tags))
-
-    # Profile rewrite runs in parallel (pure LLM call) but is only used as fallback.
-    profile_future = _RETRIEVE_EXECUTOR.submit(_rewrite_profile, query)
+    configured_top_k = rag_top_k(has_filters=bool(topics or tags))
+    candidate_k = min(max(configured_top_k * 3, 12), 24)
 
     results = hybrid_search(
         workspace,
         query_dense=query_emb["dense_vec"],
         query_sparse=query_emb.get("lexical_weights", {}),
         query_text=query,
-        top_k=top_k,
+        top_k=candidate_k,
         topics=topics,
         tags=tags,
     )
@@ -132,7 +130,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     # HyDE only if enabled and the original search is weak, avoiding a mandatory LLM call.
     if hyde_enabled() and (not results or results[0].get("score", 0) < hyde_threshold()):
         try:
-            hyde_results = _hyde_search(workspace, query, topics, tags, progress_callback)
+            hyde_results = _hyde_search(workspace, query, topics, tags, candidate_k, progress_callback)
             if hyde_results:
                 existing_ids = {r.get("id") for r in results}
                 for r in hyde_results:
@@ -140,56 +138,34 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
                         results.append(r)
                         existing_ids.add(r.get("id"))
                 results.sort(key=lambda x: x.get("score", 0), reverse=True)
-                results = results[:top_k]
+                results = results[:candidate_k]
         except Exception as e:
             log_exception("[rag/retriever] HyDE search failed", e, level="debug", logger=logger)
-
-    # Profile fallback only if main search returned nothing.
-    profile_query = profile_future.result()
-    if not results and profile_query != query:
-        profile_emb = encode_query(profile_query)
-        if profile_emb.get("dense_vec"):
-            results = hybrid_search(
-                workspace,
-                query_dense=profile_emb["dense_vec"],
-                query_sparse=profile_emb.get("lexical_weights", {}),
-                query_text=profile_query,
-                top_k=top_k,
-                topics=topics,
-                tags=tags,
-            )
 
     if len(results) > _MMR_CANDIDATE_CAP:
         results = results[:_MMR_CANDIDATE_CAP]
 
+    dynamic_top_k = select_dynamic_top_k(query, results)
     if len(results) >= 2:
-        results = _mmr_dedup(results, top_k=DEFAULT_TOP_K)
+        results = _mmr_dedup(results, top_k=dynamic_top_k)
 
     if len(results) >= 2 and rerank_enabled():
-        results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=DEFAULT_TOP_K)
+        results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=dynamic_top_k)
+        dynamic_top_k = select_dynamic_top_k(query, results)
 
-    results = filter_usable_chunks(results)[:DEFAULT_TOP_K]
+    results = filter_usable_chunks(results)[:dynamic_top_k]
 
     from sidecar.rag.context_expand import expand_retrieval_context
 
     expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
     expanded = filter_usable_chunks(expanded)
+    expanded = limit_unique_sources(expanded, dynamic_top_k)
 
     _set_cached(query, topics, tags, (expanded, []))
     return expanded
 
 
-def _rewrite_profile(query: str) -> str:
-    try:
-        from sidecar.rag.profile import rewrite_query_with_profile
-
-        return rewrite_query_with_profile(query)
-    except Exception as e:
-        log_exception("[rag/retriever] profile rewrite failed", e, level="debug", logger=logger)
-        return query
-
-
-def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list:
+def _hyde_search(workspace, query, topics, tags, top_k, progress_callback=None) -> list:
     try:
         from prompts import HYDE_PROMPT
         from utils.llm_utils import create_llm
@@ -211,7 +187,7 @@ def _hyde_search(workspace, query, topics, tags, progress_callback=None) -> list
             query_dense=hyde_emb["dense_vec"],
             query_sparse=hyde_emb.get("lexical_weights", {}),
             query_text=hypo_answer,
-            top_k=rag_top_k(has_filters=bool(topics or tags)),
+            top_k=top_k,
             topics=topics,
             tags=tags,
         )
@@ -396,8 +372,6 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import build_index, rebuild_search_indices, save_manifest
-    from sidecar.rag.profile import update_profile_from_topics
-
     rel_paths = sorted(current_files.keys())
     all_chunks: list[dict] = []
     for rel_path in rel_paths:
@@ -443,14 +417,6 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
         entry["chunks"].append(c["id"])
     save_manifest(workspace, manifest)
 
-    topic_counts = {}
-    for c in all_chunks:
-        t = c.get("topic", "")
-        if t:
-            topic_counts[t] = topic_counts.get(t, 0) + 1
-    sorted_topics = sorted(topic_counts.keys(), key=lambda x: topic_counts[x], reverse=True)
-    update_profile_from_topics(sorted_topics)
-
     return {"success": True, "chunk_count": chunk_count}
 
 
@@ -471,8 +437,6 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         rebuild_search_indices,
         save_manifest,
     )
-    from sidecar.rag.profile import update_profile_from_topics
-
     workspace_path = Path(workspace)
     current_files = _scan_files(workspace_path)
 
@@ -599,14 +563,6 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
 
     build_and_save_global_idf(full_corpus, workspace)
     save_manifest(workspace, new_manifest)
-
-    topic_counts = {}
-    for c in full_corpus:
-        t = c.get("topic", "")
-        if t:
-            topic_counts[t] = topic_counts.get(t, 0) + 1
-    sorted_topics = sorted(topic_counts.keys(), key=lambda x: topic_counts[x], reverse=True)
-    update_profile_from_topics(sorted_topics)
 
     return {"success": True, "chunk_count": chunk_count, "incremental": True}
 

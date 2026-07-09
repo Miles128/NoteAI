@@ -127,3 +127,43 @@ class TestGetReranker:
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         _mod._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
+
+
+class TestDynamicTopK:
+    def _hit(self, idx: int, score: float, topic: str = "AI > RAG") -> dict:
+        return {
+            "id": f"h{idx}",
+            "content": f"chunk {idx}",
+            "file_path": f"Notes/{idx}.md",
+            "topic": topic,
+            "score": score,
+        }
+
+    def test_easy_high_confidence_query_keeps_citations_tight(self):
+        hits = [self._hit(1, 0.9), self._hit(2, 0.62), self._hit(3, 0.5)]
+        assert _mod.select_dynamic_top_k("什么是 RAG", hits) == 2
+
+    def test_broad_diverse_query_expands_citations(self):
+        hits = [
+            self._hit(i, 0.75 - i * 0.02, topic=f"AI > T{i % 5}")
+            for i in range(1, 11)
+        ]
+        assert _mod.select_dynamic_top_k("请总结并比较这些资料有哪些方案、优缺点和路线", hits) == 8
+
+    def test_weak_evidence_does_not_pad_citations(self):
+        hits = [self._hit(1, 0.18), self._hit(2, 0.15), self._hit(3, 0.12)]
+        assert _mod.select_dynamic_top_k("NoteAI", hits) == 2
+
+    def test_empty_chunks_are_ignored(self):
+        hits = [self._hit(1, 0.9), {**self._hit(2, 0.8), "content": ""}]
+        assert _mod.select_dynamic_top_k("什么是 RAG", hits) == 1
+
+    def test_limit_unique_sources_keeps_multiple_chunks_from_selected_files(self):
+        hits = [
+            {**self._hit(1, 0.9), "id": "a1", "file_path": "Notes/a.md"},
+            {**self._hit(2, 0.8), "id": "a2", "file_path": "Notes/a.md"},
+            {**self._hit(3, 0.7), "id": "b1", "file_path": "Notes/b.md"},
+            {**self._hit(4, 0.6), "id": "c1", "file_path": "Notes/c.md"},
+        ]
+        limited = _mod.limit_unique_sources(hits, 2)
+        assert [h["id"] for h in limited] == ["a1", "a2", "b1"]

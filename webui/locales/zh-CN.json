@@ -118,11 +118,12 @@
     },
     "layoutMode": {
       "constellation": "点阵",
-      "tree": "树状"
+      "tree": "思维导图"
     },
     "toggleFilenames": "显示/隐藏文件名",
     "zoomIn": "放大",
     "zoomOut": "缩小",
+    "zoomReset": "恢复 100%",
     "replay": "重放动画",
     "refresh": "刷新图谱",
     "layoutSettings": "布局参数",
@@ -148,13 +149,15 @@
       "l3": "三级"
     },
     "tree": {
+      "rootLabel": "我的知识库",
       "depthL1": "一级主题",
       "depthL2": "二级主题",
       "depthL3": "三级主题",
       "depthTags": "标签",
       "depthNotes": "笔记",
       "noteType": "笔记",
-      "noteCountSuffix": " 篇"
+      "noteCountSuffix": " 篇",
+      "collapsed": "已收起"
     },
     "param": {
       "l1PackRatio": "一级主题间距（× 画布短边）",

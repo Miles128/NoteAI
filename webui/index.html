@@ -356,24 +356,35 @@
                             <span class="graph-stats-sep" aria-hidden="true">·</span>
                             <span class="graph-stat-chip"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
                         </div>
+                        <div class="graph-layout-mode" id="graph-layout-mode">
+                            <button class="graph-layout-mode-btn active" data-layout-mode="constellation" data-i18n="graph.layoutMode.constellation" data-i18n-title="graph.layoutMode.constellation"></button>
+                            <button class="graph-layout-mode-btn" data-layout-mode="tree" data-i18n="graph.layoutMode.tree" data-i18n-title="graph.layoutMode.tree"></button>
+                        </div>
                         <div class="graph-header-controls">
-                            <div class="graph-layout-mode" id="graph-layout-mode">
-                                <button class="graph-layout-mode-btn active" data-layout-mode="constellation" data-i18n="graph.layoutMode.constellation" data-i18n-title="graph.layoutMode.constellation"></button>
-                                <button class="graph-layout-mode-btn" data-layout-mode="tree" data-i18n="graph.layoutMode.tree" data-i18n-title="graph.layoutMode.tree"></button>
-                            </div>
                             <div class="graph-filter-bar" id="graph-filter-bar">
-                                <button class="graph-filter-btn active" data-filter="topic" data-i18n="graph.filter.topic" data-i18n-title="graph.filter.topic"></button>
-                                <button class="graph-filter-btn" data-filter="tag" data-i18n="graph.filter.tag" data-i18n-title="graph.filter.tag"></button>
-                                <button class="graph-filter-btn" data-filter="all" data-i18n="graph.filter.all" data-i18n-title="graph.filter.all"></button>
+                                <button class="graph-filter-btn active" data-filter="topic" data-i18n-title="graph.filter.topic" data-i18n-aria="graph.filter.topic">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M12 7.5v4M6 15.5v-4h12v4"/></svg>
+                                </button>
+                                <button class="graph-filter-btn" data-filter="tag" data-i18n-title="graph.filter.tag" data-i18n-aria="graph.filter.tag">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13.2 12.2 21 3 11.8V3h8.8L20 11.2a1.4 1.4 0 0 1 0 2Z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+                                </button>
+                                <button class="graph-filter-btn" data-filter="all" data-i18n-title="graph.filter.all" data-i18n-aria="graph.filter.all">
+                                    <path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
+                                </button>
+                            </div>
+                            <div class="graph-zoom-control" aria-label="Zoom">
+                                <button class="graph-zoom-btn" type="button" onclick="graphZoomOut()" data-i18n-title="graph.zoomOut" aria-label="Zoom out">−</button>
+                                <button class="graph-zoom-percent" id="graph-zoom-percent" type="button" onclick="graphZoomReset()" data-i18n-title="graph.zoomReset">100%</button>
+                                <button class="graph-zoom-btn" type="button" onclick="graphZoomIn()" data-i18n-title="graph.zoomIn" aria-label="Zoom in">+</button>
                             </div>
                             <div class="graph-toolbar">
-                                <button class="graph-toolbar-btn" id="graph-toggle-filenames" onclick="graphToggleFilenames()" data-i18n-title="graph.toggleFilenames">
+                                <button class="graph-toolbar-btn graph-toolbar-secondary" id="graph-toggle-filenames" onclick="graphToggleFilenames()" data-i18n-title="graph.toggleFilenames">
                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                                 </button>
-                                <button class="graph-toolbar-btn" onclick="graphReplay()" data-i18n-title="graph.replay">
+                                <button class="graph-toolbar-btn graph-toolbar-secondary" onclick="graphReplay()" data-i18n-title="graph.replay">
                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                 </button>
-                                <button class="graph-toolbar-btn" onclick="loadRelationGraphData()" data-i18n-title="graph.refresh">
+                                <button class="graph-toolbar-btn graph-toolbar-secondary" onclick="loadRelationGraphData()" data-i18n-title="graph.refresh">
                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                                 </button>
                                 <button class="graph-toolbar-btn" id="graph-layout-settings-btn" onclick="graphOpenLayoutSettings()" data-i18n-title="graph.layoutSettings">

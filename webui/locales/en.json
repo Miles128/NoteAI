@@ -118,11 +118,12 @@
     },
     "layoutMode": {
       "constellation": "Map",
-      "tree": "Tree"
+      "tree": "Mind map"
     },
     "toggleFilenames": "Toggle filenames",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
+    "zoomReset": "Reset to 100%",
     "replay": "Replay animation",
     "refresh": "Refresh graph",
     "layoutSettings": "Layout settings",
@@ -148,13 +149,15 @@
       "l3": "L3"
     },
     "tree": {
+      "rootLabel": "My knowledge",
       "depthL1": "L1 topics",
       "depthL2": "L2 topics",
       "depthL3": "L3 topics",
       "depthTags": "Tags",
       "depthNotes": "Notes",
       "noteType": "Note",
-      "noteCountSuffix": " notes"
+      "noteCountSuffix": " notes",
+      "collapsed": "Collapsed"
     },
     "param": {
       "l1PackRatio": "L1 topic spacing (× canvas short side)",

@@ -239,6 +239,30 @@ function _treeDepthLabel(depth, rows) {
     return (window.t && window.t('graph.tree.depthNotes')) || 'Notes';
 }
 
+function _mindMapTextWidth(text) {
+    return Array.from(String(text || '')).reduce(function(width, char) {
+        return width + (/[^\u0000-\u00ff]/.test(char) ? 13 : 7.2);
+    }, 0);
+}
+
+function _mindMapNodeWidth(d) {
+    const padding = d.type === 'file' ? 18 : 28;
+    const minWidth = d.type === 'file' ? 58 : 82;
+    const maxWidth = d.type === 'file' ? 172 : 196;
+    return Math.max(minWidth, Math.min(maxWidth, _mindMapTextWidth(d.name) + padding));
+}
+
+function _mindMapNodeHeight(d) {
+    if (d.type === 'file') return 25;
+    if (d.type === 'topic' && Number(d.level || 0) === 1) return 42;
+    return 36;
+}
+
+function _mindMapLabel(text, maxLength) {
+    const chars = Array.from(String(text || ''));
+    return chars.length > maxLength ? chars.slice(0, maxLength - 1).join('') + '…' : chars.join('');
+}
+
 function _createGraphNode(nodeSelection, getRadius, showFilenames) {
     nodeSelection.attr('class', _graphNodeClass);
 
@@ -679,6 +703,7 @@ const Graph3Tier = {
     filter: 'topic',
     layoutMode: 'constellation',
     treeCollapsedIds: new Set(),
+    treeInitialCollapseApplied: false,
     layoutConfig: loadGraphLayoutConfig(),
     _graphBodyResizeObserver: null,
     _resizePaused: false,
@@ -935,7 +960,13 @@ const Graph3Tier = {
     _lastDataHash: null,
 
     async load(filter, force) {
-        if (filter) this.filter = filter;
+        if (filter && filter !== this.filter) {
+            this.filter = filter;
+            this.treeCollapsedIds.clear();
+            this.treeInitialCollapseApplied = false;
+        } else if (filter) {
+            this.filter = filter;
+        }
         var panel = document.getElementById('graph-panel');
         if (panel && panel.style.display === 'none') return;
         if (force) {
@@ -998,6 +1029,7 @@ const Graph3Tier = {
         if (nextMode === this.layoutMode) return;
         this.layoutMode = nextMode;
         this._updateLayoutModeBtns();
+        this._updateLegend();
         if (this.data && this.svg) {
             this.initD3();
             this.render();
@@ -1039,6 +1071,7 @@ const Graph3Tier = {
     _updateLegend() {
         const el = document.getElementById('graph-legend');
         if (!el) return;
+        el.style.display = this.layoutMode === 'tree' ? 'none' : 'flex';
         el.innerHTML = '';
         var items = [];
         if (this.filter === 'tag' || this.filter === 'all') {
@@ -1092,8 +1125,12 @@ const Graph3Tier = {
 
         this.zoom = d3.zoom()
             .scaleExtent([0.06, 5])
-            .on('zoom', (e) => { this.g.attr('transform', e.transform); });
+            .on('zoom', (e) => {
+                this.g.attr('transform', e.transform);
+                this._updateZoomPercent(e.transform.k);
+            });
         this.svg.call(this.zoom);
+        this._updateZoomPercent(1);
 
         this._observeGraphPanelBodyResize(container);
 
@@ -1113,6 +1150,7 @@ const Graph3Tier = {
     render() {
         if (!this.svg || !this.data) return;
         this.g.selectAll('*').remove();
+        this.svg.classed('is-mindmap', this.layoutMode === 'tree');
 
         if (this.layoutMode === 'tree') {
             this.renderTreeLayout();
@@ -1247,34 +1285,47 @@ const Graph3Tier = {
 
         const nodeMap = {};
         nodes.forEach(n => { nodeMap[n.id] = n; });
-
+        const isVisibleType = n => this.showFilenames || n.type !== 'file';
         const childrenByParent = {};
         const hasParent = new Set();
         edges.forEach(e => {
             if (!nodeMap[e.source] || !nodeMap[e.target] || e.source === e.target) return;
             if (!childrenByParent[e.source]) childrenByParent[e.source] = [];
             childrenByParent[e.source].push(e.target);
-            hasParent.add(e.target);
+            if (isVisibleType(nodeMap[e.target])) hasParent.add(e.target);
         });
 
-        const orderedNodes = nodes.slice().sort((a, b) => {
+        const orderedNodes = nodes.filter(isVisibleType).sort((a, b) => {
             const la = a.type === 'topic' ? (a.level || 0) : 9;
             const lb = b.type === 'topic' ? (b.level || 0) : 9;
             return la - lb || String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN');
         });
+        const visibleChildIds = nodeId => (childrenByParent[nodeId] || [])
+            .filter(id => nodeMap[id] && isVisibleType(nodeMap[id]));
+
+        if (!this.treeInitialCollapseApplied) {
+            orderedNodes.forEach(n => {
+                if (!visibleChildIds(n.id).length) return;
+                if ((n.type === 'topic' && Number(n.level || 0) >= 2) || n.type === 'tag') {
+                    this.treeCollapsedIds.add(n.id);
+                }
+            });
+            this.treeInitialCollapseApplied = true;
+        }
+
         const rootNodes = orderedNodes.filter(n => !hasParent.has(n.id));
         const visited = new Set();
         const collapsed = this.treeCollapsedIds;
-        const markDescendantsVisited = (nodeId) => {
-            (childrenByParent[nodeId] || []).forEach(childId => {
+        const markDescendantsVisited = nodeId => {
+            visibleChildIds(nodeId).forEach(childId => {
                 if (visited.has(childId)) return;
                 visited.add(childId);
                 markDescendantsVisited(childId);
             });
         };
-        const toTreeNode = (n) => {
+        const toTreeNode = n => {
             visited.add(n.id);
-            const rawChildIds = (childrenByParent[n.id] || []).filter(id => nodeMap[id]);
+            const rawChildIds = visibleChildIds(n.id);
             const isCollapsed = collapsed.has(n.id) && rawChildIds.length > 0;
             if (isCollapsed) {
                 markDescendantsVisited(n.id);
@@ -1285,11 +1336,11 @@ const Graph3Tier = {
                     _collapsed: true,
                 });
             }
-            const childIds = rawChildIds.filter(id => !visited.has(id));
-            const children = childIds
+            const children = rawChildIds
+                .filter(id => !visited.has(id))
                 .map(id => nodeMap[id])
                 .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN'))
-                .map(child => toTreeNode(child));
+                .map(toTreeNode);
             return Object.assign({}, n, {
                 children,
                 _hasChildren: rawChildIds.length > 0,
@@ -1298,123 +1349,127 @@ const Graph3Tier = {
             });
         };
 
-        const rootCandidates = rootNodes.length ? rootNodes : orderedNodes;
         const roots = [];
-        rootCandidates.forEach(n => {
-            if (!visited.has(n.id)) roots.push(toTreeNode(n));
-        });
-        orderedNodes.forEach(n => {
-            if (!visited.has(n.id)) roots.push(toTreeNode(n));
-        });
+        const rootCandidates = rootNodes.length ? rootNodes : orderedNodes;
+        rootCandidates.forEach(n => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
+        orderedNodes.forEach(n => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
+        if (!roots.length) return;
 
-        const root = d3.hierarchy({ id: '__root__', name: '', children: roots });
-        const visibleNodes = root.descendants().filter(d => d.data.id !== '__root__');
-        const maxDepth = d3.max(visibleNodes, d => d.depth) || 1;
-        const leafCount = Math.max(visibleNodes.filter(d => !d.children || !d.children.length).length, 1);
-        const rowGap = Math.max(26, Math.min(42, (svgH - 96) / Math.max(leafCount, 1)));
-        const colGap = Math.max(150, Math.min(230, (svgW - 140) / Math.max(maxDepth, 1)));
-
-        d3.tree().nodeSize([rowGap, colGap])(root);
-
-        const minX = d3.min(visibleNodes, d => d.x) || 0;
-        const maxX = d3.max(visibleNodes, d => d.x) || 0;
-        const minY = d3.min(visibleNodes, d => d.y) || 0;
-        const maxY = d3.max(visibleNodes, d => d.y) || 0;
-        const offsetX = 72 - minY;
-        const offsetY = (svgH - (maxX - minX)) / 2 - minX;
-        visibleNodes.forEach(d => {
-            d.data.x = d.y + offsetX;
-            d.data.y = d.x + offsetY;
-            d.data.treeDepth = d.depth;
+        const subtreeWeight = branch => 1 + (branch.children || []).reduce((sum, child) => sum + subtreeWeight(child), 0);
+        const sides = [[], []];
+        const sideWeights = [0, 0];
+        roots.forEach((branch, index) => {
+            const sideIndex = sideWeights[0] === sideWeights[1] ? index % 2 : (sideWeights[0] < sideWeights[1] ? 0 : 1);
+            sides[sideIndex].push(branch);
+            sideWeights[sideIndex] += subtreeWeight(branch);
         });
 
-        const lc = this.layoutConfig;
-        const getRadius = d => _graphNodeRadius(d, lc);
-        const links = root.links().filter(link => link.source.data.id !== '__root__');
+        const center = {
+            id: '__mindmap_root__',
+            name: (window.t && window.t('graph.tree.rootLabel')) || 'Knowledge base',
+            x: svgW / 2,
+            y: svgH / 2,
+            _mindWidth: 132,
+            _mindHeight: 50,
+        };
+        const rowGap = this.showFilenames ? 42 : 52;
+        const colGap = (this.showFilenames ? 178 : 204) * 1.75;
+        const visibleNodes = [];
+        const links = [];
+
+        const layoutSide = (branches, direction) => {
+            if (!branches.length) return;
+            const sideRoot = d3.hierarchy({ id: '__side__', children: branches });
+            d3.tree().nodeSize([rowGap, colGap])(sideRoot);
+            const descendants = sideRoot.descendants().filter(d => d.data.id !== '__side__');
+            const minY = d3.min(descendants, d => d.x) || 0;
+            const maxY = d3.max(descendants, d => d.x) || 0;
+            const offsetY = center.y - (minY + maxY) / 2;
+            descendants.forEach(d => {
+                d.data.x = center.x + direction * d.depth * colGap;
+                d.data.y = d.x + offsetY;
+                d.data.treeDepth = d.depth;
+                d.data._mindSide = direction;
+                d.data._mindWidth = _mindMapNodeWidth(d.data);
+                d.data._mindHeight = _mindMapNodeHeight(d.data);
+                visibleNodes.push(d);
+                links.push({
+                    source: d.parent && d.parent.data.id !== '__side__' ? d.parent.data : center,
+                    target: d.data,
+                });
+            });
+        };
+        layoutSide(sides[0], -1);
+        layoutSide(sides[1], 1);
 
         this.g.selectAll('*').remove();
-        const depthValues = Array.from(new Set(visibleNodes.map(d => d.depth))).sort((a, b) => a - b);
-        const nodesByDepth = {};
-        visibleNodes.forEach(function(d) {
-            if (!nodesByDepth[d.depth]) nodesByDepth[d.depth] = [];
-            nodesByDepth[d.depth].push(d);
-        });
-        const minTreeY = d3.min(visibleNodes, d => d.data.y) || 0;
-        const maxTreeY = d3.max(visibleNodes, d => d.data.y) || 0;
-        const bandTop = minTreeY - rowGap;
-        const bandHeight = Math.max(rowGap * 2, maxTreeY - minTreeY + rowGap * 2);
-        const bandWidth = Math.max(130, colGap - 18);
-        this.g.append('g')
-            .attr('class', 'graph-tree-depth-bands')
-            .selectAll('g')
-            .data(depthValues)
-            .join('g')
-            .attr('class', 'graph-tree-depth-band')
-            .attr('transform', depth => {
-                const x = (depth * colGap) + offsetX - bandWidth / 2;
-                return 'translate(' + x + ',' + bandTop + ')';
-            })
-            .each(function(depth) {
-                const band = d3.select(this);
-                band.append('rect')
-                    .attr('width', bandWidth)
-                    .attr('height', bandHeight)
-                    .attr('rx', 8);
-                band.append('text')
-                    .attr('x', 10)
-                    .attr('y', 18)
-                    .text(_treeDepthLabel(depth, nodesByDepth[depth] || []));
-            });
+        const rootGroup = this.g.append('g')
+            .attr('class', 'graph-mindmap-root')
+            .attr('transform', 'translate(' + center.x + ',' + center.y + ')');
+        rootGroup.append('rect')
+            .attr('x', -center._mindWidth / 2)
+            .attr('y', -center._mindHeight / 2)
+            .attr('width', center._mindWidth)
+            .attr('height', center._mindHeight)
+            .attr('rx', 15);
+        rootGroup.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '0.36em')
+            .text(center.name);
 
         this.g.append('g')
-            .attr('class', 'graph-tree-links')
+            .attr('class', 'graph-tree-links graph-mindmap-links')
             .selectAll('path')
             .data(links)
             .join('path')
-            .attr('class', 'graph-tree-link')
+            .attr('class', link => 'graph-tree-link graph-mindmap-link graph-mindmap-link-depth-' + link.target.treeDepth)
             .attr('fill', 'none')
             .attr('d', link => {
-                const sx = link.source.data.x;
-                const sy = link.source.data.y;
-                const tx = link.target.data.x;
-                const ty = link.target.data.y;
-                const mid = (sx + tx) / 2;
-                return 'M' + sx + ',' + sy + 'C' + mid + ',' + sy + ' ' + mid + ',' + ty + ' ' + tx + ',' + ty;
+                const side = link.target._mindSide;
+                const sx = link.source.x + side * link.source._mindWidth / 2;
+                const sy = link.source.y;
+                const tx = link.target.x - side * link.target._mindWidth / 2;
+                const ty = link.target.y;
+                const curve = Math.max(38, Math.abs(tx - sx) * 0.52);
+                return 'M' + sx + ',' + sy + 'C' + (sx + side * curve) + ',' + sy + ' ' + (tx - side * curve) + ',' + ty + ' ' + tx + ',' + ty;
             });
 
         const self = this;
         const node = this.g.append('g')
-            .attr('class', 'graph-nodes graph-tree-nodes')
+            .attr('class', 'graph-nodes graph-tree-nodes graph-mindmap-nodes')
             .selectAll('g')
             .data(visibleNodes.map(d => d.data))
             .join('g')
+            .attr('class', d => _graphNodeClass(d) + ' graph-mindmap-node mindmap-side-' + (d._mindSide < 0 ? 'left' : 'right'))
             .attr('cursor', 'pointer')
             .attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
 
-        _createGraphNode(node, getRadius, true);
-        node.selectAll('text')
-            .attr('text-anchor', 'start')
-            .attr('x', d => getRadius(d) + 8)
-            .attr('dy', '0.32em')
-            .style('display', '');
-
+        node.append('rect')
+            .attr('class', 'graph-mindmap-node-surface')
+            .attr('x', d => -d._mindWidth / 2)
+            .attr('y', d => -d._mindHeight / 2)
+            .attr('width', d => d._mindWidth)
+            .attr('height', d => d._mindHeight)
+            .attr('rx', d => d.type === 'file' ? 7 : 11);
         node.append('text')
-            .attr('class', 'graph-tree-subtitle')
-            .attr('text-anchor', 'start')
-            .attr('x', d => getRadius(d) + 8)
-            .attr('dy', '1.65em')
+            .attr('class', 'graph-mindmap-label')
+            .attr('text-anchor', 'middle')
+            .attr('y', d => d.type === 'file' ? 4 : -4)
+            .text(d => _mindMapLabel(d.name, d.type === 'file' ? 22 : 18));
+        node.filter(d => d.type !== 'file').append('text')
+            .attr('class', 'graph-tree-subtitle graph-mindmap-meta')
+            .attr('text-anchor', 'middle')
+            .attr('y', 11)
             .text(_graphNodeSubtitle);
+        node.append('title').text(d => (d.name || '') + '\n' + _graphNodeSubtitle(d));
 
         const toggles = node.filter(d => d._hasChildren)
             .append('g')
-            .attr('class', 'graph-tree-toggle-node')
-            .attr('transform', d => 'translate(' + (-(getRadius(d) + 12)) + ',0)')
+            .attr('class', 'graph-tree-toggle-node graph-mindmap-toggle')
+            .attr('transform', d => 'translate(' + (d._mindSide * (d._mindWidth / 2 + 11)) + ',0)')
             .attr('cursor', 'pointer');
-        toggles.append('circle')
-            .attr('r', 6);
-        toggles.append('path')
-            .attr('class', 'graph-tree-toggle-minus')
-            .attr('d', 'M-3,0H3');
+        toggles.append('circle').attr('r', 7);
+        toggles.append('path').attr('class', 'graph-tree-toggle-minus').attr('d', 'M-3,0H3');
         toggles.append('path')
             .attr('class', 'graph-tree-toggle-plus')
             .attr('d', 'M0,-3V3')
@@ -1425,63 +1480,59 @@ const Graph3Tier = {
         });
 
         const pathByNode = {};
-        visibleNodes.forEach(function(d) {
+        visibleNodes.forEach(d => {
             const ids = new Set();
-            let cur = d;
-            while (cur && cur.data && cur.data.id !== '__root__') {
-                ids.add(cur.data.id);
-                cur = cur.parent;
+            let current = d;
+            while (current && current.data && current.data.id !== '__side__') {
+                ids.add(current.data.id);
+                current = current.parent;
             }
-            d.descendants().forEach(function(child) {
-                if (child.data && child.data.id !== '__root__') ids.add(child.data.id);
+            d.descendants().forEach(child => {
+                if (child.data && child.data.id !== '__side__') ids.add(child.data.id);
             });
             pathByNode[d.data.id] = ids;
         });
-
-        function setTreeFocus(targetId) {
+        const setTreeFocus = targetId => {
             const pathSet = pathByNode[targetId] || new Set();
-            node.classed('is-dimmed', function(d) { return !pathSet.has(d.id) && d.id !== targetId; });
-            node.classed('is-path', function(d) { return pathSet.has(d.id); });
-            node.classed('is-focus', function(d) { return d.id === targetId; });
+            node.classed('is-dimmed', d => !pathSet.has(d.id));
+            node.classed('is-path', d => pathSet.has(d.id));
+            node.classed('is-focus', d => d.id === targetId);
             self.g.selectAll('.graph-tree-link')
-                .classed('is-dimmed', function(link) {
-                    return !pathSet.has(link.source.data.id) || !pathSet.has(link.target.data.id);
-                })
-                .classed('is-path', function(link) {
-                    return pathSet.has(link.source.data.id) && pathSet.has(link.target.data.id);
-                });
-        }
-
-        function clearTreeFocus() {
+                .classed('is-dimmed', link => !pathSet.has(link.target.id))
+                .classed('is-path', link => pathSet.has(link.target.id));
+        };
+        const clearTreeFocus = () => {
             node.classed('is-dimmed', false).classed('is-path', false).classed('is-focus', false);
             self.g.selectAll('.graph-tree-link').classed('is-dimmed', false).classed('is-path', false);
-        }
+        };
 
         node.on('mouseenter', function(e, d) {
             setTreeFocus(d.id);
-            d3.select(this).select('circle').transition().duration(120).attr('r', getRadius(d) * 1.25);
-        }).on('mouseleave', function(e, d) {
-            clearTreeFocus();
-            d3.select(this).select('circle').transition().duration(120).attr('r', getRadius(d));
-        });
+        }).on('mouseleave', clearTreeFocus);
         node.on('click', (e, d) => self._graphNodeClick(e, d));
-        node.on('dblclick', (e, d) => self._graphNodeClick(e, d));
+        node.on('dblclick', function(e, d) {
+            e.stopPropagation();
+            if (d._hasChildren) self.toggleTreeNodeCollapsed(d.id);
+            else self._graphNodeClick(e, d);
+        });
 
-        const boundsNodes = visibleNodes.map(d => d.data);
+        const layoutNodes = visibleNodes.map(d => d.data).concat([center]);
         const bounds = {
-            x1: d3.min(boundsNodes, d => d.x) || 0,
-            y1: d3.min(boundsNodes, d => d.y) || 0,
-            x2: (d3.max(boundsNodes, d => d.x) || 0) + Math.max(120, maxY - minY > 0 ? 80 : 120),
-            y2: d3.max(boundsNodes, d => d.y) || 0,
+            x1: d3.min(layoutNodes, d => d.x - d._mindWidth / 2 - 18) || 0,
+            y1: d3.min(layoutNodes, d => d.y - d._mindHeight / 2 - 12) || 0,
+            x2: d3.max(layoutNodes, d => d.x + d._mindWidth / 2 + 18) || svgW,
+            y2: d3.max(layoutNodes, d => d.y + d._mindHeight / 2 + 12) || svgH,
         };
-        const bw = Math.max(120, bounds.x2 - bounds.x1);
-        const bh = Math.max(120, bounds.y2 - bounds.y1);
-        const scale = Math.min((svgW - 80) / bw, (svgH - 80) / bh, 1.35);
+        const bw = Math.max(180, bounds.x2 - bounds.x1);
+        const bh = Math.max(160, bounds.y2 - bounds.y1);
+        // Keep the mind map spacious. Fit vertically, and let wide branches pan
+        // beyond the viewport instead of shrinking the entire map horizontally.
+        const scale = Math.max(0.42, Math.min((svgH - 92) / bh, 1));
         const midX = (bounds.x1 + bounds.x2) / 2;
         const midY = (bounds.y1 + bounds.y2) / 2;
-        this.svg.transition().duration(300).call(
+        this.svg.transition().duration(420).call(
             this.zoom.transform,
-            d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+            d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.28, scale)).translate(-midX, -midY)
         );
     },
 
@@ -1544,6 +1595,15 @@ const Graph3Tier = {
     },
     zoomOut() {
         if (this.svg && this.zoom) this.svg.transition().duration(300).call(this.zoom.scaleBy, 0.7);
+    },
+
+    zoomReset() {
+        if (this.svg && this.zoom) this.svg.transition().duration(300).call(this.zoom.scaleTo, 1);
+    },
+
+    _updateZoomPercent(scale) {
+        const percent = document.getElementById('graph-zoom-percent');
+        if (percent) percent.textContent = Math.round((Number(scale) || 1) * 100) + '%';
     },
 
     replay() {
@@ -1664,11 +1724,13 @@ window.Graph3Tier = Graph3Tier;
 
 function graphZoomIn() { Graph3Tier.zoomIn(); }
 function graphZoomOut() { Graph3Tier.zoomOut(); }
+function graphZoomReset() { Graph3Tier.zoomReset(); }
 function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
 function graphSetLayoutMode(mode) { Graph3Tier.setLayoutMode(mode); }
 function graphToggleFilenames() {
     Graph3Tier.showFilenames = !Graph3Tier.showFilenames;
+    Graph3Tier.treeInitialCollapseApplied = false;
     var btn = document.getElementById('graph-toggle-filenames');
     if (btn) btn.classList.toggle('active', Graph3Tier.showFilenames);
     if (Graph3Tier.layoutMode === 'tree') {
@@ -1685,6 +1747,7 @@ function graphToggleFilenames() {
 }
 window.graphZoomIn = graphZoomIn;
 window.graphZoomOut = graphZoomOut;
+window.graphZoomReset = graphZoomReset;
 window.graphReplay = graphReplay;
 window.loadRelationGraphData = loadRelationGraphData;
 window.graphSetLayoutMode = graphSetLayoutMode;

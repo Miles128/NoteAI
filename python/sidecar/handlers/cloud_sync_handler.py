@@ -6,7 +6,6 @@ until conflict handling and provider UX are ready.
 
 from sidecar.handlers.base import BaseHandler
 
-
 _DISABLED_MESSAGE = "云同步暂未开放，入口保留为实验功能占位。"
 
 

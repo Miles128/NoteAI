@@ -365,8 +365,9 @@ class TestCollectionCache:
         assert first is not second
 
     def test_remove_stale_lock_cleans_nested_zero_byte_locks(self, workspace: Path):
-        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
         from sidecar.rag.index import _remove_stale_lock
+
+        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 
         path = workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "zvec_collection"
         nested = path / "stale_test"

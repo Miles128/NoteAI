@@ -13,11 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from config import config
 from sidecar.cli_agent_runner import list_available_agents, run_cli_agent
 from sidecar.handlers.cli_agent_handler import CliAgentHandler
 from sidecar.handlers.mcp_config_handler import McpConfigHandler
 from sidecar.mcp_config_manager import get_mcp_status, register_mcp_server
+
+from config import config
 
 
 def _banner(title: str) -> None:

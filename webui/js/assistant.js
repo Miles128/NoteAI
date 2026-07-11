@@ -282,7 +282,7 @@ window.AssistantModule = (function() {
         contentEl.textContent = text || '';
     }
 
-    function sendMessage(questionOverride) {
+    function sendMessage(questionOverride, options) {
         if (_isStreaming) return;
 
         var input = document.getElementById('ai-input');
@@ -305,7 +305,7 @@ window.AssistantModule = (function() {
         var tags = _extractTags();
         var currentFile = _extractCurrentFile();
 
-        window.api.ragChat(question, topics, tags, currentFile).then(function(result) {
+        window.api.ragChat(question, topics, tags, currentFile, options).then(function(result) {
             if (result && result.started) {
                 setTimeout(function() {
                     if (_isStreaming && _currentStreamEl === assistantEl && !_streamRawText) {
@@ -335,6 +335,17 @@ window.AssistantModule = (function() {
         var input = document.getElementById('ai-input');
         if (input) input.value = '';
         sendMessage(question);
+    }
+
+    function askSelection(selection, options) {
+        ensureOpen();
+        var selected = String(selection || '').trim();
+        if (!selected) return;
+        sendMessage(selected, {
+            selectionLookup: true,
+            selectionRoute: (options && options.route) || 'auto',
+            selectionContext: (options && options.context) || ''
+        });
     }
 
     function _extractTopics() {
@@ -466,6 +477,8 @@ window.AssistantModule = (function() {
                 var failMessage = indexPayload.message || window.t('common.unknownError');
                 addSystemMessage(window.t('assistant.indexBuildFailed', { message: failMessage }));
             }
+        } else if (eventData.type === 'rag_index_needs_rebuild') {
+            addSystemMessage(eventData.message || window.t('assistant.indexBuildFailed', { message: '' }));
         } else if (eventData.type === 'rag-index-progress') {
             var pct = eventData.data && eventData.data.percent || 0;
             var msg = eventData.data && eventData.data.message || '';
@@ -668,10 +681,14 @@ window.AssistantModule = (function() {
             item.appendChild(info);
 
             item.addEventListener('click', function() {
-                _openNoteFromPath(
-                    cite.file_path,
-                    cite.source_label || cite.file_name || ''
-                );
+                if (cite.url) {
+                    window.open(cite.url, '_blank', 'noopener,noreferrer');
+                } else {
+                    _openNoteFromPath(
+                        cite.file_path,
+                        cite.source_label || cite.file_name || ''
+                    );
+                }
             });
 
             list.appendChild(item);
@@ -687,7 +704,8 @@ window.AssistantModule = (function() {
         rebuildIndex: rebuildIndex,
         toggle: toggle,
         ensureOpen: ensureOpen,
-        ask: ask
+        ask: ask,
+        askSelection: askSelection
     };
 })();
 

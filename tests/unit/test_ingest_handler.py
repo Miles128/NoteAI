@@ -5,9 +5,9 @@ import pytest
 from sidecar.handlers.ingest_handler import IngestHandler
 from sidecar.ingest_pipeline import save_ingest_state
 from sidecar.schema_manager import SCHEMA_FILENAME
-from tests.workspace_rules_helpers import write_workspace_rules
 
 from config import config
+from tests.workspace_rules_helpers import write_workspace_rules
 
 
 @pytest.fixture

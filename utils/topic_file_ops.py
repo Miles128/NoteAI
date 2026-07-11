@@ -40,12 +40,15 @@ def move_file_to_notes_topic_folder(file_path, topic):
 
     import shutil
 
-    clean = topic.replace("..", "").strip()
+    clean = topic.strip()
     if not clean:
         return {"success": False, "message": "主题名称非法"}
 
     parts = [p.strip() for p in clean.split(TOPIC_SEP) if p.strip()]
-    if not parts:
+    if not parts or any(
+        p in {".", ".."} or "/" in p or "\\" in p or any(ord(ch) < 32 for ch in p)
+        for p in parts
+    ):
         return {"success": False, "message": "主题名称非法"}
 
     topic_dir = Path(workspace) / config.NOTES_FOLDER
@@ -181,9 +184,13 @@ def move_file_to_topic(file_rel_path, new_topic, file_title=None):
 
     add_success = add_file_to_wiki_topic(file_rel_path, new_topic, file_title)
 
-    write_topic_to_file(str(file_path), new_topic)
+    write_result = write_topic_to_file(str(file_path), new_topic)
+    if not write_result.get("success"):
+        return write_result
 
-    move_file_to_notes_topic_folder(str(file_path), new_topic)
+    move_result = move_file_to_notes_topic_folder(str(file_path), new_topic)
+    if not move_result.get("success"):
+        return move_result
 
     if add_success:
         if old_topic:

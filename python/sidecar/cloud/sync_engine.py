@@ -2,6 +2,7 @@ import contextlib
 import json
 import os
 import time
+from pathlib import Path
 
 from sidecar.cloud.providers import PROVIDER_MAP, CloudProvider
 from utils.keyring_store import delete_credential, load_credential, store_credential
@@ -170,9 +171,27 @@ class SyncEngine:
             to_download.append(cf)
         return to_download, conflicts
 
+    def _safe_local_path(self, relative_path: str) -> str:
+        """Resolve a provider path inside one of the explicitly synced roots."""
+        if not isinstance(relative_path, str) or not relative_path:
+            raise ValueError("云端文件路径为空")
+        normalized = relative_path.replace("\\", "/")
+        candidate = Path(normalized)
+        if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+            raise ValueError(f"云端文件路径非法: {relative_path}")
+        if not candidate.parts or candidate.parts[0] not in SYNC_DIRS:
+            raise ValueError(f"云端文件不在允许的同步目录中: {relative_path}")
+        workspace = Path(self._workspace).resolve()
+        resolved = (workspace / candidate).resolve()
+        try:
+            resolved.relative_to(workspace)
+        except ValueError as exc:
+            raise ValueError(f"云端文件路径越界: {relative_path}") from exc
+        return str(resolved)
+
     def _download_single(self, rf, local_map):
         rel = rf["relative_path"]
-        local_full = os.path.join(self._workspace, rel)
+        local_full = self._safe_local_path(rel)
         remote_path = rel.replace("\\", "/")
         is_conflict = rel in local_map and rf["mtime"] > local_map[rel]["mtime"] + 1
         if is_conflict and os.path.isfile(local_full):
@@ -244,7 +263,11 @@ class SyncEngine:
 
     @staticmethod
     def load_provider_config(workspace_path: str, provider_name: str) -> dict:
-        config_path = os.path.join(workspace_path, "NoteAI", CONFIG_FILE)
+        config_path = os.path.join(workspace_path, ".noteai", CONFIG_FILE)
+        legacy_path = os.path.join(workspace_path, "NoteAI", CONFIG_FILE)
+        if not os.path.isfile(config_path) and os.path.isfile(legacy_path):
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            os.replace(legacy_path, config_path)
         if not os.path.isfile(config_path):
             return {}
         try:
@@ -268,7 +291,7 @@ class SyncEngine:
 
     @staticmethod
     def save_provider_config(workspace_path: str, provider_name: str, config: dict):
-        noteai_dir = os.path.join(workspace_path, "NoteAI")
+        noteai_dir = os.path.join(workspace_path, ".noteai")
         os.makedirs(noteai_dir, exist_ok=True)
         config_path = os.path.join(noteai_dir, CONFIG_FILE)
         all_configs = {}

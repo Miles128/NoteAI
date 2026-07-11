@@ -51,3 +51,18 @@ def test_finish_chat_includes_citation_quality(tmp_path) -> None:
     payload = events[-1]["result"]
     assert payload["citation_quality"]["level"] == "focused"
     assert payload["citation_quality"]["source_count"] == 2
+
+
+def test_unscored_current_context_is_not_high_confidence(tmp_path) -> None:
+    config.workspace_path = str(tmp_path)
+    events = []
+    handler = RagHandler(
+        SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _send_response=lambda resp: events.append(resp),
+        )
+    )
+
+    handler._finish_chat("问题", "回答", citations=[{"file_path": "Notes/current.md", "source_type": "current"}])
+
+    assert events[-1]["result"]["citation_quality"] == {"source_count": 0, "level": "none", "top_score": None}

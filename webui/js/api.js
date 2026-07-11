@@ -346,6 +346,10 @@ var API_DEFS = [
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
     { name: 'getPendingTopics', method: 'get_pending_topics' },
     { name: 'getAllPending', method: 'get_all_pending' },
+    { name: 'retryCascadeTopic', method: 'retry_cascade_topic', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'dismissCascadeFailure', method: 'dismiss_cascade_failure', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'retryConvertFile', method: 'retry_convert_file', params: function(file) { return { file: file }; }, write: true },
+    { name: 'dismissConvertFailure', method: 'dismiss_convert_failure', params: function(file) { return { file: file }; }, write: true },
     { name: 'getDashboardStatus', method: 'get_dashboard_status' },
     { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; } },
@@ -411,7 +415,7 @@ var API_DEFS = [
     { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; }, write: true },
 
     // ---- RAG ----
-    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile) { return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null }; } },
+    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, force_intent: opts.forceIntent || null, selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
     { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; }, write: true },
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },

@@ -64,11 +64,16 @@ def rag_index_status(workspace: str) -> dict:
 
         chunk_count = count_indexed_chunks(workspace)
         manifest = load_manifest(workspace)
+        expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.get("files", {}).values())
+        built = index_exists(workspace) and chunk_count > 0 and chunk_count == expected_chunks
         return {
             "success": True,
             "enabled": True,
-            "built": index_exists(workspace) and chunk_count > 0,
+            "built": built,
+            "needs_rebuild": not built,
+            "repair_required": expected_chunks > 0 and chunk_count != expected_chunks,
             "chunk_count": chunk_count,
+            "expected_chunks": expected_chunks,
             "file_count": len(manifest.get("files", {})),
         }
     except Exception as e:

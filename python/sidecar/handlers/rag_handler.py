@@ -6,8 +6,8 @@ from pathlib import Path
 
 from config import config
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.handlers.base import BaseHandler
 from sidecar import job_status
+from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
 try:
@@ -268,7 +268,11 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
         compressed = ""
-        intent = classify_intent(question, history="")
+        if params.get("selection_lookup"):
+            return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
+
+        forced_intent = params.get("force_intent")
+        intent = {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"} if forced_intent else classify_intent(question, history="")
         logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
 
         if intent["intent"] in ("chat", "general"):
@@ -278,6 +282,40 @@ class RagHandler(BaseHandler):
 
         # workspace / unknown -> RAG retrieval
         return self._answer_with_rag(params, question, compressed, use_vector_rag=use_vector_rag)
+
+    def _answer_selection_lookup(self, params, selection: str, *, use_vector_rag: bool) -> dict:
+        """Stream a quick explanation first, then append evidence from the selected route."""
+        from sidecar.intent_router import classify_intent
+        from utils.llm_utils import APIConfigError, call_llm_raw_stream
+
+        current_file = params.get("current_file") or ""
+        context = (params.get("selection_context") or "").strip()[:2000]
+        prompt = (
+            "你在帮助用户阅读笔记。先给出简洁、明确的快速解释；这不是检索结论，"
+            "不要编造来源。\n\n"
+            f"选中文本：{selection}\n当前文件：{current_file or '未知'}\n上下文：{context or '未提供'}"
+        )
+        try:
+            quick_answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+        except (APIConfigError, Exception) as e:
+            return self._fail_rag(str(e))
+
+        requested_route = params.get("selection_route", "auto")
+        if requested_route == "rag":
+            route = "workspace"
+        elif requested_route == "web":
+            route = "web"
+        else:
+            route_query = f"选中文本：{selection}\n上下文：{context}" if context else selection
+            route = classify_intent(route_query, history="").get("intent", "unknown")
+
+        if route in {"workspace", "unknown"}:
+            self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
+            return self._answer_with_rag(params, selection, "", use_vector_rag=use_vector_rag)
+        if route == "web":
+            self._send_chat_chunk("\n\n---\n\n### 联网补充\n\n")
+            return self._answer_without_retrieval(selection, "", intent="web")
+        return self._finish_chat(selection, quick_answer)
 
     def _send_chat_chunk(self, token: str) -> None:
         self._send_response(
@@ -295,11 +333,11 @@ class RagHandler(BaseHandler):
                 scored.append(float(cite.get("score")))
             except (TypeError, ValueError):
                 continue
-        source_count = len([c for c in cites if c.get("file_path")])
+        source_count = len([c for c in cites if c.get("file_path") and c.get("source_type") != "current"])
         top_score = max(scored) if scored else None
         if source_count == 0:
             level = "none"
-        elif top_score is not None and top_score < 0.22:
+        elif top_score is None or top_score < 0.22:
             level = "weak"
         elif source_count >= 6:
             level = "broad"
@@ -378,7 +416,21 @@ class RagHandler(BaseHandler):
             RagHandler._record_error(f"LLM错误: {e}")
             return self._fail_rag(str(e))
 
-        return self._finish_chat(question, answer)
+        citations = []
+        if intent == "web":
+            citations = [
+                {
+                    "index": i,
+                    "file_path": "",
+                    "file_name": result.get("title", ""),
+                    "source_label": result.get("title", ""),
+                    "source_type": "web",
+                    "url": result.get("url", ""),
+                }
+                for i, result in enumerate(web_results, 1)
+                if result.get("url")
+            ]
+        return self._finish_chat(question, answer, citations=citations)
 
     def _answer_with_rag(self, params, question: str, compressed_history: str, *, use_vector_rag: bool) -> dict:
         from prompts import RAG_CHAT_PROMPT
@@ -403,7 +455,8 @@ class RagHandler(BaseHandler):
         citations = []
         seen_paths: set[str] = set()
 
-        # Prioritize current file as [0] so the model can cite it explicitly.
+        # The current file is useful background, but it is not evidence unless
+        # retrieval independently returns a scored chunk from that file.
         if current_file:
             current_full = self._resolve_path(current_file)
             try:
@@ -413,19 +466,7 @@ class RagHandler(BaseHandler):
                     cf_body = (cf_body or cf_text).strip()[:4000]
                     if cf_body:
                         label = Path(current_file).stem
-                        context_parts.append(f"[0] {label}（当前打开文件）\n{cf_body}")
-                        seen_paths.add(current_file)
-                        citations.append(
-                            {
-                                "index": 0,
-                                "file_path": current_file,
-                                "file_name": label,
-                                "source_label": label,
-                                "section_title": "",
-                                "topic": "",
-                                "source_type": "current",
-                            }
-                        )
+                        context_parts.append(f"当前打开文件背景（不可作为引用）：{label}\n{cf_body}")
             except Exception:
                 pass
 
@@ -516,7 +557,7 @@ class RagHandler(BaseHandler):
         return "\n".join(parts)
 
     def _rag_rebuild_index(self, params):
-        """Manual full rebuild (settings / assistant); not run on app open."""
+        """Manual index update; incremental when the existing collection is healthy."""
         return self._init_rag_index(params)
 
     def _rag_index_status(self, params):
@@ -535,6 +576,7 @@ class RagHandler(BaseHandler):
             chunk_count = count_indexed_chunks(workspace)
             manifest = load_manifest(workspace)
             files = manifest.get("files", {})
+            expected_chunks = sum(len(entry.get("chunks") or []) for entry in files.values())
             file_count = len(files)
             mtime = None
             if manifest_path(workspace).exists():
@@ -566,8 +608,11 @@ class RagHandler(BaseHandler):
             return {
                 "success": True,
                 "enabled": True,
-                "built": exists and chunk_count > 0,
+                "built": exists and chunk_count > 0 and chunk_count == expected_chunks,
+                "needs_rebuild": not (exists and chunk_count > 0 and chunk_count == expected_chunks),
+                "repair_required": expected_chunks > 0 and chunk_count != expected_chunks,
                 "chunk_count": chunk_count,
+                "expected_chunks": expected_chunks,
                 "file_count": file_count,
                 "mtime": mtime,
                 "is_building": is_building,

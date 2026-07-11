@@ -76,6 +76,7 @@ class TestWorkspaceRulesSetup:
 
     def test_no_needs_rules_when_configured(self, workspace: Path) -> None:
         from sidecar.workspace_rules import needs_workspace_rules_setup
+
         from tests.workspace_rules_helpers import write_workspace_rules
 
         write_workspace_rules(workspace)
@@ -109,6 +110,7 @@ class TestPrepareAutoIngest:
 
     def test_with_file_paths_and_rules_returns_start(self, workspace: Path) -> None:
         from sidecar.ingest_pipeline import prepare_auto_ingest
+
         from tests.workspace_rules_helpers import write_workspace_rules
 
         write_workspace_rules(workspace)

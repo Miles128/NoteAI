@@ -167,8 +167,12 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not ok:
             return {"success": False, "message": err}
         try:
-            write_topic_to_file(str(full_path), topic)
-            move_file_to_notes_topic_folder(str(full_path), topic)
+            write_result = write_topic_to_file(str(full_path), topic)
+            if not write_result.get("success"):
+                return write_result
+            move_result = move_file_to_notes_topic_folder(str(full_path), topic)
+            if not move_result.get("success"):
+                return move_result
             self._sync_wiki_with_folder_system()
             self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
             return {"success": True, "message": f"已移动到主题「{topic}」"}
@@ -450,7 +454,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         from sidecar.pending_items import collect_pending_items
 
         items = collect_pending_items(workspace)
-        return {"items": items, "count": len(items), "topic_options": topic_options}
+        summary: dict[str, int] = {}
+        for item in items:
+            item_type = item.get("type", "other")
+            summary[item_type] = summary.get(item_type, 0) + 1
+        return {"items": items, "count": len(items), "summary": summary, "topic_options": topic_options}
 
     def _resolve_topic(self, params):
         file_path = params.get("file_path", "")

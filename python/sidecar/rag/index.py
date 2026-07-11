@@ -96,7 +96,6 @@ def _read_manifest(workspace: str) -> dict:
 
 def _write_manifest(workspace: str, data: dict) -> None:
     """Atomically write the index manifest."""
-    import tempfile as _tempfile
 
     path = _manifest_path(workspace)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -300,7 +299,7 @@ def clear_collection_cache(workspace: str | None = None) -> None:
     """Drop cached collection(s), destroying handles so zvec locks are released."""
     with _COLLECTION_IO_LOCK:
         with _COLLECTION_CACHE_LOCK:
-            workspaces = [_normalize_workspace(ws) for ws in _COLLECTION_CACHE.keys()] if workspace is None else [_normalize_workspace(workspace)]
+            workspaces = [_normalize_workspace(ws) for ws in _COLLECTION_CACHE] if workspace is None else [_normalize_workspace(workspace)]
         for ws in workspaces:
             _take_cached_collection(ws, destroy=True)
         with _COLLECTION_CACHE_LOCK:

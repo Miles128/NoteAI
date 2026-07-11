@@ -6,6 +6,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from utils.error_handler import log_exception
+
 from .constants import (
     ABSTRACT_FOLDER,
     API_CONFIG_FILE,
@@ -19,7 +21,6 @@ from .constants import (
     WORKSPACE_STATE_FILE,
 )
 from .security import _restrict_file_permissions
-from utils.error_handler import log_exception
 
 _logger = logging.getLogger("NoteAI")
 

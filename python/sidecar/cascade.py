@@ -140,11 +140,7 @@ def collect_topic_notes(topic: str) -> list[dict]:
             if fm:
                 file_topic = fm.get("topic", "")
                 if isinstance(file_topic, str):
-                    if file_topic == topic:
-                        topic_match = True
-                    elif topic_parts and file_topic.startswith(topic + TOPIC_SEP):
-                        topic_match = True
-                    elif len(topic_parts) == 1 and (
+                    if file_topic == topic or topic_parts and file_topic.startswith(topic + TOPIC_SEP) or len(topic_parts) == 1 and (
                         file_topic == topic_parts[0]
                         or file_topic.startswith(topic_parts[0] + TOPIC_SEP)
                     ):
@@ -163,9 +159,7 @@ def collect_topic_notes(topic: str) -> list[dict]:
                         if len(topic_parts) == 1:
                             topic_match = True
                         elif len(rel.parts) >= 2 and rel.parts[1] == topic_parts[1]:
-                            if len(topic_parts) == 2:
-                                topic_match = True
-                            elif len(rel.parts) >= 3 and rel.parts[2] == topic_parts[2]:
+                            if len(topic_parts) == 2 or len(rel.parts) >= 3 and rel.parts[2] == topic_parts[2]:
                                 topic_match = True
 
             if topic_match:

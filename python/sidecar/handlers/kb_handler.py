@@ -6,8 +6,8 @@ from sidecar.cascade_runner import (
     load_cascade_failures,
     retry_failed_cascades,
 )
-from sidecar.handlers.base import BaseHandler
 from sidecar.dashboard_status import get_dashboard_status
+from sidecar.handlers.base import BaseHandler
 from sidecar.kb_lint import load_lint_report, log_lint_report, run_kb_lint
 from sidecar.survey_append import append_chat_to_survey
 

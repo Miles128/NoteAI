@@ -5,9 +5,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from sidecar.handlers.config_handler import ConfigHandler
 
 from config import config
-from sidecar.handlers.config_handler import ConfigHandler
 
 
 def _handler() -> ConfigHandler:

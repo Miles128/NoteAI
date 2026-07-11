@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.workspace_rules import RULES_FILENAME
+
+from config.settings import WORKSPACE_APP_FOLDER
 
 
 def write_workspace_rules(workspace: Path, **overrides) -> Path:

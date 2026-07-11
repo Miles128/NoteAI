@@ -30,6 +30,7 @@
     "timeMonthDay": "{month} 月 {day} 日",
     "confirmDelete": "确认删除",
     "confirmDeleteTopic": "确认删除主题",
+    "confirm": "确认",
     "file": "文件",
     "backendError": "后端错误",
     "errorOccurred": "发生错误",
@@ -89,6 +90,9 @@
     "typeLint": "健康检查",
     "typeCascade": "综述失败",
     "typeConvert": "转换失败",
+    "typeIngest": "入库任务",
+    "retryItem": "重试",
+    "dismissItem": "忽略",
     "itemNeedsReview": "需要处理",
     "confirmLink": "确认链接",
     "rejectLink": "拒绝",
@@ -496,8 +500,8 @@
     "componentRemoveFailed": "删除失败: {message}",
     "componentRemoveConfirm": "确定删除 RAG 组件？将卸载相关 Python 包并关闭向量检索。",
     "indexTitle": "知识库索引",
-    "indexHint": "仅在使用向量 RAG 时需要。日常入库会自动维护；若检索结果明显不对，可手动全量重建（耗时较长）。",
-    "rebuildIndexBtn": "重建知识库索引",
+    "indexHint": "仅在使用向量 RAG 时需要。日常入库会增量维护；可手动更新索引。只有索引损坏或为空时才会执行一次修复重建。",
+    "rebuildIndexBtn": "更新知识库索引",
     "activityLogTitle": "操作记录",
     "activityLogHint": "工作区内 AI 与入库操作，写入 wiki/log.md。健康检查会自动删除断链、更新过时综述。",
     "activityLogLoading": "加载中…",
@@ -595,8 +599,8 @@
     "commandDescUpToDate": "没有发现新增资料、待转换文件或需要续跑的任务。",
     "commandTitleUpdateFound": "发现更新，开始整理",
     "commandDescUpdateFound": "已发现需要处理的资料，正在启动增量整理。",
-    "commandTitleIndexMissing": "知识库索引未建立",
-    "commandDescIndexMissing": "RAG 问答需要索引才能引用资料，建议先重建索引。",
+    "commandTitleIndexMissing": "知识库索引需要修复",
+    "commandDescIndexMissing": "RAG 索引为空或不一致。点击更新索引；健康索引只会增量更新。",
     "commandTitleCheckFailed": "检查失败",
     "commandDescCheckFailed": "{message}",
     "actionRefresh": "刷新状态",
@@ -604,7 +608,7 @@
     "actionOpenPending": "处理待办",
     "actionOrganize": "整理更新",
     "actionResume": "继续整理",
-    "actionRebuildIndex": "重建索引",
+    "actionRebuildIndex": "更新索引",
     "vitals": {
       "pending": "待处理",
       "organize": "整理",
@@ -642,7 +646,8 @@
       "ready": "就绪",
       "running": "运行中",
       "failed": "失败",
-      "needsReview": "需处理"
+      "needsReview": "需处理",
+      "needsRebuild": "需重建"
     }
   },
   "ingest": {

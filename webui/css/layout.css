@@ -2408,6 +2408,24 @@ body {
     line-height: 1.45;
 }
 
+.pending-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 32px 0;
+}
+
+.pending-summary span {
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 12px;
+    padding: 3px 8px;
+}
+
+.pending-summary strong { color: var(--text); }
+
 .pending-view-header h2 {
     font-size: 20px;
     font-weight: 600;
@@ -2473,6 +2491,11 @@ body {
 .pending-item-type.type-convert {
     background: rgba(180, 100, 50, 0.12);
     color: #b46432;
+}
+
+.pending-item-type.type-ingest {
+    background: rgba(74, 144, 217, 0.12);
+    color: #4A90D9;
 }
 
 .pending-cascade-count {

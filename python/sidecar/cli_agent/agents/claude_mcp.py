@@ -8,17 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from sidecar.cli_agent.base import AgentResult, BaseCliAgent, EventEmitter
-from sidecar.cli_agent.env import build_agent_env, resolve_command
+from sidecar.cli_agent.env import build_agent_env
 from sidecar.cli_agent.process_control import TimeoutWatcher, clear, register
-from sidecar.cli_agent.workspace_bounds import (
-    append_workspace_boundary,
-    apply_workspace_bounds_env,
-)
 from sidecar.cli_agent.tool_events import (
     ToolStreamTracker,
     emit_tool_events,
     tool_results_from_message,
     tool_uses_from_message,
+)
+from sidecar.cli_agent.workspace_bounds import (
+    append_workspace_boundary,
+    apply_workspace_bounds_env,
 )
 from sidecar.mcp_config_manager import get_mcp_config_path, register_mcp_server
 from utils.logger import logger

@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.workspace_meta import (
     is_inbox_orphan_path,
     is_workspace_meta_path,
     merge_meta_docs_into_project_rules,
 )
+
+from config import config
 from utils.topic_assigner import auto_assign_topic_for_file, sync_all_folder_topics
 
 
@@ -44,6 +44,7 @@ def test_is_inbox_orphan_path(workspace: Path) -> None:
     assert is_inbox_orphan_path(workspace / "Notes" / "loose.md", str(workspace))
     assert not is_inbox_orphan_path(workspace / "Notes" / "AI" / "note.md", str(workspace))
     assert not is_inbox_orphan_path(workspace / "AGENTS.md", str(workspace))
+    assert not is_inbox_orphan_path(workspace / "README.md", str(workspace))
 
 
 def test_sync_folder_topics_for_subfolder_file(workspace: Path) -> None:

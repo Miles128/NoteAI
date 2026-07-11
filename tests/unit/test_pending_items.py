@@ -3,12 +3,13 @@ from pathlib import Path
 import pytest
 from sidecar.cascade_runner import record_cascade_failure
 from sidecar.convert_failures import record_convert_failure
+from sidecar.ingest_pipeline import save_ingest_state
 from sidecar.kb_lint import filter_stale_lint_issues, run_kb_lint
 from sidecar.pending_items import collect_pending_items
-from utils.link_indexer import load_links, save_links
-from utils.topic_pending import save_pending
 
 from config import config
+from utils.link_indexer import load_links, save_links
+from utils.topic_pending import save_pending
 
 
 @pytest.fixture
@@ -87,3 +88,14 @@ def test_collect_pending_drops_missing_convert_failures(workspace: Path) -> None
     record_convert_failure("Raw/missing.pdf", "转换失败")
     items = collect_pending_items(str(workspace))
     assert not any(i.get("type") == "convert_fail" for i in items)
+
+
+def test_collect_pending_includes_interrupted_ingest_with_highest_priority(workspace: Path) -> None:
+    save_ingest_state({"status": "cancelled", "stage": "classify", "message": "用户取消", "updated_at": 12})
+    record_cascade_failure("AI > 测试", "API 超时")
+
+    items = collect_pending_items(str(workspace))
+
+    assert items[0]["type"] == "ingest"
+    assert items[0]["action"] == "retry_ingest"
+    assert items[0]["priority"] == 0

@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 import pytest
 from sidecar.ingest_pipeline import clear_cancel, load_ingest_state, request_cancel, run_ingest
-from tests.workspace_rules_helpers import write_workspace_rules
 
 from config import config
+from tests.workspace_rules_helpers import write_workspace_rules
 
 
 @pytest.fixture

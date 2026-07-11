@@ -13,7 +13,8 @@ WORKSPACE_META_FILENAMES = frozenset({"AGENTS.md", "CLAUDE.md", "GEMINI.md"})
 
 
 def is_workspace_meta_name(name: str) -> bool:
-    return (name or "").strip().upper() in {n.upper() for n in WORKSPACE_META_FILENAMES}
+    normalized = (name or "").strip().upper()
+    return normalized in {n.upper() for n in WORKSPACE_META_FILENAMES}
 
 
 def is_workspace_meta_path(path: str | Path) -> bool:
@@ -113,7 +114,7 @@ def is_inbox_orphan_path(path: str | Path, workspace: str | None = None) -> bool
             return False
     parts = rel.parts
     if len(parts) == 1 and parts[0].lower().endswith(".md"):
-        return not is_workspace_meta_path(p)
+        return not is_workspace_meta_path(p) and p.stem.casefold() != "readme"
     if len(parts) == 2 and parts[0] == NOTES_FOLDER and parts[1].lower().endswith(".md"):
         return not is_workspace_meta_path(p)
     return False

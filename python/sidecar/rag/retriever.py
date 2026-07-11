@@ -1,4 +1,3 @@
-import json
 import os
 import threading
 import time
@@ -7,20 +6,21 @@ from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-from config import config, is_ignored_dir
-from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
-from utils.error_handler import log_exception
-from utils.logger import logger
-from utils.ttl_cache import TTLCache
-
+from config import config
+from config.settings import NOTES_FOLDER, RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.rag.rag_config import (
     hyde_enabled,
     hyde_threshold,
     rerank_enabled,
     rerank_skip_score,
+)
+from sidecar.rag.rag_config import (
     top_k as rag_top_k,
 )
 from sidecar.rag.retrieval_policy import limit_unique_sources, select_dynamic_top_k
+from utils.error_handler import log_exception
+from utils.logger import logger
+from utils.ttl_cache import TTLCache
 
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 10
@@ -308,15 +308,17 @@ def _excluded_dirs() -> set[str]:
 
 
 def _scan_files(workspace_path: Path):
-    """Scan workspace for markdown files eligible for indexing."""
+    """Scan knowledge notes only; workspace tooling and README files are not sources."""
     excluded_dirs = _excluded_dirs()
     files: dict[str, dict] = {}
-    for md_file in sorted(workspace_path.rglob("*.md")):
-        if md_file.name.startswith("."):
+    notes_root = workspace_path / NOTES_FOLDER
+    if not notes_root.is_dir():
+        return files
+    for md_file in sorted(notes_root.rglob("*.md")):
+        rel_parts = md_file.relative_to(workspace_path).parts
+        if md_file.name.startswith(".") or md_file.stem.casefold() == "readme":
             continue
-        if "wiki" in md_file.parts:
-            continue
-        if any(p.name in excluded_dirs or is_ignored_dir(p.name) for p in md_file.relative_to(workspace_path).parents):
+        if any(part.startswith(".") or part in excluded_dirs for part in rel_parts[:-1]):
             continue
         if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
@@ -332,7 +334,7 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
     workspace = workspace or config.workspace_path
     if not workspace:
         return False
-    from sidecar.rag.index import index_exists, load_manifest
+    from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest
 
     if not index_exists(workspace):
         return False
@@ -345,7 +347,8 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
         old = manifest.get(rel, {})
         if old.get("mtime") != info["mtime"] or old.get("size") != info["size"]:
             return False
-    return True
+    expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.values())
+    return expected_chunks > 0 and count_indexed_chunks(workspace) == expected_chunks
 
 
 def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:
@@ -431,6 +434,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import (
         add_chunks,
+        count_indexed_chunks,
         delete_by_file,
         index_exists,
         load_manifest,
@@ -444,16 +448,22 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         return {"success": False, "message": "未找到可索引的文件"}
 
     manifest = load_manifest(workspace)
+    manifest_files = manifest.get("files", {})
+    expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest_files.values())
     can_incremental = (
         not force_full
         and index_exists(workspace)
-        and manifest.get("files")
+        and bool(manifest_files)
+        and expected_chunks > 0
+        and count_indexed_chunks(workspace) == expected_chunks
     )
 
     if not can_incremental:
         if progress_callback:
             progress_callback(0, len(current_files), "全量重建索引...")
-        return _full_rebuild(workspace, workspace_path, current_files, progress_callback=progress_callback)
+        result = _full_rebuild(workspace, workspace_path, current_files, progress_callback=progress_callback)
+        result["repair_rebuild"] = not force_full
+        return result
 
     # Incremental rebuild
     old_files = manifest.get("files", {})

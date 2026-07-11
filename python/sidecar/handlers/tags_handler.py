@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import yaml
-
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger

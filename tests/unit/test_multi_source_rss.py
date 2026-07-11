@@ -1,8 +1,6 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
 from sidecar.multi_source import (
     fetch_all_subscriptions,
     import_rss_feed,
@@ -10,6 +8,8 @@ from sidecar.multi_source import (
     remove_subscription,
     save_subscription,
 )
+
+from config import config
 
 
 @pytest.fixture

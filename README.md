@@ -37,7 +37,8 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 - 🕸️ **Knowledge graph** — topics, tags, bidirectional links (force-directed)
 - 🤖 **RAG Assistant assistant** — HyDE + hybrid search + rerank; Q&A mode vs Agent mode
 - 🔌 **CLI agent bridge** — dispatch Claude Code / OpenCode / Codex / Gemini into your vault with auto-generated `AGENTS.md`
-- 📬 **Unified inbox** — pending topics, links, survey failures, Lint issues in one place
+- 📬 **Unified inbox** — ingest status, pending topics/links, conversion & survey failures, and Lint issues in one place
+- 🔎 **Selection lookup** — instant LLM explanation, then cited local knowledge or Bing-first web evidence
 - 📊 **Health metrics** — survey coverage, avg outbound links, Lint count
 
 ### 🚀 Quick Start
@@ -113,7 +114,7 @@ python run.py
 
 | Mode | Capabilities |
 |------|----------------|
-| 💬 **Q&A mode** (default) | RAG over notes & surveys; **search notes** & **list topics** without Agent mode |
+| 💬 **Q&A mode** (default) | RAG over notes & surveys; selection lookup returns a quick explanation, then cited local or web evidence |
 | 🛠️ **Agent mode** | Also **create topics**, **move notes**, **refresh surveys**, **trigger ingest** |
 
 Agent mode notes:
@@ -218,7 +219,7 @@ Aligned with [PRD](./documents/PRD.md) — evolve from batch tool to **continuou
 |----------|--------|
 | 🔥 P0 | Cascade updates · ingest progress & resume · query→archive · Lint · schema.md |
 | 🟡 P1 | Cross-ref on save · search UX · WIKI summaries · cloud sync GA |
-| 🎨 P1 | Main-area state machine · unified inbox · clickable citations · onboarding |
+| 🎨 P1 | Main-area state machine · onboarding · standalone App packaging & clean-machine validation |
 | 🟢 P2 | Contradiction detection · graph + editor coexist · Vite bundle (later) |
 
 ### 🤝 Contributing
@@ -265,7 +266,8 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 - 🕸️ **知识图谱** — 主题、标签、双向链接力导向可视化
 - 🤖 **RAG助手** — HyDE + 混合检索 + 重排序；问答模式 / 助手模式双档
 - 🔌 **CLI agent 桥接** — 在 vault 内调用 Claude Code / OpenCode / Codex / Gemini，自动生成 `AGENTS.md`
-- 📬 **统一待处理** — 待分类、待确认链接、综述失败、Lint 问题一处搞定
+- 📬 **统一待处理** — 入库状态、待分类/链接、转换与综述失败、Lint 问题一处处理
+- 🔎 **划词检索** — 先得 LLM 快速解释，再补本地引用或 Bing 优先的联网证据
 - 📊 **健康度指标** — 综述覆盖率、均链数、Lint 问题数一目了然
 
 ### 🚀 快速开始
@@ -341,7 +343,7 @@ python run.py
 
 | 模式 | 能做什么 |
 |------|----------|
-| 💬 **问答模式**（默认） | RAG 检索笔记与综述；**搜索笔记**、**查看主题列表**（无需开助手模式） |
+| 💬 **问答模式**（默认） | RAG 检索笔记与综述；划词后先快速解释，再补本地或联网引用 |
 | 🛠️ **助手模式** | 在上述基础上可 **新建主题**、**移动笔记**、**更新综述**、**触发入库整理** |
 
 助手模式要点：
@@ -447,7 +449,7 @@ pytest
 |--------|------|
 | 🔥 P0 | 级联更新 · Ingest 进度与断点续跑 · Query→Archive · Lint · schema.md |
 | 🟡 P1 | 保存时交叉引用 · 搜索增强 · WIKI 摘要索引 · 云盘产品化 |
-| 🎨 P1 | 主区域状态机 · 统一待处理 · RAG 引用可点击 · 首次引导 |
+| 🎨 P1 | 主区域状态机 · 首次引导 · App 打包与干净机器验收 |
 | 🟢 P2 | 矛盾检测 · 图谱与编辑并存 · 前端 Vite 打包（不急） |
 
 ### 🤝 贡献

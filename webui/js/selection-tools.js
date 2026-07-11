@@ -63,11 +63,11 @@
             if (!btn) return;
             var action = btn.getAttribute('data-action');
             if (action === 'rag') {
-                askKnowledge(_selectedText);
+                askKnowledge(_selectedText, 'auto');
             } else if (action === 'local') {
                 searchNotes(_selectedText);
             } else if (action === 'web') {
-                webSearch(_selectedText);
+                askKnowledge(_selectedText, 'web');
             } else if (action === 'copy') {
                 copySelection(_selectedText);
             }
@@ -130,24 +130,26 @@
         show(info);
     }
 
-    function askKnowledge(text) {
+    function _selectionContext() {
+        var sel = window.getSelection ? window.getSelection() : null;
+        var anchor = sel && sel.anchorNode;
+        var anchorEl = anchor && (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement);
+        var paragraph = anchorEl && anchorEl.closest('p, li, blockquote, h1, h2, h3, h4, h5, h6');
+        if (paragraph) return String(paragraph.innerText || '').slice(0, 2000);
+        var scope = document.querySelector('.tiptap-prose, .tiptap-editor-content, .preview-content');
+        return scope ? String(scope.innerText || '').slice(0, 2000) : '';
+    }
+
+    function askKnowledge(text, route) {
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
-        var prompt = _t('selectionTools.ragPrompt', '请基于知识库解释这段内容，并给出引用：{text}', { text: selected });
-        if (window.AssistantModule && window.AssistantModule.ask) {
-            window.AssistantModule.ask(prompt);
+        if (window.AssistantModule && window.AssistantModule.askSelection) {
+            window.AssistantModule.askSelection(selected, { route: route || 'auto', context: _selectionContext() });
         }
     }
 
     function webSearch(text) {
-        var selected = _normalizeSelectionText(text);
-        if (!selected) return;
-        var url = 'https://www.google.com/search?q=' + encodeURIComponent(selected);
-        try {
-            window.open(url, '_blank', 'noopener,noreferrer');
-        } catch (e) {
-            window.location.href = url;
-        }
+        askKnowledge(text, 'web');
     }
 
     function searchNotes(text) {

@@ -30,6 +30,7 @@
     "timeMonthDay": "{month}/{day}",
     "confirmDelete": "Confirm delete",
     "confirmDeleteTopic": "Confirm delete topic",
+    "confirm": "Confirm",
     "file": "File",
     "backendError": "Backend error",
     "errorOccurred": "An error occurred",
@@ -89,6 +90,9 @@
     "typeLint": "Health issue",
     "typeCascade": "Survey failed",
     "typeConvert": "Conversion failed",
+    "typeIngest": "Ingest task",
+    "retryItem": "Retry",
+    "dismissItem": "Dismiss",
     "itemNeedsReview": "Needs review",
     "confirmLink": "Confirm link",
     "rejectLink": "Reject",
@@ -496,8 +500,8 @@
     "componentRemoveFailed": "Remove failed: {message}",
     "componentRemoveConfirm": "Remove the RAG component? This uninstalls Python packages and turns off vector search.",
     "indexTitle": "Knowledge index",
-    "indexHint": "Only needed when vector RAG is enabled. Ingest maintains the index; rebuild manually if search is wrong (slow).",
-    "rebuildIndexBtn": "Rebuild knowledge index",
+    "indexHint": "Only needed when vector RAG is enabled. Ingest updates it incrementally; a manual update repairs a missing or inconsistent index only when needed.",
+    "rebuildIndexBtn": "Update knowledge index",
     "activityLogTitle": "Activity log",
     "activityLogHint": "AI and ingest actions logged to wiki/log.md. Health check fixes broken links and stale surveys.",
     "activityLogLoading": "Loading…",
@@ -595,8 +599,8 @@
     "commandDescUpToDate": "No new sources, pending conversions, or resumable jobs were found.",
     "commandTitleUpdateFound": "Updates found, organizing",
     "commandDescUpdateFound": "Work was found and incremental organization is starting.",
-    "commandTitleIndexMissing": "Knowledge index is missing",
-    "commandDescIndexMissing": "RAG answers need an index to cite sources. Rebuild the index first.",
+    "commandTitleIndexMissing": "Knowledge index needs repair",
+    "commandDescIndexMissing": "The RAG index is empty or inconsistent. Update it; healthy indexes use incremental updates only.",
     "commandTitleCheckFailed": "Check failed",
     "commandDescCheckFailed": "{message}",
     "actionRefresh": "Refresh status",
@@ -604,7 +608,7 @@
     "actionOpenPending": "Handle pending",
     "actionOrganize": "Organize updates",
     "actionResume": "Resume",
-    "actionRebuildIndex": "Rebuild index",
+    "actionRebuildIndex": "Update index",
     "vitals": {
       "pending": "Pending",
       "organize": "Organize",
@@ -642,7 +646,8 @@
       "ready": "Ready",
       "running": "Running",
       "failed": "Failed",
-      "needsReview": "Review"
+      "needsReview": "Review",
+      "needsRebuild": "Needs rebuild"
     }
   },
   "ingest": {

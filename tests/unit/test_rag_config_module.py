@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from sidecar.rag import rag_config
 
 from config import config
-from sidecar.rag import rag_config
 
 
 @pytest.fixture

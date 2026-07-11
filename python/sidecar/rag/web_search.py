@@ -75,6 +75,36 @@ def duckduckgo_search(query: str) -> list:
         return []
 
 
+def bing_search(query: str) -> list:
+    """Search Bing's public result page before falling back to other providers."""
+    try:
+        url = f"https://www.bing.com/search?q={quote_plus(query)}&count={MAX_RESULTS}"
+        if not _is_safe_url(url):
+            return []
+        resp = requests.get(url, headers=_HEADERS, timeout=_SEARCH_TIMEOUT_SECONDS, allow_redirects=True)
+        if not _is_safe_url(resp.url):
+            return []
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+        results = []
+        for item in soup.select("li.b_algo"):
+            title_tag = item.select_one("h2 a")
+            if not title_tag:
+                continue
+            title = title_tag.get_text(strip=True)
+            href = title_tag.get("href", "")
+            snippet_tag = item.select_one(".b_caption p")
+            snippet = snippet_tag.get_text(" ", strip=True) if snippet_tag else ""
+            if title and href and _is_safe_url(href):
+                results.append({"title": title, "url": href, "snippet": snippet})
+            if len(results) >= MAX_RESULTS:
+                break
+        return results
+    except Exception as e:
+        logger.warning(f"[rag/web_search] Bing search error: {e}\n")
+        return []
+
+
 def baidu_search(query: str) -> list:
     try:
         url = f"https://www.baidu.com/s?wd={quote_plus(query)}&rn={MAX_RESULTS}"
@@ -155,10 +185,14 @@ def baidu_search(query: str) -> list:
 
 
 def web_search(query: str) -> list:
-    results = duckduckgo_search(query)
+    results = bing_search(query)
     if results:
         return results
 
+    logger.warning("[rag/web_search] Bing returned no results, trying DuckDuckGo")
+    results = duckduckgo_search(query)
+    if results:
+        return results
     logger.warning("[rag/web_search] DuckDuckGo returned no results, trying Baidu")
     return baidu_search(query)
 

@@ -69,6 +69,20 @@ class TestRerankerEnabled:
         assert _mod._reranker_enabled() is False
 
 
+def test_scan_files_indexes_only_non_readme_notes(tmp_path):
+    notes = tmp_path / "Notes"
+    (notes / "AI").mkdir(parents=True)
+    (notes / "AI" / "note.md").write_text("# note", encoding="utf-8")
+    (notes / "AI" / "README.md").write_text("# guide", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# project", encoding="utf-8")
+    (tmp_path / ".reasonix").mkdir()
+    (tmp_path / ".reasonix" / "tool.md").write_text("# tool", encoding="utf-8")
+
+    files = _mod._scan_files(tmp_path)
+
+    assert set(files) == {"Notes/AI/note.md"}
+
+
 class TestGetReranker:
     @pytest.fixture(autouse=True)
     def _reranker_enabled_unless_test_sets_disable(self, monkeypatch):
@@ -109,7 +123,7 @@ class TestGetReranker:
 
         result = _mod._get_reranker()
         assert result is None
-        assert _mod._RERANKER_DISABLED_UNTIL > time.time()
+        assert time.time() < _mod._RERANKER_DISABLED_UNTIL
 
     def test_sets_disabled_flag_on_generic_exception(self, monkeypatch, _mock_embedder_module):
         import time
@@ -119,7 +133,7 @@ class TestGetReranker:
 
         result = _mod._get_reranker()
         assert result is None
-        assert _mod._RERANKER_DISABLED_UNTIL > time.time()
+        assert time.time() < _mod._RERANKER_DISABLED_UNTIL
 
     def test_returns_none_after_previous_failure(self, monkeypatch):
         import time

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import threading
 
+from sidecar import job_status
 from sidecar.cli_agent.process_control import stop_active
 from sidecar.cli_agent.session_store import clear_session
 from sidecar.cli_agent_runner import list_available_agents, run_cli_agent
-from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
 from sidecar.vault_agents_md import generate_vault_agents_md
 

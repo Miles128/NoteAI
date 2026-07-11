@@ -148,7 +148,7 @@ function renderCompile(jobs) {
     renderJobs('home-compile-body', compileJobs, window.t('home.compileIdle'));
 }
 
-function renderFlow(summary, ingestStatus, jobs) {
+function renderFlow(summary, ingestStatus, jobs, indexStatus) {
     var ingestRunning = hasRunningJob(jobs, function(job) { return job.kind === 'ingest'; }) || (ingestStatus && ingestStatus.running);
     var conversionRunning = hasRunningJob(jobs, function(job) { return job.kind === 'conversion'; });
     var surveyRunning = hasRunningJob(jobs, function(job) { return job.kind === 'survey' || job.id === 'ingest_cascade_surveys'; });
@@ -163,8 +163,9 @@ function renderFlow(summary, ingestStatus, jobs) {
         summary.topics > 0 ? window.t('home.flow.needsReview') : (ingestRunning ? window.t('home.flow.running') : window.t('home.flow.ready')));
     setFlow('survey', surveyFailed ? 'failed' : (surveyRunning ? 'running' : 'ok'),
         surveyFailed ? window.t('home.flow.needsReview') : (surveyRunning ? window.t('home.flow.running') : window.t('home.flow.ready')));
-    setFlow('index', indexFailed ? 'failed' : (indexRunning ? 'running' : 'ok'),
-        indexFailed ? window.t('home.flow.failed') : (indexRunning ? window.t('home.flow.running') : window.t('home.flow.ready')));
+    var indexNeedsRepair = indexStatus && indexStatus.enabled && indexStatus.needs_rebuild;
+    setFlow('index', indexFailed ? 'failed' : (indexRunning ? 'running' : (indexNeedsRepair ? 'warning' : 'ok')),
+        indexFailed ? window.t('home.flow.failed') : (indexRunning ? window.t('home.flow.running') : (indexNeedsRepair ? window.t('home.flow.needsRebuild') : window.t('home.flow.ready'))));
 }
 
 function setCommand(command) {
@@ -255,7 +256,7 @@ function renderDashboardStatus(status) {
     renderPending(summary);
     renderOrganize(ingestStatus, jobs);
     renderCompile(jobs);
-    renderFlow(summary, ingestStatus, jobs);
+    renderFlow(summary, ingestStatus, jobs, status.index || {});
 }
 
 function refreshFallback() {

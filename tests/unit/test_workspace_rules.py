@@ -1,9 +1,6 @@
 from pathlib import Path
 
 import pytest
-
-from config import config
-from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.workspace_rules import (
     RULES_FILENAME,
     format_wiki_topic_structure_for_llm,
@@ -13,6 +10,9 @@ from sidecar.workspace_rules import (
     resolve_survey_topic,
     save_workspace_rules_options,
 )
+
+from config import config
+from config.settings import WORKSPACE_APP_FOLDER
 
 
 @pytest.fixture

@@ -13,21 +13,38 @@ from typing import Any
 
 from sidecar.cli_agent import (
     list_available_agents as _list_available_agents,
+)
+from sidecar.cli_agent import (
     run_cli_agent as _run_cli_agent,
 )
 from sidecar.cli_agent.env import (
     build_agent_env as _build_agent_env,
+)
+from sidecar.cli_agent.env import (
     common_bin_dirs as _common_bin_dirs,
+)
+from sidecar.cli_agent.env import (
     get_login_shell as _get_login_shell,
+)
+from sidecar.cli_agent.env import (
     get_login_shell_env as _get_login_shell_env,
+)
+from sidecar.cli_agent.env import (
     merge_path as _merge_path,
+)
+from sidecar.cli_agent.env import (
     resolve_command as _resolve_command,
+)
+from sidecar.cli_agent.env import (
     resolve_workspace as _resolve_workspace,
+)
+from sidecar.cli_agent.env import (
     validate_prompt as _validate_prompt,
+)
+from sidecar.cli_agent.env import (
     which_via_login_shell as _which_via_login_shell,
 )
 from sidecar.cli_agent.registry import AgentRegistry, get_registry
-
 
 # 旧版常量：最大 prompt 长度
 MAX_PROMPT_LENGTH = 10000

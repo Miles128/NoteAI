@@ -8,8 +8,10 @@ This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.
 uv sync --extra dev --extra rag   # install deps (RAG included by default; see Settings → Components to remove)
 uv sync --extra dev               # after removing RAG in Settings only
 pytest                     # run all tests (40+ test modules)
-python run.py              # start Tauri dev mode (checks deps + cargo tauri dev)
+uv run python run.py       # start Tauri dev mode with the project virtualenv
 ```
+
+Do not use `python run.py` directly unless the system Python has the project dependencies installed; use `uv run python run.py` for development.
 
 Tests live in `tests/`, configured via `pyproject.toml` (`pythonpath = [".", "python"]`). Uses `@pytest.fixture` for test setup (e.g. `test_rpc_router.py`).
 
@@ -143,4 +145,3 @@ NoteAI 有两层 Memory，均与工作区绑定（切换工作区即切换画像
 ```
 
 > 旧文档中的 `NoteAI/`、`NoteAI/profile.md` 为别名，请以 `.noteai`、`.ai_memory` 为准。
-

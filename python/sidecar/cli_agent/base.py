@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import subprocess
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from sidecar.cli_agent.env import (
     build_agent_env,
@@ -15,13 +16,10 @@ from sidecar.cli_agent.env import (
 )
 from sidecar.cli_agent.process_control import CliProcessHandle, TimeoutWatcher, clear, register
 from sidecar.cli_agent.workspace_bounds import (
-    append_workspace_boundary,
     apply_workspace_bounds_env,
-    boundary_block,
 )
-from sidecar.mcp_config_manager import get_mcp_config_path, register_mcp_server
+from sidecar.mcp_config_manager import register_mcp_server
 from utils.logger import logger
-
 
 EventEmitter = Callable[[dict[str, Any]], None]
 

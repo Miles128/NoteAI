@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
+from collections.abc import Callable
 from threading import Lock
-from typing import Any, Callable
+from typing import Any
 
 MAX_JOBS = 100
 
 _LOCK = Lock()
-_JOBS: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+_JOBS: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
 
 def _now() -> float:

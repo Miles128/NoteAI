@@ -6,11 +6,9 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
 
 from config import config
 from utils.logger import logger
-
 
 # 登录 shell 环境缓存：GUI 启动时 PATH 不完整，通过登录 shell 获取用户真实环境
 _login_shell_env: dict[str, str] | None = None

@@ -6,6 +6,7 @@ import re
 import unicodedata
 from pathlib import Path
 
+
 def sanitize_filename(filename: str, max_length: int = 100) -> str:
     """清理文件名，移除非法字符"""
     filename = re.sub(r'[<>:"/\\|?*]', "_", filename)

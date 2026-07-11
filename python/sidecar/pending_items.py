@@ -9,6 +9,16 @@ from sidecar.cascade_runner import load_cascade_failures
 from sidecar.kb_lint import auto_fix_broken_links, filter_stale_lint_issues, load_lint_report
 from utils.topic_assigner import load_pending
 
+_PRIORITY = {
+    "ingest": 0,
+    "cascade_fail": 1,
+    "convert_fail": 1,
+    "lint": 2,
+    "topic": 3,
+    "link": 3,
+    "link_batch": 3,
+}
+
 
 def _lint_action(kind: str) -> str:
     if kind == "stale_survey":
@@ -72,6 +82,7 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "title": p.get("title", ""),
                 "candidates": p.get("candidates", []),
                 "source": p.get("source", ""),
+                "action": "resolve_topic",
             }
         )
 
@@ -110,6 +121,7 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "topic": topic,
                 "error": fail.get("error", ""),
                 "ts": fail.get("ts", 0),
+                "action": "retry_cascade",
             }
         )
 
@@ -129,7 +141,26 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "file": path,
                 "error": fail.get("error", ""),
                 "ts": fail.get("ts", 0),
+                "action": "retry_convert",
             }
         )
 
-    return items
+    from sidecar.ingest_pipeline import normalize_ingest_state
+
+    ingest = normalize_ingest_state()
+    if ingest.get("status") in {"running", "cancelled", "failed", "interrupted"}:
+        items.append(
+            {
+                "type": "ingest",
+                "status": ingest.get("status"),
+                "stage": ingest.get("stage", ""),
+                "message": ingest.get("message", ""),
+                "progress": ingest.get("progress"),
+                "action": "retry_ingest" if ingest.get("status") != "running" else "none",
+                "ts": ingest.get("updated_at", 0),
+            }
+        )
+
+    for item in items:
+        item["priority"] = _PRIORITY.get(item.get("type"), 9)
+    return sorted(items, key=lambda item: (item["priority"], -float(item.get("ts") or 0)))

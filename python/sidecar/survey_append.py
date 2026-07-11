@@ -75,7 +75,7 @@ def append_chat_to_survey(
     _fm, existing_body = parse_frontmatter(existing_text)
     chat_block = f"### RAG对话摘录\n\n**问：** {q}\n\n**答：** {a}\n"
 
-    from utils.llm_utils import APIConfigError, check_api_config, create_llm
+    from utils.llm_utils import APIConfigError, check_api_config
 
     try:
         is_valid, error_msg = check_api_config()

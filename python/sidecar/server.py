@@ -12,6 +12,7 @@ from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
+from sidecar import job_status
 from sidecar.handlers import (
     CliAgentHandler,
     CloudSyncHandler,
@@ -30,7 +31,6 @@ from sidecar.handlers import (
     TransferHandler,
     WorkspaceHandler,
 )
-from sidecar import job_status
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
@@ -249,10 +249,24 @@ class SidecarServer(PathHelpersMixin):
         if not workspace or not Path(workspace).exists():
             return
         try:
+            from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest
             from sidecar.rag.retriever import is_index_up_to_date
 
             if is_index_up_to_date(workspace):
                 logger.info("[startup] rag index is up to date, skipping rebuild")
+                return
+            manifest_files = load_manifest(workspace).get("files", {})
+            if not index_exists(workspace) or not manifest_files or count_indexed_chunks(workspace) <= 0:
+                logger.info("[startup] RAG index needs a manual rebuild; skipping expensive startup rebuild")
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "rag_index_needs_rebuild",
+                            "message": "知识库索引尚未就绪，请手动重建索引。",
+                        },
+                    }
+                )
                 return
             logger.info("[startup] auto checking rag index")
             self._rag_handler._init_rag_index({})

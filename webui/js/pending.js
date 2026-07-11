@@ -104,6 +104,7 @@ function loadPendingItems() {
         _pendingData = result;
         var items = (result && result.items) ? result.items : [];
         var count = (result && result.count) ? result.count : items.length;
+        renderPendingSummary((result && result.summary) || {});
         var topicOpts = (result && result.topic_options) ? result.topic_options : [];
 
         if (topicOpts.length) {
@@ -147,9 +148,24 @@ function renderPendingList(items, listEl) {
             html += renderPendingInfoItem(item, idx, 'cascade');
         } else if (item.type === 'convert_fail') {
             html += renderPendingInfoItem(item, idx, 'convert');
+        } else if (item.type === 'ingest') {
+            html += renderPendingInfoItem(item, idx, 'ingest');
         }
     });
     listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
+}
+
+function renderPendingSummary(summary) {
+    var el = document.getElementById('pending-summary');
+    if (!el) return;
+    var rows = [
+        ['ingest', 'pending.typeIngest'], ['cascade_fail', 'pending.typeCascade'],
+        ['convert_fail', 'pending.typeConvert'], ['topic', 'pending.typeTopic'],
+        ['link', 'pending.typeLink'], ['lint', 'pending.typeLint']
+    ].filter(function(row) { return summary[row[0]]; });
+    el.innerHTML = rows.map(function(row) {
+        return '<span>' + window.escapeHtml(window.t(row[1])) + ' <strong>' + summary[row[0]] + '</strong></span>';
+    }).join('');
 }
 
 function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
@@ -236,16 +252,23 @@ function renderPendingLinkItem(item, idx) {
 }
 
 function renderPendingInfoItem(item, idx, kind) {
-    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : 'pending.typeConvert');
+    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : 'pending.typeConvert'));
     var title = item.message || item.topic || item.file || item.file_path || item.error || '';
     var detail = item.file_path || item.file || item.topic || item.error || '';
     if (kind === 'cascade' && item.error) detail = item.error;
     if (kind === 'convert' && item.error) detail = (item.file || '') + (item.file && item.error ? ' · ' : '') + item.error;
-    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '">';
+    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '" data-topic="' + encodeURIComponent(item.topic || '') + '" data-file="' + encodeURIComponent(item.file || '') + '" data-action-kind="' + window.escapeAttr(item.action || '') + '">';
     html += '<span class="pending-item-type type-' + kind + '">' + window.t(labelKey) + '</span>';
     html += '<div class="pending-item-title">' + window.escapeHtml(title || window.t('pending.itemNeedsReview')) + '</div>';
     if (detail && detail !== title) {
         html += '<div class="pending-item-path">' + window.escapeHtml(detail) + '</div>';
+    }
+    if (item.action === 'retry_cascade' || item.action === 'retry_convert' || item.action === 'retry_ingest') {
+        html += '<div class="pending-item-actions"><button data-action="retry-item">' + window.t('pending.retryItem') + '</button>';
+        if (item.action !== 'retry_ingest') {
+            html += '<button class="btn-reject" data-action="dismiss-item">' + window.t('pending.dismissItem') + '</button>';
+        }
+        html += '</div>';
     }
     html += '</div>';
     return html;
@@ -259,7 +282,9 @@ function _findPendingItem(el) {
         idx: parseInt(item.getAttribute('data-pending-idx'), 10),
         filePath: decodeURIComponent(item.getAttribute('data-file') || ''),
         source: decodeURIComponent(item.getAttribute('data-source') || ''),
-        target: decodeURIComponent(item.getAttribute('data-target') || '')
+        target: decodeURIComponent(item.getAttribute('data-target') || ''),
+        topic: decodeURIComponent(item.getAttribute('data-topic') || ''),
+        actionKind: item.getAttribute('data-action-kind') || ''
     };
 }
 
@@ -291,7 +316,28 @@ function _handlePendingClick(e) {
         confirmAllPendingLinks(info.idx);
     } else if (action === 'reject-link') {
         rejectPendingLink(info.source, info.target, info.idx);
+    } else if (action === 'retry-item') {
+        retryPendingItem(info);
+    } else if (action === 'dismiss-item') {
+        dismissPendingItem(info);
     }
+}
+
+function retryPendingItem(info) {
+    var request;
+    if (info.actionKind === 'retry_cascade') request = window.api.retryCascadeTopic(info.topic);
+    else if (info.actionKind === 'retry_convert') request = window.api.retryConvertFile(info.filePath);
+    else if (info.actionKind === 'retry_ingest') request = window.api.retryIngest({ mode: 'full' });
+    else return;
+    request.then(function() { loadPendingItems(); refreshPendingBtnState(); }).catch(function() { loadPendingItems(); });
+}
+
+function dismissPendingItem(info) {
+    var request;
+    if (info.actionKind === 'retry_cascade') request = window.api.dismissCascadeFailure(info.topic);
+    else if (info.actionKind === 'retry_convert') request = window.api.dismissConvertFailure(info.filePath);
+    else return;
+    request.then(function() { loadPendingItems(); refreshPendingBtnState(); }).catch(function() { loadPendingItems(); });
 }
 
 function resolvePendingTopicItem(filePath, topic, idx) {

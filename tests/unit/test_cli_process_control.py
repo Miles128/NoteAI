@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import time
 
 from sidecar.cli_agent.process_control import TimeoutWatcher, clear, register, stop_active
 

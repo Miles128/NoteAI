@@ -58,6 +58,9 @@ logs/
 .coverage
 htmlcov/
 
+# Local diagnostic scratch scripts
+/tmp_*.py
+
 # Local config
 local_config.py
 config.local.py

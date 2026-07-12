@@ -1090,6 +1090,7 @@
     "workflowSteps": "Workflow ({count} steps)",
     "workflowStepsShort": "{count} steps",
     "workflowDetails": "Details",
+    "reasoning": "Reasoning",
     "newSession": "New chat",
     "newSessionDone": "Started a new chat",
     "sessionContinue": "Continuing",

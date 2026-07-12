@@ -21,6 +21,11 @@
     var _workflowDetails = null;
     var _workflowCount = 0;
     var _workflowLatestText = '';
+    var _reasoningDetails = null;
+    var _reasoningCount = 0;
+    var _finalDetails = null;
+    var _toolsDetails = null;
+    var _toolCount = 0;
     var _timeoutNoticeEl = null;
     var _sessionActive = false;
     var _sendBtnDefaultHtml = '';
@@ -97,58 +102,64 @@
     }
 
     function _updateWorkflowSummary() {
-        if (!_workflowDetails || !_workflowDetails.isConnected) return;
-        var labelEl = _workflowDetails.querySelector('.cli-workflow-status-label');
-        var hintEl = _workflowDetails.querySelector('.cli-workflow-status-hint');
-        if (labelEl) labelEl.textContent = _workflowStatusLabel();
-        if (hintEl) {
-            hintEl.textContent = _workflowLatestText ? _truncateText(_workflowLatestText, 72) : '';
-            hintEl.hidden = !_workflowLatestText;
+        if (!_reasoningDetails || !_reasoningDetails.isConnected) return;
+        var meta = _reasoningDetails.querySelector('.cli-answer-first-meta');
+        if (meta) meta.textContent = (_workflowCount + _reasoningCount) + ' steps • ' + _toolCount + ' tool calls';
+        if (_toolsDetails) {
+            var toolsMeta = _toolsDetails.querySelector('.cli-answer-first-meta');
+            if (toolsMeta) toolsMeta.textContent = (_workflowCount + _reasoningCount) + ' steps • ' + _toolCount + ' tool calls';
         }
     }
 
-    function _ensureWorkflowDetails() {
+    function _buildAnswerFirstGroup(title, open, className) {
+        var details = document.createElement('details');
+        details.className = 'cli-answer-first-card ' + className;
+        details.open = !!open;
+        var summary = document.createElement('summary');
+        summary.className = 'cli-answer-first-summary';
+        var heading = document.createElement('span');
+        heading.className = 'cli-answer-first-title';
+        heading.textContent = title;
+        summary.appendChild(heading);
+        if (!open) {
+            var meta = document.createElement('span');
+            meta.className = 'cli-answer-first-meta';
+            meta.textContent = '0 steps • 0 tool calls';
+            summary.appendChild(meta);
+        }
+        details.appendChild(summary);
+        var body = document.createElement('div');
+        body.className = 'cli-answer-first-body';
+        details.appendChild(body);
+        return details;
+    }
+
+    function _ensureAnswerFirstShell() {
         var container = _ensureStreamContainer();
+        if (!container) return null;
+        if (_finalDetails && _finalDetails.isConnected) return container;
+        _finalDetails = _buildAnswerFirstGroup('Final', true, 'cli-final-card');
+        _reasoningDetails = _buildAnswerFirstGroup('Reasoning', false, 'cli-reasoning-card');
+        _toolsDetails = _buildAnswerFirstGroup('Tools', false, 'cli-tools-card');
+        container.appendChild(_finalDetails);
+        container.appendChild(_reasoningDetails);
+        container.appendChild(_toolsDetails);
+        return container;
+    }
+
+    function _ensureWorkflowDetails() {
+        var container = _ensureAnswerFirstShell();
         if (!container) return null;
         if (_workflowDetails && _workflowDetails.isConnected) {
             return _workflowDetails;
         }
 
-        _workflowDetails = document.createElement('details');
-        _workflowDetails.className = 'cli-workflow-block cli-tool-activity cli-workflow-activity is-running';
-        _workflowDetails.open = false;
-
-        var summary = document.createElement('summary');
-        summary.className = 'cli-workflow-status cli-tool-summary';
-
-        var pulse = document.createElement('span');
-        pulse.className = 'cli-workflow-pulse';
-        pulse.setAttribute('aria-hidden', 'true');
-        summary.appendChild(pulse);
-
-        var label = document.createElement('span');
-        label.className = 'cli-workflow-status-label';
-        label.textContent = _workflowStatusLabel();
-        summary.appendChild(label);
-
-        var hint = document.createElement('span');
-        hint.className = 'cli-workflow-status-hint';
-        hint.hidden = true;
-        summary.appendChild(hint);
-
-        var chevron = document.createElement('span');
-        chevron.className = 'cli-workflow-status-chevron';
-        chevron.textContent = window.t ? window.t('cliAgent.workflowDetails') : '详情';
-        summary.appendChild(chevron);
-
-        _workflowDetails.appendChild(summary);
-
+        _workflowDetails = document.createElement('div');
+        _workflowDetails.className = 'cli-workflow-block cli-workflow-activity is-running';
         var body = document.createElement('div');
         body.className = 'cli-workflow-steps';
         _workflowDetails.appendChild(body);
-
-        container.appendChild(_workflowDetails);
-        _streamContentEl = null;
+        _reasoningDetails.querySelector('.cli-answer-first-body').appendChild(_workflowDetails);
         return _workflowDetails;
     }
 
@@ -187,7 +198,31 @@
         if (!_workflowDetails || !_workflowDetails.isConnected) return;
         _workflowDetails.classList.remove('is-running');
         _workflowDetails.classList.add('is-done');
-        _workflowDetails.open = false;
+        _updateWorkflowSummary();
+    }
+
+    function _appendReasoningStep(text) {
+        var container = _ensureAnswerFirstShell();
+        if (!container) return;
+        var reasoningSteps = _reasoningDetails.querySelector('.cli-process-steps');
+        if (!reasoningSteps) {
+            var body = document.createElement('div');
+            body.className = 'cli-process-steps';
+            _reasoningDetails.querySelector('.cli-answer-first-body').appendChild(body);
+            reasoningSteps = body;
+        }
+        _reasoningCount += 1;
+        var step = document.createElement('div');
+        step.className = 'cli-process-step';
+        step.textContent = text.replace(/^\[(?:thinking|reasoning)\]\s*/i, '').replace(/^(?:thinking|reasoning):\s*/i, '');
+        reasoningSteps.appendChild(step);
+        _updateWorkflowSummary();
+    }
+
+    function _finalizeReasoning() {
+        if (!_reasoningDetails || !_reasoningDetails.isConnected) return;
+        _reasoningDetails.classList.remove('is-running');
+        _reasoningDetails.classList.add('is-done');
         _updateWorkflowSummary();
     }
 
@@ -321,11 +356,11 @@
             : sum.describeCall(toolName, payload.input);
 
         var details = document.createElement('details');
-        details.className = 'cli-tool-activity' + (isDone ? ' is-done' : ' is-running');
+        details.className = 'cli-process-block cli-tool-activity' + (isDone ? ' is-done' : ' is-running');
         if (!isDone) details.open = false;
 
         var summary = document.createElement('summary');
-        summary.className = 'cli-tool-summary';
+        summary.className = 'cli-process-summary cli-tool-summary';
         summary.textContent = callText;
         details.appendChild(summary);
 
@@ -360,8 +395,9 @@
 
     function _upsertToolCard(payload) {
         if (!payload || !payload.phase) return;
-        var container = _ensureStreamContainer();
+        var container = _ensureAnswerFirstShell();
         if (!container) return;
+        var toolsBody = _toolsDetails.querySelector('.cli-answer-first-body');
 
         var key = _toolCardKey(payload);
         if (payload.phase === 'start') {
@@ -388,7 +424,11 @@
             if (payload.tool_id) {
                 _toolCards[payload.tool_id] = card;
             }
-            container.appendChild(card);
+            toolsBody.appendChild(card);
+            _toolCount += 1;
+            _updateWorkflowSummary();
+            var toolsMeta = _toolsDetails.querySelector('.cli-answer-first-meta');
+            if (toolsMeta) toolsMeta.textContent = (_workflowCount + _reasoningCount) + ' steps • ' + _toolCount + ' tool calls';
             _streamContentEl = null;
             _scrollCliMessages();
             return;
@@ -411,7 +451,11 @@
                 var doneCard = _buildToolCard(payload);
                 doneCard.dataset.tool = payload.tool || '';
                 _toolCards[key] = doneCard;
-                container.appendChild(doneCard);
+                toolsBody.appendChild(doneCard);
+                _toolCount += 1;
+                _updateWorkflowSummary();
+                var doneMeta = _toolsDetails.querySelector('.cli-answer-first-meta');
+                if (doneMeta) doneMeta.textContent = (_workflowCount + _reasoningCount) + ' steps • ' + _toolCount + ' tool calls';
                 _streamContentEl = null;
             }
             _scrollCliMessages();
@@ -460,6 +504,11 @@
         _workflowDetails = null;
         _workflowCount = 0;
         _workflowLatestText = '';
+        _reasoningDetails = null;
+        _reasoningCount = 0;
+        _finalDetails = null;
+        _toolsDetails = null;
+        _toolCount = 0;
         _hideTimeoutNotice();
     }
 
@@ -481,15 +530,16 @@
     }
 
     function _ensureStreamContent() {
-        var container = _ensureStreamContainer();
+        var container = _ensureAnswerFirstShell();
         if (!container) return null;
-        if (_streamContentEl && _streamContentEl.isConnected && _streamContentEl.parentElement === container) {
+        var finalBody = _finalDetails.querySelector('.cli-answer-first-body');
+        if (_streamContentEl && _streamContentEl.isConnected && _streamContentEl.parentElement === finalBody) {
             return _streamContentEl;
         }
 
         _streamContentEl = document.createElement('div');
         _streamContentEl.className = 'cli-agent-output cli-agent-output-inline';
-        container.appendChild(_streamContentEl);
+        finalBody.appendChild(_streamContentEl);
         return _streamContentEl;
     }
 
@@ -505,6 +555,10 @@
         }
         if (_isOpenCodeWorkflowLine(trimmed)) {
             _appendWorkflowStep(trimmed);
+            return;
+        }
+        if (/^\[(?:thinking|reasoning)\]/i.test(trimmed) || /^(?:thinking|reasoning):/i.test(trimmed)) {
+            _appendReasoningStep(trimmed);
             return;
         }
         var filtered = _filterCliOutput(line ? line + '\n' : '');
@@ -949,6 +1003,7 @@
         } else if (type === 'cli_agent_done') {
             _flushOutputBuffer();
             _finalizeWorkflow();
+            _finalizeReasoning();
             _hideTimeoutNotice();
             _sessionActive = true;
             _updateSessionBadge();
@@ -957,6 +1012,7 @@
         } else if (type === 'cli_agent_error') {
             _flushOutputBuffer();
             _finalizeWorkflow();
+            _finalizeReasoning();
             _hideTimeoutNotice();
             _setRunningState(false);
             _resetStreamPre();

@@ -232,6 +232,16 @@ class TestFilesHandler:
 
 
 class TestTagsHandler:
+    def test_all_tags_uses_wiki_database(self, workspace: Path) -> None:
+        note = workspace / "Notes" / "tagged.md"
+        note.write_text("---\ntags: [RAG]\n---\nbody\n", encoding="utf-8")
+        sync_wiki_with_files()
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._compute_all_tags()
+
+        assert result == {"tags": [{"name": "RAG", "count": 1, "files": ["Notes/tagged.md"]}]}
+
     def test_add_tag_to_file_preserves_body(self, workspace: Path) -> None:
         note = workspace / "Notes" / "tagged.md"
         body = "\n# Title\n\nOriginal body\n"

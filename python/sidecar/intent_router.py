@@ -1,4 +1,4 @@
-""" lightweight intent router for the assistant. """
+"""lightweight intent router for the assistant."""
 
 from __future__ import annotations
 
@@ -55,16 +55,37 @@ def classify_intent(question: str, history: str = "") -> dict[str, Any]:
 
     # Keyword-based fallback rules for local-note-related queries.
     workspace_indicators = (
-        "我的笔记", "工作区", "笔记里", "笔记中", "我记的", "我记录",
-        "主题", "标签", "某篇文章", "某个文件", "这篇文件", "这篇文章",
-        "notes/", "wiki/", "guide.md",
+        "我的笔记",
+        "工作区",
+        "笔记里",
+        "笔记中",
+        "我记的",
+        "我记录",
+        "主题",
+        "标签",
+        "某篇文章",
+        "某个文件",
+        "这篇文件",
+        "这篇文章",
+        "notes/",
+        "wiki/",
+        "guide.md",
     )
     if any(ind in lowered for ind in workspace_indicators):
         return {"intent": "workspace", "confidence": "high", "reason": "workspace keyword detected"}
 
     web_indicators = (
-        "上网查", "搜索网络", "搜一下", "最新新闻", "今天天气", "股价", "行情",
-        "twitter", "x.com", "微博", "知乎",
+        "上网查",
+        "搜索网络",
+        "搜一下",
+        "最新新闻",
+        "今天天气",
+        "股价",
+        "行情",
+        "twitter",
+        "x.com",
+        "微博",
+        "知乎",
     )
     if any(ind in lowered for ind in web_indicators):
         return {"intent": "web", "confidence": "medium", "reason": "web keyword detected"}

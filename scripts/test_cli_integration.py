@@ -65,6 +65,7 @@ def main() -> int:
         print(f"  [{flag}] {name:10} {info.get('path')}")
 
     _banner("5. Handler RPC 契约")
+
     class _FakeServer:
         def _send_response(self, resp):
             pass

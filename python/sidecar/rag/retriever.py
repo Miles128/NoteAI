@@ -79,7 +79,9 @@ def _get_reranker():
             return _RERANKER
         except Exception as e:
             _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
-            logger.warning(f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n")
+            logger.warning(
+                f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n"
+            )
             return None
 
 
@@ -375,6 +377,7 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import build_index, rebuild_search_indices, save_manifest
+
     rel_paths = sorted(current_files.keys())
     all_chunks: list[dict] = []
     for rel_path in rel_paths:
@@ -416,7 +419,9 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     manifest = {"version": 1, "files": {}}
     for c in all_chunks:
         rel = c["file_path"]
-        entry = manifest["files"].setdefault(rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []})
+        entry = manifest["files"].setdefault(
+            rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []}
+        )
         entry["chunks"].append(c["id"])
     save_manifest(workspace, manifest)
 
@@ -454,6 +459,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         rebuild_search_indices,
         save_manifest,
     )
+
     workspace_path = Path(workspace)
     current_files = _scan_files(workspace_path)
 

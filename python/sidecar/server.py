@@ -445,9 +445,7 @@ class SidecarServer(PathHelpersMixin):
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
                     logger.warning("[watcher] debounce timer already cancelled")
-            self._watcher_debounce_timer = threading.Timer(
-                5.0, self._emit_workspace_change, args=(current_generation,)
-            )
+            self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change, args=(current_generation,))
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):

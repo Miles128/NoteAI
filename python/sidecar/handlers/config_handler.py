@@ -182,9 +182,7 @@ class ConfigHandler(BaseHandler):
             if "rag_top_k" in params:
                 self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, 1, 50)
             if "rag_top_k_tags" in params:
-                self.config.rag_top_k_tags = self._coerce_int(
-                    params["rag_top_k_tags"], DEFAULT_TOP_K_TAGS, 1, 50
-                )
+                self.config.rag_top_k_tags = self._coerce_int(params["rag_top_k_tags"], DEFAULT_TOP_K_TAGS, 1, 50)
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"

@@ -164,6 +164,7 @@ def generate_vault_agents_md() -> dict[str, Any]:
     survey_count = _count_surveys(wiki_path)
 
     from datetime import datetime
+
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     content = VAULT_AGENTS_MD_TEMPLATE.format(

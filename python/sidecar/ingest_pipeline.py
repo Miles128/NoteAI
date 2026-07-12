@@ -593,16 +593,12 @@ def run_ingest(
                 from sidecar.rag.index import load_manifest
                 from sidecar.rag.retriever import rebuild_index
 
-                has_index_work = bool(_scan_index_pending(workspace)) or bool(
-                    load_manifest(workspace).get("files", {})
-                )
+                has_index_work = bool(_scan_index_pending(workspace)) or bool(load_manifest(workspace).get("files", {}))
                 if has_index_work:
                     prog("index", 0.5, "按统一 manifest 检查向量索引…")
                     rag_result = rebuild_index(
                         workspace=workspace,
-                        progress_callback=lambda cur, tot, msg: prog(
-                            "index", 0.5 + 0.15 * cur / max(tot, 1), msg
-                        ),
+                        progress_callback=lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
                     )
                     if not rag_result.get("success"):
                         raise RuntimeError(rag_result.get("message", "RAG 索引更新失败"))
@@ -659,9 +655,7 @@ def run_ingest(
 
             rules = load_workspace_rules()
             if rules.get("auto_update_survey", True):
-                resolved = {
-                    resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
-                }
+                resolved = {resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics}
                 cascade_topics = sorted(resolved)
             else:
                 cascade_topics = []

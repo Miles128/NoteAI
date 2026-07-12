@@ -115,7 +115,9 @@ def ensure_wiki_exists(workspace_str: str | Path | None = None) -> Path:
     wiki_path = resolve_wiki_path(workspace_str)
     if not wiki_path.exists():
         wiki_path.parent.mkdir(parents=True, exist_ok=True)
-        content = "# WIKI\n\n主题数量: 0\n\n## 目录\n\n<!-- NOTEAI_TAGS_START -->\n## 标签索引\n\n<!-- NOTEAI_TAGS_END -->\n"
+        content = (
+            "# WIKI\n\n主题数量: 0\n\n## 目录\n\n<!-- NOTEAI_TAGS_START -->\n## 标签索引\n\n<!-- NOTEAI_TAGS_END -->\n"
+        )
         wiki_path.write_text(content, encoding="utf-8")
     return wiki_path
 

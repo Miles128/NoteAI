@@ -204,10 +204,12 @@ class TestFilesHandler:
         target_dir = workspace / "Notes" / "Topic"
         target_dir.mkdir(parents=True)
         source.write_text("body", encoding="utf-8")
-        handler = FilesHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-        ))
+        handler = FilesHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+            )
+        )
 
         result = handler._move_file({"file_path": "Notes/source.md", "target_folder": "Notes/Topic"})
 
@@ -220,10 +222,12 @@ class TestFilesHandler:
         source.write_text("body", encoding="utf-8")
         outside = workspace.parent / "outside"
         outside.mkdir()
-        handler = FilesHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-        ))
+        handler = FilesHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+            )
+        )
 
         result = handler._move_file({"file_path": "Notes/source.md", "target_folder": str(outside)})
 
@@ -246,11 +250,13 @@ class TestTagsHandler:
         note = workspace / "Notes" / "tagged.md"
         body = "\n# Title\n\nOriginal body\n"
         note.write_text("---\ntags:\n- A\n---" + body, encoding="utf-8")
-        handler = TagsHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-            _invalidate_cache=lambda: None,
-        ))
+        handler = TagsHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+                _invalidate_cache=lambda: None,
+            )
+        )
 
         result = handler._add_tag_to_file({"file_path": "Notes/tagged.md", "tag": "B"})
 

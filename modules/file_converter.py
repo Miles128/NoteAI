@@ -72,7 +72,7 @@ class BaseConverter(ABC):
 class PDFConverter(BaseConverter):
     """PDF转Markdown转换器（仅使用快速路径）"""
 
-    SUPPORTED_FORMATS = ['.pdf']
+    SUPPORTED_FORMATS = [".pdf"]
     _display_name = "PDF"
 
     MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION = 3
@@ -168,13 +168,14 @@ class TXTConverter(BaseConverter):
 class DOCXConverter(BaseConverter):
     """Word文档转Markdown转换器（使用mammoth，仅支持 .docx）"""
 
-    SUPPORTED_FORMATS = ['.docx']
+    SUPPORTED_FORMATS = [".docx"]
     _display_name = "Word文档"
 
     def _extract_text(self, file_path: str) -> str:
         """使用mammoth将DOCX转换为Markdown"""
         import mammoth
-        with open(file_path, 'rb') as docx_file:
+
+        with open(file_path, "rb") as docx_file:
             result = mammoth.convert_to_markdown(docx_file)
             return result.value
 
@@ -182,7 +183,7 @@ class DOCXConverter(BaseConverter):
 class LegacyDOCConverter(BaseConverter):
     """旧版 Word .doc 转 Markdown，依赖系统可用的文本提取工具。"""
 
-    SUPPORTED_FORMATS = ['.doc']
+    SUPPORTED_FORMATS = [".doc"]
     _display_name = "旧版Word文档"
 
     def _extract_text(self, file_path: str) -> str:
@@ -288,7 +289,7 @@ class PPTConverter(BaseConverter):
 class LegacyPPTConverter(BaseConverter):
     """旧版 PowerPoint .ppt 转 Markdown，解析 OLE PowerPoint Document 文本记录。"""
 
-    SUPPORTED_FORMATS = ['.ppt']
+    SUPPORTED_FORMATS = [".ppt"]
     _display_name = "旧版PPT"
     TEXT_CHARS_ATOM = 4000
     TEXT_BYTES_ATOM = 4008

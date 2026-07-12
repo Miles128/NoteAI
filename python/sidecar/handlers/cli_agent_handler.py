@@ -58,6 +58,7 @@ class CliAgentHandler(BaseHandler):
 
         def _worker() -> None:
             try:
+
                 def send_event(payload: dict) -> None:
                     event_type = payload.get("type")
                     if event_type == "cli_agent_start":
@@ -96,37 +97,43 @@ class CliAgentHandler(BaseHandler):
                     message = result.get("message", "CLI agent 执行失败")
                     if "用户已停止" not in message:
                         job_status.fail_job(job_id, message, send_event=self._send_response)
-                        self._send_response({
-                            "id": "event",
-                            "result": {
-                                "type": "cli_agent_error",
-                                "agent": agent_id,
-                                "message": message,
-                            },
-                        })
+                        self._send_response(
+                            {
+                                "id": "event",
+                                "result": {
+                                    "type": "cli_agent_error",
+                                    "agent": agent_id,
+                                    "message": message,
+                                },
+                            }
+                        )
                     else:
                         job_status.cancel_job(job_id, message=message, send_event=self._send_response)
                     return
 
                 job_status.complete_job(job_id, message="CLI agent 执行完成", send_event=self._send_response)
-                self._send_response({
-                    "id": "event",
-                    "result": {
-                        "type": "cli_agent_done",
-                        "agent": agent_id,
-                        "output": result.get("output", ""),
-                    },
-                })
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "cli_agent_done",
+                            "agent": agent_id,
+                            "output": result.get("output", ""),
+                        },
+                    }
+                )
             except Exception as e:
                 job_status.fail_job(job_id, str(e), send_event=self._send_response)
-                self._send_response({
-                    "id": "event",
-                    "result": {
-                        "type": "cli_agent_error",
-                        "agent": agent_id,
-                        "message": str(e),
-                    },
-                })
+                self._send_response(
+                    {
+                        "id": "event",
+                        "result": {
+                            "type": "cli_agent_error",
+                            "agent": agent_id,
+                            "message": str(e),
+                        },
+                    }
+                )
             finally:
                 self._cli_agent_lock.release()
 

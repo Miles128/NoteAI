@@ -158,10 +158,7 @@ class TestDynamicTopK:
         assert _mod.select_dynamic_top_k("什么是 RAG", hits) == 2
 
     def test_broad_diverse_query_expands_citations(self):
-        hits = [
-            self._hit(i, 0.75 - i * 0.02, topic=f"AI > T{i % 5}")
-            for i in range(1, 11)
-        ]
+        hits = [self._hit(i, 0.75 - i * 0.02, topic=f"AI > T{i % 5}") for i in range(1, 11)]
         assert _mod.select_dynamic_top_k("请总结并比较这些资料有哪些方案、优缺点和路线", hits) == 8
 
     def test_weak_evidence_does_not_pad_citations(self):

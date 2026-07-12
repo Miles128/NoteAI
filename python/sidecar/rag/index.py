@@ -250,7 +250,9 @@ def _open_or_create_collection(path: str, workspace: str | None = None) -> zvec.
             break
     if last_err and _is_zvec_lock_error(last_err) and Path(path).exists():
         raise _collection_lock_error(ws) from last_err
-    log_exception("[rag/index] failed to open existing collection, creating new", last_err, level="warning", logger=logger)
+    log_exception(
+        "[rag/index] failed to open existing collection, creating new", last_err, level="warning", logger=logger
+    )
     return zvec.create_and_open(path, _build_schema())
 
 
@@ -299,7 +301,11 @@ def clear_collection_cache(workspace: str | None = None) -> None:
     """Drop cached collection(s), destroying handles so zvec locks are released."""
     with _COLLECTION_IO_LOCK:
         with _COLLECTION_CACHE_LOCK:
-            workspaces = [_normalize_workspace(ws) for ws in _COLLECTION_CACHE] if workspace is None else [_normalize_workspace(workspace)]
+            workspaces = (
+                [_normalize_workspace(ws) for ws in _COLLECTION_CACHE]
+                if workspace is None
+                else [_normalize_workspace(workspace)]
+            )
         for ws in workspaces:
             _take_cached_collection(ws, destroy=True)
         with _COLLECTION_CACHE_LOCK:
@@ -354,8 +360,7 @@ def count_indexed_chunks(workspace: str) -> int:
 
     if collection_count >= 0 and metadata_total != collection_count:
         logger.warning(
-            f"Chunk count mismatch: metadata={metadata_total}, collection={collection_count}; "
-            f"using collection count"
+            f"Chunk count mismatch: metadata={metadata_total}, collection={collection_count}; using collection count"
         )
         return collection_count
     return metadata_total
@@ -623,7 +628,11 @@ def delete_by_file(
     removed: list[dict] = []
     try:
         filter_expr = f"file_path = {_escape_filter_value(file_path)}"
-        docs = collection.query(filter=filter_expr, topk=10000, output_fields=["content", "file_path", "topic", "tags_json", "section_title"])
+        docs = collection.query(
+            filter=filter_expr,
+            topk=10000,
+            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+        )
         for doc in docs:
             fields = doc.fields or {}
             chunk = {

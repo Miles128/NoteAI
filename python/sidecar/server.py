@@ -445,9 +445,7 @@ class SidecarServer(PathHelpersMixin):
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
                     logger.warning("[watcher] debounce timer already cancelled")
-            self._watcher_debounce_timer = threading.Timer(
-                5.0, self._emit_workspace_change, args=(current_generation,)
-            )
+            self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change, args=(current_generation,))
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):
@@ -508,6 +506,8 @@ class SidecarServer(PathHelpersMixin):
                 sync_wiki_with_files()
             except Exception as e:
                 logger.warning(f"[watcher] syncing WIKI after workspace change: {e}\n")
+        if needs_wiki_sync and config.ingest_auto_enabled and config.rag_enabled:
+            self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
         self._send_response(
             {
                 "id": "event",

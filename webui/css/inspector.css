@@ -486,7 +486,94 @@
 }
 
 .cli-agent-stream > .ai-msg-speaker {
-    display: inline;
+    display: none;
+}
+
+.cli-answer-first-card {
+    display: block;
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: color-mix(in srgb, #000 28%, var(--surface));
+    overflow: hidden;
+}
+
+.cli-answer-first-summary {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 38px;
+    padding: 9px 12px 9px 32px;
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+}
+
+.cli-answer-first-summary::-webkit-details-marker {
+    display: none;
+}
+
+.cli-answer-first-summary::before {
+    content: '›';
+    position: absolute;
+    left: 13px;
+    top: 9px;
+    color: var(--text-muted);
+    font-size: 18px;
+    line-height: 18px;
+    transform: rotate(0deg);
+    transition: transform 0.15s ease;
+}
+
+.cli-answer-first-card[open] > .cli-answer-first-summary::before {
+    transform: rotate(90deg);
+}
+
+.cli-answer-first-title {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.4;
+    font-weight: 650;
+}
+
+.cli-answer-first-meta {
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.cli-answer-first-card[open] > .cli-answer-first-summary {
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.cli-answer-first-body {
+    padding: 2px 12px 10px;
+}
+
+.cli-final-card > .cli-answer-first-body {
+    padding: 2px 12px 12px;
+}
+
+.cli-reasoning-card,
+.cli-tools-card {
+    background: color-mix(in srgb, #000 24%, var(--surface));
+}
+
+#inspector-content-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul {
+    padding-left: 0;
+    list-style: none;
+}
+
+#inspector-content-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul > li::before {
+    content: '- ';
+    color: var(--text-muted);
+}
+
+.cli-answer-first-body > .cli-process-block,
+.cli-answer-first-body > .cli-workflow-block,
+.cli-answer-first-body > .cli-tool-activity {
+    margin-left: 0;
 }
 
 .cli-agent-stream > .cli-agent-output,
@@ -502,6 +589,96 @@
     font-size: 12px;
     line-height: 1.45;
     margin: 2px 0;
+}
+
+.cli-process-block {
+    margin: 6px 0;
+    border-left: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+    padding-left: 8px;
+    color: var(--text-muted);
+}
+
+.cli-process-block.is-running {
+    border-left-color: color-mix(in srgb, var(--accent-color, var(--primary)) 65%, transparent);
+}
+
+.cli-process-summary {
+    min-height: 22px;
+    font-size: 12px;
+    line-height: 1.45;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.cli-process-steps {
+    padding: 4px 8px 6px 16px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.cli-process-step {
+    padding: 2px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content {
+    font-size: 13px;
+    line-height: 1.62;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(h1, h2, h3, h4, h5, h6) {
+    margin: 12px 0 5px;
+    font-size: 13px;
+    line-height: 1.45;
+    font-weight: 650;
+    color: var(--text);
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(p, ul, ol, blockquote, table, pre) {
+    margin: 6px 0;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(ul, ol) {
+    padding-left: 20px;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content li {
+    margin: 2px 0;
+    font-size: 13px;
+    line-height: 1.62;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content pre {
+    padding: 8px 10px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    background: var(--surface-hover);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content code {
+    font-size: 12px;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(th, td) {
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    text-align: left;
 }
 
 .cli-tool-activity.is-running {

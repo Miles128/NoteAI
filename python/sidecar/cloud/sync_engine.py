@@ -17,10 +17,7 @@ _CLOUD_SYNC_CREDENTIAL_SERVICE = "NoteAI/cloud_sync"
 
 def _is_sensitive_key(key: str) -> bool:
     lower = key.lower()
-    return any(
-        token in lower
-        for token in ("password", "secret", "token", "key", "credential", "auth")
-    )
+    return any(token in lower for token in ("password", "secret", "token", "key", "credential", "auth"))
 
 
 def _credential_account(provider_name: str, key: str) -> str:

@@ -274,7 +274,11 @@ class RagHandler(BaseHandler):
             return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
 
         forced_intent = params.get("force_intent")
-        intent = {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"} if forced_intent else classify_intent(question, history=history)
+        intent = (
+            {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"}
+            if forced_intent
+            else classify_intent(question, history=history)
+        )
         logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
 
         if intent["intent"] in ("chat", "general"):

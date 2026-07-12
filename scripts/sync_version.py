@@ -16,7 +16,7 @@ def main():
         sys.exit("version.txt is empty")
 
     pyproject_text = PYPROJECT_PATH.read_text(encoding="utf-8")
-    pyproject_text = re.sub(r'^(version\s*=\s*")[^"]+(".*)$', rf'\g<1>{version}\g<2>', pyproject_text, flags=re.M)
+    pyproject_text = re.sub(r'^(version\s*=\s*")[^"]+(".*)$', rf"\g<1>{version}\g<2>", pyproject_text, flags=re.M)
     PYPROJECT_PATH.write_text(pyproject_text, encoding="utf-8")
 
     tauri_text = TAURI_CONF_PATH.read_text(encoding="utf-8")

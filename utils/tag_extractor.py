@@ -572,12 +572,20 @@ def process_and_tag_file_with_yaml(file_path: str, source: str = "", title: str 
 
 
 def save_tags_md(workspace_path: str) -> dict:
+    """Compatibility alias: the global tag database now lives in WIKI.md."""
     if not workspace_path:
         return {"success": False, "message": "未设置工作区"}
 
     workspace = Path(workspace_path)
     if not workspace.exists():
         return {"success": False, "message": "工作区不存在"}
+
+    from utils.wiki_sync import sync_wiki_with_files
+
+    result = sync_wiki_with_files()
+    result["count"] = result.get("tags", 0)
+    result["message"] = "标签索引已同步到 WIKI.md"
+    return result
 
     tag_map = {}
 

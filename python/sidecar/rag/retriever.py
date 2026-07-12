@@ -79,7 +79,9 @@ def _get_reranker():
             return _RERANKER
         except Exception as e:
             _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
-            logger.warning(f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n")
+            logger.warning(
+                f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n"
+            )
             return None
 
 
@@ -375,6 +377,7 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import build_index, rebuild_search_indices, save_manifest
+
     rel_paths = sorted(current_files.keys())
     all_chunks: list[dict] = []
     for rel_path in rel_paths:
@@ -416,11 +419,20 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     manifest = {"version": 1, "files": {}}
     for c in all_chunks:
         rel = c["file_path"]
-        entry = manifest["files"].setdefault(rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []})
+        entry = manifest["files"].setdefault(
+            rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []}
+        )
         entry["chunks"].append(c["id"])
     save_manifest(workspace, manifest)
 
-    return {"success": True, "chunk_count": chunk_count}
+    return {
+        "success": True,
+        "chunk_count": chunk_count,
+        "incremental": False,
+        "updated_files": len(current_files),
+        "updated_paths": sorted(current_files),
+        "deleted_files": 0,
+    }
 
 
 def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
@@ -430,6 +442,12 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     if not raw_workspace:
         return {"success": False, "message": "未设置工作区"}
     workspace = _normalize_workspace(raw_workspace)
+    legacy_state = Path(workspace) / ".noteai" / "rag_index_state.json"
+    if legacy_state.exists():
+        try:
+            legacy_state.unlink()
+        except OSError:
+            pass
 
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import (
@@ -441,11 +459,38 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         rebuild_search_indices,
         save_manifest,
     )
+
     workspace_path = Path(workspace)
     current_files = _scan_files(workspace_path)
 
     if not current_files:
-        return {"success": False, "message": "未找到可索引的文件"}
+        manifest = load_manifest(workspace)
+        old_files = list(manifest.get("files", {}))
+        if not old_files:
+            return {
+                "success": True,
+                "chunk_count": 0,
+                "incremental": True,
+                "updated_files": 0,
+                "updated_paths": [],
+                "deleted_files": 0,
+            }
+        from sidecar.rag.index import _get_collection
+
+        collection = _get_collection(workspace)
+        for rel_path in old_files:
+            delete_by_file(workspace, rel_path, collection=collection, rebuild_bm25s=False)
+        rebuild_search_indices(workspace, [], progress_callback=progress_callback, collection=collection)
+        build_and_save_global_idf([], workspace)
+        save_manifest(workspace, {"version": 1, "files": {}})
+        return {
+            "success": True,
+            "chunk_count": 0,
+            "incremental": True,
+            "updated_files": 0,
+            "updated_paths": [],
+            "deleted_files": len(old_files),
+        }
 
     manifest = load_manifest(workspace)
     manifest_files = manifest.get("files", {})
@@ -475,13 +520,35 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         old = old_files.get(rel)
         if old and old.get("mtime") == info["mtime"] and old.get("size") == info["size"]:
             unchanged.append(rel)
-        else:
+        elif old:
             modified.append(rel)
+        else:
+            new_files.append(rel)
 
     deleted = [rel for rel in old_files if rel not in current_files]
 
     if progress_callback:
         progress_callback(0, max(len(modified) + len(new_files) + len(deleted), 1), "准备增量更新...")
+
+    # Prepare all replacement vectors before mutating the working index. The
+    # manifest is committed only after every derived index succeeds.
+    files_to_chunk = modified + new_files
+    new_chunks: list[dict] = []
+    embeddings: list[dict] = []
+    if files_to_chunk:
+        new_chunks = _chunk_files_parallel(workspace_path, files_to_chunk)
+    if new_chunks:
+        if progress_callback:
+            progress_callback(0, len(new_chunks), "正在生成 Embedding...")
+        texts = [c["content"] for c in new_chunks]
+        try:
+            embeddings = encode_documents(
+                texts,
+                download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
+                progress_callback=progress_callback,
+            )
+        except Exception as e:
+            return {"success": False, "message": f"Embedding 生成失败: {e}"}
 
     # Delete removed and modified files from the collection.
     # Reuse a single opened collection and defer BM25s rebuild to the end
@@ -495,25 +562,8 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         except Exception as e:
             logger.warning(f"[rag/retriever] delete_by_file failed {rel_path}: {e}\n")
 
-    # Chunk new and modified files in parallel
-    files_to_chunk = modified + new_files
-    new_chunks: list[dict] = []
-    if files_to_chunk:
-        new_chunks = _chunk_files_parallel(workspace_path, files_to_chunk)
-
-    # Encode and add new chunks
+    # Add prepared replacement chunks.
     if new_chunks:
-        if progress_callback:
-            progress_callback(0, len(new_chunks), "正在生成 Embedding...")
-        texts = [c["content"] for c in new_chunks]
-        try:
-            embeddings = encode_documents(
-                texts,
-                download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
-                progress_callback=progress_callback,
-            )
-        except Exception as e:
-            return {"success": False, "message": f"Embedding 生成失败: {e}"}
         add_chunks(workspace, new_chunks, embeddings)
 
     # Rebuild BM25s, metadata, global IDF from the full collection
@@ -574,7 +624,14 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     build_and_save_global_idf(full_corpus, workspace)
     save_manifest(workspace, new_manifest)
 
-    return {"success": True, "chunk_count": chunk_count, "incremental": True}
+    return {
+        "success": True,
+        "chunk_count": chunk_count,
+        "incremental": True,
+        "updated_files": len(modified) + len(new_files),
+        "updated_paths": modified + new_files,
+        "deleted_files": len(deleted),
+    }
 
 
 def incremental_update(file_path: str, action: str = "update"):

@@ -246,7 +246,7 @@ def build_schema_markdown(options: dict | None = None, workspace: str | None = N
         "```",
         "",
         "- 标签 2～5 个，中文优先",
-        "- 文件名与标题一致，禁用 `/ \\ : * ? \" < > |`",
+        '- 文件名与标题一致，禁用 `/ \\ : * ? " < > |`',
         "",
         "## 4. 入库与级联",
         "",

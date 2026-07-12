@@ -255,10 +255,11 @@ def _scan_convert_pending(workspace: str) -> list[str]:
 
 
 def _scan_index_pending(workspace: str) -> list[Path]:
-    """Markdown under Notes/ whose mtime differs from last indexed state."""
-    from sidecar.rag.index_state import file_needs_index
+    """Notes whose mtime/size differs from the canonical RAG manifest."""
+    from sidecar.rag.index import load_manifest
 
     ws = Path(workspace)
+    manifest = load_manifest(workspace).get("files", {})
     out: list[Path] = []
     for md in ws.rglob("*.md"):
         if md.name.startswith(".") or "wiki" in md.parts:
@@ -269,7 +270,9 @@ def _scan_index_pending(workspace: str) -> list[Path]:
             continue
         try:
             rel = str(md.relative_to(ws))
-            if file_needs_index(rel, md.stat().st_mtime, workspace):
+            stat = md.stat()
+            old = manifest.get(rel, {})
+            if old.get("mtime") != stat.st_mtime or old.get("size") != stat.st_size:
                 out.append(md)
         except OSError:
             continue
@@ -581,38 +584,26 @@ def run_ingest(
         if is_cancelled():
             raise _Cancelled()
 
-        # 4. Index
+        # 4. Index — file_manifest.json is the single source of truth.
         indexed_paths: list[str] = []
         if stage_done("index"):
             prog("index", 0.65, "跳过索引（已完成）")
         else:
-            ws_path = Path(workspace)
-            if incremental and not file_paths:
-                index_targets = _scan_index_pending(workspace)
-            elif file_paths:
-                index_targets = []
-                for p in file_paths:
-                    path = Path(p)
-                    if not path.is_absolute():
-                        path = ws_path / p
-                    if path.exists() and path.suffix.lower() == ".md" and "wiki" not in path.parts:
-                        index_targets.append(path)
-            else:
-                index_targets = [
-                    md
-                    for md in ws_path.rglob("*.md")
-                    if not md.name.startswith(".")
-                    and "wiki" not in md.parts
-                    and not md.name.endswith("_综述.md")
-                    and NOTES_FOLDER in md.parts
-                ]
-            if index_targets:
-                prog("index", 0.5, f"检查向量索引 ({len(index_targets)} 篇，仅更新有改动的)…")
-                stats["indexed_files"], indexed_paths = _index_markdown_files(
-                    workspace,
-                    index_targets,
-                    lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
-                )
+            if config.rag_enabled:
+                from sidecar.rag.index import load_manifest
+                from sidecar.rag.retriever import rebuild_index
+
+                has_index_work = bool(_scan_index_pending(workspace)) or bool(load_manifest(workspace).get("files", {}))
+                if has_index_work:
+                    prog("index", 0.5, "按统一 manifest 检查向量索引…")
+                    rag_result = rebuild_index(
+                        workspace=workspace,
+                        progress_callback=lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
+                    )
+                    if not rag_result.get("success"):
+                        raise RuntimeError(rag_result.get("message", "RAG 索引更新失败"))
+                    stats["indexed_files"] = rag_result.get("updated_files", 0)
+                    indexed_paths = rag_result.get("updated_paths", [])
             # Cross-ref only runs on files that actually changed this run.
             prog("index", 0.65, f"索引更新: {stats['indexed_files']} 篇有改动")
             state["pending_crossref_paths"] = indexed_paths
@@ -664,9 +655,7 @@ def run_ingest(
 
             rules = load_workspace_rules()
             if rules.get("auto_update_survey", True):
-                resolved = {
-                    resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
-                }
+                resolved = {resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics}
                 cascade_topics = sorted(resolved)
             else:
                 cascade_topics = []

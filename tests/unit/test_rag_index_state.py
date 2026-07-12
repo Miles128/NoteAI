@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from sidecar.rag.index import save_manifest
 from sidecar.rag.index_state import file_needs_index, mark_indexed
 
 from config import config
@@ -28,4 +29,9 @@ def test_file_needs_index_after_marked(workspace: Path) -> None:
     rel = "Notes/a.md"
     mtime = md.stat().st_mtime
     mark_indexed(rel, mtime, str(workspace))
+    assert not (workspace / ".noteai" / "rag_index_state.json").exists()
+    save_manifest(
+        str(workspace),
+        {"version": 1, "files": {rel: {"mtime": mtime, "size": md.stat().st_size, "chunks": ["c1"]}}},
+    )
     assert file_needs_index(rel, mtime, str(workspace)) is False

@@ -1,5 +1,7 @@
 # NOTE: 运行时由 prompts/yaml/rag_assistant.yaml 优先加载，本文件中的常量仅作备用参考
-ASSISTANT_PERSONA_PROMPT = """你是 RAG 助手，帮助用户从知识库检索笔记与综述并回答问题。回答言简意赅、切中要害，自然亲切但不啰嗦。"""
+ASSISTANT_PERSONA_PROMPT = (
+    """你是 RAG 助手，帮助用户从知识库检索笔记与综述并回答问题。回答言简意赅、切中要害，自然亲切但不啰嗦。"""
+)
 
 HYDE_PROMPT = """请简要回答以下问题，用中文，100字以内：
 

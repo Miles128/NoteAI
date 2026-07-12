@@ -1,4 +1,4 @@
-<img width="720" height="441" alt="NoteAI" src="https://github.com/user-attachments/assets/d36bc718-227e-468a-a6b0-45b1eae35ae3" />
+<img width="1440" alt="NoteAI knowledge base dashboard" src="./docs/screenshots/noteai-dashboard.png" />
 
 # 🧠 NoteAI
 
@@ -40,6 +40,16 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 - 📬 **Unified inbox** — ingest status, pending topics/links, conversion & survey failures, and Lint issues in one place
 - 🔎 **Selection lookup** — instant LLM explanation, then cited local knowledge or Bing-first web evidence
 - 📊 **Health metrics** — survey coverage, avg outbound links, Lint count
+
+### 📸 Product Tour
+
+| Note preview | Knowledge graph |
+|---|---|
+| <img alt="NoteAI Markdown note preview" src="./docs/screenshots/noteai-note-preview.png" /> | <img alt="NoteAI force-directed knowledge graph" src="./docs/screenshots/noteai-knowledge-graph-network.png" /> |
+
+| Mind-map view | CLI Agent workspace |
+|---|---|
+| <img alt="NoteAI knowledge graph mind map" src="./docs/screenshots/noteai-knowledge-graph-mindmap.png" /> | <img alt="NoteAI CLI Agent with knowledge graph" src="./docs/screenshots/noteai-cli-agent.png" /> |
 
 ### 🚀 Quick Start
 
@@ -133,6 +143,10 @@ Agent mode notes:
 | 📤 Dispatch | Send prompts to the chosen CLI agent with workspace as cwd |
 | 📋 Auto AGENTS.md | Generate `AGENTS.md` describing vault structure for CLI agents |
 | 📡 Stream events | Live output via `cli_agent_output` / `cli_agent_done` / `cli_agent_error` |
+| 📝 Markdown output | Safe Markdown preview with compact, consistent typography |
+| 🧭 Process view | Reasoning progress, workflow steps, and tool activity use consistent collapsible blocks |
+
+Each run uses an **Answer First** hierarchy: `Final` is expanded at the top, while `Reasoning` and `Tools` remain available as quieter collapsed receipts below it.
 
 #### ☁️ Cloud sync (experimental)
 
@@ -362,6 +376,11 @@ python run.py
 | 📤 任务派发 | 以工作区为 cwd，向所选 CLI agent 发送提示词 |
 | 📋 自动生成 AGENTS.md | 描述 vault 结构、主题体系、笔记规范，供外部 agent 读取 |
 | 📡 流式事件 | 通过 `cli_agent_output` / `cli_agent_done` / `cli_agent_error` 实时展示 |
+| 📝 Markdown 输出 | 安全预览 Markdown，采用紧凑统一的字号体系 |
+| 🧭 过程视图 | 思考进度、工作流步骤与工具活动统一显示为可折叠区块 |
+
+CLI Agent 的最终回复以安全 Markdown 预览显示；可见过程信息完成后默认折叠，原始协议 JSON 与终端噪声不会混入最终回答。
+每次运行固定采用 **Answer First** 层级：顶部 `Final` 默认展开，`Reasoning` 与 `Tools` 作为安静的折叠收据排列在下方。
 
 #### ☁️ 云盘同步（实验性）
 

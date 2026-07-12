@@ -392,9 +392,7 @@ class TransferHandler(BaseHandler):
             self._note_integration = ni
         try:
             documents = ni.load_documents_from_folder(workspace)
-            result = ni.integrate(
-                documents=documents, save_path=workspace, user_topics=topics if topics else None
-            )
+            result = ni.integrate(documents=documents, save_path=workspace, user_topics=topics if topics else None)
             ni.documents = []
             self._send_response({"id": "event", "result": {"type": "note_integration_complete", "data": result}})
         except Exception as e:

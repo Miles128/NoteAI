@@ -148,7 +148,9 @@ def load_links() -> dict[str, Any]:
     normalized, normalized_changes = _normalize_links(deduped)
     dedupe_changes = len(links) - len(deduped)
     if dedupe_changes or normalized_changes:
-        logger.info(f"[link_indexer] 归一链接索引: 去重/自引用 {dedupe_changes} 条，自动确认/忽略 README {normalized_changes} 条")
+        logger.info(
+            f"[link_indexer] 归一链接索引: 去重/自引用 {dedupe_changes} 条，自动确认/忽略 README {normalized_changes} 条"
+        )
         data["links"] = normalized
         save_links(data)
     return data
@@ -245,9 +247,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         body = ""
 
     existing = load_links()
-    existing_keys = {
-        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])) if k
-    }
+    existing_keys = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing.get("links", [])) if k}
     suggestions: list[tuple[dict, int, str]] = []
 
     all_metas = _load_all_metas_cached(ws)
@@ -468,9 +468,7 @@ def discover_cross_refs_for_file(
 
     existing = load_links()
     existing_links = existing.get("links", [])
-    existing_keys = {
-        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k
-    }
+    existing_keys = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k}
 
     # 使用 mtime 缓存，避免每次保存都全量解析所有文件
     all_metas = _load_all_metas_cached(ws)
@@ -865,9 +863,7 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
     existing = load_links()
     existing_links = existing.get("links", [])
 
-    existing_keys = {
-        k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k
-    }
+    existing_keys = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k}
 
     merged = list(existing_links)
     added_count = 0
@@ -924,7 +920,11 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
             "count": len(links),
         }
 
-    related = [_to_view(link, center_file=file_path) for link in all_links if link["to"] == file_path or link["from"] == file_path]
+    related = [
+        _to_view(link, center_file=file_path)
+        for link in all_links
+        if link["to"] == file_path or link["from"] == file_path
+    ]
 
     return {
         "success": True,

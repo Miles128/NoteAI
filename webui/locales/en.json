@@ -299,7 +299,7 @@
     "cli": {
       "selectTitle": "Choose external AI agent CLI",
       "placeholder": "Send to {agent}...",
-      "pending": "{agent} is selected. CLI execution is not wired yet; the next step will connect external commands here."
+      "pending": "{agent} is connected and ready for file-operation instructions."
     },
     "requestFailed": "Request failed",
     "timeout": "Request timed out. Check API settings or try again.",
@@ -399,7 +399,7 @@
     "cloudSyncIntroHint": "The entry is reserved. This version does not expose authorization, push, or pull actions.",
     "saveConfig": "Save settings",
     "llmApi": "LLM API",
-    "modelHint": "Used by built-in pipelines: ingest classification, survey generation, RAG HyDE/memory, etc. CLI agents use their own API keys, separate from here.",
+    "modelHint": "Used by built-in pipelines: ingest classification, survey generation, and RAG HyDE. CLI agents use their own API keys, separate from here.",
     "maxTokens": "Max tokens",
     "maxContext": "Max context",
     "thinkingChain": "Thinking chain",

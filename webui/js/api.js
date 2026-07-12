@@ -415,7 +415,7 @@ var API_DEFS = [
     { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; }, write: true },
 
     // ---- RAG ----
-    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, force_intent: opts.forceIntent || null, selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
+    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, history: opts.history || [], force_intent: opts.forceIntent || null, selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
     { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; }, write: true },
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },

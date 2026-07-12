@@ -267,21 +267,55 @@ class RagHandler(BaseHandler):
         except APIConfigError as e:
             return {"success": False, "message": str(e)}
 
-        compressed = ""
+        history = self._limited_history(params.get("history"))
+        profile = self._load_user_profile(workspace)
+        context = self._personal_context(profile, history)
         if params.get("selection_lookup"):
             return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
 
         forced_intent = params.get("force_intent")
-        intent = {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"} if forced_intent else classify_intent(question, history="")
+        intent = {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"} if forced_intent else classify_intent(question, history=history)
         logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
 
         if intent["intent"] in ("chat", "general"):
-            return self._answer_without_retrieval(question, compressed, intent=intent["intent"])
+            return self._answer_without_retrieval(question, context, intent=intent["intent"])
         if intent["intent"] == "web":
-            return self._answer_without_retrieval(question, compressed, intent="web")
+            return self._answer_without_retrieval(question, context, intent="web")
 
         # workspace / unknown -> RAG retrieval
-        return self._answer_with_rag(params, question, compressed, use_vector_rag=use_vector_rag)
+        return self._answer_with_rag(params, question, context, use_vector_rag=use_vector_rag)
+
+    @staticmethod
+    def _limited_history(raw_history) -> str:
+        if not isinstance(raw_history, list):
+            return ""
+        lines = []
+        for message in raw_history[-6:]:
+            if not isinstance(message, dict):
+                continue
+            role = "用户" if message.get("role") == "user" else "助手"
+            content = str(message.get("content") or "").strip()[:1200]
+            if content:
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines)[:5000]
+
+    @staticmethod
+    def _load_user_profile(workspace: str) -> str:
+        profile_path = Path(workspace) / ".ai_memory" / "user_profile.json"
+        try:
+            data = json.loads(profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        return str(data.get("profile_md") or "").strip()[:4000]
+
+    @staticmethod
+    def _personal_context(profile: str, history: str) -> str:
+        parts = []
+        if profile:
+            parts.append(f"用户画像（仅用于理解用户背景，不视为知识库证据）：\n{profile}")
+        if history:
+            parts.append(f"当前会话最近上下文：\n{history}")
+        return "\n\n".join(parts)
 
     def _answer_selection_lookup(self, params, selection: str, *, use_vector_rag: bool) -> dict:
         """Stream a quick explanation first, then append evidence from the selected route."""

@@ -299,7 +299,7 @@
     "cli": {
       "selectTitle": "选择外部 AI Agent CLI",
       "placeholder": "发送给 {agent}...",
-      "pending": "{agent} 已选中。CLI 执行通道尚未接入，下一步会从这里连接外部命令。"
+      "pending": "{agent} 已连接，可直接发送文件操作指令。"
     },
     "requestFailed": "请求失败",
     "timeout": "响应超时，请检查 API 配置或稍后重试",
@@ -399,7 +399,7 @@
     "cloudSyncIntroHint": "入口保留，当前版本不提供认证、推送或拉取操作。",
     "saveConfig": "保存配置",
     "llmApi": "LLM API",
-    "modelHint": "供内置流水线使用：入库分类、综述生成、RAG HyDE/记忆等。CLI Agent 使用各自 CLI 的 API Key，与此处独立。",
+    "modelHint": "供内置流水线使用：入库分类、综述生成和 RAG HyDE。CLI Agent 使用各自 CLI 的 API Key，与此处独立。",
     "maxTokens": "最大 Tokens",
     "maxContext": "最大上下文",
     "thinkingChain": "思考链",

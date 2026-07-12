@@ -1,4 +1,6 @@
-# 意图路由与 RAG 实现分析
+# 意图路由与 RAG 实现分析（历史分析）
+
+> 本文记录旧实现，不代表当前产品边界。当前 L1/L2 与 RAG 决策以 `documents/PRD.md` 为准。
 
 > 分析对象：NoteAI `python/sidecar/` 与 `webui/js/assistant.js` 中与 RAG 助手问答相关的意图路由、检索增强生成（RAG）链路。
 > 分析时间：2026-06-20

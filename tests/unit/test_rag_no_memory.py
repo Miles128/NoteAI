@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -66,3 +67,29 @@ def test_unscored_current_context_is_not_high_confidence(tmp_path) -> None:
     handler._finish_chat("问题", "回答", citations=[{"file_path": "Notes/current.md", "source_type": "current"}])
 
     assert events[-1]["result"]["citation_quality"] == {"source_count": 0, "level": "none", "top_score": None}
+
+
+def test_limited_history_keeps_only_recent_messages() -> None:
+    history = [{"role": "user", "content": f"message-{i}"} for i in range(8)]
+
+    result = RagHandler._limited_history(history)
+
+    assert "message-0" not in result
+    assert "message-1" not in result
+    assert "message-2" in result
+    assert "message-7" in result
+
+
+def test_user_profile_is_read_only_background(tmp_path) -> None:
+    profile_dir = tmp_path / ".ai_memory"
+    profile_dir.mkdir()
+    profile_path = profile_dir / "user_profile.json"
+    profile_path.write_text(json.dumps({"profile_md": "偏好中文回答"}, ensure_ascii=False), encoding="utf-8")
+
+    profile = RagHandler._load_user_profile(str(tmp_path))
+    context = RagHandler._personal_context(profile, "用户: 最近的问题")
+
+    assert profile == "偏好中文回答"
+    assert "仅用于理解用户背景" in context
+    assert "最近的问题" in context
+    assert json.loads(profile_path.read_text(encoding="utf-8"))["profile_md"] == "偏好中文回答"

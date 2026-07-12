@@ -156,7 +156,6 @@ class AppConfig:
             notes_folder.mkdir(parents=True, exist_ok=True)
             organized_folder.mkdir(parents=True, exist_ok=True)
             raw_folder.mkdir(parents=True, exist_ok=True)
-            (noteai_folder / "memory").mkdir(parents=True, exist_ok=True)
             (noteai_folder / "logs").mkdir(parents=True, exist_ok=True)
             (noteai_folder / RAG_INDEX_FOLDER).mkdir(parents=True, exist_ok=True)
 

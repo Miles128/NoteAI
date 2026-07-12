@@ -284,6 +284,7 @@ window.AssistantModule = (function() {
 
     function sendMessage(questionOverride, options) {
         if (_isStreaming) return;
+        options = options || {};
 
         var input = document.getElementById('ai-input');
         if (!input) return;
@@ -293,6 +294,12 @@ window.AssistantModule = (function() {
         if (!questionOverride) input.value = '';
 
         addUserMessage(question);
+        var requestHistory = _chatHistory.slice(-6).map(function(message) {
+            return {
+                role: message.role,
+                content: String(message.content || '').slice(0, 1200)
+            };
+        });
         _chatHistory.push({ role: 'user', content: question });
         _lastArchive = { question: question, answer: '', rowEl: null };
 
@@ -305,6 +312,7 @@ window.AssistantModule = (function() {
         var tags = _extractTags();
         var currentFile = _extractCurrentFile();
 
+        options.history = requestHistory;
         window.api.ragChat(question, topics, tags, currentFile, options).then(function(result) {
             if (result && result.started) {
                 setTimeout(function() {

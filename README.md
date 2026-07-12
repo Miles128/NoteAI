@@ -146,7 +146,7 @@ Enable in Settings → UI → experimental; WebDAV, Jianguoyun, Aliyun, Tencent,
 ├── wiki/               # 📚 Compiled: WIKI.md, surveys, log.md
 ├── Raw/                # 📦 Originals (PDF, DOCX, …)
 ├── schema.md           # 📋 AI rules (Schema wizard)
-├── .noteai/            # ⚙️ Runtime: memory/, rag_index/, ingest state…
+├── .noteai/            # ⚙️ Runtime: rag_index/, ingest state, logs…
 └── .ai_memory/         # 👤 User profile, project rules
 ```
 
@@ -217,8 +217,8 @@ Aligned with [PRD](./documents/PRD.md) — evolve from batch tool to **continuou
 
 | Priority | Focus |
 |----------|--------|
-| 🔥 P0 | Cascade updates · ingest progress & resume · query→archive · Lint · schema.md |
-| 🟡 P1 | Cross-ref on save · search UX · WIKI summaries · cloud sync GA |
+| 🔥 P0 | Ingest 默认开启 · 后台综述 · 有限会话上下文 · CLI 文件操作 · RSS 手动触发 |
+| 🟡 P1 | Cross-ref on save · search UX · WIKI summaries · standalone App packaging |
 | 🎨 P1 | Main-area state machine · onboarding · standalone App packaging & clean-machine validation |
 | 🟢 P2 | Contradiction detection · graph + editor coexist · Vite bundle (later) |
 
@@ -375,7 +375,7 @@ python run.py
 ├── wiki/               # 📚 AI 编译层：WIKI.md、主题综述、log.md
 ├── Raw/                # 📦 原件归档（PDF、DOCX、PPTX…）
 ├── schema.md           # 📋 工作区 AI 规范（Schema 向导生成）
-├── .noteai/            # ⚙️ 运行时：memory/、rag_index/、ingest 状态…
+├── .noteai/            # ⚙️ 运行时：rag_index/、ingest 状态、日志…
 └── .ai_memory/         # 👤 用户画像、项目规则
 ```
 

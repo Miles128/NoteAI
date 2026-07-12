@@ -28,7 +28,7 @@
 | `Notes/` | **源稿层** | 原始 Markdown；按主题分文件夹；人类主编辑区 |
 | `wiki/` | **编译层** | `WIKI.md` 索引、`{叶主题名}_综述.md`、`log.md` 变更日志 |
 | `Raw/` | **原件归档** | PDF/DOCX 等；转换后笔记在 `Notes/`，原件留此处 |
-| `.noteai/` | 运行时 | RAG 索引、`memory/`、操作日志、入库状态 |
+| `.noteai/` | 运行时 | RAG 索引、操作日志、入库状态（会话上下文不落盘） |
 | `.ai_memory/` | 工作区记忆 | `project_rules.md`（本库领域细则）、`user_profile.json` |
 | 根目录 `schema.md` | 本文件 | 结构与 AI 边界 |
 | `.pending_topics.json` | 待办 | 待确认主题分类 |

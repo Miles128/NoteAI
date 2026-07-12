@@ -98,7 +98,6 @@ class SidecarServer(PathHelpersMixin):
         process is fully initialized.
         """
         self._start_workspace_watcher()
-        self._start_rss_polling()
         self._startup_sync()
 
     def _build_router(self):
@@ -337,37 +336,6 @@ class SidecarServer(PathHelpersMixin):
 
         _query_cache.clear()
 
-    def _start_rss_polling(self):
-        """Start periodic RSS feed polling (every 30 minutes)."""
-        self._rss_poll_timer = None
-        rss_path = str(Path(__file__).parent.parent)
-        if rss_path not in sys.path:
-            sys.path.insert(0, rss_path)
-
-        def _poll():
-            try:
-                workspace = config.workspace_path
-                if workspace:
-                    from sidecar.multi_source import fetch_all_subscriptions
-
-                    result = fetch_all_subscriptions(workspace)
-                    if result.get("results"):
-                        imported = sum(r.get("imported", 0) for r in result["results"])
-                        if imported > 0:
-                            self._send_response(
-                                {"id": "event", "result": {"type": "rss_poll_complete", "data": {"imported": imported}}}
-                            )
-            except Exception as e:
-                logger.warning("[rss] poll failed: %s", e)
-            finally:
-                self._rss_poll_timer = threading.Timer(1800.0, _poll)
-                self._rss_poll_timer.daemon = True
-                self._rss_poll_timer.start()
-
-        self._rss_poll_timer = threading.Timer(1800.0, _poll)
-        self._rss_poll_timer.daemon = True
-        self._rss_poll_timer.start()
-
     def _cached_or_compute(self, key, compute_fn):
         """通用缓存包装器：按工作区路径失效，带 TTL"""
         cached = self._cache.get(key)
@@ -556,11 +524,6 @@ class SidecarServer(PathHelpersMixin):
     def shutdown(self):
         """Gracefully stop background services."""
         self._stop_watcher()
-        if self._rss_poll_timer:
-            try:
-                self._rss_poll_timer.cancel()
-            except Exception as e:
-                log_exception("[shutdown] failed to cancel rss poll timer", e, level="debug", logger=logger)
         self._router.shutdown(wait=False)
         # Shutdown module-level thread pools
         try:

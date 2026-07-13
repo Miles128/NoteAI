@@ -36,12 +36,15 @@ def workspace_stats(workspace: str) -> dict:
 
 
 def pending_summary(pending: dict, lint_report: dict) -> dict:
-    items = pending.get("items") if isinstance(pending.get("items"), list) else []
-    cascade = load_cascade_failures()
+    raw_items = pending.get("items")
+    items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+    raw_cascade = load_cascade_failures()
+    cascade = raw_cascade if isinstance(raw_cascade, list) else []
     try:
         from sidecar.convert_failures import load_convert_failures
 
-        convert = load_convert_failures()
+        raw_convert = load_convert_failures()
+        convert = raw_convert if isinstance(raw_convert, list) else []
     except Exception:
         convert = []
     lint_summary = lint_report.get("summary") if isinstance(lint_report, dict) else {}

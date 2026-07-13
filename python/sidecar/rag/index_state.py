@@ -63,6 +63,23 @@ def file_needs_index(rel_path: str, mtime: float, workspace: str | None = None) 
 
 
 def mark_indexed(rel_path: str, mtime: float, workspace: str | None = None) -> None:
+    mark_many_indexed({rel_path: mtime}, workspace)
+
+
+def mark_many_indexed(files: dict[str, float], workspace: str | None = None) -> None:
+    """Commit successful index updates in one atomic state-file write."""
+    if not files:
+        return
     state = load_state(workspace)
-    state[rel_path] = mtime
+    state.update(files)
+    save_state(state, workspace)
+
+
+def remove_indexed(rel_paths: list[str], workspace: str | None = None) -> None:
+    """Forget files only after their persisted chunks have been removed."""
+    if not rel_paths:
+        return
+    state = load_state(workspace)
+    for rel_path in rel_paths:
+        state.pop(rel_path, None)
     save_state(state, workspace)

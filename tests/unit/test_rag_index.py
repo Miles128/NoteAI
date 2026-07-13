@@ -115,6 +115,8 @@ class TestMetadataIndex:
         assert _filter_candidates(str(workspace), ["a > b"], None) == {"c1", "c3"}
         assert _filter_candidates(str(workspace), None, ["t2"]) == {"c2", "c3"}
         assert _filter_candidates(str(workspace), ["a > b"], ["t2"]) == {"c3"}
+        assert _filter_candidates(str(workspace), None, None, ["y.md"]) == {"c2"}
+        assert _filter_candidates(str(workspace), ["a > b"], None, ["y.md"]) == set()
 
 
 class TestBuildAndSearch:

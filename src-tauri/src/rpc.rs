@@ -1,7 +1,7 @@
 use crate::sidecar;
 use crate::state::{AppState, PyRequest};
 
-static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
+static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "add_tag_to_file",
     "ai_topic_analyze",
     "ai_topic_survey",
@@ -17,7 +17,14 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "check_ingest_updates",
     "check_workspace_path_valid",
     "clear_saved_workspace",
+    "cloud_sync_auth",
+    "cloud_sync_disconnect",
     "cloud_sync_list_providers",
+    "cloud_sync_load_config",
+    "cloud_sync_pull",
+    "cloud_sync_push",
+    "cloud_sync_save_config",
+    "cloud_sync_status",
     "confirm_all_links",
     "confirm_link",
     "convert_raw_archive",
@@ -130,6 +137,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "start_ingest",
     "start_note_integration",
     "start_web_download",
+    "sync_wiki_with_files",
     "test_api_connection",
     "toggle_survey",
     "save_rss_subscription",
@@ -138,14 +146,15 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "list_rss_subscriptions",
     "unregister_mcp_server",
     "uninstall_component",
-    "fetch_all_rss",];
+    "fetch_all_rss",
+];
 
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         "rag_chat" => 60,
-        "start_ingest" | "ensure_ingest" | "retry_ingest"
-        | "init_rag_index" | "rag_rebuild_index" | "cancel_ingest" => 120,
+        "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
+        | "rag_rebuild_index" | "cancel_ingest" => 120,
         _ => 60,
     }
 }
@@ -186,7 +195,10 @@ async fn call_python_once(
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     {
-        let mut pending = state.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut pending = state
+            .pending_requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         pending.insert(id.clone(), tx);
     }
 
@@ -215,7 +227,10 @@ async fn call_python_once(
         Ok(Ok(value)) => Ok(value),
         Ok(Err(_)) => Err("Python response channel closed".into()),
         Err(_) => {
-            let mut pending = state.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
+            let mut pending = state
+                .pending_requests
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             pending.remove(&id);
             Err("Python request timed out".into())
         }
@@ -232,10 +247,7 @@ pub async fn call_python(
     match call_python_once(state.inner(), method, params.clone()).await {
         Ok(v) => Ok(v),
         Err(e) if is_pipe_broken(&e) || e.contains("not running") => {
-            let app = state
-                .inner()
-                .app_handle()
-                .ok_or_else(|| e.clone())?;
+            let app = state.inner().app_handle().ok_or_else(|| e.clone())?;
             sidecar::restart_python_sidecar(&app).await?;
             for _ in 0..50 {
                 if sidecar::is_sidecar_alive(state.inner()).await {

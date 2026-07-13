@@ -5,6 +5,7 @@ import threading
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 from config import config
 
@@ -12,10 +13,11 @@ from config import config
 class AppLogger:
     """应用日志管理器（线程安全单例）"""
 
-    _instance = None
+    _instance: "AppLogger | None" = None
+    _initialized: bool
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls) -> "AppLogger":
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -87,20 +89,23 @@ class AppLogger:
         except Exception as e:
             self.logger.warning(f"清理旧日志失败: {e}")
 
-    def debug(self, message: str):
-        self.logger.debug(message)
+    def debug(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.debug(message, *args, **kwargs)
 
-    def info(self, message: str):
-        self.logger.info(message)
+    def info(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.info(message, *args, **kwargs)
 
-    def warning(self, message: str):
-        self.logger.warning(message)
+    def warning(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.warning(message, *args, **kwargs)
 
-    def error(self, message: str):
-        self.logger.error(message)
+    def error(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.error(message, *args, **kwargs)
 
-    def critical(self, message: str):
-        self.logger.critical(message)
+    def exception(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.exception(message, *args, **kwargs)
+
+    def critical(self, message: object, *args: object, **kwargs: Any) -> None:
+        self.logger.critical(message, *args, **kwargs)
 
     def get_logs(self, lines: int = 100) -> list:
         """获取最近的日志"""

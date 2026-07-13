@@ -109,9 +109,10 @@ def retrieve(
 
         fm, body = parse_frontmatter(text)
         fm = fm or {}
-        file_topic = str(fm.get("topic") or "").strip()
-        if isinstance(fm.get("topic"), list):
-            parts = [str(t).strip() for t in fm.get("topic") if t]
+        raw_topic = fm.get("topic")
+        file_topic = str(raw_topic or "").strip()
+        if isinstance(raw_topic, list):
+            parts = [str(t).strip() for t in raw_topic if t]
             file_topic = parts[0] if parts else ""
 
         file_tags = _parse_tags(fm.get("tags", []))

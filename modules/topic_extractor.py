@@ -52,7 +52,7 @@ class TopicExtractor:
         Returns:
             文件名列表（不含后缀）
         """
-        filenames = []
+        filenames: list[str] = []
         folder = Path(folder_path)
 
         if not folder.exists():

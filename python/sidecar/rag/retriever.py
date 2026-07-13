@@ -3,6 +3,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
@@ -83,27 +84,33 @@ def _get_reranker():
             return None
 
 
-def _cache_key(query: str, topics, tags) -> str:
+def _cache_key(query: str, topics, tags, current_file: str = "") -> str:
     ws = config.workspace_path or ""
-    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}"
+    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}||{current_file}"
 
 
-def _get_cached(query: str, topics, tags):
-    key = _cache_key(query, topics, tags)
+def _get_cached(query: str, topics, tags, current_file: str = ""):
+    key = _cache_key(query, topics, tags, current_file)
     return _query_cache.get(key)
 
 
-def _set_cached(query: str, topics, tags, value):
-    key = _cache_key(query, topics, tags)
+def _set_cached(query: str, topics, tags, current_file: str, value):
+    key = _cache_key(query, topics, tags, current_file)
     _query_cache.set(key, value)
 
 
-def retrieve(query: str, topics: list = None, tags: list = None, progress_callback=None) -> list:
+def retrieve(
+    query: str,
+    topics: list | None = None,
+    tags: list | None = None,
+    current_file: str = "",
+    progress_callback=None,
+) -> list:
     workspace = config.workspace_path
     if not workspace:
         return []
 
-    cached = _get_cached(query, topics, tags)
+    cached = _get_cached(query, topics, tags, current_file)
     if cached is not None:
         return cached[0]
 
@@ -126,6 +133,29 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
         topics=topics,
         tags=tags,
     )
+
+    # The open note is not privileged evidence.  Retrieve its best chunks with
+    # the same query vector, then let normal ranking/MMR/reranking decide
+    # whether it earns a place in the final evidence set.
+    if current_file:
+        current_hits = hybrid_search(
+            workspace,
+            query_dense=query_emb["dense_vec"],
+            query_text="",
+            top_k=3,
+            file_paths=[current_file],
+        )
+        known_ids = {r.get("id") for r in results}
+        for hit in current_hits:
+            if hit.get("id") in known_ids:
+                continue
+            hit["source_type"] = "current"
+            # This candidate is intentionally scored by vector similarity,
+            # rather than a one-file-normalized BM25 score.
+            hit["score"] = hit.get("dense_score", 0.0)
+            results.append(hit)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        results = results[:candidate_k]
 
     # HyDE only if enabled and the original search is weak, avoiding a mandatory LLM call.
     if hyde_enabled() and (not results or results[0].get("score", 0) < hyde_threshold()):
@@ -161,7 +191,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     expanded = filter_usable_chunks(expanded)
     expanded = limit_unique_sources(expanded, dynamic_top_k)
 
-    _set_cached(query, topics, tags, (expanded, []))
+    _set_cached(query, topics, tags, current_file, (expanded, []))
     return expanded
 
 
@@ -413,7 +443,7 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     )
     build_and_save_global_idf(all_chunks, workspace)
 
-    manifest = {"version": 1, "files": {}}
+    manifest: dict[str, Any] = {"version": 1, "files": {}}
     for c in all_chunks:
         rel = c["file_path"]
         entry = manifest["files"].setdefault(rel, {"mtime": current_files[rel]["mtime"], "size": current_files[rel]["size"], "chunks": []})
@@ -518,7 +548,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
 
     # Rebuild BM25s, metadata, global IDF from the full collection
     all_chunk_ids: list[str] = []
-    new_manifest = {"version": 1, "files": {}}
+    new_manifest: dict[str, Any] = {"version": 1, "files": {}}
 
     for rel in unchanged:
         entry = old_files[rel]

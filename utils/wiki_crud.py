@@ -65,8 +65,8 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):  # noqa: PLR0
         stripped = line.strip()
         if stripped == topic_heading:
             topic_start = i
-        elif topic_start is not None and re.match(r"^#{2,}\s+", stripped):
-            h_level = len(re.match(r"^(#{2,})", stripped).group(1))
+        elif topic_start is not None and (heading_match := re.match(r"^(#{2,})", stripped)):
+            h_level = len(heading_match.group(1))
             if h_level <= topic_depth + 1:
                 topic_end = i
                 break
@@ -326,9 +326,11 @@ def create_topic(topic_name):  # noqa: PLR0912
 
 def delete_topic(topic_name):  # noqa: PLR0912, PLR0915
     from utils.topic_assigner import (  # noqa: PLC0415
+        auto_assign_topic_for_file,
+    )
+    from utils.topic_file_ops import (  # noqa: PLC0415
         _clear_topic_in_file,
         _remove_empty_dir,
-        auto_assign_topic_for_file,
     )
 
     workspace = config.workspace_path
@@ -378,21 +380,19 @@ def delete_topic(topic_name):  # noqa: PLR0912, PLR0915
     if not wiki_ok:
         logger.warning(f"[delete_topic] WIKI.md removal failed for {topic_name}")
 
-    notes_root_files = set()
+    notes_root_files: set[Path] = set()
     for src in actual_files:
         dst = notes_root / src.name
         stem = src.stem
         suffix = src.suffix
-        candidate = notes_root / f"{stem}{suffix}"
+        candidate: Path | None = notes_root / f"{stem}{suffix}"
         counter = 1
-        while not candidate.exists():
+        while candidate is not None and not candidate.exists():
             candidate = notes_root / f"{stem}_{counter}{suffix}"
             counter += 1
-            max_conflict_attempts = 100
-            if counter > max_conflict_attempts:
+            if counter > 100:
                 candidate = None
-                break
-        if candidate and candidate.exists():
+        if candidate is not None:
             notes_root_files.add(candidate)
         else:
             notes_root_files.add(notes_root / src.name)

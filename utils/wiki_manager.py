@@ -6,10 +6,17 @@ WIKI.md 的 CRUD 操作见 utils.topic_wiki_manager
 
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from config import config
 from config.constants import TOPIC_SEP
 from utils.logger import logger
+
+
+class WikiTopic(TypedDict):
+    name: str
+    label: str
+    files: list[str]
 
 
 def _get_wiki_path():
@@ -37,8 +44,8 @@ def parse_wiki_headings():
         text = wiki_path.read_text(encoding="utf-8")
     except Exception:
         return []
-    headings = []
-    topic_stack = []
+    headings: list[dict[str, int | str]] = []
+    topic_stack: list[str] = []
     for line in text.split("\n"):
         stripped = line.strip()
         match = re.match(r"^(#{2,4})\s+(.+)$", stripped)
@@ -74,10 +81,10 @@ def parse_wiki_structure():
         logger.error(f"[parse_wiki] read failed: {e}")
         return []
 
-    topics = []
+    topics: list[WikiTopic] = []
     lines = text.split("\n")
-    current_topic = None
-    topic_stack = []
+    current_topic: WikiTopic | None = None
+    topic_stack: list[str] = []
     file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
 
     def _flush():

@@ -354,10 +354,10 @@ def _format_yaml_value(value: Any) -> str:
 
 def generate_yaml_frontmatter(
     title: str = "",
-    tags: list[str] = None,
-    date: datetime = None,
+    tags: list[str] | None = None,
+    date: datetime | None = None,
     source: str = "",
-    extra_fields: dict[str, Any] = None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> str:
     """生成标准的 YAML front matter（仅包含 tags 和 source）
 
@@ -371,7 +371,7 @@ def generate_yaml_frontmatter(
     返回：
         完整的 YAML front matter 字符串（包含 --- 分隔符）
     """
-    fields = {}
+    fields: dict[str, Any] = {}
 
     if title:
         fields["title"] = title
@@ -417,7 +417,7 @@ def parse_yaml_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     返回：
         (frontmatter_dict, remaining_content)
     """
-    frontmatter = {}
+    frontmatter: dict[str, Any] = {}
     body = content
 
     if not content.startswith(("---\n", "---\r\n")):
@@ -440,7 +440,8 @@ def parse_yaml_frontmatter(content: str) -> tuple[dict[str, Any], str]:
     if frontmatter_content.strip():
         try:
             if PYYAML_AVAILABLE and yaml is not None:
-                frontmatter = yaml.safe_load(frontmatter_content) or {}
+                parsed = yaml.safe_load(frontmatter_content)
+                frontmatter = parsed if isinstance(parsed, dict) else {}
             else:
                 frontmatter = _parse_yaml_frontmatter_simple(frontmatter_content)
         except Exception:
@@ -455,7 +456,11 @@ def parse_yaml_frontmatter(content: str) -> tuple[dict[str, Any], str]:
 
 
 def add_yaml_frontmatter_to_content(
-    content: str, title: str = "", tags: list[str] = None, source: str = "", extra_fields: dict[str, Any] = None
+    content: str,
+    title: str = "",
+    tags: list[str] | None = None,
+    source: str = "",
+    extra_fields: dict[str, Any] | None = None,
 ) -> str:
     """为 Markdown 内容添加 YAML front matter
 
@@ -487,7 +492,11 @@ def add_yaml_frontmatter_to_content(
 
 
 def add_yaml_frontmatter_to_file(
-    file_path: str, title: str = "", tags: list[str] = None, source: str = "", extra_fields: dict[str, Any] = None
+    file_path: str,
+    title: str = "",
+    tags: list[str] | None = None,
+    source: str = "",
+    extra_fields: dict[str, Any] | None = None,
 ) -> bool:
     """为 Markdown 文件添加 YAML front matter
 
@@ -579,7 +588,7 @@ def save_tags_md(workspace_path: str) -> dict:
     if not workspace.exists():
         return {"success": False, "message": "工作区不存在"}
 
-    tag_map = {}
+    tag_map: dict[str, list[str]] = {}
 
     def _scan(path):
         try:

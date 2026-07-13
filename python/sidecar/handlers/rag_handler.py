@@ -245,7 +245,6 @@ class RagHandler(BaseHandler):
         return {"success": True}
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
-        from sidecar.intent_router import classify_intent
         from utils.llm_utils import APIConfigError, check_api_config
 
         question = params.get("question", "").strip()
@@ -273,16 +272,11 @@ class RagHandler(BaseHandler):
         if params.get("selection_lookup"):
             return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
 
-        forced_intent = params.get("force_intent")
-        intent = {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"} if forced_intent else classify_intent(question, history=history)
-        logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
-
-        if intent["intent"] in ("chat", "general"):
-            return self._answer_without_retrieval(question, context, intent=intent["intent"])
-        if intent["intent"] == "web":
+        # Default every normal conversation to the workspace so a greeting or
+        # broadly phrased question cannot silently bypass the evidence path.
+        # Web remains available only through an explicit UI override.
+        if params.get("force_intent") == "web":
             return self._answer_without_retrieval(question, context, intent="web")
-
-        # workspace / unknown -> RAG retrieval
         return self._answer_with_rag(params, question, context, use_vector_rag=use_vector_rag)
 
     @staticmethod
@@ -367,7 +361,7 @@ class RagHandler(BaseHandler):
                 scored.append(float(cite.get("score")))
             except (TypeError, ValueError):
                 continue
-        source_count = len([c for c in cites if c.get("file_path") and c.get("source_type") != "current"])
+        source_count = len([c for c in cites if c.get("file_path")])
         top_score = max(scored) if scored else None
         if source_count == 0:
             level = "none"
@@ -474,37 +468,33 @@ class RagHandler(BaseHandler):
         tags = params.get("tags") or None
         current_file = params.get("current_file") or ""
 
-        if use_vector_rag:
-            from sidecar.rag.retriever import retrieve as search_fn
-        else:
-            from sidecar.classic_retriever import retrieve as search_fn
-
         try:
-            search_results = search_fn(question, topics=topics, tags=tags)
+            if use_vector_rag:
+                from sidecar.rag.retriever import retrieve as vector_retrieve
+
+                search_results = vector_retrieve(
+                    question,
+                    topics=topics,
+                    tags=tags,
+                    current_file=current_file,
+                )
+            else:
+                from sidecar.classic_retriever import retrieve as classic_retrieve
+
+                search_results = classic_retrieve(question, topics=topics, tags=tags)
         except Exception as e:
             RagHandler._record_error(f"检索失败: {e}")
             return self._fail_rag(f"检索失败: {e}")
 
-        context_parts = []
-        citations = []
+        context_parts: list[str] = []
+        citations: list[dict] = []
         seen_paths: set[str] = set()
 
-        # The current file is useful background, but it is not evidence unless
-        # retrieval independently returns a scored chunk from that file.
-        if current_file:
-            current_full = self._resolve_path(current_file)
-            try:
-                if current_full:
-                    cf_text = Path(current_full).read_text(encoding="utf-8")
-                    _, cf_body = self._parse_frontmatter(cf_text)
-                    cf_body = (cf_body or cf_text).strip()[:4000]
-                    if cf_body:
-                        label = Path(current_file).stem
-                        context_parts.append(f"当前打开文件背景（不可作为引用）：{label}\n{cf_body}")
-            except Exception:
-                pass
-
         for r in search_results:
+            # Surveys and graph neighbors are helpful retrieval expansion, but
+            # are not direct evidence for a conversational answer.
+            if r.get("source_type") in {"survey", "backlink", "topic_tree"}:
+                continue
             body = (r.get("content") or "").strip()
             if not body:
                 continue
@@ -545,7 +535,20 @@ class RagHandler(BaseHandler):
             RagHandler._record_error(f"LLM错误: {e}")
             return self._fail_rag(str(e))
 
-        return self._finish_chat(question, answer, citations=citations)
+        return self._finish_chat(question, answer, citations=self._cited_sources(answer, citations))
+
+    @staticmethod
+    def _cited_sources(answer: str, citations: list[dict]) -> list[dict]:
+        """Return only valid source IDs the model actually used in its answer."""
+        by_index = {str(c.get("index")): c for c in citations if c.get("index") is not None}
+        used = []
+        seen: set[str] = set()
+        for match in re.finditer(r"\[(\d+)\]", answer or ""):
+            index = match.group(1)
+            if index in by_index and index not in seen:
+                used.append(by_index[index])
+                seen.add(index)
+        return used
 
     def _extractive_compress(self, older_history):
         if not older_history:
@@ -637,7 +640,8 @@ class RagHandler(BaseHandler):
                         "index": 65,
                         "crossref": 70,
                     }
-                    percent = stage_progress.get(ingest_state.get("stage"), 0)
+                    stage = ingest_state.get("stage")
+                    percent = stage_progress.get(stage, 0) if isinstance(stage, str) else 0
 
             return {
                 "success": True,

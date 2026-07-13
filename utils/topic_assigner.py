@@ -124,7 +124,7 @@ def _workspace_rel(path: Path, workspace: str) -> str:
 
 
 def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
-    tags = []
+    tags: list[str] = []
     title = full_path.stem
     if not meta:
         return title, tags
@@ -143,13 +143,37 @@ def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
 def _apply_auto_topic(
     full_path: Path, workspace: str, topic: str, title: str, source: str | None, format_optimized: bool
 ):
-    write_topic_to_file(str(full_path), topic)
-    add_file_to_wiki_topic(_workspace_rel(full_path, workspace), topic, title)
-    move_file_to_notes_topic_folder(str(full_path), topic)
-    _drop_pending_for_rel(_workspace_rel(full_path, workspace))
+    original_rel = _workspace_rel(full_path, workspace)
+    write_result = write_topic_to_file(str(full_path), topic)
+    if not write_result.get("success"):
+        return {
+            "status": "error",
+            "message": write_result.get("message", "写入主题失败"),
+            "format_optimized": format_optimized,
+        }
+
+    move_result = move_file_to_notes_topic_folder(str(full_path), topic)
+    if not move_result.get("success"):
+        return {
+            "status": "error",
+            "message": move_result.get("message", "移动文件失败"),
+            "format_optimized": format_optimized,
+        }
+
+    new_rel = str(move_result.get("new_path") or original_rel)
+    add_file_to_wiki_topic(new_rel, topic, title)
+    _drop_pending_for_rel(original_rel)
+    if new_rel != original_rel:
+        _drop_pending_for_rel(new_rel)
     prefix = "AI 分配" if source == "llm" else "自动分配"
     _log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
-    result = {"status": "auto_assigned", "topic": topic, "format_optimized": format_optimized}
+    result = {
+        "status": "auto_assigned",
+        "topic": topic,
+        "new_path": new_rel,
+        "file_path": str(Path(workspace) / new_rel),
+        "format_optimized": format_optimized,
+    }
     if source:
         result["source"] = source
     return result

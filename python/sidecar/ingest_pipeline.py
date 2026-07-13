@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from config import config, is_ignored_dir
 from config.settings import NOTES_FOLDER, RAW_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_converter import FileConverterManager
 from sidecar.workspace_rules import needs_workspace_rules_setup
+from utils.logger import logger
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
 from utils.topic_file_ops import _check_topic_needs_processing
 from utils.wiki_manager import topic_from_notes_path
@@ -19,6 +23,8 @@ from utils.wiki_manager import topic_from_notes_path
 STAGES = ("rules", "convert", "compile", "classify", "index", "crossref", "cascade", "lint", "sync")
 
 _cancel_event = threading.Event()
+_cancel_lock = threading.Lock()
+_cancel_generation = 0
 _state_lock = threading.Lock()
 
 
@@ -42,7 +48,8 @@ def _load_fingerprint(workspace: str) -> dict:
     if not path.exists():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
@@ -50,9 +57,9 @@ def _load_fingerprint(workspace: str) -> dict:
 def _save_fingerprint(workspace: str, fingerprint: dict) -> None:
     path = _fingerprint_path(workspace)
     try:
-        path.write_text(json.dumps(fingerprint, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+        _write_json_atomic(path, fingerprint)
+    except OSError as e:
+        logger.warning("[ingest] failed to save fingerprint: %s", e)
 
 
 def _workspace_file_fingerprint(workspace: str) -> dict:
@@ -102,7 +109,8 @@ def load_ingest_state() -> dict:
     if not path or not path.exists():
         return {"status": "idle"}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {"status": "idle"}
     except (OSError, json.JSONDecodeError):
         return {"status": "idle"}
 
@@ -112,11 +120,35 @@ def save_ingest_state(state: dict) -> None:
     if not path:
         return
     with _state_lock:
-        path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        _write_json_atomic(path, state)
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    data = json.dumps(payload, ensure_ascii=False, indent=2)
+    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def request_cancel() -> None:
-    _cancel_event.set()
+    global _cancel_generation
+    with _cancel_lock:
+        _cancel_generation += 1
+        _cancel_event.set()
 
 
 def clear_cancel() -> None:
@@ -125,6 +157,11 @@ def clear_cancel() -> None:
 
 def is_cancelled() -> bool:
     return _cancel_event.is_set()
+
+
+def cancel_generation() -> int:
+    with _cancel_lock:
+        return _cancel_generation
 
 
 def normalize_ingest_state() -> dict:
@@ -314,6 +351,7 @@ def _index_markdown_files(
     workspace: str,
     files: list[Path],
     progress_cb: Callable[[int, int, str], None] | None,
+    cancelled: Callable[[], bool] = is_cancelled,
 ) -> tuple[int, list[str]]:
     if not config.rag_enabled:
         return 0, []
@@ -321,16 +359,18 @@ def _index_markdown_files(
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import encode_documents
     from sidecar.rag.index import add_chunks, delete_by_file
-    from sidecar.rag.index_state import file_needs_index, mark_indexed
+    from sidecar.rag.index_state import file_needs_index, mark_indexed, mark_many_indexed
 
     indexed = 0
     indexed_paths: list[str] = []
     total = len(files)
     pending_chunks: list[dict] = []
     pending_embeddings: list[dict] = []
+    pending_updates: dict[str, float] = {}
+    preparation_errors: list[str] = []
 
     for i, md in enumerate(files):
-        if is_cancelled():
+        if cancelled():
             break
         try:
             rel = str(md.relative_to(workspace))
@@ -344,23 +384,55 @@ def _index_markdown_files(
             text = md.read_text(encoding="utf-8")
             chunks = chunk_file(rel, text)
             if not chunks:
+                # An empty/unchunkable file must remove any previously indexed
+                # content before its mtime is committed.
+                delete_by_file(workspace, rel)
                 mark_indexed(rel, mtime, workspace)
                 continue
-            delete_by_file(workspace, rel)
             embeddings = encode_documents([c["content"] for c in chunks])
             pending_chunks.extend(chunks)
             pending_embeddings.extend(embeddings)
-            mark_indexed(rel, mtime, workspace)
-            indexed += 1
-            indexed_paths.append(rel)
-        except Exception:
+            pending_updates[rel] = mtime
+        except Exception as e:
+            logger.warning("[ingest/index] failed to prepare %s: %s", md, e)
+            preparation_errors.append(f"{md.name}: {e}")
             continue
 
-    # Batch-add all changed files at once so BM25s is rebuilt only once.
-    if pending_chunks:
+    if preparation_errors:
+        raise RuntimeError(f"索引准备失败 {len(preparation_errors)} 篇: {'; '.join(preparation_errors[:3])}")
+
+    # Do not mutate the index after cancellation. Prepared embeddings can be
+    # safely discarded and the unchanged state will cause a retry next run.
+    if cancelled():
+        return 0, []
+
+    # Delete stale chunks immediately before the batch write. Index state is
+    # committed only after add_chunks succeeds, so a failed write is repairable.
+    if pending_updates:
+        for rel in pending_updates:
+            delete_by_file(workspace, rel)
         add_chunks(workspace, pending_chunks, pending_embeddings)
+        mark_many_indexed(pending_updates, workspace)
+        indexed = len(pending_updates)
+        indexed_paths = list(pending_updates)
 
     return indexed, indexed_paths
+
+
+def _purge_deleted_index_files(workspace: str) -> list[str]:
+    """Remove chunks and state entries for Notes files deleted from disk."""
+    if not config.rag_enabled:
+        return []
+
+    from sidecar.rag.index import delete_by_file
+    from sidecar.rag.index_state import load_state, remove_indexed
+
+    ws = Path(workspace)
+    stale_paths = [rel for rel in load_state(workspace) if not (ws / rel).is_file()]
+    for rel in stale_paths:
+        delete_by_file(workspace, rel)
+    remove_indexed(stale_paths, workspace)
+    return stale_paths
 
 
 def run_ingest(
@@ -370,6 +442,7 @@ def run_ingest(
     send_event: Callable[[dict], None] | None = None,
     *,
     resume: bool = False,
+    cancel_after_generation: int | None = None,
 ) -> dict:
     """
     Run ingest pipeline. *send_progress(stage, progress 0-1, message, extra)*.
@@ -378,9 +451,20 @@ def run_ingest(
     if not workspace:
         return {"success": False, "message": "未设置工作区"}
 
-    clear_cancel()
-    prev = load_ingest_state() if resume else {}
-    stats = {
+    # A scheduled worker receives the generation captured before it was
+    # enqueued. Any later request_cancel() is therefore observed even if it
+    # arrives before this function starts running.
+    if cancel_after_generation is None:
+        current_generation = cancel_generation()
+        cancel_after_generation = current_generation - 1 if is_cancelled() else current_generation
+
+    def cancelled() -> bool:
+        return cancel_generation() > cancel_after_generation
+    # Previous completion metadata is also required by the non-resume
+    # incremental fast path. Resume only controls whether partial stage state
+    # and statistics are restored below.
+    prev = load_ingest_state()
+    stats: dict[str, Any] = {
         "converted": 0,
         "compiled": 0,
         "classified": 0,
@@ -408,7 +492,7 @@ def run_ingest(
     ):
         msg = "工作区已是最新，跳过自检"
         if send_progress:
-            send_progress("sync", 1.0, msg)
+            send_progress("sync", 1.0, msg, None)
         if send_event:
             send_event(
                 {
@@ -421,7 +505,7 @@ def run_ingest(
         _save_fingerprint(workspace, fingerprint)
         return {"success": True, "up_to_date": True, "message": msg}
 
-    state = {
+    state: dict[str, Any] = {
         "status": "running",
         "mode": mode,
         "stage": "rules",
@@ -433,9 +517,18 @@ def run_ingest(
     state.pop("force_full_next", None)
     if resume and prev.get("completed_stages"):
         state["completed_stages"] = list(prev["completed_stages"])
+        if "index" in state["completed_stages"] and isinstance(prev.get("pending_crossref_paths"), list):
+            state["pending_crossref_paths"] = list(prev["pending_crossref_paths"])
+        if "classify" in state["completed_stages"] and isinstance(prev.get("affected_topics"), list):
+            state["affected_topics"] = list(prev["affected_topics"])
     save_ingest_state(state)
 
-    completed_stages: set[str] = set(state.get("completed_stages") or [])
+    raw_completed_stages = state.get("completed_stages")
+    completed_stages = (
+        {str(stage) for stage in raw_completed_stages}
+        if isinstance(raw_completed_stages, list)
+        else set()
+    )
 
     def stage_done(name: str) -> bool:
         return resume and name in completed_stages
@@ -454,7 +547,10 @@ def run_ingest(
         if send_progress:
             send_progress(stage, p, msg, extra)
 
-    affected_topics: set[str] = set()
+    raw_affected_topics = state.get("affected_topics")
+    affected_topics: set[str] = (
+        {str(topic) for topic in raw_affected_topics} if isinstance(raw_affected_topics, list) else set()
+    )
 
     try:
         if needs_workspace_rules_setup(workspace):
@@ -480,7 +576,7 @@ def run_ingest(
 
         prog("rules", 0.02, "整理规则已就绪…")
         mark_stage_done("rules")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         incremental = mode == "incremental"
@@ -495,8 +591,10 @@ def run_ingest(
                 prog("convert", 0.05, f"转换 {len(pending_files)} 个文件…")
                 raw_path = str(Path(workspace) / RAW_FOLDER)
                 conv = FileConverterManager()
-                results = conv.convert_batch(pending_files, workspace, raw_path=raw_path)
+                output_path = str(Path(workspace) / NOTES_FOLDER)
+                results = conv.convert_batch(pending_files, output_path, raw_path=raw_path, assign_topic=False)
                 stats["converted"] = sum(1 for r in results if r.get("success"))
+                failed_conversions = [r for r in results if not r.get("success")]
                 for r in results:
                     if r.get("success") and r.get("output_path"):
                         out = Path(r["output_path"])
@@ -504,12 +602,15 @@ def run_ingest(
                             converted_note_paths.append(str(out.relative_to(workspace)))
                         except ValueError:
                             converted_note_paths.append(r["output_path"])
+                if failed_conversions:
+                    first_error = failed_conversions[0].get("error") or "未知错误"
+                    raise RuntimeError(f"文件转换失败 {len(failed_conversions)} 个: {first_error}")
             prog("convert", 0.16, f"转换完成: {stats['converted']} 个")
             mark_stage_done("convert")
         else:
             prog("convert", 0.16, "无需转换")
             mark_stage_done("convert")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 2b. Compile — rule + LLM rewrite for converted/imported notes
@@ -541,7 +642,7 @@ def run_ingest(
                 )
             prog("compile", 0.28, f"笔记编译完成: {stats['compiled']} 篇")
             mark_stage_done("compile")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 3. Classify
@@ -561,8 +662,9 @@ def run_ingest(
             else:
                 to_classify = _scan_classify_pending(workspace)
             total_c = max(len(to_classify), 1)
+            classify_errors: list[str] = []
             for i, md in enumerate(to_classify):
-                if is_cancelled():
+                if cancelled():
                     raise _Cancelled()
                 prog("classify", 0.28 + 0.17 * (i + 1) / total_c, f"分类 ({i + 1}/{len(to_classify)}): {md.name}")
                 try:
@@ -574,11 +676,18 @@ def run_ingest(
                         stats["classified"] += 1
                     elif result and result.get("status") == "pending":
                         stats["pending_topics"] += 1
-                except Exception:
-                    continue
+                    elif result and result.get("status") == "error":
+                        classify_errors.append(f"{md.name}: {result.get('message', '未知错误')}")
+                except Exception as e:
+                    classify_errors.append(f"{md.name}: {e}")
+            state["affected_topics"] = sorted(affected_topics)
+            state["stats"] = stats
+            save_ingest_state(state)
+            if classify_errors:
+                raise RuntimeError(f"分类失败 {len(classify_errors)} 篇: {'; '.join(classify_errors[:3])}")
             prog("classify", 0.45, f"分类完成: {stats['classified']} 篇，待确认 {stats['pending_topics']}")
             mark_stage_done("classify")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 4. Index
@@ -587,6 +696,8 @@ def run_ingest(
             prog("index", 0.65, "跳过索引（已完成）")
         else:
             ws_path = Path(workspace)
+            purged_paths = _purge_deleted_index_files(workspace)
+            stats["purged_index_files"] = len(purged_paths)
             if incremental and not file_paths:
                 index_targets = _scan_index_pending(workspace)
             elif file_paths:
@@ -612,20 +723,27 @@ def run_ingest(
                     workspace,
                     index_targets,
                     lambda cur, tot, msg: prog("index", 0.5 + 0.15 * cur / max(tot, 1), msg),
+                    cancelled,
                 )
             # Cross-ref only runs on files that actually changed this run.
             prog("index", 0.65, f"索引更新: {stats['indexed_files']} 篇有改动")
             state["pending_crossref_paths"] = indexed_paths
             save_ingest_state(state)
             mark_stage_done("index")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 5. Cross-ref
         if stage_done("crossref"):
             prog("crossref", 0.7, "跳过交叉引用（已完成）")
         else:
-            crossref_paths = indexed_paths or state.get("pending_crossref_paths") or []
+            raw_crossref_paths = state.get("pending_crossref_paths")
+            resumed_crossref_paths = (
+                [str(path) for path in raw_crossref_paths]
+                if isinstance(raw_crossref_paths, list)
+                else []
+            )
+            crossref_paths = indexed_paths or resumed_crossref_paths
             # Skip cross-ref for single file (e.g. web download) — new files have no
             # meaningful vector neighbors yet, so LLM cross-ref produces poor results.
             if crossref_paths and len(crossref_paths) > 1:
@@ -635,8 +753,9 @@ def run_ingest(
                 # Use LLM only when few files; skip for large batches to save time
                 use_llm = total_x <= 20
                 cross_added = 0
+                crossref_errors: list[str] = []
                 for i, rel in enumerate(crossref_paths):
-                    if is_cancelled():
+                    if cancelled():
                         raise _Cancelled()
                     prog(
                         "crossref",
@@ -646,12 +765,18 @@ def run_ingest(
                     try:
                         xr = discover_cross_refs_for_file(rel, use_llm=use_llm)
                         cross_added += int(xr.get("added") or 0)
-                    except Exception:
-                        continue
+                    except Exception as e:
+                        crossref_errors.append(f"{Path(rel).name}: {e}")
                 stats["cross_refs"] = cross_added
+                state["stats"] = stats
+                save_ingest_state(state)
+                if crossref_errors:
+                    raise RuntimeError(
+                        f"交叉引用失败 {len(crossref_errors)} 篇: {'; '.join(crossref_errors[:3])}"
+                    )
             prog("crossref", 0.7, f"交叉引用完成: {stats.get('cross_refs', 0)} 条")
             mark_stage_done("crossref")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 6. Cascade — collect touched survey topics. The actual LLM survey work
@@ -677,7 +802,7 @@ def run_ingest(
                 prog("cascade", 0.85, "无需更新综述")
 
             mark_stage_done("cascade")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 7. Lint
@@ -688,12 +813,13 @@ def run_ingest(
 
             prog("lint", 0.88, "检查断链、孤儿页、过时综述…")
             lint_report = run_kb_lint(workspace)
-            stats["lint"] = lint_report.get("summary", {})
+            lint_summary = lint_report.get("summary", {})
+            stats["lint"] = lint_summary if isinstance(lint_summary, dict) else {}
             log_lint_report(lint_report)
             lint_total = stats["lint"].get("total", 0)
             prog("lint", 0.92, f"Lint 完成: {lint_total} 项")
             mark_stage_done("lint")
-        if is_cancelled():
+        if cancelled():
             raise _Cancelled()
 
         # 8. Sync wiki
@@ -709,6 +835,8 @@ def run_ingest(
         state["last_complete_at"] = time.time()
         state["stats"] = stats
         state["completed_stages"] = []
+        state.pop("pending_crossref_paths", None)
+        state.pop("affected_topics", None)
         state.pop("error", None)
         save_ingest_state(state)
         # Save fingerprint so next startup can skip heavy scans when nothing changed.
@@ -732,7 +860,9 @@ def run_ingest(
 
     except _Cancelled:
         state["status"] = "cancelled"
+        state["cancelled_at"] = time.time()
         save_ingest_state(state)
+        clear_cancel()
         if send_event:
             send_event(
                 {
@@ -746,6 +876,7 @@ def run_ingest(
         state["status"] = "failed"
         state["error"] = str(e)
         state["can_retry"] = True
+        state["stats"] = stats
         save_ingest_state(state)
         if send_event:
             send_event(

@@ -154,15 +154,9 @@ const TopicTree3Tier = {
                 showPreview({ path: abstractFile, name: name + ' 综述' });
             }
         } else if (el.classList.contains('has-abstract')) {
-            // 有综述标记但没有路径，尝试生成并打开
-            console.log('[TopicTree3Tier] Generating abstract for:', name);
-            api.generateAbstract(name, level).then(result => {
-                if (result.success && result.abstract_file) {
-                    if (typeof showPreview === 'function') {
-                        showPreview({ path: result.abstract_file, name: name + ' 综述' });
-                    }
-                }
-            });
+            // 数据缺少综述路径时不调用已移除的旧 RPC；刷新主题树以恢复最新状态。
+            console.warn('[TopicTree3Tier] Abstract path missing, reloading topic tree:', name);
+            this.load();
         } else {
             // 没有综述，什么都不做
             console.log('[TopicTree3Tier] No abstract, doing nothing');

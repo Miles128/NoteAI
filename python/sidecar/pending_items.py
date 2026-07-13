@@ -162,5 +162,6 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         )
 
     for item in items:
-        item["priority"] = _PRIORITY.get(item.get("type"), 9)
+        item_type = item.get("type")
+        item["priority"] = _PRIORITY.get(item_type, 9) if isinstance(item_type, str) else 9
     return sorted(items, key=lambda item: (item["priority"], -float(item.get("ts") or 0)))

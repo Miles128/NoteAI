@@ -1,7 +1,7 @@
-mod state;
-mod sidecar;
-mod rpc;
 mod commands;
+mod rpc;
+mod sidecar;
+mod state;
 
 use crate::state::AppState;
 use tauri::Emitter;
@@ -23,10 +23,13 @@ pub fn run() {
                     }
                     Err(e) => {
                         eprintln!("[ERROR] Failed to start Python sidecar: {}", e);
-                        let _ = app_handle2.emit("python-event", serde_json::json!({
-                            "type": "sidecar_error",
-                            "message": format!("Python 后端启动失败: {}", e),
-                        }));
+                        let _ = app_handle2.emit(
+                            "python-event",
+                            serde_json::json!({
+                                "type": "sidecar_error",
+                                "message": format!("Python 后端启动失败: {}", e),
+                            }),
+                        );
                     }
                 }
             });
@@ -54,7 +57,10 @@ pub fn run() {
                 let child_arc = state.python_child.clone();
                 let stdin_arc = state.python_stdin.clone();
                 {
-                    let mut pending = state.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
+                    let mut pending = state
+                        .pending_requests
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
                     for (_, sender) in pending.drain() {
                         let _ = sender.send(serde_json::Value::Null);
                     }

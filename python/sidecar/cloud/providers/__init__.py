@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from sidecar.cloud.providers.aliyun import AliyunProvider
 from sidecar.cloud.providers.baidu import BaiduProvider
 from sidecar.cloud.providers.base import CloudFileInfo, CloudProvider
@@ -17,7 +19,7 @@ ALL_PROVIDERS = [
     ICloudProvider,
 ]
 
-PROVIDER_MAP = {p.PROVIDER_NAME: p for p in ALL_PROVIDERS}
+PROVIDER_MAP: dict[str, Callable[[dict], CloudProvider]] = {p.PROVIDER_NAME: p for p in ALL_PROVIDERS}
 
 __all__ = [
     "CloudProvider",

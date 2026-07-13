@@ -43,7 +43,7 @@ class ToolStreamTracker:
                 return events
             tool_id = str(block.get("id") or "")
             name = str(block.get("name") or "tool")
-            entry = {
+            entry: dict[str, Any] = {
                 "tool_id": tool_id,
                 "tool": name,
                 "input": block.get("input") if isinstance(block.get("input"), dict) else {},
@@ -60,33 +60,35 @@ class ToolStreamTracker:
             delta = inner.get("delta") or {}
             if delta.get("type") != "input_json_delta":
                 return events
-            entry = self._by_index.get(index)
-            if entry is None:
+            tracked = self._by_index.get(index)
+            if tracked is None:
                 return events
-            entry["input_parts"].append(str(delta.get("partial_json") or ""))
+            input_parts = tracked.get("input_parts")
+            if isinstance(input_parts, list):
+                input_parts.append(str(delta.get("partial_json") or ""))
             return events
 
         if itype == "content_block_stop" and isinstance(index, int):
-            entry = self._by_index.pop(index, None)
-            if entry is None:
+            tracked = self._by_index.pop(index, None)
+            if tracked is None:
                 return events
-            raw = "".join(entry.get("input_parts") or [])
+            raw = "".join(str(part) for part in (tracked.get("input_parts") or []))
             if raw:
                 try:
                     parsed = json.loads(raw)
                     if isinstance(parsed, dict):
-                        entry["input"] = parsed
+                        tracked["input"] = parsed
                 except Exception:
                     pass
-            tool_id = str(entry.get("tool_id") or "")
+            tool_id = str(tracked.get("tool_id") or "")
             if tool_id:
-                self._by_id[tool_id] = entry
+                self._by_id[tool_id] = tracked
             events.append(
                 {
                     "phase": "start",
                     "tool_id": tool_id,
-                    "tool": entry.get("tool"),
-                    "input": entry.get("input") or {},
+                    "tool": tracked.get("tool"),
+                    "input": tracked.get("input") or {},
                     "input_ready": True,
                 }
             )

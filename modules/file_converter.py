@@ -416,13 +416,13 @@ class FileConverterManager:
 
     def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
-        self._pdf_converter = None
-        self._docx_converter = None
-        self._legacy_doc_converter = None
-        self._txt_converter = None
-        self._ppt_converter = None
-        self._legacy_ppt_converter = None
-        self._html_converter = None
+        self._pdf_converter: PDFConverter | None = None
+        self._docx_converter: DOCXConverter | None = None
+        self._legacy_doc_converter: LegacyDOCConverter | None = None
+        self._txt_converter: TXTConverter | None = None
+        self._ppt_converter: PPTConverter | None = None
+        self._legacy_ppt_converter: LegacyPPTConverter | None = None
+        self._html_converter: HTMLConverter | None = None
 
     @staticmethod
     def _needs_llm_rewrite(content: str) -> bool:
@@ -510,6 +510,8 @@ class FileConverterManager:
         file_path: str,
         output_path: str,
         output_format: str = "markdown",
+        *,
+        assign_topic: bool = True,
     ) -> dict:
         """
         转换单个文件
@@ -566,24 +568,33 @@ class FileConverterManager:
 
             counter = 1
             original_output_file = output_file
-            while output_file.exists():
-                stem = original_output_file.stem
-                output_file = original_output_file.parent / f"{stem}_{counter}.md"
-                counter += 1
-
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(markdown_content)
+            while True:
+                try:
+                    with open(output_file, "x", encoding="utf-8") as f:
+                        f.write(markdown_content)
+                    break
+                except FileExistsError:
+                    stem = original_output_file.stem
+                    output_file = original_output_file.parent / f"{stem}_{counter}.md"
+                    counter += 1
 
             tags = extract_tags_from_filename(str(output_file))
             if tags:
                 add_yaml_frontmatter_to_file(str(output_file), tags=tags, source=file_path)
 
-            try:
-                from utils.topic_assigner import auto_assign_topic_for_file
+            if assign_topic:
+                try:
+                    from utils.topic_assigner import auto_assign_topic_for_file
 
-                auto_assign_topic_for_file(str(output_file))
-            except Exception as e:
-                logger.warning(f"自动分配主题失败: {e}")
+                    assignment = auto_assign_topic_for_file(str(output_file))
+                    if assignment and assignment.get("status") == "auto_assigned":
+                        assigned_path = assignment.get("file_path")
+                        if isinstance(assigned_path, str) and Path(assigned_path).is_file():
+                            output_file = Path(assigned_path)
+                    elif assignment and assignment.get("status") == "error":
+                        logger.warning("自动分配主题失败: %s", assignment.get("message", "未知错误"))
+                except Exception as e:
+                    logger.warning(f"自动分配主题失败: {e}")
 
             result["success"] = True
             result["output_path"] = str(output_file)
@@ -601,8 +612,10 @@ class FileConverterManager:
         self,
         file_paths: list[str],
         output_path: str,
-        raw_path: str = None,
+        raw_path: str | None = None,
         output_format: str = "markdown",
+        *,
+        assign_topic: bool = True,
     ) -> list[dict]:
         """批量转换文件"""
         results = []
@@ -612,7 +625,7 @@ class FileConverterManager:
             if self.progress_callback:
                 self.progress_callback(i + 1, total, f"正在转换: {Path(file_path).name}")
 
-            result = self.convert_file(file_path, output_path, output_format)
+            result = self.convert_file(file_path, output_path, output_format, assign_topic=assign_topic)
 
             if result["success"] and raw_path:
                 self._move_to_raw(file_path, raw_path)
@@ -636,6 +649,13 @@ class FileConverterManager:
             raw_dir = Path(raw_path)
             raw_dir.mkdir(parents=True, exist_ok=True)
 
+            try:
+                source.resolve().relative_to(raw_dir.resolve())
+                logger.info(f"文件已位于Raw目录，跳过移动: {source}")
+                return True
+            except ValueError:
+                pass
+
             dest = raw_dir / source.name
             if dest.exists():
                 base_name = source.stem
@@ -658,7 +678,7 @@ class FileConverterManager:
         self,
         folder_path: str,
         output_path: str,
-        raw_path: str = None,
+        raw_path: str | None = None,
         output_format: str = "markdown",
         recursive: bool = True,
     ) -> list[dict]:

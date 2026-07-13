@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 from utils.logger import logger
 from utils.wiki_manager import _get_wiki_path, _renumber_wiki_files
@@ -59,7 +60,7 @@ def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
     lines = content.split("\n")
     file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
 
-    sections = []
+    sections: list[dict[str, Any]] = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
@@ -78,7 +79,7 @@ def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
         else:
             i += 1
 
-    groups = {}
+    groups: dict[str, list[dict[str, Any]]] = {}
     for sec in sections:
         key = sec["name"].lower()
         groups.setdefault(key, []).append(sec)

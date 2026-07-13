@@ -242,7 +242,7 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
             if is_workspace_meta_path(md):
                 continue
             derived = topic_from_notes_path(md)
-            if derived or not is_inbox_orphan_path(md, root):
+            if derived or not is_inbox_orphan_path(md, str(root)):
                 continue
             issues.append(
                 LintIssue(

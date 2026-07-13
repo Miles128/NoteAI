@@ -41,10 +41,11 @@ def query_complexity(query: str) -> str:
 
 def result_score(row: dict) -> float:
     for key in ("rerank_score", "score", "dense_score", "sparse_score"):
-        if key not in row or row.get(key) is None:
+        value = row.get(key)
+        if value is None:
             continue
         try:
-            return float(row.get(key))
+            return float(value)
         except (TypeError, ValueError):
             continue
     return 0.0

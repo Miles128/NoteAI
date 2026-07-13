@@ -816,7 +816,12 @@ def _sparse_search(
     return out
 
 
-def _filter_candidates(workspace: str, topics: list[str] | None, tags: list[str] | None) -> set[str] | None:
+def _filter_candidates(
+    workspace: str,
+    topics: list[str] | None,
+    tags: list[str] | None,
+    file_paths: list[str] | None = None,
+) -> set[str] | None:
     metadata = _load_metadata(workspace)
     candidates: set[str] | None = None
 
@@ -835,6 +840,15 @@ def _filter_candidates(workspace: str, topics: list[str] | None, tags: list[str]
         else:
             candidates &= tag_ids
 
+    if file_paths:
+        file_ids: set[str] = set()
+        for path in file_paths:
+            file_ids.update(metadata.get("files", {}).get(path, []))
+        if candidates is None:
+            candidates = file_ids
+        else:
+            candidates &= file_ids
+
     return candidates
 
 
@@ -846,10 +860,11 @@ def hybrid_search(
     topics: list | None = None,
     tags: list | None = None,
     query_text: str = "",
+    file_paths: list[str] | None = None,
 ) -> list[dict]:
     collection = _get_collection(workspace)
 
-    candidates = _filter_candidates(workspace, topics, tags)
+    candidates = _filter_candidates(workspace, topics, tags, file_paths)
 
     if not query_text and query_sparse:
         query_text = " ".join(str(k) for k, v in query_sparse.items() if v > 0)

@@ -12,7 +12,7 @@ def _norm_topic(topic: str) -> str:
     return clean
 
 
-def _find_best_topic_match(hint: str, headings: list) -> str:
+def _find_best_topic_match(hint: str, headings: list) -> str | None:
     hint_norm = _normalize_for_match(hint)
     hint_tokens = tokenize_text(hint)
 

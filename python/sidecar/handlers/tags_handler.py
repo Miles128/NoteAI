@@ -218,7 +218,7 @@ class TagsHandler(BaseHandler):
         return {"success": True, "updated": True, "message": f"已添加标签「{tag}」"}
 
     def _collect_tag_map(self, workspace: str) -> dict[str, list[str]]:
-        tag_map = {}
+        tag_map: dict[str, list[str]] = {}
         for md_file in _iter_markdown_files(workspace):
             try:
                 rel = str(md_file.relative_to(workspace))

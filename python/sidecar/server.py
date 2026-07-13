@@ -1,10 +1,12 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
-import importlib
 import json
 import sys
 import threading
 from pathlib import Path
+
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from config import config, is_ignored_dir
 from config.settings import NOTES_FOLDER
@@ -67,6 +69,8 @@ class SidecarServer(PathHelpersMixin):
         self._watcher_needs_wiki_sync = False
         self._watcher_changed_paths: set[str] = set()
         self._watcher_debounce_lock = threading.Lock()
+        self._auto_convert_inflight: set[str] = set()
+        self._auto_convert_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
         self._cache_lock = threading.Lock()  # retained for _cached_or_compat compat
@@ -273,20 +277,6 @@ class SidecarServer(PathHelpersMixin):
             logger.warning(f"[startup] auto rag index failed: {e}")
 
     def _setup_watcher(self, workspace_path):
-        try:
-            events_module = importlib.import_module("watchdog.events")
-            observers_module = importlib.import_module("watchdog.observers")
-            FileSystemEventHandler = events_module.FileSystemEventHandler
-            Observer = observers_module.Observer
-        except ImportError:
-            if not SidecarServer._watchdog_missing_logged:
-                SidecarServer._watchdog_missing_logged = True
-                logger.warning(
-                    "[sidecar] watchdog 未安装，工作区文件变更不会触发 UI 自动刷新。"
-                    " 请安装项目依赖（含 watchdog）：uv sync 或 pip install -e ."
-                )
-            return
-
         self._stop_watcher()
 
         server = self
@@ -463,6 +453,12 @@ class SidecarServer(PathHelpersMixin):
     def _auto_convert_new_file(self, file_path):
         """Auto-convert newly added non-markdown files to Markdown."""
 
+        source_key = str(Path(file_path).resolve())
+        with self._auto_convert_lock:
+            if source_key in self._auto_convert_inflight:
+                return
+            self._auto_convert_inflight.add(source_key)
+
         def _do():
             try:
                 from modules.file_converter import FileConverterManager
@@ -470,8 +466,9 @@ class SidecarServer(PathHelpersMixin):
                 ws = config.workspace_path
                 if not ws:
                     return
-                converter = FileConverterManager(ws)
-                result = converter.convert_file(file_path, ai_assist=False)
+                converter = FileConverterManager()
+                output_dir = str(Path(ws) / config.NOTES_FOLDER)
+                result = converter.convert_file(file_path, output_dir)
                 if result and result.get("success"):
                     md = result.get("output_path", "")
                     if md:
@@ -484,9 +481,11 @@ class SidecarServer(PathHelpersMixin):
                                 },
                             }
                         )
-                        self._auto_process_md_file(md)
             except Exception as e:
                 logger.warning("[watcher] auto-convert failed for %s: %s", file_path, e)
+            finally:
+                with self._auto_convert_lock:
+                    self._auto_convert_inflight.discard(source_key)
 
         threading.Thread(target=_do, daemon=True).start()
 

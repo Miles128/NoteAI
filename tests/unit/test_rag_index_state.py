@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import pytest
-from sidecar.rag.index_state import file_needs_index, mark_indexed
+from sidecar.rag.index_state import file_needs_index, load_state, mark_indexed, remove_indexed
 
 from config import config
 
@@ -29,3 +29,11 @@ def test_file_needs_index_after_marked(workspace: Path) -> None:
     mtime = md.stat().st_mtime
     mark_indexed(rel, mtime, str(workspace))
     assert file_needs_index(rel, mtime, str(workspace)) is False
+
+
+def test_remove_indexed_for_deleted_file(workspace: Path) -> None:
+    mark_indexed("Notes/deleted.md", 123.0, str(workspace))
+
+    remove_indexed(["Notes/deleted.md"], str(workspace))
+
+    assert load_state(str(workspace)) == {}

@@ -4,11 +4,21 @@ import functools
 import logging
 import traceback
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, Protocol, TypeVar
 
 T = TypeVar("T")
 
 _log = logging.getLogger("NoteAI")
+
+
+class LoggerLike(Protocol):
+    def debug(self, message: Any, *args: Any, **kwargs: Any) -> None: ...
+
+    def info(self, message: Any, *args: Any, **kwargs: Any) -> None: ...
+
+    def warning(self, message: Any, *args: Any, **kwargs: Any) -> None: ...
+
+    def error(self, message: Any, *args: Any, **kwargs: Any) -> None: ...
 
 
 def log_exception(
@@ -16,7 +26,7 @@ def log_exception(
     exc: Exception | None = None,
     level: str = "warning",
     *,
-    logger: logging.Logger | None = None,
+    logger: LoggerLike | None = None,
 ) -> None:
     """Log an exception with context. Use in except blocks instead of bare pass.
 
@@ -44,8 +54,8 @@ def swallow(
     context: str = "",
     level: str = "warning",
     *,
-    default: T = None,
-    logger: logging.Logger | None = None,
+    default: T | None = None,
+    logger: LoggerLike | None = None,
     reraise: tuple[type[Exception], ...] | None = None,
 ) -> Callable:
     """Decorator that catches exceptions, logs them, and returns a default value.
@@ -75,7 +85,7 @@ def swallow(
 def log_and_reraise(
     context: str = "",
     *,
-    logger: logging.Logger | None = None,
+    logger: LoggerLike | None = None,
     wrap_exc: type[Exception] | None = None,
 ) -> Callable:
     """Decorator that logs an exception then re-raises it (optionally wrapped).

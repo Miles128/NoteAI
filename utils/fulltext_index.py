@@ -84,7 +84,7 @@ class FullTextIndex:
 
             scored = sorted(file_hits.items(), key=lambda x: -x[1])[:max_results]
 
-        results = []
+        results: list[dict[str, str | int]] = []
         from config import config
 
         workspace = config.workspace_path

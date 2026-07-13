@@ -214,7 +214,8 @@ class ClaudeMcpAgent(BaseCliAgent):
                     if chunk:
                         text_buffer += chunk
         finally:
-            proc.stdout.close()  # type: ignore[union-attr]
+            if proc.stdout is not None:
+                proc.stdout.close()
             try:
                 return_code = proc.wait(timeout=5)
             except subprocess.TimeoutExpired:

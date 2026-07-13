@@ -34,6 +34,14 @@ class BaseHandler:
         return self._server._resolve_path
 
     @property
+    def _find_file_by_name(self):
+        return self._server._find_file_by_name
+
+    @property
+    def _parse_wiki_headings(self):
+        return self._server._parse_wiki_headings
+
+    @property
     def _cached_or_compute(self):
         return self._server._cached_or_compute
 

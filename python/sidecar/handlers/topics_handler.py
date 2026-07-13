@@ -39,7 +39,7 @@ from utils.wiki_manager import (
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
-    def _sync_wiki_with_folder_system(self):
+    def _sync_wiki_with_folder_system(self, _params=None):
         try:
             return sync_wiki_with_files()
         except Exception as e:
@@ -510,6 +510,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
     def register_routes(self, router):
         router.register("get_topic_tree", self._get_topic_tree)
+        router.register("sync_wiki_with_files", self._sync_wiki_with_folder_system)
         router.register("auto_assign_topic", self._auto_assign_topic)
         router.register("batch_auto_assign_topics", self._batch_auto_assign_topics)
         router.register("move_file_to_topic", self._move_file_to_topic)

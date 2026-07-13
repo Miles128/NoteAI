@@ -3,6 +3,7 @@ import json
 import os
 import time
 from pathlib import Path
+from typing import TypedDict
 
 from sidecar.cloud.providers import PROVIDER_MAP, CloudProvider
 from utils.keyring_store import delete_credential, load_credential, store_credential
@@ -13,6 +14,12 @@ STATE_FILE = "cloud_sync_state.json"
 CONFIG_FILE = "cloud_sync_config.json"
 
 _CLOUD_SYNC_CREDENTIAL_SERVICE = "NoteAI/cloud_sync"
+
+
+class SyncFile(TypedDict):
+    relative_path: str
+    mtime: float
+    size: int
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -52,10 +59,10 @@ class SyncEngine:
         with open(self._state_path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
 
-    def scan_local_files(self) -> list:
+    def scan_local_files(self) -> list[SyncFile]:
         if not self._workspace or not os.path.isdir(self._workspace):
             return []
-        files = []
+        files: list[SyncFile] = []
         for sync_dir in SYNC_DIRS:
             dir_path = os.path.join(self._workspace, sync_dir)
             if not os.path.isdir(dir_path):
@@ -79,12 +86,12 @@ class SyncEngine:
                         continue
         return files
 
-    def scan_remote_files(self) -> list:
-        result = []
+    def scan_remote_files(self) -> list[SyncFile]:
+        result: list[SyncFile] = []
         self._scan_remote_recursive("", result)
         return result
 
-    def _scan_remote_recursive(self, remote_path: str, result: list):
+    def _scan_remote_recursive(self, remote_path: str, result: list[SyncFile]) -> None:
         try:
             items = self._provider.list_files(remote_path)
         except Exception as e:

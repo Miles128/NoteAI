@@ -217,11 +217,12 @@ def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_head
 
 def format_file_size(size_bytes: int) -> str:
     """格式化文件大小"""
+    size = float(size_bytes)
     for unit in ["B", "KB", "MB", "GB"]:
-        if size_bytes < 1024:
-            return f"{size_bytes:.2f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.2f} TB"
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} TB"
 
 
 def ensure_dir(path: str) -> Path:
@@ -288,7 +289,7 @@ def get_file_extension(filename: str) -> str:
     return Path(filename).suffix.lower()
 
 
-def read_file_with_encoding(file_path: str, encodings: list[str] = None) -> str:
+def read_file_with_encoding(file_path: str, encodings: list[str] | None = None) -> str:
     """尝试多种编码读取文件"""
     if encodings is None:
         encodings = ["utf-8", "gbk", "gb2312", "latin-1", "cp1252"]
@@ -343,7 +344,9 @@ def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
                     last_exception = e
                     if attempt < max_retries - 1:
                         time.sleep(delay * (attempt + 1))
-            raise last_exception
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("retry_on_failure requires max_retries to be at least 1")
 
         return wrapper
 

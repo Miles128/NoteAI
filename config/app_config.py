@@ -206,7 +206,7 @@ class AppConfig:
         return (False, final_tokens, processed_content)
 
     @classmethod
-    def load_from_file(cls, config_path: str = None) -> "AppConfig":
+    def load_from_file(cls, config_path: str | None = None) -> "AppConfig":
         if config_path is None:
             config_path = PROJECT_CONFIG_PATH
 
@@ -306,7 +306,7 @@ class AppConfig:
 
         return cls(**init_kwargs)
 
-    def save_to_file(self, config_path: str = None) -> tuple[bool, str]:
+    def save_to_file(self, config_path: str | None = None) -> tuple[bool, str]:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
@@ -378,7 +378,7 @@ class AppConfig:
             return True, "主配置已保存，但API配置保存失败"
         return True, "配置保存成功"
 
-    def save(self, config_path: str = None):
+    def save(self, config_path: str | None = None) -> tuple[bool, str]:
         return self.save_to_file(config_path)
 
     def to_dict(self) -> dict[str, Any]:

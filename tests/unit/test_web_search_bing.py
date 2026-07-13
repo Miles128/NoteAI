@@ -22,3 +22,8 @@ def test_bing_search_extracts_results(monkeypatch) -> None:
     assert web_search.bing_search("test") == [
         {"title": "Example", "url": "https://example.com", "snippet": "Snippet"}
     ]
+
+
+def test_string_attribute_rejects_list_values() -> None:
+    assert web_search._string_attribute(["https://example.com", "unexpected"]) == ""
+    assert web_search._string_attribute(" https://example.com ") == "https://example.com"

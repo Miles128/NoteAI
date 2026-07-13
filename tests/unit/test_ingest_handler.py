@@ -84,3 +84,31 @@ def test_check_ingest_updates_reports_start_for_file_paths(workspace: Path, inge
     assert result["action"] == "start"
     assert result["mode"] == "incremental"
     assert result["file_paths"] == ["Notes/new.md"]
+
+
+def test_retry_cancelled_ingest_resumes_completed_stages(
+    workspace: Path, ingest_handler: IngestHandler, monkeypatch
+) -> None:
+    write_workspace_rules(workspace)
+    save_ingest_state(
+        {
+            "status": "cancelled",
+            "mode": "full",
+            "file_paths": [],
+            "completed_stages": ["rules", "convert"],
+        }
+    )
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        ingest_handler._server,
+        "_start_task",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+        raising=False,
+    )
+
+    result = ingest_handler._retry_ingest({"mode": "full"})
+
+    assert result["success"] is True
+    assert result["resume"] is True
+    task_args = calls[0][1]["args"]
+    assert task_args[0:3] == ("full", [], True)

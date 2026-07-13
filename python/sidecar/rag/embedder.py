@@ -186,7 +186,7 @@ def _compute_sparse(texts: list[str]) -> list[dict]:
         return _sparse_with_idf(tokenized, global_idf)
 
     # Fallback: batch-local IDF (same as before)
-    doc_freq = {}
+    doc_freq: dict[str, int] = {}
     for tokens in tokenized:
         seen = set(tokens)
         for t in seen:
@@ -207,7 +207,7 @@ def _sparse_with_idf(tokenized: list[list[str]], idf: dict[str, float]) -> list[
     """Compute TF * IDF sparse weights given tokenized texts and an IDF table."""
     results = []
     for tokens in tokenized:
-        tf = {}
+        tf: dict[str, int] = {}
         for t in tokens:
             tf[t] = tf.get(t, 0) + 1
         sparse = {}

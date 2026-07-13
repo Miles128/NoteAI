@@ -22,13 +22,14 @@ async function saveApiConfig() {
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
     const showStatus = (msg, isError = false) => {
-        const displayMsg = isError ? `<span style="color: #e53e3e;">${window.escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${window.escapeHtml(msg)}</span>`;
         if (statusEl) {
-            statusEl.innerHTML = displayMsg;
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? '#e53e3e' : '#38a169';
             statusEl.style.display = 'block';
         }
         if (popupStatusEl) {
-            popupStatusEl.innerHTML = displayMsg;
+            popupStatusEl.textContent = msg;
+            popupStatusEl.style.color = isError ? '#e53e3e' : '#38a169';
             popupStatusEl.style.display = 'block';
         }
     };

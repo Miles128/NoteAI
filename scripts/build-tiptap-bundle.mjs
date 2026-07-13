@@ -3,17 +3,18 @@ import * as fs from 'fs';
 
 const entryPoint = 'webui/js/tiptap-bundle-entry.mjs';
 const outFile = 'webui/lib/tiptap-bundle.js';
+const dependencyLock = 'package-lock.json';
 
 /**
- * 判断 outfile 是否已是最新（entryPoint 及所有 import 未变更）。
- * 简单策略：若 outfile 存在且 mtime 不早于 entryPoint，则视为无需重建。
- * node_modules 中的依赖通常不变；若手动升级依赖，可删除 outFile 触发重建。
+ * 判断 outfile 是否已是最新。
+ * 入口文件或依赖锁文件更新后都必须重新打包，避免依赖升级后继续发布旧 bundle。
  */
 function isUpToDate() {
   try {
     const outStat = fs.statSync(outFile);
     const entryStat = fs.statSync(entryPoint);
-    return outStat.mtimeMs >= entryStat.mtimeMs;
+    const lockStat = fs.statSync(dependencyLock);
+    return outStat.mtimeMs >= Math.max(entryStat.mtimeMs, lockStat.mtimeMs);
   } catch {
     return false;
   }

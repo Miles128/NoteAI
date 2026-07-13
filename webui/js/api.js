@@ -344,7 +344,6 @@ var API_DEFS = [
     { name: 'createNote', method: 'create_note', params: function(title, topic) { return { title: title, topic: topic || '' }; }, write: true },
     { name: 'createNoteFromDraft', method: 'create_note_from_draft', params: function(title, topic, content) { return { title: title, topic: topic || '', content: content || '' }; }, write: true },
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
-    { name: 'getPendingTopics', method: 'get_pending_topics' },
     { name: 'getAllPending', method: 'get_all_pending' },
     { name: 'retryCascadeTopic', method: 'retry_cascade_topic', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'dismissCascadeFailure', method: 'dismiss_cascade_failure', params: function(topic) { return { topic: topic }; }, write: true },
@@ -402,7 +401,6 @@ var API_DEFS = [
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
     { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
     { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
-    { name: 'generateAbstract', method: 'generate_abstract', params: function(topicName, level) { return { topic_name: topicName, level: level }; }, write: true },
 
     // ---- LLM 改写 ----
     { name: 'llmRewrite', method: 'llm_rewrite', params: function(filePath) { return { file_path: filePath }; } },
@@ -420,8 +418,6 @@ var API_DEFS = [
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },
     { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; }, write: true },
-    { name: 'getChangelog', method: 'get_changelog', params: function(limit) { return { limit: limit || 50 }; } },
-    { name: 'checkAndGenerateSurveys', method: 'check_and_generate_surveys', params: function() { return {}; }, write: true },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },

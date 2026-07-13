@@ -99,7 +99,7 @@ def common_bin_dirs() -> list[Path]:
     dirs: list[Path] = []
     home = Path.home()
 
-    candidates = [
+    candidates: list[str | Path] = [
         "/usr/local/bin",
         "/opt/homebrew/bin",
         "/usr/bin",

@@ -362,11 +362,12 @@ class TestCollectionCache:
         embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
         build_index(str(workspace), chunks, embeddings)
         first = _get_collection(str(workspace))
+        del first
         clear_collection_cache(str(workspace))
         second = _get_collection(str(workspace))
-        assert first is not second
+        assert second.stats.doc_count == 1
 
-    def test_remove_stale_lock_cleans_nested_zero_byte_locks(self, workspace: Path):
+    def test_remove_stale_lock_preserves_zero_byte_rocksdb_locks(self, workspace: Path):
         from sidecar.rag.index import _remove_stale_lock
 
         from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
@@ -376,5 +377,22 @@ class TestCollectionCache:
         nested.mkdir(parents=True)
         (nested / "LOCK").write_bytes(b"")
 
-        assert _remove_stale_lock(str(path)) is True
-        assert not (nested / "LOCK").exists()
+        assert _remove_stale_lock(str(path)) is False
+        assert (nested / "LOCK").exists()
+
+    def test_write_docs_batched_stays_below_zvec_limit(self):
+        from sidecar.rag.index import _INDEX_BATCH_SIZE, _write_docs_batched
+
+        class FakeCollection:
+            def __init__(self):
+                self.batch_sizes: list[int] = []
+
+            def upsert(self, docs):
+                self.batch_sizes.append(len(docs))
+
+        collection = FakeCollection()
+        docs = [object() for _ in range(3859)]
+        _write_docs_batched(collection, docs)
+
+        assert sum(collection.batch_sizes) == 3859
+        assert max(collection.batch_sizes) <= _INDEX_BATCH_SIZE

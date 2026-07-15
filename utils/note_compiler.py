@@ -167,7 +167,7 @@ def compile_note_file(
             from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
 
             ok, msg = check_api_config()
-            if ok:
+            if ok and len(cleaned) <= 12000:
                 from prompts import INGEST_NOTE_COMPILE_PROMPT
 
                 rules = _load_project_rules(workspace)
@@ -179,6 +179,12 @@ def compile_note_file(
                 if rewritten and len(rewritten.strip()) > len(cleaned.strip()) * 0.4:
                     new_body = rewritten.strip()
                     llm_used = True
+            elif ok:
+                logger.info(
+                    "[note_compiler] skip whole-document LLM rewrite for long note (%s chars): %s",
+                    len(cleaned),
+                    rel,
+                )
             else:
                 logger.warning(f"[note_compiler] LLM skipped: {msg}")
         except APIConfigError as e:

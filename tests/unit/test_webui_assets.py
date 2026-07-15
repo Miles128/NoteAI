@@ -75,3 +75,14 @@ def test_rpc_contract_is_consistent_across_frontend_python_and_tauri() -> None:
 
     assert declared <= registered
     assert allowed == registered
+
+
+def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
+    pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
+
+    assign_branch = pending_js.split("} else if (item.action === 'assign_topic')", 1)[1].split(
+        "html += '</div>';", 1
+    )[0]
+    assert 'data-action="move-suggested"' in assign_branch
+    assert 'data-action="keep-current"' in assign_branch
+    assert "pending-topic-select" not in assign_branch

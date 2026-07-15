@@ -14,6 +14,7 @@ _PRIORITY = {
     "cascade_fail": 1,
     "convert_fail": 1,
     "lint": 2,
+    "merge_candidate": 2,
     "topic": 3,
     "link": 3,
     "link_batch": 3,
@@ -25,8 +26,12 @@ def _lint_action(kind: str) -> str:
         return "refresh_survey"
     if kind == "orphan_topic":
         return "assign_topic"
+    if kind in ("duplicate_content", "near_duplicate"):
+        return "review_duplicate"
     if kind == "broken_link":
         return "open_file"
+    if kind == "misplaced_note":
+        return "assign_topic"
     return "none"
 
 
@@ -107,9 +112,31 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "message": issue.get("message", ""),
                 "file_path": rel,
                 "topic": issue.get("topic", ""),
+                "current_topic": issue.get("current_topic", ""),
+                "suggested_score": issue.get("suggested_score", 0.0),
                 "action": _lint_action(kind),
             }
         )
+
+    if root and root.exists():
+        from sidecar.chunk_similarity import load_chunk_similarity_graph
+        from sidecar.duplicate_review import is_merge_group_resolved
+
+        similarity_graph = load_chunk_similarity_graph(root)
+        for candidate in similarity_graph.get("candidates") or []:
+            files = [str(path) for path in (candidate.get("files") or [])]
+            if len(files) < 2 or is_merge_group_resolved(root, files):
+                continue
+            items.append(
+                {
+                    "type": "merge_candidate",
+                    "files": files,
+                    "score": candidate.get("score", 0.0),
+                    "reason": candidate.get("reason", "semantic"),
+                    "pairs": candidate.get("pairs", []),
+                    "action": "review_merge_group",
+                }
+            )
 
     for fail in load_cascade_failures():
         topic = (fail.get("topic") or "").strip()

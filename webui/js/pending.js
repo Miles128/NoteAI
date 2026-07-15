@@ -115,7 +115,9 @@ function loadPendingItems() {
 
         renderPendingList(items, listEl);
 
-        if (!topicOpts.length && items.some(function(item) { return item.type === 'topic'; })) {
+        if (!topicOpts.length && items.some(function(item) {
+            return item.type === 'topic' || item.action === 'assign_topic';
+        })) {
             _loadAllTopics().then(function() {
                 if (seq === _pendingLoadSeq) renderPendingList(items, listEl);
             });
@@ -150,6 +152,8 @@ function renderPendingList(items, listEl) {
             html += renderPendingInfoItem(item, idx, 'convert');
         } else if (item.type === 'ingest') {
             html += renderPendingInfoItem(item, idx, 'ingest');
+        } else if (item.type === 'merge_candidate') {
+            html += renderPendingInfoItem(item, idx, 'merge_candidate');
         }
     });
     listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
@@ -161,7 +165,8 @@ function renderPendingSummary(summary) {
     var rows = [
         ['ingest', 'pending.typeIngest'], ['cascade_fail', 'pending.typeCascade'],
         ['convert_fail', 'pending.typeConvert'], ['topic', 'pending.typeTopic'],
-        ['link', 'pending.typeLink'], ['lint', 'pending.typeLint']
+        ['link', 'pending.typeLink'], ['lint', 'pending.typeLint'],
+        ['merge_candidate', 'pending.typeMergeCandidate']
     ].filter(function(row) { return summary[row[0]]; });
     el.innerHTML = rows.map(function(row) {
         return '<span>' + window.escapeHtml(window.t(row[1])) + ' <strong>' + summary[row[0]] + '</strong></span>';
@@ -252,22 +257,41 @@ function renderPendingLinkItem(item, idx) {
 }
 
 function renderPendingInfoItem(item, idx, kind) {
-    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : 'pending.typeConvert'));
+    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : 'pending.typeConvert')));
     var title = item.message || item.topic || item.file || item.file_path || item.error || '';
     var detail = item.file_path || item.file || item.topic || item.error || '';
+    if (kind === 'merge_candidate') {
+        title = (item.files || []).map(function(path) { return window.Path_stem(path); }).join(' · ');
+        detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) });
+    }
     if (kind === 'cascade' && item.error) detail = item.error;
     if (kind === 'convert' && item.error) detail = (item.file || '') + (item.file && item.error ? ' · ' : '') + item.error;
-    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '" data-topic="' + encodeURIComponent(item.topic || '') + '" data-file="' + encodeURIComponent(item.file || '') + '" data-action-kind="' + window.escapeAttr(item.action || '') + '">';
+    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '" data-topic="' + encodeURIComponent(item.topic || '') + '" data-current-topic="' + encodeURIComponent(item.current_topic || '') + '" data-file="' + encodeURIComponent(item.file || item.file_path || '') + '" data-files="' + encodeURIComponent(JSON.stringify(item.files || [])) + '" data-related-file="' + encodeURIComponent(item.related_file || '') + '" data-action-kind="' + window.escapeAttr(item.action || '') + '">';
     html += '<span class="pending-item-type type-' + kind + '">' + window.t(labelKey) + '</span>';
     html += '<div class="pending-item-title">' + window.escapeHtml(title || window.t('pending.itemNeedsReview')) + '</div>';
     if (detail && detail !== title) {
         html += '<div class="pending-item-path">' + window.escapeHtml(detail) + '</div>';
     }
-    if (item.action === 'retry_cascade' || item.action === 'retry_convert' || item.action === 'retry_ingest') {
-        html += '<div class="pending-item-actions"><button data-action="retry-item">' + window.t('pending.retryItem') + '</button>';
-        if (item.action !== 'retry_ingest') {
+    if (item.action === 'retry_cascade' || item.action === 'retry_convert' || item.action === 'retry_ingest' || item.action === 'refresh_survey') {
+        var retryLabel = item.action === 'refresh_survey' ? window.t('pending.rewriteSurvey') : window.t('pending.retryItem');
+        html += '<div class="pending-item-actions"><button data-action="retry-item">' + retryLabel + '</button>';
+        if (item.action !== 'retry_ingest' && item.action !== 'refresh_survey') {
             html += '<button class="btn-reject" data-action="dismiss-item">' + window.t('pending.dismissItem') + '</button>';
         }
+        html += '</div>';
+    } else if (item.action === 'review_duplicate') {
+        html += '<div class="pending-item-path">' + window.escapeHtml(item.related_file || '') + '</div>';
+        html += '<div class="pending-item-actions"><button data-action="review-duplicate">' + window.t('pending.reviewDuplicate') + '</button></div>';
+    } else if (item.action === 'review_merge_group') {
+        html += '<div class="pending-item-actions"><button data-action="review-merge-group">' + window.t('pending.reviewMergeGroup') + '</button></div>';
+    } else if (item.action === 'open_file') {
+        html += '<div class="pending-item-actions"><button data-action="open-file">' + window.t('home.openPending') + '</button></div>';
+    } else if (item.action === 'assign_topic') {
+        var suggestedTopic = item.topic || '';
+        var currentTopic = item.current_topic || '';
+        html += '<div class="pending-item-actions">';
+        html += '<button data-action="move-suggested">' + window.escapeHtml(window.t('pending.moveToTopic', { topic: suggestedTopic })) + '</button>';
+        html += '<button class="btn-reject" data-action="keep-current">' + window.escapeHtml(window.t('pending.keepInTopic', { topic: currentTopic })) + '</button>';
         html += '</div>';
     }
     html += '</div>';
@@ -281,9 +305,12 @@ function _findPendingItem(el) {
         el: item,
         idx: parseInt(item.getAttribute('data-pending-idx'), 10),
         filePath: decodeURIComponent(item.getAttribute('data-file') || ''),
+        relatedFile: decodeURIComponent(item.getAttribute('data-related-file') || ''),
         source: decodeURIComponent(item.getAttribute('data-source') || ''),
         target: decodeURIComponent(item.getAttribute('data-target') || ''),
         topic: decodeURIComponent(item.getAttribute('data-topic') || ''),
+        currentTopic: decodeURIComponent(item.getAttribute('data-current-topic') || ''),
+        files: JSON.parse(decodeURIComponent(item.getAttribute('data-files') || '%5B%5D')),
         actionKind: item.getAttribute('data-action-kind') || ''
     };
 }
@@ -295,6 +322,15 @@ function _handlePendingClick(e) {
     var info = _findPendingItem(btn);
     if (!info) return;
 
+    if (action === 'move-suggested') {
+        if (!info.topic) return;
+        resolvePendingTopicItem(info.filePath, info.topic, info.idx);
+        return;
+    }
+    if (action === 'keep-current') {
+        keepPendingTopicItem(info);
+        return;
+    }
     if (action === 'resolve-topic') {
         var select = info.el.querySelector('.pending-topic-select');
         var input = info.el.querySelector('.pending-custom-input');
@@ -306,6 +342,14 @@ function _handlePendingClick(e) {
         }
         if (!topic) return;
         resolvePendingTopicItem(info.filePath, topic, info.idx);
+    } else if (action === 'open-file') {
+        if (info.filePath && window.TreeModule && window.TreeModule.selectFile) {
+            window.TreeModule.selectFile(info.filePath, window.Path_stem(info.filePath));
+        }
+    } else if (action === 'review-duplicate') {
+        reviewDuplicateItem(info);
+    } else if (action === 'review-merge-group') {
+        reviewMergeGroup(info);
     } else if (action === 'confirm-link') {
         confirmPendingLink(info.source, info.target, info.idx);
     } else if (action === 'open-links-panel') {
@@ -323,13 +367,85 @@ function _handlePendingClick(e) {
     }
 }
 
+function reviewMergeGroup(info) {
+    if (!window.api || !window.api.mergeNoteGroup || !info.files || info.files.length < 2) return;
+    var list = info.files.join('\n');
+    if (!window.confirm(window.t('pending.mergeGroupConfirm', { count: info.files.length }) + '\n\n' + list)) return;
+    var title = window.prompt(window.t('pending.mergeTitlePrompt'), window.Path_stem(info.files[0]) + '（整合）');
+    if (title === null) return;
+    var deleteAuthorized = window.confirm(window.t('pending.deleteOriginalsOnce') + '\n\n' + list);
+    window.api.mergeNoteGroup(info.files, title, deleteAuthorized).then(function(result) {
+        if (result && result.success) {
+            removePendingItem(info.idx);
+            if (typeof window.updateStatus === 'function') window.updateStatus(result.message || window.t('pending.mergeDone'));
+            if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+        } else if (typeof window.updateStatus === 'function') {
+            window.updateStatus((result && result.message) || window.t('pending.operationFailed'));
+        }
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(e.message || window.t('pending.operationFailed'));
+    });
+}
+
+function keepPendingTopicItem(info) {
+    if (!window.api || !window.api.keepNoteInTopic) return;
+    window.api.keepNoteInTopic(info.filePath, info.currentTopic, info.topic).then(function(result) {
+        if (result && result.success) {
+            removePendingItem(info.idx);
+        } else {
+            if (typeof window.updateStatus === 'function') window.updateStatus((result && result.message) || window.t('pending.operationFailed'));
+            loadPendingItems();
+        }
+    }).catch(function(e) {
+        console.warn('[PendingView] keep topic failed:', e);
+        loadPendingItems();
+    });
+}
+
+function reviewDuplicateItem(info) {
+    if (!window.api || !window.api.getDuplicateReview || !info.filePath || !info.relatedFile) return;
+    window.api.getDuplicateReview(info.filePath, info.relatedFile).then(function(review) {
+        if (!review || !review.success) throw new Error((review && review.message) || '无法读取重复笔记');
+        var left = (review.primary && review.primary.body) || '';
+        var right = (review.related && review.related.body) || '';
+        var message = (review.exact ? window.t('pending.exactDuplicate') : window.t('pending.nearDuplicate')) + '\n\n' +
+            info.filePath + '\n' + left.slice(0, 900) + '\n\n---\n\n' + info.relatedFile + '\n' + right.slice(0, 900);
+        if (!window.confirm(message + '\n\n' + window.t('pending.mergeConfirm'))) return;
+        var title = window.prompt(window.t('pending.mergeTitlePrompt'), (review.primary.title || '笔记') + '（整合）');
+        if (title === null) return;
+        return window.api.mergeDuplicateNotes(info.filePath, info.relatedFile, title);
+    }).then(function(result) {
+        if (!result) return;
+        if (result.success) {
+            if (typeof window.updateStatus === 'function') window.updateStatus(result.message || window.t('pending.mergeDone'));
+            loadPendingItems();
+            refreshPendingBtnState();
+            if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+        } else if (typeof window.updateStatus === 'function') {
+            window.updateStatus(result.message || window.t('pending.operationFailed'));
+        }
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(e.message || String(e));
+    });
+}
+
 function retryPendingItem(info) {
     var request;
-    if (info.actionKind === 'retry_cascade') request = window.api.retryCascadeTopic(info.topic);
+    if (info.actionKind === 'retry_cascade' || info.actionKind === 'refresh_survey') request = window.api.retryCascadeTopic(info.topic);
     else if (info.actionKind === 'retry_convert') request = window.api.retryConvertFile(info.filePath);
     else if (info.actionKind === 'retry_ingest') request = window.api.retryIngest({ mode: 'full' });
     else return;
-    request.then(function() { loadPendingItems(); refreshPendingBtnState(); }).catch(function() { loadPendingItems(); });
+    if (typeof window.updateStatus === 'function') window.updateStatus(window.t('pending.retryStarted'));
+    request.then(function(result) {
+        if (result && result.success === false && typeof window.updateStatus === 'function') {
+            window.updateStatus(result.message || window.t('pending.operationFailed'));
+        }
+        loadPendingItems();
+        refreshPendingBtnState();
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(e.message || window.t('pending.operationFailed'));
+        loadPendingItems();
+    });
 }
 
 function dismissPendingItem(info) {
@@ -479,7 +595,8 @@ function retryAllPendingSurveys() {
     var btn = document.getElementById('pending-cascade-retry-all-btn');
     if (!window.api || !window.api.retryAllCascadeFailures) return;
     _setButtonBusy(btn, true, 'pending.retrying');
-    window.api.retryAllCascadeFailures().then(function() {
+    window.api.retryAllCascadeFailures().then(function(result) {
+        if (typeof window.updateStatus === 'function') window.updateStatus((result && result.message) || window.t('pending.retryStarted'));
         loadPendingItems();
         refreshPendingBtnState();
     }).catch(function(e) {

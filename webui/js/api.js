@@ -35,8 +35,7 @@ var _pyCallRetryDelayMs = 300;
 function _isRetryableError(e) {
     if (!e) return false;
     var msg = String(e.message || e);
-    return msg.indexOf('timeout') !== -1 ||
-        msg.indexOf('aborted') !== -1 ||
+    return msg.indexOf('aborted') !== -1 ||
         msg.indexOf('cancelled') !== -1 ||
         msg.indexOf('invoke') !== -1 ||
         msg.indexOf('sidecar') !== -1;
@@ -346,12 +345,15 @@ var API_DEFS = [
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
     { name: 'getAllPending', method: 'get_all_pending' },
     { name: 'retryCascadeTopic', method: 'retry_cascade_topic', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'retryAllCascadeFailures', method: 'retry_all_cascade_failures', params: function() { return {}; }, write: true },
     { name: 'dismissCascadeFailure', method: 'dismiss_cascade_failure', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'retryConvertFile', method: 'retry_convert_file', params: function(file) { return { file: file }; }, write: true },
     { name: 'dismissConvertFailure', method: 'dismiss_convert_failure', params: function(file) { return { file: file }; }, write: true },
     { name: 'getDashboardStatus', method: 'get_dashboard_status' },
     { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; } },
+    { name: 'keepNoteInTopic', method: 'keep_note_in_topic', params: function(filePath, currentTopic, suggestedTopic) { return { file_path: filePath, current_topic: currentTopic, suggested_topic: suggestedTopic }; }, write: true },
+    { name: 'applyTopicPlacementThreshold', method: 'apply_topic_placement_threshold', params: function() { return {}; }, write: true },
     { name: 'mergeDuplicateTopics', method: 'merge_duplicate_topics', params: function() { return {}; } },
     { name: 'renameTopic', method: 'rename_topic', params: function(oldTopic, newTopic) { return { old_topic: oldTopic, new_topic: newTopic }; } },
     { name: 'deleteTopic', method: 'delete_topic', params: function(topicName) { return { topic_name: topicName }; } },
@@ -418,6 +420,11 @@ var API_DEFS = [
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },
     { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; }, write: true },
+    { name: 'getDuplicateReview', method: 'get_duplicate_review', params: function(filePath, relatedFile) { return { file_path: filePath, related_file: relatedFile }; } },
+    { name: 'mergeDuplicateNotes', method: 'merge_duplicate_notes', params: function(filePath, relatedFile, title) { return { file_path: filePath, related_file: relatedFile, title: title || '' }; }, write: true },
+    { name: 'mergeNoteGroup', method: 'merge_note_group', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
+    { name: 'buildChunkSimilarityGraph', method: 'build_chunk_similarity_graph', params: function() { return {}; }, write: true },
+    { name: 'getChunkMergeCandidates', method: 'get_chunk_merge_candidates', params: function() { return {}; } },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },

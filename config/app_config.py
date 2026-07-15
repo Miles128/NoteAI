@@ -77,6 +77,10 @@ class AppConfig:
     integration_output_path: str = ""
     integration_strategy: str = "ml"
     auto_topic: bool = True
+    # Minimum confidence used when a single LLM topic suggestion is eligible
+    # for automatic filing. The model output is not calibrated, so 0.80 is a
+    # conservative product default rather than a probability guarantee.
+    topic_auto_assign_threshold: float = 0.80
     topic_list: str = ""
     cloud_sync_experimental: bool = False
     ingest_auto_enabled: bool = True

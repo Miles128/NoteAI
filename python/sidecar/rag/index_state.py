@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from config import config
-from config.settings import WORKSPACE_APP_FOLDER
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from utils.logger import logger
 
 
@@ -21,7 +21,23 @@ def _state_path(workspace: str | None = None) -> Path | None:
 
 def load_state(workspace: str | None = None) -> dict[str, float]:
     path = _state_path(workspace)
-    if not path or not path.exists():
+    if not path:
+        return {}
+    if not path.exists():
+        # Recover the per-file mtime state from the durable RAG manifest. A
+        # missing auxiliary state file must not make every note look new.
+        manifest_path = path.parent / RAG_INDEX_FOLDER / "file_manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            files = manifest.get("files", {})
+            if isinstance(files, dict):
+                return {
+                    str(rel): float(entry["mtime"])
+                    for rel, entry in files.items()
+                    if isinstance(entry, dict) and entry.get("mtime") is not None
+                }
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

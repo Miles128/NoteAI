@@ -6,7 +6,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
 
-from config.settings import RAW_FOLDER
+from config import config
+from config.settings import NOTES_FOLDER, RAW_FOLDER
 from utils.helpers import (
     clean_text,
     ensure_dir,
@@ -19,7 +20,6 @@ from utils.logger import logger
 from utils.pdf_utils import extract_pdf_pages, extract_pdf_text
 from utils.tag_extractor import (
     add_yaml_frontmatter_to_content,
-    add_yaml_frontmatter_to_file,
     extract_tags_from_filename,
 )
 
@@ -72,7 +72,7 @@ class BaseConverter(ABC):
 class PDFConverter(BaseConverter):
     """PDF转Markdown转换器（仅使用快速路径）"""
 
-    SUPPORTED_FORMATS = ['.pdf']
+    SUPPORTED_FORMATS = [".pdf"]
     _display_name = "PDF"
 
     MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION = 3
@@ -168,13 +168,14 @@ class TXTConverter(BaseConverter):
 class DOCXConverter(BaseConverter):
     """Word文档转Markdown转换器（使用mammoth，仅支持 .docx）"""
 
-    SUPPORTED_FORMATS = ['.docx']
+    SUPPORTED_FORMATS = [".docx"]
     _display_name = "Word文档"
 
     def _extract_text(self, file_path: str) -> str:
         """使用mammoth将DOCX转换为Markdown"""
         import mammoth
-        with open(file_path, 'rb') as docx_file:
+
+        with open(file_path, "rb") as docx_file:
             result = mammoth.convert_to_markdown(docx_file)
             return result.value
 
@@ -182,7 +183,7 @@ class DOCXConverter(BaseConverter):
 class LegacyDOCConverter(BaseConverter):
     """旧版 Word .doc 转 Markdown，依赖系统可用的文本提取工具。"""
 
-    SUPPORTED_FORMATS = ['.doc']
+    SUPPORTED_FORMATS = [".doc"]
     _display_name = "旧版Word文档"
 
     def _extract_text(self, file_path: str) -> str:
@@ -288,7 +289,7 @@ class PPTConverter(BaseConverter):
 class LegacyPPTConverter(BaseConverter):
     """旧版 PowerPoint .ppt 转 Markdown，解析 OLE PowerPoint Document 文本记录。"""
 
-    SUPPORTED_FORMATS = ['.ppt']
+    SUPPORTED_FORMATS = [".ppt"]
     _display_name = "旧版PPT"
     TEXT_CHARS_ATOM = 4000
     TEXT_BYTES_ATOM = 4008
@@ -505,6 +506,66 @@ class FileConverterManager:
             return self.txt_converter
         return None
 
+    @staticmethod
+    def assess_conversion_quality(content: str, ext: str) -> dict:
+        """Return a conservative quality verdict before a note is admitted."""
+        text = content or ""
+        non_whitespace = sum(1 for char in text if not char.isspace())
+        replacement_chars = text.count("\ufffd")
+        control_chars = sum(1 for char in text if ord(char) < 32 and char not in "\n\r\t")
+        suspicious = replacement_chars + control_chars
+        suspicious_ratio = suspicious / max(non_whitespace, 1)
+        issues: list[str] = []
+
+        if non_whitespace < 30:
+            issues.append("提取正文过短")
+        if suspicious_ratio > 0.02:
+            issues.append("疑似乱码")
+        suspected_scanned_pdf = ext.lower() == ".pdf" and non_whitespace < 80
+        if suspected_scanned_pdf:
+            issues.append("疑似扫描 PDF，无法可靠提取正文")
+
+        return {
+            "acceptable": not issues,
+            "characters": non_whitespace,
+            "suspicious_ratio": round(suspicious_ratio, 4),
+            "suspected_scanned_pdf": suspected_scanned_pdf,
+            "issues": issues,
+        }
+
+    @staticmethod
+    def _workspace_for_output(output_path: str) -> Path | None:
+        output = Path(output_path)
+        if config.workspace_path:
+            workspace = Path(config.workspace_path)
+            try:
+                output.resolve().relative_to(workspace.resolve())
+                return workspace
+            except ValueError:
+                pass
+        if output.name == NOTES_FOLDER:
+            return output.parent
+        return None
+
+    @staticmethod
+    def _update_note_source(note_path: Path, source_path: Path, workspace: Path | None) -> None:
+        from sidecar.textutils import parse_frontmatter, write_frontmatter
+
+        try:
+            text = note_path.read_text(encoding="utf-8")
+            meta, body = parse_frontmatter(text)
+            fields = dict(meta or {})
+            if workspace:
+                try:
+                    fields["source"] = str(source_path.resolve().relative_to(workspace.resolve()))
+                except ValueError:
+                    fields["source"] = str(source_path)
+            else:
+                fields["source"] = str(source_path)
+            note_path.write_text(write_frontmatter(fields, body), encoding="utf-8")
+        except OSError as e:
+            logger.warning(f"更新转换来源失败 {note_path}: {e}")
+
     def convert_file(
         self,
         file_path: str,
@@ -512,6 +573,7 @@ class FileConverterManager:
         output_format: str = "markdown",
         *,
         assign_topic: bool = True,
+        raw_path: str | None = None,
     ) -> dict:
         """
         转换单个文件
@@ -521,7 +583,13 @@ class FileConverterManager:
             output_path: 输出目录路径
             output_format: 输出格式（目前仅支持 markdown）
         """
-        result = {"file_path": file_path, "success": False, "output_path": None, "error": None}
+        result = {
+            "source": file_path,
+            "file_path": file_path,
+            "success": False,
+            "output_path": None,
+            "error": None,
+        }
 
         try:
             file_path_obj = Path(file_path)
@@ -537,10 +605,40 @@ class FileConverterManager:
                 result["error"] = f"不支持的文件格式: {ext}"
                 return result
 
+            workspace = self._workspace_for_output(output_path)
+            from sidecar.conversion_state import find_existing_conversion, record_conversion
+
+            source_digest, existing_output = find_existing_conversion(file_path, workspace)
+            if existing_output:
+                archived_source = None
+                if raw_path:
+                    archived_source = self._archive_to_raw(file_path, raw_path)
+                    if archived_source is None:
+                        result["error"] = "Markdown 已存在，但原文件归档到 Raw 失败"
+                        result["output_path"] = str(existing_output)
+                        return result
+                    self._update_note_source(existing_output, archived_source, workspace)
+                result.update(
+                    {
+                        "success": True,
+                        "output_path": str(existing_output),
+                        "skipped": True,
+                        "source_sha256": source_digest,
+                        "archived_source": str(archived_source) if archived_source else None,
+                    }
+                )
+                return result
+
             # 转换为Markdown
             markdown_content = converter.to_markdown(str(file_path))
 
-            if self._needs_llm_rewrite(markdown_content):
+            extracted_quality = self.assess_conversion_quality(markdown_content, ext)
+            result["quality"] = extracted_quality
+            if not extracted_quality["acceptable"]:
+                result["error"] = "；".join(extracted_quality["issues"])
+                return result
+
+            if self._needs_llm_rewrite(markdown_content) and len(markdown_content) <= 6000:
                 try:
                     from utils.llm_utils import call_llm_raw, check_api_config
 
@@ -558,8 +656,21 @@ class FileConverterManager:
                 except Exception as e:
                     logger.warning(f"LLM 重写失败，保留原始转换: {e}")
 
+            quality = self.assess_conversion_quality(markdown_content, ext)
+            result["quality"] = quality
+            if not quality["acceptable"]:
+                result["error"] = "；".join(quality["issues"])
+                return result
+
+            tags = extract_tags_from_filename(str(file_path_obj))
+
             # 添加YAML front matter
-            markdown_content = add_yaml_frontmatter_to_content(markdown_content, tags=[], source=file_path)
+            markdown_content = add_yaml_frontmatter_to_content(
+                markdown_content,
+                tags=tags,
+                source=file_path,
+                extra_fields={"source_sha256": source_digest},
+            )
 
             # 保存文件
             output_dir = ensure_dir(output_path)
@@ -578,10 +689,6 @@ class FileConverterManager:
                     output_file = original_output_file.parent / f"{stem}_{counter}.md"
                     counter += 1
 
-            tags = extract_tags_from_filename(str(output_file))
-            if tags:
-                add_yaml_frontmatter_to_file(str(output_file), tags=tags, source=file_path)
-
             if assign_topic:
                 try:
                     from utils.topic_assigner import auto_assign_topic_for_file
@@ -596,9 +703,23 @@ class FileConverterManager:
                 except Exception as e:
                     logger.warning(f"自动分配主题失败: {e}")
 
+            record_conversion(source_digest, output_file, file_path, workspace)
+
+            archived_source = None
+            if raw_path:
+                archived_source = self._archive_to_raw(file_path, raw_path)
+                if archived_source is None:
+                    result["error"] = "转换成功，但原文件归档到 Raw 失败"
+                    result["output_path"] = str(output_file)
+                    result["source_sha256"] = source_digest
+                    return result
+                self._update_note_source(output_file, archived_source, workspace)
+
             result["success"] = True
             result["output_path"] = str(output_file)
             result["tags"] = tags
+            result["source_sha256"] = source_digest
+            result["archived_source"] = str(archived_source) if archived_source else None
 
             logger.info(f"文件转换成功: {output_file}")
 
@@ -625,10 +746,13 @@ class FileConverterManager:
             if self.progress_callback:
                 self.progress_callback(i + 1, total, f"正在转换: {Path(file_path).name}")
 
-            result = self.convert_file(file_path, output_path, output_format, assign_topic=assign_topic)
-
-            if result["success"] and raw_path:
-                self._move_to_raw(file_path, raw_path)
+            result = self.convert_file(
+                file_path,
+                output_path,
+                output_format,
+                assign_topic=assign_topic,
+                raw_path=raw_path,
+            )
 
             results.append(result)
 
@@ -636,15 +760,22 @@ class FileConverterManager:
             success_count = sum(1 for r in results if r["success"])
             self.progress_callback(total, total, f"转换完成: {success_count}/{total} 成功")
 
+        try:
+            from sidecar.convert_failures import record_convert_batch_results
+
+            record_convert_batch_results(results)
+        except Exception as e:
+            logger.warning(f"记录转换结果失败: {e}")
+
         return results
 
-    def _move_to_raw(self, file_path: str, raw_path: str) -> bool:
-        """移动文件到Raw文件夹进行归档"""
+    def _archive_to_raw(self, file_path: str, raw_path: str) -> Path | None:
+        """Move a source into Raw and return its final path."""
         try:
             source = Path(file_path)
             if not source.exists():
                 logger.warning(f"源文件不存在，跳过移动: {file_path}")
-                return False
+                return None
 
             raw_dir = Path(raw_path)
             raw_dir.mkdir(parents=True, exist_ok=True)
@@ -652,7 +783,7 @@ class FileConverterManager:
             try:
                 source.resolve().relative_to(raw_dir.resolve())
                 logger.info(f"文件已位于Raw目录，跳过移动: {source}")
-                return True
+                return source
             except ValueError:
                 pass
 
@@ -669,10 +800,14 @@ class FileConverterManager:
 
             shutil.move(str(source), str(dest))
             logger.info(f"已移动文件到Raw: {source} -> {dest}")
-            return True
+            return dest
         except Exception as e:
             logger.error(f"移动文件到Raw失败: {file_path}, 错误: {e}")
-            return False
+            return None
+
+    def _move_to_raw(self, file_path: str, raw_path: str) -> bool:
+        """Backward-compatible boolean wrapper for Raw archival."""
+        return self._archive_to_raw(file_path, raw_path) is not None
 
     def convert_folder(
         self,

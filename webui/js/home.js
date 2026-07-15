@@ -289,7 +289,9 @@ function refreshFallback() {
     });
 }
 
-function refresh() {
+var _refreshPromise = null;
+
+function _refreshOnce() {
     if (!window.api || !window.api.getDashboardStatus) {
         return refreshFallback().catch(function(err) {
             console.warn('[Home] refresh failed:', err);
@@ -302,6 +304,14 @@ function refresh() {
         console.warn('[Home] refresh failed:', err);
         return refreshFallback();
     });
+}
+
+function refresh() {
+    if (_refreshPromise) return _refreshPromise;
+    _refreshPromise = Promise.resolve(_refreshOnce()).finally(function() {
+        _refreshPromise = null;
+    });
+    return _refreshPromise;
 }
 
 async function checkUpdates() {

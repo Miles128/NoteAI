@@ -244,8 +244,26 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
+        self._start_task(
+            "kb_startup_lint",
+            self._run_startup_lint,
+            kind="lint",
+            label="知识库整理巡检",
+        )
         if config.ingest_auto_enabled and config.rag_enabled and workspace and Path(workspace).exists():
             self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
+
+    def _run_startup_lint(self):
+        """Refresh non-destructive Inbox findings once per app start."""
+        from sidecar.kb_lint import run_kb_lint
+
+        run_kb_lint(auto_repair=False, auto_refresh_surveys=False)
+        self._send_response(
+            {
+                "id": "event",
+                "result": {"type": "workspace_files_changed"},
+            }
+        )
 
     def _auto_rebuild_rag_index(self):
         workspace = config.workspace_path
@@ -259,7 +277,8 @@ class SidecarServer(PathHelpersMixin):
                 logger.info("[startup] rag index is up to date, skipping rebuild")
                 return
             manifest_files = load_manifest(workspace).get("files", {})
-            if not index_exists(workspace) or not manifest_files or count_indexed_chunks(workspace) <= 0:
+            actual_chunks = count_indexed_chunks(workspace, allow_metadata_fallback=False)
+            if not index_exists(workspace) or not manifest_files or actual_chunks <= 0:
                 logger.info("[startup] RAG index needs a manual rebuild; skipping expensive startup rebuild")
                 self._send_response(
                     {
@@ -435,9 +454,7 @@ class SidecarServer(PathHelpersMixin):
                     self._watcher_debounce_timer.cancel()
                 except RuntimeError:
                     logger.warning("[watcher] debounce timer already cancelled")
-            self._watcher_debounce_timer = threading.Timer(
-                5.0, self._emit_workspace_change, args=(current_generation,)
-            )
+            self._watcher_debounce_timer = threading.Timer(5.0, self._emit_workspace_change, args=(current_generation,))
             self._watcher_debounce_timer.start()
 
     def _auto_process_md_file(self, file_path):
@@ -468,7 +485,11 @@ class SidecarServer(PathHelpersMixin):
                     return
                 converter = FileConverterManager()
                 output_dir = str(Path(ws) / config.NOTES_FOLDER)
-                result = converter.convert_file(file_path, output_dir)
+                raw_dir = str(Path(ws) / config.RAW_FOLDER)
+                result = converter.convert_file(file_path, output_dir, raw_path=raw_dir)
+                from sidecar.convert_failures import record_convert_batch_results
+
+                record_convert_batch_results([result])
                 if result and result.get("success"):
                     md = result.get("output_path", "")
                     if md:

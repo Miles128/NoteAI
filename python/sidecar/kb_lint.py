@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -14,6 +15,7 @@ from sidecar.textutils import parse_frontmatter, write_frontmatter
 from utils.wiki_manager import topic_from_notes_path
 
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
+_MIN_DUPLICATE_CHARS = 100
 
 
 @dataclass
@@ -23,6 +25,9 @@ class LintIssue:
     message: str
     file_path: str = ""
     topic: str = ""
+    related_file: str = ""
+    current_topic: str = ""
+    suggested_score: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -49,6 +54,24 @@ def _all_md_names(workspace: Path) -> set[str]:
             names.add(md.name)
             names.add(md.stem)
     return names
+
+
+def _duplicate_content_groups(workspace: Path) -> list[list[Path]]:
+    """Find exact note-body duplicates while ignoring whitespace differences."""
+    by_hash: dict[str, list[Path]] = {}
+    for note in _iter_notes_md(workspace):
+        try:
+            _, body = parse_frontmatter(note.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        normalized = re.sub(r"\s+", "", body).casefold()
+        if len(normalized) < _MIN_DUPLICATE_CHARS:
+            continue
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        by_hash.setdefault(digest, []).append(note)
+    return [
+        sorted(paths, key=lambda path: str(path.relative_to(workspace))) for paths in by_hash.values() if len(paths) > 1
+    ]
 
 
 def _wikilink_target_exists(target: str, names: set[str]) -> bool:
@@ -319,6 +342,72 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
         except (OSError, json.JSONDecodeError):
             pass
 
+    duplicate_paths: set[str] = set()
+    from sidecar.duplicate_review import is_pair_resolved
+
+    for group in _duplicate_content_groups(root):
+        canonical = str(group[0].relative_to(root))
+        canonical_body = parse_frontmatter(group[0].read_text(encoding="utf-8"))[1]
+        for duplicate in group[1:]:
+            duplicate_rel = str(duplicate.relative_to(root))
+            duplicate_body = parse_frontmatter(duplicate.read_text(encoding="utf-8"))[1]
+            if is_pair_resolved(root, duplicate_rel, canonical, duplicate_body, canonical_body):
+                continue
+            duplicate_paths.update({duplicate_rel, canonical})
+            issues.append(
+                LintIssue(
+                    kind="duplicate_content",
+                    severity="warning",
+                    message=f"正文与 {canonical} 完全重复",
+                    file_path=str(duplicate.relative_to(root)),
+                    related_file=canonical,
+                )
+            )
+
+    from sidecar.organization_audit import run_organization_audit
+
+    organization = run_organization_audit(root)
+    near_duplicates = organization["near_duplicates"]
+    for item in near_duplicates:
+        current = root / item["file_path"]
+        related = root / item["related_file"]
+        try:
+            current_body = parse_frontmatter(current.read_text(encoding="utf-8"))[1]
+            related_body = parse_frontmatter(related.read_text(encoding="utf-8"))[1]
+        except OSError:
+            continue
+        if is_pair_resolved(root, item["file_path"], item["related_file"], current_body, related_body):
+            continue
+        score = float(item["score"])
+        issues.append(
+            LintIssue(
+                kind="near_duplicate",
+                severity="warning",
+                message=f"正文与 {item['related_file']} 高度相似（{score:.0%}）",
+                file_path=item["file_path"],
+                related_file=item["related_file"],
+            )
+        )
+
+    duplicate_paths.update(item["file_path"] for item in near_duplicates)
+    for item in organization["misplaced_notes"]:
+        if item["file_path"] in duplicate_paths:
+            continue
+        issues.append(
+            LintIssue(
+                kind="misplaced_note",
+                severity="warning",
+                message=(
+                    f"内容更接近「{item['suggested_topic']}」"
+                    f"（{item['suggested_score']:.0%}），当前主题「{item['current_topic']}」"
+                ),
+                file_path=item["file_path"],
+                topic=item["suggested_topic"],
+                current_topic=item["current_topic"],
+                suggested_score=item["suggested_score"],
+            )
+        )
+
     return issues
 
 
@@ -346,6 +435,11 @@ def run_kb_lint(
         return {"success": False, "issues": [], "summary": {}, "cancelled": True}
 
     if auto_repair:
+        from sidecar.topic_placement import auto_move_misplaced_notes
+
+        topic_move_result = auto_move_misplaced_notes(root)
+        repair["topic_moves"] = topic_move_result
+
         _progress(1, 4, "检查断链...")
         link_result = auto_fix_broken_links(root)
         repair["broken_links"] = link_result
@@ -375,6 +469,9 @@ def run_kb_lint(
         "orphan_topic": sum(1 for i in issues if i.kind == "orphan_topic"),
         "stale_survey": sum(1 for i in issues if i.kind == "stale_survey"),
         "pending_topics": sum(1 for i in issues if i.kind == "pending_topics"),
+        "duplicate_content": sum(1 for i in issues if i.kind == "duplicate_content"),
+        "near_duplicate": sum(1 for i in issues if i.kind == "near_duplicate"),
+        "misplaced_note": sum(1 for i in issues if i.kind == "misplaced_note"),
     }
     report = {
         "success": True,
@@ -400,6 +497,9 @@ _KIND_LABELS = {
     "orphan_topic": "缺主题",
     "stale_survey": "综述过时",
     "pending_topics": "待确认主题",
+    "duplicate_content": "重复内容",
+    "near_duplicate": "近似重复",
+    "misplaced_note": "疑似错位",
 }
 
 
@@ -463,6 +563,17 @@ def filter_stale_lint_issues(issues: list[dict], root: Path) -> list[dict]:
         return []
 
     names = _all_md_names(root)
+    from sidecar.duplicate_review import is_pair_resolved
+
+    duplicate_issue_paths: set[str] = set()
+    for group in _duplicate_content_groups(root):
+        canonical = str(group[0].relative_to(root))
+        _, canonical_body = parse_frontmatter(group[0].read_text(encoding="utf-8"))
+        for duplicate in group[1:]:
+            rel = str(duplicate.relative_to(root))
+            _, duplicate_body = parse_frontmatter(duplicate.read_text(encoding="utf-8"))
+            if not is_pair_resolved(root, rel, canonical, duplicate_body, canonical_body):
+                duplicate_issue_paths.add(rel)
     survey_by_topic: dict[str, Path] = {}
     wiki = root / config.ABSTRACT_FOLDER
     if wiki.exists():
@@ -537,6 +648,29 @@ def filter_stale_lint_issues(issues: list[dict], root: Path) -> list[dict]:
                 continue
             note_mtime = notes_by_topic_mtime.get(topic_key, 0)
             if not note_mtime or survey_path.stat().st_mtime >= note_mtime - 1:
+                continue
+
+        elif kind == "duplicate_content" and rel not in duplicate_issue_paths:
+            continue
+
+        elif kind == "near_duplicate":
+            related = (issue.get("related_file") or "").strip()
+            if not related:
+                continue
+            try:
+                _, current_body = parse_frontmatter((root / rel).read_text(encoding="utf-8"))
+                _, related_body = parse_frontmatter((root / related).read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            if is_pair_resolved(root, rel, related, current_body, related_body):
+                continue
+
+        elif kind == "misplaced_note":
+            from sidecar.topic_placement import is_placement_kept
+
+            current_topic = str(issue.get("current_topic") or "").strip()
+            suggested_topic = str(issue.get("topic") or "").strip()
+            if is_placement_kept(root, rel, current_topic, suggested_topic):
                 continue
 
         live.append(issue)

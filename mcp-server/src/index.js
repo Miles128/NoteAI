@@ -127,7 +127,7 @@ function createMcpServer(workspacePath) {
     },
     {
       name: 'vault_list_topics',
-      description: 'Return the vault topic guide (wiki/GUIDE.md).',
+      description: 'Return topic paths from the canonical Notes/ folder structure.',
       inputSchema: { type: 'object', properties: {} }
     },
     {

@@ -26,7 +26,6 @@ from utils.topic_pending import (
 )
 from utils.wiki_manager import (
     add_file_to_wiki_topic,
-    parse_wiki_headings,
     sync_wiki_with_files,
 )
 from utils.wiki_sync import _write_file_topic_from_folder, topic_from_notes_path
@@ -217,7 +216,9 @@ def _try_assign_survey(full_path: Path, workspace: str, title: str, format_optim
     survey_hint = re.sub(r"[_\s]*综述$", "", filename).strip()
     if not survey_hint:
         return None
-    best_match = _find_best_topic_match(survey_hint, parse_wiki_headings())
+    from sidecar.workspace_rules import list_topic_headings
+
+    best_match = _find_best_topic_match(survey_hint, list_topic_headings(workspace))
     if not best_match:
         return None
     return _apply_auto_topic(full_path, workspace, best_match, title, "survey", format_optimized)
@@ -253,7 +254,12 @@ def _try_assign_with_llm(
     if not llm_suggestions:
         return None, []
     matched = _match_llm_suggestions(llm_suggestions, headings)
-    if len(matched) == 1:
+    # The classifier currently exposes a ranked suggestion but no calibrated
+    # probability. A single exact match is treated as 0.85 confidence; the
+    # setting lets users choose how conservative automatic filing should be.
+    confidence = 0.85 if len(matched) == 1 else 0.0
+    threshold = float(getattr(config, "topic_auto_assign_threshold", 0.80) or 0.80)
+    if len(matched) == 1 and confidence >= threshold:
         return _apply_auto_topic(full_path, workspace, matched[0], title, "llm", format_optimized), matched
     return None, [*matched, *llm_suggestions]
 
@@ -279,7 +285,9 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if not is_inbox_orphan_path(full_path, workspace):
         return None
 
-    headings = parse_wiki_headings()
+    from sidecar.workspace_rules import list_topic_headings
+
+    headings = list_topic_headings(workspace)
     if not headings:
         return _save_pending_assignment(full_path, workspace, title, tags, [], "none", format_optimized)
 

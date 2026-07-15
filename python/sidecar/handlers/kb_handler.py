@@ -7,6 +7,7 @@ from sidecar.cascade_runner import (
     retry_failed_cascades,
 )
 from sidecar.dashboard_status import get_dashboard_status
+from sidecar.duplicate_review import get_duplicate_review, merge_duplicate_notes, merge_note_group
 from sidecar.handlers.base import BaseHandler
 from sidecar.kb_lint import load_lint_report, log_lint_report, run_kb_lint
 from sidecar.survey_append import append_chat_to_survey
@@ -17,6 +18,11 @@ class KbHandler(BaseHandler):
         router.register("get_dashboard_status", self._get_dashboard_status)
         router.register("run_kb_lint", self._run_kb_lint)
         router.register("get_lint_report", self._get_lint_report)
+        router.register("get_duplicate_review", self._get_duplicate_review)
+        router.register("merge_duplicate_notes", self._merge_duplicate_notes)
+        router.register("merge_note_group", self._merge_note_group)
+        router.register("build_chunk_similarity_graph", self._build_chunk_similarity_graph)
+        router.register("get_chunk_merge_candidates", self._get_chunk_merge_candidates)
         router.register("archive_chat_answer", self._archive_chat_answer)
         router.register("append_chat_to_survey", self._append_chat_to_survey)
         router.register("get_cascade_failures", self._get_cascade_failures)
@@ -37,6 +43,64 @@ class KbHandler(BaseHandler):
 
     def _get_lint_report(self, _params):
         return load_lint_report()
+
+    def _get_duplicate_review(self, params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            return get_duplicate_review(
+                workspace,
+                (params.get("file_path") or "").strip(),
+                (params.get("related_file") or "").strip(),
+            )
+        except (OSError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
+
+    def _merge_duplicate_notes(self, params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            return merge_duplicate_notes(
+                workspace,
+                (params.get("file_path") or "").strip(),
+                (params.get("related_file") or "").strip(),
+                (params.get("title") or "").strip(),
+            )
+        except (OSError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
+
+    def _merge_note_group(self, params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            return merge_note_group(
+                workspace,
+                [str(path) for path in (params.get("file_paths") or [])],
+                str(params.get("title") or ""),
+                delete_authorized=params.get("delete_authorized") is True,
+            )
+        except (OSError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
+
+    def _build_chunk_similarity_graph(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        from sidecar.chunk_similarity import build_chunk_similarity_graph
+
+        return build_chunk_similarity_graph(workspace)
+
+    def _get_chunk_merge_candidates(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": True, "items": []}
+        from sidecar.chunk_similarity import load_chunk_similarity_graph
+
+        graph = load_chunk_similarity_graph(workspace)
+        return {"success": True, "items": graph.get("candidates") or [], "needs_build": not bool(graph)}
 
     def _archive_chat_answer(self, params):
         return archive_chat_answer(

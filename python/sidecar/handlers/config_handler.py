@@ -84,6 +84,7 @@ class ConfigHandler(BaseHandler):
             "conv_ai_assist": self.config.conv_ai_assist,
             "integration_strategy": self.config.integration_strategy,
             "auto_topic": self.config.auto_topic,
+            "topic_auto_assign_threshold": self.config.topic_auto_assign_threshold,
             "topic_list": self.config.topic_list,
             "font_size": self.config.font_size,
             "sidebar_font_family": self.config.sidebar_font_family,
@@ -143,6 +144,10 @@ class ConfigHandler(BaseHandler):
                 self.config.integration_strategy = params["integration_strategy"]
             if "auto_topic" in params:
                 self.config.auto_topic = params["auto_topic"]
+            if "topic_auto_assign_threshold" in params:
+                self.config.topic_auto_assign_threshold = self._coerce_float(
+                    params["topic_auto_assign_threshold"], 0.80, 0.0, 1.0
+                )
             if "topic_list" in params:
                 self.config.topic_list = params["topic_list"]
             if "font_size" in params:

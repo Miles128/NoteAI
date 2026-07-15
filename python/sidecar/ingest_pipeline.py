@@ -298,7 +298,7 @@ def _scan_index_pending(workspace: str) -> list[Path]:
     ws = Path(workspace)
     out: list[Path] = []
     for md in ws.rglob("*.md"):
-        if md.name.startswith(".") or "wiki" in md.parts:
+        if md.name.startswith(".") or any(part.startswith(".") for part in md.relative_to(ws).parts[:-1]) or "wiki" in md.parts:
             continue
         if md.name.endswith("_综述.md"):
             continue
@@ -353,19 +353,58 @@ def _index_markdown_files(
     progress_cb: Callable[[int, int, str], None] | None,
     cancelled: Callable[[], bool] = is_cancelled,
 ) -> tuple[int, list[str]]:
+    from sidecar.rag.index import index_operation
+
+    with index_operation(workspace, blocking=False) as acquired:
+        if not acquired:
+            raise RuntimeError("RAG 索引正在由另一个任务更新，请稍后重试")
+        return _index_markdown_files_locked(workspace, files, progress_cb, cancelled)
+
+
+def _index_markdown_files_locked(
+    workspace: str,
+    files: list[Path],
+    progress_cb: Callable[[int, int, str], None] | None,
+    cancelled: Callable[[], bool],
+) -> tuple[int, list[str]]:
     if not config.rag_enabled:
         return 0, []
 
     from sidecar.rag.chunker import chunk_file
     from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import add_chunks, delete_by_file
-    from sidecar.rag.index_state import file_needs_index, mark_indexed, mark_many_indexed
+    from sidecar.rag.index import count_indexed_chunks, load_manifest, replace_file_chunks
+    from sidecar.rag.index_state import file_needs_index, mark_many_indexed
+
+    manifest = load_manifest(workspace)
+    expected_chunks = sum(
+        len(entry.get("chunks") or [])
+        for entry in manifest.get("files", {}).values()
+    )
+    actual_chunks = count_indexed_chunks(workspace, allow_metadata_fallback=False)
+    if actual_chunks < 0:
+        raise RuntimeError("RAG 索引当前不可访问，请关闭其他 NoteAI 实例后重试")
+    repair_all = expected_chunks > 0 and actual_chunks != expected_chunks
+    if repair_all:
+        logger.warning(
+            "[ingest/index] integrity mismatch actual=%s expected=%s; repairing all notes",
+            actual_chunks,
+            expected_chunks,
+        )
+        ws_path = Path(workspace)
+        files = [
+            md
+            for md in ws_path.rglob("*.md")
+            if not md.name.startswith(".")
+            and not any(part.startswith(".") for part in md.relative_to(ws_path).parts[:-1])
+            and "wiki" not in md.parts
+            and NOTES_FOLDER in md.parts
+            and not md.name.endswith("_综述.md")
+        ]
 
     indexed = 0
     indexed_paths: list[str] = []
     total = len(files)
-    pending_chunks: list[dict] = []
-    pending_embeddings: list[dict] = []
+    replacements: dict[str, dict] = {}
     pending_updates: dict[str, float] = {}
     preparation_errors: list[str] = []
 
@@ -375,7 +414,7 @@ def _index_markdown_files(
         try:
             rel = str(md.relative_to(workspace))
             mtime = md.stat().st_mtime
-            if not file_needs_index(rel, mtime, workspace):
+            if not repair_all and not file_needs_index(rel, mtime, workspace):
                 if progress_cb:
                     progress_cb(i + 1, total, f"跳过未改动 ({i + 1}/{total}): {md.name}")
                 continue
@@ -384,14 +423,21 @@ def _index_markdown_files(
             text = md.read_text(encoding="utf-8")
             chunks = chunk_file(rel, text)
             if not chunks:
-                # An empty/unchunkable file must remove any previously indexed
-                # content before its mtime is committed.
-                delete_by_file(workspace, rel)
-                mark_indexed(rel, mtime, workspace)
+                replacements[rel] = {
+                    "chunks": [],
+                    "embeddings": [],
+                    "mtime": mtime,
+                    "size": md.stat().st_size,
+                }
+                pending_updates[rel] = mtime
                 continue
             embeddings = encode_documents([c["content"] for c in chunks])
-            pending_chunks.extend(chunks)
-            pending_embeddings.extend(embeddings)
+            replacements[rel] = {
+                "chunks": chunks,
+                "embeddings": embeddings,
+                "mtime": mtime,
+                "size": md.stat().st_size,
+            }
             pending_updates[rel] = mtime
         except Exception as e:
             logger.warning("[ingest/index] failed to prepare %s: %s", md, e)
@@ -406,12 +452,8 @@ def _index_markdown_files(
     if cancelled():
         return 0, []
 
-    # Delete stale chunks immediately before the batch write. Index state is
-    # committed only after add_chunks succeeds, so a failed write is repairable.
     if pending_updates:
-        for rel in pending_updates:
-            delete_by_file(workspace, rel)
-        add_chunks(workspace, pending_chunks, pending_embeddings)
+        replace_file_chunks(workspace, replacements)
         mark_many_indexed(pending_updates, workspace)
         indexed = len(pending_updates)
         indexed_paths = list(pending_updates)
@@ -689,6 +731,18 @@ def run_ingest(
             mark_stage_done("classify")
         if cancelled():
             raise _Cancelled()
+
+        # Re-evaluate already-filed notes before indexing so automatic moves do
+        # not leave the vector manifest pointing at their former paths.
+        from sidecar.topic_placement import auto_move_misplaced_notes
+
+        placement_result = auto_move_misplaced_notes(workspace)
+        placement_moves = placement_result.get("moved") or []
+        stats["auto_topic_moves"] = len(placement_moves)
+        for move in placement_moves:
+            for topic in (move.get("current_topic"), move.get("suggested_topic")):
+                if topic:
+                    affected_topics.add(str(topic))
 
         # 4. Index
         indexed_paths: list[str] = []

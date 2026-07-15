@@ -168,15 +168,30 @@ class RagHandler(BaseHandler):
 
         from sidecar.rag.chunker import chunk_file
         from sidecar.rag.embedder import encode_documents
-        from sidecar.rag.index import add_chunks
+        from sidecar.rag.index import index_operation, replace_file_chunks
 
         try:
             text = Path(full_path).read_text(encoding="utf-8")
-            chunks = chunk_file(full_path, text)
+            rel_path = str(Path(full_path).relative_to(workspace))
+            chunks = chunk_file(rel_path, text)
             if not chunks:
                 return {"success": False, "message": "文件无可索引内容"}
             embeddings = encode_documents([c["content"] for c in chunks])
-            add_chunks(workspace, chunks, embeddings)
+            stat = Path(full_path).stat()
+            with index_operation(workspace, blocking=False) as acquired:
+                if not acquired:
+                    return {"success": False, "message": "索引更新正在进行中"}
+                replace_file_chunks(
+                    workspace,
+                    {
+                        rel_path: {
+                            "chunks": chunks,
+                            "embeddings": embeddings,
+                            "mtime": stat.st_mtime,
+                            "size": stat.st_size,
+                        }
+                    },
+                )
             return {"success": True, "message": f"已添加 {len(chunks)} 个文本块"}
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -610,11 +625,23 @@ class RagHandler(BaseHandler):
 
         try:
             exists = index_exists(workspace)
-            chunk_count = count_indexed_chunks(workspace)
+            chunk_count = count_indexed_chunks(workspace, allow_metadata_fallback=False)
             manifest = load_manifest(workspace)
             files = manifest.get("files", {})
             expected_chunks = sum(len(entry.get("chunks") or []) for entry in files.values())
             file_count = len(files)
+            if chunk_count < 0:
+                return {
+                    "success": True,
+                    "enabled": True,
+                    "built": False,
+                    "busy": True,
+                    "needs_rebuild": False,
+                    "chunk_count": 0,
+                    "expected_chunks": expected_chunks,
+                    "file_count": file_count,
+                    "is_building": True,
+                }
             mtime = None
             if manifest_path(workspace).exists():
                 mtime = Path(manifest_path(workspace)).stat().st_mtime

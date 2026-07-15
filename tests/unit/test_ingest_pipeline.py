@@ -109,19 +109,18 @@ def test_empty_note_deletes_stale_chunks_before_marking_indexed(workspace: Path)
 
     md = workspace / "Notes" / "empty.md"
     md.write_text("", encoding="utf-8")
-    calls: list[tuple[str, str]] = []
-
     with (
         patch("sidecar.rag.chunker.chunk_file", return_value=[]),
-        patch("sidecar.rag.index.delete_by_file", side_effect=lambda ws, rel: calls.append((ws, rel))),
-        patch("sidecar.rag.index_state.mark_indexed") as mark_indexed,
+        patch("sidecar.rag.index.replace_file_chunks", return_value=0) as replace_chunks,
+        patch("sidecar.rag.index_state.mark_many_indexed") as mark_many,
     ):
         indexed, paths = _index_markdown_files(str(workspace), [md], None)
 
-    assert indexed == 0
-    assert paths == []
-    assert calls == [(str(workspace), "Notes/empty.md")]
-    mark_indexed.assert_called_once()
+    assert indexed == 1
+    assert paths == ["Notes/empty.md"]
+    payload = replace_chunks.call_args.args[1]["Notes/empty.md"]
+    assert payload["chunks"] == []
+    mark_many.assert_called_once()
 
 
 def test_failed_batch_write_does_not_commit_index_state(workspace: Path) -> None:
@@ -133,14 +132,42 @@ def test_failed_batch_write_does_not_commit_index_state(workspace: Path) -> None
     with (
         patch("sidecar.rag.chunker.chunk_file", return_value=[{"content": "note"}]),
         patch("sidecar.rag.embedder.encode_documents", return_value=[{"dense": [0.1]}]),
-        patch("sidecar.rag.index.delete_by_file"),
-        patch("sidecar.rag.index.add_chunks", side_effect=RuntimeError("index write failed")),
+        patch("sidecar.rag.index.replace_file_chunks", side_effect=RuntimeError("index write failed")),
         patch("sidecar.rag.index_state.mark_many_indexed") as mark_many,
         pytest.raises(RuntimeError, match="index write failed"),
     ):
         _index_markdown_files(str(workspace), [md], None)
 
     mark_many.assert_not_called()
+
+
+def test_integrity_mismatch_repairs_all_notes(workspace: Path) -> None:
+    from sidecar.ingest_pipeline import _index_markdown_files
+
+    first = workspace / "Notes" / "a.md"
+    second = workspace / "Notes" / "b.md"
+    first.write_text("# a", encoding="utf-8")
+    second.write_text("# b", encoding="utf-8")
+
+    with (
+        patch(
+            "sidecar.rag.index.load_manifest",
+            return_value={"files": {"Notes/a.md": {"chunks": ["old-a"]}, "Notes/b.md": {"chunks": ["old-b"]}}},
+        ),
+        patch("sidecar.rag.index.count_indexed_chunks", return_value=0),
+        patch(
+            "sidecar.rag.chunker.chunk_file",
+            side_effect=lambda rel, _text: [{"id": rel, "content": rel}],
+        ),
+        patch("sidecar.rag.embedder.encode_documents", return_value=[{"dense_vec": [0.1]}]),
+        patch("sidecar.rag.index.replace_file_chunks", return_value=2) as replace_chunks,
+        patch("sidecar.rag.index_state.mark_many_indexed"),
+    ):
+        indexed, paths = _index_markdown_files(str(workspace), [first], None)
+
+    assert indexed == 2
+    assert set(paths) == {"Notes/a.md", "Notes/b.md"}
+    assert set(replace_chunks.call_args.args[1]) == {"Notes/a.md", "Notes/b.md"}
 
 
 def test_convert_failure_does_not_commit_convert_stage(workspace: Path) -> None:

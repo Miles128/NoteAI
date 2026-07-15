@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initRagSettings();
     initCliSettings();
     initIngestAutoSettings();
+    initTopicAutoThresholdSettings();
 });
 
 async function autoSaveConfig() {
@@ -301,6 +302,10 @@ async function loadUiConfigToForm() {
             var ingestAutoEl = document.getElementById('settings-ingest-auto-enabled');
             if (ingestAutoEl) {
                 ingestAutoEl.checked = uiConfig.ingest_auto_enabled !== false;
+            }
+            var topicThresholdEl = document.getElementById('settings-topic-auto-threshold');
+            if (topicThresholdEl) {
+                topicThresholdEl.value = uiConfig.topic_auto_assign_threshold != null ? uiConfig.topic_auto_assign_threshold : 0.80;
             }
             applyRagSettingsToForm(uiConfig);
             applyCliSettingsToForm(uiConfig);
@@ -859,6 +864,31 @@ function initIngestAutoSettings() {
     });
 }
 
+function initTopicAutoThresholdSettings() {
+    var el = document.getElementById('settings-topic-auto-threshold');
+    if (!el || el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('change', async function() {
+        var value = parseFloat(el.value);
+        if (isNaN(value)) value = 0.80;
+        value = Math.max(0, Math.min(1, value));
+        el.value = value.toFixed(2);
+        var saved = await saveAssistantUiConfig({ topic_auto_assign_threshold: value });
+        if (!saved || !saved.success || !window.api || !window.api.applyTopicPlacementThreshold) return;
+        try {
+            var result = await window.api.applyTopicPlacementThreshold();
+            if (result && result.success) {
+                updateStatus(window.t('settings.topicThresholdApplied', { count: result.moved_count || 0 }));
+                if (typeof window.loadPendingItems === 'function') window.loadPendingItems();
+            } else {
+                updateStatus((result && result.message) || window.t('pending.operationFailed'));
+            }
+        } catch (e) {
+            updateStatus(e.message || window.t('pending.operationFailed'));
+        }
+    });
+}
+
 function _bindRagAdvancedControls() {
     var denseEl = document.getElementById('settings-rag-dense-weight');
     if (denseEl && !denseEl.dataset.bound) {
@@ -908,6 +938,7 @@ window.SettingsModule = {
     setLocale,
     initRagSettings,
     initIngestAutoSettings,
+    initTopicAutoThresholdSettings,
     initCliSettings,
     applyRagSettingsToForm,
     applyCliSettingsToForm,

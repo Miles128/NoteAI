@@ -378,7 +378,10 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
         if old.get("mtime") != info["mtime"] or old.get("size") != info["size"]:
             return False
     expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.values())
-    return expected_chunks > 0 and count_indexed_chunks(workspace) == expected_chunks
+    return (
+        expected_chunks > 0
+        and count_indexed_chunks(workspace, allow_metadata_fallback=False) == expected_chunks
+    )
 
 
 def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:
@@ -454,6 +457,22 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
 
 
 def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
+    from sidecar.rag.index import index_operation
+
+    raw_workspace = workspace or config.workspace_path
+    if not raw_workspace:
+        return {"success": False, "message": "未设置工作区"}
+    with index_operation(raw_workspace, blocking=False) as acquired:
+        if not acquired:
+            return {"success": False, "message": "索引更新正在进行中"}
+        return _rebuild_index_locked(
+            progress_callback,
+            force_full=force_full,
+            workspace=raw_workspace,
+        )
+
+
+def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
     from sidecar.rag.index import _normalize_workspace
 
     raw_workspace = workspace or config.workspace_path
@@ -485,7 +504,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         and index_exists(workspace)
         and bool(manifest_files)
         and expected_chunks > 0
-        and count_indexed_chunks(workspace) == expected_chunks
+        and count_indexed_chunks(workspace, allow_metadata_fallback=False) == expected_chunks
     )
 
     if not can_incremental:
@@ -544,7 +563,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
             )
         except Exception as e:
             return {"success": False, "message": f"Embedding 生成失败: {e}"}
-        add_chunks(workspace, new_chunks, embeddings)
+        add_chunks(workspace, new_chunks, embeddings, rebuild_bm25s=False)
 
     # Rebuild BM25s, metadata, global IDF from the full collection
     all_chunk_ids: list[str] = []

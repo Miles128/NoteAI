@@ -65,9 +65,20 @@ def rag_index_status(workspace: str) -> dict:
     try:
         from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest
 
-        chunk_count = count_indexed_chunks(workspace)
+        chunk_count = count_indexed_chunks(workspace, allow_metadata_fallback=False)
         manifest = load_manifest(workspace)
         expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.get("files", {}).values())
+        if chunk_count < 0:
+            return {
+                "success": True,
+                "enabled": True,
+                "built": False,
+                "busy": True,
+                "needs_rebuild": False,
+                "chunk_count": 0,
+                "expected_chunks": expected_chunks,
+                "file_count": len(manifest.get("files", {})),
+            }
         built = index_exists(workspace) and chunk_count > 0 and chunk_count == expected_chunks
         return {
             "success": True,

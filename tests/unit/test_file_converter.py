@@ -80,7 +80,11 @@ def test_parallel_conversions_do_not_overwrite_same_output(tmp_path: Path, monke
     monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda _path: None)
 
     threads = [
-        Thread(target=lambda source=source: results.append(FileConverterManager().convert_file(str(source), str(output_dir))))
+        Thread(
+            target=lambda source=source: results.append(
+                FileConverterManager().convert_file(str(source), str(output_dir))
+            )
+        )
         for source in sources
     ]
     for thread in threads:
@@ -113,7 +117,7 @@ def test_convert_can_defer_topic_assignment_for_ingest(tmp_path: Path, monkeypat
 
     class Converter:
         def to_markdown(self, _path: str) -> str:
-            return "# 标题\n\n这是编译前的转换内容。"
+            return "# 标题\n\n这是编译前的转换内容，包含足够的信息和完整的句子，用于验证延后主题分配。"
 
     manager = FileConverterManager()
     monkeypatch.setattr(manager, "_get_converter", lambda _ext: Converter())
@@ -126,3 +130,45 @@ def test_convert_can_defer_topic_assignment_for_ingest(tmp_path: Path, monkeypat
 
     assert result["success"] is True
     assert assignment_calls == []
+
+
+def test_low_quality_scanned_pdf_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "scan.pdf"
+    source.write_bytes(b"pdf")
+
+    class Converter:
+        def to_markdown(self, _path: str) -> str:
+            return ""
+
+    manager = FileConverterManager()
+    monkeypatch.setattr(manager, "_get_converter", lambda _ext: Converter())
+
+    result = manager.convert_file(str(source), str(tmp_path / "Notes"), assign_topic=False)
+
+    assert result["success"] is False
+    assert result["quality"]["suspected_scanned_pdf"] is True
+    assert "无法可靠提取正文" in result["error"]
+    assert not list((tmp_path / "Notes").glob("*.md")) if (tmp_path / "Notes").exists() else True
+
+
+def test_same_source_hash_is_converted_once_and_archived(tmp_path: Path, monkeypatch) -> None:
+    raw_dir = tmp_path / "Raw"
+    raw_dir.mkdir()
+    source = raw_dir / "source.txt"
+    source.write_text("same source", encoding="utf-8")
+
+    class Converter:
+        def to_markdown(self, _path: str) -> str:
+            return "# 标题\n\n这是足够完整的转换内容，包含多个句子和必要的信息，可以安全进入知识库。"
+
+    manager = FileConverterManager()
+    monkeypatch.setattr(manager, "_get_converter", lambda _ext: Converter())
+
+    first = manager.convert_file(str(source), str(tmp_path / "Notes"), assign_topic=False, raw_path=str(raw_dir))
+    second = manager.convert_file(str(source), str(tmp_path / "Notes"), assign_topic=False, raw_path=str(raw_dir))
+
+    assert first["success"] is True
+    assert second["success"] is True
+    assert second["skipped"] is True
+    assert first["output_path"] == second["output_path"]
+    assert len(list((tmp_path / "Notes").glob("*.md"))) == 1

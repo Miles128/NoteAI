@@ -69,6 +69,8 @@
     "discoverLinksTitle": "Discover links via AI"
   },
   "pending": {
+    "moveToTopic": "Move to {topic}",
+    "keepInTopic": "Keep in {topic}",
     "title": "Pending",
     "hint": "Topic/link confirmations, survey failures, conversion errors, and health issues — all in one place.",
     "empty": "Nothing pending",
@@ -94,6 +96,17 @@
     "retryItem": "Retry",
     "dismissItem": "Dismiss",
     "itemNeedsReview": "Needs review",
+    "reviewDuplicate": "Review & merge",
+    "typeMergeCandidate": "Merge suggestion",
+    "reviewMergeGroup": "Review merge",
+    "mergeCandidateScore": "Combined similarity {score}%",
+    "mergeGroupConfirm": "Review and merge these {count} notes",
+    "deleteOriginalsOnce": "Authorize this operation to move the originals to Trash after a conflict-free merge?\nCancel keeps every original.",
+    "exactDuplicate": "Exact duplicate detected",
+    "nearDuplicate": "Highly similar content detected",
+    "mergeConfirm": "Create a new merged note? The original notes will not be changed.",
+    "mergeTitlePrompt": "Enter a title for the merged note",
+    "mergeDone": "Merged note created",
     "confirmLink": "Confirm link",
     "rejectLink": "Reject",
     "operationFailed": "Operation failed",
@@ -254,6 +267,7 @@
     "image": "Image",
     "undo": "Undo",
     "redo": "Redo",
+    "rewrite": "Rewrite with AI",
     "metadata": "Metadata",
     "saveLoading": "Loading…",
     "saveSaved": "Saved",
@@ -336,6 +350,7 @@
     "ragPrompt": "Explain the selected term or sentence using the knowledge base:\n\n{text}\n\nFirst explain the meaning, then connect it to related topics or notes in this workspace, with citations."
   },
   "settings": {
+    "topicThresholdApplied": "Threshold applied; moved {count} notes automatically",
     "title": "Settings",
     "nav": {
       "model": "Model",
@@ -426,6 +441,8 @@
     "organizeRulesSurveyLevel2": "Level 2 topics",
     "organizeRulesSetupBtn": "Initial setup",
     "organizeRulesSaveBtn": "Save rules",
+    "topicAutoThresholdLabel": "Automatic filing threshold",
+    "topicAutoThresholdHint": "Default 0.80. Only a single AI topic suggestion at or above this threshold is filed automatically.",
     "organizeRulesSaved": "Organization rules saved",
     "ingestAutoLabel": "Auto-organize ingest",
     "ingestAutoDesc": "When on, opening a workspace or adding sources runs the ingest pipeline automatically. When off, ingest only runs manually.",
@@ -917,6 +934,7 @@
     "customTopicPlaceholder": "Enter custom topic",
     "suggestionTopicPlaceholder": "Enter topic name",
     "pendingHeader": "Topics to confirm",
+    "dragToFolderHint": "Drag to a folder on the left to file it; click an AI suggestion to move it now",
     "auto": {
       "Topic_主题创建成功": "[Topic] topiccreate成功:"
     }

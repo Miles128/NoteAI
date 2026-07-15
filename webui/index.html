@@ -547,6 +547,7 @@
                                 </svg>
                             </button>
                             <div class="tiptap-spacer"></div>
+                            <button class="tiptap-btn tiptap-ai-btn" id="tiptap-rewrite-btn" onclick="onLLMRewrite()" data-i18n-title="editor.rewrite"></button>
                         </div>
                         <div class="tiptap-editor-content" id="tiptap-editor"></div>
                     </div>
@@ -913,6 +914,11 @@
                                         <label class="schema-option-card"><input type="radio" name="organize-rules-survey-level" value="1"> <span data-i18n="settings.organizeRulesSurveyLevel1"></span></label>
                                         <label class="schema-option-card selected"><input type="radio" name="organize-rules-survey-level" value="2" checked> <span data-i18n="settings.organizeRulesSurveyLevel2"></span></label>
                                     </div>
+                                </div>
+                                <div class="form-group" style="margin-top:16px">
+                                    <label class="form-label" for="settings-topic-auto-threshold" data-i18n="settings.topicAutoThresholdLabel"></label>
+                                    <input type="number" id="settings-topic-auto-threshold" class="form-input" min="0" max="1" step="0.01" value="0.80">
+                                    <p class="settings-hint" data-i18n="settings.topicAutoThresholdHint"></p>
                                 </div>
                                 <div class="btn-group btn-group-spacing" style="margin-top:16px">
                                     <button type="button" class="btn btn-secondary" id="settings-organize-rules-setup-btn" data-i18n="settings.organizeRulesSetupBtn"></button>

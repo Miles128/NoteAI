@@ -26,6 +26,9 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
+      - name: Verify one active PRD
+        run: uv run python scripts/check_prd_single_source.py
+
   python-typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -32,6 +32,19 @@ async function* walkNotes(root) {
   }
 }
 
+async function listTopicPaths(root, parts = []) {
+  if (parts.length >= 3) return [];
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const topics = [];
+  for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const nextParts = [...parts, entry.name];
+    topics.push(nextParts.join(' > '));
+    topics.push(...await listTopicPaths(path.join(root, entry.name), nextParts));
+  }
+  return topics;
+}
+
 async function readNote(notePath) {
   const content = await fs.readFile(notePath, 'utf-8');
   const rel = path.relative(process.cwd(), notePath);
@@ -105,13 +118,10 @@ export function createTools(workspacePath) {
     },
 
     vault_list_topics: async () => {
-      const guidePath = path.join(root, 'wiki', 'GUIDE.md');
-      let text = '';
-      try {
-        text = await fs.readFile(guidePath, 'utf-8');
-      } catch {
-        text = 'No wiki/GUIDE.md found. Use the file tree under Notes/ as the topic structure.';
-      }
+      const topics = await listTopicPaths(path.join(root, 'Notes'));
+      const text = topics.length
+        ? `Topic paths from Notes/:\n${topics.map(topic => `- ${topic}`).join('\n')}`
+        : 'No topic folders found under Notes/.';
       return {
         content: [{ type: 'text', text }]
       };

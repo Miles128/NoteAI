@@ -499,6 +499,41 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         return {"success": True, "message": f"已确认主题「{topic}」"}
 
+    def _keep_note_in_topic(self, params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            from sidecar.topic_placement import keep_note_in_current_topic
+
+            return keep_note_in_current_topic(
+                workspace,
+                (params.get("file_path") or "").strip(),
+                (params.get("current_topic") or "").strip(),
+                (params.get("suggested_topic") or "").strip(),
+            )
+        except (OSError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
+
+    def _apply_topic_placement_threshold(self, _params):
+        workspace = config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        from sidecar.topic_placement import auto_move_misplaced_notes
+
+        result = auto_move_misplaced_notes(workspace)
+        moves = result.get("moved") or []
+        affected_topics = {
+            str(topic)
+            for move in moves
+            for topic in (move.get("current_topic"), move.get("suggested_topic"))
+            if topic
+        }
+        for topic in affected_topics:
+            self._start_task(f"cascade_topic_move_{topic}", self._do_cascade_survey_update, args=(topic,))
+        result["moved_count"] = len(moves)
+        return result
+
     def _get_activity_log(self, params):
         limit = params.get("limit", 50)
         return {"entries": get_entries(limit)}
@@ -518,6 +553,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("rename_topic", self._rename_topic)
         router.register("delete_topic", self._delete_topic)
         router.register("resolve_topic", self._resolve_topic)
+        router.register("keep_note_in_topic", self._keep_note_in_topic)
+        router.register("apply_topic_placement_threshold", self._apply_topic_placement_threshold)
         router.register("get_all_topic_names", self._get_all_topic_names)
         router.register("get_file_topics", self._get_file_topics)
         router.register("get_topic_files", self._get_topic_files)

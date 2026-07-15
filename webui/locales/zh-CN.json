@@ -69,6 +69,8 @@
     "discoverLinksTitle": "发现链接：AI 分析文章关联"
   },
   "pending": {
+    "moveToTopic": "挪到 {topic}",
+    "keepInTopic": "留在 {topic}",
     "title": "待处理",
     "hint": "主题/链接确认、综述失败、转换失败与健康检查问题，统一在此处理。",
     "empty": "没有待处理的事项",
@@ -92,8 +94,21 @@
     "typeConvert": "转换失败",
     "typeIngest": "入库任务",
     "retryItem": "重试",
+    "rewriteSurvey": "重写综述",
+    "retryStarted": "任务已开始，完成后会自动刷新",
     "dismissItem": "忽略",
     "itemNeedsReview": "需要处理",
+    "reviewDuplicate": "审阅并整合",
+    "typeMergeCandidate": "合并建议",
+    "reviewMergeGroup": "审阅合并",
+    "mergeCandidateScore": "综合相似度 {score}%",
+    "mergeGroupConfirm": "将审阅并整合这 {count} 篇笔记",
+    "deleteOriginalsOnce": "是否一次性授权：整合成功且无冲突时，将这些原笔记移入废纸篓？\n取消将保留全部原文。",
+    "exactDuplicate": "检测到完全重复内容",
+    "nearDuplicate": "检测到高度相似内容",
+    "mergeConfirm": "是否创建一篇新的整合笔记？原笔记不会修改。",
+    "mergeTitlePrompt": "请输入整合笔记标题",
+    "mergeDone": "整合笔记已创建",
     "confirmLink": "确认链接",
     "rejectLink": "拒绝",
     "operationFailed": "操作失败",
@@ -254,6 +269,7 @@
     "image": "图片",
     "undo": "撤销",
     "redo": "重做",
+    "rewrite": "AI 重写",
     "metadata": "元数据",
     "saveLoading": "加载中...",
     "saveSaved": "已保存",
@@ -336,6 +352,7 @@
     "ragPrompt": "请基于知识库解释下面选中的词语或句子：\n\n{text}\n\n要求：先解释含义，再说明它在当前知识库中可能关联的主题或资料，并给出引用。"
   },
   "settings": {
+    "topicThresholdApplied": "阈值已应用，自动移动 {count} 篇笔记",
     "title": "设置",
     "nav": {
       "model": "模型",
@@ -426,6 +443,8 @@
     "organizeRulesSurveyLevel2": "二级主题",
     "organizeRulesSetupBtn": "首次配置",
     "organizeRulesSaveBtn": "保存规则",
+    "topicAutoThresholdLabel": "自动归类阈值",
+    "topicAutoThresholdHint": "默认 0.80。只有 AI 给出单一主题建议且达到阈值时才自动移动；降低会更积极，提高会留下更多待处理项。",
     "organizeRulesSaved": "整理规则已保存",
     "ingestAutoLabel": "自动整理入库",
     "ingestAutoDesc": "开启后，打开工作区或新增资料时自动运行整理流水线；关闭后仅在手动触发时运行",
@@ -917,6 +936,7 @@
     "customTopicPlaceholder": "输入自定义主题",
     "suggestionTopicPlaceholder": "输入主题名称",
     "pendingHeader": "待确认主题",
+    "dragToFolderHint": "拖到左侧文件夹即可归类；点击 AI 建议会立即移动",
     "auto": {
       "Topic_主题创建成功": "[Topic] 主题创建成功:"
     }

@@ -396,6 +396,35 @@ class SemanticHandler(BaseHandler):
             return {"success": False, "message": str(exc)}
         return {"success": item is not None, "item": item}
 
+    def _get_topic_wiki_page(self, params):
+        topic = str(params.get("topic", "") or "").strip()
+        store = self._store()
+        if not topic or store is None:
+            return {"success": False, "message": "主题不能为空或未设置工作区"}
+        from sidecar.semantic.wiki import build_topic_wiki_page
+
+        page = build_topic_wiki_page(store, topic)
+        return {
+            "success": True,
+            "topic": topic,
+            "content": page["content"],
+            "blocked_claim_ids": page["blocked_claim_ids"],
+            "target": str(page["target"].relative_to(store.workspace)),
+        }
+
+    def _publish_topic_wiki_page(self, params):
+        topic = str(params.get("topic", "") or "").strip()
+        store = self._store()
+        if not topic or store is None:
+            return {"success": False, "message": "主题不能为空或未设置工作区"}
+        from sidecar.semantic.wiki import materialize_topic_wiki_page
+
+        try:
+            target = materialize_topic_wiki_page(store, topic)
+        except OSError as exc:
+            return {"success": False, "message": f"语义页发布失败：{exc}"}
+        return {"success": True, "topic": topic, "path": str(target.relative_to(store.workspace))}
+
     def _conflicts(self, store: SemanticStore, params: dict):
         limit, offset = self._page(params)
         status = str(params.get("status", "pending") or "pending")
@@ -493,3 +522,5 @@ class SemanticHandler(BaseHandler):
         router.register("set_semantic_claim_status", self._set_claim_status)
         router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
+        router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
+        router.register("publish_semantic_topic_wiki_page", self._publish_topic_wiki_page)

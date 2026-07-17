@@ -34,7 +34,8 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
                 JOIN evidence e ON e.claim_id = c.id
                 JOIN blocks b ON b.id = e.block_id
                 JOIN documents d ON d.id = b.document_id
-                WHERE c.status = 'active' AND (d.topic = ? OR instr(d.topic, ?) = 1)
+                WHERE c.status = 'active' AND e.status = 'active'
+                  AND (d.topic = ? OR instr(d.topic, ?) = 1)
                 ORDER BY c.statement
                 """,
                 (topic, topic_prefix),
@@ -49,7 +50,7 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
                 FROM evidence e
                 JOIN blocks b ON b.id = e.block_id
                 JOIN documents d ON d.id = b.document_id
-                WHERE d.topic = ? OR instr(d.topic, ?) = 1
+                WHERE e.status = 'active' AND (d.topic = ? OR instr(d.topic, ?) = 1)
                 ORDER BY d.path, b.ordinal
                 """,
                 (topic, topic_prefix),

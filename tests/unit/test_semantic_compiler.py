@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from sidecar.semantic.extractor import (
 from sidecar.semantic.parser import parse_semantic_blocks
 from sidecar.semantic.store import SemanticStore
 from sidecar.semantic.topic_state import build_topic_state, materialize_topic_state
+from sidecar.semantic.wiki import build_topic_wiki_page, materialize_topic_wiki_page
 
 
 def _note(workspace: Path, content: str) -> Path:
@@ -562,6 +564,49 @@ def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish
 
     assert target.read_text(encoding="utf-8") == original
     assert store.view_dependencies(state["topic_id"], "topic_state") == dependencies
+
+
+def test_topic_wiki_page_only_publishes_active_evidence_and_gates_pending_conflicts(tmp_path: Path):
+    note = _note(tmp_path, "---\ntopic: RAG\n---\n\n正文证据。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    extract_document_semantics(
+        store,
+        compiled["document_id"],
+        llm_call=lambda _: '''{
+          "concepts": [], "entities": [], "claims": [{
+            "statement": "该方案可能提升召回", "claim_type": "hypothesis",
+            "scope": "RAG", "confidence": 0.8, "evidence_quote": "正文证据。"
+          }]
+        }''',
+    )
+    state = build_topic_state(store, "RAG")
+    claim_id = state["claims"][0]["id"]
+    evidence_id = state["claims"][0]["evidence"][0]["block_id"]
+
+    page = build_topic_wiki_page(store, "RAG")
+    assert "**假设：** 该方案可能提升召回" in page["content"]
+    assert "Notes/RAG/测试.md" in page["content"]
+    target = materialize_topic_wiki_page(store, "RAG")
+    assert target == page["target"]
+    assert target.exists()
+
+    with store.connect() as conn:
+        conn.execute(
+            """INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at)
+               VALUES('conflict-gate', 'claim_conflict', ?, '待审阅', 'pending', 'now')""",
+            (json.dumps({"claim_id": claim_id}),),
+        )
+    gated = build_topic_wiki_page(store, "RAG")
+    assert gated["blocked_claim_ids"] == [claim_id]
+    assert "暂不发布到本页" in gated["content"]
+    assert "**假设：** 该方案可能提升召回" not in gated["content"]
+
+    with store.connect() as conn:
+        conn.execute("UPDATE evidence SET status = 'excluded' WHERE block_id = ?", (evidence_id,))
+        conn.execute("UPDATE review_queue SET status = 'reviewed' WHERE id = 'conflict-gate'")
+    excluded = build_topic_wiki_page(store, "RAG")
+    assert excluded["claims"] == []
 
 
 def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):

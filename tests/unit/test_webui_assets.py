@@ -132,6 +132,9 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert "get_semantic_detail" in api_js
     assert "start_semantic_full_compile" in api_js
     assert "review_semantic_conflict" in api_js
+    assert "get_semantic_topic_wiki_page" in api_js
+    assert "publish_semantic_topic_wiki_page" in api_js
+    assert "data-preview-topic-page" in workbench_js
     assert "data-open-path" in workbench_js
     assert "semantic.claimTypes." in workbench_js
     assert ".catch(function(error)" in workbench_js

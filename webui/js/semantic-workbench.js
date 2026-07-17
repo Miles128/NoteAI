@@ -249,7 +249,9 @@ function renderClaimControls(item) {
     var statusButton = deleted
         ? '<button class="primary" data-claim-status="active">' + esc(t('semantic.restoreClaim')) + '</button>'
         : '<button class="danger" data-claim-status="deleted">' + esc(t('semantic.deleteClaim')) + '</button>';
-    return '<div class="semantic-actions"><button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + '</div>' +
+    var topic = ((item.sources || [])[0] || {}).topic || '';
+    var pageActions = topic ? '<button data-preview-topic-page="' + esc(topic) + '">' + esc(t('semantic.previewTopicPage')) + '</button><button data-publish-topic-page="' + esc(topic) + '">' + esc(t('semantic.publishTopicPage')) + '</button>' : '';
+    return '<div class="semantic-actions"><button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + pageActions + '</div>' +
         '<form class="semantic-claim-editor" hidden><label>' + esc(t('semantic.claimStatement')) + '<textarea name="statement" required>' + esc(item.statement || '') + '</textarea></label><label>' + esc(t('semantic.claimScope')) + '<input name="scope" value="' + esc(item.scope || '') + '"></label><label>' + esc(t('semantic.claimType')) + '<select name="claim_type"><option value="conclusion"' + (item.claim_type === 'conclusion' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.conclusion')) + '</option><option value="hypothesis"' + (item.claim_type === 'hypothesis' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.hypothesis')) + '</option></select></label><div class="semantic-actions"><button type="submit" class="primary">' + esc(t('common.save')) + '</button><button type="button" data-cancel-claim-edit>' + esc(t('common.cancel')) + '</button></div></form>';
 }
 
@@ -383,6 +385,31 @@ function onDetailClick(event) {
     if (cancelEdit) {
         var editForm = document.querySelector('.semantic-claim-editor');
         if (editForm) editForm.hidden = true;
+        return;
+    }
+    var previewTopic = event.target.closest('[data-preview-topic-page]');
+    if (previewTopic && window.api.getSemanticTopicWikiPage) {
+        var previewButton = previewTopic;
+        previewButton.disabled = true;
+        window.api.getSemanticTopicWikiPage(previewButton.dataset.previewTopicPage).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            var detail = document.getElementById('semantic-workbench-detail');
+            if (detail) detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(t('semantic.topicPagePreview')) + '</p><h2>' + esc(result.topic) + '</h2><pre class="semantic-topic-page-preview">' + esc(result.content || '') + '</pre></div>';
+        }).catch(function(error) {
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        }).finally(function() { previewButton.disabled = false; });
+        return;
+    }
+    var publishTopic = event.target.closest('[data-publish-topic-page]');
+    if (publishTopic && window.api.publishSemanticTopicWikiPage) {
+        var publishButton = publishTopic;
+        publishButton.disabled = true;
+        window.api.publishSemanticTopicWikiPage(publishButton.dataset.publishTopicPage).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            if (window.ToastModule) window.ToastModule.success(t('semantic.topicPagePublished'));
+        }).catch(function(error) {
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        }).finally(function() { publishButton.disabled = false; });
         return;
     }
     var claimStatus = event.target.closest('[data-claim-status]');

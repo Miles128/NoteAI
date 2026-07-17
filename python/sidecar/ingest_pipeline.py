@@ -772,6 +772,7 @@ def run_ingest(
             from sidecar.semantic.compiler import compile_semantic_batch
             from sidecar.semantic.store import SemanticStore
             from sidecar.semantic.topic_state import materialize_topic_state
+            from sidecar.semantic.wiki import materialize_topic_wiki_page
 
             ws_path = Path(workspace)
             store = SemanticStore(workspace)
@@ -808,20 +809,26 @@ def run_ingest(
                 ) | removed_topics
                 affected_topics.update(semantic_topics)
                 materialized = 0
+                wiki_pages = 0
                 for topic in sorted(semantic_topics):
                     try:
                         materialize_topic_state(store, topic)
                         materialized += 1
+                        materialize_topic_wiki_page(store, topic)
+                        wiki_pages += 1
                     except Exception as exc:
                         stats["semantic_failures"].append(
                             {"topic": topic, "error": f"TopicState: {exc}"}
                         )
                 stats["semantic_topic_states"] = materialized
+                stats["semantic_wiki_pages"] = wiki_pages
             elif removed_topics:
                 affected_topics.update(removed_topics)
                 for topic in sorted(removed_topics):
                     materialize_topic_state(store, topic)
+                    materialize_topic_wiki_page(store, topic)
                 stats["semantic_topic_states"] = len(removed_topics)
+                stats["semantic_wiki_pages"] = len(removed_topics)
             prog(
                 "semantic",
                 0.52,

@@ -409,6 +409,8 @@ var API_DEFS = [
     { name: 'updateSemanticClaim', method: 'update_semantic_claim', params: function(id, statement, scope, claimType) { return { id: id, statement: statement, scope: scope || '', claim_type: claimType }; }, write: true },
     { name: 'setSemanticClaimStatus', method: 'set_semantic_claim_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
     { name: 'setSemanticEvidenceStatus', method: 'set_semantic_evidence_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
+    { name: 'getSemanticTopicWikiPage', method: 'get_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; } },
+    { name: 'publishSemanticTopicWikiPage', method: 'publish_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'addSemanticEntityAlias', method: 'add_semantic_entity_alias', params: function(id, alias) { return { id: id, alias: alias }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
     { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },

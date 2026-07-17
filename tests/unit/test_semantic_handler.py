@@ -157,6 +157,16 @@ def test_evidence_exclusion_and_entity_alias_are_audited(
     assert entity["item"]["audit"][0]["action"] == "add_alias"
 
 
+def test_topic_wiki_page_can_be_previewed_and_published(semantic_handler: SemanticHandler) -> None:
+    preview = semantic_handler._get_topic_wiki_page({"topic": "AI > RAG"})
+    published = semantic_handler._publish_topic_wiki_page({"topic": "AI > RAG"})
+
+    assert preview["success"] is True
+    assert "# AI > RAG" in preview["content"]
+    assert published["success"] is True
+    assert published["path"].endswith("RAG_语义.md")
+
+
 def test_unknown_tab_is_rejected(semantic_handler: SemanticHandler) -> None:
     result = semantic_handler._get_workbench({"tab": "everything"})
     assert result["success"] is False

@@ -119,4 +119,17 @@ def materialize_topic_state(store: SemanticStore, topic: str) -> Path:
         except OSError:
             pass
         raise
+    source_ids = {item["id"] for item in state["documents"]} | {
+        item["id"] for item in state["claims"]
+    } | {
+        evidence["block_id"]
+        for claim in state["claims"]
+        for evidence in claim["evidence"]
+    }
+    store.replace_view_dependencies(
+        view_id=state["topic_id"],
+        view_kind="topic_state",
+        input_hash=state["input_hash"],
+        source_ids=source_ids,
+    )
     return target

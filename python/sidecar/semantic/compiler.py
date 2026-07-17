@@ -69,6 +69,7 @@ def compile_note_semantics(workspace: str | Path, file_path: str | Path) -> dict
             "file": relative,
             "document_id": document_id,
             "blocks": len(store.blocks_for_document(document_id)),
+            "affected_topics": [],
         }
 
     meta, _ = parse_frontmatter(raw)
@@ -107,6 +108,16 @@ def compile_note_semantics(workspace: str | Path, file_path: str | Path) -> dict
         "file": relative,
         "document_id": document_id,
         "blocks": len(blocks),
+        "affected_topics": sorted(
+            {
+                topic
+                for topic in (
+                    str(previous["topic"]) if previous is not None else "",
+                    str(meta.get("topic") or ""),
+                )
+                if topic
+            }
+        ),
     }
 
 
@@ -131,6 +142,7 @@ def compile_semantic_batch(
         "failed_blocks": 0,
         "pending_documents": 0,
         "topics": set(),
+        "affected_topics": set(),
         "failures": [],
     }
     total = len(file_paths)
@@ -153,6 +165,7 @@ def compile_semantic_batch(
             document = store.document(compiled["file"])
             if document is not None and document["topic"]:
                 stats["topics"].add(document["topic"])
+            stats["affected_topics"].update(compiled.get("affected_topics") or [])
             compiled_documents.append((compiled["file"], compiled["document_id"]))
         except Exception as exc:
             stats["failures"].append({"file": str(file_path), "error": str(exc)})
@@ -201,4 +214,5 @@ def compile_semantic_batch(
                         pending.cancel()
                     break
     stats["topics"] = sorted(stats["topics"])
+    stats["affected_topics"] = sorted(stats["affected_topics"])
     return stats

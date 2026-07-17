@@ -10,6 +10,7 @@
         // 存储键名常量，集中管理避免冲突
         KEYS: {
             GRAPH_LAYOUT: 'noteai.graphLayout.v2',
+            GRAPH_LAYOUT_MODE: 'noteai.graphLayoutMode.v1',
             THEME: 'noteai_theme',
             ACCENT_COLOR: 'noteai_accent_color',
             DOWNLOADER_CONFIG: 'downloader-config',

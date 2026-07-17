@@ -392,6 +392,41 @@ class SemanticStore:
         with self.connect() as conn:
             conn.execute("UPDATE documents SET status = ? WHERE id = ?", (status, document_id))
 
+    def replace_view_dependencies(
+        self,
+        *,
+        view_id: str,
+        view_kind: str,
+        input_hash: str,
+        source_ids: set[str],
+    ) -> None:
+        """Replace the complete dependency snapshot for one materialized view."""
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM dependencies WHERE target_id = ? AND target_kind = ?",
+                (view_id, view_kind),
+            )
+            conn.executemany(
+                """INSERT INTO dependencies(source_id, target_id, target_kind, input_hash)
+                   VALUES(?, ?, ?, ?)""",
+                (
+                    (source_id, view_id, view_kind, input_hash)
+                    for source_id in sorted(source_ids)
+                ),
+            )
+
+    def view_dependencies(self, view_id: str, view_kind: str) -> list[sqlite3.Row]:
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    """SELECT source_id, target_id, target_kind, input_hash
+                       FROM dependencies
+                       WHERE target_id = ? AND target_kind = ?
+                       ORDER BY source_id""",
+                    (view_id, view_kind),
+                )
+            )
+
     def extraction_is_current(self, block_id: str, block_hash: str, prompt_version: int) -> bool:
         with self.connect() as conn:
             row = conn.execute(

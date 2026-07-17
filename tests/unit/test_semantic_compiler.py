@@ -492,14 +492,76 @@ def test_deleting_source_purges_evidence_and_orphan_claim(tmp_path: Path):
           }]
         }""",
     )
+    topic_state = build_topic_state(store, "RAG")
+    materialize_topic_state(store, "RAG")
     note.unlink()
 
     topics = store.purge_missing_documents()
     assert topics == ["RAG"]
+    materialize_topic_state(store, "RAG")
     with store.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 0
+    assert store.view_dependencies(topic_state["topic_id"], "topic_state") == []
+
+
+def test_compile_tracks_old_and_new_topics_without_rebuilding_unrelated_notes(tmp_path: Path):
+    note = _note(tmp_path, "---\ntopic: A\n---\n\n原内容。\n")
+    first = compile_note_semantics(tmp_path, note)
+    assert first["affected_topics"] == ["A"]
+
+    other = tmp_path / "Notes" / "B" / "无关.md"
+    other.parent.mkdir(parents=True)
+    other.write_text("---\ntopic: B\n---\n\n无关内容。\n", encoding="utf-8")
+    compile_note_semantics(tmp_path, other)
+
+    note.write_text("---\ntopic: C\n---\n\n修改后的内容。\n", encoding="utf-8")
+    result = compile_semantic_batch(tmp_path, [note], extract=False)
+
+    assert result["affected_topics"] == ["A", "C"]
+    assert "B" not in result["affected_topics"]
+
+
+def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish_failure(
+    tmp_path: Path, monkeypatch
+):
+    note = _note(tmp_path, "---\ntopic: RAG\n---\n\n正文证据。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    extract_document_semantics(
+        store,
+        compiled["document_id"],
+        llm_call=lambda _: '''{
+          "concepts": [], "entities": [], "claims": [{
+            "statement": "该证据支持当前结论", "claim_type": "conclusion",
+            "scope": "RAG", "confidence": 0.9, "evidence_quote": "正文证据。"
+          }]
+        }''',
+    )
+    target = materialize_topic_state(store, "RAG")
+    original = target.read_text(encoding="utf-8")
+    state = build_topic_state(store, "RAG")
+    dependencies = store.view_dependencies(state["topic_id"], "topic_state")
+    assert {row["source_id"] for row in dependencies} == {
+        compiled["document_id"],
+        state["claims"][0]["id"],
+        state["claims"][0]["evidence"][0]["block_id"],
+    }
+
+    def fail_replace(_source, _target):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr("sidecar.semantic.topic_state.os.replace", fail_replace)
+    try:
+        materialize_topic_state(store, "RAG")
+    except OSError as exc:
+        assert "disk unavailable" in str(exc)
+    else:
+        raise AssertionError("expected atomic publish to fail")
+
+    assert target.read_text(encoding="utf-8") == original
+    assert store.view_dependencies(state["topic_id"], "topic_state") == dependencies
 
 
 def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):

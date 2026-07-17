@@ -803,7 +803,9 @@ def run_ingest(
                 stats["semantic_failed_blocks"] = semantic_stats["failed_blocks"]
                 stats["semantic_pending_documents"] = semantic_stats["pending_documents"]
                 stats["semantic_failures"] = semantic_stats["failures"]
-                semantic_topics = set(semantic_stats["topics"]) | removed_topics
+                semantic_topics = set(
+                    semantic_stats.get("affected_topics", semantic_stats["topics"])
+                ) | removed_topics
                 affected_topics.update(semantic_topics)
                 materialized = 0
                 for topic in sorted(semantic_topics):

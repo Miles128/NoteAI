@@ -83,6 +83,7 @@
     "conflictCount": "{count} 项待审阅冲突",
     "scope": "适用范围：{scope}",
     "evidenceCount": "{count} 条证据",
+    "claimTypes": {"conclusion": "结论", "hypothesis": "假设"},
     "mentions": "{count} 次出现",
     "sources": "{count} 个来源",
     "markReviewed": "标记已审阅",

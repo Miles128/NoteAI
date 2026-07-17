@@ -83,6 +83,7 @@
     "conflictCount": "{count} conflicts to review",
     "scope": "Scope: {scope}",
     "evidenceCount": "{count} evidence items",
+    "claimTypes": {"conclusion": "Conclusion", "hypothesis": "Hypothesis"},
     "mentions": "{count} mentions",
     "sources": "{count} sources",
     "markReviewed": "Mark reviewed",

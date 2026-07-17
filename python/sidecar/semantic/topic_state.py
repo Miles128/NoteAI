@@ -29,7 +29,7 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
         claims = list(
             conn.execute(
                 """
-                SELECT DISTINCT c.id, c.statement, c.scope, c.confidence
+                SELECT DISTINCT c.id, c.statement, c.scope, c.claim_type, c.confidence
                 FROM claims c
                 JOIN evidence e ON e.claim_id = c.id
                 JOIN blocks b ON b.id = e.block_id

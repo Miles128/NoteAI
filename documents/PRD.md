@@ -1,6 +1,6 @@
 # NoteAI PRD — AI 原生个人知识库
 
-**版本**：v3.6
+**版本**：v3.7
 **日期**：2026-07-17
 **状态**：当前产品定义（唯一有效 PRD）
 
@@ -278,12 +278,19 @@ Phase 1 固定支持以下对象，不允许模型自由扩展类型：
 | Topic | 来自 Notes 文件夹的主题 | 生成主题综述 |
 | Concept | 可复用的知识概念 | 仅入库 |
 | Entity | 人物、组织、产品、模型、协议等 | 仅入库 |
-| Claim | 可由来源支持的命题 | 进入 TopicState |
+| Claim | 作者基于材料得出的结论性判断或明确提出的假设 | 进入 TopicState |
 | Evidence | Claim 到源 Block 的证据边 | 否 |
 
 关系类型固定为 `IS_A`、`PART_OF`、`RELATED_TO`、`USES`、`SUPPORTS`、`CONTRADICTS`、`COMPARES_WITH`、`CAUSES`、`PRECEDES`、`APPLIES_TO`、`DEFINED_BY`、`MENTIONED_IN`。Phase 1 仅要求实现 `MENTIONED_IN`、`SUPPORTS` 和主题归属；其他关系按后续阶段启用。
 
-每个正式 Claim 必须包含：规范化陈述、适用范围、抽取置信度、至少一个 Evidence、来源文档 ID 和来源块 ID。置信度表示抽取可靠程度，不表示命题为真的概率。
+每个正式 Claim 必须包含：规范化陈述、适用范围、`conclusion` 或 `hypothesis` 类型、抽取置信度、至少一个 Evidence、来源文档 ID 和来源块 ID。置信度表示抽取可靠程度，不表示命题为真的概率。
+
+Claim 层只保存具有知识判断价值的内容：
+
+- `conclusion`：作者明确得出的评价、比较结论、因果判断、趋势判断、预测、推荐或由前文推导出的结论；
+- `hypothesis`：作者明确提出、尚待验证或带条件成立的假设、推测和研究命题。
+
+以下内容即使真实、可引用，也不得生成 Claim 或 Evidence：定义与术语解释、产品属性、日期数字、普通事实罗列、背景介绍、命令及参数说明、API/配置说明、安装步骤、操作指引、示例、代码行为复述和标题改写。这些信息继续保留在 Block、Concept、Entity 与全文检索层。Evidence 只为通过上述类型门禁的 Claim 创建，不把“有原文依据”误等同于“值得成为命题”。
 
 ### 10.4 编译数据流
 
@@ -331,6 +338,9 @@ Scan → Normalize → Parse → Semantic Extract → Resolve → Link
 - LLM 生成的综合推论必须标记为推论，并保留其依赖 Claim 列表，不能伪装成源资料事实。
 - Phase 1 不自动生成实体页、不构建全连接图、不提供自动删除、不静默合并低置信度实体。
 - RAG 回答仍优先引用 Notes 源块；Wiki 和 TopicState 可用于组织上下文，但不能成为唯一事实证据。
+- Claim 类型必须由受控枚举校验；缺少类型、类型不受支持或属于事实/说明/指令的候选一律拒绝入库。
+- Claim 抽取策略版本升级时，旧策略生成的 Claim/Evidence 作为派生数据失效并重新抽取；不得保留旧噪声，也不得修改 Notes 原文。
+- Claim/Evidence 提供独立增量编译通道与独立块状态。执行“仅重编命题和证据”时，不重新抽取、不覆盖、不失效 Concept、Entity 及其来源关系。
 
 ### 10.8 分阶段范围
 
@@ -359,6 +369,9 @@ Scan → Normalize → Parse → Semantic Extract → Resolve → Link
 - 同一未修改文档重复编译得到相同的 Document/Block ID，且不会新增重复记录。
 - 修改一个块时，未修改块的 ID 和语义对象保持稳定。
 - 数据库中不存在没有 Evidence 的正式 Claim。
+- 数据库中不存在定义、命令说明、参数解释、操作步骤、普通事实陈述等伪 Claim；正式 Claim 仅来自 `conclusion` 或 `hypothesis`。
+- Claim 策略升级后，旧 Claim/Evidence 自动失效；重新编译不会把旧策略数据与新策略结果混合展示。
+- Claim-only 全库编译只写 Claim、Evidence、Claim mention 与 Claim extraction 状态；编译前后的 Concept/Entity 数量及 mention 必须保持不变。
 - Evidence 可以解析到存在的 Notes 文件和 Block；源文件内容哈希变化后旧证据不会被误当作当前证据。
 - LLM 缺失、超时、非法 JSON、单块失败、数据库写失败均有自动化测试覆盖。
 - 语义编译失败不阻止现有分类、RAG 文档索引和 WIKI 同步完成。

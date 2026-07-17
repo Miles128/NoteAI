@@ -193,7 +193,8 @@ class SemanticHandler(BaseHandler):
                 args = (query, like, like)
                 total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
                 rows = conn.execute(
-                    f"""SELECT c.id, c.statement, c.scope, c.confidence, count(e.id) AS evidence_count
+                    f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence,
+                               count(e.id) AS evidence_count
                         FROM claims c JOIN evidence e ON e.claim_id = c.id
                         {where} GROUP BY c.id ORDER BY c.confidence DESC, c.statement LIMIT ? OFFSET ?""",
                     (*args, limit, offset),
@@ -254,7 +255,7 @@ class SemanticHandler(BaseHandler):
         with store.connect() as conn:
             if kind == "claim":
                 row = conn.execute(
-                    "SELECT id, statement, scope, confidence, status FROM claims WHERE id = ?",
+                    "SELECT id, statement, scope, claim_type, confidence, status FROM claims WHERE id = ?",
                     (object_id,),
                 ).fetchone()
                 if row is None:

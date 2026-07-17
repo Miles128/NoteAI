@@ -35,7 +35,11 @@ def semantic_handler(tmp_path: Path):
         )
         conn.execute("INSERT INTO concepts VALUES('concept-1', '混合检索', '组合检索方式', 0.95, 'active')")
         conn.execute("INSERT INTO entities VALUES('entity-1', 'BM25', 'algorithm', '关键词排序算法', 0.9, 'active')")
-        conn.execute("INSERT INTO claims VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG', 0.92, 'active')")
+        conn.execute(
+            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
+               VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG',
+                      'conclusion', 0.92, 'active')"""
+        )
         conn.execute("INSERT INTO evidence VALUES('evidence-1', 'claim-1', 'block-1', 'quote-hash')")
         conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', 'block-1')")
         conn.execute("INSERT INTO semantic_mentions VALUES('entity-1', 'entity', 'block-1')")
@@ -71,6 +75,7 @@ def test_overview_and_claim_evidence_are_real(semantic_handler: SemanticHandler)
     assert overview["overview"]["source_documents"] == 1
     assert overview["overview"]["uncompiled_documents"] == 0
     assert claims["total"] == 1
+    assert claims["items"][0]["claim_type"] == "conclusion"
     assert claims["items"][0]["evidence"][0]["path"] == "Notes/AI/RAG.md"
     assert claims["items"][0]["evidence"][0]["heading_path"] == ["检索"]
 
@@ -110,6 +115,7 @@ def test_semantic_detail_returns_source_blocks(semantic_handler: SemanticHandler
     assert concept["success"] is True
     assert concept["item"]["sources"][0]["path"] == "Notes/AI/RAG.md"
     assert claim["item"]["sources"][0]["excerpt"] == "混合检索结合向量与关键词。"
+    assert claim["item"]["claim_type"] == "conclusion"
 
 
 def test_start_full_compile_uses_every_note(semantic_handler: SemanticHandler) -> None:

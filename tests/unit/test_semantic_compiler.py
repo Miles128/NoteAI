@@ -6,6 +6,7 @@ from pathlib import Path
 from sidecar.semantic.compiler import compile_note_semantics, compile_semantic_batch
 from sidecar.semantic.extractor import (
     ExtractionValidationError,
+    build_extraction_prompt,
     extract_document_semantics,
     parse_extraction_json,
     validate_extraction,
@@ -72,7 +73,7 @@ def test_batch_snapshots_all_documents_before_extraction(tmp_path: Path, monkeyp
     second.write_text("## 第二篇\n\n证据二。\n", encoding="utf-8")
     observed_document_counts: list[int] = []
 
-    def fake_extract(store: SemanticStore, _document_id: str):
+    def fake_extract(store: SemanticStore, _document_id: str, **_kwargs):
         with store.connect() as conn:
             observed_document_counts.append(conn.execute("SELECT count(*) FROM documents").fetchone()[0])
         return {"extracted": 0, "claims": 0, "failed": 0, "pending": False, "failures": []}
@@ -124,6 +125,7 @@ def test_validation_rejects_claim_without_exact_evidence():
         "claims": [
             {
                 "statement": "混合检索更好",
+                "claim_type": "conclusion",
                 "scope": "",
                 "confidence": 0.8,
                 "evidence_quote": "原文中不存在的句子",
@@ -138,6 +140,64 @@ def test_validation_rejects_claim_without_exact_evidence():
         raise AssertionError("expected evidence validation failure")
 
 
+def test_validation_rejects_facts_instructions_and_missing_claim_type():
+    for claim_type in (None, "fact", "instruction", "description"):
+        item = {
+            "statement": "--port 参数指定服务端口",
+            "scope": "CLI",
+            "confidence": 0.9,
+            "evidence_quote": "--port 参数指定服务端口。",
+        }
+        if claim_type is not None:
+            item["claim_type"] = claim_type
+        try:
+            validate_extraction(
+                {"concepts": [], "entities": [], "claims": [item]},
+                block_id="blk_instruction",
+                block_content="--port 参数指定服务端口。",
+            )
+        except ExtractionValidationError as exc:
+            assert "claim_type" in str(exc)
+        else:
+            raise AssertionError(f"expected {claim_type!r} claim type to be rejected")
+
+
+def test_validation_rejects_claim_from_code_block():
+    data = {
+        "concepts": [],
+        "entities": [],
+        "claims": [{
+            "statement": "该命令更适合生产环境",
+            "claim_type": "conclusion",
+            "scope": "部署",
+            "confidence": 0.8,
+            "evidence_quote": "uv run app.py",
+        }],
+    }
+    try:
+        validate_extraction(
+            data,
+            block_id="blk_code",
+            block_content="```bash\nuv run app.py\n```",
+            block_type="code",
+        )
+    except ExtractionValidationError as exc:
+        assert "代码块" in str(exc)
+    else:
+        raise AssertionError("expected code block claim to be rejected")
+
+
+def test_claim_prompt_excludes_facts_and_command_documentation():
+    prompt = build_extraction_prompt(
+        block_id="blk_test",
+        heading_path="CLI",
+        content="--port 参数指定服务端口。",
+    )
+    assert '"claim_type": "conclusion|hypothesis"' in prompt
+    assert "命令/参数/API/配置说明" in prompt
+    assert "不是 Claim" in prompt
+
+
 def test_extractor_persists_only_evidence_backed_claims(tmp_path: Path):
     note = _note(tmp_path, "## 定义\n\n混合检索结合向量检索与关键词检索。\n")
     compiled = compile_note_semantics(tmp_path, note)
@@ -148,7 +208,8 @@ def test_extractor_persists_only_evidence_backed_claims(tmp_path: Path):
           "concepts": [{"name": "混合检索", "description": "组合检索信号", "confidence": 0.9}],
           "entities": [],
           "claims": [{
-            "statement": "混合检索结合向量检索与关键词检索",
+            "statement": "混合检索比单一检索更稳健",
+            "claim_type": "conclusion",
             "scope": "检索系统",
             "confidence": 0.95,
             "evidence_quote": "混合检索结合向量检索与关键词检索。"
@@ -164,10 +225,129 @@ def test_extractor_persists_only_evidence_backed_claims(tmp_path: Path):
         assert conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 1
+        claim = conn.execute("SELECT claim_type FROM claims").fetchone()
+        assert claim["claim_type"] == "conclusion"
+        assert conn.execute("SELECT COUNT(*) FROM claim_extractions").fetchone()[0] == 1
 
     repeated = extract_document_semantics(store, compiled["document_id"], llm_call=fake_llm)
     assert repeated["extracted"] == 0
     assert repeated["skipped"] == 1
+
+
+def test_claim_only_compile_preserves_concepts_entities_and_full_extraction_state(tmp_path: Path):
+    note = _note(tmp_path, "## 判断\n\n该方案在当前数据集上更稳健。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    block = store.blocks_for_document(compiled["document_id"])[0]
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO concepts VALUES('concept-keep', '保留概念', '不应变化', 0.8, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities VALUES('entity-keep', '保留实体', 'product', '不应变化', 0.8, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO semantic_mentions VALUES('concept-keep', 'concept', ?)",
+            (block["id"],),
+        )
+        conn.execute(
+            "INSERT INTO semantic_mentions VALUES('entity-keep', 'entity', ?)",
+            (block["id"],),
+        )
+        conn.execute(
+            "INSERT INTO block_extractions VALUES(?, ?, 2, 'complete', 'now', NULL)",
+            (block["id"], block["content_hash"]),
+        )
+
+    response = """{
+      "claims": [{
+        "statement": "该方案在当前数据集上更稳健",
+        "claim_type": "conclusion",
+        "scope": "当前数据集",
+        "confidence": 0.9,
+        "evidence_quote": "该方案在当前数据集上更稳健。"
+      }]
+    }"""
+    result = extract_document_semantics(
+        store, compiled["document_id"], llm_call=lambda _: response, claims_only=True
+    )
+    assert result["claims"] == 1
+
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
+        assert conn.execute(
+            "SELECT COUNT(*) FROM semantic_mentions WHERE object_kind IN ('concept', 'entity')"
+        ).fetchone()[0] == 2
+        assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM claim_extractions").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 1
+
+    repeated = extract_document_semantics(
+        store, compiled["document_id"], llm_call=lambda _: response, claims_only=True
+    )
+    assert repeated["extracted"] == 0
+    assert repeated["skipped"] == 1
+
+
+def test_claim_identity_includes_claim_type():
+    source = "该方案可能更稳健。"
+
+    def parsed(claim_type: str) -> dict:
+        return validate_extraction(
+            {
+                "concepts": [],
+                "entities": [],
+                "claims": [
+                    {
+                        "statement": "该方案可能更稳健",
+                        "claim_type": claim_type,
+                        "scope": "当前数据集",
+                        "confidence": 0.8,
+                        "evidence_quote": source,
+                    }
+                ],
+            },
+            block_id="block-identity",
+            block_content=source,
+        )
+
+    conclusion = parsed("conclusion")["claims"][0]
+    hypothesis = parsed("hypothesis")["claims"][0]
+    assert conclusion["id"] != hypothesis["id"]
+
+
+def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
+    store = SemanticStore(tmp_path)
+    store.root.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(store.path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO schema_meta VALUES ('claim_policy_version', '3');
+            CREATE TABLE claims (
+                id TEXT PRIMARY KEY,
+                statement TEXT NOT NULL,
+                scope TEXT NOT NULL DEFAULT '',
+                confidence REAL NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active'
+            );
+            INSERT INTO claims VALUES ('legacy', '旧结论', '', 0.8, 'active');
+            """
+        )
+
+    store.initialize()
+
+    with store.connect() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)")}
+        claim = conn.execute("SELECT claim_type FROM claims WHERE id = 'legacy'").fetchone()
+        schema_version = conn.execute(
+            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+        ).fetchone()["value"]
+    assert "claim_type" in columns
+    assert claim["claim_type"] == "conclusion"
+    assert schema_version == "2"
 
 
 def test_extractor_records_invalid_json_as_partial(tmp_path: Path):
@@ -189,7 +369,7 @@ def test_extractor_repairs_invalid_output_once(tmp_path: Path):
     responses = iter(
         [
             "not json",
-            '{"concepts": [], "entities": [], "claims": [{"statement": "存在证据", "scope": "", "confidence": 0.8, "evidence_quote": "可追溯证据。"}]}',
+            '{"concepts": [], "entities": [], "claims": [{"statement": "该证据足以支持当前结论", "claim_type": "conclusion", "scope": "", "confidence": 0.8, "evidence_quote": "可追溯证据。"}]}',
         ]
     )
 
@@ -227,9 +407,9 @@ def test_default_extractor_batches_multiple_blocks(tmp_path: Path, monkeypatch):
         return f'''{{
           "blocks": [
             {{"block_id": "{blocks[0]['id']}", "concepts": [], "entities": [],
-              "claims": [{{"statement": "第一条", "scope": "", "confidence": 0.9, "evidence_quote": "证据一。"}}]}},
+              "claims": [{{"statement": "第一项方案更优", "claim_type": "conclusion", "scope": "", "confidence": 0.9, "evidence_quote": "证据一。"}}]}},
             {{"block_id": "{blocks[1]['id']}", "concepts": [], "entities": [],
-              "claims": [{{"statement": "第二条", "scope": "", "confidence": 0.9, "evidence_quote": "证据二。"}}]}}
+              "claims": [{{"statement": "第二项方案可能更稳健", "claim_type": "hypothesis", "scope": "", "confidence": 0.9, "evidence_quote": "证据二。"}}]}}
           ]
         }}'''
 
@@ -248,7 +428,7 @@ def test_extractor_discards_result_when_source_changes_during_call(tmp_path: Pat
 
     def mutate_source(_prompt: str) -> str:
         note.write_text("## 定义\n\n新证据。\n", encoding="utf-8")
-        return '{"concepts": [], "entities": [], "claims": [{"statement": "旧命题", "scope": "", "confidence": 0.8, "evidence_quote": "旧证据。"}]}'
+        return '{"concepts": [], "entities": [], "claims": [{"statement": "旧方案更好", "claim_type": "conclusion", "scope": "", "confidence": 0.8, "evidence_quote": "旧证据。"}]}'
 
     result = extract_document_semantics(store, compiled["document_id"], llm_call=mutate_source)
     assert result["failed"] == 1
@@ -276,6 +456,7 @@ def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
           "concepts": [], "entities": [],
           "claims": [{
             "statement": "混合检索结合两类检索信号",
+            "claim_type": "conclusion",
             "scope": "RAG",
             "confidence": 0.9,
             "evidence_quote": "混合检索结合向量检索与关键词检索。"
@@ -306,6 +487,7 @@ def test_deleting_source_purges_evidence_and_orphan_claim(tmp_path: Path):
           "concepts": [], "entities": [],
           "claims": [{
             "statement": "存在正文证据", "scope": "", "confidence": 0.9,
+            "claim_type": "conclusion",
             "evidence_quote": "正文证据。"
           }]
         }""",
@@ -318,3 +500,41 @@ def test_deleting_source_purges_evidence_and_orphan_claim(tmp_path: Path):
         assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 0
+
+
+def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):
+    note = _note(tmp_path, "## 判断\n\n该方案在当前数据集上更稳健。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    extract_document_semantics(
+        store,
+        compiled["document_id"],
+        llm_call=lambda _: """{
+          "concepts": [], "entities": [],
+          "claims": [{
+            "statement": "该方案在当前数据集上更稳健",
+            "claim_type": "conclusion",
+            "scope": "当前数据集",
+            "confidence": 0.9,
+            "evidence_quote": "该方案在当前数据集上更稳健。"
+          }]
+        }""",
+    )
+    with store.connect() as conn:
+        conn.execute(
+            "UPDATE schema_meta SET value = '1' WHERE key = 'claim_policy_version'"
+        )
+        assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
+
+    store.initialize()
+
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM blocks").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
+        assert conn.execute(
+            "SELECT status FROM documents WHERE id = ?", (compiled["document_id"],)
+        ).fetchone()[0] == "parsed"

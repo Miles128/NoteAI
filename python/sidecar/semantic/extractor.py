@@ -10,9 +10,10 @@ from datetime import datetime, timezone
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
+_CLAIM_TYPES = {"conclusion", "hypothesis"}
 _BATCH_MAX_BLOCKS = 8
 _BATCH_MAX_CHARS = 12_000
 
@@ -42,7 +43,13 @@ def parse_extraction_json(raw: str) -> dict:
     return data
 
 
-def validate_extraction(data: dict, *, block_id: str, block_content: str) -> dict:
+def validate_extraction(
+    data: dict,
+    *,
+    block_id: str,
+    block_content: str,
+    block_type: str = "paragraph",
+) -> dict:
     """Validate and canonicalize one block extraction.
 
     Claims without an exact source quote are rejected rather than downgraded.
@@ -90,19 +97,27 @@ def validate_extraction(data: dict, *, block_id: str, block_content: str) -> dic
         statement = normalize_text(str(item.get("statement") or ""))
         scope = normalize_text(str(item.get("scope") or ""))
         quote = normalize_text(str(item.get("evidence_quote") or ""))
+        claim_type = normalize_text(str(item.get("claim_type") or "")).lower()
         if not statement:
             raise ExtractionValidationError("claim 缺少 statement")
+        if claim_type not in _CLAIM_TYPES:
+            raise ExtractionValidationError(
+                "claim_type 只允许 conclusion 或 hypothesis；事实、说明和指令不能作为 Claim"
+            )
+        if block_type == "code":
+            raise ExtractionValidationError("代码块不能生成 Claim")
         if not quote:
             raise ExtractionValidationError("claim 缺少 evidence_quote")
         if quote not in normalized_block:
             raise ExtractionValidationError("evidence_quote 不是当前块的原文片段")
-        claim_id = stable_id("clm", statement.casefold(), scope.casefold())
+        claim_id = stable_id("clm", claim_type, statement.casefold(), scope.casefold())
         quote_hash = content_hash(quote)
         result["claims"].append(
             {
                 "id": claim_id,
                 "statement": statement,
                 "scope": scope,
+                "claim_type": claim_type,
                 "confidence": _bounded_confidence(item.get("confidence", 0.5)),
                 "evidence": {
                     "id": stable_id("evd", claim_id, block_id, quote_hash),
@@ -115,10 +130,13 @@ def validate_extraction(data: dict, *, block_id: str, block_content: str) -> dic
     return result
 
 
-def build_extraction_prompt(*, block_id: str, heading_path: str, content: str) -> str:
+def build_extraction_prompt(
+    *, block_id: str, heading_path: str, content: str, block_type: str = "paragraph"
+) -> str:
     return f"""你是 NoteAI 的语义编译器。只抽取当前原文明确支持的知识，不补充外部知识。
 
 块 ID：{block_id}
+块类型：{block_type}
 章节：{heading_path or '（无）'}
 原文：
 <source>
@@ -129,14 +147,17 @@ def build_extraction_prompt(*, block_id: str, heading_path: str, content: str) -
 {{
   "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
   "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-  "claims": [{{"statement": "原文明确支持的完整命题", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制的短证据"}}]
+  "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制的短证据"}}]
 }}
 
 规则：
-1. evidence_quote 必须逐字来自原文，不能改写。
-2. 没有明确证据的内容不要输出。
-3. confidence 表示抽取把握，范围 0 到 1。
-4. 无内容时返回对应空数组。"""
+1. Claim 不是“任何可验证陈述”。只有作者明确得出的评价、比较、因果、趋势、预测、推荐等结论，才标为 conclusion。
+2. 只有作者明确提出、尚待验证或带条件成立的推测/研究命题，才标为 hypothesis。
+3. 定义、术语解释、产品属性、日期数字、背景事实、命令/参数/API/配置说明、安装步骤、操作指引、示例、代码行为复述，一律不要放进 claims。
+4. 例如“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
+5. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
+6. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
+7. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。"""
 
 
 def build_repair_prompt(original_prompt: str, invalid_output: str, error: str) -> str:
@@ -153,7 +174,7 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
     sources = []
     for block in blocks:
         sources.append(
-            f"""<block id="{block['id']}">
+            f"""<block id="{block['id']}" type="{block['type']}">
 章节：{block['heading'] or '（无）'}
 原文：
 {block['content']}
@@ -171,16 +192,58 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
       "block_id": "输入中的原始 ID",
       "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
       "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-      "claims": [{{"statement": "完整命题", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "只从该 block 原文逐字复制"}}]
+      "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "只从该 block 原文逐字复制"}}]
     }}
   ]
 }}
 
 规则：
-1. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
-2. 没有明确知识的 Block 也必须返回，三个数组均为空。
-3. confidence 表示抽取把握，范围 0 到 1。
-4. 只输出 JSON，不要 Markdown 代码围栏。"""
+1. Claim 不是普通事实。只允许作者的评价/比较/因果/趋势/预测/推荐等结论（conclusion），或明确待验证的假设/推测（hypothesis）。
+2. 定义、术语解释、属性、日期数字、背景事实、命令/参数/API/配置说明、步骤、操作指引、示例、代码行为复述不得进入 claims；code 类型 Block 的 claims 必须为空。
+3. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
+4. 没有结论或假设的 Block 也必须返回，claims 为空；三个数组都无内容时均为空。
+5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。"""
+
+
+def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str) -> str:
+    return f"""你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
+
+块 ID：{block_id}
+块类型：{block_type}
+章节：{heading_path or '（无）'}
+原文：
+<source>
+{content}
+</source>
+
+只输出 JSON：
+{{"claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制"}}]}}
+
+只有评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测才可进入 claims。
+定义、术语解释、属性、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
+code 类型块必须返回空 claims。evidence_quote 必须逐字来自原文。无结论或假设时返回 {{"claims": []}}。"""
+
+
+def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
+    sources = []
+    for block in blocks:
+        sources.append(
+            f"""<block id="{block['id']}" type="{block['type']}">
+章节：{block['heading'] or '（无）'}
+原文：
+{block['content']}
+</block>"""
+        )
+    return f"""你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
+
+{chr(10).join(sources)}
+
+必须为每个 block_id 返回一项，只输出 JSON：
+{{"blocks": [{{"block_id": "原始 ID", "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "同一块原文逐字复制"}}]}}]}}
+
+只允许评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测。
+定义、术语解释、属性、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
+code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。"""
 
 
 def validate_batch_extraction(data: dict, blocks: list[dict]) -> dict[str, dict]:
@@ -201,6 +264,7 @@ def validate_batch_extraction(data: dict, blocks: list[dict]) -> dict[str, dict]
             item,
             block_id=block_id,
             block_content=expected[block_id]["content"],
+            block_type=expected[block_id]["type"],
         )
     missing = set(expected) - set(actual)
     if missing:
@@ -230,6 +294,7 @@ def extract_document_semantics(
     document_id: str,
     *,
     llm_call: Callable[[str], str] | None = None,
+    claims_only: bool = False,
 ) -> dict:
     """Extract all pending blocks, degrading cleanly when no LLM is configured."""
     use_batch = llm_call is None
@@ -252,13 +317,19 @@ def extract_document_semantics(
     failures: list[dict] = []
     pending_blocks = []
     for block in store.blocks_for_document(document_id):
-        if store.extraction_is_current(block["id"], block["content_hash"], PROMPT_VERSION):
+        is_current = (
+            store.claim_extraction_is_current
+            if claims_only
+            else store.extraction_is_current
+        )
+        if is_current(block["id"], block["content_hash"], PROMPT_VERSION):
             skipped += 1
             continue
         pending_blocks.append(
             {
                 "id": block["id"],
                 "hash": block["content_hash"],
+                "type": block["block_type"],
                 "heading": " > ".join(json.loads(block["heading_path_json"])),
                 "content": block["content"],
             }
@@ -272,13 +343,22 @@ def extract_document_semantics(
         nonlocal extracted, claim_count
         if not source_is_current():
             raise RuntimeError("源文件在语义抽取期间发生变化，已丢弃本次结果")
-        store.save_block_extraction(
-            block_id=block["id"],
-            block_hash=block["hash"],
-            prompt_version=PROMPT_VERSION,
-            extracted_at=now,
-            **parsed,
-        )
+        if claims_only:
+            store.save_block_claim_extraction(
+                block_id=block["id"],
+                block_hash=block["hash"],
+                prompt_version=PROMPT_VERSION,
+                extracted_at=now,
+                claims=parsed["claims"],
+            )
+        else:
+            store.save_block_extraction(
+                block_id=block["id"],
+                block_hash=block["hash"],
+                prompt_version=PROMPT_VERSION,
+                extracted_at=now,
+                **parsed,
+            )
         extracted += 1
         claim_count += len(parsed["claims"])
 
@@ -286,8 +366,10 @@ def extract_document_semantics(
         nonlocal failures
         now = datetime.now(timezone.utc).isoformat()
         try:
-            prompt = build_extraction_prompt(
-                block_id=block["id"], heading_path=block["heading"], content=block["content"]
+            prompt_builder = build_claim_extraction_prompt if claims_only else build_extraction_prompt
+            prompt = prompt_builder(
+                block_id=block["id"], heading_path=block["heading"],
+                content=block["content"], block_type=block["type"],
             )
             raw = llm_call(prompt)
             try:
@@ -295,6 +377,7 @@ def extract_document_semantics(
                     parse_extraction_json(raw),
                     block_id=block["id"],
                     block_content=block["content"],
+                    block_type=block["type"],
                 )
             except ExtractionValidationError as first_error:
                 repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
@@ -302,17 +385,21 @@ def extract_document_semantics(
                     parse_extraction_json(repaired),
                     block_id=block["id"],
                     block_content=block["content"],
+                    block_type=block["type"],
                 )
             save_result(block, parsed, now)
         except Exception as exc:
-            store.mark_extraction_failed(
-                block["id"], block["hash"], PROMPT_VERSION, now, str(exc)
-            )
+            marker = store.mark_claim_extraction_failed if claims_only else store.mark_extraction_failed
+            marker(block["id"], block["hash"], PROMPT_VERSION, now, str(exc))
             failures.append({"block_id": block["id"], "error": str(exc)})
 
     if use_batch:
         for group in _group_extraction_blocks(pending_blocks):
-            prompt = build_batch_extraction_prompt(group)
+            prompt = (
+                build_batch_claim_extraction_prompt(group)
+                if claims_only
+                else build_batch_extraction_prompt(group)
+            )
             try:
                 raw = llm_call(prompt)
                 try:

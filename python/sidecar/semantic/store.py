@@ -10,7 +10,8 @@ from pathlib import Path
 
 from config.settings import WORKSPACE_APP_FOLDER
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+CLAIM_POLICY_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS claims (
     id TEXT PRIMARY KEY,
     statement TEXT NOT NULL,
     scope TEXT NOT NULL DEFAULT '',
+    claim_type TEXT NOT NULL CHECK(claim_type IN ('conclusion', 'hypothesis')),
     confidence REAL NOT NULL,
     status TEXT NOT NULL DEFAULT 'active'
 );
@@ -93,6 +95,14 @@ CREATE TABLE IF NOT EXISTS semantic_mentions (
     PRIMARY KEY(object_id, object_kind, block_id)
 );
 CREATE TABLE IF NOT EXISTS block_extractions (
+    block_id TEXT PRIMARY KEY REFERENCES blocks(id) ON DELETE CASCADE,
+    block_hash TEXT NOT NULL,
+    prompt_version INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    extracted_at TEXT NOT NULL,
+    error TEXT
+);
+CREATE TABLE IF NOT EXISTS claim_extractions (
     block_id TEXT PRIMARY KEY REFERENCES blocks(id) ON DELETE CASCADE,
     block_hash TEXT NOT NULL,
     prompt_version INTEGER NOT NULL,
@@ -128,10 +138,42 @@ class SemanticStore:
         self.root.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             conn.executescript(_SCHEMA)
+            claim_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(claims)")
+            }
+            if "claim_type" not in claim_columns:
+                conn.execute(
+                    "ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT 'conclusion' "
+                    "CHECK(claim_type IN ('conclusion', 'hypothesis'))"
+                )
             conn.execute(
                 "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+            row = conn.execute(
+                "SELECT value FROM schema_meta WHERE key = 'claim_policy_version'"
+            ).fetchone()
+            if row is None or row["value"] != str(CLAIM_POLICY_VERSION):
+                # Claims/Evidence are derived data. A policy change invalidates
+                # every legacy claim so old broad extraction cannot leak into
+                # the stricter conclusion/hypothesis workbench.
+                conn.execute(
+                    """DELETE FROM relations
+                       WHERE evidence_id IN (SELECT id FROM evidence)
+                          OR source_id IN (SELECT id FROM claims)
+                          OR target_id IN (SELECT id FROM claims)"""
+                )
+                conn.execute("DELETE FROM semantic_mentions WHERE object_kind = 'claim'")
+                conn.execute("DELETE FROM evidence")
+                conn.execute("DELETE FROM claims")
+                conn.execute("DELETE FROM claim_extractions")
+                conn.execute(
+                    "UPDATE documents SET status = 'parsed' WHERE status IN ('semantic', 'partial')"
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('claim_policy_version', ?)",
+                    (str(CLAIM_POLICY_VERSION),),
+                )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -177,6 +219,98 @@ class SemanticStore:
                 (block_id, block_hash, prompt_version),
             ).fetchone()
             return row is not None and row["status"] == "complete"
+
+    def claim_extraction_is_current(
+        self, block_id: str, block_hash: str, prompt_version: int
+    ) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT status FROM claim_extractions WHERE block_id = ? AND block_hash = ? AND prompt_version = ?",
+                (block_id, block_hash, prompt_version),
+            ).fetchone()
+            return row is not None and row["status"] == "complete"
+
+    def save_block_claim_extraction(
+        self,
+        *,
+        block_id: str,
+        block_hash: str,
+        prompt_version: int,
+        extracted_at: str,
+        claims: list[dict],
+    ) -> None:
+        """Replace only one block's Claim/Evidence layer."""
+        with self.connect() as conn:
+            conn.execute(
+                "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind = 'claim'",
+                (block_id,),
+            )
+            conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
+            for claim in claims:
+                conn.execute(
+                    """
+                    INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
+                    VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
+                    ON CONFLICT(id) DO UPDATE SET
+                        statement=excluded.statement,
+                        scope=excluded.scope,
+                        claim_type=excluded.claim_type,
+                        confidence=max(confidence, excluded.confidence), status='active'
+                    """,
+                    claim,
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'claim', ?)",
+                    (claim["id"], block_id),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO evidence(id, claim_id, block_id, quote_hash)
+                    VALUES(:id, :claim_id, :block_id, :quote_hash)
+                    ON CONFLICT(id) DO NOTHING
+                    """,
+                    claim["evidence"],
+                )
+            conn.execute(
+                """
+                INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                VALUES(?, ?, ?, 'complete', ?, NULL)
+                ON CONFLICT(block_id) DO UPDATE SET
+                    block_hash=excluded.block_hash,
+                    prompt_version=excluded.prompt_version,
+                    status='complete',
+                    extracted_at=excluded.extracted_at,
+                    error=NULL
+                """,
+                (block_id, block_hash, prompt_version, extracted_at),
+            )
+            conn.execute(
+                """DELETE FROM claims
+                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+            )
+
+    def mark_claim_extraction_failed(
+        self,
+        block_id: str,
+        block_hash: str,
+        prompt_version: int,
+        extracted_at: str,
+        error: str,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                VALUES(?, ?, ?, 'failed', ?, ?)
+                ON CONFLICT(block_id) DO UPDATE SET
+                    block_hash=excluded.block_hash,
+                    prompt_version=excluded.prompt_version,
+                    status='failed',
+                    extracted_at=excluded.extracted_at,
+                    error=excluded.error
+                """,
+                (block_id, block_hash, prompt_version, extracted_at, error[:1000]),
+            )
 
     def save_block_extraction(
         self,
@@ -231,9 +365,12 @@ class SemanticStore:
             for claim in claims:
                 conn.execute(
                     """
-                    INSERT INTO claims(id, statement, scope, confidence, status)
-                    VALUES(:id, :statement, :scope, :confidence, 'active')
+                    INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
+                    VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
                     ON CONFLICT(id) DO UPDATE SET
+                        statement=excluded.statement,
+                        scope=excluded.scope,
+                        claim_type=excluded.claim_type,
                         confidence=max(confidence, excluded.confidence), status='active'
                     """,
                     claim,
@@ -255,6 +392,19 @@ class SemanticStore:
             conn.execute(
                 """
                 INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                VALUES(?, ?, ?, 'complete', ?, NULL)
+                ON CONFLICT(block_id) DO UPDATE SET
+                    block_hash=excluded.block_hash,
+                    prompt_version=excluded.prompt_version,
+                    status='complete',
+                    extracted_at=excluded.extracted_at,
+                    error=NULL
+                """,
+                (block_id, block_hash, prompt_version, extracted_at),
+            )
+            conn.execute(
+                """
+                INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
                 VALUES(?, ?, ?, 'complete', ?, NULL)
                 ON CONFLICT(block_id) DO UPDATE SET
                     block_hash=excluded.block_hash,

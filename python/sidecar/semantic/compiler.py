@@ -115,6 +115,7 @@ def compile_semantic_batch(
     file_paths: list[str | Path],
     *,
     extract: bool = True,
+    claims_only: bool = False,
     progress_cb=None,
     cancelled=None,
 ) -> dict:
@@ -163,7 +164,9 @@ def compile_semantic_batch(
         worker_count = min(4, len(compiled_documents))
 
         def extract_one(document_id: str) -> dict:
-            return extract_document_semantics(SemanticStore(workspace), document_id)
+            return extract_document_semantics(
+                SemanticStore(workspace), document_id, claims_only=claims_only
+            )
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="semantic-extract") as pool:
             futures = {

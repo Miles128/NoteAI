@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import sys
 from pathlib import Path
 
@@ -16,6 +17,13 @@ from sidecar.semantic.compiler import compile_semantic_batch  # noqa: E402
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--claims-only",
+        action="store_true",
+        help="只重新编译 Claim/Evidence，不改动 Concept/Entity",
+    )
+    args = parser.parse_args()
     workspace = Path(config.workspace_path or "").expanduser()
     notes = workspace / "Notes"
     if not workspace.is_dir() or not notes.is_dir():
@@ -28,12 +36,18 @@ def main() -> int:
         and not path.name.endswith("_综述.md")
         and not any(part.startswith(".") for part in path.relative_to(notes).parts)
     )
-    print(f"SEMANTIC_COMPILE_START workspace={workspace} documents={len(paths)}", flush=True)
+    mode = "claims-only" if args.claims_only else "full"
+    print(
+        f"SEMANTIC_COMPILE_START workspace={workspace} documents={len(paths)} mode={mode}",
+        flush=True,
+    )
 
     def progress(current: int, total: int, message: str) -> None:
         print(f"SEMANTIC_COMPILE_PROGRESS {current}/{total} {message}", flush=True)
 
-    stats = compile_semantic_batch(workspace, paths, progress_cb=progress)
+    stats = compile_semantic_batch(
+        workspace, paths, progress_cb=progress, claims_only=args.claims_only
+    )
     print("SEMANTIC_COMPILE_RESULT " + json.dumps(stats, ensure_ascii=False, default=list), flush=True)
     return 0 if not stats["failures"] else 1
 

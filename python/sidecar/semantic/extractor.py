@@ -1,0 +1,345 @@
+"""Schema-constrained semantic extraction with evidence validation."""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Callable
+from datetime import datetime, timezone
+
+from sidecar.semantic.ids import content_hash, normalize_text, stable_id
+from sidecar.semantic.store import SemanticStore
+
+PROMPT_VERSION = 1
+_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+_ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
+_BATCH_MAX_BLOCKS = 8
+_BATCH_MAX_CHARS = 12_000
+
+
+class ExtractionValidationError(ValueError):
+    pass
+
+
+def _bounded_confidence(value) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ExtractionValidationError("confidence 必须是数字") from exc
+    if not 0 <= number <= 1:
+        raise ExtractionValidationError("confidence 必须在 0 到 1 之间")
+    return number
+
+
+def parse_extraction_json(raw: str) -> dict:
+    text = _FENCE.sub("", raw.strip()).strip()
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ExtractionValidationError(f"LLM 输出不是合法 JSON: {exc.msg}") from exc
+    if not isinstance(data, dict):
+        raise ExtractionValidationError("LLM 输出根节点必须是对象")
+    return data
+
+
+def validate_extraction(data: dict, *, block_id: str, block_content: str) -> dict:
+    """Validate and canonicalize one block extraction.
+
+    Claims without an exact source quote are rejected rather than downgraded.
+    """
+    result: dict[str, list[dict]] = {"concepts": [], "entities": [], "claims": []}
+    normalized_block = normalize_text(block_content)
+
+    for item in data.get("concepts", []):
+        if not isinstance(item, dict):
+            raise ExtractionValidationError("concepts 元素必须是对象")
+        name = normalize_text(str(item.get("name") or ""))
+        if not name:
+            raise ExtractionValidationError("concept 缺少 name")
+        result["concepts"].append(
+            {
+                "id": stable_id("con", name.casefold()),
+                "canonical_name": name,
+                "description": normalize_text(str(item.get("description") or "")),
+                "confidence": _bounded_confidence(item.get("confidence", 0.5)),
+            }
+        )
+
+    for item in data.get("entities", []):
+        if not isinstance(item, dict):
+            raise ExtractionValidationError("entities 元素必须是对象")
+        name = normalize_text(str(item.get("name") or ""))
+        entity_type = normalize_text(str(item.get("type") or "other")).lower()
+        if not name:
+            raise ExtractionValidationError("entity 缺少 name")
+        if entity_type not in _ENTITY_TYPES:
+            raise ExtractionValidationError(f"不支持的 entity type: {entity_type}")
+        result["entities"].append(
+            {
+                "id": stable_id("ent", entity_type, name.casefold()),
+                "canonical_name": name,
+                "entity_type": entity_type,
+                "description": normalize_text(str(item.get("description") or "")),
+                "confidence": _bounded_confidence(item.get("confidence", 0.5)),
+            }
+        )
+
+    for item in data.get("claims", []):
+        if not isinstance(item, dict):
+            raise ExtractionValidationError("claims 元素必须是对象")
+        statement = normalize_text(str(item.get("statement") or ""))
+        scope = normalize_text(str(item.get("scope") or ""))
+        quote = normalize_text(str(item.get("evidence_quote") or ""))
+        if not statement:
+            raise ExtractionValidationError("claim 缺少 statement")
+        if not quote:
+            raise ExtractionValidationError("claim 缺少 evidence_quote")
+        if quote not in normalized_block:
+            raise ExtractionValidationError("evidence_quote 不是当前块的原文片段")
+        claim_id = stable_id("clm", statement.casefold(), scope.casefold())
+        quote_hash = content_hash(quote)
+        result["claims"].append(
+            {
+                "id": claim_id,
+                "statement": statement,
+                "scope": scope,
+                "confidence": _bounded_confidence(item.get("confidence", 0.5)),
+                "evidence": {
+                    "id": stable_id("evd", claim_id, block_id, quote_hash),
+                    "claim_id": claim_id,
+                    "block_id": block_id,
+                    "quote_hash": quote_hash,
+                },
+            }
+        )
+    return result
+
+
+def build_extraction_prompt(*, block_id: str, heading_path: str, content: str) -> str:
+    return f"""你是 NoteAI 的语义编译器。只抽取当前原文明确支持的知识，不补充外部知识。
+
+块 ID：{block_id}
+章节：{heading_path or '（无）'}
+原文：
+<source>
+{content}
+</source>
+
+只输出一个 JSON 对象，不要 Markdown 代码围栏：
+{{
+  "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
+  "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
+  "claims": [{{"statement": "原文明确支持的完整命题", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制的短证据"}}]
+}}
+
+规则：
+1. evidence_quote 必须逐字来自原文，不能改写。
+2. 没有明确证据的内容不要输出。
+3. confidence 表示抽取把握，范围 0 到 1。
+4. 无内容时返回对应空数组。"""
+
+
+def build_repair_prompt(original_prompt: str, invalid_output: str, error: str) -> str:
+    return f"""{original_prompt}
+
+你上次的输出未通过编译器校验：{error}
+<invalid-output>
+{invalid_output[:6000]}
+</invalid-output>
+请只修复 JSON 结构或证据字段，仍然只能使用 source 中的原文。只输出修复后的 JSON。"""
+
+
+def build_batch_extraction_prompt(blocks: list[dict]) -> str:
+    sources = []
+    for block in blocks:
+        sources.append(
+            f"""<block id="{block['id']}">
+章节：{block['heading'] or '（无）'}
+原文：
+{block['content']}
+</block>"""
+        )
+    joined = "\n\n".join(sources)
+    return f"""你是 NoteAI 的语义编译器。只抽取各 Block 原文明确支持的知识，不补充外部知识。
+
+{joined}
+
+必须为每个输入 block_id 返回一项，不能遗漏、合并或改写 block_id。只输出 JSON：
+{{
+  "blocks": [
+    {{
+      "block_id": "输入中的原始 ID",
+      "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
+      "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
+      "claims": [{{"statement": "完整命题", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "只从该 block 原文逐字复制"}}]
+    }}
+  ]
+}}
+
+规则：
+1. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
+2. 没有明确知识的 Block 也必须返回，三个数组均为空。
+3. confidence 表示抽取把握，范围 0 到 1。
+4. 只输出 JSON，不要 Markdown 代码围栏。"""
+
+
+def validate_batch_extraction(data: dict, blocks: list[dict]) -> dict[str, dict]:
+    raw_items = data.get("blocks")
+    if not isinstance(raw_items, list):
+        raise ExtractionValidationError("批量输出缺少 blocks 数组")
+    expected = {block["id"]: block for block in blocks}
+    actual: dict[str, dict] = {}
+    for item in raw_items:
+        if not isinstance(item, dict):
+            raise ExtractionValidationError("blocks 元素必须是对象")
+        block_id = str(item.get("block_id") or "")
+        if block_id not in expected:
+            raise ExtractionValidationError(f"未知 block_id: {block_id}")
+        if block_id in actual:
+            raise ExtractionValidationError(f"重复 block_id: {block_id}")
+        actual[block_id] = validate_extraction(
+            item,
+            block_id=block_id,
+            block_content=expected[block_id]["content"],
+        )
+    missing = set(expected) - set(actual)
+    if missing:
+        raise ExtractionValidationError(f"批量输出遗漏 block_id: {', '.join(sorted(missing))}")
+    return actual
+
+
+def _group_extraction_blocks(blocks: list[dict]) -> list[list[dict]]:
+    groups: list[list[dict]] = []
+    current: list[dict] = []
+    current_chars = 0
+    for block in blocks:
+        size = len(block["content"]) + len(block["heading"]) + 80
+        if current and (len(current) >= _BATCH_MAX_BLOCKS or current_chars + size > _BATCH_MAX_CHARS):
+            groups.append(current)
+            current = []
+            current_chars = 0
+        current.append(block)
+        current_chars += size
+    if current:
+        groups.append(current)
+    return groups
+
+
+def extract_document_semantics(
+    store: SemanticStore,
+    document_id: str,
+    *,
+    llm_call: Callable[[str], str] | None = None,
+) -> dict:
+    """Extract all pending blocks, degrading cleanly when no LLM is configured."""
+    use_batch = llm_call is None
+    if llm_call is None:
+        from utils.llm_utils import call_llm_raw, check_api_config
+
+        ready, message = check_api_config()
+        if not ready:
+            store.set_document_status(document_id, "pending_extraction")
+            return {"success": True, "pending": True, "message": message, "extracted": 0, "failed": 0}
+        llm_call = lambda prompt: call_llm_raw(prompt, temperature=0.1, max_tokens=6500)
+
+    document = store.document_by_id(document_id)
+    if document is None:
+        raise ValueError(f"语义文档不存在: {document_id}")
+
+    extracted = 0
+    claim_count = 0
+    skipped = 0
+    failures: list[dict] = []
+    pending_blocks = []
+    for block in store.blocks_for_document(document_id):
+        if store.extraction_is_current(block["id"], block["content_hash"], PROMPT_VERSION):
+            skipped += 1
+            continue
+        pending_blocks.append(
+            {
+                "id": block["id"],
+                "hash": block["content_hash"],
+                "heading": " > ".join(json.loads(block["heading_path_json"])),
+                "content": block["content"],
+            }
+        )
+
+    def source_is_current() -> bool:
+        source = store.workspace / document["path"]
+        return source.is_file() and content_hash(source.read_text(encoding="utf-8")) == document["content_hash"]
+
+    def save_result(block: dict, parsed: dict, now: str) -> None:
+        nonlocal extracted, claim_count
+        if not source_is_current():
+            raise RuntimeError("源文件在语义抽取期间发生变化，已丢弃本次结果")
+        store.save_block_extraction(
+            block_id=block["id"],
+            block_hash=block["hash"],
+            prompt_version=PROMPT_VERSION,
+            extracted_at=now,
+            **parsed,
+        )
+        extracted += 1
+        claim_count += len(parsed["claims"])
+
+    def extract_single(block: dict) -> None:
+        nonlocal failures
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            prompt = build_extraction_prompt(
+                block_id=block["id"], heading_path=block["heading"], content=block["content"]
+            )
+            raw = llm_call(prompt)
+            try:
+                parsed = validate_extraction(
+                    parse_extraction_json(raw),
+                    block_id=block["id"],
+                    block_content=block["content"],
+                )
+            except ExtractionValidationError as first_error:
+                repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
+                parsed = validate_extraction(
+                    parse_extraction_json(repaired),
+                    block_id=block["id"],
+                    block_content=block["content"],
+                )
+            save_result(block, parsed, now)
+        except Exception as exc:
+            store.mark_extraction_failed(
+                block["id"], block["hash"], PROMPT_VERSION, now, str(exc)
+            )
+            failures.append({"block_id": block["id"], "error": str(exc)})
+
+    if use_batch:
+        for group in _group_extraction_blocks(pending_blocks):
+            prompt = build_batch_extraction_prompt(group)
+            try:
+                raw = llm_call(prompt)
+                try:
+                    parsed_group = validate_batch_extraction(parse_extraction_json(raw), group)
+                except ExtractionValidationError as first_error:
+                    repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
+                    parsed_group = validate_batch_extraction(parse_extraction_json(repaired), group)
+                now = datetime.now(timezone.utc).isoformat()
+                for block in group:
+                    save_result(block, parsed_group[block["id"]], now)
+            except Exception:
+                # Preserve correctness over speed: a malformed batch falls back
+                # to the established single-block validator and retry path.
+                for block in group:
+                    extract_single(block)
+    else:
+        for block in pending_blocks:
+            extract_single(block)
+
+    status = "semantic" if not failures else "partial"
+    store.set_document_status(document_id, status)
+    return {
+        "success": not failures,
+        "pending": False,
+        "extracted": extracted,
+        "claims": claim_count,
+        "skipped": skipped,
+        "failed": len(failures),
+        "failures": failures,
+    }

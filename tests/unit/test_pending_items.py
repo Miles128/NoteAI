@@ -5,7 +5,7 @@ from sidecar.cascade_runner import record_cascade_failure
 from sidecar.convert_failures import record_convert_failure
 from sidecar.ingest_pipeline import save_ingest_state
 from sidecar.kb_lint import filter_stale_lint_issues, run_kb_lint
-from sidecar.pending_items import collect_pending_items
+from sidecar.pending_items import collect_pending_items, run_pending_cleanups_if_due
 
 from config import config
 from utils.link_indexer import load_links, save_links
@@ -30,6 +30,7 @@ def test_collect_pending_includes_lint_and_cascade(workspace: Path) -> None:
     note.write_text("[[missing]]\n", encoding="utf-8")
     run_kb_lint(str(workspace))
     record_cascade_failure("AI > 测试", "API 超时")
+    run_pending_cleanups_if_due(str(workspace), force=True)
     items = collect_pending_items(str(workspace))
     kinds = {i.get("type") for i in items}
     assert "lint" in kinds
@@ -61,6 +62,7 @@ def test_collect_pending_auto_confirms_links_and_cleans_stale(workspace: Path) -
         ]
     )
 
+    run_pending_cleanups_if_due(str(workspace), force=True)
     items = collect_pending_items(str(workspace))
     types = [i.get("type") for i in items]
 
@@ -71,6 +73,18 @@ def test_collect_pending_auto_confirms_links_and_cleans_stale(workspace: Path) -
     assert links[("Notes/a.md", "Notes/b.md")] == "confirmed"
     assert links[("Notes/c.md", "Notes/b.md")] == "confirmed"
     assert ("Notes/missing.md", "Notes/b.md") not in links
+
+
+def test_collect_pending_is_read_only_and_does_not_run_maintenance(workspace: Path, monkeypatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "sidecar.pending_items.auto_fix_broken_links",
+        lambda _workspace: calls.append("repair"),
+    )
+
+    collect_pending_items(str(workspace))
+
+    assert calls == []
 
 
 def test_filter_stale_lint_issues(workspace: Path) -> None:

@@ -151,6 +151,11 @@ async function loadModules() {
     window.refreshPendingBtnState = refreshPendingBtnState;
     window.loadPendingItems = loadPendingItems;
 
+    await import('./semantic-workbench.js');
+    window.SemanticWorkbenchModule = window.SemanticWorkbenchModule || {};
+    window.toggleSemanticWorkbench = window.SemanticWorkbenchModule.toggle;
+    if (window.SemanticWorkbenchModule.init) window.SemanticWorkbenchModule.init();
+
     await import('./tabs.js');
     const { TabsModule } = window;
     window.TabsModule = TabsModule;

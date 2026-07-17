@@ -46,6 +46,7 @@ function showContentView() {
 }
 
 function showPreviewView() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
     const contentPanel = document.getElementById('content-panel');
     const previewPanel = document.getElementById('preview-panel');
     const pendingView = document.getElementById('pending-view');

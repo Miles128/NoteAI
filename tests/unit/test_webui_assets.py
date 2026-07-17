@@ -86,3 +86,65 @@ def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
     assert 'data-action="move-suggested"' in assign_branch
     assert 'data-action="keep-current"' in assign_branch
     assert "pending-topic-select" not in assign_branch
+
+
+def test_pending_view_restores_hidden_content_panel() -> None:
+    """Regression: opening Inbox from note preview must reveal its parent panel."""
+    pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
+    show_branch = pending_js.split("function showPendingViewContent()", 1)[1].split(
+        "function hidePendingView()", 1
+    )[0]
+
+    restore_parent = "contentPanel.style.display = 'flex'"
+    show_pending = "pendingView.style.display = ''"
+    assert restore_parent in show_branch
+    assert show_pending in show_branch
+    assert show_branch.index(restore_parent) < show_branch.index(show_pending)
+
+
+def test_titlebar_pending_entry_remains_icon_only() -> None:
+    html = (WEBUI / "index.html").read_text(encoding="utf-8")
+    button = html.split('id="titlebar-pending-btn"', 1)[1].split("</button>", 1)[0]
+
+    assert "pending-icon-normal" in button
+    assert "pending-icon-alert" in button
+    assert "titlebar-pending-label" not in button
+
+
+def test_semantic_workbench_assets_and_contract_are_wired() -> None:
+    html = (WEBUI / "index.html").read_text(encoding="utf-8")
+    main_js = (WEBUI / "js" / "main.mjs").read_text(encoding="utf-8")
+    api_js = (WEBUI / "js" / "api.js").read_text(encoding="utf-8")
+    workbench_js = (WEBUI / "js" / "semantic-workbench.js").read_text(encoding="utf-8")
+
+    assert 'id="titlebar-semantic-btn"' not in html
+    assert 'id="semantic-workbench"' not in html
+    assert 'class="sidebar-semantic-group"' in html
+    assert 'id="file-tree"' in html
+    assert 'id="semantic-list-pane"' in html
+    assert 'id="note-list-normal"' in html
+    assert 'class="semantic-detail-pane"' in html
+    assert html.count('data-category=') == 4
+    assert 'data-object-kind="entities"' in html
+    assert 'data-object-kind="concepts"' in html
+    assert "import('./semantic-workbench.js')" in main_js
+    assert "get_semantic_workbench" in api_js
+    assert "get_semantic_detail" in api_js
+    assert "start_semantic_full_compile" in api_js
+    assert "review_semantic_conflict" in api_js
+    assert "data-open-path" in workbench_js
+    assert ".catch(function(error)" in workbench_js
+
+
+def test_semantic_workbench_reuses_native_three_columns() -> None:
+    html = (WEBUI / "index.html").read_text(encoding="utf-8")
+    tree_pane = html.split('id="sidebar-pane-tree"', 1)[1].split('id="sidebar-pane-tags"', 1)[0]
+    note_panel = html.split('id="note-list-panel"', 1)[1].split('id="note-list-resizer"', 1)[0]
+    content_panel = html.split('id="content-panel"', 1)[1].split('id="preview-panel"', 1)[0]
+
+    assert 'id="file-tree"' in tree_pane
+    assert 'id="semantic-categories"' in tree_pane
+    assert 'id="note-list-normal"' in note_panel
+    assert 'id="semantic-list-pane"' in note_panel
+    assert 'id="semantic-workbench-detail"' in content_panel
+    assert "semantic-category-pane" not in html

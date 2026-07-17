@@ -222,8 +222,14 @@ function runRecommendedAction() {
     }
     if (action === 'rebuild_index') {
         if (window.api && window.api.ragRebuildIndex) {
-            window.api.ragRebuildIndex();
-            scheduleRefresh();
+            window.api.ragRebuildIndex().then(function() {
+                scheduleRefresh();
+            }).catch(function(err) {
+                console.warn('[Home] rebuild index failed:', err);
+                if (window.updateStatus) {
+                    window.updateStatus(window.t('assistant.indexRequestFailed', { message: err.message || String(err) }));
+                }
+            });
         }
         return;
     }

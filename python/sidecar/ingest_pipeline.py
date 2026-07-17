@@ -20,7 +20,18 @@ from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_file
 from utils.topic_file_ops import _check_topic_needs_processing
 from utils.wiki_manager import topic_from_notes_path
 
-STAGES = ("rules", "convert", "compile", "classify", "index", "crossref", "cascade", "lint", "sync")
+STAGES = (
+    "rules",
+    "convert",
+    "compile",
+    "classify",
+    "semantic",
+    "index",
+    "crossref",
+    "cascade",
+    "lint",
+    "sync",
+)
 
 _cancel_event = threading.Event()
 _cancel_lock = threading.Lock()
@@ -214,7 +225,7 @@ def prepare_auto_ingest(
     if not config.ingest_auto_enabled:
         return {"action": "none", "reason": "auto_disabled"}
 
-    state = normalize_ingest_state()
+    state = load_ingest_state()
     status = state.get("status", "idle")
 
     if needs_workspace_rules_setup(ws):
@@ -512,6 +523,12 @@ def run_ingest(
         "classified": 0,
         "pending_topics": 0,
         "indexed_files": 0,
+        "semantic_documents": 0,
+        "semantic_blocks": 0,
+        "semantic_extracted_blocks": 0,
+        "semantic_claims": 0,
+        "semantic_failed_blocks": 0,
+        "semantic_pending_documents": 0,
         "cascade_updated": 0,
         "cascade_failed": [],
         "cascade_topics": [],
@@ -743,6 +760,77 @@ def run_ingest(
             for topic in (move.get("current_topic"), move.get("suggested_topic")):
                 if topic:
                     affected_topics.add(str(topic))
+
+        # 3b. Semantic compile — evidence-first IR. Failures are recorded but
+        # do not block the established classify/index/wiki pipeline.
+        if stage_done("semantic"):
+            prog("semantic", 0.52, "跳过语义编译（已完成）")
+        elif not config.semantic_compile_enabled:
+            prog("semantic", 0.52, "语义编译已关闭")
+            mark_stage_done("semantic")
+        else:
+            from sidecar.semantic.compiler import compile_semantic_batch
+            from sidecar.semantic.store import SemanticStore
+            from sidecar.semantic.topic_state import materialize_topic_state
+
+            ws_path = Path(workspace)
+            store = SemanticStore(workspace)
+            removed_topics = set(store.purge_missing_documents())
+            if incremental:
+                semantic_targets = _scan_index_pending(workspace)
+            else:
+                semantic_targets = [
+                    md
+                    for md in ws_path.rglob("*.md")
+                    if not md.name.startswith(".")
+                    and "wiki" not in md.parts
+                    and NOTES_FOLDER in md.parts
+                    and not md.name.endswith("_综述.md")
+                ]
+            if semantic_targets:
+                semantic_stats = compile_semantic_batch(
+                    workspace,
+                    semantic_targets,
+                    progress_cb=lambda cur, tot, msg: prog(
+                        "semantic", 0.45 + 0.07 * cur / max(tot, 1), msg
+                    ),
+                    cancelled=cancelled,
+                )
+                stats["semantic_documents"] = semantic_stats["documents"]
+                stats["semantic_blocks"] = semantic_stats["blocks"]
+                stats["semantic_extracted_blocks"] = semantic_stats["extracted_blocks"]
+                stats["semantic_claims"] = semantic_stats["claims"]
+                stats["semantic_failed_blocks"] = semantic_stats["failed_blocks"]
+                stats["semantic_pending_documents"] = semantic_stats["pending_documents"]
+                stats["semantic_failures"] = semantic_stats["failures"]
+                semantic_topics = set(semantic_stats["topics"]) | removed_topics
+                affected_topics.update(semantic_topics)
+                materialized = 0
+                for topic in sorted(semantic_topics):
+                    try:
+                        materialize_topic_state(store, topic)
+                        materialized += 1
+                    except Exception as exc:
+                        stats["semantic_failures"].append(
+                            {"topic": topic, "error": f"TopicState: {exc}"}
+                        )
+                stats["semantic_topic_states"] = materialized
+            elif removed_topics:
+                affected_topics.update(removed_topics)
+                for topic in sorted(removed_topics):
+                    materialize_topic_state(store, topic)
+                stats["semantic_topic_states"] = len(removed_topics)
+            prog(
+                "semantic",
+                0.52,
+                f"语义编译: {stats['semantic_documents']} 篇，失败块 {stats['semantic_failed_blocks']}",
+            )
+            state["affected_topics"] = sorted(affected_topics)
+            state["stats"] = stats
+            save_ingest_state(state)
+            mark_stage_done("semantic")
+        if cancelled():
+            raise _Cancelled()
 
         # 4. Index
         indexed_paths: list[str] = []

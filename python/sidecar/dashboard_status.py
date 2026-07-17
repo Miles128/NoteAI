@@ -8,7 +8,7 @@ from config import config
 from config.constants import NOTES_FOLDER
 from sidecar import job_status
 from sidecar.cascade_runner import load_cascade_failures
-from sidecar.ingest_pipeline import normalize_ingest_state, prepare_auto_ingest
+from sidecar.ingest_pipeline import load_ingest_state, prepare_auto_ingest
 from sidecar.kb_lint import load_lint_report
 from sidecar.pending_items import collect_pending_items
 
@@ -95,7 +95,7 @@ def rag_index_status(workspace: str) -> dict:
 
 
 def ingest_status() -> dict:
-    state = normalize_ingest_state()
+    state = load_ingest_state()
     status = state.get("status", "idle")
     return {
         "status": status,

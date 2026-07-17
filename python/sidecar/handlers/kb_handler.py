@@ -21,8 +21,8 @@ class KbHandler(BaseHandler):
         router.register("get_duplicate_review", self._get_duplicate_review)
         router.register("merge_duplicate_notes", self._merge_duplicate_notes)
         router.register("merge_note_group", self._merge_note_group)
-        router.register("build_chunk_similarity_graph", self._build_chunk_similarity_graph)
         router.register("get_chunk_merge_candidates", self._get_chunk_merge_candidates)
+        router.register("scan_merge_candidates", self._scan_merge_candidates)
         router.register("archive_chat_answer", self._archive_chat_answer)
         router.register("append_chat_to_survey", self._append_chat_to_survey)
         router.register("get_cascade_failures", self._get_cascade_failures)
@@ -34,6 +34,9 @@ class KbHandler(BaseHandler):
         workspace = self.config.workspace_path
         if not workspace:
             return {"success": False, "message": "未设置工作区"}
+        topics_handler = getattr(self._server, "_topics_handler", None)
+        if topics_handler is not None:
+            topics_handler.schedule_pending_maintenance()
         return get_dashboard_status(workspace)
 
     def _run_kb_lint(self, _params):
@@ -85,14 +88,6 @@ class KbHandler(BaseHandler):
         except (OSError, ValueError) as exc:
             return {"success": False, "message": str(exc)}
 
-    def _build_chunk_similarity_graph(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
-        from sidecar.chunk_similarity import build_chunk_similarity_graph
-
-        return build_chunk_similarity_graph(workspace)
-
     def _get_chunk_merge_candidates(self, _params):
         workspace = self.config.workspace_path
         if not workspace:
@@ -101,6 +96,14 @@ class KbHandler(BaseHandler):
 
         graph = load_chunk_similarity_graph(workspace)
         return {"success": True, "items": graph.get("candidates") or [], "needs_build": not bool(graph)}
+
+    def _scan_merge_candidates(self, _params):
+        workspace = self.config.workspace_path
+        if not workspace:
+            return {"success": False, "message": "未设置工作区"}
+        from sidecar.chunk_similarity import build_chunk_similarity_graph
+
+        return build_chunk_similarity_graph(workspace)
 
     def _archive_chat_answer(self, params):
         return archive_chat_answer(

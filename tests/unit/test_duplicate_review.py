@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sidecar.duplicate_review import get_duplicate_review, merge_duplicate_notes
+from sidecar.duplicate_review import get_duplicate_review, merge_duplicate_notes, merge_note_group
 from sidecar.kb_lint import run_kb_lint
 
 from config import config
@@ -44,3 +44,23 @@ def test_merged_pair_is_not_reported_again_until_original_changes(tmp_path: Path
     merge_duplicate_notes(root, left, right, "整合")
     second = run_kb_lint(str(root), auto_repair=False, auto_refresh_surveys=False)
     assert not any(i["kind"] == "duplicate_content" for i in second["issues"])
+
+
+def test_group_merge_blocks_authorized_deletion_when_llm_reports_conflict(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "workspace"
+    (root / "Notes").mkdir(parents=True)
+    config.workspace_path = str(root)
+    left = _note(root, "版本甲", "发布日期是 2025 年。")
+    right = _note(root, "版本乙", "发布日期是 2026 年。")
+    monkeypatch.setattr(
+        "utils.llm_utils.call_llm_raw",
+        lambda *_args, **_kwargs: "# 整合\n\n## 观点差异（待确认）\n\n发布日期存在两个版本。[来源1][来源2]",
+    )
+
+    result = merge_note_group(root, [left, right], "冲突整合", delete_authorized=True)
+
+    assert result["success"] is True
+    assert result["has_conflicts"] is True
+    assert result["deleted"] == []
+    assert (root / left).exists()
+    assert (root / right).exists()

@@ -818,7 +818,14 @@ function initRagSettings() {
             if (window.AssistantModule && window.AssistantModule.rebuildIndex) {
                 window.AssistantModule.rebuildIndex();
             } else if (window.api && window.api.ragRebuildIndex) {
-                window.api.ragRebuildIndex();
+                window.api.ragRebuildIndex().catch(function(err) {
+                    if (statusEl) {
+                        statusEl.textContent = window.t('assistant.indexRequestFailed', {
+                            message: err.message || String(err)
+                        });
+                        statusEl.style.display = 'block';
+                    }
+                });
             }
         });
     }

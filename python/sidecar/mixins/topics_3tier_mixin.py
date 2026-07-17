@@ -261,11 +261,6 @@ class Topics3TierMixin:
         if not workspace:
             return {"success": True, "nodes": [], "edges": [], "layout": "force"}
 
-        if filter_mode == "chunk":
-            from sidecar.chunk_similarity import graph_view
-
-            return graph_view(workspace, str(params.get("level") or "topic"), str(params.get("focus") or ""))
-
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
         seen_ids: set[str] = set()

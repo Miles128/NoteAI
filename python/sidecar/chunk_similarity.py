@@ -148,6 +148,43 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
     return groups
 
 
+def _topic_candidates(chunks: list[dict], edges: list[dict], matrix: np.ndarray) -> list[dict]:
+    topics: dict[str, list[int]] = defaultdict(list)
+    for index, item in enumerate(chunks):
+        topic = str(item.get("topic") or "").strip()
+        if topic:
+            topics[topic].append(index)
+    names = sorted(topics)
+    if len(names) < 2:
+        return []
+    from sidecar.rag.embedder import encode_documents
+
+    name_vectors = np.asarray([row["dense_vec"] for row in encode_documents(names)], dtype=np.float32)
+    name_vectors /= np.maximum(np.linalg.norm(name_vectors, axis=1, keepdims=True), 1e-12)
+    centroids = []
+    for name in names:
+        centroid = matrix[topics[name]].mean(axis=0)
+        centroid /= max(float(np.linalg.norm(centroid)), 1e-12)
+        centroids.append(centroid)
+    centroid_matrix = np.asarray(centroids, dtype=np.float32)
+    rows: list[dict] = []
+    for left in range(len(names)):
+        for right in range(left + 1, len(names)):
+            name_score = float(name_vectors[left] @ name_vectors[right])
+            content_score = float(centroid_matrix[left] @ centroid_matrix[right])
+            if name_score < 0.88 or content_score < 0.72:
+                continue
+            rows.append(
+                {
+                    "topics": [names[left], names[right]],
+                    "name_score": round(name_score, 4),
+                    "content_score": round(content_score, 4),
+                    "score": round(0.55 * name_score + 0.45 * content_score, 4),
+                }
+            )
+    return sorted(rows, key=lambda row: row["score"], reverse=True)
+
+
 def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, threshold: float = 0.68) -> dict:
     root = Path(workspace).resolve()
     chunks = _collect(root)
@@ -214,12 +251,19 @@ def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, thres
         "edges": edges,
     }
     graph["candidates"] = _candidate_groups(stored_chunks, edges)
+    graph["topic_candidates"] = _topic_candidates(stored_chunks, edges, matrix) if len(matrix) else []
     graph_path, vector_path = _paths(root)
     _atomic_json(graph_path, graph)
     temp_vectors = vector_path.with_suffix(".tmp.npz")
     np.savez_compressed(temp_vectors, ids=np.asarray(ids), vectors=matrix)
     temp_vectors.replace(vector_path)
-    return {"success": True, "chunk_count": len(ids), "edge_count": len(edges), "candidate_count": len(graph["candidates"])}
+    return {
+        "success": True,
+        "chunk_count": len(ids),
+        "edge_count": len(edges),
+        "candidate_count": len(graph["candidates"]),
+        "topic_candidate_count": len(graph["topic_candidates"]),
+    }
 
 
 def load_chunk_similarity_graph(workspace: str | Path) -> dict:

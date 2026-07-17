@@ -92,6 +92,7 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "cloud_sync_experimental": self.config.cloud_sync_experimental,
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
+            "semantic_compile_enabled": self.config.semantic_compile_enabled,
             "assistant_agent_mode": self.config.assistant_agent_mode,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
@@ -162,6 +163,8 @@ class ConfigHandler(BaseHandler):
                 self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
             if "ingest_auto_enabled" in params:
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
+            if "semantic_compile_enabled" in params:
+                self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
             if "assistant_agent_mode" in params:
                 self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
             if "cli_agent_id" in params:

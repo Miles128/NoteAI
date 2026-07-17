@@ -4,7 +4,12 @@ from pathlib import Path
 
 from sidecar.organization_audit import find_misplaced_notes
 from sidecar.textutils import parse_frontmatter
-from sidecar.topic_placement import auto_move_misplaced_notes, keep_note_in_current_topic
+from sidecar.topic_placement import (
+    _AUTO_MOVE_LAST_RUN,
+    auto_move_misplaced_notes,
+    auto_move_misplaced_notes_if_due,
+    keep_note_in_current_topic,
+)
 
 from config import config
 
@@ -70,6 +75,23 @@ def test_score_below_threshold_stays_pending(tmp_path: Path, monkeypatch) -> Non
 
     assert result["moved"] == []
     assert source.exists()
+
+
+def test_inbox_auto_move_deduplicates_immediate_refresh(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "ws"
+    calls: list[Path] = []
+    _AUTO_MOVE_LAST_RUN.pop(str(root.resolve()), None)
+    monkeypatch.setattr(
+        "sidecar.topic_placement._auto_move_misplaced_notes_locked",
+        lambda workspace: calls.append(Path(workspace)) or {"success": True, "moved": [], "errors": []},
+    )
+
+    first = auto_move_misplaced_notes_if_due(root, interval_seconds=30)
+    second = auto_move_misplaced_notes_if_due(root, interval_seconds=30)
+
+    assert first.get("skipped") is None
+    assert second["skipped"] == "recently_checked"
+    assert calls == [root]
 
 
 def test_keep_decision_hides_unchanged_finding_and_expires_after_edit(tmp_path: Path) -> None:

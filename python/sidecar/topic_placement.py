@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 from pathlib import Path
 
 from config import config
@@ -12,6 +14,9 @@ from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
 from utils.activity_log import add_entry as _log
 
 _STATE_FILE = "topic_placement_resolutions.json"
+_AUTO_MOVE_LOCK = threading.Lock()
+_AUTO_MOVE_LAST_RUN: dict[str, float] = {}
+_INBOX_AUTO_MOVE_INTERVAL_SECONDS = 30.0
 
 
 def _state_path(root: Path) -> Path:
@@ -97,6 +102,34 @@ def keep_note_in_current_topic(
 
 def auto_move_misplaced_notes(workspace: str | Path) -> dict:
     """Move audit findings whose similarity meets the user's configured threshold."""
+    root_key = str(Path(workspace).resolve())
+    with _AUTO_MOVE_LOCK:
+        _AUTO_MOVE_LAST_RUN[root_key] = time.monotonic()
+        return _auto_move_misplaced_notes_locked(workspace)
+
+
+def auto_move_misplaced_notes_if_due(
+    workspace: str | Path,
+    interval_seconds: float = _INBOX_AUTO_MOVE_INTERVAL_SECONDS,
+) -> dict:
+    """Run the Inbox placement pass once per short refresh window."""
+    root_key = str(Path(workspace).resolve())
+    now = time.monotonic()
+    with _AUTO_MOVE_LOCK:
+        elapsed = now - _AUTO_MOVE_LAST_RUN.get(root_key, float("-inf"))
+        if elapsed < max(0.0, interval_seconds):
+            return {
+                "success": True,
+                "moved": [],
+                "errors": [],
+                "skipped": "recently_checked",
+            }
+        _AUTO_MOVE_LAST_RUN[root_key] = now
+        return _auto_move_misplaced_notes_locked(workspace)
+
+
+def _auto_move_misplaced_notes_locked(workspace: str | Path) -> dict:
+    """Run one serialized placement pass for Inbox and ingest callers."""
     root = Path(workspace).resolve()
     if not config.auto_topic:
         return {"success": True, "moved": [], "skipped": "auto_topic_disabled"}

@@ -11,6 +11,7 @@ from .kb_handler import KbHandler
 from .links_handler import LinksHandler
 from .mcp_config_handler import McpConfigHandler
 from .rag_handler import RagHandler
+from .semantic_handler import SemanticHandler
 from .tags_handler import TagsHandler
 from .topics_handler import TopicsHandler
 from .transfer_handler import TransferHandler
@@ -29,6 +30,7 @@ __all__ = [
     "IntelHandler",
     "JobHandler",
     "RagHandler",
+    "SemanticHandler",
     "CloudSyncHandler",
     "IngestHandler",
     "KbHandler",

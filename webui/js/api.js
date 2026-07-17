@@ -43,16 +43,17 @@ function _isRetryableError(e) {
 
 function _translateError(e) {
     var msg = String(e && (e.message || e));
+    var lower = msg.toLowerCase();
     if (msg.indexOf('Not running in Tauri') !== -1) {
         return new Error('应用未在 Tauri 环境中运行');
     }
     if (msg.indexOf('Tauri invoke not available') !== -1) {
         return new Error('Tauri 调用接口不可用，请重启应用');
     }
-    if (msg.indexOf('timeout') !== -1) {
+    if (lower.indexOf('timeout') !== -1 || lower.indexOf('timed out') !== -1) {
         return new Error('请求超时，请稍后重试');
     }
-    if (msg.indexOf('sidecar') !== -1 || msg.indexOf('python') !== -1) {
+    if (lower.indexOf('sidecar') !== -1 || lower.indexOf('python') !== -1) {
         return new Error('后端服务暂时不可用，请重启应用');
     }
     return e;
@@ -400,6 +401,11 @@ var API_DEFS = [
     { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
     { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
     { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
+    { name: 'getSemanticWorkbench', method: 'get_semantic_workbench', params: function(options) { return options || {}; } },
+    { name: 'getSemanticDetail', method: 'get_semantic_detail', params: function(kind, id) { return { kind: kind, id: id }; } },
+    { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
+    { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
+    { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
     { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
     { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
@@ -423,8 +429,10 @@ var API_DEFS = [
     { name: 'getDuplicateReview', method: 'get_duplicate_review', params: function(filePath, relatedFile) { return { file_path: filePath, related_file: relatedFile }; } },
     { name: 'mergeDuplicateNotes', method: 'merge_duplicate_notes', params: function(filePath, relatedFile, title) { return { file_path: filePath, related_file: relatedFile, title: title || '' }; }, write: true },
     { name: 'mergeNoteGroup', method: 'merge_note_group', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
-    { name: 'buildChunkSimilarityGraph', method: 'build_chunk_similarity_graph', params: function() { return {}; }, write: true },
     { name: 'getChunkMergeCandidates', method: 'get_chunk_merge_candidates', params: function() { return {}; } },
+    { name: 'scanMergeCandidates', method: 'scan_merge_candidates', params: function() { return {}; }, write: true },
+    { name: 'suggestTopicMergeNames', method: 'suggest_topic_merge_names', params: function(topics) { return { topics: topics || [] }; }, write: true },
+    { name: 'mergeSimilarTopics', method: 'merge_similar_topics', params: function(topics, newTopic) { return { topics: topics || [], new_topic: newTopic || '' }; }, write: true },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },

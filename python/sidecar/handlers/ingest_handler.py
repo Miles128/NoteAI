@@ -8,7 +8,7 @@ from typing import Any
 from sidecar.handlers.base import BaseHandler
 from sidecar.ingest_pipeline import (
     cancel_generation,
-    normalize_ingest_state,
+    load_ingest_state,
     prepare_auto_ingest,
     request_cancel,
     run_ingest,
@@ -304,7 +304,7 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "已请求取消"}
 
     def _retry_ingest(self, params):
-        state = normalize_ingest_state()
+        state = load_ingest_state()
         file_paths = params.get("file_paths") or state.get("file_paths") or []
         if state.get("status") == "cancelled":
             mode = params.get("mode") or state.get("mode") or "full"
@@ -335,7 +335,7 @@ class IngestHandler(BaseHandler):
         }
 
     def _get_ingest_status(self, _params):
-        state = normalize_ingest_state()
+        state = load_ingest_state()
         status = state.get("status", "idle")
         return {
             "success": True,

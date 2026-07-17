@@ -44,9 +44,45 @@ def test_run_ingest_completes_when_rules_configured(workspace: Path) -> None:
 
     assert result["success"] is True
     assert "rules" in stages
+    assert "semantic" in stages
     assert "sync" in stages
     assert any(e.get("type") == "ingest_complete" for e in events)
     assert load_ingest_state()["status"] == "complete"
+
+
+def test_semantic_stage_failure_does_not_block_ingest(workspace: Path) -> None:
+    write_workspace_rules(workspace)
+    note = workspace / "Notes" / "RAG" / "note.md"
+    note.parent.mkdir(parents=True)
+    note.write_text("---\ntopic: RAG\n---\n\n正文。", encoding="utf-8")
+
+    semantic_result = {
+        "documents": 1,
+        "blocks": 1,
+        "extracted_blocks": 0,
+        "claims": 0,
+        "failed_blocks": 1,
+        "pending_documents": 0,
+        "topics": ["RAG"],
+        "failures": [{"file": "Notes/RAG/note.md", "error": "bad json"}],
+    }
+    with (
+        patch("sidecar.ingest_pipeline._scan_convert_pending", return_value=[]),
+        patch("utils.note_compiler.scan_compile_pending", return_value=[]),
+        patch("sidecar.ingest_pipeline._scan_classify_pending", return_value=[]),
+        patch("sidecar.topic_placement.auto_move_misplaced_notes", return_value={"moved": []}),
+        patch("sidecar.semantic.compiler.compile_semantic_batch", return_value=semantic_result),
+        patch("sidecar.semantic.topic_state.materialize_topic_state"),
+        patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(1, ["Notes/RAG/note.md"])),
+        patch("sidecar.ingest_pipeline.sync_wiki_with_files"),
+        patch("sidecar.kb_lint.run_kb_lint", return_value={"issues": [], "summary": {"total": 0}}),
+        patch("sidecar.kb_lint.log_lint_report"),
+    ):
+        result = run_ingest(mode="full")
+
+    assert result["success"] is True
+    assert result["stats"]["semantic_failed_blocks"] == 1
+    assert result["stats"]["semantic_documents"] == 1
 
 
 def test_run_ingest_respects_cancel(workspace: Path) -> None:

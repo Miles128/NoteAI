@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="css/ingest.css">
     <link rel="stylesheet" href="css/schema-wizard.css">
     <link rel="stylesheet" href="css/inspector.css">
+    <link rel="stylesheet" href="css/semantic-workbench.css">
 
     <script src="d3.min.js"></script>
     <script src="marked.min.js"></script>
@@ -154,6 +155,20 @@
                     <div class="file-tree-container" id="file-tree">
                         <div class="tree-empty" data-i18n="common.noWorkspace"></div>
                     </div>
+                    <section class="sidebar-semantic-group" aria-labelledby="sidebar-semantic-title">
+                        <div class="sidebar-semantic-heading" id="sidebar-semantic-title">
+                            <span data-i18n="semantic.title"></span>
+                            <span class="sidebar-semantic-coverage" id="semantic-coverage"></span>
+                        </div>
+                        <nav class="semantic-categories" id="semantic-categories" aria-label="Semantic categories">
+                            <button type="button" data-category="objects"><span class="semantic-nav-icon">◇</span><span data-i18n="semantic.categories.objects"></span></button>
+                            <button type="button" data-category="claims"><span class="semantic-nav-icon">≡</span><span data-i18n="semantic.categories.claims"></span></button>
+                            <button type="button" data-category="conflicts"><span class="semantic-nav-icon">!</span><span data-i18n="semantic.categories.conflicts"></span></button>
+                            <button type="button" data-category="links"><span class="semantic-nav-icon">↔</span><span data-i18n="semantic.categories.links"></span></button>
+                        </nav>
+                        <button type="button" class="semantic-compile-all" id="semantic-compile-all" data-i18n="semantic.compileAll"></button>
+                        <div class="semantic-compile-progress" id="semantic-compile-progress" hidden></div>
+                    </section>
                 </div>
                 <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
                     <div class="sidebar-view-container" id="sidebar-tags"></div>
@@ -176,14 +191,31 @@
         <div class="resizer" id="sidebar-resizer"></div>
 
         <div class="note-list-panel" id="note-list-panel">
-            <div class="note-list-header">
-                <span class="note-list-title" id="note-list-title" data-i18n="noteList.title"></span>
-                <button type="button" class="note-list-add-btn" onclick="createNoteFromNoteList()" data-i18n-title="sidebar.newNote" data-i18n-aria="sidebar.newNote">+</button>
-                <span class="note-list-count" id="note-list-count">0</span>
+            <div class="note-list-normal" id="note-list-normal">
+                <div class="note-list-header">
+                    <span class="note-list-title" id="note-list-title" data-i18n="noteList.title"></span>
+                    <button type="button" class="note-list-add-btn" onclick="createNoteFromNoteList()" data-i18n-title="sidebar.newNote" data-i18n-aria="sidebar.newNote">+</button>
+                    <span class="note-list-count" id="note-list-count">0</span>
+                </div>
+                <div class="note-list-body" id="note-list-body">
+                    <div class="note-list-empty" data-i18n="noteList.empty"></div>
+                </div>
             </div>
-            <div class="note-list-body" id="note-list-body">
-                <div class="note-list-empty" data-i18n="noteList.empty"></div>
-            </div>
+            <section class="semantic-list-pane" id="semantic-list-pane" hidden aria-labelledby="semantic-list-title">
+                <header class="semantic-list-header">
+                    <div><h3 id="semantic-list-title"></h3><span id="semantic-list-count"></span></div>
+                    <button type="button" class="semantic-refresh" id="semantic-refresh" data-i18n-title="semantic.refresh" aria-label="Refresh">↻</button>
+                </header>
+                <div class="semantic-object-switch" id="semantic-object-switch">
+                    <button type="button" class="active" data-object-kind="entities" data-i18n="semantic.tabs.entities"></button>
+                    <button type="button" data-object-kind="concepts" data-i18n="semantic.tabs.concepts"></button>
+                </div>
+                <div class="semantic-toolbar" id="semantic-toolbar">
+                    <input type="search" id="semantic-search" data-i18n-placeholder="semantic.searchPlaceholder" autocomplete="off">
+                    <select id="semantic-status-filter" hidden aria-label="Status"></select>
+                </div>
+                <div class="semantic-list" id="semantic-workbench-list" aria-live="polite"></div>
+            </section>
         </div>
 
         <div class="resizer" id="note-list-resizer"></div>
@@ -291,6 +323,7 @@
                         <h2 data-i18n="pending.title"></h2>
                         <span class="pending-view-count" id="pending-view-count" data-i18n="common.pendingCount" data-i18n-count="0"></span>
                         <div class="pending-header-actions">
+                            <button type="button" class="pending-header-btn" id="pending-merge-scan-btn" data-i18n="pending.scanMergeCandidates" data-i18n-title="pending.scanMergeCandidates"></button>
                             <button type="button" class="pending-header-btn" id="pending-lint-run-btn" data-i18n="pending.healthCheck" data-i18n-title="pending.healthCheck"></button>
                             <button type="button" class="pending-header-btn" id="pending-cascade-retry-all-btn" data-i18n="pending.retryAllSurveys" data-i18n-title="pending.retryAllSurveys"></button>
                         </div>
@@ -309,6 +342,7 @@
                         </div>
                     </div>
                 </div>
+                <main class="semantic-detail-pane" id="semantic-workbench-detail" hidden aria-live="polite"></main>
                 <div class="content-area" id="content-area">
                     <div class="tab-content active" id="tab-0">
                     </div>

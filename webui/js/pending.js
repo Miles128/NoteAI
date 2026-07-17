@@ -18,8 +18,14 @@ function togglePendingView() {
 }
 
 function showPendingViewContent() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
     // Hide ALL other right-panel views — no splits
-    var views = ['home-dashboard', 'graph-home-view', 'graph-panel', 'content-area', 'preview-panel',
+    // pending-view lives inside content-panel. Reading a note hides that parent,
+    // so restore it before switching its child views.
+    var contentPanel = document.getElementById('content-panel');
+    if (contentPanel) contentPanel.style.display = 'flex';
+
+    var views = ['home-dashboard', 'graph-home-view', 'graph-panel', 'semantic-workbench', 'content-area', 'preview-panel',
                  'topic-pending-panel', 'ai-suggestion-panel'];
     views.forEach(function(id) {
         var el = document.getElementById(id);
@@ -154,6 +160,8 @@ function renderPendingList(items, listEl) {
             html += renderPendingInfoItem(item, idx, 'ingest');
         } else if (item.type === 'merge_candidate') {
             html += renderPendingInfoItem(item, idx, 'merge_candidate');
+        } else if (item.type === 'topic_merge_candidate') {
+            html += renderPendingInfoItem(item, idx, 'topic_merge_candidate');
         }
     });
     listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
@@ -166,7 +174,8 @@ function renderPendingSummary(summary) {
         ['ingest', 'pending.typeIngest'], ['cascade_fail', 'pending.typeCascade'],
         ['convert_fail', 'pending.typeConvert'], ['topic', 'pending.typeTopic'],
         ['link', 'pending.typeLink'], ['lint', 'pending.typeLint'],
-        ['merge_candidate', 'pending.typeMergeCandidate']
+        ['merge_candidate', 'pending.typeMergeCandidate'],
+        ['topic_merge_candidate', 'pending.typeTopicMergeCandidate']
     ].filter(function(row) { return summary[row[0]]; });
     el.innerHTML = rows.map(function(row) {
         return '<span>' + window.escapeHtml(window.t(row[1])) + ' <strong>' + summary[row[0]] + '</strong></span>';
@@ -257,16 +266,20 @@ function renderPendingLinkItem(item, idx) {
 }
 
 function renderPendingInfoItem(item, idx, kind) {
-    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : 'pending.typeConvert')));
+    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : (kind === 'topic_merge_candidate' ? 'pending.typeTopicMergeCandidate' : 'pending.typeConvert'))));
     var title = item.message || item.topic || item.file || item.file_path || item.error || '';
     var detail = item.file_path || item.file || item.topic || item.error || '';
     if (kind === 'merge_candidate') {
         title = (item.files || []).map(function(path) { return window.Path_stem(path); }).join(' · ');
         detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) });
     }
+    if (kind === 'topic_merge_candidate') {
+        title = (item.topics || []).join(' ↔ ');
+        detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) });
+    }
     if (kind === 'cascade' && item.error) detail = item.error;
     if (kind === 'convert' && item.error) detail = (item.file || '') + (item.file && item.error ? ' · ' : '') + item.error;
-    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '" data-topic="' + encodeURIComponent(item.topic || '') + '" data-current-topic="' + encodeURIComponent(item.current_topic || '') + '" data-file="' + encodeURIComponent(item.file || item.file_path || '') + '" data-files="' + encodeURIComponent(JSON.stringify(item.files || [])) + '" data-related-file="' + encodeURIComponent(item.related_file || '') + '" data-action-kind="' + window.escapeAttr(item.action || '') + '">';
+    var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '" data-topic="' + encodeURIComponent(item.topic || '') + '" data-topics="' + encodeURIComponent(JSON.stringify(item.topics || [])) + '" data-current-topic="' + encodeURIComponent(item.current_topic || '') + '" data-file="' + encodeURIComponent(item.file || item.file_path || '') + '" data-files="' + encodeURIComponent(JSON.stringify(item.files || [])) + '" data-related-file="' + encodeURIComponent(item.related_file || '') + '" data-action-kind="' + window.escapeAttr(item.action || '') + '">';
     html += '<span class="pending-item-type type-' + kind + '">' + window.t(labelKey) + '</span>';
     html += '<div class="pending-item-title">' + window.escapeHtml(title || window.t('pending.itemNeedsReview')) + '</div>';
     if (detail && detail !== title) {
@@ -284,6 +297,8 @@ function renderPendingInfoItem(item, idx, kind) {
         html += '<div class="pending-item-actions"><button data-action="review-duplicate">' + window.t('pending.reviewDuplicate') + '</button></div>';
     } else if (item.action === 'review_merge_group') {
         html += '<div class="pending-item-actions"><button data-action="review-merge-group">' + window.t('pending.reviewMergeGroup') + '</button></div>';
+    } else if (item.action === 'review_topic_merge') {
+        html += '<div class="pending-item-actions"><button data-action="review-topic-merge">' + window.t('pending.reviewTopicMerge') + '</button></div>';
     } else if (item.action === 'open_file') {
         html += '<div class="pending-item-actions"><button data-action="open-file">' + window.t('home.openPending') + '</button></div>';
     } else if (item.action === 'assign_topic') {
@@ -311,6 +326,7 @@ function _findPendingItem(el) {
         topic: decodeURIComponent(item.getAttribute('data-topic') || ''),
         currentTopic: decodeURIComponent(item.getAttribute('data-current-topic') || ''),
         files: JSON.parse(decodeURIComponent(item.getAttribute('data-files') || '%5B%5D')),
+        topics: JSON.parse(decodeURIComponent(item.getAttribute('data-topics') || '%5B%5D')),
         actionKind: item.getAttribute('data-action-kind') || ''
     };
 }
@@ -350,6 +366,8 @@ function _handlePendingClick(e) {
         reviewDuplicateItem(info);
     } else if (action === 'review-merge-group') {
         reviewMergeGroup(info);
+    } else if (action === 'review-topic-merge') {
+        reviewTopicMerge(info);
     } else if (action === 'confirm-link') {
         confirmPendingLink(info.source, info.target, info.idx);
     } else if (action === 'open-links-panel') {
@@ -381,6 +399,30 @@ function reviewMergeGroup(info) {
             if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
         } else if (typeof window.updateStatus === 'function') {
             window.updateStatus((result && result.message) || window.t('pending.operationFailed'));
+        }
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(e.message || window.t('pending.operationFailed'));
+    });
+}
+
+function reviewTopicMerge(info) {
+    if (!window.api || !window.api.suggestTopicMergeNames || !info.topics || info.topics.length !== 2) return;
+    if (typeof window.updateStatus === 'function') window.updateStatus(window.t('pending.namingTopic'));
+    window.api.suggestTopicMergeNames(info.topics).then(function(result) {
+        if (!result || !result.success || !result.names || !result.names.length) throw new Error((result && result.message) || window.t('pending.operationFailed'));
+        var choices = result.names.map(function(item, index) { return (index + 1) + '. ' + item.name + ' — ' + item.reason; }).join('\n');
+        var newTopic = window.prompt(window.t('pending.chooseMergedTopic') + '\n\n' + choices, result.names[0].name);
+        if (!newTopic) return null;
+        if (!window.confirm(window.t('pending.confirmTopicMerge', { old: info.topics.join('、'), name: newTopic }))) return null;
+        return window.api.mergeSimilarTopics(info.topics, newTopic);
+    }).then(function(result) {
+        if (!result) return;
+        if (result.success) {
+            removePendingItem(info.idx);
+            if (typeof window.updateStatus === 'function') window.updateStatus(result.message || window.t('pending.mergeDone'));
+            if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
+        } else if (typeof window.updateStatus === 'function') {
+            window.updateStatus(result.message || window.t('pending.operationFailed'));
         }
     }).catch(function(e) {
         if (typeof window.updateStatus === 'function') window.updateStatus(e.message || window.t('pending.operationFailed'));
@@ -591,6 +633,23 @@ function runPendingHealthCheck() {
     });
 }
 
+function scanPendingMergeCandidates() {
+    var btn = document.getElementById('pending-merge-scan-btn');
+    if (!window.api || !window.api.scanMergeCandidates) return;
+    _setButtonBusy(btn, true, 'pending.scanningMergeCandidates');
+    window.api.scanMergeCandidates().then(function(result) {
+        if (typeof window.updateStatus === 'function') {
+            window.updateStatus(window.t('pending.mergeScanDone', { count: (result && result.candidate_count) || 0 }));
+        }
+        loadPendingItems();
+        refreshPendingBtnState();
+    }).catch(function(e) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(e.message || window.t('pending.operationFailed'));
+    }).finally(function() {
+        _setButtonBusy(btn, false, 'pending.scanMergeCandidates');
+    });
+}
+
 function retryAllPendingSurveys() {
     var btn = document.getElementById('pending-cascade-retry-all-btn');
     if (!window.api || !window.api.retryAllCascadeFailures) return;
@@ -611,10 +670,15 @@ function retryAllPendingSurveys() {
 document.addEventListener('click', _handlePendingClick);
 document.addEventListener('DOMContentLoaded', function() {
     var lintBtn = document.getElementById('pending-lint-run-btn');
+    var mergeScanBtn = document.getElementById('pending-merge-scan-btn');
     var retryBtn = document.getElementById('pending-cascade-retry-all-btn');
     if (lintBtn && !lintBtn.dataset.pendingBound) {
         lintBtn.addEventListener('click', runPendingHealthCheck);
         lintBtn.dataset.pendingBound = '1';
+    }
+    if (mergeScanBtn && !mergeScanBtn.dataset.pendingBound) {
+        mergeScanBtn.addEventListener('click', scanPendingMergeCandidates);
+        mergeScanBtn.dataset.pendingBound = '1';
     }
     if (retryBtn && !retryBtn.dataset.pendingBound) {
         retryBtn.addEventListener('click', retryAllPendingSurveys);

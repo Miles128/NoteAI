@@ -604,6 +604,33 @@ class TestCollectTopicLabelsForPendingUi:
         assert isinstance(opts, list)
         assert f"{l1}{TOPIC_SEP}待选二级" in opts
 
+    def test_get_all_pending_schedules_auto_move_without_blocking_snapshot(
+        self, workspace: Path, monkeypatch
+    ) -> None:
+        started: list[tuple[str, object, tuple]] = []
+
+        def start_task(name, target, args=(), **_kwargs):
+            started.append((name, target, args))
+            return True
+
+        srv = SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _start_task=start_task,
+        )
+        handler = TopicsHandler(srv)
+
+        payload = handler._get_all_pending({})
+
+        assert payload["maintenance_started"] is True
+        assert payload["auto_moved_count"] == 0
+        assert payload["auto_move_errors"] == []
+        assert [(name, args) for name, _target, args in started] == [("pending_maintenance", ())]
+        assert started[0][1] == handler._run_pending_maintenance
+
+        second = handler._get_all_pending({})
+        assert second["maintenance_started"] is False
+        assert len(started) == 1
+
 
 class TestIngestAndSchemaHandlers:
     def test_ensure_schema_and_get_schema(self, workspace: Path) -> None:

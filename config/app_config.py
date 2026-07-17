@@ -84,6 +84,7 @@ class AppConfig:
     topic_list: str = ""
     cloud_sync_experimental: bool = False
     ingest_auto_enabled: bool = True
+    semantic_compile_enabled: bool = True
     assistant_agent_mode: bool = False
     cli_agent_id: str = ""
     rag_enabled: bool = True

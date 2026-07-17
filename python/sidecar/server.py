@@ -28,6 +28,7 @@ from sidecar.handlers import (
     LinksHandler,
     McpConfigHandler,
     RagHandler,
+    SemanticHandler,
     TagsHandler,
     TopicsHandler,
     TransferHandler,
@@ -87,6 +88,7 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler = IntelHandler(self)
         self._job_handler = JobHandler(self)
         self._rag_handler = RagHandler(self)
+        self._semantic_handler = SemanticHandler(self)
         self._cloud_sync_handler = CloudSyncHandler(self)
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
@@ -101,6 +103,11 @@ class SidecarServer(PathHelpersMixin):
         instantiate in tests and avoids starting threads/watchers before the
         process is fully initialized.
         """
+        from sidecar.ingest_pipeline import normalize_ingest_state
+
+        # Only process startup may declare a persisted `running` state orphaned.
+        # Read-only status RPCs must never mutate a live ingest into interrupted.
+        normalize_ingest_state()
         self._start_workspace_watcher()
         self._startup_sync()
 
@@ -117,6 +124,7 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler.register_routes(self._router)
         self._job_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
+        self._semantic_handler.register_routes(self._router)
         self._cloud_sync_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)

@@ -40,7 +40,10 @@ def semantic_handler(tmp_path: Path):
                VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG',
                       'conclusion', 0.92, 'active')"""
         )
-        conn.execute("INSERT INTO evidence VALUES('evidence-1', 'claim-1', 'block-1', 'quote-hash')")
+        conn.execute(
+            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
+               VALUES('evidence-1', 'claim-1', 'block-1', 'quote-hash')"""
+        )
         conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', 'block-1')")
         conn.execute("INSERT INTO semantic_mentions VALUES('entity-1', 'entity', 'block-1')")
         conn.execute(
@@ -101,6 +104,57 @@ def test_conflict_review_changes_only_review_status(semantic_handler: SemanticHa
     assert reviewed["success"] is True
     assert history["items"][0]["id"] == "conflict-1"
     assert claims["total"] == 1
+
+
+def test_claim_can_be_edited_deleted_and_restored_with_audit(
+    semantic_handler: SemanticHandler,
+) -> None:
+    edited = semantic_handler._update_claim(
+        {
+            "id": "claim-1",
+            "statement": "混合检索通常优于单一路径。",
+            "scope": "检索质量",
+            "claim_type": "conclusion",
+        }
+    )
+    deleted = semantic_handler._set_claim_status({"id": "claim-1", "status": "deleted"})
+    active = semantic_handler._get_workbench({"tab": "claims"})
+    history = semantic_handler._get_workbench({"tab": "claims", "status": "deleted"})
+    restored = semantic_handler._set_claim_status({"id": "claim-1", "status": "active"})
+    detail = semantic_handler._get_detail({"kind": "claim", "id": "claim-1"})
+
+    assert edited["success"] is True
+    assert deleted["success"] is True
+    assert active["total"] == 0
+    assert history["total"] == 1
+    assert restored["success"] is True
+    assert detail["item"]["statement"] == "混合检索通常优于单一路径。"
+    assert [entry["action"] for entry in detail["item"]["audit"]] == [
+        "restore",
+        "delete",
+        "edit",
+    ]
+
+
+def test_evidence_exclusion_and_entity_alias_are_audited(
+    semantic_handler: SemanticHandler,
+) -> None:
+    excluded = semantic_handler._set_evidence_status(
+        {"id": "evidence-1", "status": "excluded"}
+    )
+    claims = semantic_handler._get_workbench({"tab": "claims"})
+    restored = semantic_handler._set_evidence_status(
+        {"id": "evidence-1", "status": "active"}
+    )
+    alias = semantic_handler._add_entity_alias({"id": "entity-1", "alias": "Okapi BM25"})
+    entity = semantic_handler._get_detail({"kind": "entity", "id": "entity-1"})
+
+    assert excluded["success"] is True
+    assert claims["total"] == 0
+    assert restored["success"] is True
+    assert alias["success"] is True
+    assert entity["item"]["aliases"] == ["Okapi BM25"]
+    assert entity["item"]["audit"][0]["action"] == "add_alias"
 
 
 def test_unknown_tab_is_rejected(semantic_handler: SemanticHandler) -> None:

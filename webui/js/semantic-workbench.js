@@ -10,6 +10,8 @@ var _loadSeq = 0;
 var _detailSeq = 0;
 var _searchTimer = null;
 var _compileTimer = null;
+var _activeDetail = null;
+var _activeDetailKind = null;
 
 function esc(value) {
     return window.escapeHtml ? window.escapeHtml(String(value == null ? '' : value)) : String(value == null ? '' : value);
@@ -123,8 +125,10 @@ function setObjectKind(kind) {
 function configureStatusFilter() {
     var status = document.getElementById('semantic-status-filter');
     if (!status) return;
-    status.hidden = _category !== 'conflicts' && _category !== 'links';
-    if (_category === 'conflicts') {
+    status.hidden = _category !== 'claims' && _category !== 'conflicts' && _category !== 'links';
+    if (_category === 'claims') {
+        status.innerHTML = '<option value="active">' + esc(t('semantic.status.active')) + '</option><option value="deleted">' + esc(t('semantic.status.deleted')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
+    } else if (_category === 'conflicts') {
         status.innerHTML = '<option value="pending">' + esc(t('semantic.status.pending')) + '</option><option value="reviewed">' + esc(t('semantic.status.reviewed')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
     } else if (_category === 'links') {
         status.innerHTML = '<option value="all">' + esc(t('semantic.status.all')) + '</option><option value="pending">' + esc(t('semantic.status.pending')) + '</option><option value="confirmed">' + esc(t('semantic.status.confirmed')) + '</option>';
@@ -190,7 +194,7 @@ function renderList() {
 
 function listMeta(item) {
     if (_category === 'objects') return '<span>' + esc(item.entity_type || t('semantic.tabs.' + _objectKind)) + '</span><span>' + esc(t('semantic.mentions', { count: item.mention_count || 0 })) + '</span>';
-    if (_category === 'claims') return '<span>' + esc(t('semantic.claimTypes.' + (item.claim_type || 'conclusion'))) + '</span><span>' + esc(t('semantic.evidenceCount', { count: item.evidence_count || 0 })) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span>';
+    if (_category === 'claims') return '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span><span>' + esc(t('semantic.claimTypes.' + (item.claim_type || 'conclusion'))) + '</span><span>' + esc(t('semantic.evidenceCount', { count: item.evidence_count || 0 })) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span>';
     return '<span>' + esc(t('semantic.status.' + (item.status || 'confirmed'))) + '</span>' + (item.has_reverse ? '<span>↔</span>' : '');
 }
 
@@ -230,15 +234,40 @@ function renderObjectDetail(kind, item) {
     var kicker = kind === 'claim' ? t('semantic.categories.claims') : t('semantic.tabs.' + (kind === 'entity' ? 'entities' : 'concepts'));
     var description = item.description || (item.scope ? t('semantic.scope', { scope: item.scope }) : '');
     var sources = item.sources || [];
-    var sourceHtml = sources.map(renderSource).join('');
+    _activeDetail = item;
+    _activeDetailKind = kind;
+    var sourceHtml = sources.map(function(source) { return renderSource(source, kind); }).join('');
     var typeLabel = kind === 'claim' ? t('semantic.claimTypes.' + (item.claim_type || 'conclusion')) : (item.entity_type || '');
-    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta"><span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div><section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section></div>';
+    var status = kind === 'claim' ? '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span>' : '';
+    var controls = kind === 'claim' ? renderClaimControls(item) : (kind === 'entity' ? renderEntityAliasControls(item) : '');
+    var audit = renderAudit(item.audit || []);
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
 }
 
-function renderSource(source) {
+function renderClaimControls(item) {
+    var deleted = item.status === 'deleted';
+    var statusButton = deleted
+        ? '<button class="primary" data-claim-status="active">' + esc(t('semantic.restoreClaim')) + '</button>'
+        : '<button class="danger" data-claim-status="deleted">' + esc(t('semantic.deleteClaim')) + '</button>';
+    return '<div class="semantic-actions"><button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + '</div>' +
+        '<form class="semantic-claim-editor" hidden><label>' + esc(t('semantic.claimStatement')) + '<textarea name="statement" required>' + esc(item.statement || '') + '</textarea></label><label>' + esc(t('semantic.claimScope')) + '<input name="scope" value="' + esc(item.scope || '') + '"></label><label>' + esc(t('semantic.claimType')) + '<select name="claim_type"><option value="conclusion"' + (item.claim_type === 'conclusion' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.conclusion')) + '</option><option value="hypothesis"' + (item.claim_type === 'hypothesis' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.hypothesis')) + '</option></select></label><div class="semantic-actions"><button type="submit" class="primary">' + esc(t('common.save')) + '</button><button type="button" data-cancel-claim-edit>' + esc(t('common.cancel')) + '</button></div></form>';
+}
+
+function renderEntityAliasControls(item) {
+    var aliases = (item.aliases || []).map(function(alias) { return '<span class="semantic-alias-chip">' + esc(alias) + '</span>'; }).join('');
+    return '<section class="semantic-detail-section"><h3>' + esc(t('semantic.aliases')) + '</h3><div class="semantic-aliases">' + (aliases || '<span class="semantic-muted">' + esc(t('semantic.noAliases')) + '</span>') + '</div><form class="semantic-alias-form"><input name="alias" required placeholder="' + esc(t('semantic.aliasPlaceholder')) + '"><button type="submit">' + esc(t('semantic.addAlias')) + '</button></form></section>';
+}
+
+function renderAudit(items) {
+    if (!items.length) return '';
+    return '<section class="semantic-detail-section semantic-audit"><h3>' + esc(t('semantic.auditTitle')) + '</h3>' + items.map(function(item) { return '<div><span>' + esc(t('semantic.auditActions.' + item.action)) + '</span><time>' + esc(item.created_at || '') + '</time></div>'; }).join('') + '</section>';
+}
+
+function renderSource(source, kind) {
     var heading = (source.heading_path || []).join(' › ');
     var label = (source.title || shortPath(source.path)) + (heading ? ' · ' + heading : '') + ' · L' + (source.start_line || 1);
-    return '<article class="semantic-source-card"><button class="semantic-source" data-open-path="' + esc(source.path) + '">' + esc(label) + '</button><blockquote>' + esc(source.excerpt || '') + '</blockquote></article>';
+    var evidenceAction = kind === 'claim' ? '<button class="semantic-evidence-action" data-evidence-id="' + esc(source.id) + '" data-evidence-status="' + (source.status === 'excluded' ? 'active' : 'excluded') + '">' + esc(t(source.status === 'excluded' ? 'semantic.restoreEvidence' : 'semantic.excludeEvidence')) + '</button>' : '';
+    return '<article class="semantic-source-card' + (source.status === 'excluded' ? ' is-excluded' : '') + '"><div class="semantic-source-heading"><button class="semantic-source" data-open-path="' + esc(source.path) + '">' + esc(label) + '</button>' + evidenceAction + '</div><blockquote>' + esc(source.excerpt || '') + '</blockquote></article>';
 }
 
 function renderLocalDetail(item) {
@@ -344,6 +373,35 @@ function openSource(path) {
 function onDetailClick(event) {
     var source = event.target.closest('[data-open-path]');
     if (source) return openSource(source.dataset.openPath);
+    var edit = event.target.closest('[data-edit-claim]');
+    if (edit) {
+        var editor = document.querySelector('.semantic-claim-editor');
+        if (editor) editor.hidden = false;
+        return;
+    }
+    var cancelEdit = event.target.closest('[data-cancel-claim-edit]');
+    if (cancelEdit) {
+        var editForm = document.querySelector('.semantic-claim-editor');
+        if (editForm) editForm.hidden = true;
+        return;
+    }
+    var claimStatus = event.target.closest('[data-claim-status]');
+    if (claimStatus && _activeDetail && window.api.setSemanticClaimStatus) {
+        claimStatus.disabled = true;
+        return window.api.setSemanticClaimStatus(_activeDetail.id, claimStatus.dataset.claimStatus).then(function(result) {
+            if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+            loadList();
+        }).catch(function(error) { claimStatus.disabled = false; if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
+    }
+    var evidence = event.target.closest('[data-evidence-id]');
+    if (evidence && window.api.setSemanticEvidenceStatus) {
+        evidence.disabled = true;
+        return window.api.setSemanticEvidenceStatus(evidence.dataset.evidenceId, evidence.dataset.evidenceStatus).then(function(result) {
+            if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+            loadDetail(_activeDetail);
+            loadOverview();
+        }).catch(function(error) { evidence.disabled = false; if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
+    }
     var review = event.target.closest('[data-review-id]');
     if (review && window.api.reviewSemanticConflict) {
         review.disabled = true;
@@ -363,6 +421,30 @@ function onDetailClick(event) {
     });
 }
 
+function onDetailSubmit(event) {
+    var claimForm = event.target.closest('.semantic-claim-editor');
+    if (claimForm && _activeDetail && window.api.updateSemanticClaim) {
+        event.preventDefault();
+        var submit = claimForm.querySelector('[type="submit"]');
+        if (submit) submit.disabled = true;
+        window.api.updateSemanticClaim(_activeDetail.id, claimForm.elements.statement.value, claimForm.elements.scope.value, claimForm.elements.claim_type.value).then(function(result) {
+            if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+            loadList();
+        }).catch(function(error) { if (submit) submit.disabled = false; if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
+        return;
+    }
+    var aliasForm = event.target.closest('.semantic-alias-form');
+    if (aliasForm && _activeDetail && window.api.addSemanticEntityAlias) {
+        event.preventDefault();
+        var alias = aliasForm.elements.alias.value.trim();
+        if (!alias) return;
+        window.api.addSemanticEntityAlias(_activeDetail.id, alias).then(function(result) {
+            if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+            loadDetail(_activeDetail);
+        }).catch(function(error) { if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
+    }
+}
+
 function init() {
     var categories = document.getElementById('semantic-categories');
     if (categories) categories.addEventListener('click', function(event) {
@@ -380,7 +462,7 @@ function init() {
         if (button) selectItem(Number(button.dataset.semanticIndex));
     });
     var detail = document.getElementById('semantic-workbench-detail');
-    if (detail) detail.addEventListener('click', onDetailClick);
+    if (detail) { detail.addEventListener('click', onDetailClick); detail.addEventListener('submit', onDetailSubmit); }
     var refresh = document.getElementById('semantic-refresh');
     if (refresh) refresh.addEventListener('click', function() { loadOverview(); loadList(); });
     var compile = document.getElementById('semantic-compile-all');

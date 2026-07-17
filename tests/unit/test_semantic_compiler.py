@@ -347,7 +347,7 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
         ).fetchone()["value"]
     assert "claim_type" in columns
     assert claim["claim_type"] == "conclusion"
-    assert schema_version == "2"
+    assert schema_version == "3"
 
 
 def test_extractor_records_invalid_json_as_partial(tmp_path: Path):

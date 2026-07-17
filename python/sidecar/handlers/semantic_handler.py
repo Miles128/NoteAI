@@ -16,7 +16,11 @@ class SemanticHandler(BaseHandler):
 
     def _store(self) -> SemanticStore | None:
         workspace = self.config.workspace_path
-        return SemanticStore(workspace) if workspace else None
+        if not workspace:
+            return None
+        store = SemanticStore(workspace)
+        store.initialize()
+        return store
 
     @staticmethod
     def _page(params: dict) -> tuple[int, int]:
@@ -56,6 +60,8 @@ class SemanticHandler(BaseHandler):
             "entities": 0,
             "claims": 0,
             "evidence": 0,
+            "deleted_claims": 0,
+            "excluded_evidence": 0,
             "conflicts": 0,
             "updated_at": None,
             "source_documents": 0,
@@ -82,6 +88,19 @@ class SemanticHandler(BaseHandler):
         tables = ("documents", "blocks", "concepts", "entities", "claims", "evidence")
         with store.connect() as conn:
             overview = {table: conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in tables}
+            overview["claims"] = conn.execute(
+                """SELECT count(*) FROM claims c WHERE c.status = 'active'
+                   AND EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id AND e.status = 'active')"""
+            ).fetchone()[0]
+            overview["evidence"] = conn.execute(
+                "SELECT count(*) FROM evidence WHERE status = 'active'"
+            ).fetchone()[0]
+            overview["deleted_claims"] = conn.execute(
+                "SELECT count(*) FROM claims WHERE status = 'deleted'"
+            ).fetchone()[0]
+            overview["excluded_evidence"] = conn.execute(
+                "SELECT count(*) FROM evidence WHERE status = 'excluded'"
+            ).fetchone()[0]
             overview["conflicts"] = conn.execute(
                 "SELECT count(*) FROM review_queue WHERE item_kind = 'claim_conflict' AND status = 'pending'"
             ).fetchone()[0]
@@ -189,13 +208,25 @@ class SemanticHandler(BaseHandler):
         like = f"%{query}%"
         with store.connect() as conn:
             if tab == "claims":
-                where = "WHERE c.status = 'active' AND (? = '' OR c.statement LIKE ? OR c.scope LIKE ?)"
-                args = (query, like, like)
+                status = str(params.get("status", "active") or "active")
+                if status not in {"active", "deleted", "all"}:
+                    status = "active"
+                status_clause = "" if status == "all" else "c.status = ? AND "
+                args = (() if status == "all" else (status,)) + (query, like, like)
+                evidence_clause = (
+                    "AND (c.status = 'deleted' OR EXISTS "
+                    "(SELECT 1 FROM evidence ae WHERE ae.claim_id = c.id AND ae.status = 'active'))"
+                )
+                where = (
+                    f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) "
+                    f"{evidence_clause}"
+                )
                 total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
                 rows = conn.execute(
-                    f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence,
-                               count(e.id) AS evidence_count
-                        FROM claims c JOIN evidence e ON e.claim_id = c.id
+                    f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
+                               sum(CASE WHEN e.status = 'active' THEN 1 ELSE 0 END) AS evidence_count,
+                               sum(CASE WHEN e.status = 'excluded' THEN 1 ELSE 0 END) AS excluded_evidence_count
+                        FROM claims c LEFT JOIN evidence e ON e.claim_id = c.id
                         {where} GROUP BY c.id ORDER BY c.confidence DESC, c.statement LIMIT ? OFFSET ?""",
                     (*args, limit, offset),
                 ).fetchall()
@@ -203,7 +234,7 @@ class SemanticHandler(BaseHandler):
                 for row in rows:
                     item = dict(row)
                     evidence = conn.execute(
-                        """SELECT e.id, d.path, d.title, d.topic, b.id AS block_id,
+                        """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
                                   b.heading_path_json, b.content, b.start_line, b.end_line
                            FROM evidence e JOIN blocks b ON b.id = e.block_id
                            JOIN documents d ON d.id = b.document_id
@@ -262,7 +293,7 @@ class SemanticHandler(BaseHandler):
                     return {"success": False, "message": "命题不存在"}
                 item = dict(row)
                 rows = conn.execute(
-                    """SELECT e.id, d.path, d.title, d.topic, b.id AS block_id,
+                    """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
                               b.heading_path_json, b.content, b.start_line, b.end_line
                        FROM evidence e JOIN blocks b ON b.id = e.block_id
                        JOIN documents d ON d.id = b.document_id
@@ -284,8 +315,86 @@ class SemanticHandler(BaseHandler):
                        ORDER BY d.path, b.ordinal""",
                     (object_id, kind),
                 ).fetchall()
+                if kind == "entity":
+                    item["aliases"] = [
+                        value["alias"]
+                        for value in conn.execute(
+                            "SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias COLLATE NOCASE",
+                            (object_id,),
+                        )
+                    ]
+            audit_rows = conn.execute(
+                """SELECT id, action, before_json, after_json, created_at
+                   FROM semantic_audit_log WHERE object_kind = ? AND object_id = ?
+                   ORDER BY created_at DESC LIMIT 20""",
+                (kind, object_id),
+            ).fetchall()
         item["sources"] = [self._evidence_row(value) for value in rows]
+        item["audit"] = [
+            {
+                "id": value["id"],
+                "action": value["action"],
+                "before": json.loads(value["before_json"] or "{}"),
+                "after": json.loads(value["after_json"] or "{}"),
+                "created_at": value["created_at"],
+            }
+            for value in audit_rows
+        ]
         return {"success": True, "kind": kind, "item": item}
+
+    def _update_claim(self, params):
+        claim_id = str(params.get("id", "") or "")
+        if not claim_id:
+            return {"success": False, "message": "命题 ID 不能为空"}
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        try:
+            item = store.update_claim(
+                claim_id,
+                statement=str(params.get("statement", "") or ""),
+                scope=str(params.get("scope", "") or ""),
+                claim_type=str(params.get("claim_type", "") or ""),
+            )
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        return {"success": item is not None, "item": item, "message": "命题不存在" if item is None else ""}
+
+    def _set_claim_status(self, params):
+        claim_id = str(params.get("id", "") or "")
+        status = str(params.get("status", "") or "")
+        store = self._store()
+        if not claim_id or store is None or not store.path.exists():
+            return {"success": False, "message": "参数不完整或语义数据库不存在"}
+        try:
+            item = store.set_claim_status(claim_id, status)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        return {"success": item is not None, "item": item}
+
+    def _set_evidence_status(self, params):
+        evidence_id = str(params.get("id", "") or "")
+        status = str(params.get("status", "") or "")
+        store = self._store()
+        if not evidence_id or store is None or not store.path.exists():
+            return {"success": False, "message": "参数不完整或语义数据库不存在"}
+        try:
+            item = store.set_evidence_status(evidence_id, status)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        return {"success": item is not None, "item": item}
+
+    def _add_entity_alias(self, params):
+        entity_id = str(params.get("id", "") or "")
+        alias = str(params.get("alias", "") or "")
+        store = self._store()
+        if not entity_id or store is None or not store.path.exists():
+            return {"success": False, "message": "参数不完整或语义数据库不存在"}
+        try:
+            item = store.add_entity_alias(entity_id, alias)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        return {"success": item is not None, "item": item}
 
     def _conflicts(self, store: SemanticStore, params: dict):
         limit, offset = self._page(params)
@@ -380,3 +489,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_compile_status", self._get_compile_status)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
+        router.register("update_semantic_claim", self._update_claim)
+        router.register("set_semantic_claim_status", self._set_claim_status)
+        router.register("set_semantic_evidence_status", self._set_evidence_status)
+        router.register("add_semantic_entity_alias", self._add_entity_alias)

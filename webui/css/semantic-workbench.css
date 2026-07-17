@@ -100,6 +100,23 @@
 .semantic-actions { display: flex; gap: 8px; margin-top: 18px; }
 .semantic-actions button { border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px; background: var(--surface); color: var(--text); cursor: pointer; }
 .semantic-actions button.primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+.semantic-actions button.danger { border-color: color-mix(in srgb, var(--danger, #c94b4b) 55%, var(--border)); color: var(--danger, #c94b4b); }
+.semantic-claim-editor { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.semantic-claim-editor[hidden] { display: none; }
+.semantic-claim-editor label { display: grid; gap: 6px; color: var(--text-muted); font-size: 11px; }
+.semantic-claim-editor input, .semantic-claim-editor select, .semantic-claim-editor textarea, .semantic-alias-form input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; background: var(--article-bg); color: var(--text); font: inherit; }
+.semantic-claim-editor textarea { min-height: 92px; resize: vertical; line-height: 1.55; }
+.semantic-source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.semantic-evidence-action { flex: 0 0 auto; border: 0; padding: 0; background: transparent; color: var(--text-muted); font-size: 10px; cursor: pointer; }
+.semantic-source-card.is-excluded { opacity: .55; }
+.semantic-source-card.is-excluded blockquote { text-decoration: line-through; }
+.semantic-aliases { display: flex; flex-wrap: wrap; gap: 6px; }
+.semantic-alias-chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; background: var(--surface); color: var(--text-muted); font-size: 10px; }
+.semantic-muted { color: var(--text-muted); font-size: 11px; }
+.semantic-alias-form { display: flex; gap: 8px; margin-top: 10px; }
+.semantic-alias-form button { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px; background: var(--surface); color: var(--text); cursor: pointer; }
+.semantic-audit > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 10px; }
+.semantic-audit time { font-variant-numeric: tabular-nums; }
 .semantic-empty, .semantic-error, .semantic-loading { padding: 48px 20px; color: var(--text-muted); text-align: center; font-size: 12px; }
 .semantic-metrics { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); margin-top: 25px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .semantic-metric { padding: 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }

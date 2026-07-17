@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
+from uuid import uuid4
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from config.settings import WORKSPACE_APP_FOLDER
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 CLAIM_POLICY_VERSION = 3
 
 _SCHEMA = """
@@ -69,13 +71,15 @@ CREATE TABLE IF NOT EXISTS claims (
     scope TEXT NOT NULL DEFAULT '',
     claim_type TEXT NOT NULL CHECK(claim_type IN ('conclusion', 'hypothesis')),
     confidence REAL NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active'
+    status TEXT NOT NULL DEFAULT 'active',
+    user_edited INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS evidence (
     id TEXT PRIMARY KEY,
     claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
     block_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
     quote_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
     UNIQUE(claim_id, block_id, quote_hash)
 );
 CREATE INDEX IF NOT EXISTS idx_evidence_claim ON evidence(claim_id);
@@ -125,6 +129,23 @@ CREATE TABLE IF NOT EXISTS review_queue (
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS entity_aliases (
+    alias TEXT PRIMARY KEY COLLATE NOCASE,
+    entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id);
+CREATE TABLE IF NOT EXISTS semantic_audit_log (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    object_kind TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    before_json TEXT NOT NULL DEFAULT '{}',
+    after_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_semantic_audit_object
+    ON semantic_audit_log(object_kind, object_id, created_at DESC);
 """
 
 
@@ -145,6 +166,17 @@ class SemanticStore:
                 conn.execute(
                     "ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT 'conclusion' "
                     "CHECK(claim_type IN ('conclusion', 'hypothesis'))"
+                )
+            if "user_edited" not in claim_columns:
+                conn.execute(
+                    "ALTER TABLE claims ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0"
+                )
+            evidence_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(evidence)")
+            }
+            if "status" not in evidence_columns:
+                conn.execute(
+                    "ALTER TABLE evidence ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
                 )
             conn.execute(
                 "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
@@ -174,6 +206,154 @@ class SemanticStore:
                     "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('claim_policy_version', ?)",
                     (str(CLAIM_POLICY_VERSION),),
                 )
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _audit(
+        conn: sqlite3.Connection,
+        *,
+        action: str,
+        object_kind: str,
+        object_id: str,
+        before: dict,
+        after: dict,
+    ) -> None:
+        conn.execute(
+            """INSERT INTO semantic_audit_log(
+                   id, action, object_kind, object_id, before_json, after_json, created_at
+               ) VALUES(?, ?, ?, ?, ?, ?, ?)""",
+            (
+                uuid4().hex,
+                action,
+                object_kind,
+                object_id,
+                json.dumps(before, ensure_ascii=False, sort_keys=True),
+                json.dumps(after, ensure_ascii=False, sort_keys=True),
+                SemanticStore._now(),
+            ),
+        )
+
+    def update_claim(
+        self,
+        claim_id: str,
+        *,
+        statement: str,
+        scope: str,
+        claim_type: str,
+    ) -> dict | None:
+        if claim_type not in {"conclusion", "hypothesis"}:
+            raise ValueError("unsupported claim type")
+        statement = statement.strip()
+        scope = scope.strip()
+        if not statement:
+            raise ValueError("claim statement is required")
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
+            if row is None:
+                return None
+            before = dict(row)
+            conn.execute(
+                "UPDATE claims SET statement = ?, scope = ?, claim_type = ?, user_edited = 1 WHERE id = ?",
+                (statement, scope, claim_type, claim_id),
+            )
+            after = {
+                **before,
+                "statement": statement,
+                "scope": scope,
+                "claim_type": claim_type,
+                "user_edited": 1,
+            }
+            self._audit(
+                conn,
+                action="edit",
+                object_kind="claim",
+                object_id=claim_id,
+                before=before,
+                after=after,
+            )
+            return after
+
+    def set_claim_status(self, claim_id: str, status: str) -> dict | None:
+        if status not in {"active", "deleted"}:
+            raise ValueError("unsupported claim status")
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
+            if row is None:
+                return None
+            before = dict(row)
+            if before["status"] == status:
+                return before
+            conn.execute("UPDATE claims SET status = ? WHERE id = ?", (status, claim_id))
+            after = {**before, "status": status}
+            self._audit(
+                conn,
+                action="delete" if status == "deleted" else "restore",
+                object_kind="claim",
+                object_id=claim_id,
+                before=before,
+                after=after,
+            )
+            return after
+
+    def set_evidence_status(self, evidence_id: str, status: str) -> dict | None:
+        if status not in {"active", "excluded"}:
+            raise ValueError("unsupported evidence status")
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM evidence WHERE id = ?", (evidence_id,)).fetchone()
+            if row is None:
+                return None
+            before = dict(row)
+            if before["status"] == status:
+                return before
+            conn.execute("UPDATE evidence SET status = ? WHERE id = ?", (status, evidence_id))
+            after = {**before, "status": status}
+            self._audit(
+                conn,
+                action="exclude" if status == "excluded" else "restore",
+                object_kind="evidence",
+                object_id=evidence_id,
+                before=before,
+                after=after,
+            )
+            return after
+
+    def add_entity_alias(self, entity_id: str, alias: str) -> dict | None:
+        alias = alias.strip()
+        if not alias:
+            raise ValueError("entity alias is required")
+        with self.connect() as conn:
+            entity = conn.execute(
+                "SELECT id, canonical_name FROM entities WHERE id = ?", (entity_id,)
+            ).fetchone()
+            if entity is None:
+                return None
+            if alias.casefold() == entity["canonical_name"].casefold():
+                raise ValueError("alias duplicates canonical name")
+            existing = conn.execute(
+                "SELECT entity_id FROM entity_aliases WHERE alias = ? COLLATE NOCASE", (alias,)
+            ).fetchone()
+            if existing is not None:
+                if existing["entity_id"] == entity_id:
+                    return {"entity_id": entity_id, "alias": alias}
+                raise ValueError("alias belongs to another entity")
+            created_at = self._now()
+            conn.execute(
+                "INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES(?, ?, ?)",
+                (alias, entity_id, created_at),
+            )
+            after = {"entity_id": entity_id, "alias": alias, "created_at": created_at}
+            self._audit(
+                conn,
+                action="add_alias",
+                object_kind="entity",
+                object_id=entity_id,
+                before={},
+                after=after,
+            )
+            return after
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -241,6 +421,12 @@ class SemanticStore:
     ) -> None:
         """Replace only one block's Claim/Evidence layer."""
         with self.connect() as conn:
+            evidence_statuses = {
+                row["id"]: row["status"]
+                for row in conn.execute(
+                    "SELECT id, status FROM evidence WHERE block_id = ?", (block_id,)
+                )
+            }
             conn.execute(
                 "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind = 'claim'",
                 (block_id,),
@@ -252,10 +438,10 @@ class SemanticStore:
                     INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
                     VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
                     ON CONFLICT(id) DO UPDATE SET
-                        statement=excluded.statement,
-                        scope=excluded.scope,
-                        claim_type=excluded.claim_type,
-                        confidence=max(confidence, excluded.confidence), status='active'
+                        statement=CASE WHEN user_edited = 1 THEN statement ELSE excluded.statement END,
+                        scope=CASE WHEN user_edited = 1 THEN scope ELSE excluded.scope END,
+                        claim_type=CASE WHEN user_edited = 1 THEN claim_type ELSE excluded.claim_type END,
+                        confidence=max(confidence, excluded.confidence), status=status
                     """,
                     claim,
                 )
@@ -265,11 +451,14 @@ class SemanticStore:
                 )
                 conn.execute(
                     """
-                    INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-                    VALUES(:id, :claim_id, :block_id, :quote_hash)
+                    INSERT INTO evidence(id, claim_id, block_id, quote_hash, status)
+                    VALUES(:id, :claim_id, :block_id, :quote_hash, :status)
                     ON CONFLICT(id) DO NOTHING
                     """,
-                    claim["evidence"],
+                    {
+                        **claim["evidence"],
+                        "status": evidence_statuses.get(claim["evidence"]["id"], "active"),
+                    },
                 )
             conn.execute(
                 """
@@ -325,6 +514,12 @@ class SemanticStore:
     ) -> None:
         """Replace one block's semantic output in a single transaction."""
         with self.connect() as conn:
+            evidence_statuses = {
+                row["id"]: row["status"]
+                for row in conn.execute(
+                    "SELECT id, status FROM evidence WHERE block_id = ?", (block_id,)
+                )
+            }
             conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
             conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
 
@@ -368,10 +563,10 @@ class SemanticStore:
                     INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
                     VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
                     ON CONFLICT(id) DO UPDATE SET
-                        statement=excluded.statement,
-                        scope=excluded.scope,
-                        claim_type=excluded.claim_type,
-                        confidence=max(confidence, excluded.confidence), status='active'
+                        statement=CASE WHEN user_edited = 1 THEN statement ELSE excluded.statement END,
+                        scope=CASE WHEN user_edited = 1 THEN scope ELSE excluded.scope END,
+                        claim_type=CASE WHEN user_edited = 1 THEN claim_type ELSE excluded.claim_type END,
+                        confidence=max(confidence, excluded.confidence), status=status
                     """,
                     claim,
                 )
@@ -382,11 +577,11 @@ class SemanticStore:
                 evidence = claim["evidence"]
                 conn.execute(
                     """
-                    INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-                    VALUES(:id, :claim_id, :block_id, :quote_hash)
+                    INSERT INTO evidence(id, claim_id, block_id, quote_hash, status)
+                    VALUES(:id, :claim_id, :block_id, :quote_hash, :status)
                     ON CONFLICT(id) DO NOTHING
                     """,
-                    evidence,
+                    {**evidence, "status": evidence_statuses.get(evidence["id"], "active")},
                 )
 
             conn.execute(

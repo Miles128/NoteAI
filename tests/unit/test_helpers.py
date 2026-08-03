@@ -7,16 +7,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.helpers import (
     _truncate_at_sentence_boundary,
     clean_text,
-    detect_language,
     extract_title_from_markdown,
     get_file_extension,
-    recursive_markdown_chunk,
     remove_images_from_markdown,
     sanitize_filename,
     smart_truncate_text,
-    split_text_into_chunks,
-    truncate_text,
-    validate_api_key,
 )
 
 
@@ -67,64 +62,12 @@ class TestExtractTitle(unittest.TestCase):
         self.assertIsNone(extract_title_from_markdown(md))
 
 
-class TestSplitText(unittest.TestCase):
-    def test_basic_split(self):
-        text = "A" * 2000
-        chunks = split_text_into_chunks(text, chunk_size=1000, overlap=200)
-        self.assertGreater(len(chunks), 1)
-
-    def test_small_text(self):
-        text = "Small text"
-        chunks = split_text_into_chunks(text, chunk_size=1000)
-        self.assertEqual(len(chunks), 1)
-
-
-class TestTruncateText(unittest.TestCase):
-    def test_truncate(self):
-        text = "A" * 200
-        result = truncate_text(text, max_length=50)
-        self.assertEqual(len(result), 50)
-        self.assertTrue(result.endswith("..."))
-
-    def test_no_truncate(self):
-        text = "Short"
-        result = truncate_text(text, max_length=100)
-        self.assertEqual(result, "Short")
-
-
 class TestGetFileExtension(unittest.TestCase):
     def test_pdf(self):
         self.assertEqual(get_file_extension("file.pdf"), ".pdf")
 
     def test_uppercase(self):
         self.assertEqual(get_file_extension("file.PDF"), ".pdf")
-
-
-class TestValidateApiKey(unittest.TestCase):
-    def test_valid_key(self):
-        self.assertTrue(validate_api_key("sk-1234567890abcdef"))
-
-    def test_empty_key(self):
-        self.assertFalse(validate_api_key(""))
-
-    def test_short_key(self):
-        self.assertFalse(validate_api_key("short"))
-
-    def test_whitespace_key(self):
-        self.assertFalse(validate_api_key("   "))
-
-
-class TestDetectLanguage(unittest.TestCase):
-    def test_chinese(self):
-        text = "这是一个中文测试"
-        self.assertEqual(detect_language(text), "chinese")
-
-    def test_english(self):
-        text = "This is an English test"
-        self.assertEqual(detect_language(text), "english")
-
-    def test_empty(self):
-        self.assertEqual(detect_language(""), "unknown")
 
 
 class TestMaxContextTokens(unittest.TestCase):
@@ -176,95 +119,6 @@ class TestMaxContextTokens(unittest.TestCase):
         self.assertFalse(is_within)
         self.assertLess(tokens, 1000)
         self.assertNotEqual(result, content)
-
-
-class TestRecursiveMarkdownChunk(unittest.TestCase):
-    def test_small_text_no_split(self):
-        text = "# Title\n\nSmall content here."
-        chunks = recursive_markdown_chunk(text, chunk_size=1000, overlap=200)
-        self.assertEqual(len(chunks), 1)
-        self.assertEqual(chunks[0], text)
-
-    def test_split_by_headings(self):
-        text = """# Heading 1
-
-Content for heading 1. This is a long paragraph that should be part of the first section. It contains multiple sentences to make it longer.
-
-## Heading 2
-
-Content for heading 2. Another long paragraph for the second section. This also has multiple sentences.
-
-## Heading 3
-
-Content for heading 3. Final section content."""
-
-        chunks = recursive_markdown_chunk(text, chunk_size=100, overlap=20)
-        self.assertGreater(len(chunks), 1)
-
-        for chunk in chunks:
-            self.assertLessEqual(len(chunk), 150)
-
-    def test_split_by_punctuation(self):
-        text = "This is sentence one. This is sentence two. This is sentence three. This is sentence four. This is sentence five. This is sentence six. This is sentence seven. This is sentence eight. This is sentence nine. This is sentence ten."
-
-        chunks = recursive_markdown_chunk(text, chunk_size=50, overlap=10)
-        self.assertGreater(len(chunks), 1)
-
-        for chunk in chunks:
-            self.assertLessEqual(len(chunk), 75)
-
-    def test_preserves_heading_context(self):
-        text = """# Main Topic
-
-This is a very long paragraph under the main topic that exceeds the chunk size limit. It should be split while preserving the heading context in each chunk. More content here to make it longer. Additional sentences to increase the length. Even more content to ensure it exceeds the limit."""
-
-        chunks = recursive_markdown_chunk(text, chunk_size=100, overlap=20)
-
-        for chunk in chunks:
-            self.assertIn("# Main Topic", chunk)
-
-    def test_nested_headings(self):
-        text = """# Level 1
-
-Some content at level 1.
-
-## Level 2
-
-Very long content at level 2 that needs to be split into multiple chunks. This paragraph is quite long and should trigger the recursive splitting mechanism. More text here. Even more text. And some more.
-
-### Level 3
-
-Content at level 3. Also very long and needs splitting. More sentences. More content. Additional text."""
-
-        chunks = recursive_markdown_chunk(text, chunk_size=80, overlap=15)
-        self.assertGreater(len(chunks), 1)
-
-    def test_chinese_text(self):
-        text = """# 中文标题
-
-这是第一段内容。内容很长，需要被分割。这是第二个句子。这是第三个句子。这是第四个句子。这是第五个句子。这是第六个句子。这是第七个句子。这是第八个句子。
-
-## 第二个标题
-
-第二段内容。同样需要被分割。继续添加内容。更多内容。更多句子。"""
-
-        chunks = recursive_markdown_chunk(text, chunk_size=50, overlap=10)
-        self.assertGreater(len(chunks), 1)
-
-    def test_overlap_between_chunks(self):
-        text = "Sentence one. Sentence two. Sentence three. Sentence four. Sentence five."
-
-        chunks = recursive_markdown_chunk(text, chunk_size=30, overlap=10)
-
-        if len(chunks) > 1:
-            for i in range(1, len(chunks)):
-                prev_chunk = chunks[i - 1]
-                curr_chunk = chunks[i]
-                has_overlap = any(
-                    prev_chunk.endswith(text[j : j + 10]) and curr_chunk.startswith(text[j : j + 10])
-                    for j in range(len(text) - 10)
-                )
-                self.assertTrue(has_overlap or len(chunks) == 1)
 
 
 class TestSmartTruncateText(unittest.TestCase):

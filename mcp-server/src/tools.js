@@ -45,9 +45,60 @@ async function listTopicPaths(root, parts = []) {
   return topics;
 }
 
-async function readNote(notePath) {
+function assertPathWithin(root, target) {
+  const relative = path.relative(root, target);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error('Access denied: path outside workspace');
+  }
+}
+
+/**
+ * Resolve a caller-supplied path inside the real workspace root.
+ *
+ * For new files, canonicalize the nearest existing ancestor so a symlinked
+ * parent cannot redirect the eventual write outside the workspace.
+ */
+export async function resolveWorkspacePath(root, requestedPath, { allowMissing = false } = {}) {
+  if (typeof requestedPath !== 'string' || !requestedPath || requestedPath.includes('\0')) {
+    throw new Error('Access denied: invalid path');
+  }
+
+  const lexicalRoot = path.resolve(root);
+  const lexicalTarget = path.resolve(lexicalRoot, requestedPath);
+  assertPathWithin(lexicalRoot, lexicalTarget);
+
+  const realRoot = await fs.realpath(lexicalRoot);
+  if (!allowMissing) {
+    const realTarget = await fs.realpath(lexicalTarget);
+    assertPathWithin(realRoot, realTarget);
+    return realTarget;
+  }
+
+  let ancestor = lexicalTarget;
+  const missingParts = [];
+  while (true) {
+    try {
+      await fs.lstat(ancestor);
+      break;
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error;
+      const parent = path.dirname(ancestor);
+      if (parent === ancestor) throw new Error('Access denied: no existing parent');
+      missingParts.unshift(path.basename(ancestor));
+      ancestor = parent;
+    }
+  }
+
+  const realAncestor = await fs.realpath(ancestor);
+  assertPathWithin(realRoot, realAncestor);
+  const resolvedTarget = path.join(realAncestor, ...missingParts);
+  assertPathWithin(realRoot, resolvedTarget);
+  return resolvedTarget;
+}
+
+async function readNote(root, notePath) {
   const content = await fs.readFile(notePath, 'utf-8');
-  const rel = path.relative(process.cwd(), notePath);
+  const rel = path.relative(root, notePath);
   const frontmatter = {};
   const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
   if (match) {
@@ -69,13 +120,8 @@ export function createTools(workspacePath) {
 
   return {
     vault_read_note: async ({ file_path }) => {
-      const target = path.isAbsolute(file_path)
-        ? file_path
-        : path.join(root, file_path);
-      if (!target.startsWith(root)) {
-        throw new Error('Access denied: path outside workspace');
-      }
-      const note = await readNote(target);
+      const target = await resolveWorkspacePath(root, file_path);
+      const note = await readNote(await fs.realpath(root), target);
       return {
         content: [
           { type: 'text', text: `File: ${note.path}\n---\n${note.frontmatter.topic ? `topic: ${note.frontmatter.topic}\n` : ''}${note.frontmatter.tags ? `tags: ${note.frontmatter.tags}\n` : ''}---\n${note.content}` }
@@ -128,12 +174,7 @@ export function createTools(workspacePath) {
     },
 
     vault_write_note: async ({ file_path, content }) => {
-      const target = path.isAbsolute(file_path)
-        ? file_path
-        : path.join(root, file_path);
-      if (!target.startsWith(root)) {
-        throw new Error('Access denied: path outside workspace');
-      }
+      const target = await resolveWorkspacePath(root, file_path, { allowMissing: true });
       await fs.mkdir(path.dirname(target), { recursive: true });
       await fs.writeFile(target, content, 'utf-8');
       return {
@@ -142,10 +183,7 @@ export function createTools(workspacePath) {
     },
 
     vault_update_frontmatter: async ({ file_path, updates }) => {
-      const target = path.isAbsolute(file_path)
-        ? file_path
-        : path.join(root, file_path);
-      if (!target.startsWith(root)) throw new Error('Access denied');
+      const target = await resolveWorkspacePath(root, file_path);
       let content = await fs.readFile(target, 'utf-8').catch(() => '');
       const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
       let fm = {};
@@ -170,7 +208,7 @@ export function createTools(workspacePath) {
     },
 
     vault_append_log: async ({ message }) => {
-      const logPath = path.join(root, 'wiki', 'log.md');
+      const logPath = await resolveWorkspacePath(root, 'wiki/log.md', { allowMissing: true });
       const line = `\n- ${new Date().toISOString()} ${message}`;
       await fs.mkdir(path.dirname(logPath), { recursive: true });
       await fs.appendFile(logPath, line, 'utf-8');
@@ -180,9 +218,8 @@ export function createTools(workspacePath) {
     },
 
     vault_move_note: async ({ from_path, to_path }) => {
-      const src = path.join(root, from_path);
-      const dst = path.join(root, to_path);
-      if (!src.startsWith(root) || !dst.startsWith(root)) throw new Error('Access denied');
+      const src = await resolveWorkspacePath(root, from_path);
+      const dst = await resolveWorkspacePath(root, to_path, { allowMissing: true });
       await fs.mkdir(path.dirname(dst), { recursive: true });
       await fs.rename(src, dst);
       return {
@@ -191,10 +228,9 @@ export function createTools(workspacePath) {
     },
 
     vault_raw_archive: async ({ file_path }) => {
-      const src = path.join(root, file_path);
-      if (!src.startsWith(root)) throw new Error('Access denied');
-      const rawDir = path.join(root, 'Raw');
-      const dst = path.join(rawDir, path.basename(file_path));
+      const src = await resolveWorkspacePath(root, file_path);
+      const rawDir = await resolveWorkspacePath(root, 'Raw', { allowMissing: true });
+      const dst = await resolveWorkspacePath(root, path.join('Raw', path.basename(file_path)), { allowMissing: true });
       await fs.mkdir(rawDir, { recursive: true });
       await fs.rename(src, dst);
       return {

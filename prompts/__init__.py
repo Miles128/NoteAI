@@ -1,20 +1,12 @@
-"""Prompts package — dual-track loading with clear precedence.
+"""Prompts package — YAML is the single source of truth.
 
-Loading priority (resolved by prompts/loader.py):
-  1. YAML files (prompts/yaml/*.yaml) — preferred, always used when present
-  2. Python constants (prompts/*.py) — fallback, only used when no YAML match
+All prompts live in prompts/yaml/*.yaml and are loaded via prompts/loader.py.
+Constants below are resolved at import time from the YAML files.
 
-All prompts currently have both YAML and Python versions.
-At runtime, the YAML version takes precedence; the Python constant serves as
-a backup and editable reference. Edits to Python constants will NOT take effect
-if a corresponding YAML key exists.
-
-To add a new prompt:
-  - Add the key to the appropriate YAML file in prompts/yaml/
-  - Optionally mirror it as a Python constant in the matching prompts/*.py module
+To add a new prompt: add the key to the appropriate YAML file in prompts/yaml/.
 """
 
-from .loader import get_prompt, load_prompt
+from .loader import get_prompt
 
 INTENT_ROUTER_PROMPT = get_prompt("intent_router", "INTENT_ROUTER_PROMPT")
 
@@ -71,17 +63,12 @@ TOPIC_SUGGESTION_PROMPT = get_prompt("topic_assignment", "TOPIC_SUGGESTION_PROMP
 
 ABSTRACT_PROMPT = get_prompt("abstract", "ABSTRACT_PROMPT")
 
-CLOUD_SYNC_CONFLICT_NOTICE_PROMPT = get_prompt("cloud_sync", "CLOUD_SYNC_CONFLICT_NOTICE_PROMPT")
-CLOUD_SYNC_PUSH_SUMMARY_PROMPT = get_prompt("cloud_sync", "CLOUD_SYNC_PUSH_SUMMARY_PROMPT")
-CLOUD_SYNC_PULL_SUMMARY_PROMPT = get_prompt("cloud_sync", "CLOUD_SYNC_PULL_SUMMARY_PROMPT")
-
 SCHEMA_FALLBACK_PROMPT = get_prompt("schema_fallback", "SCHEMA_FALLBACK_PROMPT")
 
 CROSS_REF_LLM_PROMPT = get_prompt("link_indexer", "CROSS_REF_LLM_PROMPT")
 LINK_PAIR_JUDGE_PROMPT = get_prompt("link_indexer", "LINK_PAIR_JUDGE_PROMPT")
 
 __all__ = [
-    "load_prompt",
     "get_prompt",
     "INTENT_ROUTER_PROMPT",
     "TOPIC_NOTE_GENERATION_PROMPT",
@@ -123,8 +110,5 @@ __all__ = [
     "WEB_TO_MARKDOWN_PROMPT",
     "TOPIC_SUGGESTION_PROMPT",
     "ABSTRACT_PROMPT",
-    "CLOUD_SYNC_CONFLICT_NOTICE_PROMPT",
-    "CLOUD_SYNC_PUSH_SUMMARY_PROMPT",
-    "CLOUD_SYNC_PULL_SUMMARY_PROMPT",
     "SCHEMA_FALLBACK_PROMPT",
 ]

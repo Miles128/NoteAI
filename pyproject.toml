@@ -30,7 +30,6 @@ dependencies = [
     "watchdog>=4.0.0",
     "send2trash>=1.8.0",
     "numpy>=1.24.0",
-    "keyring>=24.0.0",
     "cryptography>=42.0.0",
     "snownlp",
 ]

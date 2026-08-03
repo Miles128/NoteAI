@@ -162,6 +162,8 @@ function renderPendingList(items, listEl) {
             html += renderPendingInfoItem(item, idx, 'merge_candidate');
         } else if (item.type === 'topic_merge_candidate') {
             html += renderPendingInfoItem(item, idx, 'topic_merge_candidate');
+        } else if (item.type === 'entity_quality') {
+            html += renderPendingInfoItem(item, idx, 'entity_quality');
         }
     });
     listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
@@ -175,7 +177,8 @@ function renderPendingSummary(summary) {
         ['convert_fail', 'pending.typeConvert'], ['topic', 'pending.typeTopic'],
         ['link', 'pending.typeLink'], ['lint', 'pending.typeLint'],
         ['merge_candidate', 'pending.typeMergeCandidate'],
-        ['topic_merge_candidate', 'pending.typeTopicMergeCandidate']
+        ['topic_merge_candidate', 'pending.typeTopicMergeCandidate'],
+        ['entity_quality', 'pending.typeEntityQuality']
     ].filter(function(row) { return summary[row[0]]; });
     el.innerHTML = rows.map(function(row) {
         return '<span>' + window.escapeHtml(window.t(row[1])) + ' <strong>' + summary[row[0]] + '</strong></span>';
@@ -266,7 +269,7 @@ function renderPendingLinkItem(item, idx) {
 }
 
 function renderPendingInfoItem(item, idx, kind) {
-    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : (kind === 'topic_merge_candidate' ? 'pending.typeTopicMergeCandidate' : 'pending.typeConvert'))));
+    var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : (kind === 'topic_merge_candidate' ? 'pending.typeTopicMergeCandidate' : (kind === 'entity_quality' ? 'pending.typeEntityQuality' : 'pending.typeConvert')))));
     var title = item.message || item.topic || item.file || item.file_path || item.error || '';
     var detail = item.file_path || item.file || item.topic || item.error || '';
     if (kind === 'merge_candidate') {
@@ -308,6 +311,8 @@ function renderPendingInfoItem(item, idx, kind) {
         html += '<button data-action="move-suggested">' + window.escapeHtml(window.t('pending.moveToTopic', { topic: suggestedTopic })) + '</button>';
         html += '<button class="btn-reject" data-action="keep-current">' + window.escapeHtml(window.t('pending.keepInTopic', { topic: currentTopic })) + '</button>';
         html += '</div>';
+    } else if (item.action === 'open_entity_quality') {
+        html += '<div class="pending-item-actions"><button data-action="open-entity-quality">' + window.t('semantic.openEntity') + '</button></div>';
     }
     html += '</div>';
     return html;
@@ -362,6 +367,8 @@ function _handlePendingClick(e) {
         if (info.filePath && window.TreeModule && window.TreeModule.selectFile) {
             window.TreeModule.selectFile(info.filePath, window.Path_stem(info.filePath));
         }
+    } else if (action === 'open-entity-quality') {
+        if (window.SemanticWorkbenchModule) window.SemanticWorkbenchModule.show('quality');
     } else if (action === 'review-duplicate') {
         reviewDuplicateItem(info);
     } else if (action === 'review-merge-group') {

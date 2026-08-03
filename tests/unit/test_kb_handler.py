@@ -54,13 +54,23 @@ def test_get_lint_report_cached(workspace: Path, kb_handler: KbHandler) -> None:
 
 
 def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None:
+    source = workspace / "Notes" / "source.md"
+    source.write_text("# Source\n", encoding="utf-8")
+    payload = {
+        "question": "Q",
+        "answer": "A",
+        "target": "note",
+        "citations": [{"index": 1, "file_path": "Notes/source.md"}],
+    }
+    preview = kb_handler._archive_chat_answer({**payload, "preview_only": True})
     result = kb_handler._archive_chat_answer(
         {
-            "question": "Q",
-            "answer": "A",
-            "target": "note",
+            **payload,
         }
     )
+    assert preview["success"] is True
+    assert preview["preview"] is True
+    assert "Notes/source.md" in preview["content"]
     assert result["success"] is True
     assert (workspace / "Notes" / "RAG对话").exists()
 
@@ -81,18 +91,3 @@ def test_get_dashboard_status_aggregates_home_data(workspace: Path, kb_handler: 
     assert "jobs" in result
     assert "update_plan" in result
     assert "index" in result
-
-
-def test_cloud_sync_handler_is_placeholder(workspace: Path) -> None:
-    from sidecar.handlers.cloud_sync_handler import CloudSyncHandler
-
-    handler = CloudSyncHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
-
-    listed = handler._list_providers({})
-    pushed = handler._disabled({})
-
-    assert listed["success"] is True
-    assert listed["enabled"] is False
-    assert listed["providers"] == []
-    assert pushed["success"] is False
-    assert pushed["enabled"] is False

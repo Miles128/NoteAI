@@ -39,7 +39,7 @@ def _normalize_tags(raw_tags) -> list[str]:
 
 
 def _dump_frontmatter(meta: dict, body: str, had_bom: bool) -> str:
-    from sidecar.textutils import write_frontmatter
+    from utils.text_utils import write_frontmatter
 
     return write_frontmatter(meta, body, had_bom=had_bom)
 
@@ -58,9 +58,9 @@ class TagsHandler(BaseHandler):
         return {"tags": [{"name": t, "count": len(f), "files": f} for t, f in sorted_tags]}
 
     def _auto_tag_files(self, params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         dry_run = params.get("dry_run", False)
 
@@ -97,15 +97,15 @@ class TagsHandler(BaseHandler):
         return save_tags_md(config.workspace_path)
 
     def _ensure_tags_md(self, _params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         return save_tags_md(workspace)
 
     def _create_tag(self, params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         tag_name = params.get("name", "")
         if not tag_name or not tag_name.strip():
@@ -131,9 +131,9 @@ class TagsHandler(BaseHandler):
         if old_tag == new_tag:
             return {"success": True, "message": "标签名相同", "updated": 0}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         existing_tags = set(self._collect_tag_map(workspace))
         canonical_new_tag = self._canonical_existing_tag(existing_tags, new_tag)
@@ -171,9 +171,9 @@ class TagsHandler(BaseHandler):
         if not tag_name:
             return {"success": False, "message": "标签名不能为空"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         updated_count = 0
 

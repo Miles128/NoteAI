@@ -6,13 +6,7 @@ function $(id) {
     return document.getElementById(id);
 }
 
-function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
+const escapeHtml = window.escapeHtml;
 
 function readOptionsFromDom(prefix) {
     var depthEl = document.querySelector('input[name="' + prefix + '-depth"]:checked');

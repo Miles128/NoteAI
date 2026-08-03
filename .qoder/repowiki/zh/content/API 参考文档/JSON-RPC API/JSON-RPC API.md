@@ -12,9 +12,17 @@
 - [job_handler.py](file://python/sidecar/handlers/job_handler.py)
 - [links_handler.py](file://python/sidecar/handlers/links_handler.py)
 - [tags_handler.py](file://python/sidecar/handlers/tags_handler.py)
+- [semantic_handler.py](file://python/sidecar/handlers/semantic_handler.py)
 - [base.py](file://python/sidecar/handlers/base.py)
 - [error_codes.py](file://utils/error_codes.py)
 </cite>
+
+## 更新摘要
+**变更内容**   
+- 新增语义处理器（SemanticHandler）及其11个新的API端点
+- 添加了语义工作台操作、全库编译、冲突审查、实体质量检查等功能
+- 更新了处理器架构图和依赖关系分析
+- 增强了错误处理和安全机制说明
 
 ## 目录
 1. [简介](#简介)
@@ -30,7 +38,9 @@
 11. [结论](#结论)
 
 ## 简介
-本文件为 NoteAI 的 JSON-RPC API 提供完整接口文档。NoteAI 通过 Python Sidecar 进程以 JSON-RPC over stdin/stdout 的方式对外暴露能力，涵盖配置管理、文件操作、RAG 检索、主题管理、工作区管理、链接发现、标签管理、任务状态等。所有处理器均继承自统一基类并通过 RpcRouter 注册路由，请求在独立线程池中执行，避免阻塞主 I/O 循环。
+本文件为 NoteAI 的 JSON-RPC API 提供完整接口文档。NoteAI 通过 Python Sidecar 进程以 JSON-RPC over stdin/stdout 的方式对外暴露能力，涵盖配置管理、文件操作、RAG 检索、主题管理、工作区管理、链接发现、标签管理、任务状态以及**语义工作台操作**。所有处理器均继承自统一基类并通过 RpcRouter 注册路由，请求在独立线程池中执行，避免阻塞主 I/O 循环。
+
+**新增功能**：语义处理器提供了完整的语义工作台操作能力，包括语义数据查询、全库编译、冲突审查、实体质量检查和合并等操作。
 
 ## 项目结构
 - 入口与路由
@@ -45,6 +55,7 @@
   - links_handler.py：链接发现、反向链接、确认/拒绝链接等。
   - tags_handler.py：标签扫描、自动打标、增删改查、导出 tags.md 等。
   - job_handler.py：任务列表与详情查询。
+  - **semantic_handler.py：语义工作台查询、全库编译、冲突审查、实体质量检查、实体合并等。**
 - 基础与工具
   - base.py：处理器基类，提供共享能力访问。
   - error_codes.py：统一的错误码枚举与结构化错误构造器。
@@ -61,16 +72,17 @@ B --> G["WorkspaceHandler"]
 B --> H["LinksHandler"]
 B --> I["TagsHandler"]
 B --> J["JobHandler"]
+B --> K["SemanticHandler<br/>新增"]
 end
-A --> K["Stdin/Stdout<br/>JSON-RPC 通道"]
+A --> L["Stdin/Stdout<br/>JSON-RPC 通道"]
 ```
 
-图表来源
-- [server.py:107-124](file://python/sidecar/server.py#L107-L124)
+**图表来源**
+- [server.py:114-132](file://python/sidecar/server.py#L114-L132)
 - [rpc_router.py:43-82](file://python/sidecar/rpc_router.py#L43-L82)
 
-章节来源
-- [server.py:1-125](file://python/sidecar/server.py#L1-L125)
+**章节来源**
+- [server.py:1-132](file://python/sidecar/server.py#L1-L132)
 - [rpc_router.py:1-106](file://python/sidecar/rpc_router.py#L1-L106)
 
 ## 核心组件
@@ -85,10 +97,10 @@ A --> K["Stdin/Stdout<br/>JSON-RPC 通道"]
 - Server（SidecarServer）
   - 职责：生命周期管理、文件监听、后台任务、事件推送、模型预热、RPC 路由组装。
 
-章节来源
+**章节来源**
 - [rpc_router.py:35-106](file://python/sidecar/rpc_router.py#L35-L106)
 - [base.py:1-106](file://python/sidecar/handlers/base.py#L1-L106)
-- [server.py:54-125](file://python/sidecar/server.py#L54-L125)
+- [server.py:54-132](file://python/sidecar/server.py#L54-L132)
 
 ## 架构总览
 ```mermaid
@@ -108,8 +120,8 @@ Router-->>Server : _send_ok / _send_error
 Server-->>Client : 写入 JSON-RPC 响应
 ```
 
-图表来源
-- [server.py:570-595](file://python/sidecar/server.py#L570-L595)
+**图表来源**
+- [server.py:134-151](file://python/sidecar/server.py#L134-L151)
 - [rpc_router.py:54-94](file://python/sidecar/rpc_router.py#L54-L94)
 
 ## 详细组件分析
@@ -150,7 +162,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：保存 UI 配置后返回 success=true，message="UI 配置已保存"
   - 失败：未设置工作区时保存项目规则返回 success=false，message="未设置工作区"
 
-章节来源
+**章节来源**
 - [config_handler.py:16-286](file://python/sidecar/handlers/config_handler.py#L16-L286)
 
 ### 文件操作（FilesHandler）
@@ -190,7 +202,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：保存文件返回 success=true，message="文件已保存"
   - 失败：路径无效返回 success=false，message="路径无效"
 
-章节来源
+**章节来源**
 - [files_handler.py:15-425](file://python/sidecar/handlers/files_handler.py#L15-L425)
 
 ### RAG 检索（RagHandler）
@@ -221,7 +233,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：rag_chat 启动后返回 started=true，随后收到多个 rag_chat_chunk，最终 rag_chat_done 携带 answer、citations、citation_quality
   - 失败：RAG 未启用返回 success=false，message 提示开启向量检索
 
-章节来源
+**章节来源**
 - [rag_handler.py:22-698](file://python/sidecar/handlers/rag_handler.py#L22-L698)
 
 ### 主题管理（TopicsHandler）
@@ -259,7 +271,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：批量分配完成后返回 total/auto_assigned/need_confirm/skipped 统计
   - 失败：未设置工作区返回 success=false，message="未设置工作区或工作区不存在"
 
-章节来源
+**章节来源**
 - [topics_handler.py:41-588](file://python/sidecar/handlers/topics_handler.py#L41-L588)
 
 ### 工作区管理（WorkspaceHandler）
@@ -294,7 +306,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：设置工作区返回 success=true，workspace_path=目标路径
   - 失败：路径无效返回 success=false，message="路径无效"
 
-章节来源
+**章节来源**
 - [workspace_handler.py:34-260](file://python/sidecar/handlers/workspace_handler.py#L34-L260)
 
 ### 链接管理（LinksHandler）
@@ -322,7 +334,7 @@ Server-->>Client : 写入 JSON-RPC 响应
 - 示例
   - 成功：discover_links 返回 status="started"，完成后触发 link_discovery_complete 事件
 
-章节来源
+**章节来源**
 - [links_handler.py:7-85](file://python/sidecar/handlers/links_handler.py#L7-L85)
 
 ### 标签管理（TagsHandler）
@@ -348,7 +360,7 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：rename_tag 返回 updated 计数与 merged 标志
   - 失败：未设置工作区返回 success=false，message="未设置工作区"
 
-章节来源
+**章节来源**
 - [tags_handler.py:47-305](file://python/sidecar/handlers/tags_handler.py#L47-L305)
 
 ### 任务状态（JobHandler）
@@ -365,8 +377,73 @@ Server-->>Client : 写入 JSON-RPC 响应
   - 成功：get_jobs 返回 jobs 列表
   - 失败：缺少 id 返回 success=false，message="缺少 job id"
 
-章节来源
+**章节来源**
 - [job_handler.py:5-30](file://python/sidecar/handlers/job_handler.py#L5-L30)
+
+### 语义工作台（SemanticHandler）**新增**
+- 功能概览
+  - 语义工作台查询（概览、命题、概念、实体、质量、冲突、链接）、全库语义编译、冲突审查、实体质量检查、实体合并、Wiki 页面生成等。
+  - 支持分页查询、搜索过滤、状态管理、审计日志等功能。
+- 主要方法与参数
+  - get_semantic_workbench
+    - 请求参数：tab（overview/claims/concepts/entities/quality/conflicts/links）、query、status、limit、offset
+    - 响应：success、tab、items、total、limit、offset、overview（概览时）
+  - start_semantic_full_compile
+    - 请求参数：无
+    - 响应：success、status（started/running）、total_documents、job
+  - review_semantic_conflict
+    - 请求参数：id、status（pending/reviewed）
+    - 响应：success、id、status
+  - review_semantic_entity_quality
+    - 请求参数：id、status（pending/reviewed）
+    - 响应：success、id、status
+  - enqueue_semantic_entity_quality
+    - 请求参数：id
+    - 响应：success、id
+  - get_semantic_entity_merge_preview
+    - 请求参数：source_id、target_id
+    - 响应：success、source、target、impact、message
+  - merge_semantic_entities
+    - 请求参数：source_id、target_id、confirmed（必须为true）
+    - 响应：success、target_id、affected_topics、message
+  - update_semantic_claim
+    - 请求参数：id、statement、scope、claim_type
+    - 响应：success、item、message
+  - set_semantic_claim_status
+    - 请求参数：id、status
+    - 响应：success、item
+  - set_semantic_evidence_status
+    - 请求参数：id、status
+    - 响应：success、item
+  - add_semantic_entity_alias
+    - 请求参数：id、alias
+    - 响应：success、item
+  - get_semantic_detail
+    - 请求参数：kind（concept/entity/claim）、id
+    - 响应：success、kind、item（包含sources、related、audit）
+  - get_note_semantic_context
+    - 请求参数：path
+    - 响应：success、entities、concepts、claims、relations
+  - get_semantic_compile_status
+    - 请求参数：无
+    - 响应：success、job、total_documents
+  - get_semantic_topic_wiki_page / get_semantic_object_wiki_page
+    - 请求参数：topic 或 kind+id
+    - 响应：success、content、target
+  - publish_semantic_object_wiki_page / publish_semantic_topic_wiki_page
+    - 请求参数：kind+id 或 topic
+    - 响应：success、path、aggregate（对象页时）
+- 数据模型
+  - 支持6种视图：概览（overview）、命题（claims）、概念（concepts）、实体（entities）、质量（quality）、冲突（conflicts）、链接（links）
+  - 每个视图都支持分页（limit/offset）和搜索（query）
+  - 质量问题包含多种规则：missing_source、isolated、low_confidence、uncontrolled_type、missing_description、dangling_relation、alias_conflict、duplicate_candidate
+- 示例
+  - 成功：get_semantic_workbench(tab="overview") 返回概览统计数据
+  - 成功：start_semantic_full_compile 返回 status="started"，后续通过 get_semantic_compile_status 查询进度
+  - 失败：未设置工作区返回 success=false，message="未设置工作区"
+
+**章节来源**
+- [semantic_handler.py:16-1012](file://python/sidecar/handlers/semantic_handler.py#L16-L1012)
 
 ## 依赖关系分析
 - 处理器均继承 BaseHandler，通过 Server 提供的上下文访问配置、I/O、缓存、任务调度等。
@@ -394,6 +471,7 @@ class WorkspaceHandler
 class LinksHandler
 class TagsHandler
 class JobHandler
+class SemanticHandler
 BaseHandler <|-- ConfigHandler
 BaseHandler <|-- FilesHandler
 BaseHandler <|-- RagHandler
@@ -402,20 +480,14 @@ BaseHandler <|-- WorkspaceHandler
 BaseHandler <|-- LinksHandler
 BaseHandler <|-- TagsHandler
 BaseHandler <|-- JobHandler
+BaseHandler <|-- SemanticHandler
 ```
 
-图表来源
+**图表来源**
 - [base.py:1-106](file://python/sidecar/handlers/base.py#L1-L106)
-- [config_handler.py:16-286](file://python/sidecar/handlers/config_handler.py#L16-L286)
-- [files_handler.py:15-425](file://python/sidecar/handlers/files_handler.py#L15-L425)
-- [rag_handler.py:22-698](file://python/sidecar/handlers/rag_handler.py#L22-L698)
-- [topics_handler.py:41-588](file://python/sidecar/handlers/topics_handler.py#L41-L588)
-- [workspace_handler.py:34-260](file://python/sidecar/handlers/workspace_handler.py#L34-L260)
-- [links_handler.py:7-85](file://python/sidecar/handlers/links_handler.py#L7-L85)
-- [tags_handler.py:47-305](file://python/sidecar/handlers/tags_handler.py#L47-L305)
-- [job_handler.py:5-30](file://python/sidecar/handlers/job_handler.py#L5-L30)
+- [semantic_handler.py:16-1012](file://python/sidecar/handlers/semantic_handler.py#L16-L1012)
 
-章节来源
+**章节来源**
 - [rpc_router.py:43-98](file://python/sidecar/rpc_router.py#L43-L98)
 - [error_codes.py:14-120](file://utils/error_codes.py#L14-L120)
 
@@ -430,13 +502,13 @@ BaseHandler <|-- JobHandler
   - TTLCache 对高频计算结果做短期缓存；文件变更时主动失效 RPC 与全文检索缓存。
 - 流式输出
   - RAG 问答通过事件流式推送 token，降低首字延迟。
+- 语义编译优化
+  - 全库语义编译使用批处理模式，支持进度回调和失败恢复。
 
-章节来源
+**章节来源**
 - [rpc_router.py:44-82](file://python/sidecar/rpc_router.py#L44-L82)
-- [server.py:184-214](file://python/sidecar/server.py#L184-L214)
-- [server.py:416-539](file://python/sidecar/server.py#L416-L539)
-- [server.py:340-356](file://python/sidecar/server.py#L340-L356)
-- [rag_handler.py:23-25](file://python/sidecar/handlers/rag_handler.py#L23-L25)
+- [server.py:192-222](file://python/sidecar/server.py#L192-L222)
+- [semantic_handler.py:177-232](file://python/sidecar/handlers/semantic_handler.py#L177-L232)
 
 ## 错误处理与安全
 - 错误码
@@ -447,14 +519,14 @@ BaseHandler <|-- JobHandler
   - 错误消息中的工作区路径与家目录会被替换为占位符，避免泄露敏感信息。
 - 安全校验
   - 文件保存/删除/移动对工作区内路径进行严格校验，禁止写入受保护目录；Finder 打开前过滤非法字符。
+  - 语义操作包含严格的参数验证和工作区检查。
 - 典型错误码
   - METHOD_NOT_FOUND、INTERNAL_ERROR、WORKSPACE_NOT_SET、PATH_INVALID、FILE_TOO_LARGE、RAG_NOT_ENABLED、RAG_INDEX_BUILDING、API_CONNECTION_FAILED、DEPENDENCY_MISSING 等。
 
-章节来源
+**章节来源**
 - [error_codes.py:14-120](file://utils/error_codes.py#L14-L120)
 - [rpc_router.py:14-32](file://python/sidecar/rpc_router.py#L14-L32)
 - [files_handler.py:117-149](file://python/sidecar/handlers/files_handler.py#L117-L149)
-- [files_handler.py:175-217](file://python/sidecar/handlers/files_handler.py#L175-L217)
 
 ## 版本兼容与迁移
 - 当前版本约定
@@ -464,8 +536,7 @@ BaseHandler <|-- JobHandler
 - 迁移指南
   - 若需弃用某方法，保留空实现并返回 NOT_IMPLEMENTED 或废弃提示，同时在新版本中提供替代方法。
   - 对于 RAG 相关配置项，遵循现有 coerce 逻辑与默认值，避免破坏旧配置。
-
-[本节为通用指导，不直接分析具体文件]
+  - 语义处理器为新功能，客户端需要适配新的 API 端点和数据结构。
 
 ## 故障排查指南
 - 常见问题
@@ -474,15 +545,22 @@ BaseHandler <|-- JobHandler
   - RAG 未启用：在 UI 配置中开启 rag_enabled，必要时重建索引。
   - 索引构建中：等待完成或稍后重试，避免并发冲突。
   - 链接发现进行中：等待完成后再发起新发现。
+  - 语义数据库不存在：确保工作区已初始化且包含 Notes 文件夹。
 - 定位手段
   - 观察事件流：progress、complete、failed、workspace_files_changed、rag_chat_chunk、rag_chat_done、rag_error 等。
   - 查看任务状态：get_jobs/get_job 获取运行中任务详情。
   - 检查健康状态：get_kb_health 获取知识库健康指标。
+  - 语义编译状态：通过 get_semantic_compile_status 查询编译进度和结果。
 
-章节来源
-- [server.py:126-183](file://python/sidecar/server.py#L126-L183)
+**章节来源**
+- [server.py:153-190](file://python/sidecar/server.py#L153-L190)
 - [job_handler.py:10-29](file://python/sidecar/handlers/job_handler.py#L10-L29)
-- [workspace_handler.py:45-48](file://python/sidecar/handlers/workspace_handler.py#L45-L48)
 
 ## 结论
-NoteAI 的 JSON-RPC API 以清晰的处理器分层与统一的路由/错误机制，提供了稳定可扩展的能力集合。通过线程池与事件流，兼顾了交互体验与系统稳定性。建议在客户端侧做好错误码分支、事件订阅与任务轮询，以获得最佳用户体验。
+NoteAI 的 JSON-RPC API 以清晰的处理器分层与统一的路由/错误机制，提供了稳定可扩展的能力集合。**新增的语义处理器**进一步增强了知识库的语义理解和管理能力，支持复杂的语义数据操作和质量检查。通过线程池与事件流，兼顾了交互体验与系统稳定性。建议在客户端侧做好错误码分支、事件订阅与任务轮询，以获得最佳用户体验。
+
+**新增语义处理器的价值**：
+- 提供完整的语义工作台操作界面后端支持
+- 支持大规模知识库的语义分析和质量控制
+- 实现了实体合并、冲突解决等高级语义操作
+- 集成了 Wiki 页面自动生成和发布功能

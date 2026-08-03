@@ -266,7 +266,7 @@ async function onLLMRewrite() {
     window._rewriteDoneData = null;
     window._rewriteFinished = false;
 
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event;
+    var eventAPI = window.getTauriEventAPI ? window.getTauriEventAPI() : null;
     if (eventAPI) {
         window._rewriteStreamUnlisten = await eventAPI.listen('python-event', function(event) {
             var data = event.payload;

@@ -10,9 +10,9 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.textutils import parse_frontmatter, write_frontmatter
-from utils.wiki_manager import topic_from_notes_path
+from config.settings import WORKSPACE_APP_FOLDER
+from utils.text_utils import parse_frontmatter, write_frontmatter
+from utils.wiki_sync import topic_from_notes_path
 
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _MIN_DUPLICATE_CHARS = 100
@@ -34,17 +34,9 @@ class LintIssue:
 
 
 def _iter_notes_md(workspace: Path) -> list[Path]:
-    out: list[Path] = []
-    notes = workspace / NOTES_FOLDER
-    if not notes.exists():
-        return out
-    for md in notes.rglob("*.md"):
-        if md.name.startswith("."):
-            continue
-        if md.name.endswith("_综述.md"):
-            continue
-        out.append(md)
-    return out
+    from utils.note_scanner import iter_note_files
+
+    return iter_note_files(workspace)
 
 
 def _all_md_names(workspace: Path) -> set[str]:

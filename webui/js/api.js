@@ -403,9 +403,16 @@ var API_DEFS = [
     { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
     { name: 'getSemanticWorkbench', method: 'get_semantic_workbench', params: function(options) { return options || {}; } },
     { name: 'getSemanticDetail', method: 'get_semantic_detail', params: function(kind, id) { return { kind: kind, id: id }; } },
+    { name: 'getNoteSemanticContext', method: 'get_note_semantic_context', params: function(path) { return { path: path }; } },
+    { name: 'getSemanticObjectWikiPage', method: 'get_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; } },
+    { name: 'publishSemanticObjectWikiPage', method: 'publish_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; }, write: true },
     { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
+    { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
+    { name: 'enqueueSemanticEntityQuality', method: 'enqueue_semantic_entity_quality', params: function(id) { return { id: id }; }, write: true },
+    { name: 'getSemanticEntityMergePreview', method: 'get_semantic_entity_merge_preview', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId }; } },
+    { name: 'mergeSemanticEntities', method: 'merge_semantic_entities', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId, confirmed: true }; }, write: true },
     { name: 'updateSemanticClaim', method: 'update_semantic_claim', params: function(id, statement, scope, claimType) { return { id: id, statement: statement, scope: scope || '', claim_type: claimType }; }, write: true },
     { name: 'setSemanticClaimStatus', method: 'set_semantic_claim_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
     { name: 'setSemanticEvidenceStatus', method: 'set_semantic_evidence_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
@@ -467,10 +474,7 @@ var API_DEFS = [
     { name: 'getJob', method: 'get_job', params: function(jobId) { return { job_id: jobId }; } },
 
     // ---- 搜索 ----
-    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },
-
-    // ---- 云同步占位 ----
-    { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' }
+    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } }
 ];
 
 var generatedApi = {};
@@ -499,6 +503,8 @@ window.api = Object.assign({}, generatedApi, {
 });
 
 window.getTauriEventAPI = getTauriEventAPI;
+window.checkIsTauri = checkIsTauri;
+window.getTauriInvoke = getTauriInvoke;
 
 })();
 

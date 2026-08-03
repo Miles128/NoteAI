@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
-from uuid import uuid4
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from config.settings import WORKSPACE_APP_FOLDER
+from sidecar.semantic.ids import stable_id
 
-SCHEMA_VERSION = 3
-CLAIM_POLICY_VERSION = 3
+SCHEMA_VERSION = 4
+CLAIM_POLICY_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -90,7 +91,8 @@ CREATE TABLE IF NOT EXISTS relations (
     relation_type TEXT NOT NULL,
     target_id TEXT NOT NULL,
     confidence REAL NOT NULL,
-    evidence_id TEXT REFERENCES evidence(id) ON DELETE SET NULL
+    evidence_id TEXT REFERENCES evidence(id) ON DELETE SET NULL,
+    block_id TEXT REFERENCES blocks(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS semantic_mentions (
     object_id TEXT NOT NULL,
@@ -158,6 +160,10 @@ class SemanticStore:
     def initialize(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
+            # Set the journal mode only during explicit schema initialization.
+            # Repeating this PRAGMA on every read connection can contend with an
+            # active compiler transaction and make otherwise read-only RPCs wait.
+            conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
             claim_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(claims)")
@@ -178,6 +184,14 @@ class SemanticStore:
                 conn.execute(
                     "ALTER TABLE evidence ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
                 )
+            relation_columns = {
+                row["name"] for row in conn.execute("PRAGMA table_info(relations)")
+            }
+            if "block_id" not in relation_columns:
+                # Co-occurrence relations are derived per block.  Keeping the
+                # origin lets a later extraction replace exactly its own edges.
+                conn.execute("ALTER TABLE relations ADD COLUMN block_id TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_block ON relations(block_id)")
             conn.execute(
                 "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -361,7 +375,6 @@ class SemanticStore:
         conn = sqlite3.connect(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
         try:
             yield conn
             conn.commit()
@@ -387,6 +400,28 @@ class SemanticStore:
                     (document_id,),
                 )
             )
+
+    def objects_for_document(self, document_id: str) -> list[dict]:
+        """Snapshot sourced Entity/Concept identities before a document changes."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT DISTINCT m.object_id AS id, m.object_kind AS kind,
+                          CASE m.object_kind
+                              WHEN 'entity' THEN e.canonical_name
+                              ELSE c.canonical_name
+                          END AS name
+                   FROM semantic_mentions m
+                   JOIN blocks b ON b.id = m.block_id
+                   LEFT JOIN entities e
+                     ON m.object_kind = 'entity' AND e.id = m.object_id
+                   LEFT JOIN concepts c
+                     ON m.object_kind = 'concept' AND c.id = m.object_id
+                   WHERE b.document_id = ?
+                     AND m.object_kind IN ('entity', 'concept')
+                   ORDER BY m.object_kind, m.object_id""",
+                (document_id,),
+            ).fetchall()
+        return [dict(row) for row in rows if row["name"]]
 
     def set_document_status(self, document_id: str, status: str) -> None:
         with self.connect() as conn:
@@ -556,6 +591,7 @@ class SemanticStore:
                 )
             }
             conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
+            conn.execute("DELETE FROM relations WHERE block_id = ?", (block_id,))
             conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
 
             for concept in concepts:
@@ -591,6 +627,27 @@ class SemanticStore:
                     "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'entity', ?)",
                     (entity["id"], block_id),
                 )
+
+            # An Entity and a Concept extracted from the same source block have
+            # a traceable, controlled association.  It is intentionally not a
+            # stronger semantic assertion than RELATED_TO; that requires an
+            # explicit relation extractor and evidence review.
+            for entity in entities:
+                for concept in concepts:
+                    conn.execute(
+                        """INSERT INTO relations(
+                               id, source_id, relation_type, target_id, confidence, evidence_id, block_id
+                           ) VALUES(?, ?, 'RELATED_TO', ?, ?, NULL, ?)
+                           ON CONFLICT(id) DO UPDATE SET confidence=excluded.confidence,
+                                                        block_id=excluded.block_id""",
+                        (
+                            stable_id("relation", block_id, entity["id"], "RELATED_TO", concept["id"]),
+                            entity["id"],
+                            concept["id"],
+                            min(float(entity.get("confidence") or 0), float(concept.get("confidence") or 0)),
+                            block_id,
+                        ),
+                    )
 
             for claim in claims:
                 conn.execute(

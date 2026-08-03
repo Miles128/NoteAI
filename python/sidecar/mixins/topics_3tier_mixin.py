@@ -5,8 +5,9 @@ from typing import Any, Protocol
 
 from config import config
 from utils.text_utils import parse_frontmatter
-from utils.topic_assigner import load_pending, sync_wiki_with_files
+from utils.topic_assigner import sync_wiki_with_files
 from utils.topic_manager import MAX_LEVEL, TopicManager
+from utils.topic_pending import load_pending
 
 
 class _TopicsHost(Protocol):
@@ -96,9 +97,9 @@ class Topics3TierMixin:
         if "/" in folder_name or ".." in folder_name:
             return {"success": False, "message": "名称含非法字符"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         resolved_parent = self._resolve_path(parent_path) if parent_path else None
         parent = Path(resolved_parent or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
@@ -142,9 +143,9 @@ class Topics3TierMixin:
             if not can:
                 return {"success": False, "message": reason}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         result = self._toggle_survey({"topic": topic_name})
         if not result.get("success"):

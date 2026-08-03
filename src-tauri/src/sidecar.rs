@@ -46,6 +46,7 @@ async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
 
 /// Kill child and clear handles without notifying the UI (planned restart).
 async fn stop_python_sidecar_quiet(state: &AppState) {
+    crate::rpc::fail_pending_requests(state, "Python 后端正在重启，请重试");
     SIDECAR_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(mut child) = state.python_child.lock().await.take() {
         let _ = child.kill().await;
@@ -63,6 +64,7 @@ async fn on_sidecar_process_exit(app: &AppHandle, reader_gen: u64) {
     }
 
     let state = app.state::<AppState>();
+    crate::rpc::fail_pending_requests(&state, "Python 后端意外退出，请重试");
     *state.python_stdin.lock().await = None;
     if let Some(mut child) = state.python_child.lock().await.take() {
         let _ = child.kill().await;

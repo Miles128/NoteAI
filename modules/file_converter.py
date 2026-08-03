@@ -549,7 +549,7 @@ class FileConverterManager:
 
     @staticmethod
     def _update_note_source(note_path: Path, source_path: Path, workspace: Path | None) -> None:
-        from sidecar.textutils import parse_frontmatter, write_frontmatter
+        from utils.text_utils import parse_frontmatter, write_frontmatter
 
         try:
             text = note_path.read_text(encoding="utf-8")

@@ -90,7 +90,6 @@ class ConfigHandler(BaseHandler):
             "sidebar_font_family": self.config.sidebar_font_family,
             "preview_font_family": self.config.preview_font_family,
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
-            "cloud_sync_experimental": self.config.cloud_sync_experimental,
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
             "assistant_agent_mode": self.config.assistant_agent_mode,
@@ -159,8 +158,6 @@ class ConfigHandler(BaseHandler):
                 self.config.preview_font_family = str(params["preview_font_family"] or "system")
             if "typography" in params:
                 self.config.typography = params["typography"] if isinstance(params["typography"], dict) else {}
-            if "cloud_sync_experimental" in params:
-                self.config.cloud_sync_experimental = bool(params["cloud_sync_experimental"])
             if "ingest_auto_enabled" in params:
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
@@ -255,9 +252,9 @@ class ConfigHandler(BaseHandler):
         return {"success": True, "rules": ""}
 
     def _save_project_rules(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         rules = params.get("rules", "")
         rules_path = Path(workspace) / ".ai_memory" / "project_rules.md"
         rules_path.parent.mkdir(parents=True, exist_ok=True)

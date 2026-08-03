@@ -36,11 +36,6 @@ async function loadModules() {
     window.closeLogPanel = closeLogPanel;
     window.resetApiConfig = resetApiConfig;
 
-    await import('./cloud-sync.js');
-    const { CloudSyncModule } = window;
-    window.CloudSyncModule = CloudSyncModule;
-    CloudSyncModule.init();
-
     await import('./workspace.js');
     const {
         WorkspaceModule, updateStatus, updateProgress, openWorkspace,
@@ -101,6 +96,11 @@ async function loadModules() {
     if (window.SelectionToolsModule.init) window.SelectionToolsModule.init();
 
     await import('./editor.js');
+
+    await import('./rewrite.js');
+    if (window.RewriteManager) {
+        window.onLLMRewrite = window.RewriteManager.onLLMRewrite;
+    }
 
     await import('./converter.js');
     const { ConverterModule } = window;

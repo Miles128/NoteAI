@@ -61,6 +61,15 @@ function _open() {
     });
 }
 
+function _selectTab(tab) {
+    document.querySelectorAll('#quick-create-overlay [data-qc-tab]').forEach(function(button) {
+        button.classList.toggle('active', button.dataset.qcTab === tab);
+    });
+    document.querySelectorAll('#quick-create-overlay [data-qc-pane]').forEach(function(pane) {
+        pane.hidden = pane.dataset.qcPane !== tab;
+    });
+}
+
 function _submitTopic() {
     var nameEl = document.getElementById('qc-topic-name');
     var parentEl = document.getElementById('qc-topic-parent');
@@ -116,6 +125,15 @@ function initQuickCreate() {
             if (e.key === 'Enter') { e.preventDefault(); _submitTopic(); }
         });
     }
+    overlay.addEventListener('click', function(e) {
+        var tab = e.target.closest('[data-qc-tab]');
+        if (tab) { _selectTab(tab.dataset.qcTab); return; }
+        var template = e.target.closest('[data-note-template]');
+        if (template && window.NoteDraftModule) {
+            _close();
+            window.NoteDraftModule.createNoteInContext(template.dataset.noteTemplate);
+        }
+    });
 }
 
 window.QuickCreateModule = {
@@ -126,14 +144,13 @@ window.QuickCreateModule = {
 
 window.openQuickCreate = function(tab) {
     if (tab === 'note') {
-        if (window.NoteDraftModule && window.NoteDraftModule.createNoteInContext) {
-            window.NoteDraftModule.createNoteInContext();
-        } else if (window.createNoteFromNoteList) {
-            window.createNoteFromNoteList();
-        }
+        initQuickCreate();
+        _selectTab('note');
+        _open();
         return;
     }
     initQuickCreate();
+    _selectTab('topic');
     _open();
 };
 

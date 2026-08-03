@@ -26,6 +26,9 @@ ENV/
 env/
 .venv/
 src-tauri/resources/sidecar-python/
+src-tauri/resources/mcp-runtime/*
+!src-tauri/resources/mcp-runtime/README.md
+mcp-server/dist/
 
 # JavaScript dependencies
 node_modules/

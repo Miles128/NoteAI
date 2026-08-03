@@ -61,7 +61,6 @@ def _module_prefix(filename: str) -> str:
         "toast": "toast",
         "error-handler": "error",
         "G3": "graph",
-        "topic-tree-3tier": "topicTree",
     }
     return mapping.get(name, name.replace("-", ""))
 

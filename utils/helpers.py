@@ -60,161 +60,6 @@ def extract_title_from_markdown(md_content: str) -> str | None:
     return None
 
 
-def split_text_into_chunks(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    """将文本分割成块"""
-    if overlap >= chunk_size:
-        overlap = chunk_size - 1
-    chunks = []
-    start = 0
-    text_length = len(text)
-
-    while start < text_length:
-        end = min(start + chunk_size, text_length)
-        if end < text_length:
-            for i in range(end, start, -1):
-                if text[i - 1] in ".。!！?？\n":
-                    end = i
-                    break
-
-        chunks.append(text[start:end].strip())
-        next_start = end - overlap
-        if next_start <= start:
-            next_start = end
-        start = next_start
-
-    return chunks
-
-
-def recursive_markdown_chunk(
-    text: str, chunk_size: int = 1000, overlap: int = 200, current_heading: str = ""
-) -> list[str]:
-    """递归Markdown切片：按照标题层级、标点符号层层切片"""
-    if len(text) <= chunk_size:
-        if current_heading and not text.startswith("#"):
-            return [f"{current_heading}\n\n{text}"]
-        return [text]
-
-    chunks = []
-    heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
-    headings = list(heading_pattern.finditer(text))
-
-    if len(headings) > 1:
-        for i in range(len(headings)):
-            start_pos = headings[i].start()
-            end_pos = headings[i + 1].start() if i + 1 < len(headings) else len(text)
-
-            section = text[start_pos:end_pos].strip()
-            heading_line = headings[i].group(0)
-            section_content = text[headings[i].end() : end_pos].strip()
-
-            if len(section) > chunk_size:
-                sub_chunks = recursive_markdown_chunk(
-                    section_content, chunk_size, overlap, current_heading=heading_line
-                )
-                chunks.extend(sub_chunks)
-            else:
-                if current_heading:
-                    if not section.startswith("#"):
-                        section = f"{current_heading}\n\n{section}"
-                    else:
-                        section = f"{current_heading}\n{section}"
-                chunks.append(section)
-    elif len(headings) == 1:
-        heading_line = headings[0].group(0)
-        content_after_heading = text[headings[0].end() :].strip()
-
-        if len(content_after_heading) <= chunk_size:
-            full_section = f"{heading_line}\n\n{content_after_heading}"
-            if current_heading:
-                full_section = f"{current_heading}\n{full_section}"
-            chunks.append(full_section)
-        else:
-            sub_chunks = recursive_markdown_chunk(
-                content_after_heading, chunk_size, overlap, current_heading=heading_line
-            )
-            chunks.extend(sub_chunks)
-    else:
-        paragraphs = re.split(r"\n\n+", text)
-
-        if len(paragraphs) > 1 and any(len(p) > chunk_size for p in paragraphs):
-            current_chunk = ""
-            for para in paragraphs:
-                if len(current_chunk) + len(para) + 2 > chunk_size:
-                    if current_chunk:
-                        if current_heading and not current_chunk.startswith("#"):
-                            current_chunk = f"{current_heading}\n\n{current_chunk}"
-                        chunks.append(current_chunk.strip())
-
-                    if len(para) > chunk_size:
-                        sub_chunks = _split_by_punctuation(para, chunk_size, overlap, current_heading)
-                        chunks.extend(sub_chunks)
-                        current_chunk = ""
-                    else:
-                        current_chunk = para
-                elif current_chunk:
-                    current_chunk += "\n\n" + para
-                else:
-                    current_chunk = para
-
-            if current_chunk:
-                if current_heading and not current_chunk.startswith("#"):
-                    current_chunk = f"{current_heading}\n\n{current_chunk}"
-                chunks.append(current_chunk.strip())
-        else:
-            sub_chunks = _split_by_punctuation(text, chunk_size, overlap, current_heading)
-            chunks.extend(sub_chunks)
-
-    return chunks
-
-
-def _split_by_punctuation(text: str, chunk_size: int, overlap: int, current_heading: str = "") -> list[str]:
-    """按标点符号分割文本（递归切片的最后一层）"""
-    if len(text) <= chunk_size:
-        if current_heading and not text.startswith("#"):
-            return [f"{current_heading}\n\n{text}"]
-        return [text]
-
-    chunks = []
-    punctuation_patterns = [
-        r"[.。!！?？]",
-        r"[;；]",
-        r"[，,]",
-        r"\n",
-    ]
-
-    split_pos = None
-    for pattern in punctuation_patterns:
-        matches = list(re.finditer(pattern, text))
-        if matches:
-            target_pos = chunk_size
-            for match in reversed(matches):
-                if match.end() <= target_pos:
-                    split_pos = match.end()
-                    break
-            if split_pos:
-                break
-
-    if split_pos is None:
-        split_pos = min(chunk_size, len(text))
-
-    chunk = text[:split_pos].strip()
-    if current_heading and not chunk.startswith("#"):
-        chunk = f"{current_heading}\n\n{chunk}"
-    chunks.append(chunk)
-
-    safe_overlap = min(overlap, max(split_pos - 1, 0))
-    remaining_start = split_pos - safe_overlap
-    remaining_start = min(split_pos, remaining_start)
-
-    remaining = text[remaining_start:].strip()
-
-    if remaining and len(remaining) < len(text):
-        sub_chunks = _split_by_punctuation(remaining, chunk_size, overlap, current_heading)
-        chunks.extend(sub_chunks)
-
-    return chunks
-
-
 def format_file_size(size_bytes: int) -> str:
     """格式化文件大小"""
     size = float(size_bytes)
@@ -277,13 +122,6 @@ def is_valid_url(url: str) -> bool:
     return True
 
 
-def truncate_text(text: str, max_length: int = 100, suffix: str = "...") -> str:
-    """截断文本"""
-    if len(text) <= max_length:
-        return text
-    return text[: max_length - len(suffix)] + suffix
-
-
 def get_file_extension(filename: str) -> str:
     """获取文件扩展名"""
     return Path(filename).suffix.lower()
@@ -302,30 +140,6 @@ def read_file_with_encoding(file_path: str, encodings: list[str] | None = None) 
             continue
 
     raise RuntimeError(f"无法使用任何编码读取文件: {file_path}")
-
-
-def validate_api_key(api_key: str) -> bool:
-    """验证 API Key 是否有效"""
-    if not api_key or not api_key.strip():
-        return False
-    api_key = api_key.strip()
-    if len(api_key) < 10:
-        return False
-    return True
-
-
-def detect_language(text: str) -> str:
-    """简单检测文本语言"""
-    if not text:
-        return "unknown"
-    chinese_chars = sum(1 for char in text if "一" <= char <= "鿿")
-    total_chars = len(text)
-    if total_chars == 0:
-        return "unknown"
-    chinese_ratio = chinese_chars / total_chars
-    if chinese_ratio > 0.3:
-        return "chinese"
-    return "english"
 
 
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0):

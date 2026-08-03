@@ -18,7 +18,6 @@ from sidecar.handlers.tags_handler import TagsHandler
 from sidecar.handlers.topics_handler import TopicsHandler
 from sidecar.handlers.workspace_handler import WorkspaceHandler
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
-from sidecar.pending_topics import load_pending_topics
 from sidecar.rag.index import _rag_index_dir
 from sidecar.server import WATCHED_WORKSPACE_SUFFIXES, SidecarServer
 
@@ -31,12 +30,12 @@ from utils.topic_assigner import (
     auto_assign_topic_for_file,
 )
 from utils.topic_manager import TopicManager
+from utils.topic_pending import load_pending as load_pending_topics
 from utils.wiki_manager import (
     parse_wiki_headings,
     parse_wiki_structure,
-    sync_wiki_with_files,
-    topic_from_notes_path,
 )
+from utils.wiki_sync import sync_wiki_with_files, topic_from_notes_path
 
 
 @pytest.fixture

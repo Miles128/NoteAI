@@ -31,9 +31,9 @@ class KbHandler(BaseHandler):
         router.register("dismiss_cascade_failure", self._dismiss_cascade_failure)
 
     def _get_dashboard_status(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         topics_handler = getattr(self._server, "_topics_handler", None)
         if topics_handler is not None:
             topics_handler.schedule_pending_maintenance()
@@ -48,9 +48,9 @@ class KbHandler(BaseHandler):
         return load_lint_report()
 
     def _get_duplicate_review(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         try:
             return get_duplicate_review(
                 workspace,
@@ -61,9 +61,9 @@ class KbHandler(BaseHandler):
             return {"success": False, "message": str(exc)}
 
     def _merge_duplicate_notes(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         try:
             return merge_duplicate_notes(
                 workspace,
@@ -75,9 +75,9 @@ class KbHandler(BaseHandler):
             return {"success": False, "message": str(exc)}
 
     def _merge_note_group(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         try:
             return merge_note_group(
                 workspace,
@@ -98,9 +98,9 @@ class KbHandler(BaseHandler):
         return {"success": True, "items": graph.get("candidates") or [], "needs_build": not bool(graph)}
 
     def _scan_merge_candidates(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         from sidecar.chunk_similarity import build_chunk_similarity_graph
 
         return build_chunk_similarity_graph(workspace)
@@ -113,6 +113,8 @@ class KbHandler(BaseHandler):
             title=params.get("title", ""),
             target=params.get("target", "note"),
             context_file=params.get("context_file", ""),
+            citations=params.get("citations") or [],
+            preview_only=params.get("preview_only") is True,
         )
 
     def _append_chat_to_survey(self, params):

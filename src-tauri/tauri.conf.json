@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../webui",
     "beforeDevCommand": "npm run build:tiptap",
-    "beforeBuildCommand": ""
+    "beforeBuildCommand": "npm run build:desktop"
   },
   "app": {
     "withGlobalTauri": true,
@@ -35,7 +35,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../python/**/*"
+      "../python/**/*",
+      "resources/mcp-runtime/**/*"
     ]
   },
   "plugins": {

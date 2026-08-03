@@ -13,7 +13,7 @@ from sidecar.semantic.extractor import (
     validate_extraction,
 )
 from sidecar.semantic.parser import parse_semantic_blocks
-from sidecar.semantic.store import SemanticStore
+from sidecar.semantic.store import CLAIM_POLICY_VERSION, SemanticStore
 from sidecar.semantic.topic_state import build_topic_state, materialize_topic_state
 from sidecar.semantic.wiki import build_topic_wiki_page, materialize_topic_wiki_page
 
@@ -120,9 +120,9 @@ def test_store_rolls_back_document_replace_on_failure(tmp_path: Path):
     assert len(store.blocks_for_document(result["document_id"])) == before
 
 
-def test_validation_rejects_claim_without_exact_evidence():
+def test_validation_drops_claim_without_exact_evidence_but_keeps_valid_block_output():
     data = {
-        "concepts": [],
+        "concepts": [{"name": "混合检索", "description": "组合信号", "confidence": 0.8}],
         "entities": [],
         "claims": [
             {
@@ -131,18 +131,24 @@ def test_validation_rejects_claim_without_exact_evidence():
                 "scope": "",
                 "confidence": 0.8,
                 "evidence_quote": "原文中不存在的句子",
-            }
+            },
+            {
+                "statement": "混合检索比单一检索更稳健",
+                "claim_type": "conclusion",
+                "scope": "检索系统",
+                "confidence": 0.9,
+                "evidence_quote": "混合检索结合两种信号。",
+            },
         ],
     }
-    try:
-        validate_extraction(data, block_id="blk_test", block_content="混合检索结合两种信号。")
-    except ExtractionValidationError as exc:
-        assert "不是当前块" in str(exc)
-    else:
-        raise AssertionError("expected evidence validation failure")
+    parsed = validate_extraction(
+        data, block_id="blk_test", block_content="混合检索结合两种信号。"
+    )
+    assert [item["canonical_name"] for item in parsed["concepts"]] == ["混合检索"]
+    assert [item["statement"] for item in parsed["claims"]] == ["混合检索比单一检索更稳健"]
 
 
-def test_validation_rejects_facts_instructions_and_missing_claim_type():
+def test_validation_drops_facts_instructions_and_missing_claim_type():
     for claim_type in (None, "fact", "instruction", "description"):
         item = {
             "statement": "--port 参数指定服务端口",
@@ -152,22 +158,71 @@ def test_validation_rejects_facts_instructions_and_missing_claim_type():
         }
         if claim_type is not None:
             item["claim_type"] = claim_type
-        try:
-            validate_extraction(
-                {"concepts": [], "entities": [], "claims": [item]},
-                block_id="blk_instruction",
-                block_content="--port 参数指定服务端口。",
-            )
-        except ExtractionValidationError as exc:
-            assert "claim_type" in str(exc)
-        else:
-            raise AssertionError(f"expected {claim_type!r} claim type to be rejected")
+        parsed = validate_extraction(
+            {"concepts": [], "entities": [], "claims": [item]},
+            block_id="blk_instruction",
+            block_content="--port 参数指定服务端口。",
+        )
+        assert parsed["claims"] == []
 
 
-def test_validation_rejects_claim_from_code_block():
+def test_validation_drops_plain_numeric_and_product_attributes_mislabeled_as_claims():
+    for statement, source in (
+        ("75+ 模型", "75+ 模型"),
+        ("该产品支持 75 种模型", "该产品支持 75 种模型。"),
+        ("Python 3.10 发布于 2021 年", "Python 3.10 发布于 2021 年。"),
+    ):
+        parsed = validate_extraction(
+            {
+                "concepts": [],
+                "entities": [],
+                "claims": [{
+                    "statement": statement,
+                    "claim_type": "conclusion",
+                    "scope": "",
+                    "confidence": 0.95,
+                    "evidence_quote": source,
+                }],
+            },
+            block_id="blk_plain_fact",
+            block_content=source,
+        )
+        assert parsed["claims"] == []
+
+
+def test_validation_keeps_quantitative_comparisons_and_explicit_hypotheses():
+    source = "实验显示新方案的准确率比基线高 20%。该方案可能降低长文本召回率。"
+    parsed = validate_extraction(
+        {
+            "concepts": [],
+            "entities": [],
+            "claims": [
+                {
+                    "statement": "新方案的准确率比基线高 20%",
+                    "claim_type": "conclusion",
+                    "scope": "该实验",
+                    "confidence": 0.9,
+                    "evidence_quote": "实验显示新方案的准确率比基线高 20%。",
+                },
+                {
+                    "statement": "该方案可能降低长文本召回率",
+                    "claim_type": "hypothesis",
+                    "scope": "长文本",
+                    "confidence": 0.8,
+                    "evidence_quote": "该方案可能降低长文本召回率。",
+                },
+            ],
+        },
+        block_id="blk_research_claims",
+        block_content=source,
+    )
+    assert [item["claim_type"] for item in parsed["claims"]] == ["conclusion", "hypothesis"]
+
+
+def test_validation_drops_claim_from_code_block_but_keeps_entities():
     data = {
         "concepts": [],
-        "entities": [],
+        "entities": [{"name": "uv", "type": "product", "description": "", "confidence": 0.8}],
         "claims": [{
             "statement": "该命令更适合生产环境",
             "claim_type": "conclusion",
@@ -176,17 +231,27 @@ def test_validation_rejects_claim_from_code_block():
             "evidence_quote": "uv run app.py",
         }],
     }
+    parsed = validate_extraction(
+        data,
+        block_id="blk_code",
+        block_content="```bash\nuv run app.py\n```",
+        block_type="code",
+    )
+    assert parsed["claims"] == []
+    assert [item["canonical_name"] for item in parsed["entities"]] == ["uv"]
+
+
+def test_validation_still_rejects_malformed_claim_collection():
     try:
         validate_extraction(
-            data,
-            block_id="blk_code",
-            block_content="```bash\nuv run app.py\n```",
-            block_type="code",
+            {"concepts": [], "entities": [], "claims": {}},
+            block_id="blk_invalid_schema",
+            block_content="正文。",
         )
     except ExtractionValidationError as exc:
-        assert "代码块" in str(exc)
+        assert "claims 必须是数组" in str(exc)
     else:
-        raise AssertionError("expected code block claim to be rejected")
+        raise AssertionError("expected malformed claims collection to fail validation")
 
 
 def test_claim_prompt_excludes_facts_and_command_documentation():
@@ -197,6 +262,7 @@ def test_claim_prompt_excludes_facts_and_command_documentation():
     )
     assert '"claim_type": "conclusion|hypothesis"' in prompt
     assert "命令/参数/API/配置说明" in prompt
+    assert "75+ 模型" in prompt
     assert "不是 Claim" in prompt
 
 
@@ -327,7 +393,7 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
         conn.executescript(
             """
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            INSERT INTO schema_meta VALUES ('claim_policy_version', '3');
+            INSERT INTO schema_meta VALUES ('claim_policy_version', '4');
             CREATE TABLE claims (
                 id TEXT PRIMARY KEY,
                 statement TEXT NOT NULL,
@@ -349,7 +415,35 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
         ).fetchone()["value"]
     assert "claim_type" in columns
     assert claim["claim_type"] == "conclusion"
-    assert schema_version == "3"
+    assert schema_version == "4"
+
+
+def test_initialize_adds_relation_block_column_before_creating_its_index(tmp_path: Path):
+    store = SemanticStore(tmp_path)
+    store.root.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(store.path) as conn:
+        conn.executescript(
+            f"""
+            CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO schema_meta VALUES ('claim_policy_version', '{CLAIM_POLICY_VERSION}');
+            CREATE TABLE relations (
+                id TEXT PRIMARY KEY,
+                source_id TEXT NOT NULL,
+                relation_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                evidence_id TEXT
+            );
+            """
+        )
+
+    store.initialize()
+
+    with store.connect() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(relations)")}
+        indexes = {row["name"] for row in conn.execute("PRAGMA index_list(relations)")}
+    assert "block_id" in columns
+    assert "idx_relations_block" in indexes
 
 
 def test_extractor_records_invalid_json_as_partial(tmp_path: Path):
@@ -377,6 +471,50 @@ def test_extractor_repairs_invalid_output_once(tmp_path: Path):
 
     result = extract_document_semantics(store, compiled["document_id"], llm_call=lambda _: next(responses))
     assert result["success"] is True
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
+
+
+def test_extractor_retries_transient_database_lock(tmp_path: Path, monkeypatch):
+    note = _note(tmp_path, "## 结论\n\n该方案比基线更稳健。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    original_save = store.save_block_extraction
+    calls = 0
+
+    def locked_twice(**kwargs):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise sqlite3.OperationalError("database is locked")
+        return original_save(**kwargs)
+
+    monkeypatch.setattr(store, "save_block_extraction", locked_twice)
+    monkeypatch.setattr("sidecar.semantic.extractor.time.sleep", lambda _delay: None)
+    response = json.dumps(
+        {
+            "concepts": [],
+            "entities": [],
+            "claims": [
+                {
+                    "statement": "该方案比基线更稳健",
+                    "claim_type": "conclusion",
+                    "scope": "当前测试",
+                    "confidence": 0.9,
+                    "evidence_quote": "该方案比基线更稳健。",
+                }
+            ],
+        },
+        ensure_ascii=False,
+    )
+
+    result = extract_document_semantics(
+        store, compiled["document_id"], llm_call=lambda _prompt: response
+    )
+
+    assert result["success"] is True
+    assert result["failed"] == 0
+    assert calls == 3
     with store.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
 
@@ -447,7 +585,7 @@ def test_parse_extraction_json_accepts_json_fence():
 def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
     note = _note(
         tmp_path,
-        "---\ntopic: RAG > 检索\n---\n\n## 定义\n\n混合检索结合向量检索与关键词检索。\n",
+        "---\ntopic: RAG > 检索\n---\n\n## 实验\n\n实验表明混合检索优于单一检索。\n",
     )
     compiled = compile_note_semantics(tmp_path, note)
     store = SemanticStore(tmp_path)
@@ -457,11 +595,11 @@ def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
         llm_call=lambda _: """{
           "concepts": [], "entities": [],
           "claims": [{
-            "statement": "混合检索结合两类检索信号",
+            "statement": "混合检索优于单一检索",
             "claim_type": "conclusion",
             "scope": "RAG",
             "confidence": 0.9,
-            "evidence_quote": "混合检索结合向量检索与关键词检索。"
+            "evidence_quote": "实验表明混合检索优于单一检索。"
           }]
         }""",
     )
@@ -470,7 +608,7 @@ def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
     assert state["stats"] == {"documents": 1, "claims": 1}
     evidence = state["claims"][0]["evidence"][0]
     assert evidence["document_path"] == "Notes/RAG/测试.md"
-    assert evidence["heading_path"] == ["定义"]
+    assert evidence["heading_path"] == ["实验"]
     assert evidence["start_line"] == 7
 
     path = materialize_topic_state(store, "RAG > 检索")
@@ -523,6 +661,37 @@ def test_compile_tracks_old_and_new_topics_without_rebuilding_unrelated_notes(tm
 
     assert result["affected_topics"] == ["A", "C"]
     assert "B" not in result["affected_topics"]
+
+
+def test_compile_snapshots_previous_objects_for_materialization_invalidation(tmp_path: Path):
+    note = _note(tmp_path, "---\ntopic: A\n---\n\nBM25 用于关键词排序。\n")
+    first = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    block = store.blocks_for_document(first["document_id"])[0]
+    store.save_block_extraction(
+        block_id=block["id"],
+        block_hash=block["content_hash"],
+        prompt_version=1,
+        extracted_at="2026-07-20T00:00:00Z",
+        concepts=[],
+        entities=[
+            {
+                "id": "entity-bm25",
+                "canonical_name": "BM25",
+                "entity_type": "artifact",
+                "description": "关键词排序",
+                "confidence": 0.9,
+            }
+        ],
+        claims=[],
+    )
+    note.write_text("---\ntopic: A\n---\n\n已移除旧实体。\n", encoding="utf-8")
+
+    changed = compile_note_semantics(tmp_path, note)
+
+    assert changed["affected_objects"] == [
+        {"id": "entity-bm25", "kind": "entity", "name": "BM25"}
+    ]
 
 
 def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish_failure(

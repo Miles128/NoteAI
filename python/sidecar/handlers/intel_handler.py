@@ -24,9 +24,9 @@ class IntelHandler(BaseHandler):
         if not file_path:
             return {"success": False, "message": "未指定文件"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         full_path = self._resolve_path(file_path)
         if not full_path:
@@ -58,9 +58,9 @@ class IntelHandler(BaseHandler):
         if not file_path:
             return {"success": False, "message": "未指定文件"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         full_path = self._resolve_path(file_path)
         if not full_path:
@@ -134,9 +134,9 @@ class IntelHandler(BaseHandler):
         if not rewritten_text:
             return {"success": False, "message": "无改写内容"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         full_path = self._resolve_path(file_path)
         if not full_path:
@@ -147,7 +147,7 @@ class IntelHandler(BaseHandler):
 
         try:
             original = full_path.read_text(encoding="utf-8")
-            from sidecar.textutils import parse_frontmatter
+            from utils.text_utils import parse_frontmatter
 
             fm, _ = parse_frontmatter(original)
             if fm is not None:
@@ -167,16 +167,16 @@ class IntelHandler(BaseHandler):
         if not query:
             return {"success": True, "results": [], "query": "", "count": 0}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         workspace_path = Path(workspace)
         if not workspace_path.exists():
             return {"success": False, "message": "工作区不存在"}
 
-        from sidecar.textutils import parse_frontmatter as sidecar_parse_fm
         from utils.fulltext_index import fulltext_index
+        from utils.text_utils import parse_frontmatter as sidecar_parse_fm
 
         raw_results = fulltext_index.search(query)
         results = []
@@ -237,9 +237,9 @@ class IntelHandler(BaseHandler):
         from prompts import AI_TOPIC_ANALYZE_PROMPT
         from utils.llm_utils import APIConfigError, call_llm_raw, check_api_config
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         try:
             is_valid, error_msg = check_api_config()
@@ -323,9 +323,9 @@ class IntelHandler(BaseHandler):
         if not topic_name:
             return {"success": False, "message": "未指定主题"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         try:
             is_valid, error_msg = check_api_config()
@@ -445,9 +445,9 @@ class IntelHandler(BaseHandler):
 
     def _apply_topic_suggestion(self, params):
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         suggestion = params.get("suggestion", {})
         stype = suggestion.get("type", "")
@@ -471,9 +471,46 @@ class IntelHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def _apply_new_topic(self, suggestion, workspace_path, wiki_path):
+    def _locate_note(self, fname):
+        """按文件名在工作区定位笔记（优先 Notes/），找不到返回 None。"""
+        from sidecar.paths import find_file_by_name_in_workspace
+
+        found = find_file_by_name_in_workspace(fname)
+        return Path(found) if found else None
+
+    def _assign_note_to_topic(self, md_file, fname, topic_name):
         from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
+        write_topic_to_file(str(md_file), topic_name)
+        move_file_to_notes_topic_folder(str(md_file), topic_name)
+        add_file_to_wiki_topic(str(md_file), topic_name, Path(fname).stem)
+
+    def _refresh_topic_survey(self, topic_name, fname=None, changelog_msg=""):
+        from sidecar.cascade import (
+            append_changelog,
+            collect_topic_notes,
+            ensure_topic_folder,
+            generate_new_survey,
+            get_survey_path,
+            update_existing_survey,
+        )
+
+        ensure_topic_folder(topic_name)
+        notes = collect_topic_notes(topic_name)
+        if not notes:
+            return
+        survey_path = get_survey_path(topic_name)
+        if fname and survey_path and survey_path.exists():
+            new_file_notes = [n for n in notes if n["file_name"] == fname]
+            if not new_file_notes:
+                new_file_notes = [notes[-1]]
+            update_existing_survey(topic_name, new_file_notes)
+        else:
+            generate_new_survey(topic_name, notes)
+        if changelog_msg:
+            append_changelog(changelog_msg)
+
+    def _apply_new_topic(self, suggestion, workspace_path, wiki_path):
         topic_name = suggestion.get("topic", "").strip()
         files = suggestion.get("files", [])
         if not topic_name:
@@ -485,105 +522,48 @@ class IntelHandler(BaseHandler):
             fn = fname.strip()
             if not fn:
                 continue
-            for md_file in workspace_path.rglob("*.md"):
-                if md_file.is_file() and md_file.name == fn:
-                    write_topic_to_file(str(md_file), topic_name)
-                    move_file_to_notes_topic_folder(str(md_file), topic_name)
-                    add_file_to_wiki_topic(str(md_file), topic_name, Path(fn).stem)
+            md_file = self._locate_note(fn)
+            if md_file:
+                self._assign_note_to_topic(md_file, fn, topic_name)
 
-        from sidecar.cascade import append_changelog, collect_topic_notes, ensure_topic_folder, generate_new_survey
-
-        ensure_topic_folder(topic_name)
-        notes = collect_topic_notes(topic_name)
-        if notes:
-            generate_new_survey(topic_name, notes)
-            append_changelog(f"AI创建主题并生成综述: {topic_name}")
+        self._refresh_topic_survey(topic_name, changelog_msg=f"AI创建主题并生成综述: {topic_name}")
         return None
 
     def _apply_change_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
-
         fname = suggestion.get("file", "").strip()
         new_topic = suggestion.get("suggested_topic", "").strip()
         old_topic = suggestion.get("current_topic", "").strip()
         if not fname or not new_topic:
             return {"success": False, "message": "文件名或主题名不能为空"}
 
-        if old_topic:
-            for md_file in workspace_path.rglob("*.md"):
-                if md_file.is_file() and md_file.name == fname:
-                    remove_file_from_wiki_topic(str(md_file))
-                    break
+        md_file = self._locate_note(fname)
+        if md_file:
+            if old_topic:
+                remove_file_from_wiki_topic(str(md_file))
+            self._assign_note_to_topic(md_file, fname, new_topic)
 
-        for md_file in workspace_path.rglob("*.md"):
-            if md_file.is_file() and md_file.name == fname:
-                write_topic_to_file(str(md_file), new_topic)
-                move_file_to_notes_topic_folder(str(md_file), new_topic)
-                add_file_to_wiki_topic(str(md_file), new_topic, Path(fname).stem)
-                break
-
-        from sidecar.cascade import (
-            append_changelog,
-            collect_topic_notes,
-            ensure_topic_folder,
-            generate_new_survey,
-            get_survey_path,
-            update_existing_survey,
+        self._refresh_topic_survey(
+            new_topic, fname=fname, changelog_msg=f"AI变更主题并更新综述: {fname} → {new_topic}"
         )
-
-        ensure_topic_folder(new_topic)
-        notes = collect_topic_notes(new_topic)
-        if notes:
-            survey_path = get_survey_path(new_topic)
-            if survey_path and survey_path.exists():
-                new_file_notes = [n for n in notes if n["file_name"] == fname]
-                if not new_file_notes:
-                    new_file_notes = [notes[-1]]
-                update_existing_survey(new_topic, new_file_notes)
-            else:
-                generate_new_survey(new_topic, notes)
-            append_changelog(f"AI变更主题并更新综述: {fname} → {new_topic}")
         return None
 
     def _apply_assign_topic(self, suggestion, workspace_path, wiki_path):
-        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
-
         fname = suggestion.get("file", "").strip()
         topic_name = suggestion.get("topic", "").strip()
         if not fname or not topic_name:
             return {"success": False, "message": "文件名或主题名不能为空"}
 
-        for md_file in workspace_path.rglob("*.md"):
-            if md_file.is_file() and md_file.name == fname:
-                write_topic_to_file(str(md_file), topic_name)
-                move_file_to_notes_topic_folder(str(md_file), topic_name)
-                add_file_to_wiki_topic(str(md_file), topic_name, Path(fname).stem)
-                break
+        md_file = self._locate_note(fname)
+        if md_file:
+            self._assign_note_to_topic(md_file, fname, topic_name)
 
-        from sidecar.cascade import (
-            append_changelog,
-            collect_topic_notes,
-            ensure_topic_folder,
-            generate_new_survey,
-            get_survey_path,
-            update_existing_survey,
+        self._refresh_topic_survey(
+            topic_name, fname=fname, changelog_msg=f"AI分配主题并更新综述: {fname} → {topic_name}"
         )
-
-        ensure_topic_folder(topic_name)
-        notes = collect_topic_notes(topic_name)
-        if notes:
-            survey_path = get_survey_path(topic_name)
-            if survey_path and survey_path.exists():
-                new_file_notes = [n for n in notes if n["file_name"] == fname]
-                if not new_file_notes:
-                    new_file_notes = [notes[-1]]
-                update_existing_survey(topic_name, new_file_notes)
-            else:
-                generate_new_survey(topic_name, notes)
-            append_changelog(f"AI分配主题并更新综述: {fname} → {topic_name}")
         return None
 
     def _apply_merge_topic(self, suggestion, workspace_path, wiki_path):
+        from utils.text_utils import write_frontmatter
         from utils.topic_assigner import move_file_to_notes_topic_folder
 
         source = suggestion.get("source_topic", "").strip()
@@ -605,9 +585,7 @@ class IntelHandler(BaseHandler):
 
         for md_file, fm, body in source_files:
             fm["topics"] = [target if t == source else t for t in fm["topics"]]
-            new_fm = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-            new_content = "---\n" + new_fm + "\n---\n" + body.lstrip("\n")
-            md_file.write_text(new_content, encoding="utf-8")
+            md_file.write_text(write_frontmatter(fm, body), encoding="utf-8")
             remove_file_from_wiki_topic(str(md_file))
             move_file_to_notes_topic_folder(str(md_file), target)
             add_file_to_wiki_topic(str(md_file), target, md_file.stem)

@@ -4,17 +4,32 @@ All WIKI.md read/write operations MUST go through this module.
 Downstream code should never open/read/write WIKI.md directly.
 
 Lower-level helpers live in:
-  - utils.wiki_manager: path resolution, heading parsing, renumbering
-  - utils.topic_wiki_manager: CRUD (add/remove/rename topics & files, sync)
+  - utils.wiki_manager: path resolution, heading parsing, renumbering, survey-off parsing
+  - utils.wiki_crud: CRUD (add/remove/rename topics & files)
+  - utils.wiki_sync: folder sync / topic inference
   - utils.topic_dedup: merge/dedup
+
+Note: wiki_sync imports are deferred to function bodies because
+utils.wiki_sync imports this module (collect_survey_off_topics).
+
+The wiki_crud names imported above are public facade re-exports.
 """
 
-import re
 from datetime import datetime
 from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
+from utils.wiki_crud import (  # noqa: F401  (facade re-exports)
+    add_file_to_wiki_topic,
+    create_topic,
+    delete_topic,
+    remove_file_from_wiki_topic,
+    rename_topic,
+)
+from utils.wiki_manager import (
+    collect_survey_off_topics as _collect_survey_off_topics_impl,
+)
 from utils.wiki_manager import (
     parse_wiki_headings as _parse_wiki_headings_full,
 )
@@ -44,50 +59,20 @@ def parse_wiki_structure() -> list:
     return _parse_wiki_structure_full()
 
 
-def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
-    from utils.topic_wiki_manager import add_file_to_wiki_topic as _impl
-
-    return _impl(file_rel_path, topic, file_title)
-
-
-def remove_file_from_wiki_topic(file_rel_path):
-    from utils.topic_wiki_manager import remove_file_from_wiki_topic as _impl
-
-    return _impl(file_rel_path)
-
-
-def create_topic(topic_name):
-    from utils.topic_wiki_manager import create_topic as _impl
-
-    return _impl(topic_name)
-
-
-def rename_topic(old_topic, new_topic):
-    from utils.topic_wiki_manager import rename_topic as _impl
-
-    return _impl(old_topic, new_topic)
-
-
-def delete_topic(topic_name):
-    from utils.topic_wiki_manager import delete_topic as _impl
-
-    return _impl(topic_name)
-
-
 def sync_wiki_with_files():
-    from utils.topic_wiki_manager import sync_wiki_with_files as _impl
+    from utils.wiki_sync import sync_wiki_with_files as _impl
 
     return _impl()
 
 
 def write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
-    from utils.topic_wiki_manager import _write_file_topic_from_folder as _impl
+    from utils.wiki_sync import _write_file_topic_from_folder as _impl
 
     return _impl(file_path, topic)
 
 
 def topic_from_notes_path(file_path: str | Path) -> str | None:
-    from utils.topic_wiki_manager import topic_from_notes_path as _impl
+    from utils.wiki_sync import topic_from_notes_path as _impl
 
     return _impl(file_path)
 
@@ -230,30 +215,4 @@ def toggle_survey(
 def collect_survey_off_topics(
     workspace_str: str | Path | None = None,
 ) -> set[str]:
-    wiki_path = resolve_wiki_path(workspace_str)
-    if not wiki_path.exists():
-        return set()
-    try:
-        lines = wiki_path.read_text(encoding="utf-8").split("\n")
-    except Exception:
-        return set()
-
-    off_topics: set[str] = set()
-    topic_stack: list[str] = []
-    for idx, line in enumerate(lines):
-        stripped = line.strip()
-        match = re.match(r"^(#{2,4})\s+(.+)$", stripped)
-        if not match:
-            continue
-        label = match.group(2).strip()
-        if label in ("目录", "来源文件"):
-            continue
-        topic_level = len(match.group(1)) - 1
-        while len(topic_stack) >= topic_level:
-            topic_stack.pop()
-        parent_path = topic_stack[-1] if topic_stack else ""
-        topic_path = parent_path + TOPIC_SEP + label if parent_path else label
-        topic_stack.append(topic_path)
-        if idx + 1 < len(lines) and lines[idx + 1].strip() == "> 综述: off":
-            off_topics.add(topic_path)
-    return off_topics
+    return _collect_survey_off_topics_impl(workspace_str)

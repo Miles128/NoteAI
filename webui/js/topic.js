@@ -900,7 +900,7 @@ async function onAITopicSurvey() {
     var previewPanel = document.getElementById('preview-panel');
     if (previewPanel) previewPanel.style.display = 'none';
 
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event;
+    var eventAPI = window.getTauriEventAPI ? window.getTauriEventAPI() : null;
     if (eventAPI) {
         window._surveyStreamUnlisten = await eventAPI.listen('python-event', function(event) {
             var data = event.payload;

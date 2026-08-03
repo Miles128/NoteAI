@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -24,8 +25,25 @@ AGENT_MCP_TARGETS: dict[str, str] = {
 
 
 def _mcp_server_script() -> Path:
-    """返回 mcp-server/src/index.js 的绝对路径。"""
-    return (Path(__file__).parent.parent.parent / "mcp-server" / "src" / "index.js").resolve()
+    """Return the bundled MCP entrypoint, with development fallbacks."""
+    root = Path(__file__).parent.parent.parent
+    candidates = (
+        root / "mcp-runtime" / "server" / "index.js",
+        root / "mcp-server" / "dist" / "index.js",
+        root / "mcp-server" / "src" / "index.js",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return candidates[0].resolve()
+
+
+def _mcp_node_command() -> str:
+    root = Path(__file__).parent.parent.parent
+    bundled = root / "mcp-runtime" / "bin" / ("node.exe" if os.name == "nt" else "node")
+    if bundled.is_file():
+        return str(bundled.resolve())
+    return "node"
 
 
 def _user_home() -> Path:
@@ -59,7 +77,7 @@ def build_mcp_server_config(workspace_path: str | None = None) -> dict[str, Any]
         raise FileNotFoundError(f"MCP server 脚本不存在: {script}")
     ws_path = _resolve_workspace_path(workspace_path)
     return {
-        "command": "node",
+        "command": _mcp_node_command(),
         "args": [str(script), "--workspace", str(ws_path)],
     }
 
@@ -72,7 +90,7 @@ def _build_opencode_mcp_entry(workspace_path: str | None = None) -> dict[str, An
     ws_path = _resolve_workspace_path(workspace_path)
     return {
         "type": "local",
-        "command": ["node", str(script), "--workspace", str(ws_path)],
+        "command": [_mcp_node_command(), str(script), "--workspace", str(ws_path)],
         "enabled": True,
     }
 
@@ -90,7 +108,7 @@ def _build_codex_mcp_toml_block(workspace_path: str | None = None) -> str:
     script_path = str(script)
     return (
         f"\n[mcp_servers.{MCP_SERVER_NAME}]\n"
-        f"command = {_toml_quote('node')}\n"
+        f"command = {_toml_quote(_mcp_node_command())}\n"
         f"args = [{_toml_quote(script_path)}, "
         f"{_toml_quote('--workspace')}, {_toml_quote(ws_path)}]\n"
     )

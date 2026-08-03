@@ -60,7 +60,7 @@ function _draftLabel(title) {
     return name + ' ' + suffix;
 }
 
-function createDraft(topic, folderPath) {
+function createDraft(topic, folderPath, template) {
     var cleanTopic = String(topic || '').trim();
     var cleanFolder = String(folderPath || '').trim();
     var id = 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -69,7 +69,12 @@ function createDraft(topic, folderPath) {
         fmLines.push('topic: ' + cleanTopic);
     }
     fmLines.push('---');
-    var content = fmLines.join('\n') + '\n\n# \n\n';
+    var bodies = {
+        meeting: '# 会议记录\n\n## 目标\n\n## 讨论\n\n## 决策\n\n## 待办\n\n- [ ] ',
+        research: '# 研究笔记\n\n## 问题\n\n## 资料与证据\n\n## 结论\n\n## 待验证\n\n',
+        task: '# 待办\n\n- [ ] \n\n## 背景\n\n'
+    };
+    var content = fmLines.join('\n') + '\n\n' + (bodies[template] || '# \n\n');
     var draft = {
         id: id,
         title: '',
@@ -207,7 +212,7 @@ async function openDraft(draft) {
     return !!ok;
 }
 
-async function createNoteInContext() {
+async function createNoteInContext(template) {
     var info = window.NoteListModule && window.NoteListModule.getCurrentTopicInfo
         ? window.NoteListModule.getCurrentTopicInfo()
         : null;
@@ -219,7 +224,7 @@ async function createNoteInContext() {
         return false;
     }
 
-    var draft = createDraft(info.topic, info.folderPath);
+    var draft = createDraft(info.topic, info.folderPath, template || 'blank');
     var ok = await openDraft(draft);
     if (ok && typeof window.updateStatus === 'function') {
         window.updateStatus(window.t('noteDraft.openedInFolder', { folder: info.folderName || info.folderPath }));

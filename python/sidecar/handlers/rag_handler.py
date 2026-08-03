@@ -162,9 +162,9 @@ class RagHandler(BaseHandler):
         if not full_path:
             return {"success": False, "message": "路径无效"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.rag.chunker import chunk_file
         from sidecar.rag.embedder import encode_documents
@@ -204,9 +204,9 @@ class RagHandler(BaseHandler):
         if not file_path:
             return {"success": False, "message": "未指定文件路径"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.rag.index import delete_by_file
 
@@ -266,9 +266,9 @@ class RagHandler(BaseHandler):
         if not question:
             return {"success": False, "message": "问题不能为空"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         err_msg, has_recent_error = RagHandler._check_error_reset()
         if has_recent_error:
@@ -616,9 +616,9 @@ class RagHandler(BaseHandler):
         if not config.rag_enabled:
             return {"success": True, "enabled": False, "built": False, "chunk_count": 0, "file_count": 0}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.ingest_pipeline import load_ingest_state
         from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest, manifest_path

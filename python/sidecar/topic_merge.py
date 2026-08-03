@@ -8,7 +8,7 @@ from pathlib import Path
 
 from config.constants import TOPIC_SEP
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.textutils import parse_frontmatter
+from utils.text_utils import parse_frontmatter
 
 
 def _topic_dir(root: Path, topic: str) -> Path:

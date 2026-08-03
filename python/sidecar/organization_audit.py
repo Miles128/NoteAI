@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-import hashlib
 import math
-import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 from config.constants import TOPIC_SEP
 from config.settings import NOTES_FOLDER
-from sidecar.textutils import parse_frontmatter
-from utils.text_utils import _is_generic_word, _is_meaningful_tag, tokenize
+from sidecar.text_similarity import bounded as _bounded
+from sidecar.text_similarity import jaccard as _jaccard
+from sidecar.text_similarity import normalize_body as _normalize_body
+from sidecar.text_similarity import shingles as _shingles
+from sidecar.text_similarity import simhash as _simhash
+from utils.text_utils import _is_generic_word, _is_meaningful_tag, parse_frontmatter, tokenize
 
 NEAR_DUPLICATE_THRESHOLD = 0.78
 _MIN_NEAR_DUPLICATE_CHARS = 120
-_SHINGLE_SIZE = 5
-_MAX_SHINGLES = 4000
-_MAX_COMPARE_CHARS = 16000
 _SIMHASH_MAX_DISTANCE = 12
 
 MISPLACED_MIN_SCORE = 0.28
@@ -40,11 +39,10 @@ class _NoteFeatures:
 
 
 def _iter_notes(root: Path) -> list[Path]:
-    notes = root / NOTES_FOLDER
-    if not notes.exists():
-        return []
+    from utils.note_scanner import iter_note_files
+
     return sorted(
-        (path for path in notes.rglob("*.md") if not path.name.startswith(".") and not path.name.endswith("_综述.md")),
+        iter_note_files(root),
         key=lambda path: str(path.relative_to(root)),
     )
 
@@ -55,41 +53,6 @@ def _topic_from_path(root: Path, note: Path) -> str:
     except ValueError:
         return ""
     return TOPIC_SEP.join(parts[:3]) if parts else ""
-
-
-def _bounded(text: str, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    half = limit // 2
-    return text[:half] + text[-half:]
-
-
-def _normalize_body(body: str) -> str:
-    text = _bounded(body.casefold(), _MAX_COMPARE_CHARS)
-    return re.sub(r"[\W_]+", "", text, flags=re.UNICODE)
-
-
-def _shingles(text: str) -> set[str]:
-    if len(text) < _SHINGLE_SIZE:
-        return set()
-    count = len(text) - _SHINGLE_SIZE + 1
-    step = max(1, math.ceil(count / _MAX_SHINGLES))
-    return {text[index : index + _SHINGLE_SIZE] for index in range(0, count, step)}
-
-
-def _simhash(shingles: set[str]) -> int:
-    if not shingles:
-        return 0
-    weights = [0] * 64
-    for shingle in shingles:
-        hashed = int.from_bytes(hashlib.blake2b(shingle.encode("utf-8"), digest_size=8).digest(), "big")
-        for bit in range(64):
-            weights[bit] += 1 if hashed & (1 << bit) else -1
-    value = 0
-    for bit, weight in enumerate(weights):
-        if weight >= 0:
-            value |= 1 << bit
-    return value
 
 
 def _term_counter(title: str, tags: list[str], body: str) -> Counter[str]:
@@ -137,12 +100,6 @@ def _load_features(root: Path) -> list[_NoteFeatures]:
             )
         )
     return features
-
-
-def _jaccard(left: set[str], right: set[str]) -> float:
-    if not left or not right:
-        return 0.0
-    return len(left & right) / len(left | right)
 
 
 def _find_near_duplicates(notes: list[_NoteFeatures]) -> list[dict]:

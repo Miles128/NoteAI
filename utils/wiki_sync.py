@@ -2,13 +2,12 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
-from sidecar.textutils import parse_frontmatter
-from sidecar.wiki_utils import collect_survey_off_topics
 
 from config import config
 from config.constants import TOPIC_SEP
 from utils.logger import logger
-from utils.wiki_manager import _get_wiki_path
+from utils.text_utils import parse_frontmatter
+from utils.wiki_manager import _get_wiki_path, collect_survey_off_topics
 
 
 def _write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:

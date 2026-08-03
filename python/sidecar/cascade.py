@@ -5,8 +5,8 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-from sidecar.textutils import parse_frontmatter
 from utils.logger import logger
+from utils.text_utils import parse_frontmatter
 
 _changelog_lock = threading.Lock()
 
@@ -477,7 +477,7 @@ def check_and_generate_surveys(on_progress=None) -> dict:
     if not workspace:
         return {"success": False, "message": "未设置工作区"}
 
-    from utils.topic_assigner import parse_wiki_headings
+    from utils.wiki_manager import parse_wiki_headings
 
     headings = parse_wiki_headings()
     if not headings:

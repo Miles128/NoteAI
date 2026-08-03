@@ -125,10 +125,12 @@ function setObjectKind(kind) {
 function configureStatusFilter() {
     var status = document.getElementById('semantic-status-filter');
     if (!status) return;
-    status.hidden = _category !== 'claims' && _category !== 'conflicts' && _category !== 'links';
+    status.hidden = _category !== 'claims' && _category !== 'quality' && _category !== 'conflicts' && _category !== 'links';
     if (_category === 'claims') {
         status.innerHTML = '<option value="active">' + esc(t('semantic.status.active')) + '</option><option value="deleted">' + esc(t('semantic.status.deleted')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
     } else if (_category === 'conflicts') {
+        status.innerHTML = '<option value="pending">' + esc(t('semantic.status.pending')) + '</option><option value="reviewed">' + esc(t('semantic.status.reviewed')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
+    } else if (_category === 'quality') {
         status.innerHTML = '<option value="pending">' + esc(t('semantic.status.pending')) + '</option><option value="reviewed">' + esc(t('semantic.status.reviewed')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
     } else if (_category === 'links') {
         status.innerHTML = '<option value="all">' + esc(t('semantic.status.all')) + '</option><option value="pending">' + esc(t('semantic.status.pending')) + '</option><option value="confirmed">' + esc(t('semantic.status.confirmed')) + '</option>';
@@ -194,6 +196,7 @@ function renderList() {
 
 function listMeta(item) {
     if (_category === 'objects') return '<span>' + esc(item.entity_type || t('semantic.tabs.' + _objectKind)) + '</span><span>' + esc(t('semantic.mentions', { count: item.mention_count || 0 })) + '</span>';
+    if (_category === 'quality') return '<span>' + esc(t('semantic.qualityRules.' + item.rule)) + '</span><span>' + esc(t('semantic.status.' + (item.status || 'pending'))) + '</span>';
     if (_category === 'claims') return '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span><span>' + esc(t('semantic.claimTypes.' + (item.claim_type || 'conclusion'))) + '</span><span>' + esc(t('semantic.evidenceCount', { count: item.evidence_count || 0 })) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span>';
     return '<span>' + esc(t('semantic.status.' + (item.status || 'confirmed'))) + '</span>' + (item.has_reverse ? '<span>↔</span>' : '');
 }
@@ -208,6 +211,7 @@ function selectItem(index) {
     renderList();
     var item = _items[index];
     if (_category === 'objects' || _category === 'claims') loadDetail(item);
+    else if (_category === 'quality') renderQualityDetail(item);
     else renderLocalDetail(item);
 }
 
@@ -227,6 +231,14 @@ function loadDetail(item) {
     });
 }
 
+function openObject(kind, id) {
+    if (kind !== 'entity' && kind !== 'concept') return;
+    _category = 'objects';
+    _objectKind = kind === 'entity' ? 'entities' : 'concepts';
+    show('objects');
+    loadDetail({ id: id });
+}
+
 function renderObjectDetail(kind, item) {
     var detail = document.getElementById('semantic-workbench-detail');
     if (!detail) return;
@@ -239,9 +251,14 @@ function renderObjectDetail(kind, item) {
     var sourceHtml = sources.map(function(source) { return renderSource(source, kind); }).join('');
     var typeLabel = kind === 'claim' ? t('semantic.claimTypes.' + (item.claim_type || 'conclusion')) : (item.entity_type || '');
     var status = kind === 'claim' ? '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span>' : '';
-    var controls = kind === 'claim' ? renderClaimControls(item) : (kind === 'entity' ? renderEntityAliasControls(item) : '');
+    var pageControls = (kind === 'entity' || kind === 'concept') ? '<div class="semantic-actions"><button data-preview-object-page data-object-kind="' + kind + '" data-object-id="' + esc(item.id) + '">' + esc(t('semantic.previewTopicPage')) + '</button><button data-publish-object-page data-object-kind="' + kind + '" data-object-id="' + esc(item.id) + '">' + esc(t('semantic.publishTopicPage')) + '</button></div>' : '';
+    var controls = kind === 'claim' ? renderClaimControls(item) : (kind === 'entity' ? renderEntityAliasControls(item) + pageControls : pageControls);
     var audit = renderAudit(item.audit || []);
-    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
+    var related = (item.related || []).map(function(relation) {
+        return '<button class="semantic-related-object" data-open-semantic-kind="' + esc(relation.object_kind) + '" data-open-semantic-id="' + esc(relation.object_id) + '">' + esc(relation.relation_type) + ' · ' + esc(relation.object_name) + '</button>';
+    }).join('');
+    var relatedSection = (kind === 'entity' || kind === 'concept') ? '<section class="semantic-detail-section"><h3>' + esc(t('semantic.related')) + '</h3>' + (related || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' : '';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + relatedSection + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
 }
 
 function renderClaimControls(item) {
@@ -275,6 +292,22 @@ function renderSource(source, kind) {
 function renderLocalDetail(item) {
     if (_category === 'links') return renderLinkDetail(item);
     renderConflictDetail(item);
+}
+
+function renderQualityDetail(item) {
+    var detail = document.getElementById('semantic-workbench-detail');
+    if (!detail) return;
+    _activeDetail = item;
+    _activeDetailKind = 'quality';
+    var candidates = (item.candidate_names || []).map(function(name, index) {
+        var candidateId = (item.candidate_ids || [])[index] || '';
+        return '<li>' + (candidateId ? '<button data-quality-merge-candidate="' + esc(candidateId) + '">' + esc(name) + '</button>' : esc(name)) + '</li>';
+    }).join('');
+    var action = item.status === 'pending'
+        ? '<button class="primary" data-quality-id="' + esc(item.id) + '" data-quality-status="reviewed">' + esc(t('semantic.markReviewed')) + '</button>'
+        : '<button data-quality-id="' + esc(item.id) + '" data-quality-status="pending">' + esc(t('semantic.restorePending')) + '</button>';
+    var inbox = item.status === 'pending' ? '<button data-quality-enqueue="' + esc(item.id) + '">' + esc(t('semantic.addToInbox')) + '</button>' : '';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(t('semantic.categories.quality')) + '</p><h2>' + esc(item.entity_name || '') + '</h2><div class="semantic-detail-meta"><span>' + esc(t('semantic.qualityRules.' + item.rule)) + '</span><span>' + esc(t('semantic.status.' + item.status)) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span></div><section class="semantic-detail-section"><h3>' + esc(t('semantic.qualityReason')) + '</h3><p>' + esc(item.reason || '') + '</p></section>' + (candidates ? '<section class="semantic-detail-section"><h3>' + esc(t('semantic.qualityCandidates')) + '</h3><ul>' + candidates + '</ul></section>' : '') + '<div class="semantic-actions"><button data-quality-open-entity="' + esc(item.entity_id) + '">' + esc(t('semantic.openEntity')) + '</button>' + inbox + action + '</div></div>';
 }
 
 function renderConflictDetail(item) {
@@ -373,6 +406,11 @@ function openSource(path) {
 }
 
 function onDetailClick(event) {
+    var relatedObject = event.target.closest('[data-open-semantic-kind]');
+    if (relatedObject) {
+        openObject(relatedObject.dataset.openSemanticKind, relatedObject.dataset.openSemanticId);
+        return;
+    }
     var source = event.target.closest('[data-open-path]');
     if (source) return openSource(source.dataset.openPath);
     var edit = event.target.closest('[data-edit-claim]');
@@ -398,6 +436,23 @@ function onDetailClick(event) {
         }).catch(function(error) {
             if (window.ToastModule) window.ToastModule.error(String(error.message || error));
         }).finally(function() { previewButton.disabled = false; });
+        return;
+    }
+    var previewObject = event.target.closest('[data-preview-object-page]');
+    if (previewObject && window.api.getSemanticObjectWikiPage) {
+        window.api.getSemanticObjectWikiPage(previewObject.dataset.objectKind, previewObject.dataset.objectId).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            var detail = document.getElementById('semantic-workbench-detail');
+            if (detail) detail.innerHTML = '<div class="semantic-detail-inner"><pre class="semantic-topic-page-preview">' + esc(result.content || '') + '</pre></div>';
+        }).catch(function(error) { if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
+        return;
+    }
+    var publishObject = event.target.closest('[data-publish-object-page]');
+    if (publishObject && window.api.publishSemanticObjectWikiPage) {
+        window.api.publishSemanticObjectWikiPage(publishObject.dataset.objectKind, publishObject.dataset.objectId).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            if (window.ToastModule) window.ToastModule.success(t('semantic.topicPagePublished'));
+        }).catch(function(error) { if (window.ToastModule) window.ToastModule.error(String(error.message || error)); });
         return;
     }
     var publishTopic = event.target.closest('[data-publish-topic-page]');
@@ -434,6 +489,72 @@ function onDetailClick(event) {
         review.disabled = true;
         window.api.reviewSemanticConflict(review.dataset.reviewId, review.dataset.reviewStatus).then(loadList).catch(function(error) {
             review.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var qualityEntity = event.target.closest('[data-quality-open-entity]');
+    if (qualityEntity) {
+        _category = 'objects';
+        _objectKind = 'entities';
+        show('objects');
+        if (window.api && window.api.getSemanticDetail) {
+            loadDetail({ id: qualityEntity.dataset.qualityOpenEntity });
+        }
+        return;
+    }
+    var quality = event.target.closest('[data-quality-id]');
+    if (quality && window.api.reviewSemanticEntityQuality) {
+        quality.disabled = true;
+        window.api.reviewSemanticEntityQuality(quality.dataset.qualityId, quality.dataset.qualityStatus).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            loadList();
+        }).catch(function(error) {
+            quality.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var enqueueQuality = event.target.closest('[data-quality-enqueue]');
+    if (enqueueQuality && window.api.enqueueSemanticEntityQuality) {
+        enqueueQuality.disabled = true;
+        window.api.enqueueSemanticEntityQuality(enqueueQuality.dataset.qualityEnqueue).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            if (window.ToastModule) window.ToastModule.success(t('semantic.qualityAddedToInbox'));
+        }).catch(function(error) {
+            enqueueQuality.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var mergeCandidate = event.target.closest('[data-quality-merge-candidate]');
+    if (mergeCandidate && _activeDetail && window.api.getSemanticEntityMergePreview) {
+        mergeCandidate.disabled = true;
+        window.api.getSemanticEntityMergePreview(_activeDetail.entity_id, mergeCandidate.dataset.qualityMergeCandidate).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            var source = result.source || {};
+            var target = result.target || {};
+            var impact = result.impact || {};
+            var sourceImpact = impact[source.id] || {};
+            var targetImpact = impact[target.id] || {};
+            var detail = document.getElementById('semantic-workbench-detail');
+            if (detail) detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(t('semantic.mergePreview')) + '</p><h2>' + esc(source.canonical_name || '') + ' → ' + esc(target.canonical_name || '') + '</h2><p class="semantic-detail-description">' + esc(result.message || '') + '</p><section class="semantic-detail-section"><h3>' + esc(t('semantic.mergeImpact')) + '</h3><div class="semantic-route"><span>' + esc(source.canonical_name || '') + ' · ' + esc(t('semantic.mergeImpactSummary', { mentions: sourceImpact.mentions || 0, aliases: (sourceImpact.aliases || []).length, relations: sourceImpact.relations || 0 })) + '</span><span>→</span><span>' + esc(target.canonical_name || '') + ' · ' + esc(t('semantic.mergeImpactSummary', { mentions: targetImpact.mentions || 0, aliases: (targetImpact.aliases || []).length, relations: targetImpact.relations || 0 })) + '</span></div></section><div class="semantic-actions"><button class="danger" data-confirm-entity-merge data-merge-source="' + esc(source.id) + '" data-merge-target="' + esc(target.id) + '">' + esc(t('semantic.confirmEntityMerge')) + '</button></div></div>';
+        }).catch(function(error) {
+            mergeCandidate.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var confirmMerge = event.target.closest('[data-confirm-entity-merge]');
+    if (confirmMerge && window.api.mergeSemanticEntities) {
+        if (!window.confirm(t('semantic.confirmEntityMergeWarning'))) return;
+        confirmMerge.disabled = true;
+        window.api.mergeSemanticEntities(confirmMerge.dataset.mergeSource, confirmMerge.dataset.mergeTarget).then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            if (window.ToastModule) window.ToastModule.success(result.message || t('semantic.entityMerged'));
+            show('objects');
+        }).catch(function(error) {
+            confirmMerge.disabled = false;
             if (window.ToastModule) window.ToastModule.error(String(error.message || error));
         });
         return;
@@ -502,7 +623,7 @@ function init() {
     loadOverview();
 }
 
-window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, isVisible: function() { return _visible; } };
+window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; } };
 window.toggleSemanticWorkbench = toggle;
 
 })();

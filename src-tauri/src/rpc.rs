@@ -1,6 +1,17 @@
 use crate::sidecar;
 use crate::state::{AppState, PyRequest};
 
+pub(crate) fn fail_pending_requests(state: &AppState, message: &str) {
+    let mut pending = state
+        .pending_requests
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let value = serde_json::json!({"success": false, "message": message});
+    for (_, sender) in pending.drain() {
+        let _ = sender.send(value.clone());
+    }
+}
+
 static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "add_tag_to_file",
     "ai_topic_analyze",
@@ -18,14 +29,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "check_ingest_updates",
     "check_workspace_path_valid",
     "clear_saved_workspace",
-    "cloud_sync_auth",
-    "cloud_sync_disconnect",
-    "cloud_sync_list_providers",
-    "cloud_sync_load_config",
-    "cloud_sync_pull",
-    "cloud_sync_push",
-    "cloud_sync_save_config",
-    "cloud_sync_status",
     "confirm_all_links",
     "confirm_link",
     "convert_raw_archive",
@@ -69,8 +72,14 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_link_stats",
     "get_semantic_workbench",
     "get_semantic_detail",
+    "get_note_semantic_context",
+    "get_semantic_object_wiki_page",
     "get_semantic_compile_status",
     "get_semantic_topic_wiki_page",
+    "get_semantic_entity_merge_preview",
+    "review_semantic_entity_quality",
+    "enqueue_semantic_entity_quality",
+    "merge_semantic_entities",
     "get_mcp_status",
     "get_duplicate_review",
     "get_lint_report",
@@ -130,6 +139,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "add_semantic_entity_alias",
     "start_semantic_full_compile",
     "publish_semantic_topic_wiki_page",
+    "publish_semantic_object_wiki_page",
     "reveal_in_finder",
     "register_mcp_server",
     "run_kb_lint",
@@ -212,6 +222,8 @@ async fn call_python_once(
         method: method.to_string(),
         params,
     };
+    let mut json_line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+    json_line.push('\n');
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     {
@@ -222,24 +234,33 @@ async fn call_python_once(
         pending.insert(id.clone(), tx);
     }
 
-    {
+    let write_result: Result<(), String> = {
         let mut stdin_guard = state.python_stdin.lock().await;
         match stdin_guard.as_mut() {
             Some(stdin) => {
-                let mut json_line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-                json_line.push('\n');
                 use tokio::io::AsyncWriteExt;
-                stdin
+                if let Err(error) = stdin
                     .write_all(json_line.as_bytes())
                     .await
-                    .map_err(|e| format!("Write failed: {}", e))?;
-                stdin
-                    .flush()
-                    .await
-                    .map_err(|e| format!("Flush failed: {}", e))?;
+                {
+                    Err(format!("Write failed: {}", error))
+                } else {
+                    stdin
+                        .flush()
+                        .await
+                        .map_err(|e| format!("Flush failed: {}", e))
+                }
             }
-            None => return Err("Python process not running".into()),
+            None => Err("Python process not running".into()),
         }
+    };
+    if let Err(error) = write_result {
+        state
+            .pending_requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&id);
+        return Err(error);
     }
 
     let timeout_secs = rpc_timeout_secs(method);
@@ -293,4 +314,27 @@ pub async fn py_call(
         return Err(format!("Method not allowed: {}", method));
     }
     call_python(&state, &method, params).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failing_pending_requests_notifies_and_drains_waiters() {
+        let state = AppState::default();
+        let (sender, mut receiver) = tokio::sync::oneshot::channel();
+        state
+            .pending_requests
+            .lock()
+            .unwrap()
+            .insert("request-1".to_string(), sender);
+
+        fail_pending_requests(&state, "sidecar stopped");
+
+        let response = receiver.try_recv().unwrap();
+        assert_eq!(response["success"], false);
+        assert_eq!(response["message"], "sidecar stopped");
+        assert!(state.pending_requests.lock().unwrap().is_empty());
+    }
 }

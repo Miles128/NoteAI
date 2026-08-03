@@ -7,7 +7,7 @@ This file provides guidance to AI coding agents (Claude Code, Codex, Jcode, etc.
 ```bash
 uv sync --extra dev --extra rag   # install deps (RAG included by default; see Settings → Components to remove)
 uv sync --extra dev               # after removing RAG in Settings only
-pytest                     # run all tests (40+ test modules)
+uv run pytest              # run all tests (~69 unit + 3 integration test modules)
 uv run python run.py       # start Tauri dev mode with the project virtualenv
 ```
 
@@ -25,7 +25,7 @@ Tauri v2 shell (src-tauri/)
 
 **Communication flow**: Frontend JS → `window.api` (Tauri invoke) → Rust → spawns Python sidecar → JSON-RPC over stdin/stdout → `server.py:main()` reads lines, dispatches via `RpcRouter`.
 
-**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 14 handlers, each a subclass of `BaseHandler`. `BaseHandler` uses explicit `@property` accessors to proxy server attributes (e.g. `config`, `_send_response`, `_resolve_path`, `_link_discovery_lock`) — add new properties in `base.py` when handlers need access to new server attributes. Each handler registers routes with `RpcRouter`.
+**Python sidecar** (`python/sidecar/server.py`): `SidecarServer` instantiates 16 handlers, each a subclass of `BaseHandler`. `BaseHandler` uses explicit `@property` accessors to proxy server attributes (e.g. `config`, `_send_response`, `_resolve_path`, `_link_discovery_lock`) — add new properties in `base.py` when handlers need access to new server attributes. Each handler registers routes with `RpcRouter`.
 
 **RAG pipeline** (`python/sidecar/rag/`): query → HyDE rewrite → zvec hybrid search (dense 0.7 + BM25 0.3 via bm25s; `ensure_bm25_index` auto-rebuilds missing BM25) → MMR dedup → FlagReranker (bge-reranker-v2-m3) → LLM stream. Embeddings: BAAI/bge-small-zh-v1.5 (512d) via fastembed. Note: `lexical_weights` in `embedder.py` is computed from jieba TF-IDF but is currently unused for retrieval; sparse search uses bm25s on raw query text.
 
@@ -34,7 +34,7 @@ Tauri v2 shell (src-tauri/)
 ## Key conventions
 
 - **Config**: singleton `config` loaded at import time from `config/app_config.py`. Never instantiate `AppConfig` directly — import `from config import config` or `from config.settings import config`. Persist workspace path through `config/workspace_state.py`; `config.workspace_path` is the runtime value.
-- **Frontmatter**: canonical parser is `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)` (re-exported from `sidecar.textutils` for backward compatibility). All handlers should use `self._parse_frontmatter()` or direct import — avoid manual regex.
+- **Frontmatter**: canonical parser is `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)`. All handlers should use `self._parse_frontmatter()` or direct import — avoid manual regex.
 - **LLM calls**: go through `utils/llm_utils`. `_LLM_SEMAPHORE = Semaphore(4)` limits concurrency. `call_llm_raw()` uses `_retry_with_backoff()` with exponential backoff for rate limits. Both sync and stream variants now respect the semaphore. Input prompts are clamped to `config.max_context_tokens` via `_clamp_prompt_text()`.
 - **Chunk IDs**: generated via `hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]` in `chunker.py:155`. Note: `section_title` can be `None`.
 - **Thread safety**: `SidecarServer` uses locks for stdout (`_stdout_lock`), cache (`_cache_lock`), running tasks, watcher debounce, and link discovery. RAG chat is single-threaded via `_rag_chat_lock`.
@@ -48,109 +48,21 @@ Tauri v2 shell (src-tauri/)
 - **`rag_chat_with_actions`** RPC removed: was an alias for `rag_chat`. File operations now go through the CLI agent dialog (§3.8 of PRD). The built-in `agent_runner.py` / `agent_handler.py` (6 structured tools) have been deleted.
 - **`rag/index.py:hybrid_search()`**: sparse-only hits query zvec for body text; empty chunks are dropped (`filter_usable_chunks`) and stale sparse ids purged.
 - **Embedder module** (`rag/embedder.py`): HF environment variables (`HF_ENDPOINT`, `NO_PROXY`) and `FASTEMBED_CACHE_PATH` are set lazily via `_ensure_hf_env()` / `_ensure_fastembed_cache()` on first model load, not at import time. Uses hf-mirror.com.
-- **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, `topic_pending.py`, and `topic_wiki_manager.py`; keep new topic logic in that cluster instead of growing handlers.
+- **Topic assignment** has been split across `utils/topic_assigner.py`, `topic_classifier.py`, `topic_file_ops.py`, and `topic_pending.py`; keep new topic logic in that cluster instead of growing handlers.
 - **`IGNORED_DIRS`** (constants.py): lowercased match on `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`.
-- **WIKI.md operations**: production writes should enter through `sidecar/wiki_utils.py`; lower-level parsers/CRUD helpers remain under `utils/wiki_manager.py` and `utils/topic_wiki_manager.py`.
-- **API key storage**: 3-tier priority: env var > OS keyring > Fernet-encrypted file (`api_key.dat`) in `~/Library/Application Support/NoteAI/`. Fallback file uses PBKDF2-derived key with per-installation random salt — this is obfuscation, not strong encryption.
+- **WIKI.md operations**: production writes should enter through `sidecar/wiki_utils.py`; lower-level parsers/CRUD helpers remain under `utils/wiki_manager.py` and `utils/wiki_crud.py`.
+- **Credential storage**: environment variables are read-only overrides; persistent API keys, cloud passwords, and tokens use Fernet-encrypted files under `SYSTEM_APP_DATA_DIR/credentials/`. Do not use macOS Keychain or another OS keyring. The PBKDF2-derived key and per-installation secret provide obfuscation, not hardware-backed protection.
 - **No rate limiting** on RAG endpoints beyond the LLM semaphore.
 
 ## Project memory
 
 - **`webui/js/`**: vanilla JS IIFE modules on `window.*`, no bundler, no virtual DOM. State in `window.AppState` and `window.state`. `main.mjs` is the only ES module.
 - **Tauri sidecar**: configured in `src-tauri/tauri.conf.json`. Python binary resolved via `python/main.py` → `sidecar.server.main()`.
-- **Test coverage**: \~30+ unit test modules + `tests/integration/test_sidecar_contracts.py`; run `uv run pytest` before release.
-- **Prompts**: Python constants in `prompts/` with parallel `prompts/yaml/` (loader supports both).
+- **Test coverage**: \~69 unit test modules + 3 integration modules (incl. `tests/integration/test_sidecar_contracts.py`); run `uv run pytest` before release.
+- **Prompts**: `prompts/yaml/*.yaml` is the single source of truth; `prompts/__init__.py` resolves constants via `prompts/loader.py` at import time.
 - **Sidecar Python**: dev uses project `.venv`; release can bundle `src-tauri/resources/sidecar-python` via `scripts/bundle_sidecar_python.sh`, or set `NOTEAI_PYTHON`.
 - **`rag_enabled`**: default `True` in `config/app_config.py`; classic retrieval via `sidecar/classic_retriever.py` when off.
 
 ***
 
-# NoteAI 通用 AI 行为规范
-
-以下规则适用于 NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成等），作用于所有工作区。
-
-## 标签规则
-
-- 标签从文章内容自动提取（jieba 分词 + 词频）
-- 标签应具备实际分类意义，避免过于泛化的词
-- 优先使用中文标签
-- 每篇文章建议 2-5 个标签
-
-## 知识架构（三层）
-
-```
-Notes/        ← 原始笔记（Markdown，不可变来源）
-wiki/         ← AI 编译的结构化知识（综述、WIKI.md 索引）
-Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
-```
-
-- **Notes**: 采集的文章。按主题分文件夹。文件标题 = 文件名 stem。
-- **wiki**: AI 生成的产物。WIKI.md 仅含主题标题 + 文件列表。综述按主题存放。
-- **Raw**: 非 Markdown 格式文件的归档区。
-
-## AI 功能行为准则
-
-1. **自动分类**: 以当前工作区 `Notes/` 文件夹结构为主题事实来源，`wiki/WIKI.md` 仅是自动生成的索引；不确定则标记 pending。
-2. **标签提取**: 从标题和正文提取有区分度的关键词，避免通用词。
-3. **综述生成**: 针对二级主题，综合该主题下所有笔记内容。
-4. **知识问答**: 优先从知识库检索，结合工作区的主题体系给出回答。
-5. **级联更新**: 新资料入库时，主动检查并更新受影响的已有综述和 WIKI 条目。
-
-## 文件命名规范
-
-- 文件名 = 文章标题
-- 中文命名优先
-- 避免特殊字符（`/ \ : * ? " < > |`）
-- 综述文件: `{主题名}_综述.md`
-
-## 主题存储格式（所有工作区通用）
-
-- YAML frontmatter: `topic: 一级 > 二级 > 三级`
-- 文件系统: `Notes/一级/二级/三级/文件名.md`
-- 分隔符: `>`
-- 最多三层，三级下不再设子题
-
-## 两层上下文体系
-
-NoteAI 使用两层上下文：工作区绑定的 L1 画像，以及仅存在于当前前端会话的 L2 最近消息：
-
-### L1：用户画像（工作区级）
-
-位置：`<工作区>/.ai_memory/user_profile.json`（含 `profile_md` 字段）
-
-- 用户身份、偏好、知识背景，仅用于帮助 AI 理解用户
-- 由设置界面的「用户画像」功能维护
-- RAG 对话可只读使用；不得自动提炼、扩写或将其作为知识库证据
-
-### L2：有限会话上下文
-
-L2 只包含当前前端会话最近 6 条消息，随请求传递：
-
-- 不持久化到工作区
-- 不调用 LLM 压缩或提炼
-- 不形成长期人格记忆
-- 切换工作区或重新打开 App 后不恢复
-
-### 工作区运行时目录
-
-```
-<工作区>/
-├── .noteai/
-│   ├── rag_index/    # zvec + bm25s 向量索引
-│   └── ingest_state.json 等
-├── .ai_memory/
-│   ├── user_profile.json   # 用户画像（L1）
-│   └── project_rules.md    # 项目规则
-└── wiki/
-    └── log.md        # 统一变更日志（入库/级联/Lint/归档）
-```
-
-> 旧文档中的 `NoteAI/`、`NoteAI/profile.md` 为别名，请以 `.noteai`、`.ai_memory` 为准。旧版 `.noteai/memory/` 不再作为运行时会话来源。
-
-## 产品运行边界
-
-- Ingest 总开关默认开启；用户关闭后只允许手动触发。
-- RAG 只做知识问答并给出引用，不执行文件移动、创建或归档。
-- 文件操作统一交给已接通的外部 CLI Agent。
-- 云同步保留入口，但必须标记为实验功能。
-- RSS 只允许用户手动导入或拉取订阅，不得启动后台轮询。
+> NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成等）的产品行为规范已迁移至 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

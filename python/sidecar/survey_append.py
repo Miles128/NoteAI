@@ -7,9 +7,9 @@ from pathlib import Path
 from config import config
 from prompts import SURVEY_CHAT_APPEND_PROMPT
 from sidecar.cascade import _add_survey_frontmatter, append_changelog, get_survey_path
-from sidecar.schema_validator import check_wiki_writable, require_topic
-from sidecar.textutils import parse_frontmatter
-from utils.wiki_manager import topic_from_notes_path
+from sidecar.workspace_rules_validator import check_wiki_writable, require_topic
+from utils.text_utils import parse_frontmatter
+from utils.wiki_sync import topic_from_notes_path
 from utils.workspace_log import append_log
 
 

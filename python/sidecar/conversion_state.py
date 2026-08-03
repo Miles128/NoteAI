@@ -9,7 +9,7 @@ from pathlib import Path
 
 from config import config
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.textutils import parse_frontmatter
+from utils.text_utils import parse_frontmatter
 
 _STATE_LOCK = threading.Lock()
 _STATE_FILE = "conversion_state.json"

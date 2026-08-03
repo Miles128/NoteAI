@@ -19,6 +19,7 @@ from utils.helpers import (
     sanitize_filename,
 )
 from utils.logger import logger
+from utils.network_security import safe_get
 from utils.tag_extractor import (
     add_yaml_frontmatter_to_content,
     add_yaml_frontmatter_to_file,
@@ -441,7 +442,7 @@ class WebDownloader:
     @retry_on_failure(max_retries=3, delay=1.0)
     def _get_with_retry(self, url: str) -> requests.Response:
         """带重试的GET请求"""
-        return self.session.get(url, timeout=config.timeout, allow_redirects=True)
+        return safe_get(self.session, url, timeout=config.timeout)
 
     def download_batch(
         self,

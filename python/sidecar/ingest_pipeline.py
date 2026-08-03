@@ -18,7 +18,7 @@ from sidecar.workspace_rules import needs_workspace_rules_setup
 from utils.logger import logger
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
 from utils.topic_file_ops import _check_topic_needs_processing
-from utils.wiki_manager import topic_from_notes_path
+from utils.wiki_sync import topic_from_notes_path
 
 STAGES = (
     "rules",
@@ -343,7 +343,7 @@ def _scan_classify_pending(workspace: str) -> list[Path]:
         if not is_inbox_orphan_path(md, workspace):
             continue
         try:
-            from sidecar.textutils import parse_frontmatter
+            from utils.text_utils import parse_frontmatter
 
             text = md.read_text(encoding="utf-8")
             fm, _ = parse_frontmatter(text)
@@ -529,6 +529,7 @@ def run_ingest(
         "semantic_claims": 0,
         "semantic_failed_blocks": 0,
         "semantic_pending_documents": 0,
+        "semantic_failures": [],
         "cascade_updated": 0,
         "cascade_failed": [],
         "cascade_topics": [],
@@ -770,6 +771,7 @@ def run_ingest(
             mark_stage_done("semantic")
         else:
             from sidecar.semantic.compiler import compile_semantic_batch
+            from sidecar.semantic.object_wiki import materialize_object_collection
             from sidecar.semantic.store import SemanticStore
             from sidecar.semantic.topic_state import materialize_topic_state
             from sidecar.semantic.wiki import materialize_topic_wiki_page
@@ -829,6 +831,14 @@ def run_ingest(
                     materialize_topic_wiki_page(store, topic)
                 stats["semantic_topic_states"] = len(removed_topics)
                 stats["semantic_wiki_pages"] = len(removed_topics)
+            if removed_topics:
+                for kind in ("entity", "concept"):
+                    try:
+                        materialize_object_collection(store, kind)
+                    except Exception as exc:
+                        stats["semantic_failures"].append(
+                            {"object_collection": kind, "error": str(exc)}
+                        )
             prog(
                 "semantic",
                 0.52,

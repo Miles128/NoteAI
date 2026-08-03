@@ -8,8 +8,8 @@ import re
 from pathlib import Path
 
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from sidecar.textutils import parse_frontmatter, write_frontmatter
 from utils.helpers import sanitize_filename
+from utils.text_utils import parse_frontmatter, write_frontmatter
 
 _STATE_FILE = "duplicate_resolutions.json"
 

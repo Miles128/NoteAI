@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from config import config
-from utils.wiki_manager import sync_wiki_with_files
+from utils.wiki_sync import sync_wiki_with_files
 
 
 @pytest.fixture

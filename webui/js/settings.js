@@ -117,9 +117,6 @@ function switchSettingsTab(tabName) {
         initCliSettings();
         refreshCliAgentsSettings();
     }
-    if (tabName === 'cloud-sync' && window.CloudSyncModule && window.CloudSyncModule.refresh) {
-        window.CloudSyncModule.refresh();
-    }
     if (tabName === 'organize-rules' && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
         window.OrganizeRulesModule.load();
     }

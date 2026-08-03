@@ -11,7 +11,8 @@ import os
 from config import config
 from config.settings import is_ignored_dir
 from utils.text_utils import parse_frontmatter
-from utils.topic_assigner import auto_assign_topic_for_file, load_pending, parse_wiki_headings
+from utils.topic_assigner import auto_assign_topic_for_file, load_pending
+from utils.wiki_manager import parse_wiki_headings
 
 
 def main():

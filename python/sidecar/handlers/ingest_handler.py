@@ -49,9 +49,9 @@ class IngestHandler(BaseHandler):
 
     def ensure_running(self, file_paths: list | None = None) -> dict:
         """Start ingest when needed; safe to call on every app/workspace open."""
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区", "started": False}
+        workspace, err = self._require_workspace(extra={"started": False}, message="请先设置工作区")
+        if err:
+            return err
 
         plan = prepare_auto_ingest(workspace, file_paths=file_paths)
         if plan.get("action") != "start":
@@ -130,9 +130,9 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "整理规则已保存", "needs_setup": False}
 
     def _start_ingest(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         mode = params.get("mode", "full")
         file_paths = params.get("file_paths") or []
@@ -321,9 +321,9 @@ class IngestHandler(BaseHandler):
         return self.ensure_running(file_paths=file_paths or None)
 
     def _check_ingest_updates(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区", "has_updates": False}
+        workspace, err = self._require_workspace(extra={"has_updates": False}, message="请先设置工作区")
+        if err:
+            return err
 
         plan = prepare_auto_ingest(workspace, file_paths=params.get("file_paths") or None)
         has_updates = plan.get("action") == "start"

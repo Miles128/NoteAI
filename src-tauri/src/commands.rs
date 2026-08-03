@@ -73,6 +73,85 @@ mod tests {
             result
         );
     }
+
+    #[test]
+    fn resolve_allows_new_file_under_workspace() {
+        let base = std::env::temp_dir().join(format!("noteai-path-test-{}", uuid::Uuid::new_v4()));
+        let workspace = base.join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        let resolved = resolve_workspace_target(
+            workspace.to_str().unwrap(),
+            "Notes/new/topic.md",
+        )
+        .unwrap();
+
+        assert_eq!(resolved, workspace.canonicalize().unwrap().join("Notes/new/topic.md"));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_rejects_new_file_beneath_external_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!("noteai-path-test-{}", uuid::Uuid::new_v4()));
+        let workspace = base.join("workspace");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, workspace.join("external")).unwrap();
+
+        let result = resolve_workspace_target(
+            workspace.to_str().unwrap(),
+            "external/escaped.md",
+        );
+
+        assert_eq!(result.unwrap_err(), "Path is outside workspace");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+}
+
+fn resolve_workspace_target(workspace: &str, path: &str) -> Result<std::path::PathBuf, String> {
+    let workspace_abs = std::path::Path::new(workspace)
+        .canonicalize()
+        .map_err(|e| format!("Invalid workspace: {}", e))?;
+    let target = std::path::Path::new(path);
+    let target_abs = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        workspace_abs.join(path)
+    };
+    let resolved = normalize_path(&target_abs);
+
+    // Canonicalize the nearest existing ancestor. Canonicalizing the complete
+    // target alone is insufficient for a new file: it fails and would leave a
+    // symlinked parent unresolved.
+    let mut ancestor = resolved.as_path();
+    let mut missing_tail = Vec::new();
+    while !ancestor.exists() {
+        let name = ancestor
+            .file_name()
+            .ok_or_else(|| "Invalid target path".to_string())?;
+        missing_tail.push(name.to_os_string());
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| "Invalid target path".to_string())?;
+    }
+    let canonical_ancestor = ancestor
+        .canonicalize()
+        .map_err(|e| format!("Invalid target path: {}", e))?;
+    if !canonical_ancestor.starts_with(&workspace_abs) {
+        return Err("Path is outside workspace".to_string());
+    }
+    let mut safe_target = canonical_ancestor;
+    for part in missing_tail.iter().rev() {
+        safe_target.push(part);
+    }
+    if !safe_target.starts_with(&workspace_abs) {
+        return Err("Path is outside workspace".to_string());
+    }
+    Ok(safe_target)
 }
 
 fn validate_workspace_path(
@@ -84,24 +163,7 @@ fn validate_workspace_path(
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     let workspace = workspace.as_ref().ok_or("Workspace not set")?;
-    let workspace_abs = std::path::Path::new(workspace)
-        .canonicalize()
-        .map_err(|e| format!("Invalid workspace: {}", e))?;
-    let target = std::path::Path::new(path);
-    let target_abs = if target.is_absolute() {
-        target.to_path_buf()
-    } else {
-        workspace_abs.join(path)
-    };
-    let resolved = normalize_path(&target_abs);
-    // Canonicalize the resolved path so symlinks and relative segments are fully
-    // resolved before the workspace containment check.
-    let resolved_canonical = resolved.canonicalize().unwrap_or(resolved.clone());
-    // Verify the normalized path stays inside the workspace.
-    if !resolved_canonical.starts_with(&workspace_abs) {
-        return Err("Path is outside workspace".to_string());
-    }
-    Ok(resolved_canonical.to_string_lossy().to_string())
+    resolve_workspace_target(workspace, path).map(|value| value.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -137,7 +199,12 @@ pub fn get_workspace_path(state: tauri::State<'_, AppState>) -> Option<String> {
 #[tauri::command]
 pub fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
-    let canonical = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("Invalid workspace: {}", e))?;
+    if !canonical.is_dir() {
+        return Err("Workspace must be an existing directory".to_string());
+    }
     *state
         .workspace_path
         .lock()

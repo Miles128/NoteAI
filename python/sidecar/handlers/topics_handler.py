@@ -33,11 +33,11 @@ from utils.topic_assigner import (
     save_pending,
     write_topic_to_file,
 )
-from utils.topic_manager import TopicManager
-from utils.wiki_manager import (
+from utils.topic_dedup import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
 )
+from utils.topic_manager import TopicManager
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
@@ -166,7 +166,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic)
         if not ok:
@@ -191,15 +191,15 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "主题名不能为空"}
         topic_full = TOPIC_SEP.join([parent, topic_name]) if parent else topic_name
 
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic_full)
         if not ok:
             return {"success": False, "message": err}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         result = wiki_create_topic(topic_full)
         if not result.get("success"):
@@ -240,9 +240,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "主题名不能为空"}
         if old_name == new_name:
             return {"success": True, "message": "主题名相同"}
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         workspace_path = Path(workspace)
         try:
@@ -290,9 +290,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         topic_name = params.get("topic_name", "").strip()
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         workspace_path = Path(workspace)
         notes_root = workspace_path / config.NOTES_FOLDER
@@ -522,7 +522,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not file_path or not topic:
             return {"success": False, "message": "参数缺失"}
 
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic)
         if not ok:
@@ -556,9 +556,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return {"success": True, "message": f"已确认主题「{topic}」"}
 
     def _keep_note_in_topic(self, params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         try:
             from sidecar.topic_placement import keep_note_in_current_topic
 
@@ -572,9 +572,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": str(exc)}
 
     def _apply_topic_placement_threshold(self, _params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         from sidecar.topic_placement import auto_move_misplaced_notes, auto_move_misplaced_notes_if_due
 
         try:
@@ -604,17 +604,17 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return result
 
     def _suggest_topic_merge_names(self, params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         from sidecar.topic_merge import suggest_merged_topic_names
 
         return suggest_merged_topic_names(workspace, [str(topic) for topic in (params.get("topics") or [])])
 
     def _merge_similar_topics(self, params):
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         from sidecar.topic_merge import merge_topics
 
         result = merge_topics(

@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from sidecar.organization_audit import find_misplaced_notes
-from sidecar.textutils import parse_frontmatter
 from sidecar.topic_placement import (
     _AUTO_MOVE_LAST_RUN,
     auto_move_misplaced_notes,
@@ -12,6 +11,7 @@ from sidecar.topic_placement import (
 )
 
 from config import config
+from utils.text_utils import parse_frontmatter
 
 
 def _note(root: Path, topic: str, name: str, body: str = "正文") -> Path:

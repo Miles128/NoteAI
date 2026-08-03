@@ -124,7 +124,8 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count('data-category=') == 4
+    assert html.count('data-category=') == 5
+    assert 'data-category="quality"' in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html
     assert "import('./semantic-workbench.js')" in main_js
@@ -132,6 +133,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert "get_semantic_detail" in api_js
     assert "start_semantic_full_compile" in api_js
     assert "review_semantic_conflict" in api_js
+    assert "review_semantic_entity_quality" in api_js
     assert "get_semantic_topic_wiki_page" in api_js
     assert "publish_semantic_topic_wiki_page" in api_js
     assert "data-preview-topic-page" in workbench_js
@@ -152,3 +154,17 @@ def test_semantic_workbench_reuses_native_three_columns() -> None:
     assert 'id="semantic-list-pane"' in note_panel
     assert 'id="semantic-workbench-detail"' in content_panel
     assert "semantic-category-pane" not in html
+
+
+def test_assistant_save_flow_previews_destination_and_preserves_citations() -> None:
+    html = (WEBUI / "index.html").read_text(encoding="utf-8")
+    assistant_js = (WEBUI / "js" / "assistant.js").read_text(encoding="utf-8")
+
+    assert 'id="assistant-save-modal"' in html
+    assert 'id="assistant-save-path"' in html
+    assert 'id="assistant-save-content"' in html
+    assert 'id="assistant-save-confirm"' in html
+    assert "_lastArchive.citations = eventData.citations || []" in assistant_js
+    assert "citations: archive.citations || []" in assistant_js
+    assert "preview_only: previewOnly === true" in assistant_js
+    assert "_openSavePreview(archive, target" in assistant_js

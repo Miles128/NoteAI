@@ -9,7 +9,7 @@ from pathlib import Path
 from config import config
 from sidecar.cascade_runner import load_cascade_failures
 from sidecar.kb_lint import auto_fix_broken_links, filter_stale_lint_issues, load_lint_report
-from utils.topic_assigner import load_pending
+from utils.topic_pending import load_pending
 
 _PRIORITY = {
     "ingest": 0,
@@ -18,6 +18,7 @@ _PRIORITY = {
     "lint": 2,
     "merge_candidate": 2,
     "topic_merge_candidate": 2,
+    "entity_quality": 2,
     "topic": 3,
     "link": 3,
     "link_batch": 3,
@@ -158,6 +159,34 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                     "action": "review_merge_group",
                 }
             )
+
+    if root and root.exists():
+        try:
+            from sidecar.semantic.store import SemanticStore
+
+            store = SemanticStore(root)
+            if store.path.exists():
+                with store.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT id, payload_json, reason FROM review_queue
+                           WHERE item_kind = 'entity_quality' AND status = 'pending'
+                           ORDER BY created_at DESC"""
+                    ).fetchall()
+                import json
+
+                for row in rows:
+                    payload = json.loads(row["payload_json"] or "{}")
+                    items.append({
+                        "type": "entity_quality",
+                        "id": row["id"],
+                        "message": payload.get("entity_name") or row["reason"],
+                        "reason": row["reason"],
+                        "rule": payload.get("rule", ""),
+                        "entity_id": payload.get("entity_id", ""),
+                        "action": "open_entity_quality",
+                    })
+        except Exception:
+            pass
         for candidate in similarity_graph.get("topic_candidates") or []:
             topics = [str(topic) for topic in (candidate.get("topics") or [])]
             if len(topics) != 2:

@@ -7,6 +7,7 @@ import json
 from collections import defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -224,7 +225,8 @@ def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, thres
             for other in candidates:
                 if other == index or float(row[other]) < threshold:
                     continue
-                pair = tuple(sorted((ids[index], ids[int(other)])))
+                left_id, right_id = sorted((ids[index], ids[int(other)]))
+                pair = (left_id, right_id)
                 edges_by_pair[pair] = max(edges_by_pair.get(pair, 0.0), float(row[other]))
 
     edges = [
@@ -243,7 +245,7 @@ def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, thres
         }
         for item in chunks
     ]
-    graph = {
+    graph: dict[str, Any] = {
         "version": _VERSION,
         "top_k": top_k,
         "threshold": threshold,
@@ -305,7 +307,8 @@ def graph_view(workspace: str | Path, level: str = "topic", focus: str = "") -> 
         right = node_for.get(edge["target"])
         if not left or not right or left == right:
             continue
-        aggregate[tuple(sorted((left, right)))].append(float(edge["similarity"]))
+        left_group, right_group = sorted((left, right))
+        aggregate[(left_group, right_group)].append(float(edge["similarity"]))
     node_type = "file" if level == "note" else "topic"
     nodes = [{"id": name, "name": Path(name).stem if level == "note" else name, "type": node_type, "chunk_count": len(members)} for name, members in groups.items()]
     shown_edges = [

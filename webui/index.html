@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="css/tree.css">
     <link rel="stylesheet" href="css/editor.css">
     <link rel="stylesheet" href="css/preview.css">
-    <link rel="stylesheet" href="css/cloud-sync.css">
     <link rel="stylesheet" href="css/ingest.css">
     <link rel="stylesheet" href="css/schema-wizard.css">
     <link rel="stylesheet" href="css/inspector.css">
@@ -163,6 +162,7 @@
                         <nav class="semantic-categories" id="semantic-categories" aria-label="Semantic categories">
                             <button type="button" data-category="objects"><span class="semantic-nav-icon">◇</span><span data-i18n="semantic.categories.objects"></span></button>
                             <button type="button" data-category="claims"><span class="semantic-nav-icon">≡</span><span data-i18n="semantic.categories.claims"></span></button>
+                            <button type="button" data-category="quality"><span class="semantic-nav-icon">◌</span><span data-i18n="semantic.categories.quality"></span></button>
                             <button type="button" data-category="conflicts"><span class="semantic-nav-icon">!</span><span data-i18n="semantic.categories.conflicts"></span></button>
                             <button type="button" data-category="links"><span class="semantic-nav-icon">↔</span><span data-i18n="semantic.categories.links"></span></button>
                         </nav>
@@ -483,6 +483,7 @@
                             <div data-i18n="preview.selectFile"></div>
                         </div>
                     </div>
+                    <section class="note-semantic-context" id="note-semantic-context" hidden></section>
 
                     <div class="tiptap-editor-container" id="tiptap-editor-container" style="display: none;">
                         <div class="tiptap-toolbar" id="tiptap-toolbar" style="display: none;">
@@ -699,10 +700,6 @@
                         <button class="settings-nav-btn" data-tab="organize-rules">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
                             <span data-i18n="settings.nav.organizeRules"></span>
-                        </button>
-                        <button class="settings-nav-btn" data-tab="cloud-sync" id="settings-nav-cloud-sync">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
-                            <span data-i18n="settings.nav.cloudSync"></span>
                         </button>
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -1113,13 +1110,6 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="settings-tab" id="tab-cloud-sync">
-                            <div class="card">
-                                <div class="card-title" data-i18n="settings.cloudSyncIntroTitle"></div>
-                                <p class="settings-hint" data-i18n="settings.cloudSyncIntroHint"></p>
-                            </div>
-                            <div id="cloud-sync-providers" style="margin-top:16px"></div>
-                        </div>
                         <div class="settings-tab" id="tab-about">
                             <div class="card" style="text-align:center;padding:40px">
                                 <div style="font-size:32px;font-weight:700;color:var(--primary);margin-bottom:8px">NoteAI</div>
@@ -1299,7 +1289,17 @@
                 <button type="button" class="quick-create-close" onclick="QuickCreateModule.close()" data-i18n-title="common.close">&times;</button>
             </div>
             <div class="quick-create-tabs">
+                <button type="button" class="qc-tab" data-qc-tab="note" data-i18n="quickCreate.tabNote"></button>
                 <button type="button" class="qc-tab active" data-qc-tab="topic" data-i18n="quickCreate.tabTopic"></button>
+            </div>
+            <div class="qc-pane" data-qc-pane="note" hidden>
+                <p class="qc-hint" data-i18n="quickCreate.noteTemplateHint"></p>
+                <div class="semantic-actions">
+                    <button type="button" data-note-template="blank" data-i18n="quickCreate.templateBlank"></button>
+                    <button type="button" data-note-template="meeting" data-i18n="quickCreate.templateMeeting"></button>
+                    <button type="button" data-note-template="research" data-i18n="quickCreate.templateResearch"></button>
+                    <button type="button" data-note-template="task" data-i18n="quickCreate.templateTask"></button>
+                </div>
             </div>
             <div class="qc-pane" data-qc-pane="topic">
                 <label class="qc-label" data-i18n="quickCreate.topicName"></label>
@@ -1318,6 +1318,27 @@
             <div style="display:flex;justify-content:flex-end;gap:10px">
                 <button id="custom-confirm-cancel" data-i18n="confirm.cancel" style="background:var(--bg-hover);color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:7px 18px;cursor:pointer;font-size:13px"></button>
                 <button id="custom-confirm-ok" data-i18n="confirm.ok" style="background:#4A90D9;color:#fff;border:none;border-radius:6px;padding:7px 18px;cursor:pointer;font-size:13px"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="assistant-save-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="assistant-save-title">
+        <div class="modal-dialog assistant-save-dialog">
+            <div class="modal-header">
+                <h3 id="assistant-save-title" data-i18n="assistant.previewTitle"></h3>
+                <button type="button" class="modal-close-btn" id="assistant-save-close" data-i18n-title="common.close" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc" data-i18n="assistant.previewDescription"></p>
+                <div class="assistant-save-target">
+                    <span data-i18n="assistant.targetPath"></span>
+                    <code id="assistant-save-path"></code>
+                </div>
+                <pre id="assistant-save-content" class="assistant-save-content"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="assistant-save-cancel" data-i18n="common.cancel"></button>
+                <button type="button" class="btn btn-primary" id="assistant-save-confirm" data-i18n="assistant.confirmSave"></button>
             </div>
         </div>
     </div>

@@ -5,14 +5,16 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from sidecar.semantic.ids import content_hash, stable_id
 from sidecar.semantic.parser import parse_semantic_blocks
 from sidecar.semantic.store import SCHEMA_VERSION, SemanticStore
-from sidecar.textutils import parse_frontmatter
+from utils.text_utils import parse_frontmatter
 
 COMPILER_VERSION = 1
 
@@ -62,6 +64,7 @@ def compile_note_semantics(workspace: str | Path, file_path: str | Path) -> dict
     store = SemanticStore(workspace_path)
     store.initialize()
     previous = store.document(relative)
+    previous_objects = store.objects_for_document(document_id)
     if previous is not None and previous["content_hash"] == digest:
         return {
             "success": True,
@@ -70,6 +73,7 @@ def compile_note_semantics(workspace: str | Path, file_path: str | Path) -> dict
             "document_id": document_id,
             "blocks": len(store.blocks_for_document(document_id)),
             "affected_topics": [],
+            "affected_objects": previous_objects,
         }
 
     meta, _ = parse_frontmatter(raw)
@@ -118,12 +122,13 @@ def compile_note_semantics(workspace: str | Path, file_path: str | Path) -> dict
                 if topic
             }
         ),
+        "affected_objects": previous_objects,
     }
 
 
 def compile_semantic_batch(
     workspace: str | Path,
-    file_paths: list[str | Path],
+    file_paths: Sequence[str | Path],
     *,
     extract: bool = True,
     claims_only: bool = False,
@@ -134,7 +139,7 @@ def compile_semantic_batch(
     from sidecar.semantic.extractor import extract_document_semantics
 
     store = SemanticStore(workspace)
-    stats = {
+    stats: dict[str, Any] = {
         "documents": 0,
         "blocks": 0,
         "extracted_blocks": 0,
@@ -146,7 +151,7 @@ def compile_semantic_batch(
         "failures": [],
     }
     total = len(file_paths)
-    compiled_documents: list[tuple[str, str]] = []
+    compiled_documents: list[dict] = []
 
     # Phase A is deterministic and fast: snapshot every source document first.
     # This makes full-library coverage visible immediately even while LLM
@@ -166,7 +171,13 @@ def compile_semantic_batch(
             if document is not None and document["topic"]:
                 stats["topics"].add(document["topic"])
             stats["affected_topics"].update(compiled.get("affected_topics") or [])
-            compiled_documents.append((compiled["file"], compiled["document_id"]))
+            compiled_documents.append(
+                {
+                    "file": compiled["file"],
+                    "document_id": compiled["document_id"],
+                    "previous_objects": compiled.get("affected_objects") or [],
+                }
+            )
         except Exception as exc:
             stats["failures"].append({"file": str(file_path), "error": str(exc)})
 
@@ -183,13 +194,11 @@ def compile_semantic_batch(
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="semantic-extract") as pool:
             futures = {
-                pool.submit(extract_one, document_id): file_name
-                for file_name, document_id in compiled_documents
+                pool.submit(extract_one, item["document_id"]): item["file"]
+                for item in compiled_documents
             }
-            completed = 0
-            for future in as_completed(futures):
+            for completed, future in enumerate(as_completed(futures), start=1):
                 file_name = futures[future]
-                completed += 1
                 if progress_cb:
                     progress_cb(
                         completed,
@@ -213,6 +222,35 @@ def compile_semantic_batch(
                     for pending in futures:
                         pending.cancel()
                     break
+    # Semantic pages are derived views, not another user task.  Refresh just
+    # the documents processed in this run after all extraction transactions
+    # have settled, so concurrent block workers never fight page generation.
+    if extract and compiled_documents and not (cancelled and cancelled()):
+        from sidecar.semantic.materializer import materialize_documents
+
+        materialized = materialize_documents(
+            store,
+            {item["document_id"] for item in compiled_documents},
+            previous_objects=[
+                obj
+                for item in compiled_documents
+                for obj in item["previous_objects"]
+            ],
+            affected_topics=set(stats["affected_topics"]),
+            include_objects=not claims_only,
+        )
+        stats["materialized"] = materialized
+        stats["failures"].extend(
+            {"materialization": failure} for failure in materialized["failures"]
+        )
+    else:
+        stats["materialized"] = {
+            "entities": 0,
+            "concepts": 0,
+            "topics": 0,
+            "removed": {"entities": 0, "concepts": 0},
+            "failures": [],
+        }
     stats["topics"] = sorted(stats["topics"])
     stats["affected_topics"] = sorted(stats["affected_topics"])
     return stats

@@ -1,7 +1,7 @@
 import hashlib
 import re
 
-from sidecar.textutils import parse_frontmatter
+from utils.text_utils import parse_frontmatter
 
 MAX_CHUNK_CHARS = 1000
 OVERLAP_MIN_CHARS = 100

@@ -9,8 +9,8 @@ from sidecar.rag.context_expand import (
     _backlink_items,
     _survey_items,
 )
-from sidecar.textutils import parse_frontmatter
 from utils.fulltext_index import fulltext_index
+from utils.text_utils import parse_frontmatter
 
 DEFAULT_TOP_K = 8
 _MAX_CHARS_PER_FILE = 4000

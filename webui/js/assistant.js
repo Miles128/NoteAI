@@ -100,6 +100,7 @@ window.AssistantModule = (function() {
 
     function init() {
         ensureAiBindings();
+        _ensureSavePreviewBindings();
     }
 
     function toggle() {
@@ -252,19 +253,13 @@ window.AssistantModule = (function() {
     var _currentStreamEl = null;
     var _streamRawText = '';
     var _lastArchive = null;
+    var _savePreviewState = null;
+    var _savePreviewBindingsDone = false;
 
     function _renderMarkdownHtml(text) {
         if (!text) return '';
         if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
             return window.EditorModule.renderMarkdownPreview(text);
-        }
-        if (typeof marked !== 'undefined') {
-            try {
-                var rawHtml = marked.parse(text);
-                return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(text);
-            } catch (e) {
-                console.error('[Assistant] Markdown parse error:', e);
-            }
         }
         return '<pre>' + window.escapeHtml(text) + '</pre>';
     }
@@ -301,7 +296,7 @@ window.AssistantModule = (function() {
             };
         });
         _chatHistory.push({ role: 'user', content: question });
-        _lastArchive = { question: question, answer: '', rowEl: null };
+        _lastArchive = { question: question, answer: '', citations: [], contextFile: '', rowEl: null };
 
         _isStreaming = true;
         _streamRawText = '';
@@ -311,6 +306,7 @@ window.AssistantModule = (function() {
         var topics = _extractTopics();
         var tags = _extractTags();
         var currentFile = _extractCurrentFile();
+        _lastArchive.contextFile = currentFile;
 
         options.history = requestHistory;
         window.api.ragChat(question, topics, tags, currentFile, options).then(function(result) {
@@ -461,9 +457,11 @@ window.AssistantModule = (function() {
                 }
                 if (_lastArchive) {
                     _lastArchive.answer = answerText;
-                    if (eventData.suggest_save_note) {
-                        _attachSaveNoteActions(_currentStreamEl, _lastArchive);
-                    }
+                    _lastArchive.citations = eventData.citations || [];
+                    // Saving an answer is a user choice, not an LLM judgement.
+                    // Every completed grounded answer therefore exposes the same
+                    // explicit, non-destructive save action.
+                    _attachSaveNoteActions(_currentStreamEl, _lastArchive);
                 }
             }
             _streamRawText = '';
@@ -525,38 +523,127 @@ window.AssistantModule = (function() {
         hint.textContent = window.t('assistant.insightHint');
         actions.appendChild(hint);
 
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'ai-save-note-btn';
-        btn.textContent = window.t('assistant.saveAsNote');
-        btn.addEventListener('click', function() {
-            if (!window.api || !window.api.archiveChatAnswer) return;
-            btn.disabled = true;
-            btn.textContent = window.t('assistant.saving');
-            window.api.archiveChatAnswer({
-                question: archive.question,
-                answer: archive.answer
-            }).then(function(res) {
-                if (res && res.success) {
-                    btn.textContent = window.t('common.saved');
-                    hint.textContent = window.t('assistant.savedToNotes');
-                    if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
-                        window.refreshWorkspaceViewsAfterChange();
-                    }
-                } else {
-                    btn.disabled = false;
-                    btn.textContent = window.t('assistant.saveAsNote');
-                    addSystemMessage(window.t('assistant.saveFailed', { message: (res && res.message) || window.t('common.unknownError') }));
-                }
-            }).catch(function(err) {
-                btn.disabled = false;
-                btn.textContent = window.t('assistant.saveAsNote');
-                addSystemMessage(window.t('assistant.saveFailed', { message: err.message || String(err) }));
+        function addSaveButton(label, target) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ai-save-note-btn';
+            btn.textContent = label;
+            btn.addEventListener('click', function() {
+                _openSavePreview(archive, target, btn, label, hint);
             });
-        });
-        actions.appendChild(btn);
+            actions.appendChild(btn);
+        }
+        addSaveButton(window.t('assistant.saveAsNote'), 'note');
+        addSaveButton(window.t('assistant.saveAsTask'), 'task');
         bubble.appendChild(actions);
         archive.rowEl = bubble;
+    }
+
+    function _archivePayload(archive, target, previewOnly) {
+        return {
+            question: archive.question,
+            answer: archive.answer,
+            target: target,
+            context_file: archive.contextFile || '',
+            citations: archive.citations || [],
+            preview_only: previewOnly === true
+        };
+    }
+
+    function _ensureSavePreviewBindings() {
+        if (_savePreviewBindingsDone) return;
+        var modal = document.getElementById('assistant-save-modal');
+        var close = document.getElementById('assistant-save-close');
+        var cancel = document.getElementById('assistant-save-cancel');
+        var confirm = document.getElementById('assistant-save-confirm');
+        if (!modal || !close || !cancel || !confirm) return;
+        close.addEventListener('click', _closeSavePreview);
+        cancel.addEventListener('click', _closeSavePreview);
+        modal.addEventListener('click', function(event) {
+            if (event.target === modal) _closeSavePreview();
+        });
+        confirm.addEventListener('click', _confirmSavePreview);
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && modal.style.display !== 'none') {
+                _closeSavePreview();
+            }
+        });
+        _savePreviewBindingsDone = true;
+    }
+
+    function _openSavePreview(archive, target, sourceButton, sourceLabel, hint) {
+        if (!window.api || !window.api.archiveChatAnswer) return;
+        _ensureSavePreviewBindings();
+        sourceButton.disabled = true;
+        sourceButton.textContent = window.t('assistant.loadingPreview');
+        var payload = _archivePayload(archive, target, true);
+        window.api.archiveChatAnswer(payload).then(function(res) {
+            if (!res || !res.success) {
+                throw new Error((res && res.message) || window.t('common.unknownError'));
+            }
+            var modal = document.getElementById('assistant-save-modal');
+            var path = document.getElementById('assistant-save-path');
+            var content = document.getElementById('assistant-save-content');
+            var confirm = document.getElementById('assistant-save-confirm');
+            if (!modal || !path || !content || !confirm) {
+                throw new Error(window.t('assistant.previewUnavailable'));
+            }
+            path.textContent = res.path || '';
+            content.textContent = res.content || '';
+            confirm.disabled = false;
+            confirm.textContent = window.t('assistant.confirmSave');
+            modal.style.display = 'flex';
+            _savePreviewState = {
+                payload: _archivePayload(archive, target, false),
+                sourceButton: sourceButton,
+                sourceLabel: sourceLabel,
+                hint: hint
+            };
+            window.requestAnimationFrame(function() { confirm.focus(); });
+        }).catch(function(err) {
+            sourceButton.disabled = false;
+            sourceButton.textContent = sourceLabel;
+            addSystemMessage(window.t('assistant.previewFailed', { message: err.message || String(err) }));
+        });
+    }
+
+    function _closeSavePreview() {
+        var modal = document.getElementById('assistant-save-modal');
+        if (modal) modal.style.display = 'none';
+        if (_savePreviewState && _savePreviewState.sourceButton) {
+            _savePreviewState.sourceButton.disabled = false;
+            _savePreviewState.sourceButton.textContent = _savePreviewState.sourceLabel;
+        }
+        _savePreviewState = null;
+    }
+
+    function _confirmSavePreview() {
+        if (!_savePreviewState || !window.api || !window.api.archiveChatAnswer) return;
+        var state = _savePreviewState;
+        var confirm = document.getElementById('assistant-save-confirm');
+        if (confirm) {
+            confirm.disabled = true;
+            confirm.textContent = window.t('assistant.saving');
+        }
+        window.api.archiveChatAnswer(state.payload).then(function(res) {
+            if (!res || !res.success) {
+                throw new Error((res && res.message) || window.t('common.unknownError'));
+            }
+            var modal = document.getElementById('assistant-save-modal');
+            if (modal) modal.style.display = 'none';
+            state.sourceButton.textContent = window.t('common.saved');
+            state.hint.textContent = window.t('assistant.savedToPath', { path: res.path || '' });
+            _savePreviewState = null;
+            if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
+                window.refreshWorkspaceViewsAfterChange();
+            }
+        }).catch(function(err) {
+            if (confirm) {
+                confirm.disabled = false;
+                confirm.textContent = window.t('assistant.confirmSave');
+            }
+            addSystemMessage(window.t('assistant.saveFailed', { message: err.message || String(err) }));
+        });
     }
 
     function _openNoteFromPath(filePath, displayName) {

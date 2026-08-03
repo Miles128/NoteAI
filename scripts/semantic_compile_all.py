@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import json
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -12,8 +12,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "python"))
 
-from config import config  # noqa: E402
 from sidecar.semantic.compiler import compile_semantic_batch  # noqa: E402
+
+from config import config  # noqa: E402
 
 
 def main() -> int:

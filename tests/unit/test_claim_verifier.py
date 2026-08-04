@@ -300,9 +300,7 @@ class TestVerifyClaimRpc:
         assert result["success"] is False
         assert "不可核查" in result["message"]
 
-    def test_verification_persisted_and_listed(
-        self, handler: SemanticHandler, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_verification_persisted_and_listed(self, handler: SemanticHandler, monkeypatch: pytest.MonkeyPatch) -> None:
         def fake_verify(store, claim, *, agent_id, send_event=None):
             assert claim["id"] == "claim-1"
             assert agent_id == "claude"

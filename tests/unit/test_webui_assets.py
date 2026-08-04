@@ -122,8 +122,9 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count("data-category=") == 5
+    assert html.count("data-category=") == 6
     assert 'data-category="quality"' in html
+    assert 'data-category="brief"' in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html
     assert "import('./semantic-workbench.js')" in main_js
@@ -133,6 +134,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert "review_semantic_conflict" in api_js
     assert "review_semantic_entity_quality" in api_js
     assert "get_semantic_topic_wiki_page" in api_js
+    assert "get_topic_brief" in api_js
     assert "publish_semantic_topic_wiki_page" in api_js
     assert "data-preview-topic-page" in workbench_js
     assert "data-open-path" in workbench_js

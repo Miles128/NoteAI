@@ -417,6 +417,7 @@ var API_DEFS = [
     { name: 'publishSemanticObjectWikiPage', method: 'publish_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; }, write: true },
     { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
     { name: 'getSemanticChanges', method: 'get_semantic_changes', params: function(options) { return options || {}; } },
+    { name: 'getTopicBrief', method: 'get_topic_brief', params: function(options) { return options || {}; } },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },

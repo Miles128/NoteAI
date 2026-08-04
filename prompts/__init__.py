@@ -30,6 +30,8 @@ AI_TOPIC_ANALYZE_PROMPT = get_prompt("ai_topic_consolidate", "AI_TOPIC_ANALYZE_P
 
 TOPIC_SURVEY_PROMPT = get_prompt("topic_survey", "TOPIC_SURVEY_PROMPT")
 
+TOPIC_BRIEF_PROMPT = get_prompt("brief", "TOPIC_BRIEF_PROMPT")
+
 ASSISTANT_PERSONA_PROMPT = get_prompt("rag_assistant", "ASSISTANT_PERSONA_PROMPT")
 HYDE_PROMPT = get_prompt("rag_assistant", "HYDE_PROMPT")
 RAG_ASSISTANT_PROMPT = get_prompt("rag_assistant", "RAG_ASSISTANT_PROMPT")

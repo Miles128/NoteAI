@@ -2,7 +2,7 @@ import re
 import time
 from collections.abc import Callable
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,6 +25,57 @@ from utils.tag_extractor import (
     add_yaml_frontmatter_to_file,
     extract_tags_from_filename,
 )
+
+# Query params that should never participate in source-URL dedup decisions.
+_TRACKING_PARAMS = {
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "gclid",
+    "fbclid",
+    "spm",
+}
+
+
+def normalize_source_url(url: str) -> str:
+    """Normalize a source URL for dedup: drop fragment, tracking params and trailing slash."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    try:
+        parts = urlsplit(raw)
+        if not parts.scheme or not parts.netloc:
+            return raw.lower()
+        path = parts.path.rstrip("/") if parts.path != "/" else "/"
+        query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k.lower() not in _TRACKING_PARAMS]
+        return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), "")).lower()
+    except ValueError:
+        return raw.lower()
+
+
+def existing_source_urls(workspace: str) -> set[str]:
+    """Collect normalized ``source_url`` / ``source`` frontmatter from Notes/."""
+    from utils.text_utils import parse_frontmatter
+
+    found: set[str] = set()
+    ws = Path(workspace)
+    notes_root = ws / "Notes"
+    if not notes_root.is_dir():
+        return found
+    for note_file in notes_root.rglob("*.md"):
+        try:
+            meta, _ = parse_frontmatter(note_file.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        if not meta:
+            continue
+        raw = str(meta.get("source_url") or meta.get("source") or "").strip()
+        norm = normalize_source_url(raw)
+        if norm:
+            found.add(norm)
+    return found
 
 
 class WebDownloader:
@@ -458,10 +509,26 @@ class WebDownloader:
         notes_dir = Path(save_path) / "Notes"
         save_dir = ensure_dir(str(notes_dir))
 
+        # P0 collection dedup: skip URLs already imported (normalized), and
+        # track newly saved URLs within this batch as well.
+        existing = existing_source_urls(save_path)
+
         total = len(urls)
         for i, url in enumerate(urls):
             url = url.strip()
             if not url:
+                continue
+
+            norm = normalize_source_url(url)
+            if norm and norm in existing:
+                results.append(
+                    {
+                        "success": False,
+                        "duplicate": True,
+                        "url": url,
+                        "error": "已存在相同来源的笔记，跳过",
+                    }
+                )
                 continue
 
             if self.progress_callback:
@@ -470,6 +537,17 @@ class WebDownloader:
             result = self.download_article(url)
 
             if result["success"]:
+                final_norm = normalize_source_url(str(result.get("url") or url))
+                if final_norm and final_norm in existing:
+                    results.append(
+                        {
+                            "success": False,
+                            "duplicate": True,
+                            "url": url,
+                            "error": "已存在相同来源的笔记，跳过",
+                        }
+                    )
+                    continue
                 article_title = result.get("title", "未命名文章")
                 if self.progress_callback:
                     self.progress_callback(i + 1, total, f"正在保存: {article_title}")
@@ -505,6 +583,9 @@ class WebDownloader:
                             logger.info(f"已保存HTML: {html_path}")
                         except Exception as e:
                             logger.warning(f"保存HTML失败: {e}")
+
+                    if final_norm:
+                        existing.add(final_norm)
 
                     result["file_path"] = str(file_path)
                     result["tags"] = tags

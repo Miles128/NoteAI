@@ -137,7 +137,8 @@
       "claims": "命题与证据",
       "quality": "实体质量",
       "conflicts": "冲突",
-      "links": "双向链接"
+      "links": "双向链接",
+      "brief": "主题简报"
     },
     "tabs": {
       "overview": "概览",
@@ -201,6 +202,22 @@
         "concept": "概念",
         "document": "文档"
       }
+    },
+    "brief": {
+      "days": "时间范围",
+      "daysShort": "{days} 天",
+      "topic": "主题",
+      "chooseTopic": "选择主题…",
+      "generate": "生成简报",
+      "generating": "生成中…",
+      "fallback": "未配置 LLM 或生成失败，以下为结构化变化记录",
+      "noTopics": "过去 {days} 天没有语义变化，暂无可生成简报的主题",
+      "noTopicSelected": "请先选择主题",
+      "empty": "选择一个主题并点击「生成简报」",
+      "windowLabel": "过去 {days} 天的语义变化",
+      "copy": "复制",
+      "copied": "已复制",
+      "copyFailed": "复制失败"
     }
   },
   "pending": {

@@ -488,3 +488,58 @@ def test_get_semantic_changes_is_read_only_and_validates_params(semantic_handler
     assert listed["total"] == 1
     assert listed["items"][0]["label"] == "新命题"
     assert listed["counts"] == [{"change_kind": "added", "object_kind": "claim", "count": 1}]
+
+
+def test_get_semantic_changes_repairs_legacy_store_without_change_log(
+    semantic_handler: SemanticHandler,
+) -> None:
+    """Workspaces created before the change log table must not crash the digest.
+
+    Regression: a legacy ``semantic.db`` predating ``semantic_change_log``
+    raised ``sqlite3.OperationalError: no such table`` on startup because the
+    read-only workbench never re-runs schema initialization.
+    """
+    store = SemanticStore(config.workspace_path)
+    with store.connect() as conn:
+        conn.execute("DROP TABLE semantic_change_log")
+        conn.execute("DROP INDEX IF EXISTS idx_semantic_change_created")
+
+    result = semantic_handler._get_changes({"days": 7})
+
+    assert result["success"] is True
+    assert result["counts"] == []
+    assert result["items"] == []
+    assert result["total"] == 0
+
+    # The digest must have repaired the schema in place.
+    with store.connect() as conn:
+        tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert "semantic_change_log" in tables
+
+
+def test_change_log_read_methods_self_heal_legacy_store(tmp_path: Path) -> None:
+    """Store-level read APIs create the missing table instead of raising."""
+    workspace = tmp_path / "legacy-workspace"
+    store = SemanticStore(workspace)
+    store.initialize()
+    with store.connect() as conn:
+        conn.execute("DROP TABLE semantic_change_log")
+        conn.execute("DROP INDEX IF EXISTS idx_semantic_change_created")
+
+    assert store.change_counts(days=7) == []
+    items, total = store.recent_changes(days=7)
+    assert items == []
+    assert total == 0
+
+    # After repair, writes and reads must work end to end.
+    with store.connect() as conn:
+        SemanticStore._record_change(
+            conn,
+            change_kind="added",
+            object_kind="claim",
+            object_id="claim-1",
+            label="测试命题",
+        )
+    items, total = store.recent_changes(days=7)
+    assert total == 1
+    assert items[0]["label"] == "测试命题"

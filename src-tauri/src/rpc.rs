@@ -79,6 +79,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_semantic_compile_status",
     "get_semantic_topic_wiki_page",
     "get_semantic_entity_merge_preview",
+    "get_topic_brief",
     "review_semantic_entity_quality",
     "enqueue_semantic_entity_quality",
     "merge_semantic_entities",

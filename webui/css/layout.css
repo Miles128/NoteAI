@@ -1876,6 +1876,23 @@ body {
     color: var(--surface);
 }
 
+/* 引用段落定位：打开笔记后高亮被引章节标题 */
+.ai-locate-flash {
+    animation: ai-locate-flash 2.2s ease-out;
+    border-radius: 4px;
+}
+
+@keyframes ai-locate-flash {
+    0% {
+        background: rgba(255, 200, 60, 0.45);
+        box-shadow: 0 0 0 3px rgba(255, 200, 60, 0.3);
+    }
+    100% {
+        background: transparent;
+        box-shadow: none;
+    }
+}
+
 .ai-citation-index {
     display: flex;
     align-items: center;

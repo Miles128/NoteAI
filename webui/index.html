@@ -165,6 +165,7 @@
                             <button type="button" data-category="quality"><span class="semantic-nav-icon">◌</span><span data-i18n="semantic.categories.quality"></span></button>
                             <button type="button" data-category="conflicts"><span class="semantic-nav-icon">!</span><span data-i18n="semantic.categories.conflicts"></span></button>
                             <button type="button" data-category="links"><span class="semantic-nav-icon">↔</span><span data-i18n="semantic.categories.links"></span></button>
+                            <button type="button" data-category="brief"><span class="semantic-nav-icon">▤</span><span data-i18n="semantic.categories.brief"></span></button>
                         </nav>
                         <button type="button" class="semantic-compile-all" id="semantic-compile-all" data-i18n="semantic.compileAll"></button>
                         <div class="semantic-compile-progress" id="semantic-compile-progress" hidden></div>
@@ -204,7 +205,10 @@
             <section class="semantic-list-pane" id="semantic-list-pane" hidden aria-labelledby="semantic-list-title">
                 <header class="semantic-list-header">
                     <div><h3 id="semantic-list-title"></h3><span id="semantic-list-count"></span></div>
-                    <button type="button" class="semantic-refresh" id="semantic-refresh" data-i18n-title="semantic.refresh" aria-label="Refresh">↻</button>
+                    <div class="semantic-list-header-actions">
+                        <button type="button" class="semantic-refresh" id="semantic-refresh" data-i18n-title="semantic.refresh" aria-label="Refresh">↻</button>
+                        <button type="button" class="semantic-close" id="semantic-close" data-i18n-title="common.close" data-i18n-aria="common.close" aria-label="Close">✕</button>
+                    </div>
                 </header>
                 <div class="semantic-object-switch" id="semantic-object-switch">
                     <button type="button" class="active" data-object-kind="entities" data-i18n="semantic.tabs.entities"></button>

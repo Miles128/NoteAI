@@ -68,6 +68,9 @@ include = ["config*", "modules*", "prompts*", "sidecar*", "utils*", "tests*"]
 [tool.setuptools.package-dir]
 "sidecar" = "python/sidecar"
 
+[tool.setuptools.package-data]
+sidecar = ["sample_workspace/**/*.md"]
+
 [project.scripts]
 noteai = "run:main"
 

@@ -1172,6 +1172,12 @@
     }
   },
   "workspace": {
+    "sample": {
+      "button": "Try sample workspace",
+      "creating": "Creating sample workspace…",
+      "ready": "Sample workspace is ready. Configure your LLM in Settings to compile semantic knowledge.",
+      "failed": "Failed to create sample workspace"
+    },
     "auto": {
       "button_class_workspace_btn_onclick_window_Worksp": "<button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开workspace\"> ${window.Icons.get('folderFilled')} <span>打开workspace</span> </button>",
       "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",

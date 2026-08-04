@@ -1221,6 +1221,7 @@
                     <div class="multi-source-tabs">
                         <button type="button" class="multi-source-tab active" data-ms-tab="url" data-i18n="download.tabWeb"></button>
                         <button type="button" class="multi-source-tab" data-ms-tab="rss" data-i18n="download.tabRss"></button>
+                        <button type="button" class="multi-source-tab" data-ms-tab="folder" data-i18n="download.tabFolder"></button>
                         <button type="button" class="multi-source-tab" data-ms-tab="transcript" data-i18n="download.tabTranscript"></button>
                     </div>
                     <div class="multi-source-pane active" id="ms-pane-url">
@@ -1238,6 +1239,18 @@
                             <button type="button" class="btn btn-secondary btn-sm" id="ms-rss-fetch-all-btn" data-i18n="download.rssFetchAll"></button>
                         </div>
                         <div id="ms-rss-sub-list" class="rss-sub-list"></div>
+                    </div>
+                    <div class="multi-source-pane" id="ms-pane-folder" hidden>
+                        <div class="form-row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+                            <input type="text" id="ms-folder-path" class="form-input" style="flex:1;min-width:200px" data-i18n-placeholder="download.folderPlaceholder">
+                            <label style="white-space:nowrap;"><input type="checkbox" id="ms-folder-recursive" checked> <span data-i18n="download.folderRecursive"></span></label>
+                            <button type="button" class="btn btn-secondary" id="ms-folder-add-btn" data-i18n="download.folderAdd"></button>
+                        </div>
+                        <div class="rss-sub-header" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                            <span class="rss-sub-title" style="font-size:12px;color:var(--text-muted);" data-i18n="download.folderWatched"></span>
+                            <button type="button" class="btn btn-secondary btn-sm" id="ms-folder-scan-all-btn" data-i18n="download.folderScanAll"></button>
+                        </div>
+                        <div id="ms-folder-list" class="rss-sub-list"></div>
                     </div>
                     <div class="multi-source-pane" id="ms-pane-transcript" hidden>
                         <input type="text" id="ms-transcript-title" class="form-input form-input-full" data-i18n-placeholder="download.transcriptTitle">

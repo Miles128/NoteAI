@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
+import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +14,8 @@ import requests
 
 from config import config
 from config.settings import NOTES_FOLDER
-from utils.helpers import sanitize_filename
+from utils.helpers import is_valid_url, sanitize_filename
+from utils.logger import logger
 from utils.network_security import safe_get
 
 _INBOX = "_采集"
@@ -79,6 +82,17 @@ def _fetch_rss(url: str, timeout: int = 20) -> ET.Element:
     )
     resp.raise_for_status()
     return ET.fromstring(resp.content)
+
+
+def _rss_title(root: ET.Element) -> str:
+    """Extract the feed title from RSS 2.0 / Atom feeds."""
+    channel = root.find("channel")
+    if channel is not None:
+        t = (channel.findtext("title") or "").strip()
+        if t:
+            return t
+    ns = {"a": "http://www.w3.org/2005/Atom"}
+    return (root.findtext("a:title", default="", namespaces=ns) or "").strip()
 
 
 def _rss_items(root: ET.Element) -> list[dict[str, str]]:
@@ -183,8 +197,6 @@ def import_transcript(
 
 # ── RSS Subscription Persistence ──
 
-import json
-
 _SUBS_FILE = "rss_subscriptions.json"
 
 
@@ -202,21 +214,53 @@ def load_subscriptions(workspace: str) -> list[dict]:
         return []
 
 
-def save_subscription(workspace: str, url: str, name: str = "") -> None:
-    subs = load_subscriptions(workspace)
-    if any(s["url"] == url for s in subs):
-        return
-    subs.append({"url": url, "name": name or url, "last_fetched": None, "interval_minutes": 30})
+def _persist_subscriptions(workspace: str, subs: list[dict]) -> None:
     _subs_path(workspace).parent.mkdir(parents=True, exist_ok=True)
     _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def remove_subscription(workspace: str, url: str) -> None:
+def save_subscription(workspace: str, url: str, name: str = "") -> dict:
+    """保存订阅：校验 URL，未提供名称时尝试从 feed 获取标题。"""
+    url = (url or "").strip()
+    if not url or not is_valid_url(url):
+        return {"success": False, "message": "无效的 RSS URL"}
+
     subs = load_subscriptions(workspace)
-    subs = [s for s in subs if s["url"] != url]
-    path = _subs_path(workspace)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+    for sub in subs:
+        if sub["url"] == url:
+            if name and sub.get("name") != name:
+                sub["name"] = name
+                _persist_subscriptions(workspace, subs)
+            return {"success": True, "message": "订阅已存在"}
+
+    feed_name = name.strip()
+    if not feed_name:
+        try:
+            root = _fetch_rss(url)
+            feed_name = _rss_title(root)
+        except Exception:
+            feed_name = ""
+
+    subs.append(
+        {
+            "url": url,
+            "name": feed_name or url,
+            "last_fetched": None,
+            "interval_minutes": 30,
+        }
+    )
+    _persist_subscriptions(workspace, subs)
+    return {"success": True, "message": "订阅已保存"}
+
+
+def remove_subscription(workspace: str, url: str) -> dict:
+    url = (url or "").strip()
+    subs = load_subscriptions(workspace)
+    kept = [s for s in subs if s["url"] != url]
+    if len(kept) == len(subs):
+        return {"success": False, "message": "未找到该订阅"}
+    _persist_subscriptions(workspace, kept)
+    return {"success": True, "message": "订阅已移除"}
 
 
 def fetch_all_subscriptions(workspace: str) -> dict:
@@ -231,5 +275,116 @@ def fetch_all_subscriptions(workspace: str) -> dict:
         except Exception as e:
             results.append({"url": sub["url"], "success": False, "error": str(e)})
     if subs:
-        _subs_path(workspace).write_text(json.dumps(subs, ensure_ascii=False, indent=2), encoding="utf-8")
+        _persist_subscriptions(workspace, subs)
     return {"success": True, "results": results}
+
+
+# ── RSS Automatic Polling ──
+
+
+class RssScheduler:
+    """后台定时轮询 RSS 订阅，到期订阅自动拉取并把新内容导入知识库。
+
+    每个订阅按 ``interval_minutes``（默认 30 分钟）触发一次；首次添加且从未
+    拉取过的订阅会在第一个 tick 后自动拉取。
+
+    Args:
+        workspace_provider: 返回当前工作区路径（切换工作区后自动生效）。
+        send_event: 拉取完成后的事件回调（发送 rss_poll_complete 事件）。
+        tick_seconds: 调度检查间隔。
+    """
+
+    def __init__(
+        self,
+        workspace_provider: Any,
+        send_event: Any = None,
+        tick_seconds: int = 60,
+    ):
+        self._workspace_provider = workspace_provider
+        self._send_event = send_event
+        self._tick_seconds = max(30, int(tick_seconds))
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+        self._inflight: set[str] = set()
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="rss-scheduler", daemon=True)
+        self._thread.start()
+        logger.info("[rss-scheduler] 已启动，轮询间隔 %ss", self._tick_seconds)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+            self._thread = None
+        logger.info("[rss-scheduler] 已停止")
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._tick_seconds):
+            try:
+                self._poll_due_subscriptions()
+            except Exception as e:
+                logger.warning(f"[rss-scheduler] tick 失败: {e}")
+
+    def _poll_due_subscriptions(self) -> None:
+        workspace = self._workspace_provider()
+        if not workspace or not Path(workspace).exists():
+            return
+        for sub in load_subscriptions(workspace):
+            url = sub.get("url", "")
+            if not url or not self._is_due(sub) or url in self._inflight:
+                continue
+            self._inflight.add(url)
+            threading.Thread(
+                target=self._fetch_one,
+                args=(workspace, url),
+                daemon=True,
+            ).start()
+
+    @staticmethod
+    def _is_due(sub: dict) -> bool:
+        """判断订阅是否到期：无 last_fetched 或距上次拉取超过 interval_minutes。"""
+        interval_minutes = float(sub.get("interval_minutes") or 30)
+        last = sub.get("last_fetched")
+        if not last:
+            return True
+        try:
+            last_dt = datetime.fromisoformat(str(last))
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds()
+            return elapsed >= interval_minutes * 60
+        except Exception:
+            return True
+
+    def _fetch_one(self, workspace: str, url: str) -> None:
+        try:
+            result = import_rss_feed(url, max_items=10, fetch_articles=True)
+            self._mark_fetched(workspace, url)
+            imported = int(result.get("imported") or 0)
+            logger.info(f"[rss-scheduler] {url} 拉取完成: {imported} 篇")
+            if self._send_event:
+                self._send_event(
+                    {
+                        "type": "rss_poll_complete",
+                        "data": {"url": url, "imported": imported},
+                    }
+                )
+        except Exception as e:
+            logger.warning(f"[rss-scheduler] {url} 拉取失败: {e}")
+        finally:
+            self._inflight.discard(url)
+
+    def _mark_fetched(self, workspace: str, url: str) -> None:
+        try:
+            subs = load_subscriptions(workspace)
+            for sub in subs:
+                if sub.get("url") == url:
+                    sub["last_fetched"] = datetime.now(timezone.utc).isoformat()
+                    break
+            _persist_subscriptions(workspace, subs)
+        except Exception as e:
+            logger.warning(f"[rss-scheduler] 更新 last_fetched 失败: {e}")

@@ -185,6 +185,10 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "unregister_mcp_server",
     "uninstall_component",
     "fetch_all_rss",
+    "add_watched_folder",
+    "list_watched_folders",
+    "remove_watched_folder",
+    "scan_watched_folder",
 ];
 
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.

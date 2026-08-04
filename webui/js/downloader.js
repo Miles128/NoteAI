@@ -65,6 +65,17 @@ function handleGlobalDownloadEvent(event) {
                 window.TreeModule.loadFileTree(true);
             }
         }
+    } else if (data.type === 'folder_watch_complete') {
+        var fwData = data.data || {};
+        var fwImported = fwData.imported || 0;
+        if (typeof window.updateStatus === 'function') {
+            window.updateStatus(fwImported > 0
+                ? window.t('download.folderImportDone', { count: fwImported })
+                : window.t('download.folderImportNone'));
+        }
+        if (window.TreeModule && window.TreeModule.loadFileTree) {
+            window.TreeModule.loadFileTree(true);
+        }
     }
 }
 
@@ -281,7 +292,9 @@ function openDownloadModal() {
     modal.classList.add('active');
     
     initModalDrag();
+    initMsTabs();
     initRssTab();
+    initFolderTab();
     
     setTimeout(() => {
         const urlInput = document.getElementById('modal-urls');
@@ -501,11 +514,142 @@ window.DownloaderModule = {
     autoSaveModalConfig,
     startDownloadFromModal,
     loadRssSubscriptions,
+    loadWatchedFolders,
     getDownloadState: function() { return _downloadState; }
 };
 
 window.closeDownloadModal = closeDownloadModal;
 window.startDownloadFromModal = startDownloadFromModal;
+
+// ── Multi-source Tab switching ──
+
+function initMsTabs() {
+    var tabs = document.querySelectorAll('.multi-source-tab[data-ms-tab]');
+    if (!tabs.length || tabs[0]._msTabBound) return;
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var name = tab.dataset.msTab;
+            document.querySelectorAll('.multi-source-tab').forEach(function(t) {
+                t.classList.toggle('active', t === tab);
+            });
+            document.querySelectorAll('.multi-source-pane').forEach(function(pane) {
+                pane.hidden = pane.id !== 'ms-pane-' + name;
+            });
+            if (name === 'rss') loadRssSubscriptions();
+            if (name === 'folder') loadWatchedFolders();
+        });
+        tab._msTabBound = true;
+    });
+}
+
+// ── Folder Watch Tab ──
+
+function initFolderTab() {
+    var addBtn = document.getElementById('ms-folder-add-btn');
+    if (addBtn && !addBtn._fwBound) {
+        addBtn.addEventListener('click', addWatchedFolder);
+        addBtn._fwBound = true;
+    }
+    var scanAllBtn = document.getElementById('ms-folder-scan-all-btn');
+    if (scanAllBtn && !scanAllBtn._fwBound) {
+        scanAllBtn.addEventListener('click', scanAllWatchedFolders);
+        scanAllBtn._fwBound = true;
+    }
+    loadWatchedFolders();
+}
+
+async function addWatchedFolder() {
+    if (!window.api || !window.api.addWatchedFolder) return;
+    var pathEl = document.getElementById('ms-folder-path');
+    var recursiveEl = document.getElementById('ms-folder-recursive');
+    var path = pathEl ? pathEl.value.trim() : '';
+    if (!path) { alert(_rssT('download.folderPlaceholder')); return; }
+    try {
+        var result = await window.api.addWatchedFolder(path, recursiveEl ? recursiveEl.checked : true);
+        if (result && result.success) {
+            alert(result.message || _rssT('download.folderAddDone'));
+            if (pathEl) pathEl.value = '';
+        } else {
+            alert('Folder: ' + (result && result.message || _rssT('download.folderAddFailed')));
+        }
+        await loadWatchedFolders();
+    } catch (e) { alert('Folder: ' + e.message); }
+}
+
+async function removeWatchedFolder(path) {
+    if (!path || !window.api || !window.api.removeWatchedFolder) return;
+    try {
+        var result = await window.api.removeWatchedFolder(path);
+        if (result && !result.success) alert('Folder: ' + (result.message || _rssT('common.unknownError')));
+        await loadWatchedFolders();
+    } catch (e) { alert('Folder: ' + e.message); }
+}
+
+async function scanAllWatchedFolders() {
+    if (!window.api || !window.api.scanWatchedFolder) return;
+    var btn = document.getElementById('ms-folder-scan-all-btn');
+    if (btn) { btn.disabled = true; btn.textContent = _rssT('download.folderScanning'); }
+    try {
+        var result = await window.api.scanWatchedFolder('', true);
+        if (result && result.success) {
+            if (result.scanned > 0) {
+                if (typeof window.updateStatus === 'function') {
+                    window.updateStatus(_rssT('download.folderScanDone', { count: result.scanned }));
+                }
+            } else {
+                alert(_rssT('download.folderScanNone'));
+            }
+        } else {
+            alert('Folder: ' + (result && result.message || _rssT('common.unknownError')));
+        }
+    } catch (e) { alert('Folder: ' + e.message); }
+    finally {
+        if (btn) { btn.disabled = false; btn.textContent = _rssT('download.folderScanAll'); }
+    }
+}
+
+async function loadWatchedFolders() {
+    if (!window.api || !window.api.listWatchedFolders) {
+        updateFolderList([]);
+        return;
+    }
+    try {
+        var result = await window.api.listWatchedFolders();
+        var folders = (result && result.success && result.folders) ? result.folders : [];
+        updateFolderList(folders);
+    } catch (_e) {
+        updateFolderList([]);
+    }
+}
+
+function updateFolderList(folders) {
+    var container = document.getElementById('ms-folder-list');
+    if (!container) return;
+    if (!folders || folders.length === 0) {
+        container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.folderNoFolders')) + '</div>';
+        return;
+    }
+    var html = '';
+    folders.forEach(function(folder) {
+        var path = (folder && folder.path) ? folder.path : '';
+        if (!path) return;
+        var label = path;
+        var short = label.length > 48 ? label.substring(0, 48) + '...' : label;
+        html += '<div class="rss-sub-item" data-path="' + encodeURIComponent(path) + '">';
+        html += '<span class="rss-sub-url" title="' + _escapeHtml(label) + '">' + _escapeHtml(short) + '</span>';
+        html += '<button type="button" class="rss-sub-remove" title="' + _escapeHtml(_rssT('download.folderRemove')) + '">✕</button>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var row = btn.closest('.rss-sub-item');
+            if (row && row.dataset.path) removeWatchedFolder(decodeURIComponent(row.dataset.path));
+        });
+    });
+}
+
+window.removeWatchedFolder = removeWatchedFolder;
 
 // ── RSS Tab ──
 var _RSS_LEGACY_KEY = 'noteai_rss_subscriptions';

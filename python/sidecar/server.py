@@ -1,6 +1,7 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
 import json
+import shutil
 import sys
 import threading
 from pathlib import Path
@@ -9,9 +10,10 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from config import config, is_ignored_dir
-from config.settings import NOTES_FOLDER
+from config.settings import NOTES_FOLDER, RAW_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
+from modules.folder_watcher import FolderWatcher, load_watched_folders
 from modules.topic_extractor import TopicExtractor
 from modules.web_downloader import WebDownloader
 from sidecar import job_status
@@ -60,6 +62,8 @@ class SidecarServer(PathHelpersMixin):
         self.file_converter = FileConverterManager()
         self.file_previewer = FilePreviewer()
         self.topic_extractor = TopicExtractor()
+        self.folder_watcher = FolderWatcher(on_files=self._handle_watched_folder_files)
+        self._rss_scheduler = None
         self._progress_callback = None
         self._running_tasks = set()
         self._running_tasks_lock = threading.Lock()
@@ -110,6 +114,7 @@ class SidecarServer(PathHelpersMixin):
         normalize_ingest_state()
         self._start_workspace_watcher()
         self._startup_sync()
+        self._start_rss_scheduler()
 
     def _build_router(self):
         self._config_handler.register_routes(self._router)
@@ -225,6 +230,8 @@ class SidecarServer(PathHelpersMixin):
         workspace = config.workspace_path
         if workspace and Path(workspace).exists():
             self._setup_watcher(workspace)
+        else:
+            self._restart_folder_monitor()
 
     def _startup_sync(self):
         workspace = config.workspace_path
@@ -335,6 +342,23 @@ class SidecarServer(PathHelpersMixin):
             self._watcher_observer = observer
         except Exception as e:
             logger.warning(f"[watcher] start failed: {e}\n")
+        self._restart_folder_monitor()
+
+    def _restart_folder_monitor(self):
+        """按当前工作区重新加载并启动文件夹监控（切换工作区后自动生效）。"""
+        workspace = config.workspace_path
+        folders = load_watched_folders(workspace) if workspace and Path(workspace).exists() else []
+        self.folder_watcher.start(folders)
+
+    def _start_rss_scheduler(self):
+        from sidecar.multi_source import RssScheduler
+
+        if self._rss_scheduler is None:
+            self._rss_scheduler = RssScheduler(
+                workspace_provider=lambda: config.workspace_path,
+                send_event=lambda payload: self._send_response({"id": "event", "result": payload}),
+            )
+        self._rss_scheduler.start()
 
     def _stop_watcher(self):
         if self._watcher_observer:
@@ -548,12 +572,100 @@ class SidecarServer(PathHelpersMixin):
             }
         )
 
+    def _handle_watched_folder_files(self, files: list[str]):
+        """监控目录新增文件/手动扫描后的统一入库入口。
+
+        复用既有流程：非 .md 文件复制到 Raw 后走 FileConverterManager 转换入库；
+        .md 文件直接复制进 Notes（补全缺失的 frontmatter）。
+        """
+        workspace = config.workspace_path
+        if not workspace or not files:
+            return
+        ws = Path(workspace)
+        raw_dir = ws / RAW_FOLDER
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        notes_dir = ws / NOTES_FOLDER
+        notes_dir.mkdir(parents=True, exist_ok=True)
+
+        supported = set(self.file_converter.get_supported_formats())
+        results: list[dict] = []
+        copied: list[str] = []
+        for f in files:
+            src = Path(f)
+            if not src.is_file():
+                continue
+            if src.suffix.lower() == ".md":
+                results.append(self._import_markdown_file(src, notes_dir))
+                continue
+            if src.suffix.lower() not in supported:
+                results.append({"success": False, "source": str(src), "error": f"不支持的格式: {src.suffix}"})
+                continue
+            dst = raw_dir / src.name
+            counter = 1
+            while dst.exists():
+                dst = raw_dir / f"{src.stem}_{counter}{src.suffix}"
+                counter += 1
+            try:
+                shutil.copy2(str(src), str(dst))
+                copied.append(str(dst))
+            except Exception as e:
+                results.append({"success": False, "source": str(src), "error": str(e)})
+
+        if copied:
+            batch = self.file_converter.convert_batch(copied, str(notes_dir))
+            results.extend(batch)
+            try:
+                from sidecar.convert_failures import record_convert_batch_results
+
+                record_convert_batch_results(batch)
+            except Exception as e:
+                logger.warning(f"[folder_watcher] 记录转换结果失败: {e}")
+
+        success_count = sum(1 for r in results if r.get("success"))
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "folder_watch_complete",
+                    "data": {"total": len(results), "imported": success_count, "results": results},
+                },
+            }
+        )
+        logger.info(f"[folder_watcher] 导入完成: {success_count}/{len(results)} 个文件")
+
+    @staticmethod
+    def _import_markdown_file(src: Path, notes_dir: Path) -> dict:
+        """将监控目录中的 .md 文件复制进 Notes，缺失 frontmatter 时自动补全。"""
+        from utils.helpers import sanitize_filename
+        from utils.tag_extractor import add_yaml_frontmatter_to_content
+        from utils.text_utils import parse_frontmatter
+
+        try:
+            text = src.read_text(encoding="utf-8", errors="replace")
+            meta, _body = parse_frontmatter(text)
+            title = str((meta or {}).get("title") or src.stem).strip() or src.stem
+            content = text if meta else add_yaml_frontmatter_to_content(text, title=title, tags=[], source=str(src))
+            stem = sanitize_filename(title)
+            dest = notes_dir / f"{stem}.md"
+            counter = 1
+            while dest.exists():
+                dest = notes_dir / f"{stem}_{counter}.md"
+                counter += 1
+            dest.write_text(content, encoding="utf-8")
+            return {"success": True, "source": str(src), "output_path": str(dest), "title": title}
+        except Exception as e:
+            logger.warning(f"[folder_watcher] 导入 Markdown 失败 {src}: {e}")
+            return {"success": False, "source": str(src), "error": str(e)}
+
     def handle_request(self, request):
         self._router.handle(request)
 
     def shutdown(self):
         """Gracefully stop background services."""
         self._stop_watcher()
+        self.folder_watcher.stop()
+        if self._rss_scheduler:
+            self._rss_scheduler.stop()
         self._router.shutdown(wait=False)
         # Shutdown module-level thread pools
         try:

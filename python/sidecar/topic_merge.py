@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from config.constants import TOPIC_SEP
-from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
+from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER, WORKSPACE_APP_FOLDER
 from utils.text_utils import parse_frontmatter
 
 
@@ -49,6 +49,49 @@ def suggest_merged_topic_names(workspace: str | Path, topics: list[str]) -> dict
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     ][:3]
     return {"success": bool(cleaned), "names": cleaned, "message": "未生成有效主题名" if not cleaned else ""}
+
+
+def preview_topic_merge(workspace: str | Path, topics: list[str], new_topic: str) -> dict:
+    """Preview a topic merge: migrated notes, same-name conflicts and affected surveys (PRD §9.4)."""
+    if len(topics) != 2 or topics[0] == topics[1]:
+        return {"success": False, "message": "请选择两个不同主题"}
+    root = Path(workspace).resolve()
+    target = _topic_dir(root, new_topic)
+    sources = [_topic_dir(root, topic) for topic in topics]
+    if not all(source.is_dir() for source in sources):
+        return {"success": False, "message": "源主题目录不存在"}
+    notes = sorted(note for source in sources for note in source.rglob("*.md"))
+    target_names = {path.name for path in target.rglob("*.md")} if target.is_dir() else set()
+    conflicts = []
+    for note in notes:
+        if note.name in target_names:
+            conflicts.append(
+                {
+                    "name": note.name,
+                    "source": str(note.relative_to(root)),
+                    "target": str((target / note.name).relative_to(root)),
+                }
+            )
+    wiki = root / ABSTRACT_FOLDER
+    surveys: list[str] = []
+    for topic in topics:
+        leaf = topic.rsplit(TOPIC_SEP, maxsplit=1)[-1]
+        flat = wiki / f"{leaf}_综述.md"
+        if flat.exists():
+            surveys.append(str(flat.relative_to(root)))
+        parts = [part.strip() for part in topic.split(TOPIC_SEP) if part.strip()]
+        if parts and all(part not in {".", ".."} and "/" not in part and "\\" not in part for part in parts):
+            topic_dir = wiki.joinpath(*parts)
+            if topic_dir.is_dir():
+                for survey in sorted(topic_dir.rglob("*_综述.md")):
+                    surveys.append(str(survey.relative_to(root)))
+    return {
+        "success": True,
+        "note_count": len(notes),
+        "notes": [str(note.relative_to(root)) for note in notes],
+        "conflicts": conflicts,
+        "surveys": sorted(set(surveys)),
+    }
 
 
 def merge_topics(workspace: str | Path, topics: list[str], new_topic: str) -> dict:

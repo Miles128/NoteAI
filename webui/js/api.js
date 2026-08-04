@@ -466,8 +466,9 @@ var API_DEFS = [
     { name: 'mergeDuplicateNotes', method: 'merge_duplicate_notes', params: function(filePath, relatedFile, title) { return { file_path: filePath, related_file: relatedFile, title: title || '' }; }, write: true },
     { name: 'mergeNoteGroup', method: 'merge_note_group', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
     { name: 'getChunkMergeCandidates', method: 'get_chunk_merge_candidates', params: function() { return {}; } },
-    { name: 'scanMergeCandidates', method: 'scan_merge_candidates', params: function() { return {}; }, write: true },
+    { name: 'scanMergeCandidates', method: 'scan_merge_candidates', params: function(preset) { return { preset: preset || 'balanced' }; }, write: true },
     { name: 'suggestTopicMergeNames', method: 'suggest_topic_merge_names', params: function(topics) { return { topics: topics || [] }; }, write: true },
+    { name: 'previewTopicMerge', method: 'preview_topic_merge', params: function(topics, newTopic) { return { topics: topics || [], new_topic: newTopic || '' }; } },
     { name: 'mergeSimilarTopics', method: 'merge_similar_topics', params: function(topics, newTopic) { return { topics: topics || [], new_topic: newTopic || '' }; }, write: true },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----

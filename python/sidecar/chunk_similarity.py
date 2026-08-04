@@ -18,6 +18,53 @@ _VERSION = 1
 _GRAPH_FILE = "chunk_similarity_graph.json"
 _VECTOR_FILE = "chunk_similarity_vectors.npz"
 
+# 笔记合并候选三档阈值（PRD §9.2）：conservative 保守 / balanced 平衡 / aggressive 积极
+_MERGE_PRESETS: dict[str, dict[str, float]] = {
+    "conservative": {
+        "overlap_sim": 0.90,
+        "coverage": 0.70,
+        "title": 0.86,
+        "topic": 0.88,
+        "content": 0.74,
+        "score": 0.80,
+        "topic_name": 0.90,
+        "topic_content": 0.76,
+    },
+    "balanced": {
+        "overlap_sim": 0.86,
+        "coverage": 0.60,
+        "title": 0.82,
+        "topic": 0.85,
+        "content": 0.68,
+        "score": 0.76,
+        "topic_name": 0.88,
+        "topic_content": 0.72,
+    },
+    "aggressive": {
+        "overlap_sim": 0.80,
+        "coverage": 0.50,
+        "title": 0.76,
+        "topic": 0.80,
+        "content": 0.62,
+        "score": 0.70,
+        "topic_name": 0.84,
+        "topic_content": 0.66,
+    },
+}
+
+
+def resolve_merge_rules(preset: str = "balanced", overrides: dict | None = None) -> dict[str, float]:
+    """Return the effective threshold rules for a merge preset, with optional overrides."""
+    effective = dict(_MERGE_PRESETS.get(preset, _MERGE_PRESETS["balanced"]))
+    if overrides:
+        for key, value in overrides.items():
+            if key in effective:
+                try:
+                    effective[key] = float(value)
+                except (TypeError, ValueError):
+                    continue
+    return effective
+
 
 def _paths(root: Path) -> tuple[Path, Path]:
     base = root / WORKSPACE_APP_FOLDER
@@ -66,7 +113,7 @@ def _load_previous(root: Path) -> tuple[dict, dict[str, np.ndarray]]:
     return graph, vectors
 
 
-def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
+def _candidate_groups(chunks: list[dict], edges: list[dict], rules: dict[str, float]) -> list[dict]:
     by_id = {item["id"]: item for item in chunks}
     file_chunks: dict[str, set[str]] = defaultdict(set)
     for item in chunks:
@@ -84,7 +131,7 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
     for (left_path, right_path), rows in pair_rows.items():
         left = next(item for item in chunks if item["file_path"] == left_path)
         right = next(item for item in chunks if item["file_path"] == right_path)
-        strong = [row for row in rows if row["similarity"] >= 0.86]
+        strong = [row for row in rows if row["similarity"] >= rules["overlap_sim"]]
         matched_left = {
             row["source"] if by_id[row["source"]]["file_path"] == left_path else row["target"] for row in strong
         }
@@ -105,8 +152,13 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
             else SequenceMatcher(None, left_topic.casefold(), right_topic.casefold()).ratio()
         )
         score = 0.5 * content_score + 0.25 * title_score + 0.15 * topic_score + 0.1 * shorter_coverage
-        overlap_rule = bool(strong) and shorter_coverage >= 0.60
-        semantic_rule = title_score >= 0.82 and topic_score >= 0.85 and content_score >= 0.68 and score >= 0.76
+        overlap_rule = bool(strong) and shorter_coverage >= rules["coverage"]
+        semantic_rule = (
+            title_score >= rules["title"]
+            and topic_score >= rules["topic"]
+            and content_score >= rules["content"]
+            and score >= rules["score"]
+        )
         if not (overlap_rule or semantic_rule):
             continue
         qualifying.append(
@@ -155,7 +207,7 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
     return groups
 
 
-def _topic_candidates(chunks: list[dict], edges: list[dict], matrix: np.ndarray) -> list[dict]:
+def _topic_candidates(chunks: list[dict], edges: list[dict], matrix: np.ndarray, rules: dict[str, float]) -> list[dict]:
     topics: dict[str, list[int]] = defaultdict(list)
     for index, item in enumerate(chunks):
         topic = str(item.get("topic") or "").strip()
@@ -179,7 +231,7 @@ def _topic_candidates(chunks: list[dict], edges: list[dict], matrix: np.ndarray)
         for right in range(left + 1, len(names)):
             name_score = float(name_vectors[left] @ name_vectors[right])
             content_score = float(centroid_matrix[left] @ centroid_matrix[right])
-            if name_score < 0.88 or content_score < 0.72:
+            if name_score < rules["topic_name"] or content_score < rules["topic_content"]:
                 continue
             rows.append(
                 {
@@ -192,8 +244,16 @@ def _topic_candidates(chunks: list[dict], edges: list[dict], matrix: np.ndarray)
     return sorted(rows, key=lambda row: row["score"], reverse=True)
 
 
-def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, threshold: float = 0.68) -> dict:
+def build_chunk_similarity_graph(
+    workspace: str | Path,
+    *,
+    top_k: int = 6,
+    threshold: float = 0.68,
+    preset: str = "balanced",
+    rules: dict | None = None,
+) -> dict:
     root = Path(workspace).resolve()
+    effective_rules = resolve_merge_rules(preset, rules)
     chunks = _collect(root)
     previous, old_vectors = _load_previous(root)
     old_meta = {item["id"]: item for item in previous.get("chunks", [])}
@@ -259,11 +319,13 @@ def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, thres
         "version": _VERSION,
         "top_k": top_k,
         "threshold": threshold,
+        "preset": preset if preset in _MERGE_PRESETS else "balanced",
+        "rules": effective_rules,
         "chunks": stored_chunks,
         "edges": edges,
     }
-    graph["candidates"] = _candidate_groups(stored_chunks, edges)
-    graph["topic_candidates"] = _topic_candidates(stored_chunks, edges, matrix) if len(matrix) else []
+    graph["candidates"] = _candidate_groups(stored_chunks, edges, effective_rules)
+    graph["topic_candidates"] = _topic_candidates(stored_chunks, edges, matrix, effective_rules) if len(matrix) else []
     graph_path, vector_path = _paths(root)
     _atomic_json(graph_path, graph)
     temp_vectors = vector_path.with_suffix(".tmp.npz")

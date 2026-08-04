@@ -337,6 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initCliSettings();
     initIngestAutoSettings();
     initTopicAutoThresholdSettings();
+    initMergePresetSettings();
 });
 
 async function autoSaveConfig() {
@@ -496,6 +497,11 @@ async function loadUiConfigToForm() {
             var topicThresholdEl = document.getElementById('settings-topic-auto-threshold');
             if (topicThresholdEl) {
                 topicThresholdEl.value = uiConfig.topic_auto_assign_threshold != null ? uiConfig.topic_auto_assign_threshold : 0.80;
+            }
+            var mergePresetEls = document.querySelectorAll('input[name="settings-merge-preset"]');
+            if (mergePresetEls.length) {
+                var savedPreset = uiConfig.merge_preset || 'balanced';
+                mergePresetEls.forEach(function(radio) { radio.checked = radio.value === savedPreset; });
             }
             applyRagSettingsToForm(uiConfig);
             applyCliSettingsToForm(uiConfig);
@@ -1061,6 +1067,18 @@ function initIngestAutoSettings() {
     });
 }
 
+function initMergePresetSettings() {
+    var els = document.querySelectorAll('input[name="settings-merge-preset"]');
+    if (!els.length || els[0].dataset.bound) return;
+    els.forEach(function(el) { el.dataset.bound = '1'; });
+    els.forEach(function(el) {
+        el.addEventListener('change', function() {
+            if (!el.checked) return;
+            saveAssistantUiConfig({ merge_preset: el.value });
+        });
+    });
+}
+
 function initTopicAutoThresholdSettings() {
     var el = document.getElementById('settings-topic-auto-threshold');
     if (!el || el.dataset.bound) return;
@@ -1136,6 +1154,7 @@ window.SettingsModule = {
     initRagSettings,
     initIngestAutoSettings,
     initTopicAutoThresholdSettings,
+    initMergePresetSettings,
     initCliSettings,
     applyRagSettingsToForm,
     applyCliSettingsToForm,

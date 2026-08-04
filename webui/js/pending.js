@@ -408,12 +408,25 @@ function _handlePendingClick(e) {
 
 function reviewMergeGroup(info) {
     if (!window.api || !window.api.mergeNoteGroup || !info.files || info.files.length < 2) return;
-    var list = info.files.join('\n');
+    var list = info.files.map(function(path, index) { return (index + 1) + '. ' + path; }).join('\n');
     if (!window.confirm(window.t('pending.mergeGroupConfirm', { count: info.files.length }) + '\n\n' + list)) return;
-    var title = window.prompt(window.t('pending.mergeTitlePrompt'), window.Path_stem(info.files[0]) + '（整合）');
+    var excludeAnswer = window.prompt(window.t('pending.mergeExcludePrompt'));
+    if (excludeAnswer === null) return;
+    var selected = info.files.slice();
+    var exclude = String(excludeAnswer).split(/[,\s，、]+/).map(Number).filter(function(n) { return !isNaN(n) && n >= 1 && n <= info.files.length; });
+    if (exclude.length) {
+        var excludeSet = {};
+        exclude.forEach(function(n) { excludeSet[n - 1] = true; });
+        selected = info.files.filter(function(_path, index) { return !excludeSet[index]; });
+    }
+    if (selected.length < 2) {
+        if (typeof window.updateStatus === 'function') window.updateStatus(window.t('pending.mergeExcludeTooFew'));
+        return;
+    }
+    var title = window.prompt(window.t('pending.mergeTitlePrompt'), window.Path_stem(selected[0]) + '（整合）');
     if (title === null) return;
-    var deleteAuthorized = window.confirm(window.t('pending.deleteOriginalsOnce') + '\n\n' + list);
-    window.api.mergeNoteGroup(info.files, title, deleteAuthorized).then(function(result) {
+    var deleteAuthorized = window.confirm(window.t('pending.deleteOriginalsOnce') + '\n\n' + selected.join('\n'));
+    window.api.mergeNoteGroup(selected, title, deleteAuthorized).then(function(result) {
         if (result && result.success) {
             removePendingItem(info.idx);
             if (typeof window.updateStatus === 'function') window.updateStatus(result.message || window.t('pending.mergeDone'));
@@ -672,6 +685,7 @@ function scanPendingMergeCandidates() {
     if (!window.api || !window.api.scanMergeCandidates) return;
     _setButtonBusy(btn, true, 'pending.scanningMergeCandidates');
     var preset = 'balanced';
+    var overrides = {};
     if (window.AppState && window.AppState.uiConfig && window.AppState.uiConfig.merge_preset) {
         preset = window.AppState.uiConfig.merge_preset;
     } else {
@@ -680,7 +694,15 @@ function scanPendingMergeCandidates() {
             if (saved && saved.merge_preset) preset = saved.merge_preset;
         } catch (_e) {}
     }
-    window.api.scanMergeCandidates(preset).then(function(result) {
+    if (window.AppState && window.AppState.uiConfig && window.AppState.uiConfig.merge_overrides) {
+        overrides = window.AppState.uiConfig.merge_overrides;
+    } else {
+        try {
+            var savedConfig = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');
+            if (savedConfig && savedConfig.merge_overrides) overrides = savedConfig.merge_overrides;
+        } catch (_e) {}
+    }
+    window.api.scanMergeCandidates(preset, overrides).then(function(result) {
         if (typeof window.updateStatus === 'function') {
             window.updateStatus(window.t('pending.mergeScanDone', { count: (result && result.candidate_count) || 0 }));
         }

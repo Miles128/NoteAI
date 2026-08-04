@@ -63,3 +63,32 @@ def test_merge_presets_control_candidate_discovery(tmp_path: Path, monkeypatch) 
 
     assert resolve_merge_rules("conservative")["overlap_sim"] == 0.90
     assert resolve_merge_rules("unknown", {"overlap_sim": 0.5})["overlap_sim"] == 0.5
+
+
+def test_merge_overrides_override_preset_thresholds(tmp_path: Path, monkeypatch) -> None:
+    """高级阈值覆盖（§9.2）：balanced 预设 + overlap_sim 覆盖后能发现 aggressive 才发现的候选。"""
+    root = tmp_path / "ws"
+    _write(root, "人工智能", "甲笔记", "深度学习与神经网络的核心概念。")
+    _write(root, "人工智能", "乙笔记", "机器学习与模型训练的基础方法。")
+
+    def fake_encode(texts):
+        out = []
+        for text in texts:
+            if "机器学习与模型" in str(text):
+                out.append({"dense_vec": [0.82, 0.57, 0.0], "lexical_weights": {}})
+            else:
+                out.append({"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}})
+        return out
+
+    monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
+
+    with_overrides = build_chunk_similarity_graph(
+        root, top_k=6, threshold=0.68, preset="balanced", rules={"overlap_sim": 0.80, "coverage": 0.50}
+    )
+    assert with_overrides["candidate_count"] == 1
+    graph = load_chunk_similarity_graph(root)
+    assert graph["preset"] == "balanced"
+    assert graph["rules"]["overlap_sim"] == 0.80
+    assert graph["rules"]["coverage"] == 0.50
+    # 未覆盖的阈值仍保持预设值
+    assert graph["rules"]["title"] == 0.82

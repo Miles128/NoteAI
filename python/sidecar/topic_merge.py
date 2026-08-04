@@ -18,6 +18,51 @@ def _topic_dir(root: Path, topic: str) -> Path:
     return root / NOTES_FOLDER / Path(*parts)
 
 
+def _survey_excerpts(root: Path, topics: list[str]) -> list[str]:
+    """Read up to one survey per topic from the wiki for naming context (PRD §9.4)."""
+    wiki = root / ABSTRACT_FOLDER
+    excerpts: list[str] = []
+    for topic in topics:
+        leaf = topic.rsplit(TOPIC_SEP, maxsplit=1)[-1]
+        survey_paths: list[Path] = []
+        flat = wiki / f"{leaf}_综述.md"
+        if flat.exists():
+            survey_paths.append(flat)
+        parts = [part.strip() for part in topic.split(TOPIC_SEP) if part.strip()]
+        if parts and all(part not in {".", ".."} and "/" not in part and "\\" not in part for part in parts):
+            topic_dir = wiki.joinpath(*parts)
+            if topic_dir.is_dir():
+                survey_paths.extend(sorted(topic_dir.rglob("*_综述.md"))[:1])
+        for survey in survey_paths[:1]:
+            try:
+                _, body = parse_frontmatter(survey.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            if body.strip():
+                excerpts.append(f"主题综述「{topic}」：\n{body.strip()[:800]}")
+    return excerpts
+
+
+def _representative_chunks(root: Path, topics: list[str]) -> list[str]:
+    """Pick up to two stored chunks per topic from the similarity graph for naming context."""
+    graph_path = root / WORKSPACE_APP_FOLDER / "chunk_similarity_graph.json"
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    by_topic: dict[str, list[str]] = {}
+    for chunk in graph.get("chunks") or []:
+        topic = str(chunk.get("topic") or "").strip()
+        content = str(chunk.get("content") or "").strip()
+        if topic in topics and content:
+            by_topic.setdefault(topic, []).append(content)
+    excerpts: list[str] = []
+    for topic in topics:
+        for content in by_topic.get(topic, [])[:2]:
+            excerpts.append(f"主题「{topic}」代表性片段：\n{content[:300]}")
+    return excerpts
+
+
 def suggest_merged_topic_names(workspace: str | Path, topics: list[str]) -> dict:
     if len(topics) != 2 or topics[0] == topics[1]:
         return {"success": False, "message": "请选择两个不同主题"}
@@ -30,7 +75,10 @@ def suggest_merged_topic_names(workspace: str | Path, topics: list[str]) -> dict
             _, body = parse_frontmatter(note.read_text(encoding="utf-8"))
             excerpts.append(f"{note.stem}: {body[:500]}")
         samples.append(f"主题：{topic}\n" + "\n".join(excerpts))
+    samples.extend(_survey_excerpts(root, topics))
+    samples.extend(_representative_chunks(root, topics))
     prompt = """请为两个准备合并的知识主题提出 3 个简洁、准确、互不重复的新中文主题名。
+参考以下笔记片段、主题综述与代表性片段；新主题名应同时覆盖两边的核心内容。
 返回严格 JSON：{"names":[{"name":"名称","reason":"理由"}]}。不要输出其他内容。
 
 """ + "\n\n".join(samples)
@@ -106,6 +154,7 @@ def merge_topics(workspace: str | Path, topics: list[str], new_topic: str) -> di
     from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
     moved: list[str] = []
+    renamed: list[dict] = []
     for source in sources:
         for note in sorted(source.rglob("*.md")):
             write_result = write_topic_to_file(str(note), new_topic)
@@ -114,7 +163,10 @@ def merge_topics(workspace: str | Path, topics: list[str], new_topic: str) -> di
             move_result = move_file_to_notes_topic_folder(str(note), new_topic)
             if not move_result.get("success"):
                 return {"success": False, "message": move_result.get("message", "文件迁移失败"), "moved": moved}
-            moved.append(str(move_result.get("new_path") or ""))
+            new_path = str(move_result.get("new_path") or "")
+            moved.append(new_path)
+            if Path(new_path).name != note.name:
+                renamed.append({"from": note.name, "to": Path(new_path).name})
     for source in sorted(sources, key=lambda path: len(path.parts), reverse=True):
         current = source
         notes_root = root / NOTES_FOLDER
@@ -141,4 +193,13 @@ def merge_topics(workspace: str | Path, topics: list[str], new_topic: str) -> di
     from sidecar.wiki_utils import sync_wiki_with_files
 
     sync_wiki_with_files()
-    return {"success": True, "new_topic": new_topic, "moved": moved, "message": f"已合并为主题「{new_topic}」"}
+    rename_message = ""
+    if renamed:
+        rename_message = f"；{len(renamed)} 个同名文件已自动改名，未覆盖任何笔记"
+    return {
+        "success": True,
+        "new_topic": new_topic,
+        "moved": moved,
+        "renamed": renamed,
+        "message": f"已合并为主题「{new_topic}」" + rename_message,
+    }

@@ -967,6 +967,28 @@
                                         <label class="schema-option-card"><input type="radio" name="settings-merge-preset" value="aggressive"> <span data-i18n="settings.mergePresetAggressive"></span></label>
                                     </div>
                                     <p class="settings-hint" data-i18n="settings.mergePresetHint"></p>
+                                    <button type="button" class="btn btn-link" id="settings-merge-advanced-toggle" style="padding:4px 0;font-size:12px" data-i18n="settings.mergeAdvancedToggle"></button>
+                                    <div id="settings-merge-advanced" class="settings-advanced-block" style="display:none;margin-top:8px">
+                                        <div class="settings-advanced-grid">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdOverlap"></label>
+                                            <input type="number" id="settings-merge-threshold-overlap-sim" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdCoverage"></label>
+                                            <input type="number" id="settings-merge-threshold-coverage" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdTitle"></label>
+                                            <input type="number" id="settings-merge-threshold-title" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdTopic"></label>
+                                            <input type="number" id="settings-merge-threshold-topic" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdContent"></label>
+                                            <input type="number" id="settings-merge-threshold-content" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdScore"></label>
+                                            <input type="number" id="settings-merge-threshold-score" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdTopicName"></label>
+                                            <input type="number" id="settings-merge-threshold-topic-name" class="form-input" min="0" max="1" step="0.01">
+                                            <label class="form-label" data-i18n="settings.mergeThresholdTopicContent"></label>
+                                            <input type="number" id="settings-merge-threshold-topic-content" class="form-input" min="0" max="1" step="0.01">
+                                        </div>
+                                        <p class="settings-hint" data-i18n="settings.mergeAdvancedHint"></p>
+                                    </div>
                                 </div>
                                 <div class="btn-group btn-group-spacing" style="margin-top:16px">
                                     <button type="button" class="btn btn-secondary" id="settings-organize-rules-setup-btn" data-i18n="settings.organizeRulesSetupBtn"></button>

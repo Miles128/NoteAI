@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initIngestAutoSettings();
     initTopicAutoThresholdSettings();
     initMergePresetSettings();
+    initMergeAdvancedSettings();
 });
 
 async function autoSaveConfig() {
@@ -503,6 +504,7 @@ async function loadUiConfigToForm() {
                 var savedPreset = uiConfig.merge_preset || 'balanced';
                 mergePresetEls.forEach(function(radio) { radio.checked = radio.value === savedPreset; });
             }
+            applyMergeAdvancedToForm(uiConfig.merge_overrides || {});
             applyRagSettingsToForm(uiConfig);
             applyCliSettingsToForm(uiConfig);
         }
@@ -1075,6 +1077,71 @@ function initMergePresetSettings() {
         el.addEventListener('change', function() {
             if (!el.checked) return;
             saveAssistantUiConfig({ merge_preset: el.value });
+            clearMergeAdvancedForm();
+        });
+    });
+}
+
+var _MERGE_THRESHOLD_FIELDS = [
+    'overlap_sim', 'coverage', 'title', 'topic', 'content', 'score', 'topic_name', 'topic_content'
+];
+
+function _mergeThresholdEl(key) {
+    return document.getElementById('settings-merge-threshold-' + key);
+}
+
+function applyMergeAdvancedToForm(overrides) {
+    _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
+        var el = _mergeThresholdEl(key);
+        if (!el) return;
+        var value = overrides && overrides[key];
+        el.value = (value != null && value !== '') ? value : '';
+    });
+}
+
+function clearMergeAdvancedForm() {
+    _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
+        var el = _mergeThresholdEl(key);
+        if (el) el.value = '';
+    });
+    saveMergeAdvancedConfig();
+}
+
+function _readMergeAdvancedConfig() {
+    var overrides = {};
+    _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
+        var el = _mergeThresholdEl(key);
+        if (!el) return;
+        var value = parseFloat(el.value);
+        if (isNaN(value)) return;
+        value = Math.max(0, Math.min(1, value));
+        el.value = value.toFixed(2);
+        overrides[key] = value;
+    });
+    return overrides;
+}
+
+function saveMergeAdvancedConfig() {
+    return saveAssistantUiConfig({ merge_overrides: _readMergeAdvancedConfig() });
+}
+
+function initMergeAdvancedSettings() {
+    var toggle = document.getElementById('settings-merge-advanced-toggle');
+    var panel = document.getElementById('settings-merge-advanced');
+    if (toggle && panel && !toggle.dataset.bound) {
+        toggle.dataset.bound = '1';
+        toggle.addEventListener('click', function() {
+            var hidden = panel.style.display === 'none';
+            panel.style.display = hidden ? 'block' : 'none';
+            toggle.textContent = window.t(hidden ? 'settings.mergeAdvancedHide' : 'settings.mergeAdvancedToggle');
+        });
+    }
+    _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
+        var el = _mergeThresholdEl(key);
+        if (!el || el.dataset.bound) return;
+        el.dataset.bound = '1';
+        el.addEventListener('change', function() {
+            saveMergeAdvancedConfig();
         });
     });
 }
@@ -1155,6 +1222,8 @@ window.SettingsModule = {
     initIngestAutoSettings,
     initTopicAutoThresholdSettings,
     initMergePresetSettings,
+    initMergeAdvancedSettings,
+    applyMergeAdvancedToForm,
     initCliSettings,
     applyRagSettingsToForm,
     applyCliSettingsToForm,

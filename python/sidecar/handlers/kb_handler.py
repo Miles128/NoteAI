@@ -103,7 +103,15 @@ class KbHandler(BaseHandler):
             return err
         from sidecar.chunk_similarity import build_chunk_similarity_graph
 
-        return build_chunk_similarity_graph(workspace, preset=str(params.get("preset") or "balanced"))
+        overrides = params.get("overrides") or {}
+        if not isinstance(overrides, dict):
+            overrides = {}
+        overrides = {str(key): value for key, value in overrides.items() if value is not None and str(value) != ""}
+        return build_chunk_similarity_graph(
+            workspace,
+            preset=str(params.get("preset") or "balanced"),
+            rules=overrides or None,
+        )
 
     def _archive_chat_answer(self, params):
         return archive_chat_answer(

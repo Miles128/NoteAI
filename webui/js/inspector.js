@@ -1,10 +1,12 @@
 /**
  * Inspector Module (右侧多 Tab 检查器)
  *
- * 对标 Tolaria 的 Right Inspector 面板，包含三个 Tab：
+ * 对标 Tolaria 的 Right Inspector 面板，包含四个 Tab：
  * 1. AI - 现有 AI 聊天
- * 2. Properties - 当前笔记的 frontmatter 属性
- * 3. Backlinks - 反向链接（引用当前笔记的其他笔记）
+ * 2. CLI - CLI Agent
+ * 3. Properties - 当前笔记的 frontmatter 属性
+ * 4. Backlinks - 反向链接（引用当前笔记的其他笔记）
+ * 5. Semantic - 当前笔记的语义参数（实体/概念/命题与证据/相关）
  */
 (function() {
     'use strict';
@@ -44,6 +46,8 @@
             loadProperties(_currentFilePath);
         } else if (tabName === 'backlinks' && _currentFilePath) {
             loadBacklinks(_currentFilePath);
+        } else if (tabName === 'semantic' && _currentFilePath) {
+            loadSemantic(_currentFilePath);
         } else if (tabName === 'cli') {
             if (window.CliAgentModule && window.CliAgentModule.loadAgents) {
                 window.CliAgentModule.loadAgents().then(function() {
@@ -214,6 +218,66 @@
     }
 
     /**
+     * 加载 Semantic Tab：当前笔记的语义参数（实体/概念/命题与证据/相关）
+     */
+    function loadSemantic(filePath) {
+        var body = document.getElementById('inspector-semantic-body');
+        if (!body) return;
+
+        if (!filePath || !/\.md$/i.test(filePath || '')) {
+            body.innerHTML = '<div class="inspector-empty">' +
+                (window.t ? window.t('inspector.semanticEmpty') : '选择一篇笔记查看语义参数') + '</div>';
+            return;
+        }
+
+        body.innerHTML = '<div class="inspector-empty">' +
+            (window.t ? window.t('inspector.loading') : '加载中…') + '</div>';
+
+        if (!window.api || !window.api.getNoteSemanticContext) {
+            body.innerHTML = '<div class="inspector-empty">API 不可用</div>';
+            return;
+        }
+
+        window.api.getNoteSemanticContext(filePath).then(function(data) {
+            if (!data || !data.success) {
+                body.innerHTML = '<div class="inspector-empty">' +
+                    (window.t ? window.t('inspector.semanticEmpty') : '选择一篇笔记查看语义参数') + '</div>';
+                return;
+            }
+
+            var group = function(title, items, kind) {
+                if (!items || !items.length) return '';
+                return '<div class="inspector-semantic-group"><div class="inspector-semantic-title">' + _escapeHtml(title) + '</div><div class="inspector-semantic-items">' + items.map(function(item) {
+                    var label = item.canonical_name || item.statement || '';
+                    return '<button class="inspector-semantic-chip" data-semantic-kind="' + kind + '" data-semantic-id="' + _escapeHtml(item.id) + '">' + _escapeHtml(label) + '</button>';
+                }).join('') + '</div></div>';
+            };
+
+            var relations = (data.relations || []).map(function(relation) {
+                return '<span class="inspector-semantic-relation"><button class="inspector-semantic-chip" data-semantic-kind="entity" data-semantic-id="' + _escapeHtml(relation.source_id) + '">' + _escapeHtml(relation.source_name) + '</button><em>' + _escapeHtml(relation.relation_type) + '</em><button class="inspector-semantic-chip" data-semantic-kind="concept" data-semantic-id="' + _escapeHtml(relation.target_id) + '">' + _escapeHtml(relation.target_name) + '</button></span>';
+            }).join('');
+
+            var html = group(window.t ? window.t('semantic.tabs.entities') : '实体', data.entities, 'entity') +
+                group(window.t ? window.t('semantic.tabs.concepts') : '概念', data.concepts, 'concept') +
+                group(window.t ? window.t('semantic.tabs.claims') : '命题与证据', data.claims, 'claim') +
+                (relations ? '<div class="inspector-semantic-group"><div class="inspector-semantic-title">' + _escapeHtml(window.t ? window.t('semantic.related') : '相关') + '</div><div class="inspector-semantic-items">' + relations + '</div></div>' : '');
+
+            body.innerHTML = html || '<div class="inspector-empty">' +
+                (window.t ? window.t('inspector.semanticEmpty') : '选择一篇笔记查看语义参数') + '</div>';
+
+            body.onclick = function(event) {
+                var button = event.target.closest('[data-semantic-kind][data-semantic-id]');
+                if (!button || !window.SemanticWorkbenchModule || !window.SemanticWorkbenchModule.openObject) return;
+                var kind = button.dataset.semanticKind;
+                if (kind === 'entity' || kind === 'concept') window.SemanticWorkbenchModule.openObject(kind, button.dataset.semanticId);
+            };
+        }).catch(function() {
+            body.innerHTML = '<div class="inspector-empty">' +
+                (window.t ? window.t('inspector.loadFailed') : '加载失败') + '</div>';
+        });
+    }
+
+    /**
      * 加载 Backlinks Tab
      */
     function loadBacklinks(filePath) {
@@ -287,6 +351,8 @@
             loadProperties(filePath);
         } else if (_currentTab === 'backlinks' && filePath) {
             loadBacklinks(filePath);
+        } else if (_currentTab === 'semantic' && filePath) {
+            loadSemantic(filePath);
         }
     }
 
@@ -305,6 +371,7 @@
         onFileSelected: onFileSelected,
         loadProperties: loadProperties,
         loadBacklinks: loadBacklinks,
+        loadSemantic: loadSemantic,
         init: init,
         getCurrentTab: function() { return _currentTab; }
     };

@@ -13,6 +13,8 @@ var _compileTimer = null;
 var _activeDetail = null;
 var _activeDetailKind = null;
 var _lastBrief = '';
+var _pendingTargetId = null;
+var _suppressAutoSelect = false;
 
 function esc(value) {
     return window.escapeHtml ? window.escapeHtml(String(value == null ? '' : value)) : String(value == null ? '' : value);
@@ -178,10 +180,29 @@ function loadList() {
         var count = document.getElementById('semantic-list-count');
         if (count) count.textContent = t('semantic.itemCount', { count: result.total || 0 });
         renderList();
-        if (_items.length) selectItem(0);
-        else renderEmptyDetail();
+        if (_suppressAutoSelect) {
+            // openObject 等待目标详情加载：不高亮/选中第一项，改为高亮列表中的目标项
+            _suppressAutoSelect = false;
+            var targetId = _pendingTargetId;
+            _pendingTargetId = null;
+            if (_items.length) {
+                for (var i = 0; i < _items.length; i++) {
+                    if (String(_items[i].id) === String(targetId)) {
+                        _selectedIndex = i;
+                        renderList();
+                        break;
+                    }
+                }
+            }
+        } else if (_items.length) {
+            selectItem(0);
+        } else {
+            renderEmptyDetail();
+        }
     }).catch(function(error) {
         if (seq !== _loadSeq) return;
+        _suppressAutoSelect = false;
+        _pendingTargetId = null;
         list.innerHTML = '<div class="semantic-error">' + esc(t('semantic.loadFailed', { error: String(error.message || error) })) + '</div>';
         renderEmptyDetail(String(error.message || error));
     });
@@ -324,6 +345,8 @@ function openObject(kind, id) {
     if (kind !== 'entity' && kind !== 'concept') return;
     _category = 'objects';
     _objectKind = kind === 'entity' ? 'entities' : 'concepts';
+    _pendingTargetId = id;
+    _suppressAutoSelect = true;
     show('objects');
     loadDetail({ id: id });
 }
@@ -471,7 +494,7 @@ function loadOverview() {
         if (!result || !result.success) return;
         _overview = result.overview || {};
         renderCoverage(result.compile_job || null);
-        if (_selectedIndex < 0) renderEmptyDetail();
+        if (_selectedIndex < 0 && !_suppressAutoSelect) renderEmptyDetail();
         if (result.compile_job && result.compile_job.status === 'running') scheduleCompilePoll();
     }).catch(function() {});
 }

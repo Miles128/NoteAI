@@ -82,9 +82,8 @@ def test_claim_gate_golden_accuracy() -> None:
     ]
     total = len(GOLDEN_GATE_CASES)
     accuracy = (total - len(mistakes)) / total
-    assert not mistakes, (
-        f"Claim 门禁黄金集准确率 {accuracy:.1%}，误判 {len(mistakes)}/{total}："
-        + "; ".join(f"{s!r}({k}) 期望 {'接受' if e else '拒绝'}" for s, k, e in mistakes)
+    assert not mistakes, f"Claim 门禁黄金集准确率 {accuracy:.1%}，误判 {len(mistakes)}/{total}：" + "; ".join(
+        f"{s!r}({k}) 期望 {'接受' if e else '拒绝'}" for s, k, e in mistakes
     )
 
 
@@ -290,10 +289,6 @@ def test_removing_source_paragraph_invalidates_claim_and_logs_change(tmp_path: P
     assert _active_claims(store) == []
 
     items, _total = store.recent_changes(days=7)
-    invalidated = [
-        item
-        for item in items
-        if item["change_kind"] == "invalidated" and item["object_kind"] == "claim"
-    ]
+    invalidated = [item for item in items if item["change_kind"] == "invalidated" and item["object_kind"] == "claim"]
     assert invalidated, "删除证据段落后必须记录命题失效事件"
     assert invalidated[0]["detail"]["reason"] == "source_block_removed"

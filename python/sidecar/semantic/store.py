@@ -709,14 +709,22 @@ class SemanticStore:
             entity_ids = [entity["id"] for entity in entities]
             claim_ids = [claim["id"] for claim in claims]
             existing_concepts = (
-                {row["id"] for row in conn.execute(
-                    f"SELECT id FROM concepts WHERE id IN ({','.join('?' * len(concept_ids))})", concept_ids)}
+                {
+                    row["id"]
+                    for row in conn.execute(
+                        f"SELECT id FROM concepts WHERE id IN ({','.join('?' * len(concept_ids))})", concept_ids
+                    )
+                }
                 if concept_ids
                 else set()
             )
             existing_entities = (
-                {row["id"] for row in conn.execute(
-                    f"SELECT id FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})", entity_ids)}
+                {
+                    row["id"]
+                    for row in conn.execute(
+                        f"SELECT id FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})", entity_ids
+                    )
+                }
                 if entity_ids
                 else set()
             )
@@ -1070,9 +1078,7 @@ class SemanticStore:
             where += " AND object_kind = ?"
             args.append(object_kind)
         with self.connect() as conn:
-            total = conn.execute(
-                f"SELECT count(*) FROM semantic_change_log WHERE {where}", args
-            ).fetchone()[0]
+            total = conn.execute(f"SELECT count(*) FROM semantic_change_log WHERE {where}", args).fetchone()[0]
             rows = conn.execute(
                 f"""SELECT change_kind, object_kind, object_id, label, detail_json,
                            source_path, topic, created_at

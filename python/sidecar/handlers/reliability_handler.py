@@ -20,13 +20,13 @@ class ReliabilityHandler(BaseHandler):
 
         target_dir = str(params.get("target_dir") or "").strip() or None
         include_derived = bool(params.get("include_derived"))
-        return backup_workspace(self._workspace(), target_dir=target_dir, include_derived=include_derived)
+        return backup_workspace(self._workspace() or "", target_dir=target_dir, include_derived=include_derived)
 
     def _export_notes(self, params):
         from sidecar.workspace_backup import export_notes
 
         target_dir = str(params.get("target_dir") or "").strip() or None
-        return export_notes(self._workspace(), target_dir=target_dir)
+        return export_notes(self._workspace() or "", target_dir=target_dir)
 
     def _restore_workspace_backup(self, params):
         from sidecar.workspace_backup import restore_workspace_backup
@@ -34,9 +34,9 @@ class ReliabilityHandler(BaseHandler):
         backup_path = str(params.get("backup_path") or "").strip()
         if not backup_path:
             return {"success": False, "message": "未提供备份文件路径"}
-        return restore_workspace_backup(self._workspace(), backup_path)
+        return restore_workspace_backup(self._workspace() or "", backup_path)
 
     def _get_index_health(self, _params):
         from sidecar.workspace_backup import check_index_health
 
-        return check_index_health(self._workspace())
+        return check_index_health(self._workspace() or "")

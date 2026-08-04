@@ -10,6 +10,7 @@ from .kb_handler import KbHandler
 from .links_handler import LinksHandler
 from .mcp_config_handler import McpConfigHandler
 from .rag_handler import RagHandler
+from .reliability_handler import ReliabilityHandler
 from .semantic_handler import SemanticHandler
 from .tags_handler import TagsHandler
 from .topics_handler import TopicsHandler
@@ -29,6 +30,7 @@ __all__ = [
     "IntelHandler",
     "JobHandler",
     "RagHandler",
+    "ReliabilityHandler",
     "SemanticHandler",
     "IngestHandler",
     "KbHandler",

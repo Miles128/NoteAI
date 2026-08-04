@@ -185,6 +185,17 @@ pub async fn open_file_dialog(app: tauri::AppHandle) -> Result<Option<Vec<String
 }
 
 #[tauri::command]
+pub async fn open_archive_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let file = app
+        .dialog()
+        .file()
+        .add_filter("NoteAI 备份", &["zip"])
+        .blocking_pick_file();
+    Ok(file.map(|p| p.to_string()))
+}
+
+#[tauri::command]
 pub fn get_workspace_path(state: tauri::State<'_, AppState>) -> Option<String> {
     state
         .workspace_path

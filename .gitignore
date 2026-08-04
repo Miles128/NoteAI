@@ -37,6 +37,7 @@ node_modules/
 .idea/
 .vscode/
 .cursor/
+.qoder/
 *.swp
 *.swo
 *~
@@ -87,6 +88,10 @@ webui/lib/*
 
 # Tauri
 src-tauri/target/
+
+# Personal notes accidentally placed under src-tauri (not bundled resources)
+src-tauri/Notes/
+src-tauri/My Paper/
 
 # AI-generated wiki content (per-workspace wiki/ is inside workspace, not repo root)
 wiki/

@@ -40,6 +40,7 @@ pub fn run() {
             rpc::py_call,
             commands::open_folder_dialog,
             commands::open_file_dialog,
+            commands::open_archive_dialog,
             commands::get_workspace_path,
             commands::set_workspace_path,
             commands::read_file,

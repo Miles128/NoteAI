@@ -705,6 +705,10 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
                             <span data-i18n="settings.nav.organizeRules"></span>
                         </button>
+                        <button class="settings-nav-btn" data-tab="reliability">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                            <span data-i18n="settings.nav.reliability"></span>
+                        </button>
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                             <span data-i18n="settings.nav.about"></span>
@@ -975,6 +979,37 @@
                                 <p class="settings-hint" data-i18n="settings.maintenanceHint"></p>
                                 <button type="button" class="btn btn-secondary" id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>
                                 <div id="settings-raw-convert-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-reliability">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.reliabilityBackupTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.reliabilityBackupHint"></p>
+                                <div class="btn-group btn-group-spacing" style="margin-top:12px">
+                                    <button type="button" class="btn btn-primary" id="settings-backup-btn" data-i18n="settings.reliabilityBackupBtn"></button>
+                                    <button type="button" class="btn btn-secondary" id="settings-export-btn" data-i18n="settings.reliabilityExportBtn"></button>
+                                </div>
+                                <div id="settings-backup-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.reliabilityRestoreTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.reliabilityRestoreHint"></p>
+                                <div class="btn-group btn-group-spacing" style="margin-top:12px">
+                                    <button type="button" class="btn btn-secondary" id="settings-restore-btn" data-i18n="settings.reliabilityRestoreBtn"></button>
+                                </div>
+                                <div id="settings-restore-status" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.reliabilityHealthTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.reliabilityHealthHint"></p>
+                                <button type="button" class="btn btn-secondary" id="settings-health-check-btn" data-i18n="settings.reliabilityHealthBtn"></button>
+                                <div id="settings-health-report" style="display:none;margin-top:12px"></div>
+                                <div class="btn-group btn-group-spacing" style="margin-top:12px">
+                                    <button type="button" class="btn btn-secondary" id="settings-health-rag-btn" data-i18n="settings.reliabilityRebuildRag" style="display:none"></button>
+                                    <button type="button" class="btn btn-secondary" id="settings-health-semantic-btn" data-i18n="settings.reliabilityRebuildSemantic" style="display:none"></button>
+                                    <button type="button" class="btn btn-secondary" id="settings-health-lint-btn" data-i18n="settings.reliabilityRepairLinks" style="display:none"></button>
+                                </div>
+                                <div id="settings-health-status" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-rag">

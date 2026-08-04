@@ -531,7 +531,8 @@
       "cli": "CLI Agent",
       "activityLog": "操作记录",
       "organizeRules": "整理规则",
-      "about": "关于"
+      "about": "关于",
+      "reliability": "备份与恢复"
     },
     "language": "语言",
     "languageZh": "中文",
@@ -711,6 +712,36 @@
       "回答深度": "- 回答深度：",
       "通俗向": "通俗向",
       "技术向": "技术向"
+    },
+    "reliabilityBackupTitle": "工作区备份",
+    "reliabilityBackupHint": "打包 Notes、wiki、Raw 与工作区元数据（排除可重建的索引与缓存）。备份不包含索引，恢复后需重建。",
+    "reliabilityBackupBtn": "立即备份",
+    "reliabilityExportBtn": "导出笔记",
+    "reliabilityBackupDone": "已生成：{path}（{size}，{count} 个文件）",
+    "reliabilityBackupSuccess": "备份完成",
+    "reliabilityExportDone": "已导出：{path}（{size}，{count} 个文件）",
+    "reliabilityExportSuccess": "导出完成",
+    "reliabilityFailed": "操作失败：{message}",
+    "reliabilityRestoreTitle": "从备份恢复",
+    "reliabilityRestoreHint": "选择 NoteAI 备份（zip）恢复到当前工作区。现有 Notes、wiki、Raw 会先移入 .trash 以防误恢复。",
+    "reliabilityRestoreBtn": "选择备份并恢复",
+    "reliabilityRestoreConfirm": "恢复将用备份内容替换当前工作区的 Notes、wiki 与 Raw（原内容保留在 .trash 中）。确定继续吗？",
+    "reliabilityRestoreDone": "已恢复 {count} 个文件。{note}",
+    "reliabilityRestoreSuccess": "恢复完成",
+    "reliabilityHealthTitle": "索引健康检查",
+    "reliabilityHealthHint": "检查 RAG、语义库、链接与全文索引状态；缺失的索引可一键重建。",
+    "reliabilityHealthBtn": "运行健康检查",
+    "reliabilityRebuildRag": "重建 RAG 索引",
+    "reliabilityRebuildSemantic": "重建语义库",
+    "reliabilityRepairLinks": "修复链接索引",
+    "health": {
+      "ok": "正常",
+      "bad": "异常",
+      "rag": "RAG 索引",
+      "semantic": "语义库",
+      "links": "链接索引",
+      "fulltext": "全文索引",
+      "recoveryQueued": "恢复任务已提交，完成后可在此复查"
     }
   },
   "search": {

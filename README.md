@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/screenshots/noteai-icon.png" alt="NoteAI app icon" width="180" />
+</p>
+
 <img width="1440" alt="NoteAI knowledge base dashboard" src="./docs/screenshots/noteai-dashboard.png" />
 
 # 🧠 NoteAI

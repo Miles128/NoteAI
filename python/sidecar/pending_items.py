@@ -151,7 +151,7 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
             if len(files) < 2 or is_merge_group_resolved(root, files):
                 continue
             matches = []
-            pair_edges = []
+            pair_edges: list[dict] = []
             for row in candidate.get("pairs") or []:
                 pair_edges.extend(row.get("matches") or [])
             pair_edges = sorted(pair_edges, key=lambda edge: edge.get("similarity", 0.0), reverse=True)[:5]

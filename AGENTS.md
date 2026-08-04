@@ -33,6 +33,7 @@ Tauri v2 shell (src-tauri/)
 
 ## Key conventions
 
+- **Git push/PR**: always use SSH remote (`git@github.com:Miles128/NoteAI.git`, remote name `NoteAI`) + gh CLI — never HTTPS. See `.cursor/rules/git-workflow.mdc`.
 - **Config**: singleton `config` loaded at import time from `config/app_config.py`. Never instantiate `AppConfig` directly — import `from config import config` or `from config.settings import config`. Persist workspace path through `config/workspace_state.py`; `config.workspace_path` is the runtime value.
 - **Frontmatter**: canonical parser is `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)`. All handlers should use `self._parse_frontmatter()` or direct import — avoid manual regex.
 - **LLM calls**: go through `utils/llm_utils`. `_LLM_SEMAPHORE = Semaphore(4)` limits concurrency. `call_llm_raw()` uses `_retry_with_backoff()` with exponential backoff for rate limits. Both sync and stream variants now respect the semaphore. Input prompts are clamped to `config.max_context_tokens` via `_clamp_prompt_text()`.

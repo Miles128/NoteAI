@@ -274,7 +274,8 @@ function renderPendingInfoItem(item, idx, kind) {
     var detail = item.file_path || item.file || item.topic || item.error || '';
     if (kind === 'merge_candidate') {
         title = (item.files || []).map(function(path) { return window.Path_stem(path); }).join(' · ');
-        detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) });
+        var reasonLabel = item.reason === 'chunk_overlap' ? window.t('pending.mergeReasonOverlap') : window.t('pending.mergeReasonSemantic');
+        detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) }) + ' · ' + reasonLabel + ' · ' + window.t('pending.mergeCoverage', { coverage: Math.round((item.coverage || 0) * 100) });
     }
     if (kind === 'topic_merge_candidate') {
         title = (item.topics || []).join(' ↔ ');
@@ -287,6 +288,19 @@ function renderPendingInfoItem(item, idx, kind) {
     html += '<div class="pending-item-title">' + window.escapeHtml(title || window.t('pending.itemNeedsReview')) + '</div>';
     if (detail && detail !== title) {
         html += '<div class="pending-item-path">' + window.escapeHtml(detail) + '</div>';
+    }
+    if (kind === 'merge_candidate') {
+        if ((item.content_score || 0) > 0) {
+            html += '<div class="pending-item-path">' + window.escapeHtml(window.t('pending.mergeScores', { content: Math.round((item.content_score || 0) * 100), title: Math.round((item.title_score || 0) * 100), topic: Math.round((item.topic_score || 0) * 100) })) + '</div>';
+        }
+        if (item.matches && item.matches.length) {
+            html += '<div class="pending-item-matches">';
+            (item.matches || []).slice(0, 3).forEach(function(m) {
+                var snippet = (m.left || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+                html += '<div class="pending-item-match">' + window.escapeHtml(snippet) + ' … <strong>' + Math.round((m.similarity || 0) * 100) + '%</strong></div>';
+            });
+            html += '</div>';
+        }
     }
     if (item.action === 'retry_cascade' || item.action === 'retry_convert' || item.action === 'retry_ingest' || item.action === 'refresh_survey') {
         var retryLabel = item.action === 'refresh_survey' ? window.t('pending.rewriteSurvey') : window.t('pending.retryItem');
@@ -420,8 +434,21 @@ function reviewTopicMerge(info) {
         var choices = result.names.map(function(item, index) { return (index + 1) + '. ' + item.name + ' — ' + item.reason; }).join('\n');
         var newTopic = window.prompt(window.t('pending.chooseMergedTopic') + '\n\n' + choices, result.names[0].name);
         if (!newTopic) return null;
-        if (!window.confirm(window.t('pending.confirmTopicMerge', { old: info.topics.join('、'), name: newTopic }))) return null;
-        return window.api.mergeSimilarTopics(info.topics, newTopic);
+        if (!window.api.previewTopicMerge) return window.api.mergeSimilarTopics(info.topics, newTopic);
+        return window.api.previewTopicMerge(info.topics, newTopic).then(function(preview) {
+            if (!preview || !preview.success) throw new Error((preview && preview.message) || window.t('pending.operationFailed'));
+            var lines = [window.t('pending.previewTopicMergeSummary', { count: preview.note_count || 0 })];
+            if (preview.conflicts && preview.conflicts.length) {
+                lines.push(window.t('pending.previewTopicMergeConflicts', { count: preview.conflicts.length }));
+                preview.conflicts.slice(0, 5).forEach(function(c) { lines.push('  · ' + c.name); });
+            }
+            if (preview.surveys && preview.surveys.length) {
+                lines.push(window.t('pending.previewTopicMergeSurveys', { count: preview.surveys.length }));
+                preview.surveys.slice(0, 5).forEach(function(s) { lines.push('  · ' + s); });
+            }
+            if (!window.confirm(lines.join('\n') + '\n\n' + window.t('pending.confirmTopicMerge', { old: info.topics.join('、'), name: newTopic }))) return null;
+            return window.api.mergeSimilarTopics(info.topics, newTopic);
+        });
     }).then(function(result) {
         if (!result) return;
         if (result.success) {
@@ -644,7 +671,16 @@ function scanPendingMergeCandidates() {
     var btn = document.getElementById('pending-merge-scan-btn');
     if (!window.api || !window.api.scanMergeCandidates) return;
     _setButtonBusy(btn, true, 'pending.scanningMergeCandidates');
-    window.api.scanMergeCandidates().then(function(result) {
+    var preset = 'balanced';
+    if (window.AppState && window.AppState.uiConfig && window.AppState.uiConfig.merge_preset) {
+        preset = window.AppState.uiConfig.merge_preset;
+    } else {
+        try {
+            var saved = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');
+            if (saved && saved.merge_preset) preset = saved.merge_preset;
+        } catch (_e) {}
+    }
+    window.api.scanMergeCandidates(preset).then(function(result) {
         if (typeof window.updateStatus === 'function') {
             window.updateStatus(window.t('pending.mergeScanDone', { count: (result && result.candidate_count) || 0 }));
         }

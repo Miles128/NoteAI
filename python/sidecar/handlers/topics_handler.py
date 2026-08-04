@@ -625,6 +625,18 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             self._start_task(f"cascade_topic_merge_{topic}", self._do_cascade_survey_update, args=(topic,))
         return result
 
+    def _preview_topic_merge(self, params):
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        from sidecar.topic_merge import preview_topic_merge
+
+        return preview_topic_merge(
+            workspace,
+            [str(topic) for topic in (params.get("topics") or [])],
+            str(params.get("new_topic") or "").strip(),
+        )
+
     def _get_activity_log(self, params):
         limit = params.get("limit", 50)
         return {"entries": get_entries(limit)}
@@ -648,6 +660,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("apply_topic_placement_threshold", self._apply_topic_placement_threshold)
         router.register("suggest_topic_merge_names", self._suggest_topic_merge_names)
         router.register("merge_similar_topics", self._merge_similar_topics)
+        router.register("preview_topic_merge", self._preview_topic_merge)
         router.register("get_all_topic_names", self._get_all_topic_names)
         router.register("get_file_topics", self._get_file_topics)
         router.register("get_topic_files", self._get_topic_files)

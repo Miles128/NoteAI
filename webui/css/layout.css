@@ -2609,6 +2609,26 @@ body {
     margin-bottom: 12px;
 }
 
+.pending-item-matches {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 4px 0 12px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--bg-soft, rgba(127, 127, 127, 0.08));
+}
+
+.pending-item-match {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.pending-item-match strong {
+    color: var(--accent, var(--text));
+}
+
 .pending-item-assign {
     display: flex;
     gap: 8px;

@@ -97,13 +97,13 @@ class KbHandler(BaseHandler):
         graph = load_chunk_similarity_graph(workspace)
         return {"success": True, "items": graph.get("candidates") or [], "needs_build": not bool(graph)}
 
-    def _scan_merge_candidates(self, _params):
+    def _scan_merge_candidates(self, params):
         workspace, err = self._require_workspace()
         if err:
             return err
         from sidecar.chunk_similarity import build_chunk_similarity_graph
 
-        return build_chunk_similarity_graph(workspace)
+        return build_chunk_similarity_graph(workspace, preset=str(params.get("preset") or "balanced"))
 
     def _archive_chat_answer(self, params):
         return archive_chat_answer(

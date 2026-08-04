@@ -153,6 +153,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "merge_duplicate_notes",
     "merge_note_group",
     "merge_similar_topics",
+    "preview_topic_merge",
     "run_cli_agent",
     "stop_cli_agent",
     "suggest_topic_merge_names",

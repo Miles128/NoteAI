@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sidecar.topic_merge import merge_topics, suggest_merged_topic_names
+from sidecar.topic_merge import merge_topics, preview_topic_merge, suggest_merged_topic_names
 
 from config import config
 from utils.text_utils import parse_frontmatter
@@ -48,3 +48,24 @@ def test_topic_merge_moves_notes_and_records_aliases(tmp_path: Path, monkeypatch
         assert meta["topic"] == "提示词设计"
     aliases = json.loads((root / ".noteai" / "topic_aliases.json").read_text(encoding="utf-8"))
     assert aliases == {"提示词工程": "提示词设计", "Prompt工程": "提示词设计"}
+
+
+def test_preview_topic_merge_reports_notes_conflicts_and_surveys(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    _write(root, "提示词工程", "甲")
+    _write(root, "Prompt工程", "乙")
+    _write(root, "提示词设计", "乙")  # 目标主题已有同名文件 → 冲突
+    wiki = root / "wiki"
+    wiki.mkdir(parents=True)
+    (wiki / "Prompt工程_综述.md").write_text("综述", encoding="utf-8")
+    (wiki / "提示词工程").mkdir(parents=True)
+    (wiki / "提示词工程" / "提示词工程_综述.md").write_text("综述", encoding="utf-8")
+
+    result = preview_topic_merge(root, ["提示词工程", "Prompt工程"], "提示词设计")
+
+    assert result["success"] is True
+    assert result["note_count"] == 2
+    assert [row["name"] for row in result["conflicts"]] == ["乙.md"]
+    assert result["conflicts"][0]["target"] == "Notes/提示词设计/乙.md"
+    assert "wiki/Prompt工程_综述.md" in result["surveys"]
+    assert "wiki/提示词工程/提示词工程_综述.md" in result["surveys"]

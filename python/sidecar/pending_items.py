@@ -145,17 +145,37 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         from sidecar.duplicate_review import is_merge_group_resolved
 
         similarity_graph = load_chunk_similarity_graph(root)
+        chunk_by_id = {chunk.get("id"): chunk for chunk in (similarity_graph.get("chunks") or [])}
         for candidate in similarity_graph.get("candidates") or []:
             files = [str(path) for path in (candidate.get("files") or [])]
             if len(files) < 2 or is_merge_group_resolved(root, files):
                 continue
+            matches = []
+            pair_edges: list[dict] = []
+            for row in candidate.get("pairs") or []:
+                pair_edges.extend(row.get("matches") or [])
+            pair_edges = sorted(pair_edges, key=lambda edge: edge.get("similarity", 0.0), reverse=True)[:5]
+            for edge in pair_edges:
+                left = chunk_by_id.get(edge.get("source")) or {}
+                right = chunk_by_id.get(edge.get("target")) or {}
+                matches.append(
+                    {
+                        "similarity": edge.get("similarity", 0.0),
+                        "left": (left.get("content") or "")[:60],
+                        "right": (right.get("content") or "")[:60],
+                    }
+                )
             items.append(
                 {
                     "type": "merge_candidate",
                     "files": files,
                     "score": candidate.get("score", 0.0),
+                    "content_score": candidate.get("content_score", 0.0),
+                    "title_score": candidate.get("title_score", 0.0),
+                    "topic_score": candidate.get("topic_score", 0.0),
+                    "coverage": candidate.get("coverage", 0.0),
                     "reason": candidate.get("reason", "semantic"),
-                    "pairs": candidate.get("pairs", []),
+                    "matches": matches,
                     "action": "review_merge_group",
                 }
             )

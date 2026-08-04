@@ -212,7 +212,11 @@ class TestVerifyClaimViaCli:
         )
         monkeypatch.setattr(
             "sidecar.cli_agent.registry.run_cli_agent",
-            lambda agent_id, prompt, send_event=None: {"success": True, "message": "", "output": "研究完毕，无结构化输出"},
+            lambda agent_id, prompt, send_event=None: {
+                "success": True,
+                "message": "",
+                "output": "研究完毕，无结构化输出",
+            },
         )
         result = verify_claim_via_cli(store, _claim(store, "claim-1"), agent_id="claude")
         assert result["success"] is False

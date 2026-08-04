@@ -595,7 +595,7 @@ class SemanticStore:
                 WHERE v2.claim_id = c.id
                 ORDER BY v2.created_at DESC, v2.rowid DESC LIMIT 1
             )
-            WHERE {' AND '.join(where)}
+            WHERE {" AND ".join(where)}
             ORDER BY c.confidence DESC, c.statement
         """
         if limit:

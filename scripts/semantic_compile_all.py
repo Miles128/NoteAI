@@ -46,9 +46,7 @@ def main() -> int:
     def progress(current: int, total: int, message: str) -> None:
         print(f"SEMANTIC_COMPILE_PROGRESS {current}/{total} {message}", flush=True)
 
-    stats = compile_semantic_batch(
-        workspace, paths, progress_cb=progress, claims_only=args.claims_only
-    )
+    stats = compile_semantic_batch(workspace, paths, progress_cb=progress, claims_only=args.claims_only)
     print("SEMANTIC_COMPILE_RESULT " + json.dumps(stats, ensure_ascii=False, default=list), flush=True)
     return 0 if not stats["failures"] else 1
 

@@ -619,9 +619,7 @@ class TestCollectTopicLabelsForPendingUi:
         assert isinstance(opts, list)
         assert f"{l1}{TOPIC_SEP}待选二级" in opts
 
-    def test_get_all_pending_schedules_auto_move_without_blocking_snapshot(
-        self, workspace: Path, monkeypatch
-    ) -> None:
+    def test_get_all_pending_schedules_auto_move_without_blocking_snapshot(self, workspace: Path, monkeypatch) -> None:
         started: list[tuple[str, object, tuple]] = []
 
         def start_task(name, target, args=(), **_kwargs):

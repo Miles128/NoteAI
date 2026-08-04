@@ -67,9 +67,7 @@ def _source_lines(citations: list[dict] | None, *, ws: Path, out_dir: Path) -> l
             continue
         seen.add(key)
         index = raw.get("index") or position
-        label = _markdown_label(
-            raw.get("source_label") or raw.get("file_name") or file_path or url
-        )
+        label = _markdown_label(raw.get("source_label") or raw.get("file_name") or file_path or url)
         section = _markdown_label(raw.get("section_title") or "")
         topic = _markdown_label(raw.get("topic") or "")
         suffix = ""

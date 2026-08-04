@@ -188,7 +188,11 @@ class WebDownloader:
                 if extract_from == "content":
                     text = self._string_attribute(elem.get("content"))
                 elif extract_from == "auto":
-                    text = elem.get_text().strip() if hasattr(elem, "get_text") else self._string_attribute(elem.get("content"))
+                    text = (
+                        elem.get_text().strip()
+                        if hasattr(elem, "get_text")
+                        else self._string_attribute(elem.get("content"))
+                    )
                 else:
                     text = elem.get_text().strip()
                 if text:

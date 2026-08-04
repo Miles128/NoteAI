@@ -80,9 +80,9 @@ def test_rpc_contract_is_consistent_across_frontend_python_and_tauri() -> None:
 def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
     pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
 
-    assign_branch = pending_js.split("} else if (item.action === 'assign_topic')", 1)[1].split(
-        "html += '</div>';", 1
-    )[0]
+    assign_branch = pending_js.split("} else if (item.action === 'assign_topic')", 1)[1].split("html += '</div>';", 1)[
+        0
+    ]
     assert 'data-action="move-suggested"' in assign_branch
     assert 'data-action="keep-current"' in assign_branch
     assert "pending-topic-select" not in assign_branch
@@ -91,9 +91,7 @@ def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
 def test_pending_view_restores_hidden_content_panel() -> None:
     """Regression: opening Inbox from note preview must reveal its parent panel."""
     pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
-    show_branch = pending_js.split("function showPendingViewContent()", 1)[1].split(
-        "function hidePendingView()", 1
-    )[0]
+    show_branch = pending_js.split("function showPendingViewContent()", 1)[1].split("function hidePendingView()", 1)[0]
 
     restore_parent = "contentPanel.style.display = 'flex'"
     show_pending = "pendingView.style.display = ''"
@@ -124,7 +122,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count('data-category=') == 5
+    assert html.count("data-category=") == 5
     assert 'data-category="quality"' in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html

@@ -4,7 +4,6 @@ from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 from utils.tag_extractor import save_tags_md
-from utils.wiki_sync import read_wiki_tag_map, sync_wiki_with_files, write_wiki_tag_map
 
 IGNORED_TAG_FILES = {"WIKI.md", "tags.md"}
 
@@ -88,9 +87,6 @@ class TagsHandler(BaseHandler):
             if self._write_tags(md_file, new_tags):
                 updated += 1
 
-        if updated:
-            sync_wiki_with_files()
-
         return {
             "success": True,
             "updated": updated,
@@ -98,9 +94,7 @@ class TagsHandler(BaseHandler):
         }
 
     def _save_tags_md(self, _params):
-        result = sync_wiki_with_files()
-        result["message"] = "标签索引已同步到 WIKI.md"
-        return result
+        return save_tags_md(config.workspace_path)
 
     def _ensure_tags_md(self, _params):
         workspace, err = self._require_workspace()
@@ -122,13 +116,6 @@ class TagsHandler(BaseHandler):
 
         if tag_name in existing_tags:
             return {"success": True, "message": "标签已存在", "created": False}
-
-        wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            sync_wiki_with_files()
-        tag_map = read_wiki_tag_map(wiki_path)
-        tag_map[tag_name] = []
-        write_wiki_tag_map(wiki_path, tag_map)
 
         return {
             "success": True,
@@ -162,13 +149,6 @@ class TagsHandler(BaseHandler):
             renamed_tags = self._rename_tags(current_tags, old_tag, new_tag)
             if self._write_tags(md_file, renamed_tags):
                 updated_count += 1
-
-        wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-        tag_map = read_wiki_tag_map(wiki_path)
-        tag_map.pop(old_tag, None)
-        tag_map.setdefault(new_tag, [])
-        write_wiki_tag_map(wiki_path, tag_map)
-        sync_wiki_with_files()
 
         merged = new_tag_exists
         if merged:
@@ -205,12 +185,6 @@ class TagsHandler(BaseHandler):
             if self._write_tags(md_file, filtered):
                 updated_count += 1
 
-        wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-        tag_map = read_wiki_tag_map(wiki_path)
-        tag_map.pop(tag_name, None)
-        write_wiki_tag_map(wiki_path, tag_map)
-        sync_wiki_with_files()
-
         return {
             "success": True,
             "message": f"已删除标签「{tag_name}」，更新 {updated_count} 个文件",
@@ -240,15 +214,19 @@ class TagsHandler(BaseHandler):
             return {"success": True, "updated": False, "message": "标签已存在"}
         if not self._write_tags(md_file, [*current_tags, tag]):
             return {"success": False, "message": "写入标签失败"}
-        sync_wiki_with_files()
         self._invalidate_cache()
         return {"success": True, "updated": True, "message": f"已添加标签「{tag}」"}
 
     def _collect_tag_map(self, workspace: str) -> dict[str, list[str]]:
-        wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-        if not wiki_path.exists():
-            sync_wiki_with_files()
-        return read_wiki_tag_map(wiki_path)
+        tag_map: dict[str, list[str]] = {}
+        for md_file in _iter_markdown_files(workspace):
+            try:
+                rel = str(md_file.relative_to(workspace))
+                for tag in self._read_tags(md_file):
+                    tag_map.setdefault(tag, []).append(rel)
+            except Exception as e:
+                logger.warning(f"[tags] error reading {md_file}: {e}\n")
+        return tag_map
 
     def _read_tags(self, md_file: Path) -> list[str]:
         text = md_file.read_text(encoding="utf-8")

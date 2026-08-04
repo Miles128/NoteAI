@@ -44,6 +44,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     _pending_maintenance_schedule_lock = threading.Lock()
     _pending_maintenance_last_scheduled: dict[str, float] = {}
     _pending_maintenance_interval_seconds = 30.0
+
     def _sync_wiki_with_folder_system(self, _params=None):
         try:
             return sync_wiki_with_files()
@@ -593,10 +594,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             }
         moves = result.get("moved") or []
         affected_topics = {
-            str(topic)
-            for move in moves
-            for topic in (move.get("current_topic"), move.get("suggested_topic"))
-            if topic
+            str(topic) for move in moves for topic in (move.get("current_topic"), move.get("suggested_topic")) if topic
         }
         for topic in affected_topics:
             self._start_task(f"cascade_topic_move_{topic}", self._do_cascade_survey_update, args=(topic,))

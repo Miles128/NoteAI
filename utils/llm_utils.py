@@ -41,6 +41,8 @@ class _StreamResult(TypedDict):
     text: str
     error: Exception | None
     done: bool
+
+
 _EXECUTOR_LOCK = threading.Lock()
 
 

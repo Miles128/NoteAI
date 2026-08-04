@@ -542,9 +542,7 @@ class IntelHandler(BaseHandler):
                 remove_file_from_wiki_topic(str(md_file))
             self._assign_note_to_topic(md_file, fname, new_topic)
 
-        self._refresh_topic_survey(
-            new_topic, fname=fname, changelog_msg=f"AI变更主题并更新综述: {fname} → {new_topic}"
-        )
+        self._refresh_topic_survey(new_topic, fname=fname, changelog_msg=f"AI变更主题并更新综述: {fname} → {new_topic}")
         return None
 
     def _apply_assign_topic(self, suggestion, workspace_path, wiki_path):

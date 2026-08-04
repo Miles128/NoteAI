@@ -85,8 +85,12 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
         left = next(item for item in chunks if item["file_path"] == left_path)
         right = next(item for item in chunks if item["file_path"] == right_path)
         strong = [row for row in rows if row["similarity"] >= 0.86]
-        matched_left = {row["source"] if by_id[row["source"]]["file_path"] == left_path else row["target"] for row in strong}
-        matched_right = {row["source"] if by_id[row["source"]]["file_path"] == right_path else row["target"] for row in strong}
+        matched_left = {
+            row["source"] if by_id[row["source"]]["file_path"] == left_path else row["target"] for row in strong
+        }
+        matched_right = {
+            row["source"] if by_id[row["source"]]["file_path"] == right_path else row["target"] for row in strong
+        }
         shorter_coverage = min(
             len(matched_left) / max(1, len(file_chunks[left_path])),
             len(matched_right) / max(1, len(file_chunks[right_path])),
@@ -95,9 +99,11 @@ def _candidate_groups(chunks: list[dict], edges: list[dict]) -> list[dict]:
         title_score = SequenceMatcher(None, left["title"].casefold(), right["title"].casefold()).ratio()
         left_topic = str(left.get("topic") or "")
         right_topic = str(right.get("topic") or "")
-        topic_score = 1.0 if left_topic == right_topic and left_topic else SequenceMatcher(
-            None, left_topic.casefold(), right_topic.casefold()
-        ).ratio()
+        topic_score = (
+            1.0
+            if left_topic == right_topic and left_topic
+            else SequenceMatcher(None, left_topic.casefold(), right_topic.casefold()).ratio()
+        )
         score = 0.5 * content_score + 0.25 * title_score + 0.15 * topic_score + 0.1 * shorter_coverage
         overlap_rule = bool(strong) and shorter_coverage >= 0.60
         semantic_rule = title_score >= 0.82 and topic_score >= 0.85 and content_score >= 0.68 and score >= 0.76
@@ -209,7 +215,11 @@ def build_chunk_similarity_graph(workspace: str | Path, *, top_k: int = 6, thres
             reusable[item["id"]] = np.asarray(embedding["dense_vec"], dtype=np.float32)
 
     ids = [item["id"] for item in chunks]
-    matrix = np.vstack([reusable[chunk_id] for chunk_id in ids]).astype(np.float32) if ids else np.empty((0, 512), dtype=np.float32)
+    matrix = (
+        np.vstack([reusable[chunk_id] for chunk_id in ids]).astype(np.float32)
+        if ids
+        else np.empty((0, 512), dtype=np.float32)
+    )
     if len(matrix):
         norms = np.linalg.norm(matrix, axis=1, keepdims=True)
         matrix = matrix / np.maximum(norms, 1e-12)
@@ -290,7 +300,10 @@ def graph_view(workspace: str | Path, level: str = "topic", focus: str = "") -> 
         for edge in edges:
             if edge["source"] in selected or edge["target"] in selected:
                 visible.update((edge["source"], edge["target"]))
-        nodes = [{**by_id[node_id], "name": by_id[node_id]["section_title"] or by_id[node_id]["title"], "type": "chunk"} for node_id in visible]
+        nodes = [
+            {**by_id[node_id], "name": by_id[node_id]["section_title"] or by_id[node_id]["title"], "type": "chunk"}
+            for node_id in visible
+        ]
         shown_edges = [edge for edge in edges if edge["source"] in visible and edge["target"] in visible]
         return {"success": True, "nodes": nodes, "edges": shown_edges, "layout": "force", "level": "chunk"}
 
@@ -310,9 +323,22 @@ def graph_view(workspace: str | Path, level: str = "topic", focus: str = "") -> 
         left_group, right_group = sorted((left, right))
         aggregate[(left_group, right_group)].append(float(edge["similarity"]))
     node_type = "file" if level == "note" else "topic"
-    nodes = [{"id": name, "name": Path(name).stem if level == "note" else name, "type": node_type, "chunk_count": len(members)} for name, members in groups.items()]
+    nodes = [
+        {
+            "id": name,
+            "name": Path(name).stem if level == "note" else name,
+            "type": node_type,
+            "chunk_count": len(members),
+        }
+        for name, members in groups.items()
+    ]
     shown_edges = [
-        {"source": pair[0], "target": pair[1], "similarity": round(max(values), 4), "distance": round(1 - max(values), 4)}
+        {
+            "source": pair[0],
+            "target": pair[1],
+            "similarity": round(max(values), 4),
+            "distance": round(1 - max(values), 4),
+        }
         for pair, values in aggregate.items()
     ]
     return {"success": True, "nodes": nodes, "edges": shown_edges, "layout": "force", "level": level}

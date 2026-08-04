@@ -101,9 +101,7 @@ class SemanticHandler(BaseHandler):
                 """SELECT count(*) FROM claims c WHERE c.status = 'active'
                    AND EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id AND e.status = 'active')"""
             ).fetchone()[0]
-            overview["evidence"] = conn.execute(
-                "SELECT count(*) FROM evidence WHERE status = 'active'"
-            ).fetchone()[0]
+            overview["evidence"] = conn.execute("SELECT count(*) FROM evidence WHERE status = 'active'").fetchone()[0]
             overview["deleted_claims"] = conn.execute(
                 "SELECT count(*) FROM claims WHERE status = 'deleted'"
             ).fetchone()[0]
@@ -253,10 +251,7 @@ class SemanticHandler(BaseHandler):
                     "AND (c.status = 'deleted' OR EXISTS "
                     "(SELECT 1 FROM evidence ae WHERE ae.claim_id = c.id AND ae.status = 'active'))"
                 )
-                where = (
-                    f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) "
-                    f"{evidence_clause}"
-                )
+                where = f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) {evidence_clause}"
                 total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
@@ -375,11 +370,17 @@ class SemanticHandler(BaseHandler):
                         (other_id, other_id),
                     ).fetchone()
                     if other:
-                        related.append({
-                            "id": relation["id"], "relation_type": relation["relation_type"],
-                            "confidence": relation["confidence"], "block_id": relation["block_id"],
-                            "object_id": other_id, "object_name": other["canonical_name"], "object_kind": other["kind"],
-                        })
+                        related.append(
+                            {
+                                "id": relation["id"],
+                                "relation_type": relation["relation_type"],
+                                "confidence": relation["confidence"],
+                                "block_id": relation["block_id"],
+                                "object_id": other_id,
+                                "object_name": other["canonical_name"],
+                                "object_kind": other["kind"],
+                            }
+                        )
                 item["related"] = related
             audit_rows = conn.execute(
                 """SELECT id, action, before_json, after_json, created_at
@@ -409,18 +410,28 @@ class SemanticHandler(BaseHandler):
             doc = conn.execute("SELECT id FROM documents WHERE path = ?", (path,)).fetchone()
             if doc is None:
                 return {"success": True, "entities": [], "concepts": [], "claims": [], "relations": []}
+
             def objects(table, kind):
-                return [dict(row) for row in conn.execute(
-                    f"""SELECT DISTINCT o.id, o.canonical_name, o.description FROM {table} o
+                return [
+                    dict(row)
+                    for row in conn.execute(
+                        f"""SELECT DISTINCT o.id, o.canonical_name, o.description FROM {table} o
                         JOIN semantic_mentions m ON m.object_id = o.id AND m.object_kind = ?
                         JOIN blocks b ON b.id = m.block_id WHERE b.document_id = ? AND o.status = 'active'
-                        ORDER BY o.canonical_name""", (kind, doc["id"])
-                )]
-            claims = [dict(row) for row in conn.execute(
-                """SELECT DISTINCT c.id, c.statement, c.claim_type FROM claims c JOIN evidence e ON e.claim_id = c.id
+                        ORDER BY o.canonical_name""",
+                        (kind, doc["id"]),
+                    )
+                ]
+
+            claims = [
+                dict(row)
+                for row in conn.execute(
+                    """SELECT DISTINCT c.id, c.statement, c.claim_type FROM claims c JOIN evidence e ON e.claim_id = c.id
                    JOIN blocks b ON b.id = e.block_id WHERE b.document_id = ? AND c.status = 'active' AND e.status = 'active'
-                   ORDER BY c.statement""", (doc["id"],)
-            )]
+                   ORDER BY c.statement""",
+                    (doc["id"],),
+                )
+            ]
             entities = objects("entities", "entity")
             concepts = objects("concepts", "concept")
             labels = {item["id"]: item["canonical_name"] for item in [*entities, *concepts]}
@@ -432,7 +443,9 @@ class SemanticHandler(BaseHandler):
                 (doc["id"],),
             ):
                 if row["source_id"] in labels and row["target_id"] in labels:
-                    relations.append({**dict(row), "source_name": labels[row["source_id"]], "target_name": labels[row["target_id"]]})
+                    relations.append(
+                        {**dict(row), "source_name": labels[row["source_id"]], "target_name": labels[row["target_id"]]}
+                    )
         return {"success": True, "entities": entities, "concepts": concepts, "claims": claims, "relations": relations}
 
     def _update_claim(self, params):
@@ -511,6 +524,7 @@ class SemanticHandler(BaseHandler):
         if kind not in {"entity", "concept"} or not object_id or store is None:
             return {"success": False, "message": "参数不完整"}
         from sidecar.semantic.object_wiki import build_object_page
+
         try:
             page = build_object_page(store, kind, object_id)
         except ValueError as exc:
@@ -523,6 +537,7 @@ class SemanticHandler(BaseHandler):
         if kind not in {"entity", "concept"} or not object_id or store is None:
             return {"success": False, "message": "参数不完整"}
         from sidecar.semantic.object_wiki import materialize_object_collection
+
         try:
             target = materialize_object_collection(store, kind)
         except (OSError, ValueError) as exc:
@@ -571,7 +586,15 @@ class SemanticHandler(BaseHandler):
             except json.JSONDecodeError:
                 item["payload"] = {}
             items.append(item)
-        return {"success": True, "tab": "conflicts", "items": items, "total": total, "limit": limit, "offset": offset, "status": status}
+        return {
+            "success": True,
+            "tab": "conflicts",
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "status": status,
+        }
 
     def _review_conflict(self, params):
         item_id = str(params.get("id", "") or "")
@@ -600,9 +623,12 @@ class SemanticHandler(BaseHandler):
     def _quality_issues(self, store: SemanticStore) -> list[dict]:
         """Derive entity-quality issues from the current SQLite snapshot only."""
         with store.connect() as conn:
-            entities = [dict(row) for row in conn.execute(
-                "SELECT id, canonical_name, entity_type, description, confidence FROM entities WHERE status = 'active'"
-            )]
+            entities = [
+                dict(row)
+                for row in conn.execute(
+                    "SELECT id, canonical_name, entity_type, description, confidence FROM entities WHERE status = 'active'"
+                )
+            ]
             mentions = {
                 row["entity_id"]: int(row["count"])
                 for row in conn.execute(
@@ -617,12 +643,12 @@ class SemanticHandler(BaseHandler):
                        UNION SELECT target_id AS entity_id FROM relations"""
                 )
             }
-            aliases = [dict(row) for row in conn.execute(
-                "SELECT alias, entity_id FROM entity_aliases"
-            )]
+            aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
             relation_endpoint_ids = {
                 row["entity_id"]
-                for row in conn.execute("SELECT source_id AS entity_id FROM relations UNION SELECT target_id AS entity_id FROM relations")
+                for row in conn.execute(
+                    "SELECT source_id AS entity_id FROM relations UNION SELECT target_id AS entity_id FROM relations"
+                )
             }
             reviewed = {
                 row["id"]: json.loads(row["payload_json"] or "{}")
@@ -655,20 +681,22 @@ class SemanticHandler(BaseHandler):
             )
             persisted = reviewed.get(issue_id, {})
             status = "reviewed" if persisted.get("fingerprint") == fingerprint else "pending"
-            issues.append({
-                "id": issue_id,
-                "rule": rule,
-                "entity_id": entity["id"],
-                "entity_name": entity["canonical_name"],
-                "entity_type": entity["entity_type"],
-                "confidence": entity["confidence"],
-                "mention_count": mentions.get(entity["id"], 0),
-                "reason": reason,
-                "candidate_ids": candidate_ids,
-                "candidate_names": [by_id[value]["canonical_name"] for value in candidate_ids if value in by_id],
-                "fingerprint": fingerprint,
-                "status": status,
-            })
+            issues.append(
+                {
+                    "id": issue_id,
+                    "rule": rule,
+                    "entity_id": entity["id"],
+                    "entity_name": entity["canonical_name"],
+                    "entity_type": entity["entity_type"],
+                    "confidence": entity["confidence"],
+                    "mention_count": mentions.get(entity["id"], 0),
+                    "reason": reason,
+                    "candidate_ids": candidate_ids,
+                    "candidate_names": [by_id[value]["canonical_name"] for value in candidate_ids if value in by_id],
+                    "fingerprint": fingerprint,
+                    "status": status,
+                }
+            )
 
         for entity in entities:
             entity_id = entity["id"]
@@ -697,7 +725,12 @@ class SemanticHandler(BaseHandler):
                 for entity_id in normalized_ids:
                     matched_entity = by_id.get(entity_id)
                     if matched_entity:
-                        add("alias_conflict", matched_entity, "同一别名映射到多个规范实体", [value for value in normalized_ids if value != entity_id])
+                        add(
+                            "alias_conflict",
+                            matched_entity,
+                            "同一别名映射到多个规范实体",
+                            [value for value in normalized_ids if value != entity_id],
+                        )
 
         for dangling_id in sorted(dangling_relations):
             # Attach an orphaned relation to the first entity only as a visible
@@ -712,14 +745,30 @@ class SemanticHandler(BaseHandler):
         if status not in {"pending", "reviewed", "all"}:
             status = "pending"
         issues = self._quality_issues(store)
-        counts = dict.fromkeys(("missing_source", "isolated", "low_confidence", "uncontrolled_type", "missing_description", "dangling_relation", "alias_conflict", "duplicate_candidate"), 0)
+        counts = dict.fromkeys(
+            (
+                "missing_source",
+                "isolated",
+                "low_confidence",
+                "uncontrolled_type",
+                "missing_description",
+                "dangling_relation",
+                "alias_conflict",
+                "duplicate_candidate",
+            ),
+            0,
+        )
         for issue in issues:
             if issue["status"] == "pending":
                 counts[issue["rule"]] += 1
         filtered = [
-            issue for issue in issues
+            issue
+            for issue in issues
             if (status == "all" or issue["status"] == status)
-            and (not query or query in f"{issue['entity_name']} {issue['reason']} {' '.join(issue['candidate_names'])}".casefold())
+            and (
+                not query
+                or query in f"{issue['entity_name']} {issue['reason']} {' '.join(issue['candidate_names'])}".casefold()
+            )
         ]
         limit, offset = self._page(params)
         return {
@@ -760,7 +809,12 @@ class SemanticHandler(BaseHandler):
                 object_kind="entity_quality",
                 object_id=issue_id,
                 before=dict(before_row) if before_row else {},
-                after={"status": status, "rule": issue["rule"], "entity_id": issue["entity_id"], "fingerprint": issue["fingerprint"]},
+                after={
+                    "status": status,
+                    "rule": issue["rule"],
+                    "entity_id": issue["entity_id"],
+                    "fingerprint": issue["fingerprint"],
+                },
             )
         return {"success": True, "id": issue_id, "status": status}
 
@@ -783,9 +837,17 @@ class SemanticHandler(BaseHandler):
                 (issue_id, payload, issue["reason"], store._now()),
             )
             SemanticStore._audit(
-                conn, action="enqueue_quality", object_kind="entity_quality", object_id=issue_id,
+                conn,
+                action="enqueue_quality",
+                object_kind="entity_quality",
+                object_id=issue_id,
                 before=dict(existing) if existing else {},
-                after={"status": "pending", "rule": issue["rule"], "entity_id": issue["entity_id"], "fingerprint": issue["fingerprint"]},
+                after={
+                    "status": "pending",
+                    "rule": issue["rule"],
+                    "entity_id": issue["entity_id"],
+                    "fingerprint": issue["fingerprint"],
+                },
             )
         return {"success": True, "id": issue_id}
 
@@ -805,11 +867,27 @@ class SemanticHandler(BaseHandler):
             impact = {}
             for entity_id in (source_id, target_id):
                 impact[entity_id] = {
-                    "mentions": conn.execute("SELECT count(*) FROM semantic_mentions WHERE object_kind = 'entity' AND object_id = ?", (entity_id,)).fetchone()[0],
-                    "aliases": [row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias", (entity_id,))],
-                    "relations": conn.execute("SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (entity_id, entity_id)).fetchone()[0],
+                    "mentions": conn.execute(
+                        "SELECT count(*) FROM semantic_mentions WHERE object_kind = 'entity' AND object_id = ?",
+                        (entity_id,),
+                    ).fetchone()[0],
+                    "aliases": [
+                        row["alias"]
+                        for row in conn.execute(
+                            "SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias", (entity_id,)
+                        )
+                    ],
+                    "relations": conn.execute(
+                        "SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (entity_id, entity_id)
+                    ).fetchone()[0],
                 }
-        return {"success": True, "source": entities[source_id], "target": entities[target_id], "impact": impact, "message": "这是只读影响预览；确认前不会修改任何实体、证据或 Notes。"}
+        return {
+            "success": True,
+            "source": entities[source_id],
+            "target": entities[target_id],
+            "impact": impact,
+            "message": "这是只读影响预览；确认前不会修改任何实体、证据或 Notes。",
+        }
 
     def _merge_entities(self, params):
         source_id = str(params.get("source_id", "") or "")
@@ -834,16 +912,29 @@ class SemanticHandler(BaseHandler):
                    AND block_id IN (SELECT block_id FROM semantic_mentions WHERE object_id = ? AND object_kind = 'entity')""",
                 (source_id, target_id),
             )
-            conn.execute("UPDATE semantic_mentions SET object_id = ? WHERE object_id = ? AND object_kind = 'entity'", (target_id, source_id))
-            aliases = [row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (source_id,))]
+            conn.execute(
+                "UPDATE semantic_mentions SET object_id = ? WHERE object_id = ? AND object_kind = 'entity'",
+                (target_id, source_id),
+            )
+            aliases = [
+                row["alias"]
+                for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (source_id,))
+            ]
             if source["canonical_name"].casefold() != target["canonical_name"].casefold():
                 aliases.append(source["canonical_name"])
             for alias in aliases:
-                existing = conn.execute("SELECT entity_id FROM entity_aliases WHERE alias = ? COLLATE NOCASE", (alias,)).fetchone()
+                existing = conn.execute(
+                    "SELECT entity_id FROM entity_aliases WHERE alias = ? COLLATE NOCASE", (alias,)
+                ).fetchone()
                 if existing is None:
-                    conn.execute("INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES(?, ?, ?)", (alias, target_id, store._now()))
+                    conn.execute(
+                        "INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES(?, ?, ?)",
+                        (alias, target_id, store._now()),
+                    )
                 elif existing["entity_id"] == source_id:
-                    conn.execute("UPDATE entity_aliases SET entity_id = ? WHERE alias = ? COLLATE NOCASE", (target_id, alias))
+                    conn.execute(
+                        "UPDATE entity_aliases SET entity_id = ? WHERE alias = ? COLLATE NOCASE", (target_id, alias)
+                    )
             conn.execute("UPDATE relations SET source_id = ? WHERE source_id = ?", (target_id, source_id))
             conn.execute("UPDATE relations SET target_id = ? WHERE target_id = ?", (target_id, source_id))
             # Re-key only relations touched by this merge. The former unscoped
@@ -900,10 +991,14 @@ class SemanticHandler(BaseHandler):
                         relation.get("block_id"),
                     ),
                 )
-            conn.execute("UPDATE review_queue SET status = 'reviewed' WHERE item_kind = 'entity_quality' AND payload_json LIKE ?", (f'%"entity_id": "{source_id}"%',))
+            conn.execute(
+                "UPDATE review_queue SET status = 'reviewed' WHERE item_kind = 'entity_quality' AND payload_json LIKE ?",
+                (f'%"entity_id": "{source_id}"%',),
+            )
             conn.execute("DELETE FROM entities WHERE id = ?", (source_id,))
             affected_topics = {
-                row["topic"] for row in conn.execute(
+                row["topic"]
+                for row in conn.execute(
                     """SELECT DISTINCT d.topic FROM semantic_mentions m
                        JOIN blocks b ON b.id = m.block_id JOIN documents d ON d.id = b.document_id
                        WHERE m.object_id = ? AND m.object_kind = 'entity' AND d.topic != ''""",
@@ -918,16 +1013,23 @@ class SemanticHandler(BaseHandler):
                     (target_id, target_id, target_id),
                 )
             }
-            affected_concept_ids = {
-                row["id"] for row in conn.execute(
-                    "SELECT id FROM concepts WHERE id IN ({}) AND status = 'active'".format(
-                        ",".join("?" for _ in related_ids) or "''"
-                    ),
-                    tuple(related_ids),
-                )
-            } if related_ids else set()
+            affected_concept_ids = (
+                {
+                    row["id"]
+                    for row in conn.execute(
+                        "SELECT id FROM concepts WHERE id IN ({}) AND status = 'active'".format(
+                            ",".join("?" for _ in related_ids) or "''"
+                        ),
+                        tuple(related_ids),
+                    )
+                }
+                if related_ids
+                else set()
+            )
             after = {"merged_into": target_id, "source_id": source_id, "aliases_added": aliases}
-            SemanticStore._audit(conn, action="merge_entity", object_kind="entity", object_id=target_id, before=before, after=after)
+            SemanticStore._audit(
+                conn, action="merge_entity", object_kind="entity", object_id=target_id, before=before, after=after
+            )
         materialized = []
         try:
             from sidecar.semantic.object_wiki import materialize_object_collection
@@ -943,7 +1045,12 @@ class SemanticHandler(BaseHandler):
                 materialize_object_collection(store, "concept")
         except OSError as exc:
             return {"success": False, "message": f"实体已合并，但语义页重建失败：{exc}"}
-        return {"success": True, "target_id": target_id, "affected_topics": materialized, "message": f"已将「{source['canonical_name']}」合并到「{target['canonical_name']}」"}
+        return {
+            "success": True,
+            "target_id": target_id,
+            "affected_topics": materialized,
+            "message": f"已将「{source['canonical_name']}」合并到「{target['canonical_name']}」",
+        }
 
     def _links(self, params: dict):
         workspace, err = self._require_workspace()
@@ -957,10 +1064,7 @@ class SemanticHandler(BaseHandler):
         status = str(params.get("status", "all") or "all")
         query = str(params.get("query", "") or "").strip().casefold()
         raw_links = data.get("links", []) or []
-        directed_pairs = {
-            (str(item.get("from", "") or ""), str(item.get("to", "") or ""))
-            for item in raw_links
-        }
+        directed_pairs = {(str(item.get("from", "") or ""), str(item.get("to", "") or "")) for item in raw_links}
         links = []
         seen = set()
         for raw in raw_links:

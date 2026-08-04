@@ -56,12 +56,15 @@ def materialize_documents(
 
         def load_inputs() -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
             with store.connect() as conn:
-                topic_rows = list(conn.execute(
-                    f"SELECT DISTINCT topic FROM documents WHERE id IN ({placeholders}) AND topic != ''",
-                    tuple(sorted(document_ids)),
-                ))
-                object_rows = list(conn.execute(
-                    f"""SELECT DISTINCT m.object_kind AS kind, m.object_id AS id,
+                topic_rows = list(
+                    conn.execute(
+                        f"SELECT DISTINCT topic FROM documents WHERE id IN ({placeholders}) AND topic != ''",
+                        tuple(sorted(document_ids)),
+                    )
+                )
+                object_rows = list(
+                    conn.execute(
+                        f"""SELECT DISTINCT m.object_kind AS kind, m.object_id AS id,
                                CASE m.object_kind
                                    WHEN 'entity' THEN e.canonical_name
                                    ELSE c.canonical_name
@@ -74,8 +77,9 @@ def materialize_documents(
                           ON m.object_kind = 'concept' AND c.id = m.object_id
                         WHERE b.document_id IN ({placeholders})
                           AND m.object_kind IN ('entity', 'concept')""",
-                    tuple(sorted(document_ids)),
-                ))
+                        tuple(sorted(document_ids)),
+                    )
+                )
             return topic_rows, object_rows
 
         try:
@@ -138,9 +142,7 @@ def materialize_documents(
         try:
             _retry_lock(partial(materialize_object_collection, store, kind))
         except (OSError, ValueError, sqlite3.Error) as exc:
-            result["failures"].append(
-                {"kind": f"{kind}_collection", "id": kind, "error": str(exc)}
-            )
+            result["failures"].append({"kind": f"{kind}_collection", "id": kind, "error": str(exc)})
     for topic in sorted(topics):
         try:
             _retry_lock(partial(materialize_topic_state, store, topic))

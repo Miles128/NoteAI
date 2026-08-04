@@ -165,28 +165,18 @@ class SemanticStore:
             # active compiler transaction and make otherwise read-only RPCs wait.
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(_SCHEMA)
-            claim_columns = {
-                row["name"] for row in conn.execute("PRAGMA table_info(claims)")
-            }
+            claim_columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)")}
             if "claim_type" not in claim_columns:
                 conn.execute(
                     "ALTER TABLE claims ADD COLUMN claim_type TEXT NOT NULL DEFAULT 'conclusion' "
                     "CHECK(claim_type IN ('conclusion', 'hypothesis'))"
                 )
             if "user_edited" not in claim_columns:
-                conn.execute(
-                    "ALTER TABLE claims ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0"
-                )
-            evidence_columns = {
-                row["name"] for row in conn.execute("PRAGMA table_info(evidence)")
-            }
+                conn.execute("ALTER TABLE claims ADD COLUMN user_edited INTEGER NOT NULL DEFAULT 0")
+            evidence_columns = {row["name"] for row in conn.execute("PRAGMA table_info(evidence)")}
             if "status" not in evidence_columns:
-                conn.execute(
-                    "ALTER TABLE evidence ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"
-                )
-            relation_columns = {
-                row["name"] for row in conn.execute("PRAGMA table_info(relations)")
-            }
+                conn.execute("ALTER TABLE evidence ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+            relation_columns = {row["name"] for row in conn.execute("PRAGMA table_info(relations)")}
             if "block_id" not in relation_columns:
                 # Co-occurrence relations are derived per block.  Keeping the
                 # origin lets a later extraction replace exactly its own edges.
@@ -196,9 +186,7 @@ class SemanticStore:
                 "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
-            row = conn.execute(
-                "SELECT value FROM schema_meta WHERE key = 'claim_policy_version'"
-            ).fetchone()
+            row = conn.execute("SELECT value FROM schema_meta WHERE key = 'claim_policy_version'").fetchone()
             if row is None or row["value"] != str(CLAIM_POLICY_VERSION):
                 # Claims/Evidence are derived data. A policy change invalidates
                 # every legacy claim so old broad extraction cannot leak into
@@ -213,9 +201,7 @@ class SemanticStore:
                 conn.execute("DELETE FROM evidence")
                 conn.execute("DELETE FROM claims")
                 conn.execute("DELETE FROM claim_extractions")
-                conn.execute(
-                    "UPDATE documents SET status = 'parsed' WHERE status IN ('semantic', 'partial')"
-                )
+                conn.execute("UPDATE documents SET status = 'parsed' WHERE status IN ('semantic', 'partial')")
                 conn.execute(
                     "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('claim_policy_version', ?)",
                     (str(CLAIM_POLICY_VERSION),),
@@ -339,9 +325,7 @@ class SemanticStore:
         if not alias:
             raise ValueError("entity alias is required")
         with self.connect() as conn:
-            entity = conn.execute(
-                "SELECT id, canonical_name FROM entities WHERE id = ?", (entity_id,)
-            ).fetchone()
+            entity = conn.execute("SELECT id, canonical_name FROM entities WHERE id = ?", (entity_id,)).fetchone()
             if entity is None:
                 return None
             if alias.casefold() == entity["canonical_name"].casefold():
@@ -444,10 +428,7 @@ class SemanticStore:
             conn.executemany(
                 """INSERT INTO dependencies(source_id, target_id, target_kind, input_hash)
                    VALUES(?, ?, ?, ?)""",
-                (
-                    (source_id, view_id, view_kind, input_hash)
-                    for source_id in sorted(source_ids)
-                ),
+                ((source_id, view_id, view_kind, input_hash) for source_id in sorted(source_ids)),
             )
 
     def view_dependencies(self, view_id: str, view_kind: str) -> list[sqlite3.Row]:
@@ -470,9 +451,7 @@ class SemanticStore:
             ).fetchone()
             return row is not None and row["status"] == "complete"
 
-    def claim_extraction_is_current(
-        self, block_id: str, block_hash: str, prompt_version: int
-    ) -> bool:
+    def claim_extraction_is_current(self, block_id: str, block_hash: str, prompt_version: int) -> bool:
         with self.connect() as conn:
             row = conn.execute(
                 "SELECT status FROM claim_extractions WHERE block_id = ? AND block_hash = ? AND prompt_version = ?",
@@ -493,9 +472,7 @@ class SemanticStore:
         with self.connect() as conn:
             evidence_statuses = {
                 row["id"]: row["status"]
-                for row in conn.execute(
-                    "SELECT id, status FROM evidence WHERE block_id = ?", (block_id,)
-                )
+                for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
             }
             conn.execute(
                 "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind = 'claim'",
@@ -586,9 +563,7 @@ class SemanticStore:
         with self.connect() as conn:
             evidence_statuses = {
                 row["id"]: row["status"]
-                for row in conn.execute(
-                    "SELECT id, status FROM evidence WHERE block_id = ?", (block_id,)
-                )
+                for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
             }
             conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
             conn.execute("DELETE FROM relations WHERE block_id = ?", (block_id,))
@@ -756,10 +731,7 @@ class SemanticStore:
             )
             new_ids = {block.id for block in blocks}
             existing = {
-                row["id"]
-                for row in conn.execute(
-                    "SELECT id FROM blocks WHERE document_id = ?", (document["id"],)
-                )
+                row["id"] for row in conn.execute("SELECT id FROM blocks WHERE document_id = ?", (document["id"],))
             }
             stale = existing - new_ids
             if stale:

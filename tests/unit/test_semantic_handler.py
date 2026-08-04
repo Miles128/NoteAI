@@ -127,16 +127,12 @@ def test_entity_quality_is_snapshot_only_and_reviewable(semantic_handler: Semant
     assert history["items"][0]["id"] == duplicate["id"]
     store = SemanticStore(semantic_handler.config.workspace_path)
     with store.connect() as conn:
-        audit = conn.execute(
-            "SELECT action FROM semantic_audit_log WHERE object_kind = 'entity_quality'"
-        ).fetchone()
+        audit = conn.execute("SELECT action FROM semantic_audit_log WHERE object_kind = 'entity_quality'").fetchone()
     assert audit["action"] == "review_quality"
 
 
 def test_entity_merge_preview_is_read_only(semantic_handler: SemanticHandler) -> None:
-    preview = semantic_handler._get_entity_merge_preview(
-        {"source_id": "entity-1", "target_id": "entity-3"}
-    )
+    preview = semantic_handler._get_entity_merge_preview({"source_id": "entity-1", "target_id": "entity-3"})
 
     assert preview["success"] is True
     assert preview["source"]["canonical_name"] == "BM25"
@@ -146,9 +142,7 @@ def test_entity_merge_preview_is_read_only(semantic_handler: SemanticHandler) ->
 
 def test_entity_merge_requires_confirmation_and_preserves_mentions(semantic_handler: SemanticHandler) -> None:
     denied = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "entity-3"})
-    merged = semantic_handler._merge_entities(
-        {"source_id": "entity-1", "target_id": "entity-3", "confirmed": True}
-    )
+    merged = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "entity-3", "confirmed": True})
     entities = semantic_handler._get_workbench({"tab": "entities"})
     detail = semantic_handler._get_detail({"kind": "entity", "id": "entity-3"})
 
@@ -175,18 +169,19 @@ def test_entity_merge_preserves_unrelated_self_relations_and_deduplicates_edges(
             "INSERT INTO relations VALUES('target-edge', 'entity-3', 'RELATED_TO', 'concept-1', 0.9, NULL, 'block-1')"
         )
 
-    merged = semantic_handler._merge_entities(
-        {"source_id": "entity-1", "target_id": "entity-3", "confirmed": True}
-    )
+    merged = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "entity-3", "confirmed": True})
 
     assert merged["success"] is True
     with store.connect() as conn:
         assert conn.execute("SELECT count(*) FROM relations WHERE id = 'self-other'").fetchone()[0] == 1
-        assert conn.execute(
-            """SELECT count(*) FROM relations
+        assert (
+            conn.execute(
+                """SELECT count(*) FROM relations
                WHERE source_id = 'entity-3' AND relation_type = 'RELATED_TO'
                  AND target_id = 'concept-1' AND block_id = 'block-1'"""
-        ).fetchone()[0] == 1
+            ).fetchone()[0]
+            == 1
+        )
 
 
 def test_claim_can_be_edited_deleted_and_restored_with_audit(
@@ -222,13 +217,9 @@ def test_claim_can_be_edited_deleted_and_restored_with_audit(
 def test_evidence_exclusion_and_entity_alias_are_audited(
     semantic_handler: SemanticHandler,
 ) -> None:
-    excluded = semantic_handler._set_evidence_status(
-        {"id": "evidence-1", "status": "excluded"}
-    )
+    excluded = semantic_handler._set_evidence_status({"id": "evidence-1", "status": "excluded"})
     claims = semantic_handler._get_workbench({"tab": "claims"})
-    restored = semantic_handler._set_evidence_status(
-        {"id": "evidence-1", "status": "active"}
-    )
+    restored = semantic_handler._set_evidence_status({"id": "evidence-1", "status": "active"})
     alias = semantic_handler._add_entity_alias({"id": "entity-1", "alias": "Okapi BM25"})
     entity = semantic_handler._get_detail({"kind": "entity", "id": "entity-1"})
 
@@ -259,7 +250,15 @@ def test_block_extraction_materializes_traceable_entity_concept_relation(
         prompt_version=1,
         extracted_at="2026-07-19T10:00:00Z",
         concepts=[{"id": "concept-1", "canonical_name": "混合检索", "description": "组合检索方式", "confidence": 0.95}],
-        entities=[{"id": "entity-1", "canonical_name": "BM25", "entity_type": "algorithm", "description": "关键词排序算法", "confidence": 0.9}],
+        entities=[
+            {
+                "id": "entity-1",
+                "canonical_name": "BM25",
+                "entity_type": "algorithm",
+                "description": "关键词排序算法",
+                "confidence": 0.9,
+            }
+        ],
         claims=[],
     )
 
@@ -309,13 +308,9 @@ def test_automatic_materializer_removes_page_when_old_object_loses_its_source(
     target = Path(semantic_handler.config.workspace_path) / "wiki" / "semantic" / "实体.md"
     assert target.exists()
     with store.connect() as conn:
-        conn.execute(
-            "DELETE FROM semantic_mentions WHERE object_id = 'entity-1' AND object_kind = 'entity'"
-        )
+        conn.execute("DELETE FROM semantic_mentions WHERE object_id = 'entity-1' AND object_kind = 'entity'")
 
-    result = materialize_documents(
-        store, {"doc-1"}, previous_objects=previous
-    )
+    result = materialize_documents(store, {"doc-1"}, previous_objects=previous)
 
     assert result["removed"]["entities"] == 1
     assert not result["failures"]
@@ -331,9 +326,7 @@ def test_aggregate_materializer_removes_only_generated_legacy_pages(
     workspace = Path(semantic_handler.config.workspace_path)
     legacy = workspace / "wiki" / "semantic" / "entities"
     legacy.mkdir(parents=True)
-    (legacy / "BM25.md").write_text(
-        "---\nsemantic_kind: entity\n---\n\n# BM25\n", encoding="utf-8"
-    )
+    (legacy / "BM25.md").write_text("---\nsemantic_kind: entity\n---\n\n# BM25\n", encoding="utf-8")
     (legacy / "用户笔记.md").write_text("# 请保留\n", encoding="utf-8")
 
     result = materialize_documents(SemanticStore(workspace), {"doc-1"})
@@ -353,9 +346,7 @@ def test_automatic_materializer_refreshes_old_and_new_topics(
     with store.connect() as conn:
         conn.execute("UPDATE documents SET topic = 'AI > 新主题' WHERE id = 'doc-1'")
 
-    result = materialize_documents(
-        store, {"doc-1"}, affected_topics={"AI > RAG"}, include_objects=False
-    )
+    result = materialize_documents(store, {"doc-1"}, affected_topics={"AI > RAG"}, include_objects=False)
     workspace = Path(semantic_handler.config.workspace_path)
 
     assert result["topics"] == 2
@@ -364,9 +355,7 @@ def test_automatic_materializer_refreshes_old_and_new_topics(
     assert (workspace / "wiki" / "semantic" / "AI" / "新主题_语义.md").exists()
 
 
-def test_automatic_materializer_retries_transient_database_lock(
-    semantic_handler: SemanticHandler, monkeypatch
-) -> None:
+def test_automatic_materializer_retries_transient_database_lock(semantic_handler: SemanticHandler, monkeypatch) -> None:
     import sqlite3
 
     from sidecar.semantic import materializer

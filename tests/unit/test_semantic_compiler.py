@@ -141,9 +141,7 @@ def test_validation_drops_claim_without_exact_evidence_but_keeps_valid_block_out
             },
         ],
     }
-    parsed = validate_extraction(
-        data, block_id="blk_test", block_content="混合检索结合两种信号。"
-    )
+    parsed = validate_extraction(data, block_id="blk_test", block_content="混合检索结合两种信号。")
     assert [item["canonical_name"] for item in parsed["concepts"]] == ["混合检索"]
     assert [item["statement"] for item in parsed["claims"]] == ["混合检索比单一检索更稳健"]
 
@@ -176,13 +174,15 @@ def test_validation_drops_plain_numeric_and_product_attributes_mislabeled_as_cla
             {
                 "concepts": [],
                 "entities": [],
-                "claims": [{
-                    "statement": statement,
-                    "claim_type": "conclusion",
-                    "scope": "",
-                    "confidence": 0.95,
-                    "evidence_quote": source,
-                }],
+                "claims": [
+                    {
+                        "statement": statement,
+                        "claim_type": "conclusion",
+                        "scope": "",
+                        "confidence": 0.95,
+                        "evidence_quote": source,
+                    }
+                ],
             },
             block_id="blk_plain_fact",
             block_content=source,
@@ -223,13 +223,15 @@ def test_validation_drops_claim_from_code_block_but_keeps_entities():
     data = {
         "concepts": [],
         "entities": [{"name": "uv", "type": "product", "description": "", "confidence": 0.8}],
-        "claims": [{
-            "statement": "该命令更适合生产环境",
-            "claim_type": "conclusion",
-            "scope": "部署",
-            "confidence": 0.8,
-            "evidence_quote": "uv run app.py",
-        }],
+        "claims": [
+            {
+                "statement": "该命令更适合生产环境",
+                "claim_type": "conclusion",
+                "scope": "部署",
+                "confidence": 0.8,
+                "evidence_quote": "uv run app.py",
+            }
+        ],
     }
     parsed = validate_extraction(
         data,
@@ -308,12 +310,8 @@ def test_claim_only_compile_preserves_concepts_entities_and_full_extraction_stat
     store = SemanticStore(tmp_path)
     block = store.blocks_for_document(compiled["document_id"])[0]
     with store.connect() as conn:
-        conn.execute(
-            "INSERT INTO concepts VALUES('concept-keep', '保留概念', '不应变化', 0.8, 'active')"
-        )
-        conn.execute(
-            "INSERT INTO entities VALUES('entity-keep', '保留实体', 'product', '不应变化', 0.8, 'active')"
-        )
+        conn.execute("INSERT INTO concepts VALUES('concept-keep', '保留概念', '不应变化', 0.8, 'active')")
+        conn.execute("INSERT INTO entities VALUES('entity-keep', '保留实体', 'product', '不应变化', 0.8, 'active')")
         conn.execute(
             "INSERT INTO semantic_mentions VALUES('concept-keep', 'concept', ?)",
             (block["id"],),
@@ -336,25 +334,24 @@ def test_claim_only_compile_preserves_concepts_entities_and_full_extraction_stat
         "evidence_quote": "该方案在当前数据集上更稳健。"
       }]
     }"""
-    result = extract_document_semantics(
-        store, compiled["document_id"], llm_call=lambda _: response, claims_only=True
-    )
+    result = extract_document_semantics(store, compiled["document_id"], llm_call=lambda _: response, claims_only=True)
     assert result["claims"] == 1
 
     with store.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM concepts").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
-        assert conn.execute(
-            "SELECT COUNT(*) FROM semantic_mentions WHERE object_kind IN ('concept', 'entity')"
-        ).fetchone()[0] == 2
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM semantic_mentions WHERE object_kind IN ('concept', 'entity')"
+            ).fetchone()[0]
+            == 2
+        )
         assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM claim_extractions").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 1
 
-    repeated = extract_document_semantics(
-        store, compiled["document_id"], llm_call=lambda _: response, claims_only=True
-    )
+    repeated = extract_document_semantics(store, compiled["document_id"], llm_call=lambda _: response, claims_only=True)
     assert repeated["extracted"] == 0
     assert repeated["skipped"] == 1
 
@@ -410,9 +407,7 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
     with store.connect() as conn:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(claims)")}
         claim = conn.execute("SELECT claim_type FROM claims WHERE id = 'legacy'").fetchone()
-        schema_version = conn.execute(
-            "SELECT value FROM schema_meta WHERE key = 'schema_version'"
-        ).fetchone()["value"]
+        schema_version = conn.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()["value"]
     assert "claim_type" in columns
     assert claim["claim_type"] == "conclusion"
     assert schema_version == "4"
@@ -508,9 +503,7 @@ def test_extractor_retries_transient_database_lock(tmp_path: Path, monkeypatch):
         ensure_ascii=False,
     )
 
-    result = extract_document_semantics(
-        store, compiled["document_id"], llm_call=lambda _prompt: response
-    )
+    result = extract_document_semantics(store, compiled["document_id"], llm_call=lambda _prompt: response)
 
     assert result["success"] is True
     assert result["failed"] == 0
@@ -546,9 +539,9 @@ def test_default_extractor_batches_multiple_blocks(tmp_path: Path, monkeypatch):
         calls.append(prompt)
         return f'''{{
           "blocks": [
-            {{"block_id": "{blocks[0]['id']}", "concepts": [], "entities": [],
+            {{"block_id": "{blocks[0]["id"]}", "concepts": [], "entities": [],
               "claims": [{{"statement": "第一项方案更优", "claim_type": "conclusion", "scope": "", "confidence": 0.9, "evidence_quote": "证据一。"}}]}},
-            {{"block_id": "{blocks[1]['id']}", "concepts": [], "entities": [],
+            {{"block_id": "{blocks[1]["id"]}", "concepts": [], "entities": [],
               "claims": [{{"statement": "第二项方案可能更稳健", "claim_type": "hypothesis", "scope": "", "confidence": 0.9, "evidence_quote": "证据二。"}}]}}
           ]
         }}'''
@@ -592,7 +585,8 @@ def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
     extract_document_semantics(
         store,
         compiled["document_id"],
-        llm_call=lambda _: """{
+        llm_call=lambda _: (
+            """{
           "concepts": [], "entities": [],
           "claims": [{
             "statement": "混合检索优于单一检索",
@@ -601,7 +595,8 @@ def test_topic_state_contains_traceable_claim_evidence(tmp_path: Path):
             "confidence": 0.9,
             "evidence_quote": "实验表明混合检索优于单一检索。"
           }]
-        }""",
+        }"""
+        ),
     )
 
     state = build_topic_state(store, "RAG > 检索")
@@ -623,14 +618,16 @@ def test_deleting_source_purges_evidence_and_orphan_claim(tmp_path: Path):
     extract_document_semantics(
         store,
         compiled["document_id"],
-        llm_call=lambda _: """{
+        llm_call=lambda _: (
+            """{
           "concepts": [], "entities": [],
           "claims": [{
             "statement": "存在正文证据", "scope": "", "confidence": 0.9,
             "claim_type": "conclusion",
             "evidence_quote": "正文证据。"
           }]
-        }""",
+        }"""
+        ),
     )
     topic_state = build_topic_state(store, "RAG")
     materialize_topic_state(store, "RAG")
@@ -689,26 +686,24 @@ def test_compile_snapshots_previous_objects_for_materialization_invalidation(tmp
 
     changed = compile_note_semantics(tmp_path, note)
 
-    assert changed["affected_objects"] == [
-        {"id": "entity-bm25", "kind": "entity", "name": "BM25"}
-    ]
+    assert changed["affected_objects"] == [{"id": "entity-bm25", "kind": "entity", "name": "BM25"}]
 
 
-def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish_failure(
-    tmp_path: Path, monkeypatch
-):
+def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish_failure(tmp_path: Path, monkeypatch):
     note = _note(tmp_path, "---\ntopic: RAG\n---\n\n正文证据。\n")
     compiled = compile_note_semantics(tmp_path, note)
     store = SemanticStore(tmp_path)
     extract_document_semantics(
         store,
         compiled["document_id"],
-        llm_call=lambda _: '''{
+        llm_call=lambda _: (
+            """{
           "concepts": [], "entities": [], "claims": [{
             "statement": "该证据支持当前结论", "claim_type": "conclusion",
             "scope": "RAG", "confidence": 0.9, "evidence_quote": "正文证据。"
           }]
-        }''',
+        }"""
+        ),
     )
     target = materialize_topic_state(store, "RAG")
     original = target.read_text(encoding="utf-8")
@@ -742,12 +737,14 @@ def test_topic_wiki_page_only_publishes_active_evidence_and_gates_pending_confli
     extract_document_semantics(
         store,
         compiled["document_id"],
-        llm_call=lambda _: '''{
+        llm_call=lambda _: (
+            """{
           "concepts": [], "entities": [], "claims": [{
             "statement": "该方案可能提升召回", "claim_type": "hypothesis",
             "scope": "RAG", "confidence": 0.8, "evidence_quote": "正文证据。"
           }]
-        }''',
+        }"""
+        ),
     )
     state = build_topic_state(store, "RAG")
     claim_id = state["claims"][0]["id"]
@@ -785,7 +782,8 @@ def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):
     extract_document_semantics(
         store,
         compiled["document_id"],
-        llm_call=lambda _: """{
+        llm_call=lambda _: (
+            """{
           "concepts": [], "entities": [],
           "claims": [{
             "statement": "该方案在当前数据集上更稳健",
@@ -794,12 +792,11 @@ def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):
             "confidence": 0.9,
             "evidence_quote": "该方案在当前数据集上更稳健。"
           }]
-        }""",
+        }"""
+        ),
     )
     with store.connect() as conn:
-        conn.execute(
-            "UPDATE schema_meta SET value = '1' WHERE key = 'claim_policy_version'"
-        )
+        conn.execute("UPDATE schema_meta SET value = '1' WHERE key = 'claim_policy_version'")
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
 
@@ -811,6 +808,7 @@ def test_claim_policy_upgrade_invalidates_legacy_claim_layer(tmp_path: Path):
         assert conn.execute("SELECT COUNT(*) FROM claims").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM evidence").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM block_extractions").fetchone()[0] == 1
-        assert conn.execute(
-            "SELECT status FROM documents WHERE id = ?", (compiled["document_id"],)
-        ).fetchone()[0] == "parsed"
+        assert (
+            conn.execute("SELECT status FROM documents WHERE id = ?", (compiled["document_id"],)).fetchone()[0]
+            == "parsed"
+        )

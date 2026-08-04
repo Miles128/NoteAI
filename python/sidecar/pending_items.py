@@ -176,15 +176,17 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
 
                 for row in rows:
                     payload = json.loads(row["payload_json"] or "{}")
-                    items.append({
-                        "type": "entity_quality",
-                        "id": row["id"],
-                        "message": payload.get("entity_name") or row["reason"],
-                        "reason": row["reason"],
-                        "rule": payload.get("rule", ""),
-                        "entity_id": payload.get("entity_id", ""),
-                        "action": "open_entity_quality",
-                    })
+                    items.append(
+                        {
+                            "type": "entity_quality",
+                            "id": row["id"],
+                            "message": payload.get("entity_name") or row["reason"],
+                            "reason": row["reason"],
+                            "rule": payload.get("rule", ""),
+                            "entity_id": payload.get("entity_id", ""),
+                            "action": "open_entity_quality",
+                        }
+                    )
         except Exception:
             pass
         for candidate in similarity_graph.get("topic_candidates") or []:
@@ -193,7 +195,10 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 continue
             from config.constants import TOPIC_SEP
 
-            if not all((root / config.NOTES_FOLDER / Path(*[part.strip() for part in topic.split(TOPIC_SEP)])).is_dir() for topic in topics):
+            if not all(
+                (root / config.NOTES_FOLDER / Path(*[part.strip() for part in topic.split(TOPIC_SEP)])).is_dir()
+                for topic in topics
+            ):
                 continue
             items.append(
                 {

@@ -13,6 +13,8 @@ from utils.topic_pending import load_pending
 class _TopicsHost(Protocol):
     def _resolve_path(self, path: str) -> str | None: ...
 
+    def _require_workspace(self, extra: dict | None = None, message: str = "") -> tuple[str | None, dict | None]: ...
+
     def _get_topic_tree_3tier(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
     def _create_topic_folder(self, params: dict[str, Any]) -> dict[str, Any]: ...
@@ -22,6 +24,8 @@ class _TopicsHost(Protocol):
     def _get_graph_data(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
     def _delete_topic_safe(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _toggle_survey(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
 
 def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = None) -> str:
@@ -100,6 +104,7 @@ class Topics3TierMixin:
         workspace, err = self._require_workspace()
         if err:
             return err
+        assert workspace is not None
 
         resolved_parent = self._resolve_path(parent_path) if parent_path else None
         parent = Path(resolved_parent or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
@@ -124,7 +129,7 @@ class Topics3TierMixin:
             "level": level if 1 <= level <= MAX_LEVEL else None,
         }
 
-    def _set_abstract_config(self, params):
+    def _set_abstract_config(self: _TopicsHost, params):
         """设置综述开关（仅二级主题可用）"""
         topic_name = params.get("topic_name", "").strip()
         level = params.get("level", 1)

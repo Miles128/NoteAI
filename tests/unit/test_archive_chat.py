@@ -56,9 +56,7 @@ def test_archive_chat_answer_to_notes(workspace: Path) -> None:
             "topic": "AI > 基础",
         }
     ]
-    preview = archive_chat_answer(
-        "问题?", "回答内容", title="测试", citations=citations, preview_only=True
-    )
+    preview = archive_chat_answer("问题?", "回答内容", title="测试", citations=citations, preview_only=True)
     assert preview["success"] is True
     assert preview["preview"] is True
     assert preview["path"].startswith("Notes/RAG对话/")

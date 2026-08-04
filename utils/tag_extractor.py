@@ -377,4 +377,3 @@ def save_tags_md(workspace_path: str) -> dict:
     result["count"] = result.get("tags", 0)
     result["message"] = "标签索引已同步到 WIKI.md"
     return result
-

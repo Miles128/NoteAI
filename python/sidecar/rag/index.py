@@ -692,11 +692,7 @@ def replace_file_chunks(workspace: str, replacements: dict[str, dict]) -> int:
                 "chunks": [chunk["id"] for chunk in chunks if chunk.get("id")],
             }
 
-        all_chunk_ids = [
-            chunk_id
-            for entry in manifest_files.values()
-            for chunk_id in (entry.get("chunks") or [])
-        ]
+        all_chunk_ids = [chunk_id for entry in manifest_files.values() for chunk_id in (entry.get("chunks") or [])]
         indexed_count = rebuild_search_indices(
             workspace,
             all_chunk_ids,
@@ -733,7 +729,11 @@ def delete_by_file(
         removed: list[dict] = []
         try:
             filter_expr = f"file_path = {_escape_filter_value(file_path)}"
-            docs = collection.query(filter=filter_expr, topk=10000, output_fields=["content", "file_path", "topic", "tags_json", "section_title"])
+            docs = collection.query(
+                filter=filter_expr,
+                topk=10000,
+                output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+            )
             for doc in docs:
                 fields = doc.fields or {}
                 chunk = {

@@ -142,6 +142,16 @@ def read_file_with_encoding(file_path: str, encodings: list[str] | None = None) 
     raise RuntimeError(f"无法使用任何编码读取文件: {file_path}")
 
 
+def validate_api_key(api_key: str) -> bool:
+    """验证 API Key 是否有效"""
+    if not api_key or not api_key.strip():
+        return False
+    api_key = api_key.strip()
+    if len(api_key) < 10:
+        return False
+    return True
+
+
 def retry_on_failure(max_retries: int = 3, delay: float = 1.0):
     """重试装饰器"""
     import time

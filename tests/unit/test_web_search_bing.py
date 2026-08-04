@@ -21,9 +21,7 @@ def test_bing_search_extracts_results(monkeypatch) -> None:
     response = SimpleNamespace(text=html, url="https://www.bing.com/search?q=test", raise_for_status=lambda: None)
     monkeypatch.setattr(web_search.requests, "get", lambda *_args, **_kwargs: response)
 
-    assert web_search.bing_search("test") == [
-        {"title": "Example", "url": "https://example.com", "snippet": "Snippet"}
-    ]
+    assert web_search.bing_search("test") == [{"title": "Example", "url": "https://example.com", "snippet": "Snippet"}]
 
 
 def test_string_attribute_rejects_list_values() -> None:

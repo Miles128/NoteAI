@@ -188,15 +188,10 @@ def compile_semantic_batch(
         worker_count = min(4, len(compiled_documents))
 
         def extract_one(document_id: str) -> dict:
-            return extract_document_semantics(
-                SemanticStore(workspace), document_id, claims_only=claims_only
-            )
+            return extract_document_semantics(SemanticStore(workspace), document_id, claims_only=claims_only)
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="semantic-extract") as pool:
-            futures = {
-                pool.submit(extract_one, item["document_id"]): item["file"]
-                for item in compiled_documents
-            }
+            futures = {pool.submit(extract_one, item["document_id"]): item["file"] for item in compiled_documents}
             for completed, future in enumerate(as_completed(futures), start=1):
                 file_name = futures[future]
                 if progress_cb:
@@ -213,9 +208,7 @@ def compile_semantic_batch(
                     if semantic.get("pending"):
                         stats["pending_documents"] += 1
                     if semantic.get("failures"):
-                        stats["failures"].append(
-                            {"file": file_name, "blocks": semantic["failures"]}
-                        )
+                        stats["failures"].append({"file": file_name, "blocks": semantic["failures"]})
                 except Exception as exc:
                     stats["failures"].append({"file": file_name, "error": str(exc)})
                 if cancelled and cancelled():
@@ -231,18 +224,12 @@ def compile_semantic_batch(
         materialized = materialize_documents(
             store,
             {item["document_id"] for item in compiled_documents},
-            previous_objects=[
-                obj
-                for item in compiled_documents
-                for obj in item["previous_objects"]
-            ],
+            previous_objects=[obj for item in compiled_documents for obj in item["previous_objects"]],
             affected_topics=set(stats["affected_topics"]),
             include_objects=not claims_only,
         )
         stats["materialized"] = materialized
-        stats["failures"].extend(
-            {"materialization": failure} for failure in materialized["failures"]
-        )
+        stats["failures"].extend({"materialization": failure} for failure in materialized["failures"])
     else:
         stats["materialized"] = {
             "entities": 0,

@@ -21,7 +21,9 @@ def test_llm_proposes_three_topic_names(tmp_path: Path, monkeypatch) -> None:
     _write(root, "Prompt工程", "乙")
     monkeypatch.setattr(
         "utils.llm_utils.call_llm_raw",
-        lambda *_args, **_kwargs: '{"names":[{"name":"提示词设计","reason":"覆盖两边"},{"name":"Prompt 设计","reason":"简洁"},{"name":"提示工程","reason":"通用"}]}',
+        lambda *_args, **_kwargs: (
+            '{"names":[{"name":"提示词设计","reason":"覆盖两边"},{"name":"Prompt 设计","reason":"简洁"},{"name":"提示工程","reason":"通用"}]}'
+        ),
     )
 
     result = suggest_merged_topic_names(root, ["提示词工程", "Prompt工程"])

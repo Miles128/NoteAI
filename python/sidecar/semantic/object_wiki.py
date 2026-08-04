@@ -62,11 +62,7 @@ def _load_object(store: SemanticStore, kind: str, object_id: str) -> dict:
                ORDER BY relation_type, id""",
             (object_id, object_id),
         ):
-            other_id = (
-                relation["target_id"]
-                if relation["source_id"] == object_id
-                else relation["source_id"]
-            )
+            other_id = relation["target_id"] if relation["source_id"] == object_id else relation["source_id"]
             other = conn.execute(
                 "SELECT canonical_name, 'entity' AS kind FROM entities "
                 "WHERE id = ? AND status = 'active' UNION ALL "
@@ -114,13 +110,9 @@ def _object_lines(snapshot: dict, kind: str, target: Path, *, heading_level: int
     lines.extend([f"{child} 来源", ""])
     for row in sources:
         heading = " › ".join(json.loads(row["heading_path_json"] or "[]"))
-        relative = os.path.relpath(
-            target.parents[2] / row["path"], target.parent
-        ).replace(os.sep, "/")
+        relative = os.path.relpath(target.parents[2] / row["path"], target.parent).replace(os.sep, "/")
         # ``target.parents[2]`` is the workspace for wiki/semantic/*.md.
-        lines.append(
-            f"- [{row['path']}{(' · ' + heading) if heading else ''}]({relative})"
-        )
+        lines.append(f"- [{row['path']}{(' · ' + heading) if heading else ''}]({relative})")
     if not sources:
         lines.append("暂无可用来源。")
     lines.extend(["", f"{child} 关联对象", ""])
@@ -262,9 +254,7 @@ def materialize_object_collection(store: SemanticStore, kind: str) -> Path:
         raise
     _cleanup_legacy_pages(store, kind)
     with store.connect() as conn:
-        conn.execute(
-            "DELETE FROM dependencies WHERE target_kind = 'semantic_object_wiki'"
-        )
+        conn.execute("DELETE FROM dependencies WHERE target_kind = 'semantic_object_wiki'")
     store.replace_view_dependencies(
         view_id=stable_id("semantic_object_collection", kind),
         view_kind="semantic_object_collection_wiki",

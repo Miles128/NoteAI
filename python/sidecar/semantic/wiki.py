@@ -85,12 +85,14 @@ def build_topic_wiki_page(store: SemanticStore, topic: str) -> dict:
         "",
     ]
     if blocked:
-        lines.extend([
-            "## 待审核冲突",
-            "",
-            f"有 {len(blocked)} 条命题因关联待审核冲突，暂不发布到本页。",
-            "",
-        ])
+        lines.extend(
+            [
+                "## 待审核冲突",
+                "",
+                f"有 {len(blocked)} 条命题因关联待审核冲突，暂不发布到本页。",
+                "",
+            ]
+        )
     conclusion = [claim for claim in claims if claim["claim_type"] == "conclusion"]
     hypothesis = [claim for claim in claims if claim["claim_type"] == "hypothesis"]
     for title, group, prefix in (("已发布结论", conclusion, ""), ("待验证假设", hypothesis, "**假设：** ")):
@@ -135,13 +137,11 @@ def materialize_topic_wiki_page(store: SemanticStore, topic: str) -> Path:
         except OSError:
             pass
         raise
-    source_ids = {item["id"] for item in page["state"]["documents"]} | {
-        claim["id"] for claim in page["claims"]
-    } | {
-        evidence["block_id"]
-        for claim in page["claims"]
-        for evidence in claim["evidence"]
-    }
+    source_ids = (
+        {item["id"] for item in page["state"]["documents"]}
+        | {claim["id"] for claim in page["claims"]}
+        | {evidence["block_id"] for claim in page["claims"] for evidence in claim["evidence"]}
+    )
     store.replace_view_dependencies(
         view_id=stable_id("semantic_wiki", topic.casefold()),
         view_kind="semantic_wiki",

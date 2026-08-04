@@ -199,14 +199,12 @@ def validate_extraction(
     return result
 
 
-def build_extraction_prompt(
-    *, block_id: str, heading_path: str, content: str, block_type: str = "paragraph"
-) -> str:
+def build_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str = "paragraph") -> str:
     return f"""你是 NoteAI 的语义编译器。只抽取当前原文明确支持的知识，不补充外部知识。
 
 块 ID：{block_id}
 块类型：{block_type}
-章节：{heading_path or '（无）'}
+章节：{heading_path or "（无）"}
 原文：
 <source>
 {content}
@@ -243,10 +241,10 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
     sources = []
     for block in blocks:
         sources.append(
-            f"""<block id="{block['id']}" type="{block['type']}">
-章节：{block['heading'] or '（无）'}
+            f"""<block id="{block["id"]}" type="{block["type"]}">
+章节：{block["heading"] or "（无）"}
 原文：
-{block['content']}
+{block["content"]}
 </block>"""
         )
     joined = "\n\n".join(sources)
@@ -279,7 +277,7 @@ def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: 
 
 块 ID：{block_id}
 块类型：{block_type}
-章节：{heading_path or '（无）'}
+章节：{heading_path or "（无）"}
 原文：
 <source>
 {content}
@@ -297,10 +295,10 @@ def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
     sources = []
     for block in blocks:
         sources.append(
-            f"""<block id="{block['id']}" type="{block['type']}">
-章节：{block['heading'] or '（无）'}
+            f"""<block id="{block["id"]}" type="{block["type"]}">
+章节：{block["heading"] or "（无）"}
 原文：
-{block['content']}
+{block["content"]}
 </block>"""
         )
     return f"""你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
@@ -374,6 +372,7 @@ def extract_document_semantics(
         if not ready:
             store.set_document_status(document_id, "pending_extraction")
             return {"success": True, "pending": True, "message": message, "extracted": 0, "failed": 0}
+
         def configured_llm_call(prompt: str) -> str:
             return call_llm_raw(prompt, temperature=0.1, max_tokens=6500)
 
@@ -389,11 +388,7 @@ def extract_document_semantics(
     failures: list[dict] = []
     pending_blocks: list[dict] = []
     for stored_block in store.blocks_for_document(document_id):
-        is_current = (
-            store.claim_extraction_is_current
-            if claims_only
-            else store.extraction_is_current
-        )
+        is_current = store.claim_extraction_is_current if claims_only else store.extraction_is_current
         if is_current(stored_block["id"], stored_block["content_hash"], PROMPT_VERSION):
             skipped += 1
             continue
@@ -444,8 +439,10 @@ def extract_document_semantics(
         try:
             prompt_builder = build_claim_extraction_prompt if claims_only else build_extraction_prompt
             prompt = prompt_builder(
-                block_id=block["id"], heading_path=block["heading"],
-                content=block["content"], block_type=block["type"],
+                block_id=block["id"],
+                heading_path=block["heading"],
+                content=block["content"],
+                block_type=block["type"],
             )
             raw = llm_call(prompt)
             try:
@@ -468,20 +465,14 @@ def extract_document_semantics(
             marker = store.mark_claim_extraction_failed if claims_only else store.mark_extraction_failed
             error = str(exc)
             try:
-                _retry_sqlite_lock(
-                    lambda: marker(block["id"], block["hash"], PROMPT_VERSION, now, error)
-                )
+                _retry_sqlite_lock(lambda: marker(block["id"], block["hash"], PROMPT_VERSION, now, error))
             except Exception as marker_exc:
                 error = f"{error}; 记录失败状态失败: {marker_exc}"
             failures.append({"block_id": block["id"], "error": error})
 
     if use_batch:
         for group in _group_extraction_blocks(pending_blocks):
-            prompt = (
-                build_batch_claim_extraction_prompt(group)
-                if claims_only
-                else build_batch_extraction_prompt(group)
-            )
+            prompt = build_batch_claim_extraction_prompt(group) if claims_only else build_batch_extraction_prompt(group)
             try:
                 raw = llm_call(prompt)
                 try:

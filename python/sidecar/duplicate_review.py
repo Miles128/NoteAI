@@ -105,7 +105,11 @@ def is_merge_group_resolved(root: Path, file_paths: list[str]) -> bool:
 
 def _unique_blocks(primary: str, related: str) -> list[str]:
     existing = {re.sub(r"\s+", "", block).casefold() for block in primary.split("\n\n") if block.strip()}
-    return [block.strip() for block in related.split("\n\n") if block.strip() and re.sub(r"\s+", "", block).casefold() not in existing]
+    return [
+        block.strip()
+        for block in related.split("\n\n")
+        if block.strip() and re.sub(r"\s+", "", block).casefold() not in existing
+    ]
 
 
 def merge_duplicate_notes(
@@ -172,7 +176,7 @@ def merge_note_group(
     parsed = [parse_frontmatter(note.read_text(encoding="utf-8")) for note in notes]
     bodies = [body for _, body in parsed]
     source_blocks = "\n\n".join(
-        f"<source index=\"{index + 1}\" path=\"{file_paths[index]}\">\n{body}\n</source>"
+        f'<source index="{index + 1}" path="{file_paths[index]}">\n{body}\n</source>'
         for index, body in enumerate(bodies)
     )
     prompt = f"""你是 NoteAI 的知识整合器。把以下笔记整合成一篇结构清晰的 Markdown。
@@ -201,7 +205,9 @@ def merge_note_group(
 
     for left_index, left in enumerate(notes):
         for right_index in range(left_index + 1, len(notes)):
-            _mark_pair_resolved(root, file_paths[left_index], file_paths[right_index], bodies[left_index], bodies[right_index])
+            _mark_pair_resolved(
+                root, file_paths[left_index], file_paths[right_index], bodies[left_index], bodies[right_index]
+            )
 
     deleted: list[str] = []
     if delete_authorized and not has_conflicts:

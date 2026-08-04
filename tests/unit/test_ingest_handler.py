@@ -33,9 +33,7 @@ def test_get_ingest_status_idle(workspace: Path, ingest_handler: IngestHandler) 
     assert status["status"] == "idle"
 
 
-def test_get_ingest_status_does_not_interrupt_running_pipeline(
-    workspace: Path, ingest_handler: IngestHandler
-) -> None:
+def test_get_ingest_status_does_not_interrupt_running_pipeline(workspace: Path, ingest_handler: IngestHandler) -> None:
     save_ingest_state({"status": "running", "stage": "semantic", "progress": 0.5})
 
     status = ingest_handler._get_ingest_status({})

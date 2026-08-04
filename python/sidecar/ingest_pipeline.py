@@ -303,14 +303,17 @@ def _scan_convert_pending(workspace: str) -> list[str]:
 
 
 def _scan_index_pending(workspace: str) -> list[Path]:
-    """Notes whose mtime/size differs from the canonical RAG manifest."""
-    from sidecar.rag.index import load_manifest
+    """Markdown under Notes/ whose mtime differs from last indexed state."""
+    from sidecar.rag.index_state import file_needs_index
 
     ws = Path(workspace)
-    manifest = load_manifest(workspace).get("files", {})
     out: list[Path] = []
     for md in ws.rglob("*.md"):
-        if md.name.startswith(".") or any(part.startswith(".") for part in md.relative_to(ws).parts[:-1]) or "wiki" in md.parts:
+        if (
+            md.name.startswith(".")
+            or any(part.startswith(".") for part in md.relative_to(ws).parts[:-1])
+            or "wiki" in md.parts
+        ):
             continue
         if md.name.endswith("_综述.md"):
             continue
@@ -318,9 +321,7 @@ def _scan_index_pending(workspace: str) -> list[Path]:
             continue
         try:
             rel = str(md.relative_to(ws))
-            stat = md.stat()
-            old = manifest.get(rel, {})
-            if old.get("mtime") != stat.st_mtime or old.get("size") != stat.st_size:
+            if file_needs_index(rel, md.stat().st_mtime, workspace):
                 out.append(md)
         except OSError:
             continue
@@ -390,10 +391,7 @@ def _index_markdown_files_locked(
     from sidecar.rag.index_state import file_needs_index, mark_many_indexed
 
     manifest = load_manifest(workspace)
-    expected_chunks = sum(
-        len(entry.get("chunks") or [])
-        for entry in manifest.get("files", {}).values()
-    )
+    expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.get("files", {}).values())
     actual_chunks = count_indexed_chunks(workspace, allow_metadata_fallback=False)
     if actual_chunks < 0:
         raise RuntimeError("RAG 索引当前不可访问，请关闭其他 NoteAI 实例后重试")
@@ -516,6 +514,7 @@ def run_ingest(
 
     def cancelled() -> bool:
         return cancel_generation() > cancel_after_generation
+
     # Previous completion metadata is also required by the non-resume
     # incremental fast path. Resume only controls whether partial stage state
     # and statistics are restored below.
@@ -588,9 +587,7 @@ def run_ingest(
 
     raw_completed_stages = state.get("completed_stages")
     completed_stages = (
-        {str(stage) for stage in raw_completed_stages}
-        if isinstance(raw_completed_stages, list)
-        else set()
+        {str(stage) for stage in raw_completed_stages} if isinstance(raw_completed_stages, list) else set()
     )
 
     def stage_done(name: str) -> bool:
@@ -797,9 +794,7 @@ def run_ingest(
                 semantic_stats = compile_semantic_batch(
                     workspace,
                     semantic_targets,
-                    progress_cb=lambda cur, tot, msg: prog(
-                        "semantic", 0.45 + 0.07 * cur / max(tot, 1), msg
-                    ),
+                    progress_cb=lambda cur, tot, msg: prog("semantic", 0.45 + 0.07 * cur / max(tot, 1), msg),
                     cancelled=cancelled,
                 )
                 stats["semantic_documents"] = semantic_stats["documents"]
@@ -809,9 +804,7 @@ def run_ingest(
                 stats["semantic_failed_blocks"] = semantic_stats["failed_blocks"]
                 stats["semantic_pending_documents"] = semantic_stats["pending_documents"]
                 stats["semantic_failures"] = semantic_stats["failures"]
-                semantic_topics = set(
-                    semantic_stats.get("affected_topics", semantic_stats["topics"])
-                ) | removed_topics
+                semantic_topics = set(semantic_stats.get("affected_topics", semantic_stats["topics"])) | removed_topics
                 affected_topics.update(semantic_topics)
                 materialized = 0
                 wiki_pages = 0
@@ -822,9 +815,7 @@ def run_ingest(
                         materialize_topic_wiki_page(store, topic)
                         wiki_pages += 1
                     except Exception as exc:
-                        stats["semantic_failures"].append(
-                            {"topic": topic, "error": f"TopicState: {exc}"}
-                        )
+                        stats["semantic_failures"].append({"topic": topic, "error": f"TopicState: {exc}"})
                 stats["semantic_topic_states"] = materialized
                 stats["semantic_wiki_pages"] = wiki_pages
             elif removed_topics:
@@ -839,9 +830,7 @@ def run_ingest(
                     try:
                         materialize_object_collection(store, kind)
                     except Exception as exc:
-                        stats["semantic_failures"].append(
-                            {"object_collection": kind, "error": str(exc)}
-                        )
+                        stats["semantic_failures"].append({"object_collection": kind, "error": str(exc)})
             prog(
                 "semantic",
                 0.52,
@@ -854,7 +843,7 @@ def run_ingest(
         if cancelled():
             raise _Cancelled()
 
-        # 4. Index — file_manifest.json is the single source of truth.
+        # 4. Index
         indexed_paths: list[str] = []
         if stage_done("index"):
             prog("index", 0.65, "跳过索引（已完成）")
@@ -903,9 +892,7 @@ def run_ingest(
         else:
             raw_crossref_paths = state.get("pending_crossref_paths")
             resumed_crossref_paths = (
-                [str(path) for path in raw_crossref_paths]
-                if isinstance(raw_crossref_paths, list)
-                else []
+                [str(path) for path in raw_crossref_paths] if isinstance(raw_crossref_paths, list) else []
             )
             crossref_paths = indexed_paths or resumed_crossref_paths
             # Skip cross-ref for single file (e.g. web download) — new files have no
@@ -935,9 +922,7 @@ def run_ingest(
                 state["stats"] = stats
                 save_ingest_state(state)
                 if crossref_errors:
-                    raise RuntimeError(
-                        f"交叉引用失败 {len(crossref_errors)} 篇: {'; '.join(crossref_errors[:3])}"
-                    )
+                    raise RuntimeError(f"交叉引用失败 {len(crossref_errors)} 篇: {'; '.join(crossref_errors[:3])}")
             prog("crossref", 0.7, f"交叉引用完成: {stats.get('cross_refs', 0)} 条")
             mark_stage_done("crossref")
         if cancelled():

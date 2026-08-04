@@ -70,6 +70,8 @@ SCHEMA_FALLBACK_PROMPT = get_prompt("schema_fallback", "SCHEMA_FALLBACK_PROMPT")
 CROSS_REF_LLM_PROMPT = get_prompt("link_indexer", "CROSS_REF_LLM_PROMPT")
 LINK_PAIR_JUDGE_PROMPT = get_prompt("link_indexer", "LINK_PAIR_JUDGE_PROMPT")
 
+CLAIM_VERIFY_CLI_PROMPT = get_prompt("claim_verify", "CLAIM_VERIFY_CLI_PROMPT")
+
 __all__ = [
     "get_prompt",
     "INTENT_ROUTER_PROMPT",
@@ -113,4 +115,5 @@ __all__ = [
     "TOPIC_SUGGESTION_PROMPT",
     "ABSTRACT_PROMPT",
     "SCHEMA_FALLBACK_PROMPT",
+    "CLAIM_VERIFY_CLI_PROMPT",
 ]

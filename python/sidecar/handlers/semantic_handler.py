@@ -345,14 +345,39 @@ class SemanticHandler(BaseHandler):
                 rows = conn.execute(
                     f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
                                sum(CASE WHEN e.status = 'active' THEN 1 ELSE 0 END) AS evidence_count,
-                               sum(CASE WHEN e.status = 'excluded' THEN 1 ELSE 0 END) AS excluded_evidence_count
+                               sum(CASE WHEN e.status = 'excluded' THEN 1 ELSE 0 END) AS excluded_evidence_count,
+                               v.verdict AS verification_verdict,
+                               v.confidence AS verification_confidence,
+                               v.method AS verification_method,
+                               v.agent AS verification_agent,
+                               v.created_at AS verified_at
                         FROM claims c LEFT JOIN evidence e ON e.claim_id = c.id
+                        LEFT JOIN claim_verifications v ON v.id = (
+                            SELECT v2.id FROM claim_verifications v2
+                            WHERE v2.claim_id = c.id
+                            ORDER BY v2.created_at DESC, v2.rowid DESC LIMIT 1
+                        )
                         {where} GROUP BY c.id ORDER BY c.confidence DESC, c.statement LIMIT ? OFFSET ?""",
                     (*args, limit, offset),
                 ).fetchall()
                 items = []
                 for row in rows:
                     item = dict(row)
+                    verdict = item.pop("verification_verdict", None)
+                    if verdict:
+                        item["verification"] = {
+                            "verdict": verdict,
+                            "confidence": item.pop("verification_confidence"),
+                            "method": item.pop("verification_method"),
+                            "agent": item.pop("verification_agent"),
+                            "verified_at": item.pop("verified_at"),
+                        }
+                    else:
+                        item.pop("verification_confidence", None)
+                        item.pop("verification_method", None)
+                        item.pop("verification_agent", None)
+                        item.pop("verified_at", None)
+                        item["verification"] = None
                     evidence = conn.execute(
                         """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
                                   b.heading_path_json, b.content, b.start_line, b.end_line
@@ -478,6 +503,7 @@ class SemanticHandler(BaseHandler):
                 (kind, object_id),
             ).fetchall()
         item["sources"] = [self._evidence_row(value) for value in rows]
+        item["verifications"] = store.claim_verifications(object_id) if kind == "claim" else []
         item["audit"] = [
             {
                 "id": value["id"],

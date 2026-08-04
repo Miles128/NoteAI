@@ -1,7 +1,9 @@
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from sidecar.multi_source import (
+    RssScheduler,
     fetch_all_subscriptions,
     import_rss_feed,
     load_subscriptions,
@@ -68,3 +70,30 @@ def test_fetch_all_subscriptions_empty(workspace: Path) -> None:
     result = fetch_all_subscriptions(str(workspace))
     assert result["success"] is True
     assert result["results"] == []
+
+
+def test_save_subscription_rejects_invalid_url(workspace: Path) -> None:
+    result = save_subscription(str(workspace), "not-a-url")
+    assert result["success"] is False
+    assert load_subscriptions(str(workspace)) == []
+
+
+def test_save_subscription_fetches_feed_title(monkeypatch: pytest.MonkeyPatch, workspace: Path) -> None:
+    import xml.etree.ElementTree as ET
+
+    root = ET.fromstring("<rss><channel><title>My Feed</title></channel></rss>")
+    monkeypatch.setattr("sidecar.multi_source._fetch_rss", lambda url: root)
+
+    result = save_subscription(str(workspace), "https://example.com/feed.xml")
+    assert result["success"] is True
+    subs = load_subscriptions(str(workspace))
+    assert len(subs) == 1
+    assert subs[0]["name"] == "My Feed"
+
+
+def test_rss_scheduler_is_due() -> None:
+    now = datetime.now(timezone.utc)
+    assert RssScheduler._is_due({"url": "x"})  # 从未拉取过
+    assert not RssScheduler._is_due({"url": "x", "last_fetched": now.isoformat(), "interval_minutes": 30})
+    old = (now - timedelta(minutes=31)).isoformat()
+    assert RssScheduler._is_due({"url": "x", "last_fetched": old, "interval_minutes": 30})

@@ -34,6 +34,10 @@ class TransferHandler(BaseHandler):
         router.register("remove_rss_subscription", self._remove_rss_subscription)
         router.register("list_rss_subscriptions", self._list_rss_subscriptions)
         router.register("fetch_all_rss", self._fetch_all_rss)
+        router.register("list_watched_folders", self._list_watched_folders)
+        router.register("add_watched_folder", self._add_watched_folder)
+        router.register("remove_watched_folder", self._remove_watched_folder)
+        router.register("scan_watched_folder", self._scan_watched_folder)
 
     def _run_sync_job(
         self,
@@ -501,22 +505,20 @@ class TransferHandler(BaseHandler):
         url = params.get("url", "")
         name = params.get("name", "")
         workspace = self.config.workspace_path
-        if not workspace or not url:
-            return {"success": False, "message": "缺少工作区或 URL"}
+        if not workspace:
+            return {"success": False, "message": "缺少工作区"}
         from sidecar.multi_source import save_subscription
 
-        save_subscription(workspace, url, name)
-        return {"success": True}
+        return save_subscription(workspace, url, name)
 
     def _remove_rss_subscription(self, params):
         url = params.get("url", "")
         workspace = self.config.workspace_path
-        if not workspace or not url:
-            return {"success": False, "message": "缺少工作区或 URL"}
+        if not workspace:
+            return {"success": False, "message": "缺少工作区"}
         from sidecar.multi_source import remove_subscription
 
-        remove_subscription(workspace, url)
-        return {"success": True}
+        return remove_subscription(workspace, url)
 
     def _list_rss_subscriptions(self, _params):
         workspace = self.config.workspace_path
@@ -548,3 +550,68 @@ class TransferHandler(BaseHandler):
             complete_message=lambda result: f"RSS 手动拉取完成: {imported_count(result)} 条",
             complete_metadata=lambda result: {"imported": imported_count(result)},
         )
+
+    # ── Folder Watching ──
+
+    def _list_watched_folders(self, _params):
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
+        from modules.folder_watcher import load_watched_folders
+
+        return {"success": True, "folders": load_watched_folders(workspace)}
+
+    def _add_watched_folder(self, params):
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
+        from modules.folder_watcher import add_watched_folder
+
+        result = add_watched_folder(workspace, params.get("path", ""), bool(params.get("recursive", True)))
+        if result.get("success"):
+            self._server._restart_folder_monitor()
+        return result
+
+    def _remove_watched_folder(self, params):
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
+        from modules.folder_watcher import remove_watched_folder
+
+        result = remove_watched_folder(workspace, params.get("path", ""))
+        if result.get("success"):
+            self._server._restart_folder_monitor()
+        return result
+
+    def _scan_watched_folder(self, params):
+        """立即扫描指定目录（缺省扫描全部已监控目录），新文件自动入库。"""
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
+        from modules.folder_watcher import collect_ingestible_files, load_watched_folders
+
+        path = (params.get("path") or "").strip()
+        recursive = bool(params.get("recursive", True))
+        if path:
+            folders = [{"path": path, "recursive": recursive}]
+        else:
+            folders = load_watched_folders(workspace)
+
+        files: list[str] = []
+        for f in folders:
+            files.extend(collect_ingestible_files(str(f.get("path", "") or ""), bool(f.get("recursive", True))))
+        files = sorted(set(files))
+        if not files:
+            return {"success": True, "scanned": 0, "message": "未发现可导入文件"}
+        if not self._start_task(
+            "folder_scan",
+            self._do_folder_scan,
+            args=(files,),
+            kind="ingest",
+            label="Folder scan",
+        ):
+            return {"success": False, "message": "扫描任务正在进行中"}
+        return {"success": True, "scanned": len(files), "message": f"发现 {len(files)} 个文件，正在导入"}
+
+    def _do_folder_scan(self, files: list[str]) -> None:
+        self._server._handle_watched_folder_files(files)

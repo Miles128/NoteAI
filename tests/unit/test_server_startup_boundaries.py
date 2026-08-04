@@ -1,16 +1,16 @@
 from sidecar.server import SidecarServer
 
 
-def test_start_does_not_schedule_rss_polling(monkeypatch) -> None:
+def test_start_schedules_rss_polling(monkeypatch) -> None:
     server = SidecarServer()
     calls = []
     monkeypatch.setattr(server, "_start_workspace_watcher", lambda: calls.append("watcher"))
     monkeypatch.setattr(server, "_startup_sync", lambda: calls.append("sync"))
+    monkeypatch.setattr(server, "_start_rss_scheduler", lambda: calls.append("rss_scheduler"))
 
     server.start()
 
-    assert calls == ["watcher", "sync"]
-    assert not hasattr(server, "_rss_poll_timer")
+    assert calls == ["watcher", "sync", "rss_scheduler"]
 
 
 def test_auto_convert_uses_notes_output_directory(monkeypatch, tmp_path) -> None:

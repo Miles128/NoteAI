@@ -38,7 +38,7 @@ def test_run_ingest_completes_when_rules_configured(workspace: Path) -> None:
     with (
         patch("sidecar.ingest_pipeline.sync_wiki_with_files"),
         patch("utils.note_compiler.compile_notes_batch", return_value=(0, [])),
-        patch("sidecar.ingest_pipeline._index_markdown_files", return_value=(0, [])),
+        patch("sidecar.ingest_pipeline._scan_index_pending", return_value=[]),
     ):
         result = run_ingest(mode="full", send_progress=on_progress, send_event=on_event)
 

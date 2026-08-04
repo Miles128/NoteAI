@@ -102,9 +102,11 @@ class ClaudeMcpAgent(BaseCliAgent):
             return AgentResult(False, "MCP 配置生成失败")
 
         args = [
-            "--output-format", "stream-json",
+            "--output-format",
+            "stream-json",
             "--verbose",
-            "--mcp-config", str(mcp_config_path),
+            "--mcp-config",
+            str(mcp_config_path),
         ]
         if continue_session:
             args.append("-c")
@@ -118,10 +120,7 @@ class ClaudeMcpAgent(BaseCliAgent):
             args.extend(["--permission-mode", "acceptEdits"])
 
         full_cmd = [command] + args
-        logger.info(
-            f"Claude MCP agent 启动命令: {' '.join(full_cmd)} "
-            f"(cwd={ws_path}, continue={continue_session})"
-        )
+        logger.info(f"Claude MCP agent 启动命令: {' '.join(full_cmd)} (cwd={ws_path}, continue={continue_session})")
 
         self._emit(
             {

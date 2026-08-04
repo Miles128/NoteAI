@@ -3,7 +3,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from config import is_ignored_dir
 from utils.logger import logger
 from utils.text_utils import (
     CHINESE_STOPWORDS,
@@ -364,6 +363,7 @@ def process_and_tag_file_with_yaml(file_path: str, source: str = "", title: str 
 
 
 def save_tags_md(workspace_path: str) -> dict:
+    """Compatibility alias: the global tag database now lives in WIKI.md."""
     if not workspace_path:
         return {"success": False, "message": "未设置工作区"}
 
@@ -371,73 +371,10 @@ def save_tags_md(workspace_path: str) -> dict:
     if not workspace.exists():
         return {"success": False, "message": "工作区不存在"}
 
-    tag_map: dict[str, list[str]] = {}
+    from utils.wiki_sync import sync_wiki_with_files
 
-    def _scan(path):
-        try:
-            for entry in sorted(Path(path).iterdir(), key=lambda p: p.name.lower()):
-                if entry.name.startswith("."):
-                    continue
-                if entry.is_dir():
-                    if is_ignored_dir(entry.name):
-                        continue
-                    if entry.name == "wiki":
-                        continue
-                    _scan(str(entry))
-                elif entry.suffix.lower() == ".md":
-                    try:
-                        text = entry.read_text(encoding="utf-8")
-                        meta, _ = parse_frontmatter(text)
-                        if meta is None:
-                            continue
-                        rel = str(entry.relative_to(workspace))
-                        raw_tags = meta.get("tags", [])
-                        tags = []
-                        if isinstance(raw_tags, list):
-                            tags = [str(t).strip() for t in raw_tags if t]
-                        elif isinstance(raw_tags, str) and raw_tags.strip():
-                            tags = [raw_tags.strip()]
-                        for tag in tags:
-                            if tag not in tag_map:
-                                tag_map[tag] = []
-                            tag_map[tag].append(rel)
-                    except Exception as e:
-                        logger.warning(f"[save_tags_md] 跳过解析失败的文件 {entry.name}: {e}")
-                        continue
-        except PermissionError as e:
-            logger.warning(f"[save_tags_md] 无权限访问目录: {e}")
+    result = sync_wiki_with_files()
+    result["count"] = result.get("tags", 0)
+    result["message"] = "标签索引已同步到 WIKI.md"
+    return result
 
-    _scan(str(workspace))
-
-    existing_tags = set()
-    tags_md_path = workspace / "wiki" / "tags.md"
-    if tags_md_path.exists():
-        try:
-            text = tags_md_path.read_text(encoding="utf-8")
-            for line in text.split("\n"):
-                if line.startswith("## "):
-                    tag = line[3:].strip()
-                    if tag:
-                        existing_tags.add(tag)
-        except Exception as e:
-            logger.warning(f"[save_tags_md] 读取现有 tags.md 失败: {e}")
-
-    for tag in tag_map:
-        existing_tags.add(tag)
-
-    lines = ["# Tags", ""]
-    sorted_tags = sorted(existing_tags, key=lambda t: -len(tag_map.get(t, [])))
-    for tag in sorted_tags:
-        lines.append("## " + tag)
-        lines.append("")
-        files = tag_map.get(tag, [])
-        for f in files:
-            fname = Path(f).stem
-            lines.append("- [[" + fname + "]]")
-        lines.append("")
-
-    tags_md_path = workspace / "wiki" / "tags.md"
-    tags_md_path.parent.mkdir(parents=True, exist_ok=True)
-    tags_md_path.write_text("\n".join(lines), encoding="utf-8")
-
-    return {"success": True, "count": len(sorted_tags)}

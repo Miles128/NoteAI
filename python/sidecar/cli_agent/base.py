@@ -208,9 +208,7 @@ class BaseCliAgent(ABC):
         if new_session and self.supports_cli_session:
             clear_session(self.agent_id, ws_key)
 
-        continue_session = (
-            self.supports_cli_session and has_session(self.agent_id, ws_key)
-        )
+        continue_session = self.supports_cli_session and has_session(self.agent_id, ws_key)
 
         mcp_error = self._ensure_mcp_registered(ws_path)
         if mcp_error:
@@ -228,8 +226,7 @@ class BaseCliAgent(ABC):
 
         full_cmd = [command] + args
         logger.info(
-            f"CLI agent {self.agent_id} 启动命令: {' '.join(full_cmd)} "
-            f"(cwd={ws_path}, continue={continue_session})"
+            f"CLI agent {self.agent_id} 启动命令: {' '.join(full_cmd)} (cwd={ws_path}, continue={continue_session})"
         )
 
         self._emit(
@@ -285,9 +282,7 @@ class BaseCliAgent(ABC):
 
             return_code = proc.returncode
             if return_code != 0:
-                logger.warning(
-                    f"CLI agent {self.agent_id} 非零退出 ({return_code}): {output[:500]}"
-                )
+                logger.warning(f"CLI agent {self.agent_id} 非零退出 ({return_code}): {output[:500]}")
                 if self.supports_cli_session:
                     clear_session(self.agent_id, ws_key)
                 self._emit(

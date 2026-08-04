@@ -48,6 +48,8 @@ def parse_wiki_headings():
     topic_stack: list[str] = []
     for line in text.split("\n"):
         stripped = line.strip()
+        if stripped == "<!-- NOTEAI_TAGS_START -->":
+            break
         match = re.match(r"^(#{2,4})\s+(.+)$", stripped)
         if not match:
             continue
@@ -91,6 +93,8 @@ def parse_wiki_structure():
 
     for line in lines:
         stripped = line.strip()
+        if stripped == "<!-- NOTEAI_TAGS_START -->":
+            break
 
         heading_match = re.match(r"^(#{2,})\s+(.+)$", stripped)
         if heading_match:

@@ -248,7 +248,9 @@ def _open_or_create_collection(path: str, workspace: str | None = None) -> zvec.
             break
     if last_err and _is_zvec_lock_error(last_err) and Path(path).exists():
         raise _collection_lock_error(ws) from last_err
-    log_exception("[rag/index] failed to open existing collection, creating new", last_err, level="warning", logger=logger)
+    log_exception(
+        "[rag/index] failed to open existing collection, creating new", last_err, level="warning", logger=logger
+    )
     return zvec.create_and_open(path, _build_schema())
 
 
@@ -297,7 +299,11 @@ def clear_collection_cache(workspace: str | None = None) -> None:
     """Drop cached collection handles without deleting on-disk data."""
     with _COLLECTION_IO_LOCK:
         with _COLLECTION_CACHE_LOCK:
-            workspaces = [_normalize_workspace(ws) for ws in _COLLECTION_CACHE] if workspace is None else [_normalize_workspace(workspace)]
+            workspaces = (
+                [_normalize_workspace(ws) for ws in _COLLECTION_CACHE]
+                if workspace is None
+                else [_normalize_workspace(workspace)]
+            )
         for ws in workspaces:
             collection = _take_cached_collection(ws)
             collection = None
@@ -352,8 +358,7 @@ def count_indexed_chunks(workspace: str, *, allow_metadata_fallback: bool = True
 
     if collection_count >= 0 and metadata_total != collection_count:
         logger.warning(
-            f"Chunk count mismatch: metadata={metadata_total}, collection={collection_count}; "
-            f"using collection count"
+            f"Chunk count mismatch: metadata={metadata_total}, collection={collection_count}; using collection count"
         )
         return collection_count
     return metadata_total
@@ -743,6 +748,8 @@ def delete_by_file(
                 _update_metadata_index(metadata, chunk, mode="remove")
         except Exception as e:
             logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
+            # Collection object may be in an inconsistent state; drop it from cache.
+            clear_collection_cache(workspace)
             raise
 
         if removed:

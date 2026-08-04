@@ -1189,7 +1189,7 @@
     "emptyHint": "选择一个已安装的 CLI Agent 并输入指令。支持 Claude Code、OpenCode、Codex CLI、Gemini CLI。若连接失败，请确认已在对应 CLI 中完成登录或配置 API key。",
     "noAgent": "未检测到已安装的 CLI Agent，请先在系统中安装。"
   },
-  "cliAgent": {
+    "cliAgent": {
     "selectAgent": "选择 Agent",
     "generateMd": "生成 AGENTS.md",
     "generating": "正在生成 AGENTS.md...",
@@ -1208,6 +1208,7 @@
     "workflowSteps": "工作流 ({count} 步)",
     "workflowStepsShort": "{count} 步",
     "workflowDetails": "详情",
+    "reasoning": "思考过程",
     "newSession": "新对话",
     "newSessionDone": "已开始新对话",
     "sessionContinue": "续聊中",

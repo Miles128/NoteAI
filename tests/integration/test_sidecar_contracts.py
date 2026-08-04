@@ -203,10 +203,12 @@ class TestFilesHandler:
         target_dir = workspace / "Notes" / "Topic"
         target_dir.mkdir(parents=True)
         source.write_text("body", encoding="utf-8")
-        handler = FilesHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-        ))
+        handler = FilesHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+            )
+        )
 
         result = handler._move_file({"file_path": "Notes/source.md", "target_folder": "Notes/Topic"})
 
@@ -219,10 +221,12 @@ class TestFilesHandler:
         source.write_text("body", encoding="utf-8")
         outside = workspace.parent / "outside"
         outside.mkdir()
-        handler = FilesHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-        ))
+        handler = FilesHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+            )
+        )
 
         result = handler._move_file({"file_path": "Notes/source.md", "target_folder": str(outside)})
 
@@ -231,15 +235,27 @@ class TestFilesHandler:
 
 
 class TestTagsHandler:
+    def test_all_tags_uses_wiki_database(self, workspace: Path) -> None:
+        note = workspace / "Notes" / "tagged.md"
+        note.write_text("---\ntags: [RAG]\n---\nbody\n", encoding="utf-8")
+        sync_wiki_with_files()
+        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+
+        result = handler._compute_all_tags()
+
+        assert result == {"tags": [{"name": "RAG", "count": 1, "files": ["Notes/tagged.md"]}]}
+
     def test_add_tag_to_file_preserves_body(self, workspace: Path) -> None:
         note = workspace / "Notes" / "tagged.md"
         body = "\n# Title\n\nOriginal body\n"
         note.write_text("---\ntags:\n- A\n---" + body, encoding="utf-8")
-        handler = TagsHandler(SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _resolve_path=resolve_workspace_path,
-            _invalidate_cache=lambda: None,
-        ))
+        handler = TagsHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _resolve_path=resolve_workspace_path,
+                _invalidate_cache=lambda: None,
+            )
+        )
 
         result = handler._add_tag_to_file({"file_path": "Notes/tagged.md", "tag": "B"})
 

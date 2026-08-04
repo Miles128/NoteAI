@@ -209,11 +209,7 @@ class WorkspaceHandler(BaseHandler):
                 if entry.is_dir():
                     if entry.name in FILE_TREE_IGNORED_DIRS or is_ignored_dir(entry.name):
                         continue
-                    children = (
-                        self._build_recursive_tree(entry, workspace, depth + 1)
-                        if depth < MAX_TREE_DEPTH
-                        else []
-                    )
+                    children = self._build_recursive_tree(entry, workspace, depth + 1) if depth < MAX_TREE_DEPTH else []
                     items.append(
                         {
                             "name": entry.name,

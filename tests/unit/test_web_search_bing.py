@@ -5,7 +5,9 @@ from sidecar.rag import web_search
 
 def test_web_search_prefers_bing(monkeypatch) -> None:
     calls = []
-    monkeypatch.setattr(web_search, "bing_search", lambda query: calls.append(("bing", query)) or [{"url": "https://example.com"}])
+    monkeypatch.setattr(
+        web_search, "bing_search", lambda query: calls.append(("bing", query)) or [{"url": "https://example.com"}]
+    )
     monkeypatch.setattr(web_search, "duckduckgo_search", lambda _query: calls.append(("ddg", "")) or [])
 
     result = web_search.web_search("NoteAI")

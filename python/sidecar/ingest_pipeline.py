@@ -303,10 +303,11 @@ def _scan_convert_pending(workspace: str) -> list[str]:
 
 
 def _scan_index_pending(workspace: str) -> list[Path]:
-    """Markdown under Notes/ whose mtime differs from last indexed state."""
-    from sidecar.rag.index_state import file_needs_index
+    """Notes whose mtime/size differs from the canonical RAG manifest."""
+    from sidecar.rag.index import load_manifest
 
     ws = Path(workspace)
+    manifest = load_manifest(workspace).get("files", {})
     out: list[Path] = []
     for md in ws.rglob("*.md"):
         if md.name.startswith(".") or any(part.startswith(".") for part in md.relative_to(ws).parts[:-1]) or "wiki" in md.parts:
@@ -317,7 +318,9 @@ def _scan_index_pending(workspace: str) -> list[Path]:
             continue
         try:
             rel = str(md.relative_to(ws))
-            if file_needs_index(rel, md.stat().st_mtime, workspace):
+            stat = md.stat()
+            old = manifest.get(rel, {})
+            if old.get("mtime") != stat.st_mtime or old.get("size") != stat.st_size:
                 out.append(md)
         except OSError:
             continue
@@ -851,7 +854,7 @@ def run_ingest(
         if cancelled():
             raise _Cancelled()
 
-        # 4. Index
+        # 4. Index — file_manifest.json is the single source of truth.
         indexed_paths: list[str] = []
         if stage_done("index"):
             prog("index", 0.65, "跳过索引（已完成）")
@@ -950,9 +953,7 @@ def run_ingest(
 
             rules = load_workspace_rules()
             if rules.get("auto_update_survey", True):
-                resolved = {
-                    resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics
-                }
+                resolved = {resolve_survey_topic(t, rules.get("survey_at_level", 2)) for t in affected_topics}
                 cascade_topics = sorted(resolved)
             else:
                 cascade_topics = []

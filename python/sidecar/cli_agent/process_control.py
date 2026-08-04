@@ -99,16 +99,10 @@ class TimeoutWatcher:
                     pass
                 return
             now = time.time()
-            if (
-                now - self.last_output_time > self.idle_timeout_s
-                and not self.handle.idle_warned
-            ):
+            if now - self.last_output_time > self.idle_timeout_s and not self.handle.idle_warned:
                 self.handle.idle_warned = True
                 self._emit_warning("idle", int(self.idle_timeout_s))
-            if (
-                now - self.start_time > self.total_timeout_s
-                and not self.handle.total_warned
-            ):
+            if now - self.start_time > self.total_timeout_s and not self.handle.total_warned:
                 self.handle.total_warned = True
                 self._emit_warning("total", int(self.total_timeout_s))
             time.sleep(1.0)

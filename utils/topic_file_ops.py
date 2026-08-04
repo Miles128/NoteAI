@@ -44,10 +44,7 @@ def move_file_to_notes_topic_folder(file_path, topic):
         return {"success": False, "message": "主题名称非法"}
 
     parts = [p.strip() for p in clean.split(TOPIC_SEP) if p.strip()]
-    if not parts or any(
-        p in {".", ".."} or "/" in p or "\\" in p or any(ord(ch) < 32 for ch in p)
-        for p in parts
-    ):
+    if not parts or any(p in {".", ".."} or "/" in p or "\\" in p or any(ord(ch) < 32 for ch in p) for p in parts):
         return {"success": False, "message": "主题名称非法"}
 
     topic_dir = Path(workspace) / config.NOTES_FOLDER

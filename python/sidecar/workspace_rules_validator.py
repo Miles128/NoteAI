@@ -37,10 +37,7 @@ def validate_topic(topic: str, rules: dict | None = None) -> tuple[bool, str]:
     if not t:
         return False, "主题不能为空"
     parts = [part.strip() for part in t.split(TOPIC_SEP) if part.strip()]
-    if any(
-        part in {".", ".."} or "/" in part or "\\" in part or any(ord(ch) < 32 for ch in part)
-        for part in parts
-    ):
+    if any(part in {".", ".."} or "/" in part or "\\" in part or any(ord(ch) < 32 for ch in part) for part in parts):
         return False, "主题名称包含非法路径字符"
     depth = topic_depth(t)
     max_depth = int(rules.get("max_topic_depth") or 3)

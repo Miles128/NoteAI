@@ -533,6 +533,8 @@ class SidecarServer(PathHelpersMixin):
                 sync_wiki_with_files()
             except Exception as e:
                 logger.warning(f"[watcher] syncing WIKI after workspace change: {e}\n")
+        if needs_wiki_sync and config.ingest_auto_enabled and config.rag_enabled:
+            self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
         self._send_response(
             {
                 "id": "event",

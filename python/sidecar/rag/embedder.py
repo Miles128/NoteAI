@@ -51,6 +51,7 @@ def _ensure_fastembed_cache():
     os.environ["FASTEMBED_CACHE_PATH"] = str(cache)
     _FASTEMBED_CACHE_PATH_CONFIGURED = True
 
+
 from fastembed import TextEmbedding
 
 from utils.logger import logger

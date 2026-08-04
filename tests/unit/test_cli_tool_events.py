@@ -36,10 +36,14 @@ def test_stream_tracker_tool_use():
     )
     assert start[0]["tool"] == "Read"
     tracker.handle_stream_event(
-        {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "{\"file_path\":"}}
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "input_json_delta", "partial_json": '{"file_path":'},
+        }
     )
     tracker.handle_stream_event(
-        {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": "\"a.md\"}"}}
+        {"type": "content_block_delta", "index": 0, "delta": {"type": "input_json_delta", "partial_json": '"a.md"}'}}
     )
     stop = tracker.handle_stream_event({"type": "content_block_stop", "index": 0})
     assert stop[0]["input"] == {"file_path": "a.md"}

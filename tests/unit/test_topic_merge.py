@@ -9,10 +9,10 @@ from config import config
 from utils.text_utils import parse_frontmatter
 
 
-def _write(root: Path, topic: str, name: str) -> None:
+def _write(root: Path, topic: str, name: str, body: str = "正文") -> None:
     folder = root / "Notes" / topic
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{name}.md").write_text(f"---\ntopic: {topic}\n---\n\n正文", encoding="utf-8")
+    (folder / f"{name}.md").write_text(f"---\ntopic: {topic}\n---\n\n{body}", encoding="utf-8")
 
 
 def test_llm_proposes_three_topic_names(tmp_path: Path, monkeypatch) -> None:
@@ -69,3 +69,64 @@ def test_preview_topic_merge_reports_notes_conflicts_and_surveys(tmp_path: Path)
     assert result["conflicts"][0]["target"] == "Notes/提示词设计/乙.md"
     assert "wiki/Prompt工程_综述.md" in result["surveys"]
     assert "wiki/提示词工程/提示词工程_综述.md" in result["surveys"]
+
+
+def test_merge_topics_renames_conflicting_files_without_overwriting(tmp_path: Path, monkeypatch) -> None:
+    """同名文件不覆盖（§9.4 步骤 6）：自动改名并返回 renamed 明细。"""
+    root = tmp_path / "ws"
+    _write(root, "提示词工程", "甲")
+    _write(root, "Prompt工程", "乙")
+    _write(root, "提示词设计", "乙")  # 与待迁移文件同名
+    monkeypatch.setattr(config, "workspace_path", str(root))
+    monkeypatch.setattr("sidecar.wiki_utils.sync_wiki_with_files", lambda: {"success": True})
+
+    result = merge_topics(root, ["提示词工程", "Prompt工程"], "提示词设计")
+
+    assert result["success"] is True
+    assert result["renamed"] == [{"from": "乙.md", "to": "乙_1.md"}]
+    target = root / "Notes" / "提示词设计"
+    # 目标主题原有文件未被覆盖
+    meta, _ = parse_frontmatter((target / "乙.md").read_text(encoding="utf-8"))
+    assert meta["topic"] == "提示词设计"
+    assert (target / "乙_1.md").exists()
+
+
+def test_suggest_names_reads_survey_and_representative_chunks(tmp_path: Path, monkeypatch) -> None:
+    """命名输入增强（§9.4 步骤 2）：prompt 包含主题综述与代表性 Chunk。"""
+    root = tmp_path / "ws"
+    _write(root, "提示词工程", "甲", "提示词需要清晰描述目标。")
+    _write(root, "Prompt工程", "乙", "提示词需要提供示例。")
+    wiki = root / "wiki"
+    wiki.mkdir(parents=True)
+    (wiki / "提示词工程_综述.md").write_text("---\n---\n\n本主题覆盖提示词的目标描述与示例设计。", encoding="utf-8")
+    graph_dir = root / ".noteai"
+    graph_dir.mkdir(parents=True)
+    (graph_dir / "chunk_similarity_graph.json").write_text(
+        json.dumps(
+            {
+                "chunks": [
+                    {"topic": "提示词工程", "content": "代表性片段一：清晰描述目标与输出格式。"},
+                    {"topic": "Prompt工程", "content": "代表性片段二：示例驱动的提示词编写。"},
+                    {"topic": "无关主题", "content": "不应进入 prompt 的片段。"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    captured: dict = {}
+
+    def fake_llm(prompt, **_kwargs):
+        captured["prompt"] = prompt
+        return '{"names":[{"name":"提示词设计","reason":"覆盖两边"}]}'
+
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw", fake_llm)
+
+    result = suggest_merged_topic_names(root, ["提示词工程", "Prompt工程"])
+
+    assert result["success"] is True
+    prompt = captured["prompt"]
+    assert "主题综述「提示词工程」" in prompt
+    assert "本主题覆盖提示词的目标描述" in prompt
+    assert "代表性片段一" in prompt
+    assert "代表性片段二" in prompt
+    assert "不应进入 prompt 的片段" not in prompt

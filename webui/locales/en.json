@@ -137,7 +137,8 @@
       "claims": "Claims & evidence",
       "quality": "Entity quality",
       "conflicts": "Conflicts",
-      "links": "Bidirectional links"
+      "links": "Bidirectional links",
+      "brief": "Topic brief"
     },
     "tabs": {
       "overview": "Overview",
@@ -201,6 +202,22 @@
         "concept": "Concept",
         "document": "Document"
       }
+    },
+    "brief": {
+      "days": "Window",
+      "daysShort": "{days}d",
+      "topic": "Topic",
+      "chooseTopic": "Choose a topic…",
+      "generate": "Generate brief",
+      "generating": "Generating…",
+      "fallback": "No LLM configured or generation failed — showing the structured change log",
+      "noTopics": "No semantic changes in the last {days} days — no topics available",
+      "noTopicSelected": "Select a topic first",
+      "empty": "Select a topic and click Generate brief",
+      "windowLabel": "Semantic changes in the last {days} days",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyFailed": "Copy failed"
     }
   },
   "pending": {
@@ -512,7 +529,8 @@
       "cli": "CLI Agent",
       "activityLog": "Activity log",
       "organizeRules": "Organization rules",
-      "about": "About"
+      "about": "About",
+      "reliability": "Backup & restore"
     },
     "language": "Language",
     "languageZh": "中文",
@@ -692,6 +710,36 @@
       "回答深度": "- Response depth:",
       "通俗向": "Beginner-friendly",
       "技术向": "Technical"
+    },
+    "reliabilityBackupTitle": "Workspace backup",
+    "reliabilityBackupHint": "Packages Notes, wiki, Raw and workspace metadata (rebuildable indices and caches excluded). Indices are not backed up; rebuild after restore.",
+    "reliabilityBackupBtn": "Back up now",
+    "reliabilityExportBtn": "Export notes",
+    "reliabilityBackupDone": "Created: {path} ({size}, {count} files)",
+    "reliabilityBackupSuccess": "Backup complete",
+    "reliabilityExportDone": "Exported: {path} ({size}, {count} files)",
+    "reliabilityExportSuccess": "Export complete",
+    "reliabilityFailed": "Operation failed: {message}",
+    "reliabilityRestoreTitle": "Restore from backup",
+    "reliabilityRestoreHint": "Pick a NoteAI backup (zip) to restore into the current workspace. Existing Notes, wiki and Raw are moved into .trash first so an accidental restore can be undone.",
+    "reliabilityRestoreBtn": "Choose backup & restore",
+    "reliabilityRestoreConfirm": "Restoring will replace Notes, wiki and Raw in the current workspace (previous content stays in .trash). Continue?",
+    "reliabilityRestoreDone": "Restored {count} files. {note}",
+    "reliabilityRestoreSuccess": "Restore complete",
+    "reliabilityHealthTitle": "Index health check",
+    "reliabilityHealthHint": "Checks RAG, semantic store, links and full-text indices; missing indices can be rebuilt with one click.",
+    "reliabilityHealthBtn": "Run health check",
+    "reliabilityRebuildRag": "Rebuild RAG index",
+    "reliabilityRebuildSemantic": "Rebuild semantic store",
+    "reliabilityRepairLinks": "Repair link index",
+    "health": {
+      "ok": "OK",
+      "bad": "Issue",
+      "rag": "RAG index",
+      "semantic": "Semantic store",
+      "links": "Link index",
+      "fulltext": "Full-text index",
+      "recoveryQueued": "Recovery queued; re-run the check when it finishes"
     }
   },
   "search": {

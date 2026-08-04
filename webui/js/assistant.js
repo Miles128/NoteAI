@@ -646,16 +646,64 @@ window.AssistantModule = (function() {
         });
     }
 
-    function _openNoteFromPath(filePath, displayName) {
+    function _openNoteFromPath(filePath, displayName, sectionTitle) {
         if (!filePath) return;
         var name = displayName || filePath.split('/').pop() || filePath;
+        window._pendingSectionLocate = sectionTitle || '';
         if (window.TreeModule && window.TreeModule.selectFile) {
             window.TreeModule.selectFile(filePath, name);
+            _locatePendingSection();
             return;
         }
         if (window.api && window.api.onFileSelected) {
             window.api.onFileSelected(filePath);
         }
+    }
+
+    // P0: locate a cited answer back to the exact section in the opened note.
+    // The note renders asynchronously (preview markdown or tiptap editor), so we
+    // poll for the heading for a short window and scroll/highlight it when found.
+    function _locatePendingSection() {
+        var sectionTitle = window._pendingSectionLocate || '';
+        window._pendingSectionLocate = '';
+        if (!sectionTitle) return;
+        var attempts = 0;
+        var timer = setInterval(function() {
+            attempts += 1;
+            if (_locateSectionInDocument(sectionTitle) || attempts > 12) {
+                clearInterval(timer);
+            }
+        }, 300);
+    }
+
+    function _locateSectionInDocument(sectionTitle) {
+        var segments = String(sectionTitle).split('>').map(function(s) { return s.trim(); }).filter(Boolean);
+        var wanted = segments[segments.length - 1];
+        if (!wanted) return false;
+        var containers = [];
+        var preview = document.getElementById('preview-content');
+        if (preview && preview.style.display !== 'none') containers.push(preview);
+        var tiptapWrap = document.getElementById('tiptap-editor-container');
+        if (tiptapWrap && tiptapWrap.style.display !== 'none') {
+            containers.push(tiptapWrap.querySelector('.tiptap') || tiptapWrap);
+        }
+        if (!containers.length) return false;
+        var i, j;
+        for (i = 0; i < containers.length; i++) {
+            var heads = containers[i].querySelectorAll('h1, h2, h3, h4, h5, h6');
+            for (j = 0; j < heads.length; j++) {
+                var text = (heads[j].textContent || '').replace(/\s+/g, ' ').trim();
+                if (text === wanted || text.indexOf(wanted + ' ') === 0) {
+                    heads[j].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    heads[j].classList.add('ai-locate-flash');
+                    (function(el) {
+                        setTimeout(function() { el.classList.remove('ai-locate-flash'); }, 2200);
+                    })(heads[j]);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     function _linkifyCitationRefs(contentEl, citations) {
@@ -701,7 +749,8 @@ window.AssistantModule = (function() {
                             e.preventDefault();
                             _openNoteFromPath(
                                 c.file_path,
-                                c.source_label || c.file_name || ''
+                                c.source_label || c.file_name || '',
+                                c.section_title || ''
                             );
                         });
                     })(cite);
@@ -781,7 +830,8 @@ window.AssistantModule = (function() {
                 } else {
                     _openNoteFromPath(
                         cite.file_path,
-                        cite.source_label || cite.file_name || ''
+                        cite.source_label || cite.file_name || '',
+                        cite.section_title || ''
                     );
                 }
             });

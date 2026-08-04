@@ -231,6 +231,14 @@ async function browseFolder() {
     return folder || '';
 }
 
+async function openArchiveDialog() {
+    if (!checkIsTauri()) {
+        throw new Error('必须在 Tauri 环境中运行');
+    }
+    var invoke = getTauriInvoke();
+    return await invoke('open_archive_dialog');
+}
+
 async function getFilePreview(path) {
     var raw = await pyCall('get_file_preview', { path: path });
     if (!raw || !raw.success) return raw;
@@ -417,6 +425,11 @@ var API_DEFS = [
     { name: 'publishSemanticObjectWikiPage', method: 'publish_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; }, write: true },
     { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
     { name: 'getSemanticChanges', method: 'get_semantic_changes', params: function(options) { return options || {}; } },
+    { name: 'getTopicBrief', method: 'get_topic_brief', params: function(options) { return options || {}; } },
+    { name: 'getIndexHealth', method: 'get_index_health', params: function() { return {}; } },
+    { name: 'backupWorkspace', method: 'backup_workspace', params: function(options) { return options || {}; }, write: true },
+    { name: 'exportNotes', method: 'export_notes', params: function(options) { return options || {}; }, write: true },
+    { name: 'restoreWorkspaceBackup', method: 'restore_workspace_backup', params: function(options) { return options || {}; }, write: true },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
@@ -503,6 +516,7 @@ window.api = Object.assign({}, generatedApi, {
     addFiles: addFiles,
     importFilesToWorkspace: importFilesToWorkspace,
     browseFolder: browseFolder,
+    openArchiveDialog: openArchiveDialog,
     getFilePreview: getFilePreview,
 
     // 窗口控制

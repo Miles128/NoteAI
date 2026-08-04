@@ -12,6 +12,7 @@ var _searchTimer = null;
 var _compileTimer = null;
 var _activeDetail = null;
 var _activeDetailKind = null;
+var _lastBrief = '';
 
 function esc(value) {
     return window.escapeHtml ? window.escapeHtml(String(value == null ? '' : value)) : String(value == null ? '' : value);
@@ -96,6 +97,12 @@ function hide() {
 }
 
 function setCategory(category) {
+    // Clicking the already-active category dismisses the workbench, giving
+    // users an explicit way to return to the standard note view.
+    if (_visible && _category === category) {
+        hide();
+        return;
+    }
     _category = category;
     _selectedIndex = -1;
     if (!_visible) {
@@ -156,6 +163,7 @@ function categoryTitle() {
 
 function loadList() {
     if (!_visible || !window.api || !window.api.getSemanticWorkbench) return;
+    if (_category === 'brief') return loadBrief();
     var list = document.getElementById('semantic-workbench-list');
     if (!list) return;
     var seq = ++_loadSeq;
@@ -177,6 +185,87 @@ function loadList() {
         list.innerHTML = '<div class="semantic-error">' + esc(t('semantic.loadFailed', { error: String(error.message || error) })) + '</div>';
         renderEmptyDetail(String(error.message || error));
     });
+}
+
+function briefDays() {
+    var select = document.getElementById('semantic-brief-days');
+    var value = select ? Number(select.value) : 7;
+    return value >= 1 && value <= 90 ? value : 7;
+}
+
+function loadBrief() {
+    var list = document.getElementById('semantic-workbench-list');
+    if (!list || !window.api || !window.api.getTopicBrief) return;
+    var seq = ++_loadSeq;
+    _items = [];
+    _selectedIndex = -1;
+    var title = document.getElementById('semantic-list-title');
+    if (title) title.textContent = categoryTitle();
+    var count = document.getElementById('semantic-list-count');
+    if (count) count.textContent = '';
+    list.innerHTML = '<div class="semantic-loading">' + esc(t('common.loading')) + '</div>';
+    renderEmptyDetail();
+    window.api.getTopicBrief({ days: briefDays() }).then(function(result) {
+        if (seq !== _loadSeq) return;
+        if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        renderBriefControls(result.topics || [], result.days || briefDays());
+    }).catch(function(error) {
+        if (seq !== _loadSeq) return;
+        list.innerHTML = '<div class="semantic-error">' + esc(t('semantic.loadFailed', { error: String(error.message || error) })) + '</div>';
+    });
+}
+
+function renderBriefControls(topics, days) {
+    var list = document.getElementById('semantic-workbench-list');
+    if (!list) return;
+    var options = topics.length
+        ? '<option value="">' + esc(t('semantic.brief.chooseTopic')) + '</option>' + topics.map(function(topic) { return '<option value="' + esc(topic) + '">' + esc(topic) + '</option>'; }).join('')
+        : '<option value="">' + esc(t('semantic.brief.noTopics', { days: days })) + '</option>';
+    list.innerHTML = '<div class="semantic-brief-controls">' +
+        '<label>' + esc(t('semantic.brief.days')) + '<select id="semantic-brief-days">' +
+        [7, 14, 30, 90].map(function(d) { return '<option value="' + d + '"' + (d === days ? ' selected' : '') + '>' + esc(t('semantic.brief.daysShort', { days: d })) + '</option>'; }).join('') +
+        '</select></label>' +
+        '<label>' + esc(t('semantic.brief.topic')) + '<select id="semantic-brief-topic">' + options + '</select></label>' +
+        '<button type="button" class="primary" data-brief-generate' + (topics.length ? '' : ' disabled') + '>' + esc(t('semantic.brief.generate')) + '</button>' +
+        '</div>';
+    var daysSelect = list.querySelector('#semantic-brief-days');
+    if (daysSelect) daysSelect.addEventListener('change', loadBrief);
+}
+
+function generateBrief() {
+    if (!window.api || !window.api.getTopicBrief) return;
+    var topic = document.getElementById('semantic-brief-topic');
+    var topicValue = topic ? topic.value.trim() : '';
+    if (!topicValue) {
+        if (window.ToastModule) window.ToastModule.error(t('semantic.brief.noTopicSelected'));
+        return;
+    }
+    var button = document.querySelector('[data-brief-generate]');
+    if (button) button.disabled = true;
+    var detail = document.getElementById('semantic-workbench-detail');
+    if (detail) detail.innerHTML = '<div class="semantic-loading">' + esc(t('semantic.brief.generating')) + '</div>';
+    window.api.getTopicBrief({ topic: topicValue, days: briefDays() }).then(function(result) {
+        if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        renderBrief(result);
+    }).catch(function(error) {
+        var detailPane = document.getElementById('semantic-workbench-detail');
+        if (detailPane) detailPane.innerHTML = '<div class="semantic-error">' + esc(String(error.message || error)) + '</div>';
+        if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+    }).finally(function() {
+        var btn = document.querySelector('[data-brief-generate]');
+        if (btn) btn.disabled = false;
+    });
+}
+
+function renderBrief(result) {
+    var detail = document.getElementById('semantic-workbench-detail');
+    if (!detail) return;
+    _lastBrief = result.brief || '';
+    var body = _lastBrief;
+    var html = window.marked && window.marked.parse ? window.marked.parse(body) : '<pre>' + esc(body) + '</pre>';
+    if (typeof DOMPurify !== 'undefined') html = DOMPurify.sanitize(html);
+    var fallback = result.fallback ? '<div class="semantic-brief-fallback">' + esc(t('semantic.brief.fallback')) + '</div>' : '';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(t('semantic.categories.brief')) + '</p><h2>' + esc(result.topic || '') + '</h2><p class="semantic-detail-description">' + esc(t('semantic.brief.windowLabel', { days: result.days || 7 })) + '</p><div class="semantic-brief-body">' + html + '</div>' + fallback + '<div class="semantic-actions"><button data-brief-copy>' + esc(t('semantic.brief.copy')) + '</button></div></div>';
 }
 
 function renderList() {
@@ -596,6 +685,18 @@ function onDetailClick(event) {
         });
         return;
     }
+    var briefCopy = event.target.closest('[data-brief-copy]');
+    if (briefCopy && _lastBrief) {
+        var briefText = _lastBrief;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(briefText).then(function() {
+                if (window.ToastModule) window.ToastModule.success(t('semantic.brief.copied'));
+            }).catch(function() {});
+        } else if (window.ToastModule) {
+            window.ToastModule.error(t('semantic.brief.copyFailed'));
+        }
+        return;
+    }
     var link = event.target.closest('[data-link-action]');
     if (!link) return;
     link.disabled = true;
@@ -643,6 +744,8 @@ function init() {
     });
     var list = document.getElementById('semantic-workbench-list');
     if (list) list.addEventListener('click', function(event) {
+        var briefGenerate = event.target.closest('[data-brief-generate]');
+        if (briefGenerate) { generateBrief(); return; }
         var button = event.target.closest('[data-semantic-index]');
         if (button) selectItem(Number(button.dataset.semanticIndex));
     });
@@ -650,6 +753,8 @@ function init() {
     if (detail) { detail.addEventListener('click', onDetailClick); detail.addEventListener('submit', onDetailSubmit); }
     var refresh = document.getElementById('semantic-refresh');
     if (refresh) refresh.addEventListener('click', function() { loadOverview(); loadList(); });
+    var close = document.getElementById('semantic-close');
+    if (close) close.addEventListener('click', hide);
     var compile = document.getElementById('semantic-compile-all');
     if (compile) compile.addEventListener('click', startCompileAll);
     var search = document.getElementById('semantic-search');

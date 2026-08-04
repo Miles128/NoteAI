@@ -70,6 +70,9 @@
 .semantic-list-header h3 { margin: 0; color: var(--sidebar-text); font-size: 13px; }
 .semantic-list-header span { display: block; margin-top: 2px; color: var(--sidebar-text-muted); font-size: 9px; }
 .semantic-refresh { width: 25px; height: 25px; border: 1px solid var(--sidebar-border); border-radius: 5px; background: transparent; color: var(--sidebar-text-muted); cursor: pointer; }
+.semantic-list-header-actions { display: flex; gap: 6px; }
+.semantic-close { width: 25px; height: 25px; border: 1px solid var(--sidebar-border); border-radius: 5px; background: transparent; color: var(--sidebar-text-muted); cursor: pointer; }
+.semantic-refresh:hover, .semantic-close:hover { border-color: var(--primary); color: var(--primary); }
 
 .semantic-object-switch { display: flex; padding: 9px 10px 0; gap: 4px; }
 .semantic-object-switch button { flex: 1; border: 1px solid var(--sidebar-border); border-radius: 5px; padding: 6px; background: transparent; color: var(--sidebar-text-muted); cursor: pointer; }
@@ -144,3 +147,13 @@
 .semantic-change-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .semantic-change-source { flex: 0 1 auto; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10px; }
 .semantic-changes-total { margin: 8px 0 0; color: var(--text-muted); font-size: 11px; }
+.semantic-brief-controls { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.semantic-brief-controls label { display: grid; gap: 5px; color: var(--text-muted); font-size: 11px; }
+.semantic-brief-controls select, .semantic-brief-controls button { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; background: var(--article-bg); color: var(--text); font: inherit; }
+.semantic-brief-controls button.primary { background: var(--primary); border-color: var(--primary); color: #fff; cursor: pointer; }
+.semantic-brief-controls button.primary:disabled { opacity: .55; cursor: default; }
+.semantic-brief-body { line-height: 1.65; font-size: 13px; }
+.semantic-brief-body h1, .semantic-brief-body h2, .semantic-brief-body h3 { margin: 14px 0 6px; }
+.semantic-brief-body ul, .semantic-brief-body ol { padding-left: 20px; }
+.semantic-brief-body code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+.semantic-brief-fallback { margin-top: 12px; padding: 8px 10px; border: 1px solid rgba(180, 83, 9, .35); border-radius: 5px; color: #b45309; background: var(--surface); font-size: 11px; }

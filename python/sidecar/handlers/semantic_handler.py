@@ -146,9 +146,79 @@ class SemanticHandler(BaseHandler):
         if not store.path.exists():
             return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
         limit, offset = self._page(params)
-        counts = store.change_counts(days=days)
-        items, total = store.recent_changes(days=days, limit=limit, offset=offset, object_kind=object_kind)
+        try:
+            counts = store.change_counts(days=days)
+            items, total = store.recent_changes(days=days, limit=limit, offset=offset, object_kind=object_kind)
+        except sqlite3.OperationalError:
+            # A stale or partially initialized store must never break the
+            # read-only digest; surface an empty result instead of an error.
+            return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
         return {"success": True, "days": days, "counts": counts, "items": items, "total": total}
+
+    def _get_topic_brief(self, params):
+        """One-topic review brief from the change log.
+
+        Uses the LLM when configured; otherwise falls back to a structured
+        Markdown change list. Read-only — never writes to the store.
+        """
+        store = self._store()
+        if store is None:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            days = max(1, min(int(params.get("days", 7) or 7), 90))
+        except (TypeError, ValueError):
+            days = 7
+        topic = str(params.get("topic") or "").strip()
+        if not store.path.exists():
+            return {"success": True, "days": days, "topics": [], "topic": "", "brief": "", "fallback": False}
+        topics = store.topics_with_changes(days=days)
+        if not topic:
+            return {"success": True, "days": days, "topics": topics[:50], "topic": "", "brief": "", "fallback": False}
+        changes = store.topic_changes(topic=topic, days=days)
+        if not changes:
+            brief = f"## 主题简报：{topic}\n\n过去 {days} 天该主题没有语义变化。"
+            return {
+                "success": True,
+                "days": days,
+                "topics": topics[:50],
+                "topic": topic,
+                "brief": brief,
+                "fallback": False,
+            }
+        records = "\n".join(
+            f"- [{c['created_at'][:10]}] {c['change_kind']} · {c['object_kind']}: {c['label'] or c['object_id']}"
+            + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
+            for c in changes
+        )
+        brief, fallback = self._compose_topic_brief(topic, days, records)
+        return {
+            "success": True,
+            "days": days,
+            "topics": topics[:50],
+            "topic": topic,
+            "brief": brief,
+            "fallback": fallback,
+        }
+
+    @staticmethod
+    def _compose_topic_brief(topic: str, days: int, records: str) -> tuple[str, bool]:
+        """LLM-generated brief when available; structured fallback otherwise."""
+        from prompts import TOPIC_BRIEF_PROMPT
+        from utils.llm_utils import call_llm_raw
+
+        try:
+            prompt = TOPIC_BRIEF_PROMPT.format(topic_name=topic, days=days, change_records=records)
+            text = call_llm_raw(prompt, temperature=0.3)
+        except Exception:
+            text = ""
+        if not text or not text.strip():
+            fallback = (
+                f"## 主题简报：{topic}\n\n"
+                f"（未配置 LLM 或生成失败，以下为结构化变化记录）\n\n"
+                f"过去 {days} 天变化：\n\n{records}\n"
+            )
+            return fallback, True
+        return text.strip(), False
 
     def _all_note_paths(self) -> list[Path]:
         workspace = self.config.workspace_path
@@ -1119,6 +1189,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_note_semantic_context", self._get_note_semantic_context)
         router.register("get_semantic_compile_status", self._get_compile_status)
         router.register("get_semantic_changes", self._get_changes)
+        router.register("get_topic_brief", self._get_topic_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
         router.register("review_semantic_entity_quality", self._review_entity_quality)

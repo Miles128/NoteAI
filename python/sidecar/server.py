@@ -27,6 +27,7 @@ from sidecar.handlers import (
     LinksHandler,
     McpConfigHandler,
     RagHandler,
+    ReliabilityHandler,
     SemanticHandler,
     TagsHandler,
     TopicsHandler,
@@ -88,6 +89,7 @@ class SidecarServer(PathHelpersMixin):
         self._job_handler = JobHandler(self)
         self._rag_handler = RagHandler(self)
         self._semantic_handler = SemanticHandler(self)
+        self._reliability_handler = ReliabilityHandler(self)
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
         self._cli_agent_handler = CliAgentHandler(self)
@@ -123,6 +125,7 @@ class SidecarServer(PathHelpersMixin):
         self._job_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
         self._semantic_handler.register_routes(self._router)
+        self._reliability_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
         self._cli_agent_handler.register_routes(self._router)

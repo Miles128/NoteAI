@@ -120,6 +120,199 @@ function switchSettingsTab(tabName) {
     if (tabName === 'organize-rules' && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
         window.OrganizeRulesModule.load();
     }
+    if (tabName === 'reliability') {
+        initReliabilitySettings();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 备份与恢复 / 索引健康（本地可靠性）
+// ---------------------------------------------------------------------------
+
+function showReliabilityStatus(elId, msg, isError) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.color = isError ? '#e53e3e' : '#38a169';
+}
+
+function hideReliabilityStatus(elId) {
+    const el = document.getElementById(elId);
+    if (el) el.style.display = 'none';
+}
+
+function formatBytes(bytes) {
+    if (bytes == null || isNaN(bytes)) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+async function backupWorkspaceNow() {
+    const btn = document.getElementById('settings-backup-btn');
+    if (btn) btn.disabled = true;
+    hideReliabilityStatus('settings-backup-status');
+    try {
+        const result = await window.api.backupWorkspace({});
+        if (!result || !result.success) throw new Error((result && result.message) || window.t('common.unknownError'));
+        const msg = window.t('settings.reliabilityBackupDone', {
+            path: result.backup_path,
+            size: formatBytes(result.size_bytes),
+            count: result.file_count || 0
+        });
+        showReliabilityStatus('settings-backup-status', msg, false);
+        if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityBackupSuccess'));
+    } catch (e) {
+        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function exportNotesNow() {
+    const btn = document.getElementById('settings-export-btn');
+    if (btn) btn.disabled = true;
+    hideReliabilityStatus('settings-backup-status');
+    try {
+        const result = await window.api.exportNotes({});
+        if (!result || !result.success) throw new Error((result && result.message) || window.t('common.unknownError'));
+        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityExportDone', {
+            path: result.backup_path,
+            size: formatBytes(result.size_bytes),
+            count: result.file_count || 0
+        }), false);
+        if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityExportSuccess'));
+    } catch (e) {
+        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function restoreBackupNow() {
+    let file = '';
+    try {
+        file = await window.api.openArchiveDialog();
+    } catch (e) {
+        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        return;
+    }
+    if (!file) return;
+    if (!window.confirm(window.t('settings.reliabilityRestoreConfirm'))) return;
+    const btn = document.getElementById('settings-restore-btn');
+    if (btn) btn.disabled = true;
+    hideReliabilityStatus('settings-restore-status');
+    try {
+        const result = await window.api.restoreWorkspaceBackup({ backup_path: file });
+        if (!result || !result.success) throw new Error((result && result.message) || window.t('common.unknownError'));
+        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityRestoreDone', {
+            count: result.restored_count || 0,
+            note: result.note || ''
+        }), false);
+        if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityRestoreSuccess'));
+    } catch (e) {
+        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function healthBadge(ok) {
+    return ok ? window.escapeHtml(window.t('settings.health.ok')) : window.escapeHtml(window.t('settings.health.bad'));
+}
+
+function renderHealthReport(report) {
+    const el = document.getElementById('settings-health-report');
+    if (!el) return;
+    const rows = ['rag', 'semantic', 'links', 'fulltext'].map(function(key) {
+        const item = report[key] || {};
+        const cls = item.ok ? 'settings-health-ok' : 'settings-health-bad';
+        return '<div class="settings-health-row"><span class="settings-health-name">' + window.escapeHtml(window.t('settings.health.' + key)) + '</span><span class="settings-health-badge ' + cls + '">' + healthBadge(item.ok) + '</span><span class="settings-health-detail">' + window.escapeHtml(item.detail || '') + '</span></div>';
+    }).join('');
+    el.innerHTML = rows;
+    el.style.display = 'block';
+    const ragBtn = document.getElementById('settings-health-rag-btn');
+    const semanticBtn = document.getElementById('settings-health-semantic-btn');
+    const lintBtn = document.getElementById('settings-health-lint-btn');
+    if (ragBtn) ragBtn.style.display = report.rag && !report.rag.ok ? 'inline-block' : 'none';
+    if (semanticBtn) semanticBtn.style.display = report.semantic && !report.semantic.ok ? 'inline-block' : 'none';
+    if (lintBtn) lintBtn.style.display = report.links && !report.links.ok ? 'inline-block' : 'none';
+}
+
+async function runHealthCheck() {
+    const btn = document.getElementById('settings-health-check-btn');
+    if (btn) btn.disabled = true;
+    hideReliabilityStatus('settings-health-status');
+    try {
+        const result = await window.api.getIndexHealth();
+        if (!result || !result.success) throw new Error((result && result.message) || window.t('common.unknownError'));
+        renderHealthReport(result);
+    } catch (e) {
+        const el = document.getElementById('settings-health-report');
+        if (el) el.style.display = 'none';
+        showReliabilityStatus('settings-health-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function runHealthRecovery(kind) {
+    const statusEl = 'settings-health-status';
+    hideReliabilityStatus(statusEl);
+    try {
+        let result;
+        if (kind === 'rag') {
+            result = await window.api.ragRebuildIndex({});
+        } else if (kind === 'semantic') {
+            result = await window.api.startSemanticFullCompile({});
+        } else if (kind === 'lint') {
+            result = await window.api.runKbLint({});
+        }
+        if (result && !result.success) throw new Error(result.message || window.t('common.unknownError'));
+        showReliabilityStatus(statusEl, window.t('settings.health.recoveryQueued'), false);
+        if (window.ToastModule) window.ToastModule.success(window.t('settings.health.recoveryQueued'));
+    } catch (e) {
+        showReliabilityStatus(statusEl, window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+    }
+}
+
+function initReliabilitySettings() {
+    const backupBtn = document.getElementById('settings-backup-btn');
+    if (backupBtn && !backupBtn.dataset.bound) {
+        backupBtn.dataset.bound = '1';
+        backupBtn.addEventListener('click', backupWorkspaceNow);
+    }
+    const exportBtn = document.getElementById('settings-export-btn');
+    if (exportBtn && !exportBtn.dataset.bound) {
+        exportBtn.dataset.bound = '1';
+        exportBtn.addEventListener('click', exportNotesNow);
+    }
+    const restoreBtn = document.getElementById('settings-restore-btn');
+    if (restoreBtn && !restoreBtn.dataset.bound) {
+        restoreBtn.dataset.bound = '1';
+        restoreBtn.addEventListener('click', restoreBackupNow);
+    }
+    const healthBtn = document.getElementById('settings-health-check-btn');
+    if (healthBtn && !healthBtn.dataset.bound) {
+        healthBtn.dataset.bound = '1';
+        healthBtn.addEventListener('click', runHealthCheck);
+    }
+    const ragBtn = document.getElementById('settings-health-rag-btn');
+    if (ragBtn && !ragBtn.dataset.bound) {
+        ragBtn.dataset.bound = '1';
+        ragBtn.addEventListener('click', function() { runHealthRecovery('rag'); });
+    }
+    const semanticBtn = document.getElementById('settings-health-semantic-btn');
+    if (semanticBtn && !semanticBtn.dataset.bound) {
+        semanticBtn.dataset.bound = '1';
+        semanticBtn.addEventListener('click', function() { runHealthRecovery('semantic'); });
+    }
+    const lintBtn = document.getElementById('settings-health-lint-btn');
+    if (lintBtn && !lintBtn.dataset.bound) {
+        lintBtn.dataset.bound = '1';
+        lintBtn.addEventListener('click', function() { runHealthRecovery('lint'); });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {

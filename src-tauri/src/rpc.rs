@@ -239,10 +239,7 @@ async fn call_python_once(
         match stdin_guard.as_mut() {
             Some(stdin) => {
                 use tokio::io::AsyncWriteExt;
-                if let Err(error) = stdin
-                    .write_all(json_line.as_bytes())
-                    .await
-                {
+                if let Err(error) = stdin.write_all(json_line.as_bytes()).await {
                     Err(format!("Write failed: {}", error))
                 } else {
                     stdin

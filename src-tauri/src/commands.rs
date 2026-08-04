@@ -80,13 +80,13 @@ mod tests {
         let workspace = base.join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
 
-        let resolved = resolve_workspace_target(
-            workspace.to_str().unwrap(),
-            "Notes/new/topic.md",
-        )
-        .unwrap();
+        let resolved =
+            resolve_workspace_target(workspace.to_str().unwrap(), "Notes/new/topic.md").unwrap();
 
-        assert_eq!(resolved, workspace.canonicalize().unwrap().join("Notes/new/topic.md"));
+        assert_eq!(
+            resolved,
+            workspace.canonicalize().unwrap().join("Notes/new/topic.md")
+        );
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -102,10 +102,7 @@ mod tests {
         std::fs::create_dir_all(&outside).unwrap();
         symlink(&outside, workspace.join("external")).unwrap();
 
-        let result = resolve_workspace_target(
-            workspace.to_str().unwrap(),
-            "external/escaped.md",
-        );
+        let result = resolve_workspace_target(workspace.to_str().unwrap(), "external/escaped.md");
 
         assert_eq!(result.unwrap_err(), "Path is outside workspace");
         std::fs::remove_dir_all(&base).unwrap();

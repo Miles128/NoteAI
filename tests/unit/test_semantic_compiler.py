@@ -410,7 +410,7 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
         schema_version = conn.execute("SELECT value FROM schema_meta WHERE key = 'schema_version'").fetchone()["value"]
     assert "claim_type" in columns
     assert claim["claim_type"] == "conclusion"
-    assert schema_version == "4"
+    assert schema_version == "5"
 
 
 def test_initialize_adds_relation_block_column_before_creating_its_index(tmp_path: Path):

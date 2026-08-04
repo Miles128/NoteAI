@@ -13,7 +13,7 @@ from uuid import uuid4
 from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.semantic.ids import stable_id
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 CLAIM_POLICY_VERSION = 6
 
 _SCHEMA = """
@@ -161,6 +161,19 @@ CREATE TABLE IF NOT EXISTS semantic_change_log (
 );
 CREATE INDEX IF NOT EXISTS idx_semantic_change_created
     ON semantic_change_log(created_at DESC);
+CREATE TABLE IF NOT EXISTS claim_verifications (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+    verdict TEXT NOT NULL CHECK(verdict IN ('supported', 'refuted', 'unclear')),
+    confidence REAL NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    method TEXT NOT NULL DEFAULT 'default',
+    agent TEXT NOT NULL DEFAULT '',
+    sources_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_claim_verifications_claim
+    ON claim_verifications(claim_id, created_at DESC);
 """
 
 CHANGE_LOG_LIMIT = 8000
@@ -425,6 +438,73 @@ class SemanticStore:
             )
             return after
 
+    def save_claim_verification(
+        self,
+        claim_id: str,
+        *,
+        verdict: str,
+        confidence: float,
+        summary: str = "",
+        method: str = "default",
+        agent: str = "",
+        sources: list[dict] | None = None,
+    ) -> dict | None:
+        """Persist one external verification result (联网证实/证伪) for a claim."""
+        if verdict not in {"supported", "refuted", "unclear"}:
+            raise ValueError("unsupported verdict")
+        try:
+            confidence = max(0.0, min(1.0, float(confidence)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("confidence 必须是数字") from exc
+        sources = [source for source in (sources or []) if isinstance(source, dict)]
+        created_at = self._now()
+        verification_id = stable_id("cvr", claim_id, created_at)
+        with self.connect() as conn:
+            claim = conn.execute("SELECT id, statement FROM claims WHERE id = ?", (claim_id,)).fetchone()
+            if claim is None:
+                return None
+            conn.execute(
+                """INSERT INTO claim_verifications(
+                       id, claim_id, verdict, confidence, summary, method, agent, sources_json, created_at
+                   ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    verification_id,
+                    claim_id,
+                    verdict,
+                    confidence,
+                    (summary or "").strip(),
+                    method,
+                    agent,
+                    json.dumps(sources, ensure_ascii=False),
+                    created_at,
+                ),
+            )
+            self._audit(
+                conn,
+                action="verify_claim",
+                object_kind="claim",
+                object_id=claim_id,
+                before={},
+                after={
+                    "verdict": verdict,
+                    "confidence": confidence,
+                    "method": method,
+                    "agent": agent,
+                    "sources": len(sources),
+                },
+            )
+        return {
+            "id": verification_id,
+            "claim_id": claim_id,
+            "verdict": verdict,
+            "confidence": confidence,
+            "summary": (summary or "").strip(),
+            "method": method,
+            "agent": agent,
+            "sources": sources,
+            "created_at": created_at,
+        }
+
     def set_evidence_status(self, evidence_id: str, status: str) -> dict | None:
         if status not in {"active", "excluded"}:
             raise ValueError("unsupported evidence status")
@@ -446,6 +526,106 @@ class SemanticStore:
                 after=after,
             )
             return after
+
+    def claim_verifications(self, claim_id: str, *, limit: int = 10) -> list[dict]:
+        """Return verification history for one claim, newest first (read-only)."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT id, claim_id, verdict, confidence, summary, method, agent,
+                          sources_json, created_at
+                   FROM claim_verifications WHERE claim_id = ?
+                   ORDER BY created_at DESC, rowid DESC LIMIT ?""",
+                (claim_id, max(1, limit)),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "claim_id": row["claim_id"],
+                "verdict": row["verdict"],
+                "confidence": row["confidence"],
+                "summary": row["summary"],
+                "method": row["method"],
+                "agent": row["agent"],
+                "sources": json.loads(row["sources_json"] or "[]"),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def latest_claim_verification(self, claim_id: str) -> dict | None:
+        """Return the most recent verification for one claim (read-only)."""
+        items = self.claim_verifications(claim_id, limit=1)
+        return items[0] if items else None
+
+    def list_claims_for_verification(
+        self,
+        *,
+        topic: str | None = None,
+        limit: int | None = None,
+        verified: bool | None = None,
+    ) -> list[dict]:
+        """List active evidenced claims with their latest verification (read-only).
+
+        ``verified`` filters by whether a claim already has any verification:
+        ``True`` only verified, ``False`` only unverified, ``None`` all.
+        """
+        where = [
+            "c.status = 'active'",
+            "EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id AND e.status = 'active')",
+        ]
+        args: list[object] = []
+        if topic:
+            where.append(
+                "EXISTS (SELECT 1 FROM evidence e2 JOIN blocks b2 ON b2.id = e2.block_id "
+                "JOIN documents d2 ON d2.id = b2.document_id "
+                "WHERE e2.claim_id = c.id AND d2.topic = ?)"
+            )
+            args.append(topic)
+        if verified is True:
+            where.append("EXISTS (SELECT 1 FROM claim_verifications v WHERE v.claim_id = c.id)")
+        elif verified is False:
+            where.append("NOT EXISTS (SELECT 1 FROM claim_verifications v WHERE v.claim_id = c.id)")
+        sql = f"""
+            SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence,
+                   v.id AS verification_id, v.verdict, v.confidence AS verification_confidence,
+                   v.summary, v.method, v.agent, v.created_at AS verified_at
+            FROM claims c
+            LEFT JOIN claim_verifications v ON v.id = (
+                SELECT v2.id FROM claim_verifications v2
+                WHERE v2.claim_id = c.id
+                ORDER BY v2.created_at DESC, v2.rowid DESC LIMIT 1
+            )
+            WHERE {" AND ".join(where)}
+            ORDER BY c.confidence DESC, c.statement
+        """
+        if limit:
+            sql += " LIMIT ?"
+            args.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(sql, args).fetchall()
+        items: list[dict] = []
+        for row in rows:
+            item = {
+                "id": row["id"],
+                "statement": row["statement"],
+                "scope": row["scope"],
+                "claim_type": row["claim_type"],
+                "confidence": row["confidence"],
+            }
+            if row["verification_id"]:
+                item["verification"] = {
+                    "id": row["verification_id"],
+                    "verdict": row["verdict"],
+                    "confidence": row["verification_confidence"],
+                    "summary": row["summary"],
+                    "method": row["method"],
+                    "agent": row["agent"],
+                    "verified_at": row["verified_at"],
+                }
+            else:
+                item["verification"] = None
+            items.append(item)
+        return items
 
     def add_entity_alias(self, entity_id: str, alias: str) -> dict | None:
         alias = alias.strip()

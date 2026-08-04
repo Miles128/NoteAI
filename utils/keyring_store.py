@@ -18,7 +18,9 @@ _PBKDF2_ITERATIONS = 600_000
 
 
 def _app_data_dir() -> Path:
-    from config.settings import SYSTEM_APP_DATA_DIR
+    # Import from constants (a leaf module) instead of settings to avoid a
+    # circular import: settings -> app_config -> keyring_store -> settings.
+    from config.constants import SYSTEM_APP_DATA_DIR
 
     return SYSTEM_APP_DATA_DIR
 

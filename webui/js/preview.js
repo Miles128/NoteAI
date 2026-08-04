@@ -149,7 +149,6 @@ async function loadFilePreview(path, fileName) {
                 },
                 pdfData: result
             };
-            loadNoteSemanticContext(path, requestId);
 
             updateTitlebarFileName(fileName, isMarkdown);
             
@@ -228,33 +227,6 @@ async function loadFilePreview(path, fileName) {
             showPreviewError(window.t('preview.loadFailed'), e.message);
         }
     }
-}
-
-function loadNoteSemanticContext(path, requestId) {
-    var panel = document.getElementById('note-semantic-context');
-    if (!panel || !window.api || !window.api.getNoteSemanticContext || !/\.md$/i.test(path || '')) return;
-    panel.hidden = true;
-    window.api.getNoteSemanticContext(path).then(function(data) {
-        if (requestId !== currentLoadRequestId || !data || !data.success) return;
-        var group = function(title, items, kind) {
-            if (!items || !items.length) return '';
-            return '<div><strong>' + escapeHtml(title) + '</strong><span>' + items.map(function(item) {
-                var label = item.canonical_name || item.statement || '';
-                return '<button data-semantic-kind="' + kind + '" data-semantic-id="' + escapeHtml(item.id) + '">' + escapeHtml(label) + '</button>';
-            }).join('') + '</span></div>';
-        };
-        var relations = (data.relations || []).map(function(relation) {
-            return '<button data-semantic-kind="entity" data-semantic-id="' + escapeHtml(relation.source_id) + '">' + escapeHtml(relation.source_name) + '</button><em> ' + escapeHtml(relation.relation_type) + ' </em><button data-semantic-kind="concept" data-semantic-id="' + escapeHtml(relation.target_id) + '">' + escapeHtml(relation.target_name) + '</button>';
-        }).join('');
-        panel.innerHTML = group(window.t('semantic.tabs.entities'), data.entities, 'entity') + group(window.t('semantic.tabs.concepts'), data.concepts, 'concept') + group(window.t('semantic.tabs.claims'), data.claims, 'claim') + (relations ? '<div><strong>' + escapeHtml(window.t('semantic.related')) + '</strong><span>' + relations + '</span></div>' : '');
-        panel.onclick = function(event) {
-            var button = event.target.closest('[data-semantic-kind][data-semantic-id]');
-            if (!button || !window.SemanticWorkbenchModule || !window.SemanticWorkbenchModule.openObject) return;
-            var kind = button.dataset.semanticKind;
-            if (kind === 'entity' || kind === 'concept') window.SemanticWorkbenchModule.openObject(kind, button.dataset.semanticId);
-        };
-        panel.hidden = !panel.innerHTML;
-    }).catch(function() { if (panel) panel.hidden = true; });
 }
 
 async function loadPdfViewer(path, fileName, requestId) {

@@ -14,7 +14,7 @@ from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.semantic.ids import stable_id
 
 SCHEMA_VERSION = 4
-CLAIM_POLICY_VERSION = 5
+CLAIM_POLICY_VERSION = 6
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (

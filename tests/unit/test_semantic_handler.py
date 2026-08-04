@@ -459,3 +459,32 @@ def test_full_compile_purges_deleted_documents_and_refreshes_object_pages(
 
     assert store.document("Notes/AI/deleted.md") is None
     assert "Stale" not in (workspace / "wiki" / "semantic" / "实体.md").read_text(encoding="utf-8")
+
+
+def test_get_semantic_changes_is_read_only_and_validates_params(semantic_handler: SemanticHandler) -> None:
+    result = semantic_handler._get_changes({"days": 7, "limit": 10})
+    assert result["success"] is True
+    assert result["days"] == 7
+    assert isinstance(result["counts"], list)
+    assert isinstance(result["items"], list)
+    assert result["total"] == 0
+
+    assert semantic_handler._get_changes({"object_kind": "relation"})["success"] is False
+
+    clamped = semantic_handler._get_changes({"days": "999"})
+    assert clamped["success"] is True
+    assert clamped["days"] == 90
+
+    store = SemanticStore(config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            """INSERT INTO semantic_change_log(
+                   id, change_kind, object_kind, object_id, label, detail_json,
+                   source_path, topic, created_at
+               ) VALUES('chg-1', 'added', 'claim', 'claim-x', '新命题', '{}',
+                        'Notes/AI/RAG.md', 'AI > RAG', datetime('now'))"""
+        )
+    listed = semantic_handler._get_changes({"days": 7})
+    assert listed["total"] == 1
+    assert listed["items"][0]["label"] == "新命题"
+    assert listed["counts"] == [{"change_kind": "added", "object_kind": "claim", "count": 1}]

@@ -336,7 +336,44 @@ function renderEmptyDetail(error) {
     var metrics = keys.map(function(key) {
         return '<div class="semantic-metric"><strong>' + esc(_overview[key] || 0) + '</strong><span>' + esc(t('semantic.metrics.' + key)) + '</span></div>';
     }).join('');
-    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">Semantic IR</p><h2>' + esc(t('semantic.categoryEmptyTitle')) + '</h2><p class="semantic-detail-description">' + esc(t(_category === 'conflicts' ? 'semantic.emptyConflicts' : 'semantic.selectHint')) + '</p><div class="semantic-metrics">' + metrics + '</div></div>';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">Semantic IR</p><h2>' + esc(t('semantic.categoryEmptyTitle')) + '</h2><p class="semantic-detail-description">' + esc(t(_category === 'conflicts' ? 'semantic.emptyConflicts' : 'semantic.selectHint')) + '</p><div class="semantic-metrics">' + metrics + '</div><section class="semantic-changes" id="semantic-changes"><h3>' + esc(t('semantic.changes.title')) + ' <span class="semantic-changes-window">' + esc(t('semantic.changes.window')) + '</span></h3><p class="semantic-detail-description">' + esc(t('semantic.changes.empty')) + '</p></section></div>';
+    loadChanges();
+}
+
+function loadChanges() {
+    if (!window.api || !window.api.getSemanticChanges) return;
+    window.api.getSemanticChanges({ days: 7, limit: 8 }).then(function(result) {
+        if (!result || !result.success) throw new Error((result && result.message) || '');
+        renderChanges(result);
+    }).catch(function() {
+        var box = document.getElementById('semantic-changes');
+        if (box) box.querySelector('p') && (box.querySelector('p').textContent = t('semantic.changes.loadFailed'));
+    });
+}
+
+function renderChanges(result) {
+    var box = document.getElementById('semantic-changes');
+    if (!box) return;
+    var counts = result.counts || [];
+    var items = result.items || [];
+    var total = result.total || 0;
+    var summary = {};
+    counts.forEach(function(entry) {
+        summary[entry.change_kind] = (summary[entry.change_kind] || 0) + entry.count;
+    });
+    var badgeOrder = ['added', 'updated', 'invalidated', 'removed'];
+    var badges = badgeOrder.filter(function(kind) { return summary[kind]; }).map(function(kind) {
+        return '<span class="semantic-change-badge semantic-change-' + kind + '">' + esc(t('semantic.changes.' + kind)) + ' ' + summary[kind] + '</span>';
+    }).join('');
+    var rows = items.map(function(item) {
+        var objectLabel = t('semantic.changes.objects.' + item.object_kind) || item.object_kind;
+        var source = item.source_path ? '<span class="semantic-change-source">' + esc(item.source_path) + '</span>' : '';
+        return '<li class="semantic-change-row"><span class="semantic-change-badge semantic-change-' + esc(item.change_kind) + '">' + esc(t('semantic.changes.' + item.change_kind)) + '</span><span class="semantic-change-kind">' + esc(objectLabel) + '</span><span class="semantic-change-label" title="' + esc(item.label || '') + '">' + esc(item.label || '') + '</span>' + source + '</li>';
+    }).join('');
+    var body = items.length
+        ? '<ul class="semantic-change-list">' + rows + '</ul><p class="semantic-changes-total">' + esc(t('semantic.changes.total', { total: total })) + '</p>'
+        : '<p class="semantic-detail-description">' + esc(t('semantic.changes.empty')) + '</p>';
+    box.innerHTML = '<h3>' + esc(t('semantic.changes.title')) + ' <span class="semantic-changes-window">' + esc(t('semantic.changes.window')) + '</span></h3>' + (badges ? '<div class="semantic-change-summary">' + badges + '</div>' : '') + body;
 }
 
 function loadOverview() {

@@ -184,6 +184,23 @@
       "dangling_relation": "关系悬空",
       "alias_conflict": "别名冲突",
       "duplicate_candidate": "疑似重复"
+    },
+    "changes": {
+      "title": "知识变化",
+      "window": "最近 7 天",
+      "empty": "暂无语义变化记录。入库或编译后，新增、更新与失效会自动出现在这里。",
+      "loadFailed": "知识变化加载失败",
+      "total": "共 {total} 条变化",
+      "added": "新增",
+      "updated": "更新",
+      "invalidated": "失效",
+      "removed": "移除",
+      "objects": {
+        "claim": "命题",
+        "entity": "实体",
+        "concept": "概念",
+        "document": "文档"
+      }
     }
   },
   "pending": {
@@ -1189,7 +1206,7 @@
     "emptyHint": "选择一个已安装的 CLI Agent 并输入指令。支持 Claude Code、OpenCode、Codex CLI、Gemini CLI。若连接失败，请确认已在对应 CLI 中完成登录或配置 API key。",
     "noAgent": "未检测到已安装的 CLI Agent，请先在系统中安装。"
   },
-    "cliAgent": {
+  "cliAgent": {
     "selectAgent": "选择 Agent",
     "generateMd": "生成 AGENTS.md",
     "generating": "正在生成 AGENTS.md...",

@@ -131,6 +131,25 @@ class SemanticHandler(BaseHandler):
             "total": 0,
         }
 
+    def _get_changes(self, params):
+        """Read-only knowledge change digest; never triggers LLM or writes."""
+        store = self._store()
+        if store is None:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            days = max(1, min(int(params.get("days", 7) or 7), 90))
+        except (TypeError, ValueError):
+            days = 7
+        object_kind = str(params.get("object_kind") or "").strip() or None
+        if object_kind not in {None, "claim", "entity", "concept", "document"}:
+            return {"success": False, "message": "未知对象类型"}
+        if not store.path.exists():
+            return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
+        limit, offset = self._page(params)
+        counts = store.change_counts(days=days)
+        items, total = store.recent_changes(days=days, limit=limit, offset=offset, object_kind=object_kind)
+        return {"success": True, "days": days, "counts": counts, "items": items, "total": total}
+
     def _all_note_paths(self) -> list[Path]:
         workspace = self.config.workspace_path
         if not workspace:
@@ -1099,6 +1118,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_detail", self._get_detail)
         router.register("get_note_semantic_context", self._get_note_semantic_context)
         router.register("get_semantic_compile_status", self._get_compile_status)
+        router.register("get_semantic_changes", self._get_changes)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
         router.register("review_semantic_entity_quality", self._review_entity_quality)

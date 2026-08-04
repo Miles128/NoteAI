@@ -74,6 +74,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_semantic_detail",
     "get_note_semantic_context",
     "get_semantic_object_wiki_page",
+    "get_semantic_changes",
     "get_semantic_compile_status",
     "get_semantic_topic_wiki_page",
     "get_semantic_entity_merge_preview",

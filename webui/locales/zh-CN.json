@@ -1174,6 +1174,12 @@
     }
   },
   "workspace": {
+    "sample": {
+      "button": "试用示例库",
+      "creating": "正在创建示例库…",
+      "ready": "示例库已就绪，可在设置中配置 LLM 后编译语义知识",
+      "failed": "创建示例库失败"
+    },
     "auto": {
       "button_class_workspace_btn_onclick_window_Worksp": "\n                <button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开工作区\">\n                    ${window.Icons.get('folderFilled')}\n                    <span>打开工作区</span>\n                </button>\n            ",
       "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",

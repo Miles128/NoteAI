@@ -34,6 +34,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "convert_raw_archive",
     "create_note",
     "create_note_from_draft",
+    "create_sample_workspace",
     "create_tag",
     "create_topic",
     "create_topic_folder",

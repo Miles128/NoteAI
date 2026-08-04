@@ -37,6 +37,7 @@ class WorkspaceHandler(BaseHandler):
         router.register("check_workspace_path_valid", self._check_workspace_path_valid)
         router.register("clear_saved_workspace", self._clear_saved_workspace)
         router.register("set_workspace_path", self._set_workspace_path)
+        router.register("create_sample_workspace", self._create_sample_workspace)
         router.register("get_workspace_tree", self._get_workspace_tree)
         router.register("on_file_selected", self._on_file_selected)
         router.register("refresh_log", self._refresh_log)
@@ -103,6 +104,20 @@ class WorkspaceHandler(BaseHandler):
                 "needs_schema_setup": flag,
             }
         return {"success": False, "message": "路径无效"}
+
+    def _create_sample_workspace(self, params):
+        """Create a workspace from bundled sample notes, then activate it."""
+        from sidecar.sample_workspace import create_sample_workspace
+
+        target_dir = str(params.get("target_dir") or "").strip()
+        ok, message, path = create_sample_workspace(target_dir)
+        if not ok:
+            return {"success": False, "message": message}
+        result = self._set_workspace_path({"path": path})
+        if not result.get("success"):
+            return result
+        result["sample"] = True
+        return result
 
     def _get_workspace_tree(self, _params):
         return self._compute_workspace_tree()

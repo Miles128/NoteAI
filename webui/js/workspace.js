@@ -61,6 +61,29 @@ async function openWorkspace() {
     }
 }
 
+async function createSampleWorkspace() {
+    const t = window.t || function(k) { return k; };
+    updateStatus(t('workspace.sample.creating'));
+    try {
+        const result = await window.api.createSampleWorkspace();
+        if (result && result.success) {
+            updateWorkspaceDisplay(result.workspace_path);
+            updateStatus(result.message || t('workspace.sample.ready'));
+            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                await window.TreeModule.loadFileTree(true);
+            }
+            if (typeof window.runPostWorkspaceSetup === 'function') {
+                window.runPostWorkspaceSetup();
+            }
+        } else {
+            updateStatus((result && result.message) || t('workspace.sample.failed'));
+        }
+    } catch (e) {
+        console.error('[Workspace] createSampleWorkspace error:', e);
+        updateStatus((e && e.message) || t('workspace.sample.failed'));
+    }
+}
+
 function updateWorkspaceDisplay(workspacePath) {
     const container = document.getElementById('workspace-container');
     const nameDisplay = document.getElementById('workspace-name-display');
@@ -91,10 +114,15 @@ function updateWorkspaceDisplay(workspacePath) {
                 </div>
             `;
         } else {
+            const sampleLabel = window.t ? window.t('workspace.sample.button') : '试用示例库';
             container.innerHTML = `
                 <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="打开工作区">
                     ${window.Icons.get('folderFilled')}
                     <span>打开工作区</span>
+                </button>
+                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${sampleLabel}">
+                    ${window.Icons.get('folderFilled')}
+                    <span>${sampleLabel}</span>
                 </button>
             `;
         }
@@ -270,6 +298,7 @@ window.WorkspaceModule = {
     updateStatus,
     updateProgress,
     openWorkspace,
+    createSampleWorkspace,
     updateWorkspaceDisplay,
     showWorkspaceOptions,
     checkWorkspaceStatus,

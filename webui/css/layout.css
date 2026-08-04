@@ -2835,6 +2835,26 @@ body {
     background: var(--primary-dark);
 }
 
+.workspace-btn-secondary {
+    background: transparent;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+}
+
+.workspace-btn-secondary:hover {
+    background: var(--primary-light);
+}
+
+.workspace-btn-secondary:active {
+    background: var(--primary-hover);
+}
+
+#workspace-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .workspace-btn svg {
     width: 18px;
     height: 18px;

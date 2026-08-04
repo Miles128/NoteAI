@@ -19,12 +19,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Build frontend bundles (tiptap + MCP runtime)
         run: |
           npm ci
+          npm ci --prefix mcp-server
           npm run build:desktop
 
       - name: Install Rust stable toolchain

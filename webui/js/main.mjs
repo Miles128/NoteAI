@@ -36,11 +36,6 @@ async function loadModules() {
     window.closeLogPanel = closeLogPanel;
     window.resetApiConfig = resetApiConfig;
 
-    await import('./cloud-sync.js');
-    const { CloudSyncModule } = window;
-    window.CloudSyncModule = CloudSyncModule;
-    CloudSyncModule.init();
-
     await import('./workspace.js');
     const {
         WorkspaceModule, updateStatus, updateProgress, openWorkspace,
@@ -102,6 +97,11 @@ async function loadModules() {
 
     await import('./editor.js');
 
+    await import('./rewrite.js');
+    if (window.RewriteManager) {
+        window.onLLMRewrite = window.RewriteManager.onLLMRewrite;
+    }
+
     await import('./converter.js');
     const { ConverterModule } = window;
     window.ConverterModule = ConverterModule;
@@ -150,6 +150,11 @@ async function loadModules() {
     window.togglePendingView = togglePendingView;
     window.refreshPendingBtnState = refreshPendingBtnState;
     window.loadPendingItems = loadPendingItems;
+
+    await import('./semantic-workbench.js');
+    window.SemanticWorkbenchModule = window.SemanticWorkbenchModule || {};
+    window.toggleSemanticWorkbench = window.SemanticWorkbenchModule.toggle;
+    if (window.SemanticWorkbenchModule.init) window.SemanticWorkbenchModule.init();
 
     await import('./tabs.js');
     const { TabsModule } = window;

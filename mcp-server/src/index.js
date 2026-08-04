@@ -13,6 +13,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { timingSafeEqual } from 'node:crypto';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { createTools } from './tools.js';
 
@@ -75,6 +78,7 @@ function parseArgs() {
   let workspace = process.env.NOTEAI_WORKSPACE || '';
   let port = 9710;
   let transport = 'stdio';
+  let token = process.env.NOTEAI_MCP_TOKEN || '';
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--workspace' && i + 1 < args.length) {
       workspace = args[++i];
@@ -82,9 +86,31 @@ function parseArgs() {
       port = parseInt(args[++i], 10);
     } else if (args[i] === '--transport' && i + 1 < args.length) {
       transport = args[++i];
+    } else if (args[i] === '--token' && i + 1 < args.length) {
+      token = args[++i];
     }
   }
-  return { workspace, port, transport };
+  return { workspace, port, transport, token };
+}
+
+function safeTokenEqual(actual, expected) {
+  const actualBuffer = Buffer.from(String(actual || ''));
+  const expectedBuffer = Buffer.from(String(expected || ''));
+  return actualBuffer.length === expectedBuffer.length
+    && timingSafeEqual(actualBuffer, expectedBuffer);
+}
+
+export function isAuthorizedWebSocketRequest(req, expectedToken) {
+  if (!expectedToken) return false;
+  const authorization = String(req?.headers?.authorization || '');
+  const bearer = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+  let queryToken = '';
+  try {
+    queryToken = new URL(req?.url || '/', 'ws://127.0.0.1').searchParams.get('token') || '';
+  } catch {
+    queryToken = '';
+  }
+  return safeTokenEqual(bearer, expectedToken) || safeTokenEqual(queryToken, expectedToken);
 }
 
 function createMcpServer(workspacePath) {
@@ -127,7 +153,7 @@ function createMcpServer(workspacePath) {
     },
     {
       name: 'vault_list_topics',
-      description: 'Return the vault topic guide (wiki/GUIDE.md).',
+      description: 'Return topic paths from the canonical Notes/ folder structure.',
       inputSchema: { type: 'object', properties: {} }
     },
     {
@@ -217,7 +243,7 @@ function createMcpServer(workspacePath) {
 }
 
 async function main() {
-  const { workspace, port, transport } = parseArgs();
+  const { workspace, port, transport, token } = parseArgs();
   if (!workspace) {
     console.error('Error: --workspace is required');
     process.exit(1);
@@ -226,21 +252,32 @@ async function main() {
   const server = createMcpServer(workspace);
 
   if (transport === 'websocket') {
-    const wss = new WebSocketServer({ port });
+    if (!token) {
+      throw new Error('WebSocket transport requires --token or NOTEAI_MCP_TOKEN');
+    }
+    const host = '127.0.0.1';
+    const wss = new WebSocketServer({
+      host,
+      port,
+      verifyClient: ({ req }) => isAuthorizedWebSocketRequest(req, token),
+    });
     wss.on('connection', (ws) => {
       const transport = new WebSocketServerTransport(ws);
       server.connect(transport).catch((err) => {
         console.error('MCP WebSocket transport error:', err);
       });
     });
-    console.error(`NoteAI MCP server listening on ws://localhost:${port}`);
+    console.error(`NoteAI MCP server listening on ws://${host}:${port}`);
   } else {
     const stdioTransport = new StdioServerTransport();
     await server.connect(stdioTransport);
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
-  process.exit(1);
-});
+const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
+if (import.meta.url === entryUrl) {
+  main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
+  });
+}

@@ -75,9 +75,9 @@ class TransferHandler(BaseHandler):
         urls = params.get("urls", [])
         ai_assist = params.get("ai_assist", False)
         include_images = params.get("include_images", True)
-        save_path = self.config.workspace_path
-        if not save_path:
-            return {"success": False, "message": "请先设置工作区"}
+        save_path, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
         if not urls:
             return {"success": False, "message": "请输入至少一个URL"}
 
@@ -121,9 +121,9 @@ class TransferHandler(BaseHandler):
     def _import_files(self, params):
 
         files = params.get("files", [])
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
         if not files:
             return {"success": False, "message": "未选择文件"}
 
@@ -175,7 +175,8 @@ class TransferHandler(BaseHandler):
             for i, _f in enumerate(copied):
                 self._send_progress("import-progress", (i + 1) / total, f"正在转换 {i + 1}/{total}")
 
-            result = self.file_converter.convert_batch(copied, workspace)
+            output_path = str(Path(workspace) / NOTES_FOLDER)
+            result = self.file_converter.convert_batch(copied, output_path)
             from sidecar.convert_failures import record_convert_batch_results
 
             record_convert_batch_results(result)
@@ -202,9 +203,9 @@ class TransferHandler(BaseHandler):
 
     def _start_file_conversion(self, params):
         ai_assist = params.get("ai_assist", False)
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         if not self._start_task(
             "file_conversion",
@@ -268,7 +269,8 @@ class TransferHandler(BaseHandler):
     def _do_auto_convert(self, workspace, pending_files):
         try:
             raw_path = str(Path(workspace) / "Raw")
-            results = self.file_converter.convert_batch(pending_files, workspace, raw_path=raw_path)
+            output_path = str(Path(workspace) / NOTES_FOLDER)
+            results = self.file_converter.convert_batch(pending_files, output_path, raw_path=raw_path)
             from sidecar.convert_failures import record_convert_batch_results
 
             record_convert_batch_results(results)
@@ -312,7 +314,8 @@ class TransferHandler(BaseHandler):
             record_convert_batch_results([{"success": False, "source": file_path, "error": "文件不存在"}])
             return
         raw_path = str(ws / RAW_FOLDER)
-        results = self.file_converter.convert_batch([str(full)], workspace, raw_path=raw_path)
+        output_path = str(ws / NOTES_FOLDER)
+        results = self.file_converter.convert_batch([str(full)], output_path, raw_path=raw_path)
         record_convert_batch_results(results)
 
     def _retry_all_convert_failures(self, _params):
@@ -320,9 +323,9 @@ class TransferHandler(BaseHandler):
         files = [x.get("file") for x in items if x.get("file")]
         if not files:
             return {"success": True, "message": "无失败项"}
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
         if not self._start_task(
             "convert_retry_all",
             self._do_retry_all_converts,
@@ -343,7 +346,8 @@ class TransferHandler(BaseHandler):
         if not paths:
             return
         raw_path = str(ws / RAW_FOLDER)
-        results = self.file_converter.convert_batch(paths, workspace, raw_path=raw_path)
+        output_path = str(ws / NOTES_FOLDER)
+        results = self.file_converter.convert_batch(paths, output_path, raw_path=raw_path)
         record_convert_batch_results(results)
 
     def _dismiss_convert_failure(self, params):
@@ -355,9 +359,9 @@ class TransferHandler(BaseHandler):
 
     def _extract_topics(self, params):
         topic_count = params.get("topic_count", None)
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         result = self.topic_extractor.extract_topics(specified_topic_count=topic_count)
         if not result.get("success"):
@@ -367,9 +371,9 @@ class TransferHandler(BaseHandler):
     def _start_note_integration(self, params):
         auto_topic = params.get("auto_topic", True)
         topics = params.get("topics", [])
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         self._note_integration = NoteIntegration()
 
@@ -407,8 +411,9 @@ class TransferHandler(BaseHandler):
         url = params.get("feed_url", "") or params.get("url", "")
         max_items = int(params.get("max_items", 10) or 10)
         fetch_articles = bool(params.get("fetch_articles", True))
-        if not self.config.workspace_path:
-            return {"success": False, "message": "请先设置工作区"}
+        _, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
         return self._run_sync_job(
             "rss_import",
             kind="ingest",
@@ -423,8 +428,9 @@ class TransferHandler(BaseHandler):
     def _import_transcript(self, params):
         from sidecar.multi_source import import_transcript
 
-        if not self.config.workspace_path:
-            return {"success": False, "message": "请先设置工作区"}
+        _, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
         return import_transcript(
             params.get("title", ""),
             params.get("content", ""),
@@ -434,9 +440,9 @@ class TransferHandler(BaseHandler):
 
     def _convert_raw_archive(self, _params):
         """Batch re-convert supported files under Raw/."""
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         if not self._start_task(
             "convert_raw",
@@ -472,7 +478,8 @@ class TransferHandler(BaseHandler):
             )
             return
         raw_path = str(raw_root)
-        results = self.file_converter.convert_batch(pending, workspace, raw_path=raw_path)
+        output_path = str(ws / NOTES_FOLDER)
+        results = self.file_converter.convert_batch(pending, output_path, raw_path=raw_path)
         record_convert_batch_results(results)
         converted = sum(1 for r in results if r.get("success"))
         self._send_response(
@@ -520,9 +527,9 @@ class TransferHandler(BaseHandler):
         return {"success": True, "subscriptions": load_subscriptions(workspace)}
 
     def _fetch_all_rss(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
         from sidecar.multi_source import fetch_all_subscriptions
 
         def imported_count(result):

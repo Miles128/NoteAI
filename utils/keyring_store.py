@@ -1,4 +1,8 @@
-"""Secure API key storage via OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service)."""
+"""Encrypted credential storage in NoteAI's application data directory.
+
+The module name is retained for compatibility with existing imports. NoteAI no
+longer reads from or writes to an operating-system keychain.
+"""
 
 import base64
 import hashlib
@@ -10,48 +14,57 @@ from pathlib import Path
 
 _log = logging.getLogger("NoteAI")
 
-_SERVICE_NAME = "NoteAI"
-_ACCOUNT_API_KEY = "api_key"
-
-_HAS_KEYRING = False
-_keyring_exc = None
-try:
-    import keyring
-
-    _HAS_KEYRING = True
-except ImportError:
-    _keyring_exc = "keyring library not installed"
-
-
-def _fallback_path():
-    from config.settings import SYSTEM_APP_DATA_DIR
-
-    SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return SYSTEM_APP_DATA_DIR / "api_key.dat"
-
-
 _PBKDF2_ITERATIONS = 600_000
 
 
-def _install_secret_path():
+def _app_data_dir() -> Path:
     from config.settings import SYSTEM_APP_DATA_DIR
 
-    SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return SYSTEM_APP_DATA_DIR / ".install_secret"
+    return SYSTEM_APP_DATA_DIR
+
+
+def _credentials_dir() -> Path:
+    path = _app_data_dir() / "credentials"
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+    return path
+
+
+def _fallback_path() -> Path:
+    return _credentials_dir() / "api_key.dat"
+
+
+def _legacy_fallback_path() -> Path:
+    return _app_data_dir() / "api_key.dat"
+
+
+def _install_secret_path() -> Path:
+    return _credentials_dir() / ".install_secret"
+
+
+def _legacy_install_secret_path() -> Path:
+    return _app_data_dir() / ".install_secret"
+
+
+def _read_install_secret(path: Path) -> bytes | None:
+    if not path.exists():
+        return None
+    try:
+        return base64.b64decode(path.read_bytes())
+    except Exception:
+        return None
 
 
 def _load_or_create_install_secret() -> bytes:
-    """Load or create a per-installation random secret stored separately.
-
-    This secret is NOT part of the encrypted api_key.dat payload, so an attacker
-    needs both files to derive the key. The file is created with 0o600.
-    """
+    """Load or create the per-installation secret used for local encryption."""
     path = _install_secret_path()
-    if path.exists():
-        try:
-            return base64.b64decode(path.read_bytes())
-        except Exception:
-            pass
+    existing = _read_install_secret(path)
+    if existing is not None:
+        return existing
+
     secret = secrets.token_bytes(32)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".install_secret_")
     try:
@@ -59,17 +72,16 @@ def _load_or_create_install_secret() -> bytes:
     finally:
         os.close(fd)
     os.chmod(tmp, 0o600)
-    os.replace(tmp, str(path))
+    os.replace(tmp, path)
     return secret
 
 
 def _derive_fernet_key(salt: bytes, install_secret: bytes | None = None) -> bytes:
-    """Derive a Fernet key from machine info, user, and an install secret.
+    """Derive a local encryption key from machine, user, and install data.
 
-    The fallback file stores the salt alongside the ciphertext. This is still
-    obfuscation, not true encryption: anyone with the file, the machine info,
-    and the install secret can decrypt it. It is only used when the OS keychain
-    is unavailable.
+    The install secret lives beside the encrypted credentials. This protects
+    against accidental plaintext disclosure, but is not equivalent to hardware
+    backed or OS-keychain protection.
     """
     machine_id = os.uname().nodename if hasattr(os, "uname") else os.environ.get("COMPUTERNAME", "localhost")
     user = os.environ.get("USER", os.environ.get("USERNAME", "user"))
@@ -83,10 +95,8 @@ def _encrypt(value: str) -> bytes:
     from cryptography.fernet import Fernet
 
     salt = secrets.token_bytes(16)
-    install_secret = _load_or_create_install_secret()
-    f = Fernet(_derive_fernet_key(salt, install_secret))
-    ciphertext = f.encrypt(value.encode("utf-8"))
-    return base64.b64encode(salt + ciphertext)
+    fernet = Fernet(_derive_fernet_key(salt, _load_or_create_install_secret()))
+    return base64.b64encode(salt + fernet.encrypt(value.encode("utf-8")))
 
 
 def _decrypt(data: bytes, install_secret: bytes | None = None) -> str:
@@ -96,213 +106,144 @@ def _decrypt(data: bytes, install_secret: bytes | None = None) -> str:
         install_secret = _load_or_create_install_secret()
     raw = base64.b64decode(data)
     if len(raw) < 16:
-        raise ValueError("Invalid fallback data")
+        raise ValueError("Invalid credential data")
     salt, ciphertext = raw[:16], raw[16:]
-    f = Fernet(_derive_fernet_key(salt, install_secret))
-    return f.decrypt(ciphertext).decode("utf-8")
+    return Fernet(_derive_fernet_key(salt, install_secret)).decrypt(ciphertext).decode("utf-8")
 
 
-def _legacy_decrypt(data: bytes) -> str:
-    """Decrypt data written before the install-secret was introduced."""
-    from cryptography.fernet import Fernet
+def _decrypt_compatible(data: bytes) -> str:
+    """Read current data and formats used by earlier file-based storage."""
+    secrets_to_try = [_load_or_create_install_secret()]
+    legacy_secret = _read_install_secret(_legacy_install_secret_path())
+    if legacy_secret is not None and legacy_secret not in secrets_to_try:
+        secrets_to_try.append(legacy_secret)
 
-    raw = base64.b64decode(data)
-    if len(raw) < 16:
-        raise ValueError("Invalid fallback data")
-    salt, ciphertext = raw[:16], raw[16:]
-    f = Fernet(_derive_fernet_key(salt, None))
-    return f.decrypt(ciphertext).decode("utf-8")
-
-
-def _fallback_read() -> str:
-    path = _fallback_path()
-    if not path.exists():
-        return ""
-    try:
-        data = path.read_bytes()
-        os.chmod(path, 0o600)
-        install_secret = _load_or_create_install_secret()
+    for install_secret in secrets_to_try:
         try:
             return _decrypt(data, install_secret)
         except Exception:
-            # Allow migration from old format: if the new format fails, try legacy.
-            try:
-                return _legacy_decrypt(data)
-            except Exception:
-                return base64.b64decode(data).decode("utf-8")
-    except Exception as e:
-        _log.warning("Failed to read API key from fallback: %s", e)
-        return ""
+            pass
+
+    # Compatibility with the oldest machine/user-derived format.
+    try:
+        return _decrypt(data, b"")
+    except Exception:
+        return base64.b64decode(data).decode("utf-8")
 
 
-def _fallback_write(key: str) -> bool:
-    path = _fallback_path()
+def _atomic_write(path: Path, value: str, prefix: str) -> bool:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".api_key_")
-        try:
-            os.write(fd, _encrypt(key))
-        finally:
-            os.close(fd)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, str(path))
-        return True
-    except Exception as e:
-        _log.warning("Failed to write API key to fallback: %s", e)
-        return False
-
-
-def _fallback_delete() -> bool:
-    try:
-        path = _fallback_path()
-        if path.exists():
-            path.unlink()
-        return True
-    except Exception as e:
-        _log.warning("Failed to delete API key fallback: %s", e)
-        return False
-
-
-def store_api_key(api_key: str) -> bool:
-    if not api_key:
-        return False
-
-    if _HAS_KEYRING:
-        try:
-            keyring.set_password(_SERVICE_NAME, _ACCOUNT_API_KEY, api_key)
-            return True
-        except Exception as e:
-            _log.warning("Keyring store failed, using fallback: %s", e)
-
-    return _fallback_write(api_key)
-
-
-def load_api_key() -> str:
-    if _HAS_KEYRING:
-        try:
-            key = keyring.get_password(_SERVICE_NAME, _ACCOUNT_API_KEY)
-            if key:
-                return key
-        except Exception as e:
-            _log.warning("Keyring load failed, using fallback: %s", e)
-
-    return _fallback_read()
-
-
-def delete_api_key() -> bool:
-    ok = True
-    if _HAS_KEYRING:
-        try:
-            keyring.delete_password(_SERVICE_NAME, _ACCOUNT_API_KEY)
-        except Exception as e:
-            _log.warning("Keyring delete failed: %s", e)
-            ok = False
-    if not _fallback_delete():
-        ok = False
-    return ok
-
-
-def store_credential(service: str, account: str, value: str) -> bool:
-    """Store an arbitrary credential in the OS keychain or the fallback file."""
-    if not value:
-        return False
-    if _HAS_KEYRING:
-        try:
-            keyring.set_password(service, account, value)
-            return True
-        except Exception as e:
-            _log.warning("Keyring store failed for %s/%s, using fallback: %s", service, account, e)
-    return _fallback_write_credential(service, account, value)
-
-
-def load_credential(service: str, account: str) -> str:
-    """Load an arbitrary credential from the OS keychain or the fallback file."""
-    if _HAS_KEYRING:
-        try:
-            key = keyring.get_password(service, account)
-            if key is not None:
-                return key
-        except Exception as e:
-            _log.warning("Keyring load failed for %s/%s, using fallback: %s", service, account, e)
-    return _fallback_read_credential(service, account)
-
-
-def delete_credential(service: str, account: str) -> bool:
-    """Delete an arbitrary credential from the OS keychain and fallback file."""
-    ok = True
-    if _HAS_KEYRING:
-        try:
-            keyring.delete_password(service, account)
-        except Exception as e:
-            _log.warning("Keyring delete failed for %s/%s: %s", service, account, e)
-            ok = False
-    if not _fallback_delete_credential(service, account):
-        ok = False
-    return ok
-
-
-def _credential_fallback_path(service: str, account: str) -> Path:
-    from config.settings import SYSTEM_APP_DATA_DIR
-
-    safe_service = base64.urlsafe_b64encode(hashlib.sha256(service.encode()).digest()).decode()[:16]
-    safe_account = base64.urlsafe_b64encode(hashlib.sha256(account.encode()).digest()).decode()[:16]
-    SYSTEM_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    return SYSTEM_APP_DATA_DIR / f"cred_{safe_service}_{safe_account}.dat"
-
-
-def _fallback_write_credential(service: str, account: str, value: str) -> bool:
-    path = _credential_fallback_path(service, account)
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".cred_")
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=prefix)
         try:
             os.write(fd, _encrypt(value))
         finally:
             os.close(fd)
         os.chmod(tmp, 0o600)
-        os.replace(tmp, str(path))
+        os.replace(tmp, path)
         return True
-    except Exception as e:
-        _log.warning("Failed to write credential fallback for %s/%s: %s", service, account, e)
+    except Exception as exc:
+        _log.warning("Failed to write encrypted credential %s: %s", path.name, exc)
         return False
 
 
-def _fallback_read_credential(service: str, account: str) -> str:
-    path = _credential_fallback_path(service, account)
+def _read_path(path: Path) -> str:
     if not path.exists():
         return ""
     try:
-        data = path.read_bytes()
         os.chmod(path, 0o600)
-        install_secret = _load_or_create_install_secret()
-        try:
-            return _decrypt(data, install_secret)
-        except Exception:
-            try:
-                return _legacy_decrypt(data)
-            except Exception:
-                return base64.b64decode(data).decode("utf-8")
-    except Exception as e:
-        _log.warning("Failed to read credential fallback for %s/%s: %s", service, account, e)
+        return _decrypt_compatible(path.read_bytes())
+    except Exception as exc:
+        _log.warning("Failed to read encrypted credential %s: %s", path.name, exc)
         return ""
 
 
-def _fallback_delete_credential(service: str, account: str) -> bool:
+def _delete_path(path: Path) -> bool:
     try:
-        path = _credential_fallback_path(service, account)
         if path.exists():
             path.unlink()
         return True
-    except Exception as e:
-        _log.warning("Failed to delete credential fallback for %s/%s: %s", service, account, e)
+    except Exception as exc:
+        _log.warning("Failed to delete encrypted credential %s: %s", path.name, exc)
         return False
 
 
+def _load_with_migration(current: Path, legacy: Path, prefix: str) -> str:
+    value = _read_path(current)
+    if value or not legacy.exists():
+        return value
+
+    value = _read_path(legacy)
+    if value and _atomic_write(current, value, prefix):
+        _delete_path(legacy)
+    return value
+
+
+def store_api_key(api_key: str) -> bool:
+    if not api_key:
+        return False
+    written = _atomic_write(_fallback_path(), api_key, ".api_key_")
+    if written:
+        _delete_path(_legacy_fallback_path())
+    return written
+
+
+def load_api_key() -> str:
+    return _load_with_migration(_fallback_path(), _legacy_fallback_path(), ".api_key_")
+
+
+def delete_api_key() -> bool:
+    current_deleted = _delete_path(_fallback_path())
+    legacy_deleted = _delete_path(_legacy_fallback_path())
+    return current_deleted and legacy_deleted
+
+
+def _credential_filename(service: str, account: str) -> str:
+    safe_service = base64.urlsafe_b64encode(hashlib.sha256(service.encode()).digest()).decode()[:16]
+    safe_account = base64.urlsafe_b64encode(hashlib.sha256(account.encode()).digest()).decode()[:16]
+    return f"cred_{safe_service}_{safe_account}.dat"
+
+
+def _credential_fallback_path(service: str, account: str) -> Path:
+    return _credentials_dir() / _credential_filename(service, account)
+
+
+def _legacy_credential_fallback_path(service: str, account: str) -> Path:
+    return _app_data_dir() / _credential_filename(service, account)
+
+
+def store_credential(service: str, account: str, value: str) -> bool:
+    """Store an arbitrary credential in the encrypted application directory."""
+    if not value:
+        return False
+    current = _credential_fallback_path(service, account)
+    written = _atomic_write(current, value, ".cred_")
+    if written:
+        _delete_path(_legacy_credential_fallback_path(service, account))
+    return written
+
+
+def load_credential(service: str, account: str) -> str:
+    """Load an arbitrary credential from the encrypted application directory."""
+    return _load_with_migration(
+        _credential_fallback_path(service, account),
+        _legacy_credential_fallback_path(service, account),
+        ".cred_",
+    )
+
+
+def delete_credential(service: str, account: str) -> bool:
+    """Delete an arbitrary credential from current and legacy file locations."""
+    current_deleted = _delete_path(_credential_fallback_path(service, account))
+    legacy_deleted = _delete_path(_legacy_credential_fallback_path(service, account))
+    return current_deleted and legacy_deleted
+
+
 def is_keyring_available() -> bool:
-    return _HAS_KEYRING
+    """Compatibility API: OS keyrings are intentionally disabled."""
+    return False
 
 
 def keyring_status() -> str:
-    if _HAS_KEYRING:
-        return "available"
-    return f"unavailable: {_keyring_exc}"
+    """Compatibility API describing the configured storage backend."""
+    return "disabled: using encrypted application directory"

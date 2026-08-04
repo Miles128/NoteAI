@@ -900,7 +900,7 @@ async function onAITopicSurvey() {
     var previewPanel = document.getElementById('preview-panel');
     if (previewPanel) previewPanel.style.display = 'none';
 
-    var eventAPI = window.__TAURI__ && window.__TAURI__.event;
+    var eventAPI = window.getTauriEventAPI ? window.getTauriEventAPI() : null;
     if (eventAPI) {
         window._surveyStreamUnlisten = await eventAPI.listen('python-event', function(event) {
             var data = event.payload;
@@ -1145,6 +1145,7 @@ function loadTopicPendingPanel(pending, topicNames) {
     }
 
     var html = '<div class="topic-pending-header">' + window.t('topic.pendingHeader') + ' <span class="topic-pending-count">' + pending.length + '</span></div>';
+    html += '<div class="topic-pending-hint">' + window.t('topic.dragToFolderHint') + '</div>';
     html += '<div class="topic-pending-list">';
 
     pending.forEach(function(p, i) {
@@ -1154,18 +1155,6 @@ function loadTopicPendingPanel(pending, topicNames) {
         (p.candidates || []).forEach(function(c) {
             html += '<button class="topic-candidate-btn" data-topic="' + escapeAttr(c) + '" data-file="' + escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + escapeHtml(c) + '</button>';
         });
-        html += '</div>';
-        html += '<div class="topic-assign-row">';
-        if (topicNames.length > 0) {
-            html += '<select class="topic-select" data-file="' + escapeAttr(p.file) + '" onchange="onTopicSelectChange(this)">';
-            html += '<option value="">' + window.t('topic.selectExistingTopic') + '</option>';
-            topicNames.forEach(function(name) {
-                html += '<option value="' + escapeAttr(name) + '">' + escapeHtml(name) + '</option>';
-            });
-            html += '</select>';
-        }
-        html += '<input type="text" class="topic-custom-input" data-file="' + escapeAttr(p.file) + '" placeholder="' + window.t('topic.customTopicPlaceholder') + '">';
-        html += '<button class="topic-custom-btn" onclick="onConfirmBtnClick(this)">' + window.t('common.ok') + '</button>';
         html += '</div>';
         html += '</div>';
     });
@@ -1220,10 +1209,9 @@ function onCandidateClick(btnEl) {
     btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
     btnEl.classList.add('topic-candidate-selected');
 
-    var input = card.querySelector('.topic-custom-input');
-    if (input) {
-        input.value = '';
-    }
+    // A candidate is an explicit user choice. Apply it immediately; drag/drop
+    // onto the folder tree remains the second direct-manipulation path.
+    doConfirmTopic(card);
 }
 
 function onInputChange(inputEl) {
@@ -1381,4 +1369,3 @@ if (document.readyState === 'loading') {
 }
 
 })();
-

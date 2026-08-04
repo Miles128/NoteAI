@@ -13,7 +13,9 @@ import json
 import shutil
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +47,12 @@ _COLLECTION_CACHE: dict[str, zvec.Collection] = {}
 _COLLECTION_CACHE_LOCK = threading.Lock()
 _COLLECTION_IO_LOCK = threading.RLock()
 
+# Serialize complete indexing operations per workspace. zvec permits concurrent
+# readers, but writes are single-process exclusive; callers must not prepare and
+# commit two independent index generations at the same time.
+_INDEX_OPERATION_LOCKS: dict[str, threading.Lock] = {}
+_INDEX_OPERATION_LOCKS_GUARD = threading.Lock()
+
 # In-memory BM25 retriever cache (bm25s.load is costly on every query).
 _BM25_CACHE: dict[str, tuple[Any, list[dict]]] = {}
 _BM25_CACHE_LOCK = threading.Lock()
@@ -54,6 +62,20 @@ _ENSURE_BM25_IN_PROGRESS: set[str] = set()
 
 def _normalize_workspace(workspace: str) -> str:
     return str(Path(workspace).expanduser().resolve())
+
+
+@contextmanager
+def index_operation(workspace: str, *, blocking: bool = False):
+    """Acquire the workspace-wide index writer lease."""
+    ws = _normalize_workspace(workspace)
+    with _INDEX_OPERATION_LOCKS_GUARD:
+        lock = _INDEX_OPERATION_LOCKS.setdefault(ws, threading.Lock())
+    acquired = lock.acquire(blocking=blocking)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            lock.release()
 
 
 def _rag_index_dir(workspace: str) -> Path:
@@ -167,56 +189,35 @@ def _collection_lock_error(workspace: str | None = None) -> RuntimeError:
     return RuntimeError(f"RAG 索引文件被占用，{hint}")
 
 
-def _take_cached_collection(workspace: str, *, destroy: bool = False) -> zvec.Collection | None:
-    """Remove a workspace collection from cache; optionally destroy it to release zvec lock."""
+def _take_cached_collection(workspace: str) -> zvec.Collection | None:
+    """Remove a workspace collection handle from cache.
+
+    zvec.Collection.destroy() deletes the on-disk collection; it is not a
+    close operation. Releasing the final Python reference closes the native
+    handle without erasing user data.
+    """
     ws = _normalize_workspace(workspace)
     with _COLLECTION_CACHE_LOCK:
         collection = _COLLECTION_CACHE.pop(ws, None)
-    if collection is not None and destroy:
-        try:
-            collection.destroy()
-        except Exception as e:
-            log_exception("[rag/index] failed to destroy cached collection", e, level="warning", logger=logger)
-        gc.collect()
     return collection
 
 
 def _remove_stale_lock(path: str) -> bool:
-    """Remove stale zvec/rocksdb LOCK files under a collection directory."""
-    root = Path(path)
-    if not root.exists():
-        return False
-    removed = False
-    for lock_file in root.rglob("LOCK"):
-        try:
-            if lock_file.stat().st_size == 0:
-                lock_file.unlink()
-                logger.info(f"[rag/index] removed stale 0-byte LOCK: {lock_file}")
-                removed = True
-                continue
-            content = lock_file.read_text().strip()
-            if content:
-                import psutil
+    """Never unlink RocksDB LOCK files.
 
-                pid = int(content)
-                if not psutil.pid_exists(pid):
-                    lock_file.unlink()
-                    logger.info(f"[rag/index] removed stale LOCK from dead PID {pid}: {lock_file}")
-                    removed = True
-        except Exception:
-            try:
-                lock_file.unlink()
-                logger.info(f"[rag/index] forcibly removed LOCK: {lock_file}")
-                removed = True
-            except Exception:
-                pass
-    return removed
+    RocksDB lock files are normally zero bytes and their ownership lives in an
+    OS file lock, not in file contents. Unlinking one on Unix can bypass an
+    active writer's lock by creating a new inode at the same path.
+    """
+    return False
 
 
 def _release_collection(workspace: str, *, remove_data: bool = False) -> None:
-    """Destroy cached zvec handle and optionally wipe on-disk collection data."""
+    """Release the cached zvec handle and optionally wipe collection data."""
     ws = _normalize_workspace(workspace)
-    _take_cached_collection(ws, destroy=True)
+    collection = _take_cached_collection(ws)
+    collection = None
+    gc.collect()
     path = _collection_path(ws)
     if remove_data and path.exists():
         shutil.rmtree(path, ignore_errors=True)
@@ -238,9 +239,6 @@ def _open_or_create_collection(path: str, workspace: str | None = None) -> zvec.
                 break
             gc.collect()
             if attempt == 0:
-                continue
-            if _remove_stale_lock(path):
-                gc.collect()
                 continue
             if ws is not None:
                 _release_collection(ws)
@@ -265,7 +263,7 @@ def _get_collection(workspace: str) -> zvec.Collection:
                 return cached
 
         destroy = not _manifest_version_ok(ws)
-        _take_cached_collection(ws, destroy=destroy)
+        _take_cached_collection(ws)
 
         path = str(_collection_path(ws))
         if destroy and Path(path).exists():
@@ -298,7 +296,7 @@ def clear_bm25_cache(workspace: str | None = None) -> None:
 
 
 def clear_collection_cache(workspace: str | None = None) -> None:
-    """Drop cached collection(s), destroying handles so zvec locks are released."""
+    """Drop cached collection handles without deleting on-disk data."""
     with _COLLECTION_IO_LOCK:
         with _COLLECTION_CACHE_LOCK:
             workspaces = (
@@ -307,7 +305,8 @@ def clear_collection_cache(workspace: str | None = None) -> None:
                 else [_normalize_workspace(workspace)]
             )
         for ws in workspaces:
-            _take_cached_collection(ws, destroy=True)
+            collection = _take_cached_collection(ws)
+            collection = None
         with _COLLECTION_CACHE_LOCK:
             if workspace is None:
                 _COLLECTION_CACHE.clear()
@@ -340,7 +339,7 @@ def index_exists(workspace: str) -> bool:
     return _collection_path(workspace).exists() and _metadata_path(workspace).exists()
 
 
-def count_indexed_chunks(workspace: str) -> int:
+def count_indexed_chunks(workspace: str, *, allow_metadata_fallback: bool = True) -> int:
     """Return approximate chunk count from the metadata inverted index.
 
     Cross-checks the actual collection count when available and falls back to
@@ -352,11 +351,10 @@ def count_indexed_chunks(workspace: str) -> int:
     for ids in files.values():
         metadata_total += len(ids)
 
-    try:
-        collection_count = _collection_count(workspace)
-    except Exception as e:
-        log_exception("[rag/index] failed to get collection count", e, level="debug", logger=logger)
-        collection_count = -1
+    collection_count = _collection_count(workspace)
+
+    if collection_count < 0 and not allow_metadata_fallback:
+        return -1
 
     if collection_count >= 0 and metadata_total != collection_count:
         logger.warning(
@@ -368,11 +366,17 @@ def count_indexed_chunks(workspace: str) -> int:
 
 def _collection_count(workspace: str) -> int:
     """Query the zvec collection for total entity count, or -1 if unavailable."""
+    # Status endpoints must not queue behind a long full rebuild. The previous
+    # behavior occupied every RPC worker while build_index held this lock.
+    if not _COLLECTION_IO_LOCK.acquire(blocking=False):
+        return -1
     try:
         return int(_get_collection(workspace).stats.doc_count)
     except Exception as e:
         log_exception("[rag/index] failed to query collection count", e, level="debug", logger=logger)
         return -1
+    finally:
+        _COLLECTION_IO_LOCK.release()
 
 
 def _empty_metadata() -> dict[str, Any]:
@@ -507,7 +511,10 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
 
     with _COLLECTION_IO_LOCK:
         collection_path = _collection_path(ws)
-        _release_collection(ws, remove_data=True)
+        staging_path = collection_path.with_name(f"{collection_path.name}.building-{uuid.uuid4().hex}")
+        backup_path = collection_path.with_name(f"{collection_path.name}.backup-{uuid.uuid4().hex}")
+        shutil.rmtree(staging_path, ignore_errors=True)
+        shutil.rmtree(backup_path, ignore_errors=True)
         for old in index_dir.glob("*.tmp"):
             old.unlink()
 
@@ -515,20 +522,16 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
         collection = None
         for attempt in range(3):
             try:
-                collection = zvec.create_and_open(str(collection_path), _build_schema())
+                collection = zvec.create_and_open(str(staging_path), _build_schema())
                 break
             except Exception as e:
                 last_err = e
                 if not _is_zvec_lock_error(e):
                     raise
-                _remove_stale_lock(str(collection_path))
                 gc.collect()
                 time.sleep(0.08 * (attempt + 1))
         if collection is None:
             raise _collection_lock_error(ws) from last_err
-
-        with _COLLECTION_CACHE_LOCK:
-            _COLLECTION_CACHE[ws] = collection
 
         batch_size = _INDEX_BATCH_SIZE
         total = len(chunks)
@@ -543,6 +546,28 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
                 progress_callback(min(i + batch_size, total), total, "写入索引")
 
         collection.flush()
+
+        # Publish the completed vector collection atomically. The previous
+        # generation remains available until every zvec batch has succeeded.
+        collection = None
+        gc.collect()
+        _release_collection(ws)
+        if collection_path.exists():
+            collection_path.rename(backup_path)
+        try:
+            staging_path.rename(collection_path)
+            collection = zvec.open(str(collection_path))
+        except Exception:
+            shutil.rmtree(collection_path, ignore_errors=True)
+            if backup_path.exists():
+                backup_path.rename(collection_path)
+            raise
+        finally:
+            shutil.rmtree(staging_path, ignore_errors=True)
+
+        with _COLLECTION_CACHE_LOCK:
+            _COLLECTION_CACHE[ws] = collection
+        shutil.rmtree(backup_path, ignore_errors=True)
 
         # Build BM25s index
         if progress_callback:
@@ -561,28 +586,49 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
     return {"success": True, "chunk_count": total, "_collection": collection}
 
 
-def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> None:
+def _write_docs_batched(collection: zvec.Collection, docs: list[zvec.Doc], *, insert: bool = False) -> None:
+    """Write within zvec's maximum request size."""
+    operation = collection.insert if insert else collection.upsert
+    for offset in range(0, len(docs), _INDEX_BATCH_SIZE):
+        operation(docs[offset : offset + _INDEX_BATCH_SIZE])
+
+
+def _delete_ids_batched(collection: zvec.Collection, ids: list[str]) -> None:
+    for offset in range(0, len(ids), _INDEX_BATCH_SIZE):
+        collection.delete(ids[offset : offset + _INDEX_BATCH_SIZE])
+
+
+def add_chunks(
+    workspace: str,
+    chunks: list[dict],
+    embeddings: list[dict],
+    *,
+    rebuild_bm25s: bool = True,
+) -> None:
     if not chunks:
         return
 
-    collection = _get_collection(workspace)
-    metadata = _load_metadata(workspace)
+    with _COLLECTION_IO_LOCK:
+        collection = _get_collection(workspace)
+        metadata = _load_metadata(workspace)
 
-    docs = []
-    for chunk, emb in zip(chunks, embeddings, strict=False):
-        if not chunk.get("id"):
-            continue
-        docs.append(_chunk_to_doc(chunk, emb))
-        _update_metadata_index(metadata, chunk, mode="add")
+        docs = []
+        for chunk, emb in zip(chunks, embeddings, strict=False):
+            if not chunk.get("id"):
+                continue
+            docs.append(_chunk_to_doc(chunk, emb))
+            _update_metadata_index(metadata, chunk, mode="add")
 
-    if not docs:
-        return
+        if not docs:
+            return
 
-    collection.upsert(docs)
-    collection.flush()
-    _save_metadata(workspace, metadata)
+        _write_docs_batched(collection, docs)
+        collection.flush()
+        _save_metadata(workspace, metadata)
 
     # Rebuild BM25s with merged corpus
+    if not rebuild_bm25s:
+        return
     try:
         bm25_dir = _bm25s_dir(workspace)
         if bm25_dir.exists() and any(bm25_dir.iterdir()):
@@ -600,6 +646,60 @@ def add_chunks(workspace: str, chunks: list[dict], embeddings: list[dict]) -> No
         _build_and_save_bm25(merged_corpus, bm25_dir, workspace)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild failed: {e}\n")
+
+
+def replace_file_chunks(workspace: str, replacements: dict[str, dict]) -> int:
+    """Atomically-ish replace chunks for multiple files under one writer lock.
+
+    New documents are upserted before stale ids are removed, so a failed write
+    leaves the previous searchable generation intact. Manifest, metadata and
+    BM25 are committed only after the zvec mutation succeeds.
+    """
+    if not replacements:
+        return 0
+
+    with _COLLECTION_IO_LOCK:
+        collection = _get_collection(workspace)
+        manifest = load_manifest(workspace)
+        manifest_files = manifest.setdefault("files", {})
+        docs: list[zvec.Doc] = []
+        stale_ids: list[str] = []
+
+        for rel_path, payload in replacements.items():
+            chunks = payload.get("chunks") or []
+            embeddings = payload.get("embeddings") or []
+            new_ids = {str(chunk.get("id")) for chunk in chunks if chunk.get("id")}
+            old_ids = set((manifest_files.get(rel_path) or {}).get("chunks") or [])
+            stale_ids.extend(sorted(old_ids - new_ids))
+            docs.extend(
+                _chunk_to_doc(chunk, embedding)
+                for chunk, embedding in zip(chunks, embeddings, strict=False)
+                if chunk.get("id")
+            )
+
+        if docs:
+            _write_docs_batched(collection, docs)
+            collection.flush()
+        if stale_ids:
+            _delete_ids_batched(collection, stale_ids)
+            collection.flush()
+
+        for rel_path, payload in replacements.items():
+            chunks = payload.get("chunks") or []
+            manifest_files[rel_path] = {
+                "mtime": payload.get("mtime", 0),
+                "size": payload.get("size", 0),
+                "chunks": [chunk["id"] for chunk in chunks if chunk.get("id")],
+            }
+
+        all_chunk_ids = [chunk_id for entry in manifest_files.values() for chunk_id in (entry.get("chunks") or [])]
+        indexed_count = rebuild_search_indices(
+            workspace,
+            all_chunk_ids,
+            collection=collection,
+        )
+        save_manifest(workspace, manifest)
+        return indexed_count
 
 
 def delete_by_file(
@@ -621,41 +721,42 @@ def delete_by_file(
     Returns:
         List of removed chunk dicts.
     """
-    if collection is None:
-        collection = _get_collection(workspace)
-    metadata = _load_metadata(workspace)
+    with _COLLECTION_IO_LOCK:
+        if collection is None:
+            collection = _get_collection(workspace)
+        metadata = _load_metadata(workspace)
 
-    removed: list[dict] = []
-    try:
-        filter_expr = f"file_path = {_escape_filter_value(file_path)}"
-        docs = collection.query(
-            filter=filter_expr,
-            topk=10000,
-            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
-        )
-        for doc in docs:
-            fields = doc.fields or {}
-            chunk = {
-                "id": doc.id,
-                "content": fields.get("content", ""),
-                "file_path": fields.get("file_path", ""),
-                "topic": fields.get("topic", ""),
-                "tags": _tags_from_fields(fields),
-                "section_title": fields.get("section_title", ""),
-            }
-            removed.append(chunk)
-            _update_metadata_index(metadata, chunk, mode="remove")
-    except Exception as e:
-        logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
-        # Collection object may be in an inconsistent state; drop it from cache.
-        clear_collection_cache(workspace)
+        removed: list[dict] = []
+        try:
+            filter_expr = f"file_path = {_escape_filter_value(file_path)}"
+            docs = collection.query(
+                filter=filter_expr,
+                topk=10000,
+                output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+            )
+            for doc in docs:
+                fields = doc.fields or {}
+                chunk = {
+                    "id": doc.id,
+                    "content": fields.get("content", ""),
+                    "file_path": fields.get("file_path", ""),
+                    "topic": fields.get("topic", ""),
+                    "tags": _tags_from_fields(fields),
+                    "section_title": fields.get("section_title", ""),
+                }
+                removed.append(chunk)
+                _update_metadata_index(metadata, chunk, mode="remove")
+        except Exception as e:
+            logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
+            # Collection object may be in an inconsistent state; drop it from cache.
+            clear_collection_cache(workspace)
+            raise
 
-    if removed:
-        ids = [c["id"] for c in removed]
-        collection.delete(ids)
-        collection.flush()
+        if removed:
+            _delete_ids_batched(collection, [c["id"] for c in removed])
+            collection.flush()
 
-    _save_metadata(workspace, metadata)
+        _save_metadata(workspace, metadata)
 
     # Rebuild BM25s without deleted docs
     if not rebuild_bm25s:
@@ -670,6 +771,9 @@ def delete_by_file(
         removed_ids = {c["id"] for c in removed}
         new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
         _build_and_save_bm25(new_corpus, bm25_dir, workspace)
+        manifest = load_manifest(workspace)
+        manifest.get("files", {}).pop(file_path, None)
+        save_manifest(workspace, manifest)
     except Exception as e:
         logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
 
@@ -825,7 +929,12 @@ def _sparse_search(
     return out
 
 
-def _filter_candidates(workspace: str, topics: list[str] | None, tags: list[str] | None) -> set[str] | None:
+def _filter_candidates(
+    workspace: str,
+    topics: list[str] | None,
+    tags: list[str] | None,
+    file_paths: list[str] | None = None,
+) -> set[str] | None:
     metadata = _load_metadata(workspace)
     candidates: set[str] | None = None
 
@@ -844,6 +953,15 @@ def _filter_candidates(workspace: str, topics: list[str] | None, tags: list[str]
         else:
             candidates &= tag_ids
 
+    if file_paths:
+        file_ids: set[str] = set()
+        for path in file_paths:
+            file_ids.update(metadata.get("files", {}).get(path, []))
+        if candidates is None:
+            candidates = file_ids
+        else:
+            candidates &= file_ids
+
     return candidates
 
 
@@ -855,10 +973,11 @@ def hybrid_search(
     topics: list | None = None,
     tags: list | None = None,
     query_text: str = "",
+    file_paths: list[str] | None = None,
 ) -> list[dict]:
     collection = _get_collection(workspace)
 
-    candidates = _filter_candidates(workspace, topics, tags)
+    candidates = _filter_candidates(workspace, topics, tags, file_paths)
 
     if not query_text and query_sparse:
         query_text = " ".join(str(k) for k, v in query_sparse.items() if v > 0)

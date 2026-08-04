@@ -1,4 +1,6 @@
-from sidecar.pending_topics import load_pending_topics, save_pending_topics
+from utils.topic_pending import load_pending, save_pending
+
+NO_WORKSPACE_MESSAGE = "未设置工作区"
 
 
 class BaseHandler:
@@ -32,6 +34,14 @@ class BaseHandler:
     @property
     def _resolve_path(self):
         return self._server._resolve_path
+
+    @property
+    def _find_file_by_name(self):
+        return self._server._find_file_by_name
+
+    @property
+    def _parse_wiki_headings(self):
+        return self._server._parse_wiki_headings
 
     @property
     def _cached_or_compute(self):
@@ -79,19 +89,35 @@ class BaseHandler:
 
     @staticmethod
     def _parse_frontmatter(md_text: str) -> dict:
-        from sidecar.textutils import parse_frontmatter
+        from utils.text_utils import parse_frontmatter
 
         return parse_frontmatter(md_text)
+
+    def _require_workspace(self, extra: dict | None = None, message: str = NO_WORKSPACE_MESSAGE):
+        """工作区统一守卫。
+
+        Returns:
+            (workspace, None) —— 工作区已设置；
+            (None, error_dict) —— 未设置，error_dict 可直接作为 RPC 响应返回。
+            extra 用于附加字段（如 {"started": False}）。
+        """
+        workspace = self.config.workspace_path
+        if workspace:
+            return workspace, None
+        err = {"success": False, "message": message}
+        if extra:
+            err.update(extra)
+        return None, err
 
     def _load_pending_topics(self):
         if not self.config.workspace_path:
             return []
-        return load_pending_topics()
+        return load_pending()
 
     def _save_pending_topics(self, pending):
         if not self.config.workspace_path:
             return
-        save_pending_topics(pending)
+        save_pending(pending)
 
     def register_routes(self, router):
         raise NotImplementedError

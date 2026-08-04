@@ -45,7 +45,12 @@ class AgentRegistry:
 
     def list_agents(self) -> list[dict[str, Any]]:
         """列出所有支持的 agent 及其安装状态。"""
-        return [self._get(aid).info() for aid in self._AGENTS]
+        items: list[dict[str, Any]] = []
+        for agent_id in self._AGENTS:
+            agent = self._get(agent_id)
+            if agent is not None:
+                items.append(agent.info())
+        return items
 
     def is_supported(self, agent_id: str) -> bool:
         return agent_id in self._AGENTS

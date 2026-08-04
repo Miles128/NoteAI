@@ -1,14 +1,14 @@
 import hashlib
 import re
 
-from sidecar.textutils import parse_frontmatter
+from utils.text_utils import parse_frontmatter
 
 MAX_CHUNK_CHARS = 1000
 OVERLAP_MIN_CHARS = 100
 OVERLAP_RATIO = 0.2
 
 
-def chunk_file(file_path: str, text: str) -> list:
+def chunk_file(file_path: str, text: str) -> list[dict]:
     meta, body = parse_frontmatter(text)
     if meta is None:
         meta = {}
@@ -24,11 +24,11 @@ def chunk_file(file_path: str, text: str) -> list:
     return _split_by_headings(body, file_path, topic, tags)
 
 
-def _split_by_headings(body: str, file_path: str, topic, tags) -> list:
+def _split_by_headings(body: str, file_path: str, topic, tags) -> list[dict]:
     h2_pattern = re.compile(r"^(## .+)$", re.MULTILINE)
     splits = h2_pattern.split(body)
 
-    chunks = []
+    chunks: list[dict] = []
     if splits and splits[0].strip():
         _add_chunks(splits[0], file_path, topic, tags, None, chunks)
 
@@ -102,8 +102,8 @@ def _add_paragraph_chunks(content: str, file_path: str, topic, tags, section_tit
         chunks.append(_make_chunk(current, file_path, topic, tags, section_title))
 
 
-def _split_into_segments(content: str) -> list:
-    segments = []
+def _split_into_segments(content: str) -> list[str]:
+    segments: list[str] = []
     code_pattern = re.compile(r"(```[\s\S]*?```)", re.MULTILINE)
     table_pattern = re.compile(r"(\|.*\|(\n\|[-:|]+\|)?(\n\|.*\|)*)", re.MULTILINE)
 
@@ -112,15 +112,14 @@ def _split_into_segments(content: str) -> list:
         code_match = code_pattern.search(content, pos)
         table_match = table_pattern.search(content, pos)
 
-        next_code_pos = code_match.start() if code_match else float("inf")
-        next_table_pos = table_match.start() if table_match else float("inf")
-
-        if next_code_pos < next_table_pos:
+        if code_match is not None and (table_match is None or code_match.start() < table_match.start()):
+            next_code_pos = code_match.start()
             if next_code_pos > pos:
                 segments.append(content[pos:next_code_pos])
             segments.append(code_match.group(1))
             pos = code_match.end()
-        elif next_table_pos < next_code_pos:
+        elif table_match is not None:
+            next_table_pos = table_match.start()
             if next_table_pos > pos:
                 segments.append(content[pos:next_table_pos])
             segments.append(table_match.group(1))

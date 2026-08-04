@@ -1,8 +1,9 @@
 import os
 import sys
+from os import PathLike
 
 
-def _restrict_file_permissions(filepath: str):
+def _restrict_file_permissions(filepath: str | PathLike[str]) -> None:
     try:
         os.chmod(filepath, 0o600)
     except Exception as e:

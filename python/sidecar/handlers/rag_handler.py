@@ -162,21 +162,36 @@ class RagHandler(BaseHandler):
         if not full_path:
             return {"success": False, "message": "路径无效"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.rag.chunker import chunk_file
         from sidecar.rag.embedder import encode_documents
-        from sidecar.rag.index import add_chunks
+        from sidecar.rag.index import index_operation, replace_file_chunks
 
         try:
             text = Path(full_path).read_text(encoding="utf-8")
-            chunks = chunk_file(full_path, text)
+            rel_path = str(Path(full_path).relative_to(workspace))
+            chunks = chunk_file(rel_path, text)
             if not chunks:
                 return {"success": False, "message": "文件无可索引内容"}
             embeddings = encode_documents([c["content"] for c in chunks])
-            add_chunks(workspace, chunks, embeddings)
+            stat = Path(full_path).stat()
+            with index_operation(workspace, blocking=False) as acquired:
+                if not acquired:
+                    return {"success": False, "message": "索引更新正在进行中"}
+                replace_file_chunks(
+                    workspace,
+                    {
+                        rel_path: {
+                            "chunks": chunks,
+                            "embeddings": embeddings,
+                            "mtime": stat.st_mtime,
+                            "size": stat.st_size,
+                        }
+                    },
+                )
             return {"success": True, "message": f"已添加 {len(chunks)} 个文本块"}
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -189,9 +204,9 @@ class RagHandler(BaseHandler):
         if not file_path:
             return {"success": False, "message": "未指定文件路径"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.rag.index import delete_by_file
 
@@ -245,16 +260,15 @@ class RagHandler(BaseHandler):
         return {"success": True}
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
-        from sidecar.intent_router import classify_intent
         from utils.llm_utils import APIConfigError, check_api_config
 
         question = params.get("question", "").strip()
         if not question:
             return {"success": False, "message": "问题不能为空"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         err_msg, has_recent_error = RagHandler._check_error_reset()
         if has_recent_error:
@@ -273,20 +287,11 @@ class RagHandler(BaseHandler):
         if params.get("selection_lookup"):
             return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
 
-        forced_intent = params.get("force_intent")
-        intent = (
-            {"intent": forced_intent, "confidence": "forced", "reason": "前端明确指定"}
-            if forced_intent
-            else classify_intent(question, history=history)
-        )
-        logger.info(f"[rag/intent] {intent['intent']} ({intent['confidence']}): {intent['reason']}")
-
-        if intent["intent"] in ("chat", "general"):
-            return self._answer_without_retrieval(question, context, intent=intent["intent"])
-        if intent["intent"] == "web":
+        # Default every normal conversation to the workspace so a greeting or
+        # broadly phrased question cannot silently bypass the evidence path.
+        # Web remains available only through an explicit UI override.
+        if params.get("force_intent") == "web":
             return self._answer_without_retrieval(question, context, intent="web")
-
-        # workspace / unknown -> RAG retrieval
         return self._answer_with_rag(params, question, context, use_vector_rag=use_vector_rag)
 
     @staticmethod
@@ -371,7 +376,7 @@ class RagHandler(BaseHandler):
                 scored.append(float(cite.get("score")))
             except (TypeError, ValueError):
                 continue
-        source_count = len([c for c in cites if c.get("file_path") and c.get("source_type") != "current"])
+        source_count = len([c for c in cites if c.get("file_path")])
         top_score = max(scored) if scored else None
         if source_count == 0:
             level = "none"
@@ -478,37 +483,33 @@ class RagHandler(BaseHandler):
         tags = params.get("tags") or None
         current_file = params.get("current_file") or ""
 
-        if use_vector_rag:
-            from sidecar.rag.retriever import retrieve as search_fn
-        else:
-            from sidecar.classic_retriever import retrieve as search_fn
-
         try:
-            search_results = search_fn(question, topics=topics, tags=tags)
+            if use_vector_rag:
+                from sidecar.rag.retriever import retrieve as vector_retrieve
+
+                search_results = vector_retrieve(
+                    question,
+                    topics=topics,
+                    tags=tags,
+                    current_file=current_file,
+                )
+            else:
+                from sidecar.classic_retriever import retrieve as classic_retrieve
+
+                search_results = classic_retrieve(question, topics=topics, tags=tags)
         except Exception as e:
             RagHandler._record_error(f"检索失败: {e}")
             return self._fail_rag(f"检索失败: {e}")
 
-        context_parts = []
-        citations = []
+        context_parts: list[str] = []
+        citations: list[dict] = []
         seen_paths: set[str] = set()
 
-        # The current file is useful background, but it is not evidence unless
-        # retrieval independently returns a scored chunk from that file.
-        if current_file:
-            current_full = self._resolve_path(current_file)
-            try:
-                if current_full:
-                    cf_text = Path(current_full).read_text(encoding="utf-8")
-                    _, cf_body = self._parse_frontmatter(cf_text)
-                    cf_body = (cf_body or cf_text).strip()[:4000]
-                    if cf_body:
-                        label = Path(current_file).stem
-                        context_parts.append(f"当前打开文件背景（不可作为引用）：{label}\n{cf_body}")
-            except Exception:
-                pass
-
         for r in search_results:
+            # Surveys and graph neighbors are helpful retrieval expansion, but
+            # are not direct evidence for a conversational answer.
+            if r.get("source_type") in {"survey", "backlink", "topic_tree"}:
+                continue
             body = (r.get("content") or "").strip()
             if not body:
                 continue
@@ -549,7 +550,20 @@ class RagHandler(BaseHandler):
             RagHandler._record_error(f"LLM错误: {e}")
             return self._fail_rag(str(e))
 
-        return self._finish_chat(question, answer, citations=citations)
+        return self._finish_chat(question, answer, citations=self._cited_sources(answer, citations))
+
+    @staticmethod
+    def _cited_sources(answer: str, citations: list[dict]) -> list[dict]:
+        """Return only valid source IDs the model actually used in its answer."""
+        by_index = {str(c.get("index")): c for c in citations if c.get("index") is not None}
+        used = []
+        seen: set[str] = set()
+        for match in re.finditer(r"\[(\d+)\]", answer or ""):
+            index = match.group(1)
+            if index in by_index and index not in seen:
+                used.append(by_index[index])
+                seen.add(index)
+        return used
 
     def _extractive_compress(self, older_history):
         if not older_history:
@@ -602,20 +616,32 @@ class RagHandler(BaseHandler):
         if not config.rag_enabled:
             return {"success": True, "enabled": False, "built": False, "chunk_count": 0, "file_count": 0}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         from sidecar.ingest_pipeline import load_ingest_state
         from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest, manifest_path
 
         try:
             exists = index_exists(workspace)
-            chunk_count = count_indexed_chunks(workspace)
+            chunk_count = count_indexed_chunks(workspace, allow_metadata_fallback=False)
             manifest = load_manifest(workspace)
             files = manifest.get("files", {})
             expected_chunks = sum(len(entry.get("chunks") or []) for entry in files.values())
             file_count = len(files)
+            if chunk_count < 0:
+                return {
+                    "success": True,
+                    "enabled": True,
+                    "built": False,
+                    "busy": True,
+                    "needs_rebuild": False,
+                    "chunk_count": 0,
+                    "expected_chunks": expected_chunks,
+                    "file_count": file_count,
+                    "is_building": True,
+                }
             mtime = None
             if manifest_path(workspace).exists():
                 mtime = Path(manifest_path(workspace)).stat().st_mtime
@@ -641,7 +667,8 @@ class RagHandler(BaseHandler):
                         "index": 65,
                         "crossref": 70,
                     }
-                    percent = stage_progress.get(ingest_state.get("stage"), 0)
+                    stage = ingest_state.get("stage")
+                    percent = stage_progress.get(stage, 0) if isinstance(stage, str) else 0
 
             return {
                 "success": True,

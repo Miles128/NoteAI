@@ -5,6 +5,9 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, TypedDict
+
+from pydantic import SecretStr
 
 from utils.logger import logger
 
@@ -32,6 +35,14 @@ class LLMRateLimitError(Exception):
 _LLM_SEMAPHORE = threading.Semaphore(4)
 
 _LLM_EXECUTOR = None
+
+
+class _StreamResult(TypedDict):
+    text: str
+    error: Exception | None
+    done: bool
+
+
 _EXECUTOR_LOCK = threading.Lock()
 
 
@@ -68,7 +79,9 @@ def _retry_with_backoff(
             delay = min(base_delay * (2**attempt), max_delay)
             logger.warning(f"LLM 调用失败 (尝试 {attempt + 1}/{max_retries + 1})，{delay:.1f}s 后重试: {e}")
             time.sleep(delay)
-    raise last_error  # type: ignore[misc]
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("LLM retry loop completed without a result")
 
 
 _RETRYABLE_KEYWORDS = frozenset(
@@ -135,7 +148,7 @@ def _create_llm(temperature: float = 0.7, max_tokens: int | None = None):
 
     from config import config
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "api_key": config.api_key,
         "base_url": config.api_base,
         "model": config.model_name,
@@ -248,7 +261,7 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
     if not acquired:
         raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
 
-    result = {"text": "", "error": None, "done": False}
+    result: _StreamResult = {"text": "", "error": None, "done": False}
 
     def _run():
         try:
@@ -277,8 +290,9 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
         logger.warning("[llm_utils] stream timeout after 120s")
         raise RuntimeError("LLM 流式调用超时（120秒）")
 
-    if result["error"]:
-        raise result["error"]
+    stream_error = result["error"]
+    if stream_error is not None:
+        raise stream_error
 
     return result["text"]
 
@@ -399,13 +413,19 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[b
     if not url_pattern.match(api_base):
         return False, f"API Base URL 格式无效：{api_base}"
 
-    result = [None]
+    result: list[tuple[bool, str] | None] = [None]
 
     def _test():
         try:
             from langchain_openai import ChatOpenAI
 
-            llm = ChatOpenAI(api_key=api_key, base_url=api_base, model=model_name, temperature=0, max_tokens=10)
+            llm = ChatOpenAI(
+                api_key=SecretStr(api_key),
+                base_url=api_base,
+                model=model_name,
+                temperature=0,
+                max_completion_tokens=10,
+            )
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
                 result[0] = (True, "API 连接成功")

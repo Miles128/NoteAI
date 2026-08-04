@@ -24,12 +24,12 @@ from utils.topic_pending import (
     load_pending,
     save_pending,
 )
-from utils.wiki_manager import (
-    add_file_to_wiki_topic,
-    parse_wiki_headings,
+from utils.wiki_crud import add_file_to_wiki_topic
+from utils.wiki_sync import (
+    _write_file_topic_from_folder,
     sync_wiki_with_files,
+    topic_from_notes_path,
 )
-from utils.wiki_sync import _write_file_topic_from_folder, topic_from_notes_path
 
 
 def is_inbox_orphan_path(file_path, workspace: str | None = None) -> bool:
@@ -124,7 +124,7 @@ def _workspace_rel(path: Path, workspace: str) -> str:
 
 
 def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
-    tags = []
+    tags: list[str] = []
     title = full_path.stem
     if not meta:
         return title, tags
@@ -143,13 +143,37 @@ def _extract_assignment_meta(full_path: Path, meta) -> tuple[str, list[str]]:
 def _apply_auto_topic(
     full_path: Path, workspace: str, topic: str, title: str, source: str | None, format_optimized: bool
 ):
-    write_topic_to_file(str(full_path), topic)
-    add_file_to_wiki_topic(_workspace_rel(full_path, workspace), topic, title)
-    move_file_to_notes_topic_folder(str(full_path), topic)
-    _drop_pending_for_rel(_workspace_rel(full_path, workspace))
+    original_rel = _workspace_rel(full_path, workspace)
+    write_result = write_topic_to_file(str(full_path), topic)
+    if not write_result.get("success"):
+        return {
+            "status": "error",
+            "message": write_result.get("message", "写入主题失败"),
+            "format_optimized": format_optimized,
+        }
+
+    move_result = move_file_to_notes_topic_folder(str(full_path), topic)
+    if not move_result.get("success"):
+        return {
+            "status": "error",
+            "message": move_result.get("message", "移动文件失败"),
+            "format_optimized": format_optimized,
+        }
+
+    new_rel = str(move_result.get("new_path") or original_rel)
+    add_file_to_wiki_topic(new_rel, topic, title)
+    _drop_pending_for_rel(original_rel)
+    if new_rel != original_rel:
+        _drop_pending_for_rel(new_rel)
     prefix = "AI 分配" if source == "llm" else "自动分配"
     _log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
-    result = {"status": "auto_assigned", "topic": topic, "format_optimized": format_optimized}
+    result = {
+        "status": "auto_assigned",
+        "topic": topic,
+        "new_path": new_rel,
+        "file_path": str(Path(workspace) / new_rel),
+        "format_optimized": format_optimized,
+    }
     if source:
         result["source"] = source
     return result
@@ -193,7 +217,9 @@ def _try_assign_survey(full_path: Path, workspace: str, title: str, format_optim
     survey_hint = re.sub(r"[_\s]*综述$", "", filename).strip()
     if not survey_hint:
         return None
-    best_match = _find_best_topic_match(survey_hint, parse_wiki_headings())
+    from sidecar.workspace_rules import list_topic_headings
+
+    best_match = _find_best_topic_match(survey_hint, list_topic_headings(workspace))
     if not best_match:
         return None
     return _apply_auto_topic(full_path, workspace, best_match, title, "survey", format_optimized)
@@ -229,7 +255,12 @@ def _try_assign_with_llm(
     if not llm_suggestions:
         return None, []
     matched = _match_llm_suggestions(llm_suggestions, headings)
-    if len(matched) == 1:
+    # The classifier currently exposes a ranked suggestion but no calibrated
+    # probability. A single exact match is treated as 0.85 confidence; the
+    # setting lets users choose how conservative automatic filing should be.
+    confidence = 0.85 if len(matched) == 1 else 0.0
+    threshold = float(getattr(config, "topic_auto_assign_threshold", 0.80) or 0.80)
+    if len(matched) == 1 and confidence >= threshold:
         return _apply_auto_topic(full_path, workspace, matched[0], title, "llm", format_optimized), matched
     return None, [*matched, *llm_suggestions]
 
@@ -255,7 +286,9 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if not is_inbox_orphan_path(full_path, workspace):
         return None
 
-    headings = parse_wiki_headings()
+    from sidecar.workspace_rules import list_topic_headings
+
+    headings = list_topic_headings(workspace)
     if not headings:
         return _save_pending_assignment(full_path, workspace, title, tags, [], "none", format_optimized)
 

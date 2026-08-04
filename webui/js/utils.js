@@ -1,10 +1,9 @@
 (function() { 'use strict';
 
 function escapeHtml(text) {
-    if (!text) return '';
-    var div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function escapeAttr(str) {
@@ -26,18 +25,6 @@ function formatModifiedTime(timestamp) {
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
-function formatFileSizeForTree(size) {
-    if (size < 1024) {
-        return size + ' B';
-    } else if (size < 1024 * 1024) {
-        return (size / 1024).toFixed(1) + ' KB';
-    } else if (size < 1024 * 1024 * 1024) {
-        return (size / (1024 * 1024)).toFixed(1) + ' MB';
-    } else {
-        return (size / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-    }
-}
-
 function Path_stem(p) {
     if (!p) return p;
     var parts = p.split('/');
@@ -46,23 +33,11 @@ function Path_stem(p) {
     return dotIdx > 0 ? name.substring(0, dotIdx) : name;
 }
 
-function getTauriEventAPI() {
-    if (window.__TAURI__ && window.__TAURI__.event && typeof window.__TAURI__.event.listen === 'function') {
-        return window.__TAURI__.event;
-    }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event && typeof window.__TAURI_INTERNALS__.event.listen === 'function') {
-        return window.__TAURI_INTERNALS__.event;
-    }
-    return null;
-}
-
 window.escapeHtml = escapeHtml;
 window.escapeAttr = escapeAttr;
 window.formatFileSize = formatFileSize;
 window.formatModifiedTime = formatModifiedTime;
-window.formatFileSizeForTree = formatFileSizeForTree;
 window.Path_stem = Path_stem;
-window.getTauriEventAPI = getTauriEventAPI;
 
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
 function _noop() {}
@@ -89,15 +64,5 @@ _earlyGlobals.forEach(function(name) {
         window[name] = _noop;
     }
 });
-
-window.utils = {
-    escapeHtml: escapeHtml,
-    escapeAttr: escapeAttr,
-    formatFileSize: formatFileSize,
-    formatFileSizeForTree: formatFileSizeForTree,
-    formatModifiedTime: formatModifiedTime,
-    Path_stem: Path_stem,
-    getTauriEventAPI: getTauriEventAPI
-};
 
 })();

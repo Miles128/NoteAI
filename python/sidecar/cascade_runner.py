@@ -17,8 +17,8 @@ from sidecar.cascade import (
     get_survey_path,
     update_existing_survey,
 )
-from sidecar.schema_validator import check_wiki_writable
 from sidecar.workspace_rules import load_workspace_rules, resolve_survey_topic
+from sidecar.workspace_rules_validator import check_wiki_writable
 from utils.logger import logger
 
 MAX_RETRIES = 3

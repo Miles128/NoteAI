@@ -215,7 +215,7 @@ def _title_mentioned_in_text(title: str, body: str) -> bool:
     return norm_title in norm_body
 
 
-def _link_key(from_path: str, to_path: str) -> tuple[str, str]:
+def _link_key(from_path: str, to_path: str) -> tuple[str, str] | None:
     """外部去重使用的有向键：方向不同视为不同链接，自引用返回 None 表示无效。"""
     if _is_self_link(from_path, to_path):
         return None
@@ -592,7 +592,7 @@ def _iter_md_files(workspace: Path) -> list[Path]:
     return files
 
 
-def _parse_file_meta(md_file: Path) -> dict[str, Any]:
+def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
     if _is_readme_note(md_file):
         return None
     try:

@@ -18,7 +18,6 @@ from sidecar.handlers.tags_handler import TagsHandler
 from sidecar.handlers.topics_handler import TopicsHandler
 from sidecar.handlers.workspace_handler import WorkspaceHandler
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
-from sidecar.pending_topics import load_pending_topics
 from sidecar.rag.index import _rag_index_dir
 from sidecar.server import WATCHED_WORKSPACE_SUFFIXES, SidecarServer
 
@@ -31,12 +30,12 @@ from utils.topic_assigner import (
     auto_assign_topic_for_file,
 )
 from utils.topic_manager import TopicManager
+from utils.topic_pending import load_pending as load_pending_topics
 from utils.wiki_manager import (
     parse_wiki_headings,
     parse_wiki_structure,
-    sync_wiki_with_files,
-    topic_from_notes_path,
 )
+from utils.wiki_sync import sync_wiki_with_files, topic_from_notes_path
 
 
 @pytest.fixture
@@ -619,6 +618,31 @@ class TestCollectTopicLabelsForPendingUi:
         opts = payload["topic_options"]
         assert isinstance(opts, list)
         assert f"{l1}{TOPIC_SEP}待选二级" in opts
+
+    def test_get_all_pending_schedules_auto_move_without_blocking_snapshot(self, workspace: Path, monkeypatch) -> None:
+        started: list[tuple[str, object, tuple]] = []
+
+        def start_task(name, target, args=(), **_kwargs):
+            started.append((name, target, args))
+            return True
+
+        srv = SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _start_task=start_task,
+        )
+        handler = TopicsHandler(srv)
+
+        payload = handler._get_all_pending({})
+
+        assert payload["maintenance_started"] is True
+        assert payload["auto_moved_count"] == 0
+        assert payload["auto_move_errors"] == []
+        assert [(name, args) for name, _target, args in started] == [("pending_maintenance", ())]
+        assert started[0][1] == handler._run_pending_maintenance
+
+        second = handler._get_all_pending({})
+        assert second["maintenance_started"] is False
+        assert len(started) == 1
 
 
 class TestIngestAndSchemaHandlers:

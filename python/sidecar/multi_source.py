@@ -13,6 +13,7 @@ import requests
 from config import config
 from config.settings import NOTES_FOLDER
 from utils.helpers import sanitize_filename
+from utils.network_security import safe_get
 
 _INBOX = "_采集"
 
@@ -70,7 +71,8 @@ def _write_note(
 
 
 def _fetch_rss(url: str, timeout: int = 20) -> ET.Element:
-    resp = requests.get(
+    resp = safe_get(
+        requests,
         url,
         timeout=timeout,
         headers={"User-Agent": "NoteAI/1.0 RSS Reader"},

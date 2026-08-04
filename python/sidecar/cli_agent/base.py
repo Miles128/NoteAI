@@ -90,7 +90,7 @@ class BaseCliAgent(ABC):
         from sidecar.cli_agent.env import get_login_shell_env, lookup_api_key
 
         login_env = get_login_shell_env()
-        return [key for key in self.env_keys if lookup_api_key(key, login_env)]
+        return [key for key in (self.env_keys or []) if lookup_api_key(key, login_env)]
 
     def has_api_key(self) -> bool:
         """是否至少有一个可用的 API key。"""
@@ -122,7 +122,7 @@ class BaseCliAgent(ABC):
 
     def build_env(self) -> dict[str, str]:
         """构建子进程环境变量。"""
-        return build_agent_env(self.env_keys)
+        return build_agent_env(self.env_keys or [])
 
     def _validate_and_prepare(
         self,
@@ -195,7 +195,7 @@ class BaseCliAgent(ABC):
         if not self.has_api_key():
             return AgentResult(
                 False,
-                f"{self.display_name} 需要至少一个 API key: {', '.join(self.env_keys)}。"
+                f"{self.display_name} 需要至少一个 API key: {', '.join(self.env_keys or [])}。"
                 "请在环境变量或 shell 配置中设置。",
             )
 
@@ -241,7 +241,7 @@ class BaseCliAgent(ABC):
         )
 
         try:
-            env = build_agent_env(self.env_keys)
+            env = build_agent_env(self.env_keys or [])
             env = apply_workspace_bounds_env(env, self.agent_id, ws_path)
             proc = subprocess.Popen(
                 full_cmd,
@@ -358,7 +358,8 @@ class BaseCliAgent(ABC):
                     send_event,
                 )
         finally:
-            proc.stdout.close()  # type: ignore[union-attr]
+            if proc.stdout is not None:
+                proc.stdout.close()
             try:
                 return_code = proc.wait(timeout=5)
             except subprocess.TimeoutExpired:

@@ -200,6 +200,9 @@ function renderFileTree(treeData, container) {
             var path = this.getAttribute('data-path');
             var name = this.getAttribute('data-name');
             if (this.classList.contains('folder')) {
+                if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.isVisible && window.SemanticWorkbenchModule.isVisible()) {
+                    window.SemanticWorkbenchModule.hide();
+                }
                 setActiveTreeItem(this);
                 window.TreeModule.toggleTreeFolder(this);
                 // 触发 Note List 显示该主题下的笔记
@@ -794,6 +797,7 @@ async function _loadFileTreeOnce(force) {
 }
 
 function selectFile(path, fileName) {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
     setSelectedFile(path, fileName);
 
     var graphHome = document.getElementById('home-dashboard') || document.getElementById('graph-home-view');
@@ -888,6 +892,7 @@ window.TreeModule = {
 
 window.switchSidebarView = window.switchSidebarView;
 window.toggleGraphPanel = function() {
+        if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
         var panel = document.getElementById('graph-panel');
         if (!panel) return;
         if (panel.style.display === 'none') {

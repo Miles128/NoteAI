@@ -1,9 +1,31 @@
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
+from typing import Any, Protocol
 
 from config import config
-from utils.topic_assigner import load_pending, sync_wiki_with_files
+from utils.text_utils import parse_frontmatter
+from utils.topic_assigner import sync_wiki_with_files
 from utils.topic_manager import MAX_LEVEL, TopicManager
+from utils.topic_pending import load_pending
+
+
+class _TopicsHost(Protocol):
+    def _resolve_path(self, path: str) -> str | None: ...
+
+    def _require_workspace(self, extra: dict | None = None, message: str = "") -> tuple[str | None, dict | None]: ...
+
+    def _get_topic_tree_3tier(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _create_topic_folder(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _set_abstract_config(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _get_graph_data(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _delete_topic_safe(self, params: dict[str, Any]) -> dict[str, Any]: ...
+
+    def _toggle_survey(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
 
 def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = None) -> str:
@@ -26,6 +48,9 @@ def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = N
 
 class Topics3TierMixin:
     """三层主题系统扩展方法（通过 mixin 注入 TopicsHandler）"""
+
+    _toggle_survey: Callable[[dict[str, Any]], dict[str, Any]]
+    _delete_topic: Callable[[dict[str, Any]], dict[str, Any]]
 
     def _get_topic_tree_3tier(self, _params):
         """返回三层主题树（含文件系统扫描 + WIKI.md 解析 + 综述状态）"""
@@ -65,7 +90,7 @@ class Topics3TierMixin:
             "pending": pending,
         }
 
-    def _create_topic_folder(self, params):  # noqa: PLR0911
+    def _create_topic_folder(self: _TopicsHost, params):  # noqa: PLR0911
         """创建新主题文件夹（自动判定一二三级）"""
         folder_name = params.get("name", "").strip()
         parent_path = params.get("parent_path", "")
@@ -76,11 +101,13 @@ class Topics3TierMixin:
         if "/" in folder_name or ".." in folder_name:
             return {"success": False, "message": "名称含非法字符"}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        assert workspace is not None
 
-        parent = Path(self._resolve_path(parent_path) or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
+        resolved_parent = self._resolve_path(parent_path) if parent_path else None
+        parent = Path(resolved_parent or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
 
         if not parent.exists():
             return {"success": False, "message": "父目录不存在"}
@@ -102,7 +129,7 @@ class Topics3TierMixin:
             "level": level if 1 <= level <= MAX_LEVEL else None,
         }
 
-    def _set_abstract_config(self, params):
+    def _set_abstract_config(self: _TopicsHost, params):
         """设置综述开关（仅二级主题可用）"""
         topic_name = params.get("topic_name", "").strip()
         level = params.get("level", 1)
@@ -121,9 +148,9 @@ class Topics3TierMixin:
             if not can:
                 return {"success": False, "message": reason}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         result = self._toggle_survey({"topic": topic_name})
         if not result.get("success"):
@@ -178,7 +205,7 @@ class Topics3TierMixin:
 
     def _collect_tag_files(self, workspace: str):
         ignored_dirs = {"_assets", "_templates", ".git", "__pycache__", "node_modules", ".venv", ".obsidian", ".trash"}
-        tag_files = {}
+        tag_files: dict[str, list[str]] = {}
         ws_path = Path(workspace)
 
         def scan(path: Path):
@@ -197,7 +224,7 @@ class Topics3TierMixin:
                     continue
                 try:
                     text = entry.read_text(encoding="utf-8")
-                    meta, _body = self._parse_frontmatter(text)
+                    meta, _body = parse_frontmatter(text)
                 except Exception:
                     continue
                 if meta is None:
@@ -240,9 +267,9 @@ class Topics3TierMixin:
         if not workspace:
             return {"success": True, "nodes": [], "edges": [], "layout": "force"}
 
-        nodes = []
-        edges = []
-        seen_ids = set()
+        nodes: list[dict[str, Any]] = []
+        edges: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
 
         if filter_mode in ("topic", "all"):
             tree_result = self._get_topic_tree_3tier({})
@@ -288,7 +315,7 @@ class Topics3TierMixin:
 
         return self._delete_topic(params)
 
-    def register_routes_3tier(self, router):
+    def register_routes_3tier(self: _TopicsHost, router):
         """注册三层主题相关路由"""
         router.register("get_topic_tree_3tier", self._get_topic_tree_3tier)
         router.register("create_topic_folder", self._create_topic_folder)

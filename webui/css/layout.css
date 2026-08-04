@@ -1695,6 +1695,38 @@ body {
     gap: 8px;
 }
 
+.assistant-save-dialog {
+    width: min(720px, 92vw);
+    max-height: min(760px, 88vh);
+}
+
+.assistant-save-target {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.assistant-save-target code {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.assistant-save-content {
+    max-height: 52vh;
+    margin: 0;
+    padding: 14px;
+    overflow: auto;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .ai-save-wiki-btn {
     margin-left: 0;
 }

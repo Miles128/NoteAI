@@ -1,5 +1,8 @@
+import json
+from pathlib import Path
+
 from config.constants import TOPIC_SEP
-from config.settings import config
+from config.settings import WORKSPACE_APP_FOLDER, config
 from utils.logger import logger
 from utils.text_utils import _is_generic_word, _is_meaningful_tag, _normalize_for_match
 from utils.text_utils import tokenize as tokenize_text
@@ -12,7 +15,29 @@ def _norm_topic(topic: str) -> str:
     return clean
 
 
-def _find_best_topic_match(hint: str, headings: list) -> str:
+def _load_topic_aliases() -> dict[str, str]:
+    if not config.workspace_path:
+        return {}
+    path = Path(config.workspace_path) / WORKSPACE_APP_FOLDER / "topic_aliases.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {str(key): str(value) for key, value in data.items()} if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _alias_target(value: str) -> str | None:
+    normalized = _normalize_for_match(value)
+    for alias, target in _load_topic_aliases().items():
+        if _normalize_for_match(alias) == normalized:
+            return target
+    return None
+
+
+def _find_best_topic_match(hint: str, headings: list) -> str | None:
+    alias = _alias_target(hint)
+    if alias:
+        return alias
     hint_norm = _normalize_for_match(hint)
     hint_tokens = tokenize_text(hint)
 
@@ -151,6 +176,10 @@ def _collect_topic_candidates(headings, filename: str, tags: list[str]):
 def _match_llm_suggestions(llm_suggestions, headings):
     matched = []
     for suggestion in llm_suggestions:
+        alias = _alias_target(suggestion)
+        if alias and alias not in matched:
+            matched.append(alias)
+            continue
         for heading in headings:
             if _normalize_for_match(suggestion) == _normalize_for_match(heading["name"]):
                 matched.append(heading["name"])

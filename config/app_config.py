@@ -77,9 +77,13 @@ class AppConfig:
     integration_output_path: str = ""
     integration_strategy: str = "ml"
     auto_topic: bool = True
+    # Minimum confidence used when a single LLM topic suggestion is eligible
+    # for automatic filing. The model output is not calibrated, so 0.80 is a
+    # conservative product default rather than a probability guarantee.
+    topic_auto_assign_threshold: float = 0.80
     topic_list: str = ""
-    cloud_sync_experimental: bool = False
     ingest_auto_enabled: bool = True
+    semantic_compile_enabled: bool = True
     assistant_agent_mode: bool = False
     cli_agent_id: str = ""
     rag_enabled: bool = True
@@ -206,7 +210,7 @@ class AppConfig:
         return (False, final_tokens, processed_content)
 
     @classmethod
-    def load_from_file(cls, config_path: str = None) -> "AppConfig":
+    def load_from_file(cls, config_path: str | None = None) -> "AppConfig":
         if config_path is None:
             config_path = PROJECT_CONFIG_PATH
 
@@ -230,18 +234,17 @@ class AppConfig:
             except Exception as e:
                 _logger.warning("加载API配置时发生未知错误: %s", e)
 
-        # Load API key from OS keyring first; fall back to encrypted file storage.
-        # The file fallback uses a key derived from machine info and provides
-        # obfuscation only — it is not a substitute for the OS keychain.
+        # Load the API key from NoteAI's encrypted application-data directory.
+        # NOTEAI_API_KEY remains a read-only, higher-priority override below.
         try:
             from utils.keyring_store import load_api_key
 
-            keyring_key = load_api_key() or ""
+            stored_key = load_api_key() or ""
         except Exception as e:
             _logger.warning("加载API key失败: %s", e)
-            keyring_key = ""
-        if keyring_key:
-            api_data["api_key"] = keyring_key
+            stored_key = ""
+        if stored_key:
+            api_data["api_key"] = stored_key
 
         workspace_default = ""
         try:
@@ -306,7 +309,7 @@ class AppConfig:
 
         return cls(**init_kwargs)
 
-    def save_to_file(self, config_path: str = None) -> tuple[bool, str]:
+    def save_to_file(self, config_path: str | None = None) -> tuple[bool, str]:
         if not config_path:
             config_path = PROJECT_CONFIG_PATH
 
@@ -358,7 +361,8 @@ class AppConfig:
             if "api_key" in api_config and api_config["api_key"]:
                 from utils.keyring_store import store_api_key
 
-                store_api_key(api_config["api_key"])
+                if not store_api_key(api_config["api_key"]):
+                    raise OSError("无法写入加密凭据文件")
                 api_config.pop("api_key", None)
 
             if api_config:
@@ -378,7 +382,7 @@ class AppConfig:
             return True, "主配置已保存，但API配置保存失败"
         return True, "配置保存成功"
 
-    def save(self, config_path: str = None):
+    def save(self, config_path: str | None = None) -> tuple[bool, str]:
         return self.save_to_file(config_path)
 
     def to_dict(self) -> dict[str, Any]:

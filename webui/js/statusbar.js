@@ -8,10 +8,7 @@
 
     var _currentFilePath = null;
 
-    function _escapeHtml(s) {
-        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    const _escapeHtml = window.escapeHtml;
 
     function _parseFrontmatter(text) {
         var meta = {};

@@ -20,6 +20,11 @@ _HEADERS = {
 }
 
 
+def _string_attribute(value: object) -> str:
+    """Return a scalar HTML attribute and reject malformed list-valued attributes."""
+    return value.strip() if isinstance(value, str) else ""
+
+
 def _extract_ddg_url(href: str) -> str:
     if not href:
         return ""
@@ -50,7 +55,7 @@ def duckduckgo_search(query: str) -> list:
                 continue
 
             title = title_tag.get_text(strip=True)
-            href = _extract_ddg_url(title_tag.get("href", ""))
+            href = _extract_ddg_url(_string_attribute(title_tag.get("href")))
 
             snippet = ""
             snippet_tag = item.select_one(".result__snippet")
@@ -92,7 +97,7 @@ def bing_search(query: str) -> list:
             if not title_tag:
                 continue
             title = title_tag.get_text(strip=True)
-            href = title_tag.get("href", "")
+            href = _string_attribute(title_tag.get("href"))
             snippet_tag = item.select_one(".b_caption p")
             snippet = snippet_tag.get_text(" ", strip=True) if snippet_tag else ""
             if title and href and _is_safe_url(href):
@@ -128,7 +133,7 @@ def baidu_search(query: str) -> list:
                 continue
 
             title = title_tag.get_text(strip=True)
-            href = title_tag.get("href", "")
+            href = _string_attribute(title_tag.get("href"))
 
             snippet = ""
             for sel in [

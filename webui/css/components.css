@@ -1349,6 +1349,12 @@
     margin-left: 6px;
 }
 
+.topic-pending-hint {
+    margin: 4px 0 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
 .topic-pending-list {
     display: flex;
     flex-direction: column;

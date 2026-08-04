@@ -9,7 +9,9 @@
   },
   "scripts": {
     "build:tiptap": "node scripts/build-tiptap-bundle.mjs",
-    "test": "echo \"No frontend tests configured\""
+    "build:mcp": "node scripts/build-mcp-bundle.mjs",
+    "build:desktop": "npm run build:tiptap && node scripts/bundle-mcp-runtime.mjs",
+    "test": "node --test mcp-server/test/*.test.js"
   },
   "keywords": [],
   "author": "",

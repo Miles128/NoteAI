@@ -1,11 +1,23 @@
 use crate::sidecar;
 use crate::state::{AppState, PyRequest};
 
-static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
+pub(crate) fn fail_pending_requests(state: &AppState, message: &str) {
+    let mut pending = state
+        .pending_requests
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let value = serde_json::json!({"success": false, "message": message});
+    for (_, sender) in pending.drain() {
+        let _ = sender.send(value.clone());
+    }
+}
+
+static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "add_tag_to_file",
     "ai_topic_analyze",
     "ai_topic_survey",
     "append_chat_to_survey",
+    "apply_topic_placement_threshold",
     "apply_topic_suggestion",
     "archive_chat_answer",
     "auto_assign_topic",
@@ -17,7 +29,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "check_ingest_updates",
     "check_workspace_path_valid",
     "clear_saved_workspace",
-    "cloud_sync_list_providers",
     "confirm_all_links",
     "confirm_link",
     "convert_raw_archive",
@@ -48,6 +59,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "get_cascade_failures",
     "get_convert_failures",
     "get_components_status",
+    "get_chunk_merge_candidates",
     "get_dashboard_status",
     "get_file_preview",
     "get_file_topics",
@@ -58,7 +70,18 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "get_kb_health",
     "generate_vault_agents_md",
     "get_link_stats",
+    "get_semantic_workbench",
+    "get_semantic_detail",
+    "get_note_semantic_context",
+    "get_semantic_object_wiki_page",
+    "get_semantic_compile_status",
+    "get_semantic_topic_wiki_page",
+    "get_semantic_entity_merge_preview",
+    "review_semantic_entity_quality",
+    "enqueue_semantic_entity_quality",
+    "merge_semantic_entities",
     "get_mcp_status",
+    "get_duplicate_review",
     "get_lint_report",
     "get_project_rules",
     "get_workspace_rules",
@@ -79,6 +102,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "import_transcript",
     "init_rag_index",
     "install_component",
+    "keep_note_in_topic",
     "llm_rewrite",
     "llm_rewrite_apply",
     "llm_rewrite_stream",
@@ -108,11 +132,23 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "retry_cascade_topic",
     "retry_convert_file",
     "retry_ingest",
+    "review_semantic_conflict",
+    "update_semantic_claim",
+    "set_semantic_claim_status",
+    "set_semantic_evidence_status",
+    "add_semantic_entity_alias",
+    "start_semantic_full_compile",
+    "publish_semantic_topic_wiki_page",
+    "publish_semantic_object_wiki_page",
     "reveal_in_finder",
     "register_mcp_server",
     "run_kb_lint",
+    "merge_duplicate_notes",
+    "merge_note_group",
+    "merge_similar_topics",
     "run_cli_agent",
     "stop_cli_agent",
+    "suggest_topic_merge_names",
     "clear_cli_agent_session",
     "save_api_config",
     "save_file_content",
@@ -123,6 +159,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "save_tags_md",
     "save_theme_preference",
     "save_ui_config",
+    "scan_merge_candidates",
     "search_files",
     "set_abstract_config",
     "set_workspace_path",
@@ -130,6 +167,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "start_ingest",
     "start_note_integration",
     "start_web_download",
+    "sync_wiki_with_files",
     "test_api_connection",
     "toggle_survey",
     "save_rss_subscription",
@@ -138,14 +176,15 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[    "agent_chat",
     "list_rss_subscriptions",
     "unregister_mcp_server",
     "uninstall_component",
-    "fetch_all_rss",];
+    "fetch_all_rss",
+];
 
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         "rag_chat" => 60,
-        "start_ingest" | "ensure_ingest" | "retry_ingest"
-        | "init_rag_index" | "rag_rebuild_index" | "cancel_ingest" => 120,
+        "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
+        | "rag_rebuild_index" | "cancel_ingest" => 120,
         _ => 60,
     }
 }
@@ -183,31 +222,42 @@ async fn call_python_once(
         method: method.to_string(),
         params,
     };
+    let mut json_line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
+    json_line.push('\n');
 
     let (tx, rx) = tokio::sync::oneshot::channel();
     {
-        let mut pending = state.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
+        let mut pending = state
+            .pending_requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         pending.insert(id.clone(), tx);
     }
 
-    {
+    let write_result: Result<(), String> = {
         let mut stdin_guard = state.python_stdin.lock().await;
         match stdin_guard.as_mut() {
             Some(stdin) => {
-                let mut json_line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-                json_line.push('\n');
                 use tokio::io::AsyncWriteExt;
-                stdin
-                    .write_all(json_line.as_bytes())
-                    .await
-                    .map_err(|e| format!("Write failed: {}", e))?;
-                stdin
-                    .flush()
-                    .await
-                    .map_err(|e| format!("Flush failed: {}", e))?;
+                if let Err(error) = stdin.write_all(json_line.as_bytes()).await {
+                    Err(format!("Write failed: {}", error))
+                } else {
+                    stdin
+                        .flush()
+                        .await
+                        .map_err(|e| format!("Flush failed: {}", e))
+                }
             }
-            None => return Err("Python process not running".into()),
+            None => Err("Python process not running".into()),
         }
+    };
+    if let Err(error) = write_result {
+        state
+            .pending_requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&id);
+        return Err(error);
     }
 
     let timeout_secs = rpc_timeout_secs(method);
@@ -215,7 +265,10 @@ async fn call_python_once(
         Ok(Ok(value)) => Ok(value),
         Ok(Err(_)) => Err("Python response channel closed".into()),
         Err(_) => {
-            let mut pending = state.pending_requests.lock().unwrap_or_else(|e| e.into_inner());
+            let mut pending = state
+                .pending_requests
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             pending.remove(&id);
             Err("Python request timed out".into())
         }
@@ -232,10 +285,7 @@ pub async fn call_python(
     match call_python_once(state.inner(), method, params.clone()).await {
         Ok(v) => Ok(v),
         Err(e) if is_pipe_broken(&e) || e.contains("not running") => {
-            let app = state
-                .inner()
-                .app_handle()
-                .ok_or_else(|| e.clone())?;
+            let app = state.inner().app_handle().ok_or_else(|| e.clone())?;
             sidecar::restart_python_sidecar(&app).await?;
             for _ in 0..50 {
                 if sidecar::is_sidecar_alive(state.inner()).await {
@@ -261,4 +311,27 @@ pub async fn py_call(
         return Err(format!("Method not allowed: {}", method));
     }
     call_python(&state, &method, params).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failing_pending_requests_notifies_and_drains_waiters() {
+        let state = AppState::default();
+        let (sender, mut receiver) = tokio::sync::oneshot::channel();
+        state
+            .pending_requests
+            .lock()
+            .unwrap()
+            .insert("request-1".to_string(), sender);
+
+        fail_pending_requests(&state, "sidecar stopped");
+
+        let response = receiver.try_recv().unwrap();
+        assert_eq!(response["success"], false);
+        assert_eq!(response["message"], "sidecar stopped");
+        assert!(state.pending_requests.lock().unwrap().is_empty());
+    }
 }

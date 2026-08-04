@@ -467,14 +467,6 @@
         if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
             return window.EditorModule.renderMarkdownPreview(text);
         }
-        if (typeof marked !== 'undefined') {
-            try {
-                var rawHtml = marked.parse(text);
-                return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : _escapeHtml(text);
-            } catch (e) {
-                console.error('[CliAgent] Markdown parse error:', e);
-            }
-        }
         return '<pre>' + _escapeHtml(text) + '</pre>';
     }
 
@@ -642,10 +634,7 @@
         });
     }
 
-    function _escapeHtml(s) {
-        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    const _escapeHtml = window.escapeHtml;
 
     function _loadSavedCliAgentId() {
         if (window.state && window.state.getState) {

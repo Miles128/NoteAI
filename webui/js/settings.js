@@ -22,13 +22,14 @@ async function saveApiConfig() {
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
     const showStatus = (msg, isError = false) => {
-        const displayMsg = isError ? `<span style="color: #e53e3e;">${window.escapeHtml(msg)}</span>` : `<span style="color: #38a169;">${window.escapeHtml(msg)}</span>`;
         if (statusEl) {
-            statusEl.innerHTML = displayMsg;
+            statusEl.textContent = msg;
+            statusEl.style.color = isError ? '#e53e3e' : '#38a169';
             statusEl.style.display = 'block';
         }
         if (popupStatusEl) {
-            popupStatusEl.innerHTML = displayMsg;
+            popupStatusEl.textContent = msg;
+            popupStatusEl.style.color = isError ? '#e53e3e' : '#38a169';
             popupStatusEl.style.display = 'block';
         }
     };
@@ -116,9 +117,6 @@ function switchSettingsTab(tabName) {
         initCliSettings();
         refreshCliAgentsSettings();
     }
-    if (tabName === 'cloud-sync' && window.CloudSyncModule && window.CloudSyncModule.refresh) {
-        window.CloudSyncModule.refresh();
-    }
     if (tabName === 'organize-rules' && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
         window.OrganizeRulesModule.load();
     }
@@ -145,6 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initRagSettings();
     initCliSettings();
     initIngestAutoSettings();
+    initTopicAutoThresholdSettings();
 });
 
 async function autoSaveConfig() {
@@ -300,6 +299,10 @@ async function loadUiConfigToForm() {
             var ingestAutoEl = document.getElementById('settings-ingest-auto-enabled');
             if (ingestAutoEl) {
                 ingestAutoEl.checked = uiConfig.ingest_auto_enabled !== false;
+            }
+            var topicThresholdEl = document.getElementById('settings-topic-auto-threshold');
+            if (topicThresholdEl) {
+                topicThresholdEl.value = uiConfig.topic_auto_assign_threshold != null ? uiConfig.topic_auto_assign_threshold : 0.80;
             }
             applyRagSettingsToForm(uiConfig);
             applyCliSettingsToForm(uiConfig);
@@ -812,7 +815,14 @@ function initRagSettings() {
             if (window.AssistantModule && window.AssistantModule.rebuildIndex) {
                 window.AssistantModule.rebuildIndex();
             } else if (window.api && window.api.ragRebuildIndex) {
-                window.api.ragRebuildIndex();
+                window.api.ragRebuildIndex().catch(function(err) {
+                    if (statusEl) {
+                        statusEl.textContent = window.t('assistant.indexRequestFailed', {
+                            message: err.message || String(err)
+                        });
+                        statusEl.style.display = 'block';
+                    }
+                });
             }
         });
     }
@@ -855,6 +865,31 @@ function initIngestAutoSettings() {
     el.dataset.bound = '1';
     el.addEventListener('change', function() {
         saveAssistantUiConfig({ ingest_auto_enabled: el.checked });
+    });
+}
+
+function initTopicAutoThresholdSettings() {
+    var el = document.getElementById('settings-topic-auto-threshold');
+    if (!el || el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('change', async function() {
+        var value = parseFloat(el.value);
+        if (isNaN(value)) value = 0.80;
+        value = Math.max(0, Math.min(1, value));
+        el.value = value.toFixed(2);
+        var saved = await saveAssistantUiConfig({ topic_auto_assign_threshold: value });
+        if (!saved || !saved.success || !window.api || !window.api.applyTopicPlacementThreshold) return;
+        try {
+            var result = await window.api.applyTopicPlacementThreshold();
+            if (result && result.success) {
+                updateStatus(window.t('settings.topicThresholdApplied', { count: result.moved_count || 0 }));
+                if (typeof window.loadPendingItems === 'function') window.loadPendingItems();
+            } else {
+                updateStatus((result && result.message) || window.t('pending.operationFailed'));
+            }
+        } catch (e) {
+            updateStatus(e.message || window.t('pending.operationFailed'));
+        }
     });
 }
 
@@ -907,6 +942,7 @@ window.SettingsModule = {
     setLocale,
     initRagSettings,
     initIngestAutoSettings,
+    initTopicAutoThresholdSettings,
     initCliSettings,
     applyRagSettingsToForm,
     applyCliSettingsToForm,

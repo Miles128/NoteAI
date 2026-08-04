@@ -1,10 +1,12 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
-import importlib
 import json
 import sys
 import threading
 from pathlib import Path
+
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
 
 from config import config, is_ignored_dir
 from config.settings import NOTES_FOLDER
@@ -15,7 +17,6 @@ from modules.web_downloader import WebDownloader
 from sidecar import job_status
 from sidecar.handlers import (
     CliAgentHandler,
-    CloudSyncHandler,
     ComponentHandler,
     ConfigHandler,
     FilesHandler,
@@ -26,6 +27,7 @@ from sidecar.handlers import (
     LinksHandler,
     McpConfigHandler,
     RagHandler,
+    SemanticHandler,
     TagsHandler,
     TopicsHandler,
     TransferHandler,
@@ -67,6 +69,8 @@ class SidecarServer(PathHelpersMixin):
         self._watcher_needs_wiki_sync = False
         self._watcher_changed_paths: set[str] = set()
         self._watcher_debounce_lock = threading.Lock()
+        self._auto_convert_inflight: set[str] = set()
+        self._auto_convert_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
         self._cache_lock = threading.Lock()  # retained for _cached_or_compat compat
@@ -83,7 +87,7 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler = IntelHandler(self)
         self._job_handler = JobHandler(self)
         self._rag_handler = RagHandler(self)
-        self._cloud_sync_handler = CloudSyncHandler(self)
+        self._semantic_handler = SemanticHandler(self)
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
         self._cli_agent_handler = CliAgentHandler(self)
@@ -97,6 +101,11 @@ class SidecarServer(PathHelpersMixin):
         instantiate in tests and avoids starting threads/watchers before the
         process is fully initialized.
         """
+        from sidecar.ingest_pipeline import normalize_ingest_state
+
+        # Only process startup may declare a persisted `running` state orphaned.
+        # Read-only status RPCs must never mutate a live ingest into interrupted.
+        normalize_ingest_state()
         self._start_workspace_watcher()
         self._startup_sync()
 
@@ -113,7 +122,7 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler.register_routes(self._router)
         self._job_handler.register_routes(self._router)
         self._rag_handler.register_routes(self._router)
-        self._cloud_sync_handler.register_routes(self._router)
+        self._semantic_handler.register_routes(self._router)
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
         self._cli_agent_handler.register_routes(self._router)
@@ -240,8 +249,26 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
+        self._start_task(
+            "kb_startup_lint",
+            self._run_startup_lint,
+            kind="lint",
+            label="知识库整理巡检",
+        )
         if config.ingest_auto_enabled and config.rag_enabled and workspace and Path(workspace).exists():
             self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
+
+    def _run_startup_lint(self):
+        """Refresh non-destructive Inbox findings once per app start."""
+        from sidecar.kb_lint import run_kb_lint
+
+        run_kb_lint(auto_repair=False, auto_refresh_surveys=False)
+        self._send_response(
+            {
+                "id": "event",
+                "result": {"type": "workspace_files_changed"},
+            }
+        )
 
     def _auto_rebuild_rag_index(self):
         workspace = config.workspace_path
@@ -255,7 +282,8 @@ class SidecarServer(PathHelpersMixin):
                 logger.info("[startup] rag index is up to date, skipping rebuild")
                 return
             manifest_files = load_manifest(workspace).get("files", {})
-            if not index_exists(workspace) or not manifest_files or count_indexed_chunks(workspace) <= 0:
+            actual_chunks = count_indexed_chunks(workspace, allow_metadata_fallback=False)
+            if not index_exists(workspace) or not manifest_files or actual_chunks <= 0:
                 logger.info("[startup] RAG index needs a manual rebuild; skipping expensive startup rebuild")
                 self._send_response(
                     {
@@ -273,20 +301,6 @@ class SidecarServer(PathHelpersMixin):
             logger.warning(f"[startup] auto rag index failed: {e}")
 
     def _setup_watcher(self, workspace_path):
-        try:
-            events_module = importlib.import_module("watchdog.events")
-            observers_module = importlib.import_module("watchdog.observers")
-            FileSystemEventHandler = events_module.FileSystemEventHandler
-            Observer = observers_module.Observer
-        except ImportError:
-            if not SidecarServer._watchdog_missing_logged:
-                SidecarServer._watchdog_missing_logged = True
-                logger.warning(
-                    "[sidecar] watchdog 未安装，工作区文件变更不会触发 UI 自动刷新。"
-                    " 请安装项目依赖（含 watchdog）：uv sync 或 pip install -e ."
-                )
-            return
-
         self._stop_watcher()
 
         server = self
@@ -461,6 +475,12 @@ class SidecarServer(PathHelpersMixin):
     def _auto_convert_new_file(self, file_path):
         """Auto-convert newly added non-markdown files to Markdown."""
 
+        source_key = str(Path(file_path).resolve())
+        with self._auto_convert_lock:
+            if source_key in self._auto_convert_inflight:
+                return
+            self._auto_convert_inflight.add(source_key)
+
         def _do():
             try:
                 from modules.file_converter import FileConverterManager
@@ -468,8 +488,13 @@ class SidecarServer(PathHelpersMixin):
                 ws = config.workspace_path
                 if not ws:
                     return
-                converter = FileConverterManager(ws)
-                result = converter.convert_file(file_path, ai_assist=False)
+                converter = FileConverterManager()
+                output_dir = str(Path(ws) / config.NOTES_FOLDER)
+                raw_dir = str(Path(ws) / config.RAW_FOLDER)
+                result = converter.convert_file(file_path, output_dir, raw_path=raw_dir)
+                from sidecar.convert_failures import record_convert_batch_results
+
+                record_convert_batch_results([result])
                 if result and result.get("success"):
                     md = result.get("output_path", "")
                     if md:
@@ -482,9 +507,11 @@ class SidecarServer(PathHelpersMixin):
                                 },
                             }
                         )
-                        self._auto_process_md_file(md)
             except Exception as e:
                 logger.warning("[watcher] auto-convert failed for %s: %s", file_path, e)
+            finally:
+                with self._auto_convert_lock:
+                    self._auto_convert_inflight.discard(source_key)
 
         threading.Thread(target=_do, daemon=True).start()
 

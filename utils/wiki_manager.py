@@ -1,15 +1,22 @@
-"""WIKI.md 核心解析模块 — 路径解析、标题解析、编号
+"""WIKI.md 核心解析模块 — 路径解析、标题解析、编号、综述开关解析
 
-WIKI.md 的 CRUD 操作见 utils.topic_wiki_manager
-去重逻辑见 utils.topic_dedup
+WIKI.md 的 CRUD 操作见 utils.wiki_crud，同步逻辑见 utils.wiki_sync，
+去重逻辑见 utils.topic_dedup，sidecar 统一门面见 sidecar.wiki_utils。
 """
 
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from config import config
 from config.constants import TOPIC_SEP
 from utils.logger import logger
+
+
+class WikiTopic(TypedDict):
+    name: str
+    label: str
+    files: list[str]
 
 
 def _get_wiki_path():
@@ -37,8 +44,8 @@ def parse_wiki_headings():
         text = wiki_path.read_text(encoding="utf-8")
     except Exception:
         return []
-    headings = []
-    topic_stack = []
+    headings: list[dict[str, int | str]] = []
+    topic_stack: list[str] = []
     for line in text.split("\n"):
         stripped = line.strip()
         if stripped == "<!-- NOTEAI_TAGS_START -->":
@@ -59,10 +66,6 @@ def parse_wiki_headings():
     return headings
 
 
-def _title_from_path(file_rel_path: str) -> str:
-    return Path(file_rel_path).stem
-
-
 def parse_wiki_structure():
     workspace = config.workspace_path
     if not workspace:
@@ -76,10 +79,10 @@ def parse_wiki_structure():
         logger.error(f"[parse_wiki] read failed: {e}")
         return []
 
-    topics = []
+    topics: list[WikiTopic] = []
     lines = text.split("\n")
-    current_topic = None
-    topic_stack = []
+    current_topic: WikiTopic | None = None
+    topic_stack: list[str] = []
     file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
 
     def _flush():
@@ -122,6 +125,41 @@ def parse_wiki_structure():
     return topics
 
 
+def collect_survey_off_topics(workspace_str=None) -> set[str]:
+    wiki_path = _get_wiki_path()
+    if workspace_str is not None:
+        ws = Path(workspace_str)
+        new_path = ws / "wiki" / "WIKI.md"
+        old_path = ws / "WIKI.md"
+        wiki_path = new_path if new_path.exists() else (old_path if old_path.exists() else new_path)
+    if not wiki_path or not wiki_path.exists():
+        return set()
+    try:
+        lines = wiki_path.read_text(encoding="utf-8").split("\n")
+    except Exception:
+        return set()
+
+    off_topics: set[str] = set()
+    topic_stack: list[str] = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        match = re.match(r"^(#{2,4})\s+(.+)$", stripped)
+        if not match:
+            continue
+        label = match.group(2).strip()
+        if label in ("目录", "来源文件"):
+            continue
+        topic_level = len(match.group(1)) - 1
+        while len(topic_stack) >= topic_level:
+            topic_stack.pop()
+        parent_path = topic_stack[-1] if topic_stack else ""
+        topic_path = parent_path + TOPIC_SEP + label if parent_path else label
+        topic_stack.append(topic_path)
+        if idx + 1 < len(lines) and lines[idx + 1].strip() == "> 综述: off":
+            off_topics.add(topic_path)
+    return off_topics
+
+
 def _renumber_wiki_files(lines):
     file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
     in_topic = False
@@ -145,86 +183,3 @@ def _renumber_wiki_files(lines):
         else:
             result.append(line)
     lines[:] = result
-
-
-# --- Re-exported functions from topic_dedup and topic_wiki_manager ---
-# Imports are deferred to function bodies to avoid circular imports
-# (topic_dedup / wiki_crud / wiki_sync all import from this module).
-
-
-def _remove_empty_topic_sections(topic_name_lower):
-    from utils.topic_dedup import _remove_empty_topic_sections as _impl
-
-    return _impl(topic_name_lower)
-
-
-def _merge_duplicate_topics_in_wiki():
-    from utils.topic_dedup import _merge_duplicate_topics_in_wiki as _impl
-
-    return _impl()
-
-
-def _deduplicate_files_in_wiki():
-    from utils.topic_dedup import _deduplicate_files_in_wiki as _impl
-
-    return _impl()
-
-
-def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):
-    from utils.topic_wiki_manager import add_file_to_wiki_topic as _impl
-
-    return _impl(file_rel_path, topic, file_title=file_title)
-
-
-def remove_file_from_wiki_topic(file_rel_path):
-    from utils.topic_wiki_manager import remove_file_from_wiki_topic as _impl
-
-    return _impl(file_rel_path)
-
-
-def rename_wiki_topic(old_topic, new_topic):
-    from utils.topic_wiki_manager import rename_wiki_topic as _impl
-
-    return _impl(old_topic, new_topic)
-
-
-def _remove_topic_from_wiki(topic_name):
-    from utils.topic_wiki_manager import _remove_topic_from_wiki as _impl
-
-    return _impl(topic_name)
-
-
-def create_topic(topic_name):
-    from utils.topic_wiki_manager import create_topic as _impl
-
-    return _impl(topic_name)
-
-
-def rename_topic(old_topic, new_topic):
-    from utils.topic_wiki_manager import rename_topic as _impl
-
-    return _impl(old_topic, new_topic)
-
-
-def delete_topic(topic_name):
-    from utils.topic_wiki_manager import delete_topic as _impl
-
-    return _impl(topic_name)
-
-
-def sync_wiki_with_files():
-    from utils.topic_wiki_manager import sync_wiki_with_files as _impl
-
-    return _impl()
-
-
-def _write_file_topic_from_folder(file_path, topic):
-    from utils.topic_wiki_manager import _write_file_topic_from_folder as _impl
-
-    return _impl(file_path, topic)
-
-
-def topic_from_notes_path(file_path):
-    from utils.topic_wiki_manager import topic_from_notes_path as _impl
-
-    return _impl(file_path)

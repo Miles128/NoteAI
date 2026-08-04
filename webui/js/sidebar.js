@@ -30,6 +30,7 @@ function _deactivatePendingBtn() {
 }
 
 function showGraphHomeView() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
     var contentPanel = document.getElementById('content-panel');
     var previewPanel = document.getElementById('preview-panel');
     var contentArea = document.getElementById('content-area');

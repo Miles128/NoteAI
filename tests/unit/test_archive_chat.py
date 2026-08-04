@@ -45,7 +45,26 @@ def test_parse_save_suggestion_missing_marker():
 
 
 def test_archive_chat_answer_to_notes(workspace: Path) -> None:
-    result = archive_chat_answer("问题?", "回答内容", title="测试")
+    source = workspace / "Notes" / "AI" / "基础" / "来源.md"
+    source.write_text("# 来源\n", encoding="utf-8")
+    citations = [
+        {
+            "index": 1,
+            "file_path": "Notes/AI/基础/来源.md",
+            "source_label": "来源笔记",
+            "section_title": "关键结论",
+            "topic": "AI > 基础",
+        }
+    ]
+    preview = archive_chat_answer("问题?", "回答内容", title="测试", citations=citations, preview_only=True)
+    assert preview["success"] is True
+    assert preview["preview"] is True
+    assert preview["path"].startswith("Notes/RAG对话/")
+    assert "## 来源" in preview["content"]
+    assert "来源笔记" in preview["content"]
+    assert not list((workspace / "Notes" / "RAG对话").glob("*.md"))
+
+    result = archive_chat_answer("问题?", "回答内容", title="测试", citations=citations)
     assert result["success"] is True
     assert result["target"] == "note"
     saved = list((workspace / "Notes" / "RAG对话").glob("*.md"))
@@ -53,6 +72,21 @@ def test_archive_chat_answer_to_notes(workspace: Path) -> None:
     text = saved[0].read_text(encoding="utf-8")
     assert "问题?" in text
     assert "回答内容" in text
+    assert "## 来源" in text
+    assert "[来源笔记]" in text
+    assert "关键结论" in text
+    assert "主题：AI > 基础" in text
+
+
+def test_archive_chat_answer_to_task(workspace: Path) -> None:
+    result = archive_chat_answer("整理项目路线", "先完成导入和问答。", target="task")
+    assert result["success"] is True
+    assert result["target"] == "task"
+    saved = list((workspace / "Notes" / "待办").glob("*.md"))
+    assert len(saved) == 1
+    text = saved[0].read_text(encoding="utf-8")
+    assert "- [ ] 整理项目路线" in text
+    assert "## 参考回答" in text
 
 
 def test_archive_chat_answer_to_wiki_with_topic_from_context(workspace: Path) -> None:
@@ -69,3 +103,23 @@ def test_archive_chat_answer_to_wiki_with_topic_from_context(workspace: Path) ->
     saved = list((workspace / "wiki" / "RAG对话").glob("*.md"))
     assert len(saved) == 1
     assert 'topic: "AI > 基础"' in saved[0].read_text(encoding="utf-8")
+
+
+def test_archive_chat_answer_does_not_link_outside_workspace(workspace: Path) -> None:
+    result = archive_chat_answer(
+        "问题?",
+        "回答",
+        citations=[{"index": 1, "file_path": "../../etc/passwd", "source_label": "外部文件"}],
+    )
+    saved = Path(workspace, result["path"]).read_text(encoding="utf-8")
+
+    assert result["success"] is True
+    assert "来源当前不可定位" in saved
+    assert "](../../etc/passwd)" not in saved
+
+
+def test_archive_chat_answer_rejects_unknown_target(workspace: Path) -> None:
+    result = archive_chat_answer("问题?", "回答", target="report")
+
+    assert result["success"] is False
+    assert "不支持" in result["message"]

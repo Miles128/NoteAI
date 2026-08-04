@@ -14,6 +14,7 @@ YAML frontmatter 标记规则（横杠缩进）:
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from config.constants import TOPIC_SEP
 
@@ -22,10 +23,10 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # 预定义的 4 个一级标题
 # ============================================================
-LEVEL1_TOPICS = []
+LEVEL1_TOPICS: list[str] = []
 
 MAX_LEVEL = 3
-LEVEL1_ORDER = {}
+LEVEL1_ORDER: dict[str, int] = {}
 
 
 class TopicManager:
@@ -58,7 +59,7 @@ class TopicManager:
             {"name": "L3名称", "level": 3, "parent": "L2名称"},
           ]
         """
-        topics = []
+        topics: list[dict[str, Any]] = []
         raw = frontmatter.get("topic", [])
         if not raw:
             return topics
@@ -187,7 +188,7 @@ class TopicManager:
         例如: Notes/普通人的 AI 学习指南/AI Agent 核心架构设计/MCP vs CLI/test.md
         → [{name: "普通人的 AI 学习指南", level: 1}, {name: "AI Agent 核心架构设计", level: 2}, {name: "MCP vs CLI", level: 3}]
         """
-        topics = []
+        topics: list[dict[str, Any]] = []
         try:
             rel = Path(file_path).relative_to(Path(workspace))
         except ValueError:

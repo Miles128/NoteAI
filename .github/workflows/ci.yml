@@ -26,20 +26,25 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
-  # mypy type check — re-enable after fixing pre-existing type errors
-  # python-typecheck:
-  #   runs-on: ubuntu-latest
-  #   timeout-minutes: 10
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - name: Install uv
-  #       uses: astral-sh/setup-uv@v5
-  #     - name: Install Python and dependencies
-  #       run: |
-  #         uv python install 3.10
-  #         uv sync --python 3.10 --extra dev
-  #     - name: Mypy type check
-  #       run: uv run mypy . --ignore-missing-imports
+      - name: Verify one active PRD
+        run: uv run python scripts/check_prd_single_source.py
+
+  python-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python and dependencies
+        run: |
+          uv python install 3.10
+          uv sync --python 3.10 --extra dev --extra rag
+
+      - name: Mypy type check
+        run: uv run mypy config modules prompts python utils
 
   python-test:
     runs-on: ubuntu-latest
@@ -126,7 +131,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -137,6 +142,10 @@ jobs:
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-registry-
+
+      - name: Cargo format check
+        working-directory: src-tauri
+        run: cargo fmt --check
 
       - name: Cargo clippy
         working-directory: src-tauri

@@ -12,10 +12,7 @@
     var _currentNotes = [];
     var _activeFilePath = null;
 
-    function _escapeHtml(s) {
-        return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    }
+    const _escapeHtml = window.escapeHtml;
 
     function _formatDate(ts) {
         if (!ts) return '';

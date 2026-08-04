@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use tauri::AppHandle;
 use tokio::process::{Child, ChildStdin};
-use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::oneshot;
+use tokio::sync::Mutex as AsyncMutex;
 
 pub struct AppState {
     pub python_stdin: Arc<AsyncMutex<Option<ChildStdin>>>,
@@ -28,10 +28,7 @@ impl Default for AppState {
 
 impl AppState {
     pub fn app_handle(&self) -> Option<AppHandle> {
-        self.app_handle
-            .lock()
-            .ok()
-            .and_then(|g| g.clone())
+        self.app_handle.lock().ok().and_then(|g| g.clone())
     }
 }
 

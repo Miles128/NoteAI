@@ -51,6 +51,10 @@ def test_import_rss_feed_without_fetch(monkeypatch: pytest.MonkeyPatch, workspac
             return None
 
     monkeypatch.setattr("sidecar.multi_source.requests.get", lambda *a, **k: FakeResp())
+    monkeypatch.setattr(
+        "utils.network_security.socket.getaddrinfo",
+        lambda *_args, **_kwargs: [(2, 1, 6, "", ("93.184.216.34", 443))],
+    )
 
     result = import_rss_feed("https://example.com/feed.xml", max_items=5, fetch_articles=False)
     assert result["success"] is True

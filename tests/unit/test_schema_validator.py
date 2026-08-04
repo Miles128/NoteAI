@@ -1,4 +1,4 @@
-from sidecar.schema_validator import (
+from sidecar.workspace_rules_validator import (
     check_notes_writable,
     check_wiki_writable,
     require_topic,

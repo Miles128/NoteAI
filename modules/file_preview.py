@@ -152,7 +152,7 @@ class FilePreviewer:
             from utils.pdf_utils import extract_pdf_pages
 
             pages_text = extract_pdf_pages(file_path)
-            pages_data = []
+            pages_data: list[dict[str, Any]] = []
             for i, text in enumerate(pages_text):
                 pages_data.append({"page_number": i + 1, "text": text.strip(), "image": None, "width": 0, "height": 0})
             return {
@@ -162,7 +162,7 @@ class FilePreviewer:
                 "file_size": file_size,
                 "total_pages": len(pages_data),
                 "pages": pages_data,
-                "full_text": "\n\n".join([p["text"] for p in pages_data]),
+                "full_text": "\n\n".join(str(p["text"]) for p in pages_data),
             }
         except Exception as e:
             logger.error(f"PDF预览失败 (legacy): {e}")

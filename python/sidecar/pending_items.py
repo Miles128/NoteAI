@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from pathlib import Path
 
 from config import config
 from sidecar.cascade_runner import load_cascade_failures
 from sidecar.kb_lint import auto_fix_broken_links, filter_stale_lint_issues, load_lint_report
-from utils.topic_assigner import load_pending
+from utils.topic_pending import load_pending
 
 _PRIORITY = {
     "ingest": 0,
     "cascade_fail": 1,
     "convert_fail": 1,
     "lint": 2,
+    "merge_candidate": 2,
+    "topic_merge_candidate": 2,
+    "entity_quality": 2,
     "topic": 3,
     "link": 3,
     "link_batch": 3,
 }
+
+_MAINTENANCE_LOCK = threading.Lock()
+_MAINTENANCE_LAST_RUN: dict[str, float] = {}
+_MAINTENANCE_INTERVAL_SECONDS = 30.0
 
 
 def _lint_action(kind: str) -> str:
@@ -25,48 +34,66 @@ def _lint_action(kind: str) -> str:
         return "refresh_survey"
     if kind == "orphan_topic":
         return "assign_topic"
+    if kind in ("duplicate_content", "near_duplicate"):
+        return "review_duplicate"
     if kind == "broken_link":
         return "open_file"
+    if kind == "misplaced_note":
+        return "assign_topic"
     return "none"
 
 
-def _run_pending_cleanups() -> None:
+def run_pending_cleanups_if_due(
+    workspace: str | None = None,
+    *,
+    interval_seconds: float = _MAINTENANCE_INTERVAL_SECONDS,
+    force: bool = False,
+) -> bool:
     """Remove stale rows from topic/link queues before building the inbox."""
-    ws = config.workspace_path
-    try:
-        from utils.topic_assigner import sync_all_folder_topics
+    ws = workspace or config.workspace_path
+    if not ws:
+        return False
+    root_key = str(Path(ws).resolve())
+    with _MAINTENANCE_LOCK:
+        now = time.monotonic()
+        elapsed = now - _MAINTENANCE_LAST_RUN.get(root_key, float("-inf"))
+        if not force and elapsed < max(0.0, interval_seconds):
+            return False
+        _MAINTENANCE_LAST_RUN[root_key] = now
 
-        sync_all_folder_topics(ws)
-    except Exception:
-        pass
-    try:
-        from utils.topic_pending import cleanup_stale_pending
+        try:
+            from utils.topic_assigner import sync_all_folder_topics
 
-        cleanup_stale_pending()
-    except Exception:
-        pass
-    try:
-        from utils.link_indexer import cleanup_stale_links
+            sync_all_folder_topics(ws)
+        except Exception:
+            pass
+        try:
+            from utils.topic_pending import cleanup_stale_pending
 
-        cleanup_stale_links()
-    except Exception:
-        pass
-    try:
-        from sidecar.convert_failures import cleanup_stale_convert_failures
+            cleanup_stale_pending()
+        except Exception:
+            pass
+        try:
+            from utils.link_indexer import cleanup_stale_links
 
-        cleanup_stale_convert_failures()
-    except Exception:
-        pass
-    if ws:
+            cleanup_stale_links()
+        except Exception:
+            pass
+        try:
+            from sidecar.convert_failures import cleanup_stale_convert_failures
+
+            cleanup_stale_convert_failures()
+        except Exception:
+            pass
         try:
             auto_fix_broken_links(ws)
         except Exception:
             pass
+    return True
 
 
 def collect_pending_items(workspace: str | None = None) -> list[dict]:
     ws = workspace or config.workspace_path
-    _run_pending_cleanups()
 
     items: list[dict] = []
     topic_files: set[str] = set()
@@ -107,9 +134,82 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
                 "message": issue.get("message", ""),
                 "file_path": rel,
                 "topic": issue.get("topic", ""),
+                "current_topic": issue.get("current_topic", ""),
+                "suggested_score": issue.get("suggested_score", 0.0),
                 "action": _lint_action(kind),
             }
         )
+
+    if root and root.exists():
+        from sidecar.chunk_similarity import load_chunk_similarity_graph
+        from sidecar.duplicate_review import is_merge_group_resolved
+
+        similarity_graph = load_chunk_similarity_graph(root)
+        for candidate in similarity_graph.get("candidates") or []:
+            files = [str(path) for path in (candidate.get("files") or [])]
+            if len(files) < 2 or is_merge_group_resolved(root, files):
+                continue
+            items.append(
+                {
+                    "type": "merge_candidate",
+                    "files": files,
+                    "score": candidate.get("score", 0.0),
+                    "reason": candidate.get("reason", "semantic"),
+                    "pairs": candidate.get("pairs", []),
+                    "action": "review_merge_group",
+                }
+            )
+
+    if root and root.exists():
+        try:
+            from sidecar.semantic.store import SemanticStore
+
+            store = SemanticStore(root)
+            if store.path.exists():
+                with store.connect() as conn:
+                    rows = conn.execute(
+                        """SELECT id, payload_json, reason FROM review_queue
+                           WHERE item_kind = 'entity_quality' AND status = 'pending'
+                           ORDER BY created_at DESC"""
+                    ).fetchall()
+                import json
+
+                for row in rows:
+                    payload = json.loads(row["payload_json"] or "{}")
+                    items.append(
+                        {
+                            "type": "entity_quality",
+                            "id": row["id"],
+                            "message": payload.get("entity_name") or row["reason"],
+                            "reason": row["reason"],
+                            "rule": payload.get("rule", ""),
+                            "entity_id": payload.get("entity_id", ""),
+                            "action": "open_entity_quality",
+                        }
+                    )
+        except Exception:
+            pass
+        for candidate in similarity_graph.get("topic_candidates") or []:
+            topics = [str(topic) for topic in (candidate.get("topics") or [])]
+            if len(topics) != 2:
+                continue
+            from config.constants import TOPIC_SEP
+
+            if not all(
+                (root / config.NOTES_FOLDER / Path(*[part.strip() for part in topic.split(TOPIC_SEP)])).is_dir()
+                for topic in topics
+            ):
+                continue
+            items.append(
+                {
+                    "type": "topic_merge_candidate",
+                    "topics": topics,
+                    "score": candidate.get("score", 0.0),
+                    "name_score": candidate.get("name_score", 0.0),
+                    "content_score": candidate.get("content_score", 0.0),
+                    "action": "review_topic_merge",
+                }
+            )
 
     for fail in load_cascade_failures():
         topic = (fail.get("topic") or "").strip()
@@ -145,9 +245,9 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
             }
         )
 
-    from sidecar.ingest_pipeline import normalize_ingest_state
+    from sidecar.ingest_pipeline import load_ingest_state
 
-    ingest = normalize_ingest_state()
+    ingest = load_ingest_state()
     if ingest.get("status") in {"running", "cancelled", "failed", "interrupted"}:
         items.append(
             {
@@ -162,5 +262,6 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         )
 
     for item in items:
-        item["priority"] = _PRIORITY.get(item.get("type"), 9)
+        item_type = item.get("type")
+        item["priority"] = _PRIORITY.get(item_type, 9) if isinstance(item_type, str) else 9
     return sorted(items, key=lambda item: (item["priority"], -float(item.get("ts") or 0)))

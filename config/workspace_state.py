@@ -13,7 +13,7 @@ class WorkspaceStateError(Exception):
 
 
 class WorkspaceStateManager:
-    def __init__(self, state_file: Path = None):
+    def __init__(self, state_file: Path | None = None):
         self.state_file = state_file or WORKSPACE_STATE_FILE
         self._ensure_dir_exists()
 
@@ -59,7 +59,11 @@ class WorkspaceStateManager:
         except OSError as e:
             raise WorkspaceStateError(f"保存工作区状态失败：{e}")
 
-    def save_workspace(self, workspace_path: str, additional_data: dict[str, Any] = None) -> tuple[bool, str]:
+    def save_workspace(
+        self,
+        workspace_path: str,
+        additional_data: dict[str, Any] | None = None,
+    ) -> tuple[bool, str]:
         if not workspace_path:
             return False, "工作区路径为空"
 

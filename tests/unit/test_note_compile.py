@@ -48,6 +48,25 @@ def test_compile_note_rule_only_without_api(workspace: Path) -> None:
     assert "source: doc.pdf" in text
 
 
+def test_long_note_is_not_replaced_by_truncated_llm_input(workspace: Path) -> None:
+    rel = "Notes/AI/子题/源文章.md"
+    full = workspace / rel
+    body = "".join(f"第 {index} 段长文正文，必须完整保留这一段独特内容。\n" for index in range(1000))
+    full.write_text(
+        f"---\ntopic: AI > 子题\nsource: report.pdf\n---\n\n{body}",
+        encoding="utf-8",
+    )
+    with (
+        patch("utils.llm_utils.check_api_config", return_value=(True, "ok")),
+        patch("utils.llm_utils.call_llm_raw") as call_llm,
+    ):
+        result = compile_note_file(rel, use_llm=True, force=True)
+
+    assert result["success"] is True
+    call_llm.assert_not_called()
+    assert full.read_text(encoding="utf-8").count("必须完整保留") == 1000
+
+
 def test_discover_cross_refs_no_forced_minimum(workspace: Path) -> None:
     rel = "Notes/AI/子题/源文章.md"
     result = discover_cross_refs_for_file(rel, use_llm=False, max_links=25)

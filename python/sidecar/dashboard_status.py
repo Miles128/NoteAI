@@ -8,7 +8,7 @@ from config import config
 from config.constants import NOTES_FOLDER
 from sidecar import job_status
 from sidecar.cascade_runner import load_cascade_failures
-from sidecar.ingest_pipeline import normalize_ingest_state, prepare_auto_ingest
+from sidecar.ingest_pipeline import load_ingest_state, prepare_auto_ingest
 from sidecar.kb_lint import load_lint_report
 from sidecar.pending_items import collect_pending_items
 
@@ -36,12 +36,15 @@ def workspace_stats(workspace: str) -> dict:
 
 
 def pending_summary(pending: dict, lint_report: dict) -> dict:
-    items = pending.get("items") if isinstance(pending.get("items"), list) else []
-    cascade = load_cascade_failures()
+    raw_items = pending.get("items")
+    items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+    raw_cascade = load_cascade_failures()
+    cascade = raw_cascade if isinstance(raw_cascade, list) else []
     try:
         from sidecar.convert_failures import load_convert_failures
 
-        convert = load_convert_failures()
+        raw_convert = load_convert_failures()
+        convert = raw_convert if isinstance(raw_convert, list) else []
     except Exception:
         convert = []
     lint_summary = lint_report.get("summary") if isinstance(lint_report, dict) else {}
@@ -62,9 +65,20 @@ def rag_index_status(workspace: str) -> dict:
     try:
         from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest
 
-        chunk_count = count_indexed_chunks(workspace)
+        chunk_count = count_indexed_chunks(workspace, allow_metadata_fallback=False)
         manifest = load_manifest(workspace)
         expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.get("files", {}).values())
+        if chunk_count < 0:
+            return {
+                "success": True,
+                "enabled": True,
+                "built": False,
+                "busy": True,
+                "needs_rebuild": False,
+                "chunk_count": 0,
+                "expected_chunks": expected_chunks,
+                "file_count": len(manifest.get("files", {})),
+            }
         built = index_exists(workspace) and chunk_count > 0 and chunk_count == expected_chunks
         return {
             "success": True,
@@ -81,7 +95,7 @@ def rag_index_status(workspace: str) -> dict:
 
 
 def ingest_status() -> dict:
-    state = normalize_ingest_state()
+    state = load_ingest_state()
     status = state.get("status", "idle")
     return {
         "status": status,

@@ -18,6 +18,8 @@ function _collectDescendantIds(rootId, childMap) {
 const _GRAPH_TAU = Math.PI * 2;
 const _GRAPH_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 const GRAPH_LAYOUT_STORAGE_KEY = window.Storage.KEYS.GRAPH_LAYOUT;
+const GRAPH_LAYOUT_MODE_STORAGE_KEY = window.Storage.KEYS.GRAPH_LAYOUT_MODE;
+const GRAPH_LAYOUT_MODE_DEFAULT = 'tree';
 /** 节点圆半径显示缩放（相对布局配置值） */
 const _GRAPH_RADIUS_DISPLAY_SCALE = 0.75;
 
@@ -294,6 +296,19 @@ function saveGraphLayoutConfig(cfg) {
 
 function resetGraphLayoutConfigStorage() {
     window.Storage.removeItem(GRAPH_LAYOUT_STORAGE_KEY);
+}
+
+function loadGraphLayoutMode() {
+    const saved = window.Storage.getItem(
+        GRAPH_LAYOUT_MODE_STORAGE_KEY,
+        GRAPH_LAYOUT_MODE_DEFAULT,
+        { silent: true }
+    );
+    return saved === 'constellation' || saved === 'tree' ? saved : GRAPH_LAYOUT_MODE_DEFAULT;
+}
+
+function saveGraphLayoutMode(mode) {
+    window.Storage.setItem(GRAPH_LAYOUT_MODE_STORAGE_KEY, mode, { silent: true });
 }
 
 function _graphCfg() {
@@ -701,7 +716,10 @@ const Graph3Tier = {
     showFilenames: false,
     simulation: null,
     filter: 'topic',
-    layoutMode: 'constellation',
+    // The balanced mind map is easier to scan, so it is the first-run default.
+    // Keep constellation available for relationship exploration and remember
+    // an explicit user choice across sessions.
+    layoutMode: loadGraphLayoutMode(),
     treeCollapsedIds: new Set(),
     treeInitialCollapseApplied: false,
     layoutConfig: loadGraphLayoutConfig(),
@@ -1028,6 +1046,7 @@ const Graph3Tier = {
         const nextMode = mode === 'tree' ? 'tree' : 'constellation';
         if (nextMode === this.layoutMode) return;
         this.layoutMode = nextMode;
+        saveGraphLayoutMode(nextMode);
         this._updateLayoutModeBtns();
         this._updateLegend();
         if (this.data && this.svg) {

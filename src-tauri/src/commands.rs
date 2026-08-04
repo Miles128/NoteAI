@@ -54,7 +54,11 @@ mod tests {
         // Excessive ".." beyond the root should collapse to root, not panic.
         let p = PathBuf::from("/a/../../..");
         let result = normalize_path(&p);
-        assert!(result.starts_with("/"), "result should remain under root: {:?}", result);
+        assert!(
+            result.starts_with("/"),
+            "result should remain under root: {:?}",
+            result
+        );
     }
 
     #[test]
@@ -63,14 +67,51 @@ mod tests {
         let result = normalize_path(&p);
         // Relative paths with excessive ".." should not contain ".." segments.
         let s = result.to_string_lossy();
-        assert!(!s.contains(".."), "result should not contain '..': {:?}", result);
+        assert!(
+            !s.contains(".."),
+            "result should not contain '..': {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn resolve_allows_new_file_under_workspace() {
+        let base = std::env::temp_dir().join(format!("noteai-path-test-{}", uuid::Uuid::new_v4()));
+        let workspace = base.join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+
+        let resolved =
+            resolve_workspace_target(workspace.to_str().unwrap(), "Notes/new/topic.md").unwrap();
+
+        assert_eq!(
+            resolved,
+            workspace.canonicalize().unwrap().join("Notes/new/topic.md")
+        );
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolve_rejects_new_file_beneath_external_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let base = std::env::temp_dir().join(format!("noteai-path-test-{}", uuid::Uuid::new_v4()));
+        let workspace = base.join("workspace");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        symlink(&outside, workspace.join("external")).unwrap();
+
+        let result = resolve_workspace_target(workspace.to_str().unwrap(), "external/escaped.md");
+
+        assert_eq!(result.unwrap_err(), "Path is outside workspace");
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }
 
-fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Result<String, String> {
-    let workspace = state.workspace_path.lock().unwrap_or_else(|e| e.into_inner());
-    let workspace = workspace.as_ref().ok_or("Workspace not set")?;
-    let workspace_abs = std::path::Path::new(workspace).canonicalize()
+fn resolve_workspace_target(workspace: &str, path: &str) -> Result<std::path::PathBuf, String> {
+    let workspace_abs = std::path::Path::new(workspace)
+        .canonicalize()
         .map_err(|e| format!("Invalid workspace: {}", e))?;
     let target = std::path::Path::new(path);
     let target_abs = if target.is_absolute() {
@@ -79,52 +120,92 @@ fn validate_workspace_path(state: &tauri::State<'_, AppState>, path: &str) -> Re
         workspace_abs.join(path)
     };
     let resolved = normalize_path(&target_abs);
-    // Canonicalize the resolved path so symlinks and relative segments are fully
-    // resolved before the workspace containment check.
-    let resolved_canonical = resolved.canonicalize().unwrap_or(resolved.clone());
-    // Verify the normalized path stays inside the workspace.
-    if !resolved_canonical.starts_with(&workspace_abs) {
+
+    // Canonicalize the nearest existing ancestor. Canonicalizing the complete
+    // target alone is insufficient for a new file: it fails and would leave a
+    // symlinked parent unresolved.
+    let mut ancestor = resolved.as_path();
+    let mut missing_tail = Vec::new();
+    while !ancestor.exists() {
+        let name = ancestor
+            .file_name()
+            .ok_or_else(|| "Invalid target path".to_string())?;
+        missing_tail.push(name.to_os_string());
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| "Invalid target path".to_string())?;
+    }
+    let canonical_ancestor = ancestor
+        .canonicalize()
+        .map_err(|e| format!("Invalid target path: {}", e))?;
+    if !canonical_ancestor.starts_with(&workspace_abs) {
         return Err("Path is outside workspace".to_string());
     }
-    Ok(resolved_canonical.to_string_lossy().to_string())
+    let mut safe_target = canonical_ancestor;
+    for part in missing_tail.iter().rev() {
+        safe_target.push(part);
+    }
+    if !safe_target.starts_with(&workspace_abs) {
+        return Err("Path is outside workspace".to_string());
+    }
+    Ok(safe_target)
+}
+
+fn validate_workspace_path(
+    state: &tauri::State<'_, AppState>,
+    path: &str,
+) -> Result<String, String> {
+    let workspace = state
+        .workspace_path
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let workspace = workspace.as_ref().ok_or("Workspace not set")?;
+    resolve_workspace_target(workspace, path).map(|value| value.to_string_lossy().to_string())
 }
 
 #[tauri::command]
-pub async fn open_folder_dialog(
-    app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
+pub async fn open_folder_dialog(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let folder = app
-        .dialog()
-        .file()
-        .blocking_pick_folder();
+    let folder = app.dialog().file().blocking_pick_folder();
     Ok(folder.map(|p| p.to_string()))
 }
 
 #[tauri::command]
-pub async fn open_file_dialog(
-    app: tauri::AppHandle,
-) -> Result<Option<Vec<String>>, String> {
+pub async fn open_file_dialog(app: tauri::AppHandle) -> Result<Option<Vec<String>>, String> {
     use tauri_plugin_dialog::DialogExt;
     let files = app
         .dialog()
         .file()
-        .add_filter("文档文件", &["pdf", "docx", "doc", "pptx", "ppt", "html", "htm", "txt"])
+        .add_filter(
+            "文档文件",
+            &["pdf", "docx", "doc", "pptx", "ppt", "html", "htm", "txt"],
+        )
         .blocking_pick_files();
     Ok(files.map(|paths| paths.into_iter().map(|p| p.to_string()).collect()))
 }
 
 #[tauri::command]
 pub fn get_workspace_path(state: tauri::State<'_, AppState>) -> Option<String> {
-    state.workspace_path.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    state
+        .workspace_path
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()
 }
 
 #[tauri::command]
 pub fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
-    let canonical = p.canonicalize()
-        .unwrap_or_else(|_| p.to_path_buf());
-    *state.workspace_path.lock().unwrap_or_else(|e| e.into_inner()) = Some(canonical.to_string_lossy().to_string());
+    let canonical = p
+        .canonicalize()
+        .map_err(|e| format!("Invalid workspace: {}", e))?;
+    if !canonical.is_dir() {
+        return Err("Workspace must be an existing directory".to_string());
+    }
+    *state
+        .workspace_path
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(canonical.to_string_lossy().to_string());
     Ok(())
 }
 
@@ -135,7 +216,11 @@ pub fn read_file(state: tauri::State<'_, AppState>, path: String) -> Result<Stri
 }
 
 #[tauri::command]
-pub fn write_file(state: tauri::State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+pub fn write_file(
+    state: tauri::State<'_, AppState>,
+    path: String,
+    content: String,
+) -> Result<(), String> {
     let validated = validate_workspace_path(&state, &path)?;
     if let Some(parent) = std::path::Path::new(&validated).parent() {
         std::fs::create_dir_all(parent)
@@ -145,19 +230,19 @@ pub fn write_file(state: tauri::State<'_, AppState>, path: String, content: Stri
 }
 
 #[tauri::command]
-pub fn list_dir(state: tauri::State<'_, AppState>, path: String) -> Result<Vec<serde_json::Value>, String> {
+pub fn list_dir(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<Vec<serde_json::Value>, String> {
     let validated = validate_workspace_path(&state, &path)?;
-    let entries = std::fs::read_dir(&validated)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries =
+        std::fs::read_dir(&validated).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     let mut result = Vec::new();
     for entry in entries {
         let entry = entry.map_err(|e| e.to_string())?;
         let metadata = entry.metadata().map_err(|e| e.to_string())?;
-        let name = entry
-            .file_name()
-            .to_string_lossy()
-            .to_string();
+        let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with('.') {
             continue;
         }
@@ -198,15 +283,12 @@ pub async fn open_file_in_new_window(
     let safe_path = validate_workspace_path(&state, &path)?;
 
     #[allow(unused_mut)]
-    let mut builder = tauri::WebviewWindowBuilder::new(
-        &app,
-        window_label,
-        WebviewUrl::App("index.html".into()),
-    )
-    .title(window_title)
-    .inner_size(1000.0, 700.0)
-    .min_inner_size(800.0, 600.0)
-    .decorations(true);
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(&app, window_label, WebviewUrl::App("index.html".into()))
+            .title(window_title)
+            .inner_size(1000.0, 700.0)
+            .min_inner_size(800.0, 600.0)
+            .decorations(true);
 
     #[cfg(target_os = "macos")]
     {

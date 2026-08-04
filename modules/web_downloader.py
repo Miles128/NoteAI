@@ -19,6 +19,7 @@ from utils.helpers import (
     sanitize_filename,
 )
 from utils.logger import logger
+from utils.network_security import safe_get
 from utils.tag_extractor import (
     add_yaml_frontmatter_to_content,
     add_yaml_frontmatter_to_file,
@@ -175,21 +176,34 @@ class WebDownloader:
         return "未命名文章"
 
     def _try_selectors(
-        self, soup: BeautifulSoup, selectors: list[str], extract_from: str = "text", invalid_titles: set = None
+        self,
+        soup: BeautifulSoup,
+        selectors: list[str],
+        extract_from: str = "text",
+        invalid_titles: set[str] | None = None,
     ) -> str | None:
         for selector in selectors:
             elem = soup.select_one(selector)
             if elem:
                 if extract_from == "content":
-                    text = elem.get("content", "").strip()
+                    text = self._string_attribute(elem.get("content"))
                 elif extract_from == "auto":
-                    text = elem.get_text().strip() if hasattr(elem, "get_text") else elem.get("content", "").strip()
+                    text = (
+                        elem.get_text().strip()
+                        if hasattr(elem, "get_text")
+                        else self._string_attribute(elem.get("content"))
+                    )
                 else:
                     text = elem.get_text().strip()
                 if text:
                     if not invalid_titles or text not in invalid_titles:
                         return text
         return None
+
+    @staticmethod
+    def _string_attribute(value: object) -> str:
+        """Return a scalar HTML attribute and reject malformed list-valued attributes."""
+        return value.strip() if isinstance(value, str) else ""
 
     def _normalize_img_tags_in_html(self, html_content: str, base_url: str) -> str:
         """
@@ -230,7 +244,7 @@ class WebDownloader:
 
             for attr in lazy_load_attributes:
                 if img.get(attr):
-                    attr_value = img.get(attr)
+                    attr_value = self._string_attribute(img.get(attr))
                     if attr in ["data-srcset", "srcset"]:
                         srcset_urls = self._parse_srcset(attr_value)
                         if srcset_urls:
@@ -243,12 +257,12 @@ class WebDownloader:
             if actual_src is None:
                 srcset = img.get("srcset")
                 if srcset:
-                    srcset_urls = self._parse_srcset(srcset)
+                    srcset_urls = self._parse_srcset(self._string_attribute(srcset))
                     if srcset_urls:
                         actual_src = srcset_urls[0]
 
             if actual_src is None:
-                actual_src = img.get("src")
+                actual_src = self._string_attribute(img.get("src"))
 
             if actual_src:
                 try:
@@ -432,7 +446,7 @@ class WebDownloader:
     @retry_on_failure(max_retries=3, delay=1.0)
     def _get_with_retry(self, url: str) -> requests.Response:
         """带重试的GET请求"""
-        return self.session.get(url, timeout=config.timeout, allow_redirects=True)
+        return safe_get(self.session, url, timeout=config.timeout)
 
     def download_batch(
         self,

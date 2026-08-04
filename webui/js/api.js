@@ -35,8 +35,7 @@ var _pyCallRetryDelayMs = 300;
 function _isRetryableError(e) {
     if (!e) return false;
     var msg = String(e.message || e);
-    return msg.indexOf('timeout') !== -1 ||
-        msg.indexOf('aborted') !== -1 ||
+    return msg.indexOf('aborted') !== -1 ||
         msg.indexOf('cancelled') !== -1 ||
         msg.indexOf('invoke') !== -1 ||
         msg.indexOf('sidecar') !== -1;
@@ -44,16 +43,17 @@ function _isRetryableError(e) {
 
 function _translateError(e) {
     var msg = String(e && (e.message || e));
+    var lower = msg.toLowerCase();
     if (msg.indexOf('Not running in Tauri') !== -1) {
         return new Error('应用未在 Tauri 环境中运行');
     }
     if (msg.indexOf('Tauri invoke not available') !== -1) {
         return new Error('Tauri 调用接口不可用，请重启应用');
     }
-    if (msg.indexOf('timeout') !== -1) {
+    if (lower.indexOf('timeout') !== -1 || lower.indexOf('timed out') !== -1) {
         return new Error('请求超时，请稍后重试');
     }
-    if (msg.indexOf('sidecar') !== -1 || msg.indexOf('python') !== -1) {
+    if (lower.indexOf('sidecar') !== -1 || lower.indexOf('python') !== -1) {
         return new Error('后端服务暂时不可用，请重启应用');
     }
     return e;
@@ -344,15 +344,17 @@ var API_DEFS = [
     { name: 'createNote', method: 'create_note', params: function(title, topic) { return { title: title, topic: topic || '' }; }, write: true },
     { name: 'createNoteFromDraft', method: 'create_note_from_draft', params: function(title, topic, content) { return { title: title, topic: topic || '', content: content || '' }; }, write: true },
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
-    { name: 'getPendingTopics', method: 'get_pending_topics' },
     { name: 'getAllPending', method: 'get_all_pending' },
     { name: 'retryCascadeTopic', method: 'retry_cascade_topic', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'retryAllCascadeFailures', method: 'retry_all_cascade_failures', params: function() { return {}; }, write: true },
     { name: 'dismissCascadeFailure', method: 'dismiss_cascade_failure', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'retryConvertFile', method: 'retry_convert_file', params: function(file) { return { file: file }; }, write: true },
     { name: 'dismissConvertFailure', method: 'dismiss_convert_failure', params: function(file) { return { file: file }; }, write: true },
     { name: 'getDashboardStatus', method: 'get_dashboard_status' },
     { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; } },
+    { name: 'keepNoteInTopic', method: 'keep_note_in_topic', params: function(filePath, currentTopic, suggestedTopic) { return { file_path: filePath, current_topic: currentTopic, suggested_topic: suggestedTopic }; }, write: true },
+    { name: 'applyTopicPlacementThreshold', method: 'apply_topic_placement_threshold', params: function() { return {}; }, write: true },
     { name: 'mergeDuplicateTopics', method: 'merge_duplicate_topics', params: function() { return {}; } },
     { name: 'renameTopic', method: 'rename_topic', params: function(oldTopic, newTopic) { return { old_topic: oldTopic, new_topic: newTopic }; } },
     { name: 'deleteTopic', method: 'delete_topic', params: function(topicName) { return { topic_name: topicName }; } },
@@ -399,10 +401,27 @@ var API_DEFS = [
     { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
     { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
     { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
+    { name: 'getSemanticWorkbench', method: 'get_semantic_workbench', params: function(options) { return options || {}; } },
+    { name: 'getSemanticDetail', method: 'get_semantic_detail', params: function(kind, id) { return { kind: kind, id: id }; } },
+    { name: 'getNoteSemanticContext', method: 'get_note_semantic_context', params: function(path) { return { path: path }; } },
+    { name: 'getSemanticObjectWikiPage', method: 'get_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; } },
+    { name: 'publishSemanticObjectWikiPage', method: 'publish_semantic_object_wiki_page', params: function(kind, id) { return { kind: kind, id: id }; }, write: true },
+    { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
+    { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
+    { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
+    { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
+    { name: 'enqueueSemanticEntityQuality', method: 'enqueue_semantic_entity_quality', params: function(id) { return { id: id }; }, write: true },
+    { name: 'getSemanticEntityMergePreview', method: 'get_semantic_entity_merge_preview', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId }; } },
+    { name: 'mergeSemanticEntities', method: 'merge_semantic_entities', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId, confirmed: true }; }, write: true },
+    { name: 'updateSemanticClaim', method: 'update_semantic_claim', params: function(id, statement, scope, claimType) { return { id: id, statement: statement, scope: scope || '', claim_type: claimType }; }, write: true },
+    { name: 'setSemanticClaimStatus', method: 'set_semantic_claim_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
+    { name: 'setSemanticEvidenceStatus', method: 'set_semantic_evidence_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
+    { name: 'getSemanticTopicWikiPage', method: 'get_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; } },
+    { name: 'publishSemanticTopicWikiPage', method: 'publish_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; }, write: true },
+    { name: 'addSemanticEntityAlias', method: 'add_semantic_entity_alias', params: function(id, alias) { return { id: id, alias: alias }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
     { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
     { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
-    { name: 'generateAbstract', method: 'generate_abstract', params: function(topicName, level) { return { topic_name: topicName, level: level }; }, write: true },
 
     // ---- LLM 改写 ----
     { name: 'llmRewrite', method: 'llm_rewrite', params: function(filePath) { return { file_path: filePath }; } },
@@ -420,8 +439,13 @@ var API_DEFS = [
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'archiveChatAnswer', method: 'archive_chat_answer', params: function(payload) { return payload || {}; }, write: true },
     { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; }, write: true },
-    { name: 'getChangelog', method: 'get_changelog', params: function(limit) { return { limit: limit || 50 }; } },
-    { name: 'checkAndGenerateSurveys', method: 'check_and_generate_surveys', params: function() { return {}; }, write: true },
+    { name: 'getDuplicateReview', method: 'get_duplicate_review', params: function(filePath, relatedFile) { return { file_path: filePath, related_file: relatedFile }; } },
+    { name: 'mergeDuplicateNotes', method: 'merge_duplicate_notes', params: function(filePath, relatedFile, title) { return { file_path: filePath, related_file: relatedFile, title: title || '' }; }, write: true },
+    { name: 'mergeNoteGroup', method: 'merge_note_group', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
+    { name: 'getChunkMergeCandidates', method: 'get_chunk_merge_candidates', params: function() { return {}; } },
+    { name: 'scanMergeCandidates', method: 'scan_merge_candidates', params: function() { return {}; }, write: true },
+    { name: 'suggestTopicMergeNames', method: 'suggest_topic_merge_names', params: function(topics) { return { topics: topics || [] }; }, write: true },
+    { name: 'mergeSimilarTopics', method: 'merge_similar_topics', params: function(topics, newTopic) { return { topics: topics || [], new_topic: newTopic || '' }; }, write: true },
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },
@@ -450,10 +474,7 @@ var API_DEFS = [
     { name: 'getJob', method: 'get_job', params: function(jobId) { return { job_id: jobId }; } },
 
     // ---- 搜索 ----
-    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },
-
-    // ---- 云同步占位 ----
-    { name: 'cloudSyncListProviders', method: 'cloud_sync_list_providers' }
+    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } }
 ];
 
 var generatedApi = {};
@@ -482,6 +503,8 @@ window.api = Object.assign({}, generatedApi, {
 });
 
 window.getTauriEventAPI = getTauriEventAPI;
+window.checkIsTauri = checkIsTauri;
+window.getTauriInvoke = getTauriInvoke;
 
 })();
 

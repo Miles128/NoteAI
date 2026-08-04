@@ -1,4 +1,6 @@
 import shutil
+import threading
+import time
 from pathlib import Path
 
 import yaml
@@ -31,15 +33,19 @@ from utils.topic_assigner import (
     save_pending,
     write_topic_to_file,
 )
-from utils.topic_manager import TopicManager
-from utils.wiki_manager import (
+from utils.topic_dedup import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
 )
+from utils.topic_manager import TopicManager
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
-    def _sync_wiki_with_folder_system(self):
+    _pending_maintenance_schedule_lock = threading.Lock()
+    _pending_maintenance_last_scheduled: dict[str, float] = {}
+    _pending_maintenance_interval_seconds = 30.0
+
+    def _sync_wiki_with_folder_system(self, _params=None):
         try:
             return sync_wiki_with_files()
         except Exception as e:
@@ -161,7 +167,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         full_path = Path(full_path)
         if not full_path.exists():
             return {"success": False, "message": "文件不存在"}
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic)
         if not ok:
@@ -186,15 +192,15 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "主题名不能为空"}
         topic_full = TOPIC_SEP.join([parent, topic_name]) if parent else topic_name
 
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic_full)
         if not ok:
             return {"success": False, "message": err}
 
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         result = wiki_create_topic(topic_full)
         if not result.get("success"):
@@ -235,9 +241,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": "主题名不能为空"}
         if old_name == new_name:
             return {"success": True, "message": "主题名相同"}
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         workspace_path = Path(workspace)
         try:
@@ -285,9 +291,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         topic_name = params.get("topic_name", "").strip()
         if not topic_name:
             return {"success": False, "message": "主题名不能为空"}
-        workspace = config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
 
         workspace_path = Path(workspace)
         notes_root = workspace_path / config.NOTES_FOLDER
@@ -445,6 +451,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def _get_all_pending(self, _params):
         workspace = config.workspace_path
         topic_options: list[str] = []
+        maintenance_started = self.schedule_pending_maintenance() if workspace else False
         if workspace:
             try:
                 topic_options = TopicManager.collect_topic_labels(workspace)
@@ -458,7 +465,57 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         for item in items:
             item_type = item.get("type", "other")
             summary[item_type] = summary.get(item_type, 0) + 1
-        return {"items": items, "count": len(items), "summary": summary, "topic_options": topic_options}
+        return {
+            "items": items,
+            "count": len(items),
+            "summary": summary,
+            "topic_options": topic_options,
+            "auto_moved_count": 0,
+            "auto_move_errors": [],
+            "maintenance_started": maintenance_started,
+        }
+
+    def schedule_pending_maintenance(self) -> bool:
+        """Start deduplicated Inbox maintenance without blocking snapshot reads."""
+        start_task = getattr(self._server, "_start_task", None)
+        if not callable(start_task):
+            return False
+        workspace = config.workspace_path
+        if not workspace:
+            return False
+        root_key = str(Path(workspace).resolve())
+        now = time.monotonic()
+        with self._pending_maintenance_schedule_lock:
+            elapsed = now - self._pending_maintenance_last_scheduled.get(root_key, float("-inf"))
+            if elapsed < self._pending_maintenance_interval_seconds:
+                return False
+            started = bool(
+                start_task(
+                    "pending_maintenance",
+                    self._run_pending_maintenance,
+                    kind="maintenance",
+                    label="Inbox maintenance",
+                )
+            )
+            if started:
+                self._pending_maintenance_last_scheduled[root_key] = now
+            return started
+
+    def _run_pending_maintenance(self) -> None:
+        from sidecar.pending_items import run_pending_cleanups_if_due
+
+        workspace = config.workspace_path
+        if not workspace:
+            return
+        cleaned = run_pending_cleanups_if_due(workspace)
+        placement = self._apply_topic_placement_threshold({"skip_recent": True})
+        if cleaned or placement.get("moved_count") or placement.get("errors"):
+            self._send_response(
+                {
+                    "id": "event",
+                    "result": {"type": "workspace_files_changed", "source": "pending_maintenance"},
+                }
+            )
 
     def _resolve_topic(self, params):
         file_path = params.get("file_path", "")
@@ -466,7 +523,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         if not file_path or not topic:
             return {"success": False, "message": "参数缺失"}
 
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
 
         ok, err = require_topic(topic)
         if not ok:
@@ -499,6 +556,75 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         return {"success": True, "message": f"已确认主题「{topic}」"}
 
+    def _keep_note_in_topic(self, params):
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        try:
+            from sidecar.topic_placement import keep_note_in_current_topic
+
+            return keep_note_in_current_topic(
+                workspace,
+                (params.get("file_path") or "").strip(),
+                (params.get("current_topic") or "").strip(),
+                (params.get("suggested_topic") or "").strip(),
+            )
+        except (OSError, ValueError) as exc:
+            return {"success": False, "message": str(exc)}
+
+    def _apply_topic_placement_threshold(self, _params):
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        from sidecar.topic_placement import auto_move_misplaced_notes, auto_move_misplaced_notes_if_due
+
+        try:
+            if _params.get("skip_recent"):
+                result = auto_move_misplaced_notes_if_due(workspace)
+            else:
+                result = auto_move_misplaced_notes(workspace)
+        except Exception as exc:
+            logger.exception("[topics_handler] auto topic placement failed")
+            return {
+                "success": False,
+                "message": str(exc),
+                "moved": [],
+                "moved_count": 0,
+                "errors": [{"message": str(exc)}],
+            }
+        moves = result.get("moved") or []
+        affected_topics = {
+            str(topic) for move in moves for topic in (move.get("current_topic"), move.get("suggested_topic")) if topic
+        }
+        for topic in affected_topics:
+            self._start_task(f"cascade_topic_move_{topic}", self._do_cascade_survey_update, args=(topic,))
+        result["moved_count"] = len(moves)
+        return result
+
+    def _suggest_topic_merge_names(self, params):
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        from sidecar.topic_merge import suggest_merged_topic_names
+
+        return suggest_merged_topic_names(workspace, [str(topic) for topic in (params.get("topics") or [])])
+
+    def _merge_similar_topics(self, params):
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        from sidecar.topic_merge import merge_topics
+
+        result = merge_topics(
+            workspace,
+            [str(topic) for topic in (params.get("topics") or [])],
+            str(params.get("new_topic") or "").strip(),
+        )
+        if result.get("success"):
+            topic = result.get("new_topic")
+            self._start_task(f"cascade_topic_merge_{topic}", self._do_cascade_survey_update, args=(topic,))
+        return result
+
     def _get_activity_log(self, params):
         limit = params.get("limit", 50)
         return {"entries": get_entries(limit)}
@@ -510,6 +636,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
     def register_routes(self, router):
         router.register("get_topic_tree", self._get_topic_tree)
+        router.register("sync_wiki_with_files", self._sync_wiki_with_folder_system)
         router.register("auto_assign_topic", self._auto_assign_topic)
         router.register("batch_auto_assign_topics", self._batch_auto_assign_topics)
         router.register("move_file_to_topic", self._move_file_to_topic)
@@ -517,6 +644,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("rename_topic", self._rename_topic)
         router.register("delete_topic", self._delete_topic)
         router.register("resolve_topic", self._resolve_topic)
+        router.register("keep_note_in_topic", self._keep_note_in_topic)
+        router.register("apply_topic_placement_threshold", self._apply_topic_placement_threshold)
+        router.register("suggest_topic_merge_names", self._suggest_topic_merge_names)
+        router.register("merge_similar_topics", self._merge_similar_topics)
         router.register("get_all_topic_names", self._get_all_topic_names)
         router.register("get_file_topics", self._get_file_topics)
         router.register("get_topic_files", self._get_topic_files)

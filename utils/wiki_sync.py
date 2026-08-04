@@ -2,13 +2,12 @@ import re
 from pathlib import Path
 
 import yaml
-from sidecar.textutils import parse_frontmatter
-from sidecar.wiki_utils import collect_survey_off_topics
 
 from config import config
 from config.constants import TOPIC_SEP
 from utils.logger import logger
-from utils.wiki_manager import _get_wiki_path
+from utils.text_utils import parse_frontmatter
+from utils.wiki_manager import _get_wiki_path, collect_survey_off_topics
 
 TAGS_START = "<!-- NOTEAI_TAGS_START -->"
 TAGS_END = "<!-- NOTEAI_TAGS_END -->"

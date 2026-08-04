@@ -7,9 +7,9 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from sidecar.cascade import get_survey_path
-from sidecar.textutils import parse_frontmatter
 from utils.link_indexer import load_links
 from utils.logger import logger
+from utils.text_utils import parse_frontmatter
 
 _MAX_SURVEY_TOPICS = 2
 _MAX_SURVEY_CHARS = 2800

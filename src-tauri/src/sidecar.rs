@@ -46,6 +46,7 @@ async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
 
 /// Kill child and clear handles without notifying the UI (planned restart).
 async fn stop_python_sidecar_quiet(state: &AppState) {
+    crate::rpc::fail_pending_requests(state, "Python 后端正在重启，请重试");
     SIDECAR_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(mut child) = state.python_child.lock().await.take() {
         let _ = child.kill().await;
@@ -63,6 +64,7 @@ async fn on_sidecar_process_exit(app: &AppHandle, reader_gen: u64) {
     }
 
     let state = app.state::<AppState>();
+    crate::rpc::fail_pending_requests(&state, "Python 后端意外退出，请重试");
     *state.python_stdin.lock().await = None;
     if let Some(mut child) = state.python_child.lock().await.take() {
         let _ = child.kill().await;
@@ -110,7 +112,10 @@ fn python_ok(candidate: &Path) -> bool {
     if !candidate.exists() {
         return false;
     }
-    let Ok(output) = std::process::Command::new(candidate).arg("--version").output() else {
+    let Ok(output) = std::process::Command::new(candidate)
+        .arg("--version")
+        .output()
+    else {
         return false;
     };
     let ver = String::from_utf8_lossy(&output.stdout);
@@ -172,7 +177,10 @@ pub fn find_python() -> Result<PathBuf, String> {
 }
 
 fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
-    if let Ok(path) = app.path().resolve("python/main.py", BaseDirectory::Resource) {
+    if let Ok(path) = app
+        .path()
+        .resolve("python/main.py", BaseDirectory::Resource)
+    {
         if path.exists() {
             return Ok(path);
         }
@@ -188,7 +196,12 @@ fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
         exe_dir.join("../Resources/python/main.py"),
         exe_dir.join("..").join("python").join("main.py"),
         exe_dir.join("..").join("..").join("python").join("main.py"),
-        exe_dir.join("..").join("..").join("..").join("python").join("main.py"),
+        exe_dir
+            .join("..")
+            .join("..")
+            .join("..")
+            .join("python")
+            .join("main.py"),
         PathBuf::from("python/main.py"),
     ];
 
@@ -218,7 +231,8 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         )
         .env(
             "NO_PROXY",
-            std::env::var("NO_PROXY").unwrap_or_else(|_| "huggingface.co,hf-mirror.com".to_string()),
+            std::env::var("NO_PROXY")
+                .unwrap_or_else(|_| "huggingface.co,hf-mirror.com".to_string()),
         )
         .env("HF_HOME", &hf_cache_str)
         .env("HUGGINGFACE_HUB_CACHE", &hf_cache_str)
@@ -236,8 +250,14 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to start Python: {}", e))?;
 
     let stdin = child.stdin.take();
-    let stdout = child.stdout.take().ok_or("Failed to capture Python stdout")?;
-    let stderr = child.stderr.take().ok_or("Failed to capture Python stderr")?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or("Failed to capture Python stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("Failed to capture Python stderr")?;
 
     let app_clone = app.clone();
     tokio::spawn(async move {

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import traceback
+from typing import Any
 
 from sidecar.handlers.base import BaseHandler
 from sidecar.ingest_pipeline import (
-    normalize_ingest_state,
+    cancel_generation,
+    load_ingest_state,
     prepare_auto_ingest,
     request_cancel,
     run_ingest,
@@ -47,9 +49,9 @@ class IngestHandler(BaseHandler):
 
     def ensure_running(self, file_paths: list | None = None) -> dict:
         """Start ingest when needed; safe to call on every app/workspace open."""
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区", "started": False}
+        workspace, err = self._require_workspace(extra={"started": False}, message="请先设置工作区")
+        if err:
+            return err
 
         plan = prepare_auto_ingest(workspace, file_paths=file_paths)
         if plan.get("action") != "start":
@@ -58,10 +60,11 @@ class IngestHandler(BaseHandler):
         mode = plan.get("mode", "incremental")
         paths = plan.get("file_paths") or []
         resume = bool(plan.get("resume"))
+        cancel_token = cancel_generation()
         if self._start_task(
             "ingest_pipeline",
             self._do_ingest,
-            args=(mode, paths, resume),
+            args=(mode, paths, resume, cancel_token),
             kind="ingest",
             label="Ingest pipeline",
         ):
@@ -127,17 +130,18 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "整理规则已保存", "needs_setup": False}
 
     def _start_ingest(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区"}
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
 
         mode = params.get("mode", "full")
         file_paths = params.get("file_paths") or []
         resume = bool(params.get("resume"))
+        cancel_token = cancel_generation()
         if not self._start_task(
             "ingest_pipeline",
             self._do_ingest,
-            args=(mode, file_paths, resume),
+            args=(mode, file_paths, resume, cancel_token),
             kind="ingest",
             label="Ingest pipeline",
         ):
@@ -145,7 +149,13 @@ class IngestHandler(BaseHandler):
 
         return {"success": True, "message": "入库流水线已开始", "mode": mode}
 
-    def _do_ingest(self, mode: str, file_paths: list, resume: bool = False) -> None:
+    def _do_ingest(
+        self,
+        mode: str,
+        file_paths: list,
+        resume: bool = False,
+        cancel_token: int | None = None,
+    ) -> None:
         def send_progress(stage: str, progress: float, message: str, extra: dict | None = None) -> None:
             self._send_job_update(
                 "ingest_pipeline",
@@ -173,6 +183,7 @@ class IngestHandler(BaseHandler):
                 send_progress=send_progress,
                 send_event=send_event,
                 resume=resume,
+                cancel_after_generation=cancel_token,
             )
             if result.get("success"):
                 cascade_topics = result.get("stats", {}).get("cascade_topics") or []
@@ -261,8 +272,9 @@ class IngestHandler(BaseHandler):
         retry_result = retry_failed_cascades(send_response=send_event)
         updated = result.get("updated", 0) + retry_result.get("updated", 0)
         failed = list(result.get("failed") or []) + list(retry_result.get("failed") or [])
-        state = load_ingest_state()
-        stats = state.get("stats") if isinstance(state.get("stats"), dict) else {}
+        state: dict[str, Any] = load_ingest_state()
+        raw_stats = state.get("stats")
+        stats: dict[str, Any] = raw_stats if isinstance(raw_stats, dict) else {}
         stats["cascade_updated"] = updated
         stats["cascade_failed"] = failed
         state["stats"] = stats
@@ -292,13 +304,26 @@ class IngestHandler(BaseHandler):
         return {"success": True, "message": "已请求取消"}
 
     def _retry_ingest(self, params):
-        normalize_ingest_state()
-        return self.ensure_running(file_paths=params.get("file_paths") or None)
+        state = load_ingest_state()
+        file_paths = params.get("file_paths") or state.get("file_paths") or []
+        if state.get("status") == "cancelled":
+            mode = params.get("mode") or state.get("mode") or "full"
+            cancel_token = cancel_generation()
+            if self._start_task(
+                "ingest_pipeline",
+                self._do_ingest,
+                args=(mode, file_paths, True, cancel_token),
+                kind="ingest",
+                label="Ingest pipeline",
+            ):
+                return {"success": True, "started": True, "mode": mode, "resume": True}
+            return {"success": False, "started": False, "reason": "already_running"}
+        return self.ensure_running(file_paths=file_paths or None)
 
     def _check_ingest_updates(self, params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "请先设置工作区", "has_updates": False}
+        workspace, err = self._require_workspace(extra={"has_updates": False}, message="请先设置工作区")
+        if err:
+            return err
 
         plan = prepare_auto_ingest(workspace, file_paths=params.get("file_paths") or None)
         has_updates = plan.get("action") == "start"
@@ -310,7 +335,7 @@ class IngestHandler(BaseHandler):
         }
 
     def _get_ingest_status(self, _params):
-        state = normalize_ingest_state()
+        state = load_ingest_state()
         status = state.get("status", "idle")
         return {
             "success": True,

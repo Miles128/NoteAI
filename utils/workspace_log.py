@@ -142,6 +142,8 @@ def _parse_legacy_json_entries(path: Path) -> list[dict]:
             continue
         ts = item.get("ts")
         try:
+            if not isinstance(ts, (str, int, float)):
+                raise TypeError("invalid timestamp")
             dt = datetime.fromtimestamp(float(ts))
         except (TypeError, ValueError, OSError):
             dt = datetime.now()

@@ -3,6 +3,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
@@ -85,27 +86,33 @@ def _get_reranker():
             return None
 
 
-def _cache_key(query: str, topics, tags) -> str:
+def _cache_key(query: str, topics, tags, current_file: str = "") -> str:
     ws = config.workspace_path or ""
-    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}"
+    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}||{current_file}"
 
 
-def _get_cached(query: str, topics, tags):
-    key = _cache_key(query, topics, tags)
+def _get_cached(query: str, topics, tags, current_file: str = ""):
+    key = _cache_key(query, topics, tags, current_file)
     return _query_cache.get(key)
 
 
-def _set_cached(query: str, topics, tags, value):
-    key = _cache_key(query, topics, tags)
+def _set_cached(query: str, topics, tags, current_file: str, value):
+    key = _cache_key(query, topics, tags, current_file)
     _query_cache.set(key, value)
 
 
-def retrieve(query: str, topics: list = None, tags: list = None, progress_callback=None) -> list:
+def retrieve(
+    query: str,
+    topics: list | None = None,
+    tags: list | None = None,
+    current_file: str = "",
+    progress_callback=None,
+) -> list:
     workspace = config.workspace_path
     if not workspace:
         return []
 
-    cached = _get_cached(query, topics, tags)
+    cached = _get_cached(query, topics, tags, current_file)
     if cached is not None:
         return cached[0]
 
@@ -128,6 +135,29 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
         topics=topics,
         tags=tags,
     )
+
+    # The open note is not privileged evidence.  Retrieve its best chunks with
+    # the same query vector, then let normal ranking/MMR/reranking decide
+    # whether it earns a place in the final evidence set.
+    if current_file:
+        current_hits = hybrid_search(
+            workspace,
+            query_dense=query_emb["dense_vec"],
+            query_text="",
+            top_k=3,
+            file_paths=[current_file],
+        )
+        known_ids = {r.get("id") for r in results}
+        for hit in current_hits:
+            if hit.get("id") in known_ids:
+                continue
+            hit["source_type"] = "current"
+            # This candidate is intentionally scored by vector similarity,
+            # rather than a one-file-normalized BM25 score.
+            hit["score"] = hit.get("dense_score", 0.0)
+            results.append(hit)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        results = results[:candidate_k]
 
     # HyDE only if enabled and the original search is weak, avoiding a mandatory LLM call.
     if hyde_enabled() and (not results or results[0].get("score", 0) < hyde_threshold()):
@@ -163,7 +193,7 @@ def retrieve(query: str, topics: list = None, tags: list = None, progress_callba
     expanded = filter_usable_chunks(expanded)
     expanded = limit_unique_sources(expanded, dynamic_top_k)
 
-    _set_cached(query, topics, tags, (expanded, []))
+    _set_cached(query, topics, tags, current_file, (expanded, []))
     return expanded
 
 
@@ -350,7 +380,7 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
         if old.get("mtime") != info["mtime"] or old.get("size") != info["size"]:
             return False
     expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.values())
-    return expected_chunks > 0 and count_indexed_chunks(workspace) == expected_chunks
+    return expected_chunks > 0 and count_indexed_chunks(workspace, allow_metadata_fallback=False) == expected_chunks
 
 
 def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:
@@ -416,7 +446,7 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     )
     build_and_save_global_idf(all_chunks, workspace)
 
-    manifest = {"version": 1, "files": {}}
+    manifest: dict[str, Any] = {"version": 1, "files": {}}
     for c in all_chunks:
         rel = c["file_path"]
         entry = manifest["files"].setdefault(
@@ -425,29 +455,32 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
         entry["chunks"].append(c["id"])
     save_manifest(workspace, manifest)
 
-    return {
-        "success": True,
-        "chunk_count": chunk_count,
-        "incremental": False,
-        "updated_files": len(current_files),
-        "updated_paths": sorted(current_files),
-        "deleted_files": 0,
-    }
+    return {"success": True, "chunk_count": chunk_count}
 
 
 def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
+    from sidecar.rag.index import index_operation
+
+    raw_workspace = workspace or config.workspace_path
+    if not raw_workspace:
+        return {"success": False, "message": "未设置工作区"}
+    with index_operation(raw_workspace, blocking=False) as acquired:
+        if not acquired:
+            return {"success": False, "message": "索引更新正在进行中"}
+        return _rebuild_index_locked(
+            progress_callback,
+            force_full=force_full,
+            workspace=raw_workspace,
+        )
+
+
+def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, workspace: str | None = None):
     from sidecar.rag.index import _normalize_workspace
 
     raw_workspace = workspace or config.workspace_path
     if not raw_workspace:
         return {"success": False, "message": "未设置工作区"}
     workspace = _normalize_workspace(raw_workspace)
-    legacy_state = Path(workspace) / ".noteai" / "rag_index_state.json"
-    if legacy_state.exists():
-        try:
-            legacy_state.unlink()
-        except OSError:
-            pass
 
     from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
     from sidecar.rag.index import (
@@ -464,33 +497,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     current_files = _scan_files(workspace_path)
 
     if not current_files:
-        manifest = load_manifest(workspace)
-        old_files = list(manifest.get("files", {}))
-        if not old_files:
-            return {
-                "success": True,
-                "chunk_count": 0,
-                "incremental": True,
-                "updated_files": 0,
-                "updated_paths": [],
-                "deleted_files": 0,
-            }
-        from sidecar.rag.index import _get_collection
-
-        collection = _get_collection(workspace)
-        for rel_path in old_files:
-            delete_by_file(workspace, rel_path, collection=collection, rebuild_bm25s=False)
-        rebuild_search_indices(workspace, [], progress_callback=progress_callback, collection=collection)
-        build_and_save_global_idf([], workspace)
-        save_manifest(workspace, {"version": 1, "files": {}})
-        return {
-            "success": True,
-            "chunk_count": 0,
-            "incremental": True,
-            "updated_files": 0,
-            "updated_paths": [],
-            "deleted_files": len(old_files),
-        }
+        return {"success": False, "message": "未找到可索引的文件"}
 
     manifest = load_manifest(workspace)
     manifest_files = manifest.get("files", {})
@@ -500,7 +507,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         and index_exists(workspace)
         and bool(manifest_files)
         and expected_chunks > 0
-        and count_indexed_chunks(workspace) == expected_chunks
+        and count_indexed_chunks(workspace, allow_metadata_fallback=False) == expected_chunks
     )
 
     if not can_incremental:
@@ -520,35 +527,13 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         old = old_files.get(rel)
         if old and old.get("mtime") == info["mtime"] and old.get("size") == info["size"]:
             unchanged.append(rel)
-        elif old:
-            modified.append(rel)
         else:
-            new_files.append(rel)
+            modified.append(rel)
 
     deleted = [rel for rel in old_files if rel not in current_files]
 
     if progress_callback:
         progress_callback(0, max(len(modified) + len(new_files) + len(deleted), 1), "准备增量更新...")
-
-    # Prepare all replacement vectors before mutating the working index. The
-    # manifest is committed only after every derived index succeeds.
-    files_to_chunk = modified + new_files
-    new_chunks: list[dict] = []
-    embeddings: list[dict] = []
-    if files_to_chunk:
-        new_chunks = _chunk_files_parallel(workspace_path, files_to_chunk)
-    if new_chunks:
-        if progress_callback:
-            progress_callback(0, len(new_chunks), "正在生成 Embedding...")
-        texts = [c["content"] for c in new_chunks]
-        try:
-            embeddings = encode_documents(
-                texts,
-                download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
-                progress_callback=progress_callback,
-            )
-        except Exception as e:
-            return {"success": False, "message": f"Embedding 生成失败: {e}"}
 
     # Delete removed and modified files from the collection.
     # Reuse a single opened collection and defer BM25s rebuild to the end
@@ -562,13 +547,30 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
         except Exception as e:
             logger.warning(f"[rag/retriever] delete_by_file failed {rel_path}: {e}\n")
 
-    # Add prepared replacement chunks.
+    # Chunk new and modified files in parallel
+    files_to_chunk = modified + new_files
+    new_chunks: list[dict] = []
+    if files_to_chunk:
+        new_chunks = _chunk_files_parallel(workspace_path, files_to_chunk)
+
+    # Encode and add new chunks
     if new_chunks:
-        add_chunks(workspace, new_chunks, embeddings)
+        if progress_callback:
+            progress_callback(0, len(new_chunks), "正在生成 Embedding...")
+        texts = [c["content"] for c in new_chunks]
+        try:
+            embeddings = encode_documents(
+                texts,
+                download_callback=lambda msg: progress_callback(0, 1, msg) if progress_callback else None,
+                progress_callback=progress_callback,
+            )
+        except Exception as e:
+            return {"success": False, "message": f"Embedding 生成失败: {e}"}
+        add_chunks(workspace, new_chunks, embeddings, rebuild_bm25s=False)
 
     # Rebuild BM25s, metadata, global IDF from the full collection
     all_chunk_ids: list[str] = []
-    new_manifest = {"version": 1, "files": {}}
+    new_manifest: dict[str, Any] = {"version": 1, "files": {}}
 
     for rel in unchanged:
         entry = old_files[rel]
@@ -624,14 +626,7 @@ def rebuild_index(progress_callback=None, *, force_full: bool = False, workspace
     build_and_save_global_idf(full_corpus, workspace)
     save_manifest(workspace, new_manifest)
 
-    return {
-        "success": True,
-        "chunk_count": chunk_count,
-        "incremental": True,
-        "updated_files": len(modified) + len(new_files),
-        "updated_paths": modified + new_files,
-        "deleted_files": len(deleted),
-    }
+    return {"success": True, "chunk_count": chunk_count, "incremental": True}
 
 
 def incremental_update(file_path: str, action: str = "update"):

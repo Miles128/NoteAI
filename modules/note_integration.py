@@ -17,12 +17,12 @@ class NoteIntegration:
 
     def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
-        self.documents = []
+        self.documents: list[dict] = []
 
     def load_documents_from_folder(self, folder_path: str) -> list[dict]:
         """从文件夹加载Markdown文档"""
         folder = Path(folder_path)
-        documents = []
+        documents: list[dict] = []
 
         if not folder.exists():
             logger.error(f"文件夹不存在: {folder_path}")
@@ -49,7 +49,12 @@ class NoteIntegration:
         logger.info(f"已加载 {len(documents)} 个文档")
         return documents
 
-    def integrate(self, documents: list[dict], save_path: str = None, user_topics: list[str] = None) -> dict:
+    def integrate(
+        self,
+        documents: list[dict],
+        save_path: str | None = None,
+        user_topics: list[str] | None = None,
+    ) -> dict:
         """笔记整合入口
 
         Args:
@@ -59,7 +64,12 @@ class NoteIntegration:
         """
         return self._integrate_by_topics(documents, save_path, user_topics)
 
-    def _integrate_by_topics(self, documents: list[dict], save_path: str = None, user_topics: list[str] = None) -> dict:
+    def _integrate_by_topics(
+        self,
+        documents: list[dict],
+        save_path: str | None = None,
+        user_topics: list[str] | None = None,
+    ) -> dict:
         """基于主题的笔记整合策略
 
         流程：
@@ -174,7 +184,7 @@ class NoteIntegration:
         """使用 LLM 将整个文件分配到最匹配的主题"""
         from utils.llm_utils import call_llm
 
-        topic_doc_mapping = {t: [] for t in topics}
+        topic_doc_mapping: dict[str, list[int]] = {t: [] for t in topics}
 
         docs_info = "\n".join(
             [f"- 文档{i}: {d.get('title', d.get('filename', '未命名'))}" for i, d in enumerate(documents)]
@@ -192,12 +202,14 @@ class NoteIntegration:
                 docs_info=docs_info,
             )
             result = json.loads(response_text)
-            mapping = result.get("mapping", {})
+            mapping = result.get("mapping", {}) if isinstance(result, dict) else {}
+            if not isinstance(mapping, dict):
+                raise ValueError("LLM mapping must be an object")
 
             for topic_name, doc_indices in mapping.items():
                 # 验证 doc_indices 是整数列表且在有效范围内
+                validated: list[int] = []
                 if isinstance(doc_indices, list):
-                    validated = []
                     for idx in doc_indices:
                         if isinstance(idx, int) and 0 <= idx < len(documents):
                             validated.append(idx)
@@ -205,13 +217,15 @@ class NoteIntegration:
                             int_idx = int(idx)
                             if 0 <= int_idx < len(documents):
                                 validated.append(int_idx)
-                    doc_indices = validated
+                else:
+                    continue
+                topic_name = str(topic_name)
                 if topic_name in topic_doc_mapping:
-                    topic_doc_mapping[topic_name] = doc_indices
+                    topic_doc_mapping[topic_name] = validated
                 else:
                     matched = next((t for t in topic_doc_mapping if t.strip() == topic_name.strip()), None)
                     if matched:
-                        topic_doc_mapping[matched] = doc_indices
+                        topic_doc_mapping[matched] = validated
 
             logger.info(f"文件-主题映射完成: {[(t, len(ids)) for t, ids in topic_doc_mapping.items()]}")
             return topic_doc_mapping
@@ -222,7 +236,7 @@ class NoteIntegration:
 
     def _fallback_doc_mapping(self, topics: list[str], documents: list[dict]) -> dict[str, list[int]]:
         """降级策略：基于关键词匹配将文档分配到主题"""
-        topic_doc_mapping = {t: [] for t in topics}
+        topic_doc_mapping: dict[str, list[int]] = {t: [] for t in topics}
         assigned_docs = set()
 
         for i, doc in enumerate(documents):

@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from sidecar.handlers.rag_handler import RagHandler
 
 from config import config
@@ -58,3 +59,27 @@ def test_selection_lookup_routes_web_after_quick_answer(monkeypatch) -> None:
 
     assert result["success"] is True
     assert events[-1]["result"]["token"] == "\n\n---\n\n### 联网补充\n\n"
+
+
+def test_normal_chat_defaults_to_workspace_rag(monkeypatch, tmp_path) -> None:
+    config.workspace_path = str(tmp_path)
+    events = []
+    handler = _handler(events)
+    calls = []
+
+    monkeypatch.setattr("utils.llm_utils.check_api_config", lambda: (True, ""))
+    monkeypatch.setattr(
+        handler,
+        "_answer_with_rag",
+        lambda _params, question, _history, **_kwargs: calls.append(question) or {"success": True},
+    )
+    monkeypatch.setattr(
+        handler,
+        "_answer_without_retrieval",
+        lambda *_args, **_kwargs: pytest.fail("normal chat should not bypass RAG"),
+    )
+
+    result = handler._do_rag_chat_inner({"question": "你好"}, use_vector_rag=True)
+
+    assert result["success"] is True
+    assert calls == ["你好"]

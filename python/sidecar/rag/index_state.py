@@ -1,22 +1,75 @@
-"""Backward-compatible per-file helpers backed by the canonical manifest."""
+"""Track per-file mtimes so RAG indexing skips unchanged Notes."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from config import config
+from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from utils.logger import logger
+
+
+def _state_path(workspace: str | None = None) -> Path | None:
+    ws = workspace or config.workspace_path
+    if not ws:
+        return None
+    p = Path(ws) / WORKSPACE_APP_FOLDER / "rag_index_state.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def load_state(workspace: str | None = None) -> dict[str, float]:
-    from sidecar.rag.index import load_manifest
-
-    ws = workspace or config.workspace_path
-    if not ws:
+    path = _state_path(workspace)
+    if not path:
         return {}
-    return {path: float(entry.get("mtime", 0)) for path, entry in load_manifest(ws).get("files", {}).items()}
+    if not path.exists():
+        # Recover the per-file mtime state from the durable RAG manifest. A
+        # missing auxiliary state file must not make every note look new.
+        manifest_path = path.parent / RAG_INDEX_FOLDER / "file_manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            files = manifest.get("files", {})
+            if isinstance(files, dict):
+                return {
+                    str(rel): float(entry["mtime"])
+                    for rel, entry in files.items()
+                    if isinstance(entry, dict) and entry.get("mtime") is not None
+                }
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        files = data.get("files", {})
+        if isinstance(files, dict):
+            return {str(k): float(v) for k, v in files.items()}
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return {}
 
 
 def save_state(files: dict[str, float], workspace: str | None = None) -> None:
-    # Compatibility no-op: only a successful index rebuild may commit manifest.
-    return None
+    import os as _os
+    import tempfile as _tempfile
+
+    path = _state_path(workspace)
+    if not path:
+        return
+    data = json.dumps({"files": files}, ensure_ascii=False, indent=2)
+    try:
+        fd, tmp = _tempfile.mkstemp(dir=str(path.parent), prefix=".rag_index_state_")
+        try:
+            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(data)
+        except Exception:
+            _os.close(fd)
+            raise
+        _os.replace(tmp, str(path))
+    except Exception as e:
+        logger.warning(f"[rag/index_state] save failed: {e}")
+        # Fallback to direct write on atomic-write failure.
+        path.write_text(data, encoding="utf-8")
 
 
 def file_needs_index(rel_path: str, mtime: float, workspace: str | None = None) -> bool:
@@ -26,6 +79,23 @@ def file_needs_index(rel_path: str, mtime: float, workspace: str | None = None) 
 
 
 def mark_indexed(rel_path: str, mtime: float, workspace: str | None = None) -> None:
-    # Compatibility no-op: marking before vector persistence caused false clean
-    # states. rebuild_index() now commits the complete manifest atomically.
-    return None
+    mark_many_indexed({rel_path: mtime}, workspace)
+
+
+def mark_many_indexed(files: dict[str, float], workspace: str | None = None) -> None:
+    """Commit successful index updates in one atomic state-file write."""
+    if not files:
+        return
+    state = load_state(workspace)
+    state.update(files)
+    save_state(state, workspace)
+
+
+def remove_indexed(rel_paths: list[str], workspace: str | None = None) -> None:
+    """Forget files only after their persisted chunks have been removed."""
+    if not rel_paths:
+        return
+    state = load_state(workspace)
+    for rel_path in rel_paths:
+        state.pop(rel_path, None)
+    save_state(state, workspace)

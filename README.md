@@ -148,10 +148,6 @@ Agent mode notes:
 
 Each run uses an **Answer First** hierarchy: `Final` is expanded at the top, while `Reasoning` and `Tools` remain available as quieter collapsed receipts below it.
 
-#### ☁️ Cloud sync (experimental)
-
-Enable in Settings → UI → experimental; WebDAV, Jianguoyun, Aliyun, Tencent, OneDrive, Baidu Pan, etc.
-
 ### 📂 Workspace Layout
 
 ```
@@ -178,7 +174,7 @@ Enable in Settings → UI → experimental; WebDAV, Jianguoyun, Aliyun, Tencent,
 │                                   │ invoke → JSON-RPC                  │
 │  ┌────────────────────────────────▼──────────────────────────────┐   │
 │  │  🐍 Python sidecar                                               │   │
-│  │  Handlers · RAG · ingest · CLI agent bridge · cloud sync         │   │
+│  │  Handlers · RAG · ingest · CLI agent bridge                       │   │
 │  └───────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -382,10 +378,6 @@ python run.py
 CLI Agent 的最终回复以安全 Markdown 预览显示；可见过程信息完成后默认折叠，原始协议 JSON 与终端噪声不会混入最终回答。
 每次运行固定采用 **Answer First** 层级：顶部 `Final` 默认展开，`Reasoning` 与 `Tools` 作为安静的折叠收据排列在下方。
 
-#### ☁️ 云盘同步（实验性）
-
-设置 → 界面 → 启用实验功能后，可配置 WebDAV / 坚果云、阿里云、腾讯云、 OneDrive、百度网盘等。
-
 ### 📂 工作区结构
 
 ```
@@ -412,7 +404,7 @@ CLI Agent 的最终回复以安全 Markdown 预览显示；可见过程信息完
 │                                   │ invoke → JSON-RPC                  │
 │  ┌────────────────────────────────▼──────────────────────────────┐   │
 │  │  🐍 Python sidecar                                               │   │
-│  │  Handlers · RAG · 入库流水线 · CLI agent 桥接 · 云同步             │   │
+│  │  Handlers · RAG · 入库流水线 · CLI agent 桥接                    │   │
 │  └───────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
 ```

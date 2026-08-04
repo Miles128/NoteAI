@@ -81,83 +81,7 @@ function initCodeMirrorEditor(content, filePath) {
     window.mdEditor.isActive = true;
 
     updateSaveStatus('saved', window.t('editor.saveLoading'));
-
-    if (!window.EditorBridge || !window.EditorBridge.isReady) {
-        console.warn('[Editor] EditorBridge not ready, waiting 5s...');
-        let waited = 0;
-        const checkInterval = setInterval(() => {
-            waited += 200;
-            if (window.EditorBridge && window.EditorBridge.isReady) {
-                clearInterval(checkInterval);
-                createCodeMirrorInstance(content, filePath, container);
-            } else if (waited >= 5000) {
-                clearInterval(checkInterval);
-                console.warn('[Editor] EditorBridge timeout, using textarea fallback');
-                createTextareaFallback(content, filePath, container);
-            }
-        }, 200);
-        return;
-    }
-
-    try {
-        createCodeMirrorInstance(content, filePath, container);
-    } catch (e) {
-        console.error('[Editor] CodeMirror init failed:', e);
-        createTextareaFallback(content, filePath, container);
-    }
-}
-
-function createCodeMirrorInstance(content, filePath, container) {
-    const M = window.EditorBridge.modules;
-    const isDark = getEffectiveTheme() === 'dark';
-    const theme = isDark ? M.oneDark : M.oneLight;
-
-    const updateListener = M.EditorView.updateListener.of((v) => {
-        if (v.docChanged) {
-            const newContent = v.state.doc.toString();
-            updateMarkdownPreview(newContent);
-            scheduleAutoSave(newContent);
-        }
-    });
-
-    const scrollListener = M.EditorView.domEventHandlers({
-        scroll: (event, view) => {
-            if (window.mdEditor.isScrollSyncing) return;
-            syncScrollFromEditor(view);
-        }
-    });
-
-    const extensions = [
-        M.basicSetup,
-        M.markdown(),
-        theme,
-        updateListener,
-        scrollListener,
-        M.keymap.of([
-            M.indentWithTab,
-            ...M.closeBracketsKeymap,
-            ...M.defaultKeymap,
-            ...M.historyKeymap,
-            ...M.completionKeymap,
-            ...M.lintKeymap
-        ])
-    ];
-
-    const state = M.EditorState.create({
-        doc: content,
-        extensions: extensions
-    });
-
-    window.mdEditor.view = new M.EditorView({
-        state: state,
-        parent: container
-    });
-
-    updateMarkdownPreview(content);
-    updateSaveStatus('saved', window.t('editor.saveSaved'));
-    initPreviewScrollListener();
-
-    console.log('[Editor] CodeMirror initialized for:', filePath, 'content length:', content.length);
+    createTextareaFallback(content, filePath, container);
 }
 
 function createTextareaFallback(content, filePath, container) {
@@ -188,64 +112,11 @@ function destroyCodeMirrorEditor() {
         performImmediateSave();
         window.mdEditor.usingFallback = false;
         window.mdEditor.getFallbackContent = null;
-    } else if (window.mdEditor.view) {
-        performImmediateSave();
-        window.mdEditor.view.destroy();
-        window.mdEditor.view = null;
     }
     window.mdEditor.filePath = null;
     window.mdEditor.originalContent = null;
     window.mdEditor.isActive = false;
     window.mdEditor.isScrollSyncing = false;
-}
-
-function updateEditorTheme() {
-    if (!window.mdEditor.view || !window.EditorBridge || !window.EditorBridge.isReady) return;
-
-    const M = window.EditorBridge.modules;
-    const isDark = getEffectiveTheme() === 'dark';
-    const theme = isDark ? M.oneDark : M.oneLight;
-
-    const currentDoc = window.mdEditor.view.state.doc;
-    const container = window.mdEditor.view.dom.parentElement;
-
-    window.mdEditor.view.destroy();
-
-    const updateListener = M.EditorView.updateListener.of((v) => {
-        if (v.docChanged) {
-            const newContent = v.state.doc.toString();
-            updateMarkdownPreview(newContent);
-            scheduleAutoSave(newContent);
-        }
-    });
-
-    const extensions = [
-        M.basicSetup,
-        M.markdown(),
-        theme,
-        updateListener,
-        M.keymap.of([
-            M.indentWithTab,
-            ...M.closeBracketsKeymap,
-            ...M.defaultKeymap,
-            ...M.historyKeymap,
-            ...M.completionKeymap,
-            ...M.lintKeymap
-        ])
-    ];
-
-    const state = M.EditorState.create({
-        doc: currentDoc,
-        extensions: extensions
-    });
-
-    window.mdEditor.view = new M.EditorView({
-        state: state,
-        parent: container
-    });
-
-    updateHljsTheme();
-    console.log('[Editor] Theme updated to:', isDark ? 'dark' : 'light');
 }
 
 function updateMarkdownPreview(content) {
@@ -516,10 +387,8 @@ window.EditorModule = {
     updateHljsTheme,
     updateSaveStatus,
     initCodeMirrorEditor,
-    createCodeMirrorInstance,
     createTextareaFallback,
     destroyCodeMirrorEditor,
-    updateEditorTheme,
     updateMarkdownPreview,
     renderMarkdownPreview,
     scheduleAutoSave,

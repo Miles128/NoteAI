@@ -1,11 +1,10 @@
 import re
 from pathlib import Path
 
-from sidecar.textutils import parse_frontmatter, write_frontmatter
-
 from config import config
 from config.constants import TOPIC_SEP
 from utils.logger import logger
+from utils.text_utils import parse_frontmatter, write_frontmatter
 from utils.topic_classifier import _norm_topic
 
 
@@ -153,7 +152,7 @@ def _clear_topic_in_file(file_path):
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):
-    from utils.wiki_manager import add_file_to_wiki_topic, remove_file_from_wiki_topic
+    from utils.wiki_crud import add_file_to_wiki_topic, remove_file_from_wiki_topic
 
     new_topic = _norm_topic(new_topic)
     workspace = config.workspace_path

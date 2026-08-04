@@ -33,6 +33,15 @@ def test_get_ingest_status_idle(workspace: Path, ingest_handler: IngestHandler) 
     assert status["status"] == "idle"
 
 
+def test_get_ingest_status_does_not_interrupt_running_pipeline(workspace: Path, ingest_handler: IngestHandler) -> None:
+    save_ingest_state({"status": "running", "stage": "semantic", "progress": 0.5})
+
+    status = ingest_handler._get_ingest_status({})
+
+    assert status["status"] == "running"
+    assert status["running"] is True
+
+
 def test_needs_schema_setup_flag(workspace: Path, ingest_handler: IngestHandler) -> None:
     result = ingest_handler._needs_schema_setup({})
     assert result["needs_setup"] is True
@@ -84,3 +93,31 @@ def test_check_ingest_updates_reports_start_for_file_paths(workspace: Path, inge
     assert result["action"] == "start"
     assert result["mode"] == "incremental"
     assert result["file_paths"] == ["Notes/new.md"]
+
+
+def test_retry_cancelled_ingest_resumes_completed_stages(
+    workspace: Path, ingest_handler: IngestHandler, monkeypatch
+) -> None:
+    write_workspace_rules(workspace)
+    save_ingest_state(
+        {
+            "status": "cancelled",
+            "mode": "full",
+            "file_paths": [],
+            "completed_stages": ["rules", "convert"],
+        }
+    )
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        ingest_handler._server,
+        "_start_task",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or True,
+        raising=False,
+    )
+
+    result = ingest_handler._retry_ingest({"mode": "full"})
+
+    assert result["success"] is True
+    assert result["resume"] is True
+    task_args = calls[0][1]["args"]
+    assert task_args[0:3] == ("full", [], True)

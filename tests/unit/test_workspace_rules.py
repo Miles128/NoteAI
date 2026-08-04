@@ -54,21 +54,23 @@ def test_save_options_marks_configured(workspace: Path) -> None:
     assert rules["auto_update_survey"] is False
 
 
-def test_l1_topics_from_wiki(workspace: Path) -> None:
-    wiki = workspace / "wiki"
-    wiki.mkdir()
-    (wiki / "WIKI.md").write_text("## AI Agent\n\n## RAG\n", encoding="utf-8")
+def test_l1_topics_from_notes_folders(workspace: Path) -> None:
+    (workspace / "Notes" / "AI Agent").mkdir()
+    (workspace / "Notes" / "RAG").mkdir()
     opts = get_workspace_rules_options(str(workspace))
     assert opts["l1_topics"] == ["AI Agent", "RAG"]
 
 
-def test_wiki_topic_structure_snippet(workspace: Path) -> None:
+def test_topic_structure_uses_notes_folders_not_stale_wiki(workspace: Path) -> None:
+    (workspace / "Notes" / "AI Agent" / "记忆").mkdir(parents=True)
     wiki = workspace / "wiki"
     wiki.mkdir()
-    (wiki / "WIKI.md").write_text("## AI Agent\n### 记忆\n", encoding="utf-8")
+    (wiki / "WIKI.md").write_text("## 已废弃主题\n", encoding="utf-8")
     text = format_wiki_topic_structure_for_llm(workspace=str(workspace))
     assert "AI Agent" in text
     assert "记忆" in text
+    assert "已废弃主题" not in text
+    assert "来源：Notes/ 文件夹" in text
 
 
 def test_resolve_survey_topic() -> None:

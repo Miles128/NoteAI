@@ -6,8 +6,8 @@ from pathlib import Path
 
 from config import config
 from config.settings import NOTES_FOLDER
-from sidecar.textutils import parse_frontmatter
 from utils.logger import logger
+from utils.text_utils import parse_frontmatter
 
 WORKSPACE_META_FILENAMES = frozenset({"AGENTS.md", "CLAUDE.md", "GEMINI.md"})
 

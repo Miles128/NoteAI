@@ -96,46 +96,44 @@ def needs_workspace_rules_setup(workspace: str | None = None) -> bool:
     return not load_workspace_rules(workspace).get("configured", False)
 
 
-def _parse_wiki_headings_for_workspace(workspace: str) -> list[dict]:
-    wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-    if not wiki_path.exists():
-        legacy = Path(workspace) / "WIKI.md"
-        wiki_path = legacy if legacy.exists() else wiki_path
-    if not wiki_path.exists():
+def list_topic_headings(workspace: str | None = None) -> list[dict]:
+    """Return topic paths from the Notes directory, the canonical hierarchy."""
+    ws_value = workspace or config.workspace_path
+    if not ws_value:
         return []
-    try:
-        text = wiki_path.read_text(encoding="utf-8")
-    except OSError:
+    notes_root = Path(ws_value) / config.NOTES_FOLDER
+    if not notes_root.exists():
         return []
+
     headings: list[dict] = []
-    topic_stack: list[str] = []
-    for line in text.split("\n"):
-        stripped = line.strip()
-        match = re.match(r"^(#{2,4})\s+(.+)$", stripped)
-        if not match:
+    for directory in sorted(
+        (path for path in notes_root.rglob("*") if path.is_dir()),
+        key=lambda path: str(path.relative_to(notes_root)),
+    ):
+        try:
+            parts = directory.relative_to(notes_root).parts
+        except ValueError:
             continue
-        label = match.group(2).strip()
-        if label in ("目录", "来源文件"):
+        if not parts or len(parts) > 3 or any(part.startswith(".") for part in parts):
             continue
-        topic_level = len(match.group(1)) - 1
-        while len(topic_stack) >= topic_level:
-            topic_stack.pop()
-        parent_path = topic_stack[-1] if topic_stack else ""
-        topic_path = parent_path + TOPIC_SEP + label if parent_path else label
-        topic_stack.append(topic_path)
-        headings.append({"level": topic_level, "name": topic_path, "label": label})
+        headings.append(
+            {
+                "level": len(parts),
+                "name": TOPIC_SEP.join(parts),
+                "label": parts[-1],
+            }
+        )
     return headings
 
 
 def list_l1_topics(workspace: str | None = None) -> list[str]:
-    """一级主题来自 wiki/WIKI.md 目录结构（与 Notes 文件夹同步）。"""
+    """一级主题来自 Notes/ 文件夹结构。"""
+    topics = [h["label"] for h in list_topic_headings(workspace) if h.get("level") == 1]
+    if topics:
+        return topics
     ws = workspace or config.workspace_path
     if not ws:
         return []
-    headings = _parse_wiki_headings_for_workspace(ws)
-    topics = [h["label"] for h in headings if h.get("level") == 1]
-    if topics:
-        return topics
     from utils.topic_manager import TopicManager
 
     tree = TopicManager.build_tree_from_filesystem(ws)
@@ -171,9 +169,8 @@ def resolve_survey_topic(topic: str, survey_at_level: int = 2) -> str:
 
 
 def format_wiki_topic_structure_for_llm(max_chars: int = 1200, workspace: str | None = None) -> str:
-    """主题结构摘要，供分类 LLM 使用（来源：wiki/WIKI.md）。"""
-    ws = workspace or config.workspace_path
-    headings = _parse_wiki_headings_for_workspace(ws) if ws else []
+    """主题结构摘要，供分类 LLM 使用（来源：Notes/ 文件夹）。"""
+    headings = list_topic_headings(workspace)
 
     if not headings:
         l1 = list_l1_topics(workspace)
@@ -189,7 +186,7 @@ def format_wiki_topic_structure_for_llm(max_chars: int = 1200, workspace: str | 
         lvl = int(h.get("level") or 1)
         by_level.setdefault(lvl, []).append(h["name"])
 
-    lines = ["【工作区主题结构】", "来源：wiki/WIKI.md，分类时请优先选用下列路径：", ""]
+    lines = ["【工作区主题结构】", "来源：Notes/ 文件夹，分类时请优先选用下列路径：", ""]
     for name in by_level.get(1, []):
         lines.append(f"- {name}")
     for name in by_level.get(2, []):

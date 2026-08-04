@@ -514,10 +514,7 @@ function _rssT(key, params) {
     return window.t ? window.t(key, params) : key;
 }
 
-function _escapeHtml(s) {
-    return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+const _escapeHtml = window.escapeHtml;
 
 function initRssTab() {
   var rssImportBtn = document.getElementById('ms-rss-import-btn');

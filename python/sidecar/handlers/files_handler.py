@@ -325,15 +325,15 @@ class FilesHandler(BaseHandler):
     def _note_target_path(self, title: str, topic: str):
         from config.constants import TOPIC_SEP
         from config.settings import NOTES_FOLDER
-        from sidecar.schema_validator import require_topic
+        from sidecar.workspace_rules_validator import require_topic
         from utils.helpers import sanitize_filename
 
         if not title:
             return None, {"success": False, "message": "标题不能为空"}
 
-        workspace = self.config.workspace_path
-        if not workspace:
-            return None, {"success": False, "message": "未设置工作区"}
+        workspace, err = self._require_workspace()
+        if err:
+            return None, err
 
         if topic:
             ok, err = require_topic(topic)

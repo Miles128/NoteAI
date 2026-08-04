@@ -6,7 +6,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,7 +14,7 @@ from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.semantic.ids import stable_id
 
 SCHEMA_VERSION = 4
-CLAIM_POLICY_VERSION = 4
+CLAIM_POLICY_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -148,7 +148,22 @@ CREATE TABLE IF NOT EXISTS semantic_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_semantic_audit_object
     ON semantic_audit_log(object_kind, object_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS semantic_change_log (
+    id TEXT PRIMARY KEY,
+    change_kind TEXT NOT NULL,
+    object_kind TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    source_path TEXT NOT NULL DEFAULT '',
+    topic TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_semantic_change_created
+    ON semantic_change_log(created_at DESC);
 """
+
+CHANGE_LOG_LIMIT = 8000
 
 
 class SemanticStore:
@@ -210,6 +225,96 @@ class SemanticStore:
     @staticmethod
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @staticmethod
+    def _record_change(
+        conn: sqlite3.Connection,
+        *,
+        change_kind: str,
+        object_kind: str,
+        object_id: str,
+        label: str = "",
+        detail: dict | None = None,
+        source_path: str = "",
+        topic: str = "",
+    ) -> None:
+        """Append one knowledge-change event (added/updated/invalidated/removed)."""
+        conn.execute(
+            """INSERT INTO semantic_change_log(
+                   id, change_kind, object_kind, object_id, label,
+                   detail_json, source_path, topic, created_at
+               ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                uuid4().hex,
+                change_kind,
+                object_kind,
+                object_id,
+                label,
+                json.dumps(detail or {}, ensure_ascii=False),
+                source_path,
+                topic,
+                SemanticStore._now(),
+            ),
+        )
+
+    @staticmethod
+    def _trim_change_log(conn: sqlite3.Connection) -> None:
+        count = conn.execute("SELECT count(*) FROM semantic_change_log").fetchone()[0]
+        if count > CHANGE_LOG_LIMIT + 2000:
+            conn.execute(
+                """DELETE FROM semantic_change_log WHERE id NOT IN (
+                       SELECT id FROM semantic_change_log
+                       ORDER BY created_at DESC, rowid DESC LIMIT ?
+                   )""",
+                (CHANGE_LOG_LIMIT,),
+            )
+
+    @staticmethod
+    def _block_source(conn: sqlite3.Connection, block_id: str) -> tuple[str, str]:
+        row = conn.execute(
+            """SELECT d.path AS path, d.topic AS topic
+               FROM blocks b JOIN documents d ON d.id = b.document_id
+               WHERE b.id = ?""",
+            (block_id,),
+        ).fetchone()
+        if row is None:
+            return "", ""
+        return str(row["path"] or ""), str(row["topic"] or "")
+
+    @staticmethod
+    def _invalidate_orphan_claims(
+        conn: sqlite3.Connection,
+        *,
+        reason: str,
+        source_path: str = "",
+        topic: str = "",
+        detail: dict | None = None,
+    ) -> int:
+        """Record then delete claims that lost their last supporting evidence."""
+        orphans = conn.execute(
+            """SELECT c.id AS id, c.statement AS statement FROM claims c
+               WHERE NOT EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id)"""
+        ).fetchall()
+        payload = {"reason": reason}
+        if detail:
+            payload.update(detail)
+        for row in orphans:
+            SemanticStore._record_change(
+                conn,
+                change_kind="invalidated",
+                object_kind="claim",
+                object_id=row["id"],
+                label=row["statement"],
+                detail=payload,
+                source_path=source_path,
+                topic=topic,
+            )
+        if orphans:
+            conn.execute(
+                """DELETE FROM claims
+                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+            )
+        return len(orphans)
 
     @staticmethod
     def _audit(
@@ -470,6 +575,18 @@ class SemanticStore:
     ) -> None:
         """Replace only one block's Claim/Evidence layer."""
         with self.connect() as conn:
+            source_path, source_topic = self._block_source(conn, block_id)
+            incoming_ids = [claim["id"] for claim in claims]
+            previous_claims: dict[str, sqlite3.Row] = {}
+            if incoming_ids:
+                placeholders = ",".join("?" * len(incoming_ids))
+                previous_claims = {
+                    row["id"]: row
+                    for row in conn.execute(
+                        f"SELECT id, statement, user_edited FROM claims WHERE id IN ({placeholders})",
+                        incoming_ids,
+                    )
+                }
             evidence_statuses = {
                 row["id"]: row["status"]
                 for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
@@ -492,6 +609,29 @@ class SemanticStore:
                     """,
                     claim,
                 )
+                previous = previous_claims.get(claim["id"])
+                if previous is None:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="claim",
+                        object_id=claim["id"],
+                        label=claim["statement"],
+                        detail={"claim_type": claim["claim_type"], "scope": claim.get("scope", "")},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
+                elif not previous["user_edited"] and previous["statement"] != claim["statement"]:
+                    self._record_change(
+                        conn,
+                        change_kind="updated",
+                        object_kind="claim",
+                        object_id=claim["id"],
+                        label=claim["statement"],
+                        detail={"claim_type": claim["claim_type"], "previous_statement": previous["statement"]},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
                 conn.execute(
                     "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'claim', ?)",
                     (claim["id"], block_id),
@@ -520,10 +660,13 @@ class SemanticStore:
                 """,
                 (block_id, block_hash, prompt_version, extracted_at),
             )
-            conn.execute(
-                """DELETE FROM claims
-                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+            self._invalidate_orphan_claims(
+                conn,
+                reason="replaced_by_recompile",
+                source_path=source_path,
+                topic=source_topic,
             )
+            self._trim_change_log(conn)
 
     def mark_claim_extraction_failed(
         self,
@@ -561,6 +704,31 @@ class SemanticStore:
     ) -> None:
         """Replace one block's semantic output in a single transaction."""
         with self.connect() as conn:
+            source_path, source_topic = self._block_source(conn, block_id)
+            concept_ids = [concept["id"] for concept in concepts]
+            entity_ids = [entity["id"] for entity in entities]
+            claim_ids = [claim["id"] for claim in claims]
+            existing_concepts = (
+                {row["id"] for row in conn.execute(
+                    f"SELECT id FROM concepts WHERE id IN ({','.join('?' * len(concept_ids))})", concept_ids)}
+                if concept_ids
+                else set()
+            )
+            existing_entities = (
+                {row["id"] for row in conn.execute(
+                    f"SELECT id FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})", entity_ids)}
+                if entity_ids
+                else set()
+            )
+            previous_claims: dict[str, sqlite3.Row] = {}
+            if claim_ids:
+                previous_claims = {
+                    row["id"]: row
+                    for row in conn.execute(
+                        f"SELECT id, statement, user_edited FROM claims WHERE id IN ({','.join('?' * len(claim_ids))})",
+                        claim_ids,
+                    )
+                }
             evidence_statuses = {
                 row["id"]: row["status"]
                 for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
@@ -581,6 +749,16 @@ class SemanticStore:
                     """,
                     concept,
                 )
+                if concept["id"] not in existing_concepts:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="concept",
+                        object_id=concept["id"],
+                        label=concept["canonical_name"],
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
                 conn.execute(
                     "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'concept', ?)",
                     (concept["id"], block_id),
@@ -598,6 +776,17 @@ class SemanticStore:
                     """,
                     entity,
                 )
+                if entity["id"] not in existing_entities:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="entity",
+                        object_id=entity["id"],
+                        label=entity["canonical_name"],
+                        detail={"entity_type": entity.get("entity_type", "")},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
                 conn.execute(
                     "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'entity', ?)",
                     (entity["id"], block_id),
@@ -637,6 +826,29 @@ class SemanticStore:
                     """,
                     claim,
                 )
+                previous = previous_claims.get(claim["id"])
+                if previous is None:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="claim",
+                        object_id=claim["id"],
+                        label=claim["statement"],
+                        detail={"claim_type": claim["claim_type"], "scope": claim.get("scope", "")},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
+                elif not previous["user_edited"] and previous["statement"] != claim["statement"]:
+                    self._record_change(
+                        conn,
+                        change_kind="updated",
+                        object_kind="claim",
+                        object_id=claim["id"],
+                        label=claim["statement"],
+                        detail={"claim_type": claim["claim_type"], "previous_statement": previous["statement"]},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
                 conn.execute(
                     "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'claim', ?)",
                     (claim["id"], block_id),
@@ -677,10 +889,13 @@ class SemanticStore:
                 """,
                 (block_id, block_hash, prompt_version, extracted_at),
             )
-            conn.execute(
-                """DELETE FROM claims
-                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+            self._invalidate_orphan_claims(
+                conn,
+                reason="replaced_by_recompile",
+                source_path=source_path,
+                topic=source_topic,
             )
+            self._trim_change_log(conn)
 
     def mark_extraction_failed(
         self,
@@ -714,6 +929,7 @@ class SemanticStore:
         """Atomically replace a parsed document and its block snapshot."""
         self.initialize()
         with self.connect() as conn:
+            existed = conn.execute("SELECT 1 FROM documents WHERE id = ?", (document["id"],)).fetchone()
             conn.execute(
                 """
                 INSERT INTO documents(id, path, content_hash, title, topic, tags_json, status, compiled_at)
@@ -736,10 +952,22 @@ class SemanticStore:
             stale = existing - new_ids
             if stale:
                 conn.executemany("DELETE FROM blocks WHERE id = ?", ((item,) for item in stale))
-                conn.execute(
-                    """DELETE FROM claims
-                       WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+                self._invalidate_orphan_claims(
+                    conn,
+                    reason="source_block_removed",
+                    source_path=document.get("path", ""),
+                    topic=document.get("topic", ""),
                 )
+            self._record_change(
+                conn,
+                change_kind="updated" if existed else "added",
+                object_kind="document",
+                object_id=document["id"],
+                label=document.get("title", ""),
+                source_path=document.get("path", ""),
+                topic=document.get("topic", ""),
+            )
+            self._trim_change_log(conn)
             conn.executemany(
                 """
                 INSERT INTO blocks(
@@ -771,15 +999,27 @@ class SemanticStore:
         """Delete missing source snapshots and return their affected topics."""
         self.initialize()
         with self.connect() as conn:
-            rows = list(conn.execute("SELECT id, path, topic FROM documents"))
+            rows = list(conn.execute("SELECT id, path, title, topic FROM documents"))
             missing = [row for row in rows if not (self.workspace / row["path"]).is_file()]
             if not missing:
                 return []
             conn.executemany("DELETE FROM documents WHERE id = ?", ((row["id"],) for row in missing))
-            conn.execute(
-                """DELETE FROM claims
-                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
+            removed_paths = [row["path"] for row in missing]
+            self._invalidate_orphan_claims(
+                conn,
+                reason="source_deleted",
+                detail={"documents": removed_paths[:8]},
             )
+            for row in missing:
+                self._record_change(
+                    conn,
+                    change_kind="removed",
+                    object_kind="document",
+                    object_id=row["id"],
+                    label=row["title"] or row["path"],
+                    source_path=row["path"],
+                    topic=row["topic"],
+                )
             conn.execute(
                 """DELETE FROM concepts
                    WHERE NOT EXISTS (
@@ -796,4 +1036,61 @@ class SemanticStore:
                          AND semantic_mentions.object_kind = 'entity'
                    )"""
             )
+            self._trim_change_log(conn)
             return sorted({row["topic"] for row in missing if row["topic"]})
+
+    def change_counts(self, *, days: int = 7) -> list[dict]:
+        """Aggregate change events per kind inside the window (read-only)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT change_kind, object_kind, count(*) AS count
+                   FROM semantic_change_log WHERE created_at >= ?
+                   GROUP BY change_kind, object_kind""",
+                (cutoff,),
+            ).fetchall()
+        return [
+            {"change_kind": row["change_kind"], "object_kind": row["object_kind"], "count": row["count"]}
+            for row in rows
+        ]
+
+    def recent_changes(
+        self,
+        *,
+        days: int = 7,
+        limit: int = 100,
+        offset: int = 0,
+        object_kind: str | None = None,
+    ) -> tuple[list[dict], int]:
+        """Return recent change events newest-first (read-only)."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        where = "created_at >= ?"
+        args: list = [cutoff]
+        if object_kind:
+            where += " AND object_kind = ?"
+            args.append(object_kind)
+        with self.connect() as conn:
+            total = conn.execute(
+                f"SELECT count(*) FROM semantic_change_log WHERE {where}", args
+            ).fetchone()[0]
+            rows = conn.execute(
+                f"""SELECT change_kind, object_kind, object_id, label, detail_json,
+                           source_path, topic, created_at
+                    FROM semantic_change_log WHERE {where}
+                    ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?""",
+                [*args, limit, offset],
+            ).fetchall()
+        items = [
+            {
+                "change_kind": row["change_kind"],
+                "object_kind": row["object_kind"],
+                "object_id": row["object_id"],
+                "label": row["label"],
+                "detail": json.loads(row["detail_json"] or "{}"),
+                "source_path": row["source_path"],
+                "topic": row["topic"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+        return items, total

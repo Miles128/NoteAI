@@ -35,7 +35,7 @@ _CONCLUSION_MARKERS = re.compile(
     r"趋势|逐渐|持续|越来越|"
     r"预测|预计|将会|有望|"
     r"建议|推荐|应当|应该|值得|适合|不适合|"
-    r"有效|无效|可靠|稳健|重要|关键|合理|可行|不足|优势|局限|风险|足以|难以|易于|"
+    r"有效|无效|可靠|稳健|重要|关键|合理|可行|不足|优势|局限|风险|足以|难以|易于|较差|优秀|出色|"
     r"表明|证明|显示|发现|可见|得出结论|支持.{0,8}(?:结论|判断|假设|推断)|"
     r"outperform(?:s|ed)?|better|worse|higher|lower|improv(?:e|es|ed|ement)|"
     r"increas(?:e|es|ed)|decreas(?:e|es|ed)|caus(?:e|es|ed)|leads?\s+to|"

@@ -388,9 +388,9 @@ def test_initialize_migrates_legacy_claim_type_column(tmp_path: Path):
     store.root.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(store.path) as conn:
         conn.executescript(
-            """
+            f"""
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            INSERT INTO schema_meta VALUES ('claim_policy_version', '4');
+            INSERT INTO schema_meta VALUES ('claim_policy_version', '{CLAIM_POLICY_VERSION}');
             CREATE TABLE claims (
                 id TEXT PRIMARY KEY,
                 statement TEXT NOT NULL,

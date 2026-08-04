@@ -184,6 +184,23 @@
       "dangling_relation": "Dangling relation",
       "alias_conflict": "Alias conflict",
       "duplicate_candidate": "Possible duplicate"
+    },
+    "changes": {
+      "title": "Knowledge changes",
+      "window": "Last 7 days",
+      "empty": "No semantic changes yet. Added, updated and invalidated objects will appear here automatically after ingest or compilation.",
+      "loadFailed": "Failed to load knowledge changes",
+      "total": "{total} changes in total",
+      "added": "Added",
+      "updated": "Updated",
+      "invalidated": "Invalidated",
+      "removed": "Removed",
+      "objects": {
+        "claim": "Claim",
+        "entity": "Entity",
+        "concept": "Concept",
+        "document": "Document"
+      }
     }
   },
   "pending": {

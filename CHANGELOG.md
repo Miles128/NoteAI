@@ -5,6 +5,8 @@
 ## [Unreleased]
 
 ### 新增
+- 知识变化摘要：语义编译自动记录命题/实体/概念/文档的新增、更新与失效，语义工作台概览展示最近 7 天变化（`get_semantic_changes` RPC）
+- Claim 抽取黄金评测集：锁定 Claim 类型门禁、逐字证据校验与证据可解析性，回归即失败
 - 贡献指南 (CONTRIBUTING.md)
 - 安全策略 (SECURITY.md)
 - Issue 模板和 PR 模板

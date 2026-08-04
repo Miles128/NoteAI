@@ -5,7 +5,7 @@ import os
 
 class TestKeyringStore:
     def test_module_uses_application_directory(self, monkeypatch, tmp_path):
-        from config import settings
+        from config import constants
         from utils.keyring_store import (
             _fallback_path,
             is_keyring_available,
@@ -14,7 +14,7 @@ class TestKeyringStore:
             store_api_key,
         )
 
-        monkeypatch.setattr(settings, "SYSTEM_APP_DATA_DIR", tmp_path)
+        monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
         assert is_keyring_available() is False
         assert "application directory" in keyring_status()
@@ -26,10 +26,10 @@ class TestKeyringStore:
             assert _fallback_path().parent.stat().st_mode & 0o777 == 0o700
 
     def test_fallback_encrypt_decrypt_roundtrip(self, monkeypatch, tmp_path):
-        from config import settings
+        from config import constants
         from utils.keyring_store import _decrypt, _encrypt
 
-        monkeypatch.setattr(settings, "SYSTEM_APP_DATA_DIR", tmp_path)
+        monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
         key = "sk-test-12345"
         encrypted = _encrypt(key)
@@ -38,10 +38,10 @@ class TestKeyringStore:
         assert decrypted == key
 
     def test_generic_credential_roundtrip(self, monkeypatch, tmp_path):
-        from config import settings
+        from config import constants
         from utils.keyring_store import delete_credential, load_credential, store_credential
 
-        monkeypatch.setattr(settings, "SYSTEM_APP_DATA_DIR", tmp_path)
+        monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
         assert store_credential("NoteAI/cloud_sync", "webdav/password", "secret")
         assert load_credential("NoteAI/cloud_sync", "webdav/password") == "secret"
@@ -49,10 +49,10 @@ class TestKeyringStore:
         assert load_credential("NoteAI/cloud_sync", "webdav/password") == ""
 
     def test_legacy_file_is_migrated(self, monkeypatch, tmp_path):
-        from config import settings
+        from config import constants
         from utils.keyring_store import _encrypt, load_api_key
 
-        monkeypatch.setattr(settings, "SYSTEM_APP_DATA_DIR", tmp_path)
+        monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
         legacy_data = _encrypt("sk-legacy-encrypted")
         credentials_dir = tmp_path / "credentials"

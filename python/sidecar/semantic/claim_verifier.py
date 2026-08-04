@@ -24,7 +24,7 @@ def verdict_label(verdict: str) -> str:
     return _VERDICT_LABELS.get(verdict, verdict)
 
 
-def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+def _clamp(value: Any, low: float = 0.0, high: float = 1.0) -> float:
     try:
         return max(low, min(high, float(value)))
     except (TypeError, ValueError):

@@ -280,3 +280,65 @@ class TestHandlerAttachesVerification:
         item = next(value for value in listing["items"] if value["id"] == "claim-2")
         assert item["verification"] is None
         assert json.loads(json.dumps(item, ensure_ascii=False))  # JSON-serializable
+
+
+class TestVerifyClaimRpc:
+    @pytest.fixture
+    def handler(self, store: SemanticStore):
+        previous = config.workspace_path
+        config.workspace_path = str(store.workspace)
+        yield SemanticHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+        config.workspace_path = previous
+
+    def test_requires_id_and_agent(self, handler: SemanticHandler) -> None:
+        assert handler._verify_claim({})["success"] is False
+        assert handler._verify_claim({"id": "claim-1"})["success"] is False
+        assert handler._verify_claim({"agent": "claude"})["success"] is False
+
+    def test_rejects_unknown_or_unverifiable_claim(self, handler: SemanticHandler) -> None:
+        result = handler._verify_claim({"id": "nope", "agent": "claude"})
+        assert result["success"] is False
+        assert "不可核查" in result["message"]
+
+    def test_verification_persisted_and_listed(
+        self, handler: SemanticHandler, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def fake_verify(store, claim, *, agent_id, send_event=None):
+            assert claim["id"] == "claim-1"
+            assert agent_id == "claude"
+            verification = store.save_claim_verification(
+                claim_id=claim["id"],
+                verdict="supported",
+                confidence=0.82,
+                summary="多轮检索后主流证据支持",
+                method="cli",
+                agent=agent_id,
+                sources=[{"title": "文档", "url": "https://example.com/doc"}],
+            )
+            return {"success": True, "verification": verification, "output": "x" * 5000}
+
+        monkeypatch.setattr(
+            "sidecar.semantic.claim_verifier.verify_claim_via_cli",
+            fake_verify,
+        )
+        result = handler._verify_claim({"id": "claim-1", "agent": "claude"})
+        assert result["success"] is True
+        assert result["verification"]["verdict"] == "supported"
+        assert len(result["output"]) == 2000  # 截断超大输出
+        detail = handler._get_detail({"kind": "claim", "id": "claim-1"})
+        assert detail["item"]["verifications"][0]["verdict"] == "supported"
+        listing = handler._get_workbench({"tab": "claims"})
+        item = next(value for value in listing["items"] if value["id"] == "claim-1")
+        assert item["verification"]["verdict"] == "supported"
+
+    def test_cli_failure_propagates(self, handler: SemanticHandler, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_verify(store, claim, *, agent_id, send_event=None):
+            return {"success": False, "message": f"{agent_id} 未安装", "output": ""}
+
+        monkeypatch.setattr(
+            "sidecar.semantic.claim_verifier.verify_claim_via_cli",
+            fake_verify,
+        )
+        result = handler._verify_claim({"id": "claim-1", "agent": "claude"})
+        assert result["success"] is False
+        assert "未安装" in result["message"]

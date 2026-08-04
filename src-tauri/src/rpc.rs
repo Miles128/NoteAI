@@ -145,6 +145,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "set_semantic_evidence_status",
     "add_semantic_entity_alias",
     "start_semantic_full_compile",
+    "verify_semantic_claim",
     "publish_semantic_topic_wiki_page",
     "publish_semantic_object_wiki_page",
     "reveal_in_finder",
@@ -195,6 +196,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         "rag_chat" => 60,
+        "verify_semantic_claim" => 360,
         "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
         | "rag_rebuild_index" | "cancel_ingest" => 120,
         _ => 60,

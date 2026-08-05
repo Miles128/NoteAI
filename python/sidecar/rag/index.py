@@ -1093,8 +1093,13 @@ def rebuild_search_indices(
     all_chunk_ids: list[str],
     progress_callback=None,
     collection: zvec.Collection | None = None,
+    build_global_idf: bool = False,
 ) -> int:
     """Rebuild BM25s and metadata from all chunks currently in the zvec collection.
+
+    Args:
+        build_global_idf: 为 True 时复用同一次全量遍历顺带构建 global IDF，
+            避免调用方再 fetch 一遍语料。
 
     Returns the number of chunks in the rebuilt indices.
     """
@@ -1139,5 +1144,11 @@ def rebuild_search_indices(
     if progress_callback:
         progress_callback(total, total, "重建 BM25 索引")
     _build_and_save_bm25(corpus, _bm25s_dir(workspace), workspace)
+
+    # 复用同一份 corpus 构建 global IDF，避免调用方二次 fetch
+    if build_global_idf:
+        from sidecar.rag.embedder import build_and_save_global_idf
+
+        build_and_save_global_idf(corpus, workspace)
 
     return len(corpus)

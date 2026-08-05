@@ -76,7 +76,7 @@ function _submitTopic() {
     var name = (nameEl && nameEl.value || '').trim();
     var parent = (parentEl && parentEl.value || '').trim();
     if (!name) {
-        if (typeof window.updateStatus === 'function') window.updateStatus(window.t('quickCreate.enterTopicName'));
+        window.updateStatus(window.t('quickCreate.enterTopicName'));
         return;
     }
     if (!window.api || !window.api.createTopic) return;
@@ -90,20 +90,16 @@ function _submitTopic() {
             if (window.TreeModule && window.TreeModule.loadFileTree) {
                 window.TreeModule.loadFileTree(true);
             }
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(res.message || window.t('quickCreate.topicCreated'));
-            }
+            window.updateStatus(res.message || window.t('quickCreate.topicCreated'));
             if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
                 window.refreshWorkspaceViewsAfterChange();
             }
-        } else if (typeof window.updateStatus === 'function') {
+        } else {
             window.updateStatus(window.t('quickCreate.createFailed', { message: (res && res.message) || window.t('common.unknownError') }));
         }
     }).catch(function(err) {
         if (btn) btn.disabled = false;
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('quickCreate.createFailed', { message: err.message || err }));
-        }
+        window.updateStatus(window.t('quickCreate.createFailed', { message: err.message || err }));
     });
 }
 

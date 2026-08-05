@@ -114,9 +114,7 @@ function _finishRewriteStream(data) {
         _showRewriteDiffView();
     } else if (data) {
         alert(window.t('app.rewriteFailed', { message: data.message || window.t('common.unknownError') }));
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('app.rewriteFailedShort'));
-        }
+        window.updateStatus(window.t('app.rewriteFailedShort'));
         _cleanupRewriteState();
     }
 }
@@ -158,9 +156,7 @@ function _showRewriteDiffView() {
         '</div>';
 
     diffPanel.style.display = 'flex';
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus(window.t('app.rewriteDoneConfirm'));
-    }
+    window.updateStatus(window.t('app.rewriteDoneConfirm'));
 }
 
 async function onRewriteConfirm() {
@@ -168,15 +164,11 @@ async function onRewriteConfirm() {
     var rewrittenText = window._rewritePendingText;
     if (!filePath || !rewrittenText) return;
 
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus(window.t('app.saving'));
-    }
+    window.updateStatus(window.t('app.saving'));
     try {
         var result = await window.api.llmRewriteApply(filePath, rewrittenText);
         if (result && result.success) {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('common.saved'));
-            }
+            window.updateStatus(window.t('common.saved'));
             if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
                 window.StatusbarModule.updateSaveStatus('saved', window.t('common.saved'));
                 setTimeout(function() {
@@ -187,15 +179,11 @@ async function onRewriteConfirm() {
             }
         } else {
             alert(window.t('app.saveFailed', { message: result ? result.message || window.t('common.unknownError') : window.t('common.unknownError') }));
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('app.rewriteFailedShort'));
-            }
+            window.updateStatus(window.t('app.rewriteFailedShort'));
         }
     } catch (e) {
         alert(window.t('app.saveError', { message: e.message || e }));
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('app.saveError', { message: e.message || e }));
-        }
+        window.updateStatus(window.t('app.saveError', { message: e.message || e }));
     } finally {
         window._rewritePendingFilePath = null;
         window._rewritePendingText = null;
@@ -215,9 +203,7 @@ function onRewriteCancel() {
             { duration: 3000 }
         );
     }
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus(window.t('app.rewriteCancelled'));
-    }
+    window.updateStatus(window.t('app.rewriteCancelled'));
     _cleanupRewriteState();
     if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
@@ -255,9 +241,7 @@ async function onLLMRewrite() {
         btn.disabled = true;
         btn.style.opacity = '0.5';
     }
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus(window.t('app.rewritingDoc'));
-    }
+    window.updateStatus(window.t('app.rewritingDoc'));
     setEditorRewriting(rewritePath, true);
     window._rewriteStreamText = '';
     window._rewriteBuffer = '';
@@ -287,9 +271,7 @@ async function onLLMRewrite() {
         await window.api.llmRewriteStream(rewritePath);
     } catch (e) {
         alert(window.t('app.rewriteError', { message: e.message || e }));
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('app.rewriteError', { message: e.message || e }));
-        }
+        window.updateStatus(window.t('app.rewriteError', { message: e.message || e }));
         if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
             window.StatusbarModule.setRewriting(false);
         }

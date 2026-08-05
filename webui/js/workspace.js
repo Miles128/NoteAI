@@ -1,44 +1,7 @@
 (function() { 'use strict';
 
-function updateStatus(text) {
-    if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
-        window.StatusbarModule.updateMessage(text || '');
-        return;
-    }
-    var statusBar = document.getElementById('status-bar') || document.getElementById('statusbar-message');
-    if (statusBar) {
-        statusBar.textContent = text;
-    }
-}
-
-function updateProgress(elementId, progress, text) {
-    const fillEl = document.getElementById(elementId + '-fill');
-    const statusEl = document.getElementById(elementId.replace('progress', 'status'));
-    
-    if (fillEl) {
-        fillEl.style.width = (progress * 100) + '%';
-    }
-    if (statusEl) {
-        statusEl.textContent = text;
-    }
-    
-    const modalFillEl = document.getElementById('modal-' + elementId + '-fill');
-    const modalStatusEl = document.getElementById('modal-' + elementId.replace('progress', 'status'));
-    const modalProgressContainer = document.getElementById('modal-progress-container');
-    
-    if (modalProgressContainer) {
-        if (progress > 0 || text) {
-            modalProgressContainer.style.display = 'block';
-        }
-    }
-    
-    if (modalFillEl) {
-        modalFillEl.style.width = (progress * 100) + '%';
-    }
-    if (modalStatusEl) {
-        modalStatusEl.textContent = text;
-    }
-}
+// updateStatus / updateProgress 的唯一实现在 toast.js（main.mjs 先于本模块加载），
+// 本文件内直接调用全局 window.updateStatus。
 
 async function openWorkspace() {
     const result = await window.api.openWorkspace();
@@ -295,8 +258,6 @@ document.addEventListener('localechange', function() {
 });
 
 window.WorkspaceModule = {
-    updateStatus,
-    updateProgress,
     openWorkspace,
     createSampleWorkspace,
     updateWorkspaceDisplay,
@@ -310,8 +271,6 @@ window.WorkspaceModule = {
     showLog
 };
 
-window.updateStatus = updateStatus;
-window.updateProgress = updateProgress;
 window.openWorkspace = openWorkspace;
 window.showProjectRulesModal = showProjectRulesModal;
 window.closeProjectRulesModal = closeProjectRulesModal;

@@ -52,7 +52,7 @@ function doSearch(query) {
         return;
     }
 
-    if (!window.api || !window.api.invoke) {
+    if (!window.api || !window.api.searchFiles) {
         resultsEl.innerHTML =
             '<div class="search-empty">' + window.t('search.unavailable') + '</div>';
         return;
@@ -178,7 +178,8 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
-document.addEventListener('DOMContentLoaded', function() {
+// 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接绑定（不再依赖 DOMContentLoaded 重放）
+(function() {
     var input = document.getElementById('search-input');
     if (input) {
         input.addEventListener('input', function () {
@@ -203,7 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
-});
+})();
 
 window.toggleSearchModal = toggleSearchModal;
 window.openSearchModal = openSearchModal;

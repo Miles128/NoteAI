@@ -302,51 +302,6 @@ def build_and_save_global_idf(all_chunks: list[dict], workspace: str | None = No
     logger.info(f"[rag/embedder] Global IDF saved: {len(idf)} terms, {n_docs} docs")
 
 
-def update_global_idf_incremental(
-    added_chunks: list[dict],
-    deleted_chunk_ids: set[str] | None = None,
-    workspace: str | None = None,
-):
-    """Incrementally update global IDF when chunks are added/deleted.
-
-    For simplicity, this recomputes from all chunks if the count changes
-    significantly. For small incremental updates, it adjusts doc_freq
-    in-place.
-    """
-    if not added_chunks and not deleted_chunk_ids:
-        return
-
-    idf = _load_global_idf(workspace)
-    if idf is None:
-        # No existing IDF, can't update incrementally
-        return
-
-    # For incremental updates, we adjust n_docs and doc_freq
-    # This is approximate but good enough for small updates
-    path = _idf_path(workspace)
-    try:
-        import json
-
-        # Read raw to get n_docs info stored alongside
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        # We don't store n_docs separately, estimate from IDF values
-        # For accuracy, just rebuild from the chunks we have
-        # But for small adds, approximate:
-        import jieba
-
-        for chunk in added_chunks:
-            text = chunk.get("content", "")
-            tokens = set(w for w in jieba.cut(text) if w.strip() and w not in _STOP_WORDS)
-            for t in tokens:
-                # Approximate: increment doc_freq by 1
-                # Since we don't have exact doc_freq, skip incremental
-                pass
-        # For simplicity, just mark IDF as stale so next full rebuild picks it up
-        # Incremental IDF updates are best-effort
-    except Exception as e:
-        log_exception("[rag/embedder] incremental IDF update failed (best-effort)", e, level="debug", logger=logger)
-
-
 def get_model(download_callback=None):
     return _get_dense_model(download_callback)
 
@@ -355,7 +310,13 @@ def encode(
     texts: list,
     download_callback=None,
     progress_callback=None,
+    compute_sparse: bool = False,
 ) -> dict:
+    """生成 dense 向量。
+
+    sparse 检索直接使用 bm25s 对原始文本建索引，lexical_weights 不参与索引写入
+    与检索，因此默认不计算 jieba TF-IDF 权重（compute_sparse=True 时可显式开启）。
+    """
     if not texts:
         return {"dense_vecs": [], "lexical_weights": []}
     texts = [t if t and t.strip() else " " for t in texts]
@@ -370,20 +331,21 @@ def encode(
             progress_callback(min(idx + 1, total), total, "正在生成 Embedding...")
 
     dense_vecs = np.array(embeddings)
-    sparse_weights = _compute_sparse(texts)
+    sparse_weights = _compute_sparse(texts) if compute_sparse else [{} for _ in texts]
     if progress_callback and total > 0:
         progress_callback(total, total, "Embedding 生成完成")
     return {"dense_vecs": dense_vecs, "lexical_weights": sparse_weights}
 
 
-def encode_query(query: str) -> dict:
+def encode_query(query: str, compute_sparse: bool = False) -> dict:
     if not query:
         return {"dense_vec": None, "lexical_weights": {}}
     model = _get_dense_model()
     prefixed = _bge_prefix([query], is_query=True)
     embeddings = list(model.embed(prefixed))
     dense = embeddings[0].tolist()
-    sparse = _compute_sparse([query])[0]
+    # sparse 分支使用 bm25s + query_text，默认无需 jieba 权重
+    sparse = _compute_sparse([query])[0] if compute_sparse else {}
     return {"dense_vec": dense, "lexical_weights": sparse}
 
 
@@ -391,10 +353,16 @@ def encode_documents(
     texts: list,
     download_callback=None,
     progress_callback=None,
+    compute_sparse: bool = False,
 ) -> list[dict]:
     if not texts:
         return []
-    result = encode(texts, download_callback=download_callback, progress_callback=progress_callback)
+    result = encode(
+        texts,
+        download_callback=download_callback,
+        progress_callback=progress_callback,
+        compute_sparse=compute_sparse,
+    )
     output = []
     for i in range(len(texts)):
         dense = result["dense_vecs"][i].tolist()

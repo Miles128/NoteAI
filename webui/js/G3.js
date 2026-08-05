@@ -1010,7 +1010,7 @@ const Graph3Tier = {
         this._lastLoadTime = Date.now();
         this.initLayoutConfig();
         try {
-            this.data = await api.getGraphData(this.filter);
+            this.data = await window.api.getGraphData(this.filter);
             if (!this.data || !Array.isArray(this.data.nodes) || !Array.isArray(this.data.edges)) {
                 console.error('图谱数据格式异常:', this.data);
                 this.data = { nodes: [], edges: [] };
@@ -1788,7 +1788,9 @@ window.GraphLayoutParams = {
     load: loadGraphLayoutConfig,
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+// 本模块由 main.mjs 动态 import（在 storage.js 经典脚本之后），执行时 DOM 已解析完成，
+// 直接绑定（不再依赖 DOMContentLoaded 重放）
+(() => {
     var fnBtn = document.getElementById('graph-toggle-filenames');
     if (fnBtn) fnBtn.classList.toggle('active', Graph3Tier.showFilenames);
     document.querySelectorAll('#graph-filter-bar .graph-filter-btn').forEach(btn => {
@@ -1802,6 +1804,6 @@ document.addEventListener('DOMContentLoaded', () => {
             Graph3Tier.setLayoutMode(this.dataset.layoutMode);
         });
     });
-});
+})();
 
 window.addEventListener('resize', () => Graph3Tier.resize());

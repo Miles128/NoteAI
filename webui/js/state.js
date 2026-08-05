@@ -1,6 +1,12 @@
 (function() {
     'use strict';
 
+    // 状态双轨分工（约定）：
+    // - window.state：配置持久化门面（apiConfig / uiConfig / themePreference / workspacePath），
+    //   读写均伴随后端持久化与订阅通知。
+    // - window.AppState：UI 运行时状态（Proxy 代理同一 _ui 对象），可任意增删键，
+    //   写入即 notify；仅用于会话内 UI 状态，不做持久化。
+
     var _state = {
         apiConfig: null,
         uiConfig: null,
@@ -57,10 +63,9 @@
     }
 
     function setUi(key, value) {
-        if (_ui.hasOwnProperty(key)) {
-            _ui[key] = value;
-            notify();
-        }
+        // 新键不再静默丢弃：正常写入并通知（与 AppState Proxy 行为对齐）
+        _ui[key] = value;
+        notify();
     }
 
     async function loadApiConfig() {

@@ -1,6 +1,8 @@
 (function() { 'use strict';
 
-document.addEventListener('DOMContentLoaded', async function() {
+// 应用初始化入口：由 main.mjs 在全部模块加载完成后显式调用 window.App.init()，
+// 不再依赖重放 DOMContentLoaded 事件。
+async function initApp() {
     initMarked();
 
     // 主题已由 main.mjs 中 applyThemeBootstrap（服务端偏好 + localStorage）应用，此处不再覆盖
@@ -152,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     console.log('[App] Initialization complete');
-});
+}
 
 function initMarked() {
     if (window.EditorModule && window.EditorModule.initMarked) {
@@ -208,11 +210,7 @@ async function checkWorkspaceStatus() {
     }
 }
 
-function updateStatus(text) {
-    if (window.WorkspaceModule && window.WorkspaceModule.updateStatus) {
-        window.WorkspaceModule.updateStatus(text);
-    }
-}
+// updateStatus 唯一实现在 toast.js（全局 window.updateStatus），本文件不再有局部重复定义。
 
 var _fileImportUnlisten = null;
 
@@ -355,6 +353,7 @@ function initCustomTooltip() {
 window.importFiles = importFiles;
 
 window.App = {
+    init: initApp,
     initMarked,
     initSystemThemeListener,
     applyTheme,
@@ -364,7 +363,6 @@ window.App = {
     initWindowDrag,
     initTabSwitching,
     checkWorkspaceStatus,
-    updateStatus,
     initWorkspaceFileWatcher: function() {
         if (window.EventListeners) {
             window.EventListeners.initWorkspaceFileWatcher();

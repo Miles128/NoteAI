@@ -70,8 +70,9 @@ def test_collect_pending_auto_confirms_links_and_cleans_stale(workspace: Path) -
     assert "link" not in types
     assert types.count("topic") == 0
     links = {(l["from"], l["to"]): l["status"] for l in load_links()["links"]}
-    assert links[("Notes/a.md", "Notes/b.md")] == "confirmed"
-    assert links[("Notes/c.md", "Notes/b.md")] == "confirmed"
+    # 严格判断：pending 链接保持 pending，不会因清理流程被自动确认
+    assert links[("Notes/a.md", "Notes/b.md")] == "pending"
+    assert links[("Notes/c.md", "Notes/b.md")] == "pending"
     assert ("Notes/missing.md", "Notes/b.md") not in links
 
 

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
@@ -80,9 +81,18 @@ def _directed_link_key(from_path: str, to_path: str) -> tuple[str, str]:
     return (from_path, to_path)
 
 
+def _normalize_link_path(path: str) -> str:
+    """归一化链接路径：去空白、折叠 . / .. 段，再按大小写不敏感比较。"""
+    return os.path.normpath(str(path or "")).strip().casefold()
+
+
 def _is_self_link(from_path: str, to_path: str) -> bool:
-    """自引用检查：同一文件的链接不存储。"""
-    return from_path == to_path
+    """自引用检查：同一文件的链接不存储。
+
+    路径先归一化（去除 ``./`` 前缀、``.``/``..`` 段、空白），再按大小写不敏感
+    比较，避免 ``Notes/A.md`` 与 ``./notes/a.md`` 这类写法不同的自引用漏判。
+    """
+    return _normalize_link_path(from_path) == _normalize_link_path(to_path)
 
 
 def _is_readme_note(path: str | Path) -> bool:
@@ -91,7 +101,7 @@ def _is_readme_note(path: str | Path) -> bool:
 
 
 def _normalize_links(links: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
-    """Drop README links and auto-confirm all remaining link records."""
+    """Drop README links; keep each record's own status (pending stays pending)."""
     normalized: list[dict[str, Any]] = []
     changed = 0
     for link in links:
@@ -100,10 +110,6 @@ def _normalize_links(links: list[dict[str, Any]]) -> tuple[list[dict[str, Any]],
         if _is_readme_note(from_path) or _is_readme_note(to_path):
             changed += 1
             continue
-        if link.get("status") != "confirmed":
-            link = dict(link)
-            link["status"] = "confirmed"
-            changed += 1
         normalized.append(link)
     return normalized, changed
 
@@ -181,10 +187,13 @@ def cleanup_stale_links() -> int:
     ws = Path(workspace)
     original_count = len(links)
     valid = []
-    auto_confirmed = 0
+    changed = 0
     for link in links:
         from_path = link.get("from", "")
         to_path = link.get("to", "")
+        if _is_self_link(from_path, to_path):
+            logger.info(f"[link_indexer] 清理自引用链接: {from_path} -> {to_path}")
+            continue
         if _is_readme_note(from_path) or _is_readme_note(to_path):
             logger.info(f"[link_indexer] 清理 README 链接: {from_path} -> {to_path}")
             continue
@@ -193,12 +202,11 @@ def cleanup_stale_links() -> int:
         if not from_full.exists() or not to_full.exists():
             logger.info(f"[link_indexer] 清理无效链接: {from_path} -> {to_path}")
             continue
-        if link.get("status") != "confirmed":
-            link["status"] = "confirmed"
-            auto_confirmed += 1
-            logger.info(f"[link_indexer] 自动确认链接: {from_path} -> {to_path}")
+        if not link.get("status"):
+            link["status"] = "pending"
+            changed += 1
         valid.append(link)
-    changed = (original_count - len(valid)) + auto_confirmed
+    changed += original_count - len(valid)
     if changed > 0:
         data["links"] = valid
         save_links(data)
@@ -260,10 +268,10 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
 
         reason = ""
         priority = 0
+        # 同主题不连双向链接：仅同属一个主题目录并不是实质关联
         if source.get("topic") and source["topic"] == other.get("topic"):
-            priority = 1
-            reason = f"同主题「{source['topic']}」"
-        elif _title_mentioned_in_text(other.get("title", ""), body):
+            continue
+        if _title_mentioned_in_text(other.get("title", ""), body):
             priority = 2
             reason = f"正文提及「{other['title']}」"
         elif _title_mentioned_in_text(source.get("title", ""), other.get("summary", "")):
@@ -280,12 +288,14 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         key = _link_key(rel, other["path"])
         if not key or key in existing_keys:
             continue
+        # 严格判断：标题提及、摘要提及只是候选信号，一律待人工确认，
+        # 不因启发式规则自动放行（同主题已跳过，不在此处生成候选）。
         merged.append(
             {
                 "from": rel,
                 "to": other["path"],
                 "reason": reason,
-                "status": "confirmed",
+                "status": "pending",
             }
         )
         existing_keys.add(key)
@@ -411,7 +421,8 @@ def _llm_pick_cross_refs(
         response = call_llm_raw(prompt, temperature=0.2)
         picked = _extract_json_array(response)
         if picked is None:
-            return candidates[:max_links] if max_links > 0 else candidates
+            # LLM 不可用时不做任何兜底：宁缺毋滥，不因启发式规则自动放行
+            return []
         out: list[dict[str, Any]] = []
         for item in picked:
             idx = item.get("id")
@@ -421,10 +432,10 @@ def _llm_pick_cross_refs(
                 out.append(row)
             if max_links > 0 and len(out) >= max_links:
                 break
-        return out if out else (candidates[:max_links] if max_links > 0 else candidates)
+        return out
     except Exception as e:
         logger.warning(f"[link_indexer] cross-ref LLM error: {e}")
-        return candidates[:max_links] if max_links > 0 else candidates
+        return []
 
 
 def discover_cross_refs_for_file(
@@ -495,10 +506,7 @@ def discover_cross_refs_for_file(
             "auto_confirm": auto_confirm,
         }
 
-    if source.get("topic"):
-        for path, meta in all_metas.items():
-            if meta.get("topic") == source["topic"]:
-                _add(path, 100.0, f"同主题「{source['topic']}」", True)
+    # 同主题不连双向链接：仅同属一个主题目录并不是实质关联，直接跳过
 
     for path, meta in all_metas.items():
         if _title_mentioned_in_text(meta.get("title", ""), body):
@@ -537,12 +545,14 @@ def discover_cross_refs_for_file(
                 "from": rel,
                 "to": row["path"],
                 "reason": row.get("reason", "交叉引用"),
-                "status": "confirmed",
+                # 确定性同主题规则直接确认；LLM/弱启发式候选待人工确认
+                "status": "confirmed" if row.get("auto_confirm") else "pending",
             }
         )
         existing_keys.add(key)
         added += 1
-        confirmed += 1
+        if row.get("auto_confirm"):
+            confirmed += 1
 
     if added:
         save_links({"links": merged, "last_scan": existing.get("last_scan")})
@@ -737,8 +747,8 @@ def _build_candidate_pairs(metas: list[dict]) -> list[tuple[dict, dict, int]]:
 
 def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_callback=None) -> list[dict]:
     """
-    将候选对批处理发给 LLM，获取确认的链接。
-    每次发送最多 15 对。
+    将候选对批处理发给 LLM，获取候选链接。
+    每次发送最多 15 对；LLM 失败时静默跳过该批（宁缺毋滥，不降级全量接受）。
     """
     if not candidate_pairs:
         return []
@@ -789,7 +799,8 @@ def _ask_llm_for_links(candidate_pairs: list[tuple[dict, dict, int]], progress_c
                                 "from": meta_a["path"],
                                 "to": meta_b["path"],
                                 "reason": reason,
-                                "status": "confirmed",
+                                # LLM 判断的链接一律待人工确认，不再自动放行
+                                "status": "pending",
                             }
                         )
         except Exception as e:
@@ -859,7 +870,7 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
         if not ok:
             return {"success": False, "message": f"API 未配置: {msg}"}
 
-    # Step 4: 合并到已有链接，新链接直接标记为 confirmed
+    # Step 4: 合并到已有链接；LLM 精判的候选一律保持 pending，等待人工确认
     existing = load_links()
     existing_links = existing.get("links", [])
 
@@ -872,7 +883,6 @@ def discover_links(progress_callback=None) -> dict[str, Any]:
             continue
         key = _link_key(link["from"], link["to"])
         if key and key not in existing_keys:
-            link["status"] = "confirmed"
             merged.append(link)
             existing_keys.add(key)
             added_count += 1
@@ -897,9 +907,11 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
     """获取指定文件的链接；file_path 为空时返回所有链接。"""
     data = load_links()
     all_links = _dedupe_links(data.get("links", []))
+    norm_center = _normalize_link_path(file_path)
 
     def _to_view(link: dict[str, Any], center_file: str = "") -> dict[str, Any]:
-        is_incoming = center_file and link["to"] == center_file
+        # 归一化比较，避免 ``./Notes/A.md`` 与 ``Notes/A.md`` 等写法差异导致方向判错
+        is_incoming = norm_center and _normalize_link_path(link["to"]) == norm_center
         other = link["from"] if is_incoming else link["to"]
         return {
             "from": link["from"],
@@ -923,7 +935,7 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
     related = [
         _to_view(link, center_file=file_path)
         for link in all_links
-        if link["to"] == file_path or link["from"] == file_path
+        if _normalize_link_path(link["to"]) == norm_center or _normalize_link_path(link["from"]) == norm_center
     ]
 
     return {

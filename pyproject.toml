@@ -89,6 +89,7 @@ select = [
     "UP",  # pyupgrade
     "SIM", # flake8-simplify
     "RET", # flake8-return
+    "T20", # flake8-print（sidecar stdout 是 JSON-RPC 通道，禁止 print）
 ]
 ignore = [
     "E501",  # line too long (handled by formatter)
@@ -110,6 +111,11 @@ ignore = [
     "C416",  # unnecessary-comprehension
     "F841",  # unused-variable
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI 脚本与终端入口的 print 是正常输出；sidecar 等 stdout 为 JSON-RPC 通道的模块仍受 T20 拦截
+"scripts/**" = ["T20"]
+"run.py" = ["T20"]
 
 [tool.ruff.format]
 quote-style = "double"

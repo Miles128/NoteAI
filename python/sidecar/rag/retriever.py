@@ -26,7 +26,6 @@ from utils.ttl_cache import TTLCache
 _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 10
 _RERANK_MAX_CHARS = 512
-_FETCH_BATCH_SIZE = 256
 
 _RERANKER = None
 _RERANKER_DISABLED_UNTIL: float = 0.0
@@ -487,7 +486,7 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
         return {"success": False, "message": "未设置工作区"}
     workspace = _normalize_workspace(raw_workspace)
 
-    from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
+    from sidecar.rag.embedder import encode_documents
     from sidecar.rag.index import (
         add_chunks,
         count_indexed_chunks,
@@ -596,39 +595,15 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
         )
         entry["chunks"].append(c["id"])
 
+    # 复用 rebuild_search_indices 的全量遍历顺带构建 global IDF，避免二次 fetch
     chunk_count = rebuild_search_indices(
-        workspace, all_chunk_ids, progress_callback=progress_callback, collection=collection
+        workspace,
+        all_chunk_ids,
+        progress_callback=progress_callback,
+        collection=collection,
+        build_global_idf=True,
     )
 
-    # Build global IDF from full corpus
-    full_corpus: list[dict] = []
-    if collection is not None:
-        from sidecar.rag.index import _tags_from_fields
-
-        batch_size = _FETCH_BATCH_SIZE
-        for i in range(0, len(all_chunk_ids), batch_size):
-            batch = all_chunk_ids[i : i + batch_size]
-            fetched = collection.fetch(
-                batch,
-                output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
-                include_vector=False,
-            )
-            for doc in fetched.values():
-                fields = doc.fields or {}
-                full_corpus.append(
-                    {
-                        "id": doc.id,
-                        "content": fields.get("content", ""),
-                        "file_path": fields.get("file_path", ""),
-                        "topic": fields.get("topic", ""),
-                        "tags": _tags_from_fields(fields),
-                        "section_title": fields.get("section_title", ""),
-                    }
-                )
-    else:
-        full_corpus = new_chunks
-
-    build_and_save_global_idf(full_corpus, workspace)
     save_manifest(workspace, new_manifest)
 
     return {"success": True, "chunk_count": chunk_count, "incremental": True}

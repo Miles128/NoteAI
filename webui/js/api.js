@@ -441,6 +441,7 @@ var API_DEFS = [
     { name: 'getSemanticEntityMergePreview', method: 'get_semantic_entity_merge_preview', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId }; } },
     { name: 'mergeSemanticEntities', method: 'merge_semantic_entities', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId, confirmed: true }; }, write: true },
     { name: 'updateSemanticClaim', method: 'update_semantic_claim', params: function(id, statement, scope, claimType) { return { id: id, statement: statement, scope: scope || '', claim_type: claimType }; }, write: true },
+    { name: 'verifySemanticClaim', method: 'verify_semantic_claim', params: function(id, agent) { return { id: id, agent: agent }; }, write: true },
     { name: 'setSemanticClaimStatus', method: 'set_semantic_claim_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
     { name: 'setSemanticEvidenceStatus', method: 'set_semantic_evidence_status', params: function(id, status) { return { id: id, status: status }; }, write: true },
     { name: 'getSemanticTopicWikiPage', method: 'get_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; } },

@@ -75,14 +75,14 @@ jobs:
 
   frontend-lint:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
 
       - name: Install dependencies
@@ -90,6 +90,29 @@ jobs:
 
       - name: Build tiptap bundle
         run: npm run build:tiptap
+
+      - name: Syntax check webui/js
+        run: |
+          for f in webui/js/*.js; do
+            node --check "$f" || exit 1
+          done
+
+      - name: Test mcp-server
+        working-directory: mcp-server
+        run: |
+          npm ci
+          npm test
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python and dependencies
+        run: |
+          uv python install 3.10
+          uv sync --python 3.10 --extra dev --extra rag
+
+      - name: Verify RPC whitelist consistency (Python ↔ Rust ↔ api.js)
+        run: uv run python scripts/sync_rpc_whitelist.py
 
   rust-check:
     runs-on: ubuntu-latest

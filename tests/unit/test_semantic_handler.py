@@ -345,14 +345,25 @@ def test_automatic_materializer_refreshes_old_and_new_topics(
     store = SemanticStore(semantic_handler.config.workspace_path)
     with store.connect() as conn:
         conn.execute("UPDATE documents SET topic = 'AI > 新主题' WHERE id = 'doc-1'")
+        conn.execute(
+            """INSERT INTO documents(id, path, content_hash, title, topic, compiled_at)
+               VALUES('doc-2', 'Notes/AI/RAG2.md', 'hash2', 'RAG2', 'AI > RAG',
+                      '2026-07-17T10:00:00Z') """
+        )
 
     result = materialize_documents(store, {"doc-1"}, affected_topics={"AI > RAG"}, include_objects=False)
     workspace = Path(semantic_handler.config.workspace_path)
 
     assert result["topics"] == 2
+    assert result["wiki_pages"] == 1
     assert not result["failures"]
-    assert (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
-    assert (workspace / "wiki" / "semantic" / "AI" / "新主题_语义.md").exists()
+    merged = workspace / "wiki" / "semantic" / "AI_语义.md"
+    assert merged.exists()
+    content = merged.read_text(encoding="utf-8")
+    assert "## RAG" in content
+    assert "## 新主题" in content
+    assert not (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
+    assert not (workspace / "wiki" / "semantic" / "AI" / "新主题_语义.md").exists()
 
 
 def test_automatic_materializer_retries_transient_database_lock(semantic_handler: SemanticHandler, monkeypatch) -> None:

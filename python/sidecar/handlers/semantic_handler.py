@@ -674,7 +674,18 @@ class SemanticHandler(BaseHandler):
             target = materialize_topic_wiki_page(store, topic)
         except OSError as exc:
             return {"success": False, "message": f"语义页发布失败：{exc}"}
-        return {"success": True, "topic": topic, "path": str(target.relative_to(store.workspace))}
+        try:
+            from sidecar.wiki_utils import sync_semantic_links
+
+            wiki_links = sync_semantic_links()
+        except Exception:
+            wiki_links = None
+        return {
+            "success": True,
+            "topic": topic,
+            "path": str(target.relative_to(store.workspace)),
+            "wiki_links": wiki_links,
+        }
 
     def _conflicts(self, store: SemanticStore, params: dict):
         limit, offset = self._page(params)

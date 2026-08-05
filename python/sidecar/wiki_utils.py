@@ -97,6 +97,55 @@ def write_wiki_text(content: str, workspace_str: str | Path | None = None) -> bo
         return False
 
 
+_SEMANTIC_LINK_MARKER = "<!-- NOTEAI_SEMANTIC_LINK -->"
+
+
+def _semantic_card_link(top: str, semantic_dir: Path) -> str | None:
+    """Return the markdown link line for a top-level semantic card, if present."""
+    if not top or top in {"目录", "标签索引"} or "/" in top:
+        return None
+    card = semantic_dir / f"{top}_语义.md"
+    if not card.is_file():
+        return None
+    return f"- **语义知识卡**：[{top} · 语义知识](semantic/{top}_语义.md) {_SEMANTIC_LINK_MARKER}"
+
+
+def sync_semantic_links(workspace_str: str | Path | None = None) -> dict:
+    """Inject semantic knowledge-card links into each WIKI.md top-level section.
+
+    Idempotent: sections already carrying the NOTEAI_SEMANTIC_LINK marker are
+    skipped; only sections whose `semantic/{top}_语义.md` exists get a link.
+    Best-effort: returns a dict, never raises.
+    """
+    wiki_path = resolve_wiki_path(workspace_str)
+    if not wiki_path.exists():
+        return {"success": False, "message": "WIKI.md 不存在"}
+    semantic_dir = wiki_path.parent / "semantic"
+    if not semantic_dir.is_dir():
+        return {"success": False, "message": "语义知识目录不存在"}
+    try:
+        text = wiki_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return {"success": False, "message": f"读取 WIKI.md 失败：{exc}"}
+    parts = text.split("\n## ")
+    head, blocks = parts[0], parts[1:]
+    rebuilt = [head]
+    injected = 0
+    for block in blocks:
+        first_line, sep, body = block.partition("\n")
+        if _SEMANTIC_LINK_MARKER not in block:
+            link = _semantic_card_link(first_line.strip(), semantic_dir)
+            if link is not None:
+                body = body.rstrip("\n") + "\n" + link + "\n"
+                injected += 1
+        rebuilt.append(first_line + sep + body)
+    try:
+        wiki_path.write_text("\n## ".join(rebuilt), encoding="utf-8")
+    except Exception as exc:
+        return {"success": False, "message": f"写入 WIKI.md 失败：{exc}"}
+    return {"success": True, "injected": injected}
+
+
 def ensure_wiki_exists(workspace_str: str | Path | None = None) -> Path:
     wiki_path = resolve_wiki_path(workspace_str)
     if not wiki_path.exists():

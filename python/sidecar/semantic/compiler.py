@@ -428,9 +428,7 @@ def run_full_compile(
             f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
             f"主题页 {materialized.get('topics', 0)}"
         )
-        message = (
-            f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
-        )
+        message = f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
     if done_cb:
         done_cb(
             message,

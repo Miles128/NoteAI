@@ -36,8 +36,7 @@ def merge_entities(store: SemanticStore, source_id: str, target_id: str) -> dict
             (target_id, source_id),
         )
         aliases = [
-            row["alias"]
-            for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (source_id,))
+            row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (source_id,))
         ]
         if source["canonical_name"].casefold() != target["canonical_name"].casefold():
             aliases.append(source["canonical_name"])

@@ -81,12 +81,26 @@
     "notCompiled": "Semantic compilation has not completed",
     "updatedAt": "Last compiled {time}",
     "conflictCount": "{count} conflicts to review",
+    "rescanConflicts": "Rescan",
+    "scanConflictsDone": "Conflict scan complete",
     "scope": "Scope: {scope}",
     "evidenceCount": "{count} evidence items",
     "claimTypes": {
       "conclusion": "Conclusion",
       "hypothesis": "Hypothesis"
     },
+    "verdicts": {
+      "supported": "Supported",
+      "refuted": "Refuted",
+      "unclear": "Unclear"
+    },
+    "verifyClaim": "Verify online",
+    "verifyRunning": "Researching…",
+    "verifyDone": "Verification complete",
+    "verifyNoAgent": "Select a research agent first",
+    "verificationTitle": "Verification results",
+    "verificationEmpty": "Not verified yet; run a deep web research (personal opinions cannot be verified)",
+    "verificationHistory": "{count} previous",
     "mentions": "{count} mentions",
     "sources": "{count} sources",
     "markReviewed": "Mark reviewed",

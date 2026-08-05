@@ -81,12 +81,26 @@
     "notCompiled": "尚未完成语义编译",
     "updatedAt": "最近编译 {time}",
     "conflictCount": "{count} 项待审阅冲突",
+    "rescanConflicts": "重新扫描",
+    "scanConflictsDone": "冲突扫描完成",
     "scope": "适用范围：{scope}",
     "evidenceCount": "{count} 条证据",
     "claimTypes": {
       "conclusion": "结论",
       "hypothesis": "假设"
     },
+    "verdicts": {
+      "supported": "已证实",
+      "refuted": "已证伪",
+      "unclear": "存疑"
+    },
+    "verifyClaim": "联网核查",
+    "verifyRunning": "深度研究中…",
+    "verifyDone": "核查完成",
+    "verifyNoAgent": "请先选择核查 agent",
+    "verificationTitle": "核查结果",
+    "verificationEmpty": "尚未核查；可发起联网深度研究（个人意见类命题无法证实/证伪）",
+    "verificationHistory": "历史 {count} 次",
     "mentions": "{count} 次出现",
     "sources": "{count} 个来源",
     "markReviewed": "标记已审阅",

@@ -1,4 +1,4 @@
-"""Read-only semantic workbench queries and explicit review actions."""
+"""Semantic workbench queries, explicit review actions and claim verification."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
+from sidecar.handlers.cli_agent_handler import CliAgentHandler
 from sidecar.semantic.ids import stable_id
 from sidecar.semantic.store import SemanticStore
 
@@ -553,6 +554,36 @@ class SemanticHandler(BaseHandler):
         ]
         return {"success": True, "kind": kind, "item": item}
 
+    def _verify_claim(self, params):
+        """联网深度研究核查单个命题（CLI agent 模式），结果落库供工作台展示。
+
+        CLI 深度研究可能耗时数分钟；与 CLI Agent 对话共用同一执行通道，
+        因此复用 CliAgentHandler 的全局锁避免并发执行。
+        """
+        claim_id = str(params.get("id", "") or "")
+        agent_id = str(params.get("agent", "") or "")
+        if not claim_id or not agent_id:
+            return {"success": False, "message": "参数不完整"}
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        claims = store.list_claims_for_verification(limit=5000)
+        claim = next((item for item in claims if item["id"] == claim_id), None)
+        if claim is None:
+            return {"success": False, "message": "命题不存在或不可核查（仅支持 active 且有证据的命题）"}
+        if not CliAgentHandler._cli_agent_lock.acquire(blocking=False):
+            return {"success": False, "message": "CLI agent 正在运行其他任务，请稍后再试"}
+        try:
+            from sidecar.semantic.claim_verifier import verify_claim_via_cli
+
+            result = verify_claim_via_cli(store, claim, agent_id=agent_id)
+            if result.get("success"):
+                # 只保留原始输出尾部，避免超大 RPC 响应
+                result["output"] = (result.get("output") or "")[-2000:]
+            return result
+        finally:
+            CliAgentHandler._cli_agent_lock.release()
+
     def _get_note_semantic_context(self, params):
         path = str(params.get("path", "") or "").replace("\\", "/")
         store = self._store()
@@ -773,6 +804,15 @@ class SemanticHandler(BaseHandler):
                 (status, item_id),
             )
         return {"success": cursor.rowcount > 0, "id": item_id, "status": status}
+
+    def _scan_conflicts(self, params):
+        """手动触发结构化冲突检测：重扫 claims 快照并落库（幂等）。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.conflict_detector import scan_and_persist
+
+        return scan_and_persist(store)
 
     @staticmethod
     def _quality_key(*parts: str) -> str:
@@ -1273,6 +1313,7 @@ class SemanticHandler(BaseHandler):
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("start_semantic_claims_compile", self._start_claims_compile)
         router.register("review_semantic_conflict", self._review_conflict)
+        router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)
@@ -1281,6 +1322,7 @@ class SemanticHandler(BaseHandler):
         router.register("set_semantic_claim_status", self._set_claim_status)
         router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
+        router.register("verify_semantic_claim", self._verify_claim)
         router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)

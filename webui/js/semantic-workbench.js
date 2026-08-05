@@ -18,6 +18,7 @@ var _suppressAutoSelect = false;
 var _intensity = 'standard';
 var _enabledCategories = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
 var _workbenchEnabled = true;
+var _verifyAgents = [];
 
 function esc(value) {
     return window.escapeHtml ? window.escapeHtml(String(value == null ? '' : value)) : String(value == null ? '' : value);
@@ -144,6 +145,8 @@ function configureStatusFilter() {
     var status = document.getElementById('semantic-status-filter');
     if (!status) return;
     status.hidden = _category !== 'claims' && _category !== 'quality' && _category !== 'conflicts' && _category !== 'links';
+    var scan = document.getElementById('semantic-scan-conflicts');
+    if (scan) scan.hidden = _category !== 'conflicts';
     if (_category === 'claims') {
         status.innerHTML = '<option value="active">' + esc(t('semantic.status.active')) + '</option><option value="deleted">' + esc(t('semantic.status.deleted')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
     } else if (_category === 'conflicts') {
@@ -317,7 +320,7 @@ function renderList() {
 function listMeta(item) {
     if (_category === 'objects') return '<span>' + esc(item.entity_type || t('semantic.tabs.' + _objectKind)) + '</span><span>' + esc(t('semantic.mentions', { count: item.mention_count || 0 })) + '</span>';
     if (_category === 'quality') return '<span>' + esc(t('semantic.qualityRules.' + item.rule)) + '</span><span>' + esc(t('semantic.status.' + (item.status || 'pending'))) + '</span>';
-    if (_category === 'claims') return '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span><span>' + esc(t('semantic.claimTypes.' + (item.claim_type || 'conclusion'))) + '</span><span>' + esc(t('semantic.evidenceCount', { count: item.evidence_count || 0 })) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span>';
+    if (_category === 'claims') return (item.verification ? '<span class="semantic-verdict semantic-verdict-' + esc(item.verification.verdict) + '">' + esc(t('semantic.verdicts.' + item.verification.verdict)) + '</span>' : '') + '<span>' + esc(t('semantic.status.' + (item.status || 'active'))) + '</span><span>' + esc(t('semantic.claimTypes.' + (item.claim_type || 'conclusion'))) + '</span><span>' + esc(t('semantic.evidenceCount', { count: item.evidence_count || 0 })) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span>';
     return '<span>' + esc(t('semantic.status.' + (item.status || 'confirmed'))) + '</span>' + (item.has_reverse ? '<span>↔</span>' : '');
 }
 
@@ -381,7 +384,8 @@ function renderObjectDetail(kind, item) {
         return '<button class="semantic-related-object" data-open-semantic-kind="' + esc(relation.object_kind) + '" data-open-semantic-id="' + esc(relation.object_id) + '">' + esc(relation.relation_type) + ' · ' + esc(relation.object_name) + '</button>';
     }).join('');
     var relatedSection = (kind === 'entity' || kind === 'concept') ? '<section class="semantic-detail-section"><h3>' + esc(t('semantic.related')) + '</h3>' + (related || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' : '';
-    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + relatedSection + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
+    var verificationSection = kind === 'claim' ? renderVerifications(item) : '';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + verificationSection + relatedSection + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
 }
 
 function renderClaimControls(item) {
@@ -391,8 +395,61 @@ function renderClaimControls(item) {
         : '<button class="danger" data-claim-status="deleted">' + esc(t('semantic.deleteClaim')) + '</button>';
     var topic = ((item.sources || [])[0] || {}).topic || '';
     var pageActions = topic ? '<button data-preview-topic-page="' + esc(topic) + '">' + esc(t('semantic.previewTopicPage')) + '</button><button data-publish-topic-page="' + esc(topic) + '">' + esc(t('semantic.publishTopicPage')) + '</button>' : '';
-    return '<div class="semantic-actions"><button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + pageActions + '</div>' +
+    var verifyControl = !deleted && _verifyAgents.length
+        ? '<select data-verify-agent>' + _verifyAgents.map(function(agent) { return '<option value="' + esc(agent.id) + '">' + esc(agent.name || agent.id) + '</option>'; }).join('') + '</select><button data-verify-claim>' + esc(t('semantic.verifyClaim')) + '</button>'
+        : '';
+    return '<div class="semantic-actions">' + verifyControl + '<button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + pageActions + '</div>' +
         '<form class="semantic-claim-editor" hidden><label>' + esc(t('semantic.claimStatement')) + '<textarea name="statement" required>' + esc(item.statement || '') + '</textarea></label><label>' + esc(t('semantic.claimScope')) + '<input name="scope" value="' + esc(item.scope || '') + '"></label><label>' + esc(t('semantic.claimType')) + '<select name="claim_type"><option value="conclusion"' + (item.claim_type === 'conclusion' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.conclusion')) + '</option><option value="hypothesis"' + (item.claim_type === 'hypothesis' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.hypothesis')) + '</option></select></label><div class="semantic-actions"><button type="submit" class="primary">' + esc(t('common.save')) + '</button><button type="button" data-cancel-claim-edit>' + esc(t('common.cancel')) + '</button></div></form>';
+}
+
+function loadVerifyAgents() {
+    if (!window.api.listCliAgents) return;
+    window.api.listCliAgents().then(function(result) {
+        if (!result || !result.success) return;
+        _verifyAgents = (result.agents || []).filter(function(agent) { return agent.installed; });
+        if (_activeDetail && _activeDetailKind === 'claim') renderObjectDetail(_activeDetailKind, _activeDetail);
+    }).catch(function() {});
+}
+
+function verifyClaim(button) {
+    if (!_activeDetail || !window.api.verifySemanticClaim) return;
+    var actions = button.closest('.semantic-actions');
+    var select = actions ? actions.querySelector('[data-verify-agent]') : null;
+    var agentId = select ? select.value : '';
+    if (!agentId) {
+        if (window.ToastModule) window.ToastModule.error(t('semantic.verifyNoAgent'));
+        return;
+    }
+    var originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = t('semantic.verifyRunning');
+    window.api.verifySemanticClaim(_activeDetail.id, agentId).then(function(result) {
+        if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        if (window.ToastModule) window.ToastModule.success(t('semantic.verifyDone'));
+        loadList();
+        loadDetail(_activeDetail);
+    }).catch(function(error) {
+        if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+    }).finally(function() {
+        button.disabled = false;
+        button.textContent = originalLabel;
+    });
+}
+
+function renderVerifications(item) {
+    var records = item.verifications || [];
+    var header = '<h3>' + esc(t('semantic.verificationTitle')) + '</h3>';
+    if (!records.length) {
+        return '<section class="semantic-detail-section">' + header + '<div class="semantic-empty">' + esc(t('semantic.verificationEmpty')) + '</div></section>';
+    }
+    var history = records.length > 1 ? '<span class="semantic-muted">' + esc(t('semantic.verificationHistory', { count: records.length })) + '</span>' : '';
+    var cards = records.map(function(record) {
+        var sources = (record.sources || []).map(function(source) {
+            return '<li><a href="' + esc(source.url || '#') + '" target="_blank" rel="noopener">' + esc(source.title || source.url || '') + '</a></li>';
+        }).join('');
+        return '<article class="semantic-verification"><div class="semantic-verification-head"><span class="semantic-verdict semantic-verdict-' + esc(record.verdict) + '">' + esc(t('semantic.verdicts.' + record.verdict)) + '</span><span>' + Math.round((record.confidence || 0) * 100) + '%</span><span>' + esc(record.agent || record.method || '') + '</span><time>' + esc(record.created_at || '') + '</time></div>' + (record.summary ? '<p>' + esc(record.summary) + '</p>' : '') + (sources ? '<ul class="semantic-verification-sources">' + sources + '</ul>' : '') + '</article>';
+    }).join('');
+    return '<section class="semantic-detail-section">' + header + history + cards + '</section>';
 }
 
 function renderEntityAliasControls(item) {
@@ -543,6 +600,23 @@ function startCompileAll() {
     });
 }
 
+function scanConflicts(button) {
+    if (!window.api || !window.api.scanSemanticConflicts) return;
+    var original = button.textContent;
+    button.disabled = true;
+    window.api.scanSemanticConflicts().then(function(result) {
+        if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        if (window.ToastModule) window.ToastModule.success(t('semantic.scanConflictsDone'));
+        loadOverview();
+        loadList();
+    }).catch(function(error) {
+        if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+    }).finally(function() {
+        button.disabled = false;
+        button.textContent = original;
+    });
+}
+
 function scheduleCompilePoll() {
     clearTimeout(_compileTimer);
     if (!_visible) return;
@@ -625,6 +699,11 @@ function onDetailClick(event) {
         }).catch(function(error) {
             if (window.ToastModule) window.ToastModule.error(String(error.message || error));
         }).finally(function() { publishButton.disabled = false; });
+        return;
+    }
+    var verifyButton = event.target.closest('[data-verify-claim]');
+    if (verifyButton) {
+        verifyClaim(verifyButton);
         return;
     }
     var claimStatus = event.target.closest('[data-claim-status]');
@@ -844,9 +923,12 @@ function init() {
     if (search) search.addEventListener('input', function() { clearTimeout(_searchTimer); _searchTimer = setTimeout(loadList, 220); });
     var status = document.getElementById('semantic-status-filter');
     if (status) status.addEventListener('change', loadList);
+    var scan = document.getElementById('semantic-scan-conflicts');
+    if (scan) scan.addEventListener('click', function() { scanConflicts(scan); });
     configureStatusFilter();
     loadOverview();
     applyVisibilityConfig();
+    loadVerifyAgents();
 }
 
 window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };

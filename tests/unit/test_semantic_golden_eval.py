@@ -135,6 +135,17 @@ GOLDEN_GATE_CASES: list[tuple[str, str, bool]] = [
     ("The dataset was released in 2023", "hypothesis", False),
     ("提示词应包含任务说明", "hypothesis", False),
     ("该工具由开源社区维护", "hypothesis", False),
+    # --- round 3: first-person opinions must never enter the claim stream ----
+    ("我认为该方案更适合生产环境", "conclusion", False),
+    ("我觉得混合检索的效果更好", "conclusion", False),
+    ("我个人认为数据质量比模型规模更重要", "conclusion", False),
+    ("我的观点是温度参数不宜设置过高", "conclusion", False),
+    ("主观上看，这个工具更顺手", "conclusion", False),
+    ("我更偏好稀疏检索方案", "hypothesis", False),
+    ("我不看好多模态检索的发展", "conclusion", False),
+    ("I think this approach is better", "conclusion", False),
+    ("作者认为该基准不足以衡量真实能力", "conclusion", True),
+    ("论文指出该方案值得在更大语料上复现", "conclusion", True),
 ]
 
 

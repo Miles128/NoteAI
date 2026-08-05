@@ -109,6 +109,16 @@
 .semantic-claim-editor label { display: grid; gap: 6px; color: var(--text-muted); font-size: 11px; }
 .semantic-claim-editor input, .semantic-claim-editor select, .semantic-claim-editor textarea, .semantic-alias-form input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; background: var(--article-bg); color: var(--text); font: inherit; }
 .semantic-claim-editor textarea { min-height: 92px; resize: vertical; line-height: 1.55; }
+.semantic-actions select { border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; background: var(--surface); color: var(--text); font: inherit; }
+.semantic-verdict { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 1.7; }
+.semantic-verdict-supported { background: color-mix(in srgb, #2e8b57 16%, transparent); color: #2e8b57; }
+.semantic-verdict-refuted { background: color-mix(in srgb, var(--danger, #c94b4b) 16%, transparent); color: var(--danger, #c94b4b); }
+.semantic-verdict-unclear { background: color-mix(in srgb, #b8860b 16%, transparent); color: #b8860b; }
+.semantic-verification { border: 1px solid var(--border); border-radius: 7px; padding: 12px; margin-top: 10px; background: var(--surface); }
+.semantic-verification-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); }
+.semantic-verification p { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
+.semantic-verification-sources { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
+.semantic-verification-sources a { color: var(--primary); }
 .semantic-source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .semantic-evidence-action { flex: 0 0 auto; border: 0; padding: 0; background: transparent; color: var(--text-muted); font-size: 10px; cursor: pointer; }
 .semantic-source-card.is-excluded { opacity: .55; }

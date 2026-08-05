@@ -232,16 +232,11 @@ class SemanticHandler(BaseHandler):
         workspace = self.config.workspace_path
         if not workspace:
             return []
-        notes = Path(workspace) / "Notes"
-        if not notes.is_dir():
-            return []
-        return sorted(
-            path
-            for path in notes.rglob("*.md")
-            if not path.name.startswith(".")
-            and not path.name.endswith("_综述.md")
-            and not any(part.startswith(".") for part in path.relative_to(notes).parts)
-        )
+        from utils.note_scanner import iter_note_files
+
+        # 统一走 note_scanner 扫描入口（排除点文件、点目录与 *_综述.md），
+        # 与 ingest 语义编译、增量扫描的过滤规则保持一致。
+        return sorted(iter_note_files(workspace), key=lambda p: str(p.relative_to(workspace)))
 
     def _start_full_compile(self, _params):
         return self._start_semantic_compile(_params, claims_only=False)
@@ -290,7 +285,9 @@ class SemanticHandler(BaseHandler):
 
         total = max(len(paths), 1)
         store = SemanticStore(workspace)
-        removed_topics = set(store.purge_missing_documents())
+        # keep_paths=paths：同时清理磁盘上已不存在、以及不在本次编译集合内
+        # （如隐藏目录中的残留文档）的记录，保证工作台计数与源文档一致。
+        removed_topics = set(store.purge_missing_documents(keep_paths=paths))
 
         def progress(current, _total, message):
             self._send_job_update(

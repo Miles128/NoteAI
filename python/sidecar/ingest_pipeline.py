@@ -775,21 +775,21 @@ def run_ingest(
             from sidecar.semantic.store import SemanticStore
             from sidecar.semantic.topic_state import materialize_topic_state
             from sidecar.semantic.wiki import materialize_topic_wiki_page
+            from utils.note_scanner import iter_note_files
 
-            ws_path = Path(workspace)
             store = SemanticStore(workspace)
-            removed_topics = set(store.purge_missing_documents())
             if incremental:
                 semantic_targets = _scan_index_pending(workspace)
+                # 增量编译只处理待更新文件，不能把编译集合外的记录误删
+                removed_topics = set(store.purge_missing_documents())
             else:
+                # 统一走 note_scanner：排除点文件/点目录/综述，与工作台统计一致
                 semantic_targets = [
                     md
-                    for md in ws_path.rglob("*.md")
-                    if not md.name.startswith(".")
-                    and "wiki" not in md.parts
-                    and NOTES_FOLDER in md.parts
-                    and not md.name.endswith("_综述.md")
+                    for md in iter_note_files(workspace)
+                    if "wiki" not in md.parts
                 ]
+                removed_topics = set(store.purge_missing_documents(keep_paths=semantic_targets))
             if semantic_targets:
                 semantic_stats = compile_semantic_batch(
                     workspace,

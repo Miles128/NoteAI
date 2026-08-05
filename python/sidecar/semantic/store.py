@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1279,12 +1279,29 @@ class SemanticStore:
                 ),
             )
 
-    def purge_missing_documents(self) -> list[str]:
-        """Delete missing source snapshots and return their affected topics."""
+    def purge_missing_documents(self, keep_paths: Sequence[str | Path] | None = None) -> list[str]:
+        """Delete documents whose source is missing or outside the compile set.
+
+        Args:
+            keep_paths: 本次编译覆盖的笔记绝对路径集合。提供时，磁盘上存在但
+                不在该集合内的记录（如隐藏目录中的文件）也会被清理；为 None 时
+                仅清理磁盘上已不存在的记录。
+
+        Returns:
+            受影响的主题列表。
+        """
         self.initialize()
+        keep: set[str] | None = None
+        if keep_paths is not None:
+            keep = {str(Path(p).relative_to(self.workspace)) for p in keep_paths}
         with self.connect() as conn:
             rows = list(conn.execute("SELECT id, path, title, topic FROM documents"))
-            missing = [row for row in rows if not (self.workspace / row["path"]).is_file()]
+            missing = [
+                row
+                for row in rows
+                if not (self.workspace / row["path"]).is_file()
+                or (keep is not None and row["path"] not in keep)
+            ]
             if not missing:
                 return []
             conn.executemany("DELETE FROM documents WHERE id = ?", ((row["id"],) for row in missing))

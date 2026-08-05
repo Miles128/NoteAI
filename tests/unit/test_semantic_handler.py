@@ -622,6 +622,48 @@ def test_full_compile_purges_deleted_documents_and_refreshes_object_pages(
     assert "Stale" not in (workspace / "wiki" / "semantic" / "实体.md").read_text(encoding="utf-8")
 
 
+def test_purge_missing_documents_removes_records_outside_compile_set(
+    semantic_handler: SemanticHandler,
+) -> None:
+    """磁盘存在但不在编译集合内的记录（如隐藏目录残留）也会被清理。"""
+    from utils.note_scanner import iter_note_files
+
+    workspace = Path(semantic_handler.config.workspace_path)
+    hidden = workspace / "Notes" / ".workbuddy" / "memory.md"
+    hidden.parent.mkdir(parents=True)
+    hidden.write_text("hidden", encoding="utf-8")
+    store = SemanticStore(workspace)
+    with store.connect() as conn:
+        conn.execute(
+            """INSERT INTO documents(id, path, content_hash, title, topic, compiled_at)
+               VALUES('hidden-doc', 'Notes/.workbuddy/memory.md', 'h', 'Hidden', '',
+                      '2026-07-17T10:00:00Z') """
+        )
+
+    keep_paths = iter_note_files(workspace)
+    assert all(".workbuddy" not in p.parts for p in keep_paths)
+
+    topics = store.purge_missing_documents(keep_paths=keep_paths)
+
+    assert store.document("Notes/.workbuddy/memory.md") is None
+    # 编译集合内的正常文档不受影响
+    assert store.document("Notes/AI/RAG.md") is not None
+    assert topics == []
+
+
+def test_purge_missing_documents_without_keep_paths_keeps_existing_files(
+    semantic_handler: SemanticHandler,
+) -> None:
+    """不传 keep_paths 时保持原行为：磁盘存在的记录不被清理。"""
+    workspace = Path(semantic_handler.config.workspace_path)
+    store = SemanticStore(workspace)
+
+    topics = store.purge_missing_documents()
+
+    assert store.document("Notes/AI/RAG.md") is not None
+    assert topics == []
+
+
 def test_get_semantic_changes_is_read_only_and_validates_params(semantic_handler: SemanticHandler) -> None:
     result = semantic_handler._get_changes({"days": 7, "limit": 10})
     assert result["success"] is True

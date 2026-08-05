@@ -145,6 +145,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "set_semantic_evidence_status",
     "add_semantic_entity_alias",
     "start_semantic_full_compile",
+    "start_semantic_claims_compile",
     "publish_semantic_topic_wiki_page",
     "publish_semantic_object_wiki_page",
     "reveal_in_finder",

@@ -435,6 +435,7 @@ var API_DEFS = [
     { name: 'exportNotes', method: 'export_notes', params: function(options) { return options || {}; }, write: true },
     { name: 'restoreWorkspaceBackup', method: 'restore_workspace_backup', params: function(options) { return options || {}; }, write: true },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
+    { name: 'startSemanticClaimsCompile', method: 'start_semantic_claims_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'enqueueSemanticEntityQuality', method: 'enqueue_semantic_entity_quality', params: function(id) { return { id: id }; }, write: true },

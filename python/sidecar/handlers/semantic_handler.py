@@ -16,6 +16,9 @@ from sidecar.semantic.store import SemanticStore
 class SemanticHandler(BaseHandler):
     _TABS = {"overview", "claims", "concepts", "entities", "quality", "conflicts", "links"}
     _COMPILE_JOB_ID = "semantic-full-compile"
+    # Workbench display intensity → minimum confidence for claims/objects.
+    # "deep" keeps every item (including legacy rows without confidence).
+    _INTENSITY_MIN_CONFIDENCE = {"light": 0.8, "standard": 0.5, "deep": 0.0}
 
     def _store(self) -> SemanticStore | None:
         workspace = self.config.workspace_path
@@ -42,6 +45,10 @@ class SemanticHandler(BaseHandler):
         tab = str(params.get("tab", "overview") or "overview")
         if tab not in self._TABS:
             return {"success": False, "message": "未知语义视图"}
+        intensity = str(params.get("intensity", "standard") or "standard")
+        min_confidence = self._INTENSITY_MIN_CONFIDENCE.get(intensity)
+        if min_confidence is None:
+            min_confidence = self._INTENSITY_MIN_CONFIDENCE["standard"]
         store = self._store()
         if store is None:
             return {"success": False, "message": "未设置工作区"}
@@ -58,7 +65,7 @@ class SemanticHandler(BaseHandler):
             return self._conflicts(store, params)
         if tab == "quality":
             return self._quality(store, params)
-        return self._semantic_list(store, tab, params)
+        return self._semantic_list(store, tab, params, min_confidence=min_confidence)
 
     @staticmethod
     def _empty_overview() -> dict:
@@ -236,6 +243,18 @@ class SemanticHandler(BaseHandler):
         )
 
     def _start_full_compile(self, _params):
+        return self._start_semantic_compile(_params, claims_only=False)
+
+    def _start_claims_compile(self, _params):
+        """只重抽命题/证据，不触碰实体/概念。
+
+        历史遗留场景：早期严格校验导致 claims 被整体清空，而 block_extractions
+        已记录为 complete，常规全量编译会跳过这些块；本入口走 claim_extractions
+        表，可只花一次 LLM 调用重抽全部命题。
+        """
+        return self._start_semantic_compile(_params, claims_only=True)
+
+    def _start_semantic_compile(self, _params, *, claims_only: bool):
         workspace, err = self._require_workspace()
         if err:
             return err
@@ -244,8 +263,9 @@ class SemanticHandler(BaseHandler):
             self._COMPILE_JOB_ID,
             self._run_full_compile,
             args=(workspace, paths),
+            kwargs={"claims_only": claims_only},
             kind="semantic_compile",
-            label="全库语义编译",
+            label="全库命题编译" if claims_only else "全库语义编译",
         )
         if not started:
             return {
@@ -261,7 +281,7 @@ class SemanticHandler(BaseHandler):
             "job": job_status.get_job(self._COMPILE_JOB_ID),
         }
 
-    def _run_full_compile(self, workspace: str, paths: list[Path]) -> None:
+    def _run_full_compile(self, workspace: str, paths: list[Path], *, claims_only: bool = False) -> None:
         from sidecar.semantic.compiler import compile_semantic_batch
         from sidecar.semantic.object_wiki import materialize_object_collection
         from sidecar.semantic.topic_state import materialize_topic_state
@@ -279,13 +299,14 @@ class SemanticHandler(BaseHandler):
                 metadata={"processed_documents": current, "total_documents": len(paths)},
             )
 
-        stats = compile_semantic_batch(workspace, paths, progress_cb=progress)
+        stats = compile_semantic_batch(workspace, paths, progress_cb=progress, claims_only=claims_only)
         cleanup_failures = []
-        for kind in ("entity", "concept"):
-            try:
-                materialize_object_collection(store, kind)
-            except (OSError, ValueError, sqlite3.Error) as exc:
-                cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
+        if not claims_only:
+            for kind in ("entity", "concept"):
+                try:
+                    materialize_object_collection(store, kind)
+                except (OSError, ValueError, sqlite3.Error) as exc:
+                    cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
         for topic in sorted(removed_topics):
             try:
                 materialize_topic_state(store, topic)
@@ -295,21 +316,31 @@ class SemanticHandler(BaseHandler):
         if cleanup_failures:
             stats["failures"].extend({"cleanup": item} for item in cleanup_failures)
         materialized = stats.get("materialized", {})
-        materialized_message = (
-            f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
-            f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
-            f"主题页 {materialized.get('topics', 0)}"
-        )
+        if claims_only:
+            message = (
+                f"全库命题编译完成：{stats['documents']} 篇，"
+                f"命题 {stats['claims']} 条（拒绝 {stats['rejected_claims']}），失败块 {stats['failed_blocks']}"
+            )
+        else:
+            materialized_message = (
+                f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
+                f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
+                f"主题页 {materialized.get('topics', 0)}"
+            )
+            message = (
+                f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
+            )
         self._send_job_update(
             self._COMPILE_JOB_ID,
             progress=1,
             status="complete",
-            message=f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}",
+            message=message,
             metadata={
                 "processed_documents": stats["documents"],
                 "total_documents": len(paths),
                 "blocks": stats["blocks"],
                 "claims": stats["claims"],
+                "rejected_claims": stats["rejected_claims"],
                 "failed_blocks": stats["failed_blocks"],
                 "pending_documents": stats["pending_documents"],
                 "failure_count": len(stats["failures"]),
@@ -325,7 +356,7 @@ class SemanticHandler(BaseHandler):
             "total_documents": len(self._all_note_paths()),
         }
 
-    def _semantic_list(self, store: SemanticStore, tab: str, params: dict):
+    def _semantic_list(self, store: SemanticStore, tab: str, params: dict, min_confidence: float | None = None):
         limit, offset = self._page(params)
         query = str(params.get("query", "") or "").strip()
         like = f"%{query}%"
@@ -341,6 +372,9 @@ class SemanticHandler(BaseHandler):
                     "(SELECT 1 FROM evidence ae WHERE ae.claim_id = c.id AND ae.status = 'active'))"
                 )
                 where = f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) {evidence_clause}"
+                if min_confidence:
+                    where += " AND c.confidence >= ?"
+                    args = args + (min_confidence,)
                 total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
@@ -395,6 +429,9 @@ class SemanticHandler(BaseHandler):
                 description_column = "o.description"
                 where = "WHERE o.status = 'active' AND (? = '' OR o.canonical_name LIKE ? OR o.description LIKE ?)"
                 args = (query, like, like)
+                if min_confidence:
+                    where += " AND o.confidence >= ?"
+                    args = args + (min_confidence,)
                 total = conn.execute(f"SELECT count(*) FROM {table} o {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT o.id, o.canonical_name, {description_column}, o.confidence{type_select},
@@ -674,7 +711,18 @@ class SemanticHandler(BaseHandler):
             target = materialize_topic_wiki_page(store, topic)
         except OSError as exc:
             return {"success": False, "message": f"语义页发布失败：{exc}"}
-        return {"success": True, "topic": topic, "path": str(target.relative_to(store.workspace))}
+        try:
+            from sidecar.wiki_utils import sync_semantic_links
+
+            wiki_links = sync_semantic_links()
+        except Exception:
+            wiki_links = None
+        return {
+            "success": True,
+            "topic": topic,
+            "path": str(target.relative_to(store.workspace)),
+            "wiki_links": wiki_links,
+        }
 
     def _conflicts(self, store: SemanticStore, params: dict):
         limit, offset = self._page(params)
@@ -759,6 +807,10 @@ class SemanticHandler(BaseHandler):
                 )
             }
             aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
+            concept_ids = {
+                row["id"]
+                for row in conn.execute("SELECT id FROM concepts WHERE status = 'active'")
+            }
             relation_endpoint_ids = {
                 row["entity_id"]
                 for row in conn.execute(
@@ -775,7 +827,9 @@ class SemanticHandler(BaseHandler):
         by_id = {entity["id"]: entity for entity in entities}
         canonical_groups: dict[str, list[str]] = {}
         alias_groups: dict[str, list[str]] = {}
-        dangling_relations = relation_endpoint_ids - set(by_id)
+        # Relations legitimately link entities to concepts (RELATED_TO co-occurrence),
+        # so concept endpoints must count as known. Only truly missing endpoints are dangling.
+        dangling_relations = relation_endpoint_ids - set(by_id) - concept_ids
         for entity in entities:
             canonical_groups.setdefault(self._normalized_entity_name(entity["canonical_name"]), []).append(entity["id"])
         for alias in aliases:
@@ -1217,6 +1271,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_changes", self._get_changes)
         router.register("get_topic_brief", self._get_topic_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
+        router.register("start_semantic_claims_compile", self._start_claims_compile)
         router.register("review_semantic_conflict", self._review_conflict)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)

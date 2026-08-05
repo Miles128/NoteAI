@@ -92,6 +92,9 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
+            "semantic_workbench_enabled": self.config.semantic_workbench_enabled,
+            "semantic_workbench_tabs": list(self.config.semantic_workbench_tabs),
+            "semantic_workbench_intensity": self.config.semantic_workbench_intensity,
             "assistant_agent_mode": self.config.assistant_agent_mode,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
@@ -162,6 +165,19 @@ class ConfigHandler(BaseHandler):
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
                 self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
+            if "semantic_workbench_enabled" in params:
+                self.config.semantic_workbench_enabled = bool(params["semantic_workbench_enabled"])
+            if "semantic_workbench_tabs" in params:
+                tabs = params["semantic_workbench_tabs"]
+                if isinstance(tabs, list):
+                    valid_tabs = {"objects", "claims", "quality", "conflicts", "links", "brief"}
+                    cleaned = [str(tab) for tab in tabs if str(tab) in valid_tabs]
+                    if cleaned:
+                        self.config.semantic_workbench_tabs = cleaned
+            if "semantic_workbench_intensity" in params:
+                intensity = str(params["semantic_workbench_intensity"] or "").strip()
+                if intensity in {"light", "standard", "deep"}:
+                    self.config.semantic_workbench_intensity = intensity
             if "assistant_agent_mode" in params:
                 self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
             if "cli_agent_id" in params:

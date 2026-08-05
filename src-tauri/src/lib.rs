@@ -41,11 +41,7 @@ pub fn run() {
             commands::open_folder_dialog,
             commands::open_file_dialog,
             commands::open_archive_dialog,
-            commands::get_workspace_path,
             commands::set_workspace_path,
-            commands::read_file,
-            commands::write_file,
-            commands::list_dir,
             commands::open_file_in_new_window,
         ])
         .on_window_event(|window, event| {

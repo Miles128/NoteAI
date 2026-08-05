@@ -196,15 +196,6 @@ pub async fn open_archive_dialog(app: tauri::AppHandle) -> Result<Option<String>
 }
 
 #[tauri::command]
-pub fn get_workspace_path(state: tauri::State<'_, AppState>) -> Option<String> {
-    state
-        .workspace_path
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .clone()
-}
-
-#[tauri::command]
 pub fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
     let canonical = p
@@ -218,65 +209,6 @@ pub fn set_workspace_path(state: tauri::State<'_, AppState>, path: String) -> Re
         .lock()
         .unwrap_or_else(|e| e.into_inner()) = Some(canonical.to_string_lossy().to_string());
     Ok(())
-}
-
-#[tauri::command]
-pub fn read_file(state: tauri::State<'_, AppState>, path: String) -> Result<String, String> {
-    let validated = validate_workspace_path(&state, &path)?;
-    std::fs::read_to_string(&validated).map_err(|e| format!("Failed to read file: {}", e))
-}
-
-#[tauri::command]
-pub fn write_file(
-    state: tauri::State<'_, AppState>,
-    path: String,
-    content: String,
-) -> Result<(), String> {
-    let validated = validate_workspace_path(&state, &path)?;
-    if let Some(parent) = std::path::Path::new(&validated).parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
-    }
-    std::fs::write(&validated, &content).map_err(|e| format!("Failed to write file: {}", e))
-}
-
-#[tauri::command]
-pub fn list_dir(
-    state: tauri::State<'_, AppState>,
-    path: String,
-) -> Result<Vec<serde_json::Value>, String> {
-    let validated = validate_workspace_path(&state, &path)?;
-    let entries =
-        std::fs::read_dir(&validated).map_err(|e| format!("Failed to read directory: {}", e))?;
-
-    let mut result = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let metadata = entry.metadata().map_err(|e| e.to_string())?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with('.') {
-            continue;
-        }
-        result.push(serde_json::json!({
-            "name": name,
-            "path": entry.path().to_string_lossy(),
-            "type": if metadata.is_dir() { "dir" } else { "file" },
-            "size": metadata.len(),
-        }));
-    }
-
-    result.sort_by(|a, b| {
-        let a_dir = a["type"].as_str() == Some("dir");
-        let b_dir = b["type"].as_str() == Some("dir");
-        b_dir.cmp(&a_dir).then(
-            a["name"]
-                .as_str()
-                .unwrap_or("")
-                .cmp(b["name"].as_str().unwrap_or("")),
-        )
-    });
-
-    Ok(result)
 }
 
 #[tauri::command]

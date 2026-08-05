@@ -17,10 +17,6 @@ body {
     -webkit-font-smoothing: subpixel-antialiased;
 }
 
-[data-theme="light"] body {
-    background: var(--bg);
-}
-
 .app-container {
     display: flex;
     align-items: stretch;
@@ -44,7 +40,7 @@ body {
     bottom: 0;
     height: var(--statusbar-height);
     background: var(--statusbar-bg);
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--chrome-border);
     display: flex;
     align-items: center;
     padding: 0 8px 0 6px;
@@ -140,8 +136,7 @@ body {
 .note-list-header,
 .graph-panel-header,
 .tiptap-toolbar,
-.preview-header,
-.sidebar-workspace-header {
+.preview-header {
     width: 100%;
     height: var(--column-header-height);
     min-height: var(--column-header-height);
@@ -155,10 +150,20 @@ body {
 }
 
 .sidebar-workspace-header {
+    width: 100%;
+    height: var(--column-header-height);
+    min-height: var(--column-header-height);
+    max-height: var(--column-header-height);
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: var(--column-header-padding-x);
+    padding-right: var(--column-header-padding-x);
+    box-sizing: border-box;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 6px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--chrome-border);
     background: var(--sidebar-bg);
     -webkit-app-region: no-drag;
 }
@@ -328,7 +333,7 @@ body {
     user-select: none;
     flex-shrink: 0;
     padding: 0 8px 0 84px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--chrome-border);
     -webkit-app-region: drag;
 }
 
@@ -759,7 +764,7 @@ body {
 }
 
 .sidebar-pane[hidden] {
-    display: none !important;
+    display: none;
 }
 
 .sidebar-pane .file-tree-container,
@@ -787,7 +792,7 @@ body {
 }
 
 .statusbar-dock .sidebar-dock-panel[hidden] {
-    display: none !important;
+    display: none;
 }
 
 .sidebar-footer {
@@ -1269,7 +1274,7 @@ body {
 }
 
 .multi-source-pane[hidden] {
-    display: none !important;
+    display: none;
 }
 
 .rss-sub-list {
@@ -3598,68 +3603,8 @@ body {
     font-weight: 600;
 }
 
-/* ── Flat design: no glass/blur effects ── */
-[data-theme="light"] .custom-titlebar {
-    background: var(--topbar-bg);
-}
-
-[data-theme="light"] .sidebar,
-[data-theme="light"] .sidebar-expand-btn {
-    background: var(--sidebar-bg);
-    box-shadow: none;
-}
-
-[data-theme="light"] .content-panel,
-[data-theme="light"] .right-area > .preview-panel {
-    background: var(--article-bg);
-    border: none;
-    box-shadow: none;
-}
-
-[data-theme="light"] #ai-panel {
-    background: var(--ai-panel-bg);
-    border-color: var(--ai-faint-border);
-}
-
-[data-theme="light"] .app-container {
-    background: transparent;
-}
-
-[data-theme="light"] .custom-titlebar,
-[data-theme="paper"] .custom-titlebar,
-[data-theme="light"] .app-statusbar,
-[data-theme="paper"] .app-statusbar {
-    border-color: rgba(35, 31, 25, 0.06);
-}
-
-[data-theme="paper"] .sidebar,
-[data-theme="paper"] .sidebar-expand-btn {
-    background: var(--sidebar-bg);
-    box-shadow: none;
-}
-
-[data-theme="paper"] .content-panel,
-[data-theme="paper"] .right-area > .preview-panel {
-    background: var(--article-bg);
-    border: none;
-    box-shadow: none;
-}
-
-[data-theme="light"] .note-list-header,
-[data-theme="paper"] .note-list-header,
-[data-theme="light"] .graph-panel-header,
-[data-theme="paper"] .graph-panel-header,
-[data-theme="light"] .preview-header,
-[data-theme="paper"] .preview-header,
-[data-theme="light"] .sidebar-workspace-header,
-[data-theme="paper"] .sidebar-workspace-header {
-    border-color: rgba(35, 31, 25, 0.06);
-}
-
-[data-theme="light"] .app-container,
-[data-theme="paper"] .app-container {
-    background: var(--bg);
-}
+/* Flat design：无玻璃/模糊效果；主题差异已全部收敛到 variables.css 的变量层
+ * （背景色均引用各主题变量；顶栏/状态栏/列顶栏边框色用 --chrome-border） */
 
 /* Drop overlay */
 .drop-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center}

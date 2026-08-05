@@ -176,8 +176,8 @@
 }
 
 .btn-secondary {
-    background: var(--surface);
-    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--text);
     border: 1px solid var(--border);
     padding: 6px 16px;
     border-radius: 6px;
@@ -186,7 +186,7 @@
 }
 
 .btn-secondary:hover {
-    background: var(--hover);
+    background: rgba(0, 0, 0, 0.08);
 }
 
 .topic-context-menu {
@@ -209,10 +209,6 @@
 
 .topic-menu-item:hover {
     background: var(--interactive-hover, var(--surface-hover));
-}
-
-.sidebar-tag-row {
-    position: relative;
 }
 
 .sidebar-tag-row.drag-over {
@@ -363,15 +359,6 @@
     opacity: 0.5;
     transform: none;
     box-shadow: none;
-}
-
-.btn-secondary {
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--text);
-}
-
-.btn-secondary:hover {
-    background: rgba(0, 0, 0, 0.08);
 }
 
 .btn-secondary:active {
@@ -1176,6 +1163,7 @@
 }
 
 .sidebar-tag-row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1808,7 +1796,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--chrome-border);
     gap: 10px;
     position: relative;
     z-index: 30;
@@ -2086,6 +2074,7 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 4px 10px;
     border-radius: 999px;
@@ -2255,8 +2244,7 @@
     font-variant-numeric: tabular-nums;
 }
 
-.graph-zoom-btn,
-.graph-zoom-percent {
+.graph-zoom-btn {
     height: 24px;
     border: none;
     background: transparent;
@@ -2264,9 +2252,6 @@
     cursor: pointer;
     border-radius: 4px;
     transition: background 140ms ease, color 140ms ease, transform 100ms ease;
-}
-
-.graph-zoom-btn {
     width: 24px;
     padding: 0;
     font-size: 16px;
@@ -2275,6 +2260,13 @@
 }
 
 .graph-zoom-percent {
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 140ms ease, color 140ms ease, transform 100ms ease;
     min-width: 46px;
     padding: 0 4px;
     font-size: 10.5px;
@@ -2346,8 +2338,7 @@
     z-index: 5;
 }
 
-.graph-legend,
-.graph-legend-float {
+.graph-legend {
     display: flex;
     gap: 8px;
     justify-content: center;

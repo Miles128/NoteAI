@@ -17,7 +17,7 @@ from modules.file_converter import FileConverterManager
 from sidecar.workspace_rules import needs_workspace_rules_setup
 from utils.logger import logger
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
-from utils.topic_file_ops import _check_topic_needs_processing
+from utils.topic_file_ops import check_topic_needs_processing
 from utils.wiki_sync import topic_from_notes_path
 
 STAGES = (
@@ -355,7 +355,7 @@ def _scan_classify_pending(workspace: str) -> list[Path]:
                 continue
             if not is_inbox_orphan_path(md, workspace):
                 continue
-            if fm is None or _check_topic_needs_processing(fm):
+            if fm is None or check_topic_needs_processing(fm):
                 out.append(md)
         except OSError:
             continue

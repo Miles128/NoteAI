@@ -97,15 +97,24 @@ class AppConfig:
     locale: str = "zh-CN"
 
     def __post_init__(self):
-        self._lock = threading.Lock()
+        # Snapshot lock: only guards the __dict__ snapshot taken by
+        # save_to_file/to_dict against concurrent mutation mid-iteration.
+        # RLock (not Lock) because handlers legitimately hold the lock around
+        # compound read-modify-write batches that call save()/save_to_file(),
+        # which re-acquires it; a non-reentrant Lock would self-deadlock.
+        # Plain attribute reads/writes elsewhere are atomic under CPython's
+        # GIL and intentionally left unlocked.
+        self._lock = threading.RLock()
 
-    def _get_attr(self, name):
-        with self._lock:
-            return getattr(self, name, None)
+    @classmethod
+    def for_test(cls, **overrides: Any) -> "AppConfig":
+        """Test injection point: pure-default instance without touching
+        config files, environment variables or the keyring.
 
-    def _set_attr(self, name, value):
-        with self._lock:
-            setattr(self, name, value)
+        Production code keeps using the module-level ``config`` singleton;
+        this factory only gives future tests a clean construction entry point.
+        """
+        return cls(**overrides)
 
     def is_workspace_set(self) -> bool:
         if not self.workspace_path:
@@ -191,22 +200,6 @@ class AppConfig:
         if self.max_context_tokens < 1000 or self.max_context_tokens > 1000000:
             return False
         return True
-
-    def check_content_within_context(self, content: str) -> tuple:
-        from utils.llm_utils import _estimate_tokens
-
-        estimated_tokens = _estimate_tokens(content, self.model_name)
-
-        if estimated_tokens <= self.max_context_tokens:
-            return (True, estimated_tokens, content)
-
-        from utils.llm_utils import process_content_with_llm
-
-        processed_content, was_summarized, was_truncated, final_tokens = process_content_with_llm(
-            content, max_tokens=self.max_context_tokens, model_name=self.model_name
-        )
-
-        return (False, final_tokens, processed_content)
 
     @classmethod
     def load_from_file(cls, config_path: str | None = None) -> "AppConfig":

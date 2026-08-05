@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
 _CLAIM_TYPES = {"conclusion", "hypothesis"}
@@ -50,6 +50,24 @@ _HYPOTHESIS_MARKERS = re.compile(
     re.IGNORECASE,
 )
 
+# First-person subjective opinions (我/本人 + 看法、偏好、喜恶) are deliberately
+# NOT Claims: they express personal taste rather than an author judgment that
+# could be supported or refuted by evidence.  Third-person attributions such as
+# "作者认为 …" stay eligible because they state the author's position as a
+# verifiable fact about the source.
+_OPINION_MARKERS = re.compile(
+    r"(?:"
+    r"我认为|我觉得|我个人(?:认为|觉得|的看法|的观点|而言)|在我看来|依我(?:之见|看来)|"
+    r"我的(?:观点|看法|立场|经验)|主观(?:上|地)?(?:认为|觉得|看|判断)|"
+    r"说句(?:公道话|实话|心里话)|坦白(?:地)?说|个人而言|以我之见|"
+    r"我(?:个人)?(?:更)?(?:喜欢|偏爱|偏好|欣赏|看好)|我(?:更)?(?:倾向|倾向于|愿意)|"
+    r"我不(?:喜欢|看好|赞成|同意|认为|觉得)|我(?:坚决)?(?:支持|反对)这个观点|"
+    r"凭(?:感觉|直觉)|感觉上|直觉上|"
+    r"i\s+(?:think|believe|feel|prefer|like|recommend|personally)"
+    r")",
+    re.IGNORECASE,
+)
+
 
 class ExtractionValidationError(ValueError):
     pass
@@ -84,7 +102,14 @@ def _claim_has_required_judgment(statement: str, claim_type: str) -> bool:
     labels them as conclusion.  Quantitative findings remain eligible when the
     statement explicitly expresses a comparison, change, causal judgment, or
     another supported conclusion marker.
+
+    First-person opinions (我认为/我觉得/我的观点/主观上 …) never enter the
+    conclusion stream regardless of the LLM-supplied claim_type: personal
+    taste cannot be supported or refuted, so an opinion-labeled candidate is
+    dropped just like any other pseudo-claim.
     """
+    if _OPINION_MARKERS.search(statement):
+        return False
     if claim_type == "hypothesis":
         return _HYPOTHESIS_MARKERS.search(statement) is not None
     return _CONCLUSION_MARKERS.search(statement) is not None
@@ -221,10 +246,11 @@ def build_extraction_prompt(*, block_id: str, heading_path: str, content: str, b
 1. Claim 不是“任何可验证陈述”。只有作者明确得出的评价、比较、因果、趋势、预测、推荐等结论，才标为 conclusion。
 2. 只有作者明确提出、尚待验证或带条件成立的推测/研究命题，才标为 hypothesis。
 3. 定义、术语解释、产品属性、日期数字、背景事实、命令/参数/API/配置说明、安装步骤、操作指引、示例、代码行为复述，一律不要放进 claims。
-4. 例如“75+ 模型”“支持 75 种模型”“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
-5. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
-6. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
-7. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。"""
+4. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；转述他人立场的“作者认为/论文指出”仍可抽取。
+5. 例如“75+ 模型”“支持 75 种模型”“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
+6. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
+7. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
+8. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。"""
 
 
 def build_repair_prompt(original_prompt: str, invalid_output: str, error: str) -> str:
@@ -267,6 +293,7 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
 规则：
 1. Claim 不是普通事实。只允许作者的评价/比较/因果/趋势/预测/推荐等结论（conclusion），或明确待验证的假设/推测（hypothesis）。
 2. 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令/参数/API/配置说明、步骤、操作指引、示例、代码行为复述不得进入 claims；code 类型 Block 的 claims 必须为空。
+3. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
 3. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
 4. 没有结论或假设的 Block 也必须返回，claims 为空；三个数组都无内容时均为空。
 5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。"""
@@ -288,6 +315,7 @@ def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: 
 
 只有评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测才可进入 claims。
 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
+第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
 code 类型块必须返回空 claims。evidence_quote 必须逐字来自原文。无结论或假设时返回 {{"claims": []}}。"""
 
 
@@ -310,6 +338,7 @@ def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
 
 只允许评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测。
 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
+第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
 code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。"""
 
 

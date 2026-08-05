@@ -251,9 +251,7 @@ def test_delete_topic_moves_files_and_removes_wiki_section(workspace: Path, monk
     (workspace / "wiki" / "WIKI.md").write_text(
         _wiki_with_topic("\n## 待删主题\n\n1. **甲文件**\n2. **乙文件**\n"), encoding="utf-8"
     )
-    monkeypatch.setattr(
-        "utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"}
-    )
+    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
 
     result = delete_topic("待删主题")
 
@@ -274,12 +272,8 @@ def test_delete_topic_counts_reassigned_files(workspace: Path, monkeypatch):
     topic_dir = workspace / "Notes" / "重分配主题"
     topic_dir.mkdir()
     (topic_dir / "文件.md").write_text("# 内容\n", encoding="utf-8")
-    (workspace / "wiki" / "WIKI.md").write_text(
-        _wiki_with_topic("\n## 重分配主题\n\n1. **文件**\n"), encoding="utf-8"
-    )
-    monkeypatch.setattr(
-        "utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "auto_assigned"}
-    )
+    (workspace / "wiki" / "WIKI.md").write_text(_wiki_with_topic("\n## 重分配主题\n\n1. **文件**\n"), encoding="utf-8")
+    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "auto_assigned"})
 
     result = delete_topic("重分配主题")
     assert result["moved"] == 1
@@ -288,9 +282,7 @@ def test_delete_topic_counts_reassigned_files(workspace: Path, monkeypatch):
 
 
 def test_delete_missing_topic_is_graceful(workspace: Path, monkeypatch):
-    monkeypatch.setattr(
-        "utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"}
-    )
+    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
     before = read_wiki(workspace)
 
     result = delete_topic("不存在主题")
@@ -318,17 +310,13 @@ def test_rename_topic_empty_name_fails(workspace: Path):
 
 def test_rename_topic_simple_path_updates_files_and_dir(workspace: Path, monkeypatch):
     # WIKI.md 中先登记旧主题及其文件
-    (workspace / "wiki" / "WIKI.md").write_text(
-        _wiki_with_topic("\n## 旧主题\n\n1. **文件A**\n"), encoding="utf-8"
-    )
+    (workspace / "wiki" / "WIKI.md").write_text(_wiki_with_topic("\n## 旧主题\n\n1. **文件A**\n"), encoding="utf-8")
     old_dir = workspace / "Notes" / "旧主题"
     old_dir.mkdir()
     (old_dir / "文件A.md").write_text("---\n---\n内容\n", encoding="utf-8")
 
     written: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "utils.topic_assigner.write_topic_to_file", lambda path, topic: written.append((path, topic))
-    )
+    monkeypatch.setattr("utils.topic_assigner.write_topic_to_file", lambda path, topic: written.append((path, topic)))
 
     result = rename_topic("旧主题", "新主题")
     assert result["success"] is True
@@ -347,9 +335,7 @@ def test_rename_topic_simple_path_updates_files_and_dir(workspace: Path, monkeyp
 
 def test_rename_topic_updates_file_frontmatter(workspace: Path):
     # 端到端验证：不 mock write_topic_to_file，frontmatter 中的 topic 应被更新
-    (workspace / "wiki" / "WIKI.md").write_text(
-        _wiki_with_topic("\n## 旧主题\n\n1. **文件A**\n"), encoding="utf-8"
-    )
+    (workspace / "wiki" / "WIKI.md").write_text(_wiki_with_topic("\n## 旧主题\n\n1. **文件A**\n"), encoding="utf-8")
     old_dir = workspace / "Notes" / "旧主题"
     old_dir.mkdir()
     (old_dir / "文件A.md").write_text("---\ntopic: 旧主题\n---\n内容\n", encoding="utf-8")

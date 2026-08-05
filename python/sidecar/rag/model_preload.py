@@ -26,8 +26,11 @@ class ModelWarmupManager:
 
         logger.warning("[preload] Starting model warmup (embedding + reranker)…")
 
+        # Load embedder first (critical path), then reranker in background.
         cls._preload_embedder()
-        threading.Thread(target=cls._preload_reranker, daemon=True, name="reranker-warmup").start()
+        reranker_thread = threading.Thread(target=cls._preload_reranker, daemon=True, name="reranker-warmup")
+        reranker_thread.start()
+        reranker_thread.join()
 
         logger.warning("[preload] Model warmup complete")
 

@@ -7,9 +7,15 @@ to install them on demand.
 
 from __future__ import annotations
 
+_RAG_AVAILABLE: bool | None = None
+_RAG_IMPORT_ERROR: str = ""
 
-def _try_import_rag() -> tuple[bool, str]:
-    """Check whether the RAG optional dependencies are importable."""
+
+def _check_rag_available() -> tuple[bool, str]:
+    """Lazily check whether the RAG optional dependencies are importable."""
+    global _RAG_AVAILABLE, _RAG_IMPORT_ERROR
+    if _RAG_AVAILABLE is not None:
+        return _RAG_AVAILABLE, _RAG_IMPORT_ERROR
     missing = []
     for mod_name in ("zvec", "bm25s", "fastembed", "numpy"):
         try:
@@ -17,8 +23,20 @@ def _try_import_rag() -> tuple[bool, str]:
         except ImportError:
             missing.append(mod_name)
     if missing:
-        return False, f"missing RAG dependencies: {', '.join(missing)}"
-    return True, ""
+        _RAG_AVAILABLE = False
+        _RAG_IMPORT_ERROR = f"missing RAG dependencies: {', '.join(missing)}"
+    else:
+        _RAG_AVAILABLE = True
+        _RAG_IMPORT_ERROR = ""
+    return _RAG_AVAILABLE, _RAG_IMPORT_ERROR
 
 
-RAG_AVAILABLE, RAG_IMPORT_ERROR = _try_import_rag()
+# Backward-compatible module-level attributes (evaluated lazily via __getattr__).
+def __getattr__(name: str):
+    if name == "RAG_AVAILABLE":
+        avail, _ = _check_rag_available()
+        return avail
+    if name == "RAG_IMPORT_ERROR":
+        _, err = _check_rag_available()
+        return err
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -52,8 +52,6 @@ def _ensure_fastembed_cache():
     _FASTEMBED_CACHE_PATH_CONFIGURED = True
 
 
-from fastembed import TextEmbedding
-
 from utils.logger import logger
 
 _DENSE_MODEL = None
@@ -65,9 +63,8 @@ DENSE_DIM = 512
 # HF hub 缓存目录名 fastembed：Qdrant/bge-small-zh-v1.5
 _FF_MODEL_FOLDER = "models--Qdrant--bge-small-zh-v1.5"
 
-import jieba
-
-jieba.setLogLevel(jieba.logging.INFO)
+# jieba and fastembed are imported lazily inside functions to speed up
+# module import time (they are heavy C extensions).
 
 _STOP_WORDS = {
     "的",
@@ -149,6 +146,8 @@ def _get_dense_model(download_callback=None):
             try:
                 if download_callback:
                     download_callback("正在加载 Embedding 模型…" if attempt == 0 else "正在重新下载 Embedding 模型…")
+                from fastembed import TextEmbedding
+
                 _dense = TextEmbedding(
                     DENSE_MODEL_NAME,
                     cache_dir=str(_fastembed_cache_root()),
@@ -171,14 +170,30 @@ def _bge_prefix(texts: list[str], is_query: bool = False) -> list[str]:
     return texts
 
 
+_JIEBA_INIT = False
+
+
+def _ensure_jieba():
+    global _JIEBA_INIT
+    if _JIEBA_INIT:
+        return
+    import jieba
+
+    jieba.setLogLevel(jieba.logging.INFO)
+    _JIEBA_INIT = True
+
+
 def _compute_sparse(texts: list[str]) -> list[dict]:
     """Compute sparse weights for a batch of texts using precomputed global IDF.
 
     Falls back to batch-local IDF if global IDF is not available.
     """
+    _ensure_jieba()
+    import jieba as _jieba
+
     tokenized = []
     for text in texts:
-        tokens = [w for w in jieba.cut(text) if w.strip() and w not in _STOP_WORDS]
+        tokens = [w for w in _jieba.cut(text) if w.strip() and w not in _STOP_WORDS]
         tokenized.append(tokens)
 
     # Try global IDF first
@@ -261,6 +276,8 @@ def build_and_save_global_idf(all_chunks: list[dict], workspace: str | None = No
 
     Called once during full index rebuild.
     """
+    import jieba
+
     doc_freq: dict[str, int] = {}
     n_docs = len(all_chunks)
 
@@ -315,6 +332,8 @@ def update_global_idf_incremental(
         # We don't store n_docs separately, estimate from IDF values
         # For accuracy, just rebuild from the chunks we have
         # But for small adds, approximate:
+        import jieba
+
         for chunk in added_chunks:
             text = chunk.get("content", "")
             tokens = set(w for w in jieba.cut(text) if w.strip() and w not in _STOP_WORDS)

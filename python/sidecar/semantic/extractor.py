@@ -9,9 +9,6 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 
-from sidecar.semantic.ids import content_hash, normalize_text, stable_id
-from sidecar.semantic.store import SemanticStore
-
 from prompts import (
     SEMANTIC_BATCH_CLAIM_EXTRACT_PROMPT,
     SEMANTIC_BATCH_EXTRACT_PROMPT,
@@ -20,6 +17,8 @@ from prompts import (
     SEMANTIC_OBJECT_NAME_RULES,
     SEMANTIC_REPAIR_SUFFIX,
 )
+from sidecar.semantic.ids import content_hash, normalize_text, stable_id
+from sidecar.semantic.store import SemanticStore
 
 PROMPT_VERSION = 4
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and

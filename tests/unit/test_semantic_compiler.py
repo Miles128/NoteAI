@@ -6,8 +6,8 @@ from pathlib import Path
 
 from sidecar.semantic.compiler import compile_note_semantics, compile_semantic_batch
 from sidecar.semantic.extractor import (
-    ExtractionValidationError,
     _QUOTE_PUNCT_RE,
+    ExtractionValidationError,
     _quote_matches,
     build_batch_extraction_prompt,
     build_extraction_prompt,

@@ -35,6 +35,7 @@ def _relative_note_path(workspace: Path, file_path: str | Path) -> tuple[Path, s
 
 def _write_manifest(store: SemanticStore, payload: dict) -> None:
     path = store.root / "manifest.json"
+    _prompt_version: int | None
     try:
         from sidecar.semantic.extractor import PROMPT_VERSION as _prompt_version
     except Exception:

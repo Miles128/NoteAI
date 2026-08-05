@@ -15,6 +15,7 @@ def _get_jieba():
     _jieba_checked = True
     try:
         import jieba as _jb
+
         _jieba_mod = _jb
     except ImportError:
         _jieba_mod = None

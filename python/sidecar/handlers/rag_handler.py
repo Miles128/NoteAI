@@ -15,6 +15,7 @@ def _jieba_analyse_available():
     """Check if jieba.analyse is importable (lazy, cached)."""
     try:
         import jieba.analyse  # noqa: F401
+
         return True
     except ImportError:
         return False
@@ -589,6 +590,7 @@ class RagHandler(BaseHandler):
                 continue
 
             import jieba.analyse
+
             keywords = jieba.analyse.extract_tags(text, topK=3, withWeight=False)
             kw_str = "、".join(keywords) if keywords else ""
 

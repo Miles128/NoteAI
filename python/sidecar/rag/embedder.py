@@ -178,6 +178,7 @@ def _ensure_jieba():
     if _JIEBA_INIT:
         return
     import jieba
+
     jieba.setLogLevel(jieba.logging.INFO)
     _JIEBA_INIT = True
 

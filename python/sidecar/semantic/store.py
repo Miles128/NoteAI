@@ -1389,9 +1389,7 @@ class SemanticStore:
                                    ON CONFLICT(id) DO UPDATE SET
                                        confidence=excluded.confidence""",
                                 (
-                                    stable_id(
-                                        "relation", "cooccur", doc_id, source[1], "RELATED_TO", target[1]
-                                    ),
+                                    stable_id("relation", "cooccur", doc_id, source[1], "RELATED_TO", target[1]),
                                     source[1],
                                     target[1],
                                     round(weighted, 3),

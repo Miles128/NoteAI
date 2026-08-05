@@ -62,11 +62,7 @@ def _object_rows(store: SemanticStore, topics: list | None) -> list[dict]:
     if topics:
         topic_set = {str(topic).strip().casefold() for topic in topics if topic}
         if topic_set:
-            objs = [
-                obj
-                for obj in objs
-                if any(str(t).casefold() in topic_set for t in obj["topics"])
-            ]
+            objs = [obj for obj in objs if any(str(t).casefold() in topic_set for t in obj["topics"])]
     return objs
 
 

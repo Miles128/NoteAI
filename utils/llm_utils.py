@@ -400,7 +400,9 @@ def _normalize_api_base(api_base: str) -> str:
     return api_base
 
 
-def test_api_connection(api_key: str, api_base: str, model_name: str, disable_thinking: bool | None = None) -> tuple[bool, str]:
+def test_api_connection(
+    api_key: str, api_base: str, model_name: str, disable_thinking: bool | None = None
+) -> tuple[bool, str]:
     """测试 API 连接是否可用"""
     logger.info("[API连接测试] 开始测试连接...")
     logger.info(f"[API连接测试] API Base: {api_base}")

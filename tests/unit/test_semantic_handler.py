@@ -797,7 +797,7 @@ def test_low_frequency_objects_are_degraded_outside_deep_mode(semantic_handler: 
             """INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)
                VALUES('entity-6', '高频低置信实体', 'product', '描述', 0.55, 'active')"""
         )
-        for block_id in ('block-1', 'block-2', 'block-3', 'block-4', 'block-5'):
+        for block_id in ("block-1", "block-2", "block-3", "block-4", "block-5"):
             conn.execute(
                 """INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal,
                                       content, content_hash, start_line, end_line)
@@ -842,9 +842,7 @@ def test_retry_failed_blocks_no_failures(semantic_handler: SemanticHandler) -> N
     assert result["extracted_blocks"] == 0
 
 
-def test_retry_failed_blocks_retries_and_completes(
-    semantic_handler: SemanticHandler, monkeypatch
-) -> None:
+def test_retry_failed_blocks_retries_and_completes(semantic_handler: SemanticHandler, monkeypatch) -> None:
     _mark_claim_failed(semantic_handler._store(), "block-1")
     calls: list[tuple[str, bool]] = []
 
@@ -905,9 +903,7 @@ def test_retry_failed_blocks_limit(semantic_handler: SemanticHandler, monkeypatc
     assert result["remaining_failed"] == 3
 
 
-def test_retry_failed_blocks_reports_failure(
-    semantic_handler: SemanticHandler, monkeypatch
-) -> None:
+def test_retry_failed_blocks_reports_failure(semantic_handler: SemanticHandler, monkeypatch) -> None:
     _mark_claim_failed(semantic_handler._store(), "block-1", "解析失败")
 
     def fake_extract(store, doc_id, claims_only=False):
@@ -924,9 +920,7 @@ def test_retry_failed_blocks_reports_failure(
     assert result["remaining_failed"] == 1
 
 
-def test_retry_failed_blocks_full_mode_uses_block_extractions(
-    semantic_handler: SemanticHandler, monkeypatch
-) -> None:
+def test_retry_failed_blocks_full_mode_uses_block_extractions(semantic_handler: SemanticHandler, monkeypatch) -> None:
     with semantic_handler._store().connect() as conn:
         conn.execute(
             """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)

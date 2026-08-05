@@ -95,6 +95,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_schema_options",
     "get_schema_rules",
     "get_schema_template",
+    "get_survey_overview",
     "get_survey_status",
     "get_theme_preference",
     "get_topic_files",

@@ -111,11 +111,8 @@ class SemanticHandler(BaseHandler):
         return {
             "prompt_version": manifest_version,
             "prompt_version_latest": PROMPT_VERSION,
-            "prompt_version_stale": (
-                manifest_version is not None and manifest_version != PROMPT_VERSION
-            ),
+            "prompt_version_stale": (manifest_version is not None and manifest_version != PROMPT_VERSION),
         }
-
 
     def _overview(self, store: SemanticStore):
         source_documents = len(self._all_note_paths())
@@ -319,7 +316,12 @@ class SemanticHandler(BaseHandler):
             try:
                 return extract_document_semantics(store, doc_id, claims_only=claims_only)
             except Exception as exc:  # 抽取器内部异常也归为失败，不让单文档拖垮整批
-                return {"success": False, "extracted": 0, "claims": 0, "failures": [{"block_id": None, "error": str(exc)}]}
+                return {
+                    "success": False,
+                    "extracted": 0,
+                    "claims": 0,
+                    "failures": [{"block_id": None, "error": str(exc)}],
+                }
 
         results: dict[str, dict] = {}
         with ThreadPoolExecutor(max_workers=min(4, len(doc_ids)), thread_name_prefix="semantic-retry") as pool:
@@ -348,7 +350,6 @@ class SemanticHandler(BaseHandler):
             "remaining_failed": remaining,
             "failures": failures[:20],
         }
-
 
     def _start_semantic_compile(self, _params, *, claims_only: bool):
         workspace, err = self._require_workspace()
@@ -535,9 +536,7 @@ class SemanticHandler(BaseHandler):
                 # confidence<0.6 的对象（偶发提及，稀释列表但无代表性）。
                 degrade_mentions = int(self._LOW_FREQ_DEGRADE["min_mentions"])
                 degrade_confidence = float(self._LOW_FREQ_DEGRADE["min_confidence"])
-                apply_degrade = (
-                    min_confidence is not None and min_confidence > 0 and not query
-                )
+                apply_degrade = min_confidence is not None and min_confidence > 0 and not query
                 if apply_degrade:
                     degraded_hidden = conn.execute(
                         f"""SELECT count(*) FROM {table} o

@@ -119,7 +119,7 @@ def move_file_to_topic_folder(file_path: str, topic: str) -> dict:
         return {"success": False, "message": f"文件操作失败: {e}"}
 
 
-def collect_topic_notes(topic: str) -> list[dict]:
+def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
     workspace = config.workspace_path
     if not workspace:
         return []
@@ -137,7 +137,13 @@ def collect_topic_notes(topic: str) -> list[dict]:
         if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
             continue
         try:
-            text = md_file.read_text(encoding="utf-8")
+            # 轻量模式（include_content=False）只读文件头部解析 frontmatter，
+            # 用于综述过期检测等只关心归属与 mtime 的场景，避免全量读正文。
+            if include_content:
+                text = md_file.read_text(encoding="utf-8")
+            else:
+                with md_file.open("r", encoding="utf-8") as fh:
+                    text = fh.read(8192)
             fm, body = parse_frontmatter(text)
 
             topic_match = False
@@ -171,7 +177,7 @@ def collect_topic_notes(topic: str) -> list[dict]:
 
             if topic_match:
                 content = body.strip()
-                if content:
+                if include_content or content:
                     notes.append(
                         {
                             "file_name": md_file.name,

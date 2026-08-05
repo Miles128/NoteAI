@@ -438,8 +438,7 @@ def test_merge_duplicate_entities_collapses_english_plural_variants(tmp_path: Pa
     assert stats["merged_concepts"] == 2
     with store.connect() as conn:
         active = [
-            row["canonical_name"]
-            for row in conn.execute("SELECT canonical_name FROM concepts WHERE status = 'active'")
+            row["canonical_name"] for row in conn.execute("SELECT canonical_name FROM concepts WHERE status = 'active'")
         ]
         assert sorted(active) == ["Skill", "Token"]
 

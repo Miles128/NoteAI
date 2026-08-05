@@ -669,6 +669,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)
         router.register("get_survey_status", self._get_survey_status)
+        router.register("get_survey_overview", self._get_survey_overview)
         router.register("toggle_survey", self._toggle_survey)
         router.register("fix_survey_topics", self._fix_survey_topics)
 
@@ -685,6 +686,11 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def _get_survey_status(self, _params):
         surveys = get_survey_status()
         return {"success": True, "surveys": surveys}
+
+    def _get_survey_overview(self, _params):
+        from sidecar.wiki_utils import get_survey_overview
+
+        return {"success": True, "overview": get_survey_overview()}
 
     def _toggle_survey(self, params):
         topic_name = params.get("topic", "").strip()

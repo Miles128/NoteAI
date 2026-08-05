@@ -98,6 +98,7 @@ _TITLE_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
+
 def _is_noise_object_name(name: str) -> bool:
     """Return True for names that are almost certainly not a real entity/concept.
 

@@ -139,7 +139,9 @@ class TestDetectConflicts:
 
     def test_same_scope_bridges_different_topics(self, store: SemanticStore) -> None:
         _add_claim(store, "claim-a", "混合检索优于纯向量检索", topic="RAG > 检索", scope="中文语料")
-        _add_claim(store, "claim-b", "纯向量检索优于混合检索", topic="LLM > 上下文", block_id="block-2", scope="中文语料")
+        _add_claim(
+            store, "claim-b", "纯向量检索优于混合检索", topic="LLM > 上下文", block_id="block-2", scope="中文语料"
+        )
         assert len(detect_claim_conflicts(store)) == 1
 
     def test_hypotheses_do_not_participate(self, store: SemanticStore) -> None:
@@ -192,9 +194,9 @@ class TestPersist:
         result = scan_and_persist(store)
         assert result["candidates"] == 0
         with store.connect() as conn:
-            remaining = conn.execute(
-                "SELECT count(*) FROM review_queue WHERE item_kind = 'claim_conflict'"
-            ).fetchone()[0]
+            remaining = conn.execute("SELECT count(*) FROM review_queue WHERE item_kind = 'claim_conflict'").fetchone()[
+                0
+            ]
         assert remaining == 0
 
     def test_scan_and_persist_end_to_end(self, store: SemanticStore) -> None:
@@ -206,9 +208,7 @@ class TestPersist:
         assert result["candidates"] == 1
         with store.connect() as conn:
             payload = json.loads(
-                conn.execute(
-                    "SELECT payload_json FROM review_queue WHERE item_kind = 'claim_conflict'"
-                ).fetchone()[0]
+                conn.execute("SELECT payload_json FROM review_queue WHERE item_kind = 'claim_conflict'").fetchone()[0]
             )
         assert payload["claim_a"] == "混合检索优于纯向量检索"
         assert payload["claim_b"] == "纯向量检索优于混合检索"

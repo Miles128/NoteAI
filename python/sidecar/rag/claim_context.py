@@ -30,11 +30,67 @@ _MAX_STATEMENT_CHARS = 200
 _MAX_SUMMARY_CHARS = 120
 _STOPWORDS = frozenset(
     {
-        "的", "了", "吗", "呢", "啊", "吧", "是", "在", "与", "和", "或", "也", "都", "更",
-        "最", "比", "对", "用", "中", "下", "上", "里", "如何", "怎么", "怎样", "什么",
-        "为什么", "为何", "是否", "哪些", "哪个", "谁", "何时", "哪里", "请", "帮我",
-        "我", "你", "他", "她", "它", "这", "那", "有", "没有", "不", "很", "比较", "一下",
-        "the", "a", "an", "of", "to", "in", "on", "for", "and", "or", "is", "are",
+        "的",
+        "了",
+        "吗",
+        "呢",
+        "啊",
+        "吧",
+        "是",
+        "在",
+        "与",
+        "和",
+        "或",
+        "也",
+        "都",
+        "更",
+        "最",
+        "比",
+        "对",
+        "用",
+        "中",
+        "下",
+        "上",
+        "里",
+        "如何",
+        "怎么",
+        "怎样",
+        "什么",
+        "为什么",
+        "为何",
+        "是否",
+        "哪些",
+        "哪个",
+        "谁",
+        "何时",
+        "哪里",
+        "请",
+        "帮我",
+        "我",
+        "你",
+        "他",
+        "她",
+        "它",
+        "这",
+        "那",
+        "有",
+        "没有",
+        "不",
+        "很",
+        "比较",
+        "一下",
+        "the",
+        "a",
+        "an",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "and",
+        "or",
+        "is",
+        "are",
     }
 )
 
@@ -98,9 +154,7 @@ def _conflict_map(store: SemanticStore) -> dict[str, list[str]]:
     """claim_id -> opposite statements from active conflict candidates."""
     opposite: dict[str, list[str]] = {}
     with store.connect() as conn:
-        rows = conn.execute(
-            "SELECT payload_json FROM review_queue WHERE item_kind = 'claim_conflict'"
-        ).fetchall()
+        rows = conn.execute("SELECT payload_json FROM review_queue WHERE item_kind = 'claim_conflict'").fetchall()
     for row in rows:
         try:
             payload = json.loads(row["payload_json"] or "{}")

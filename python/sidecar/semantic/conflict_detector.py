@@ -30,12 +30,11 @@ from sidecar.semantic.ids import normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
 # 方向以「前项」为准：前项 优于/提升/有效 后项 => +1
-_COMPARE_VERBS = (
-    "优于|胜过|强于|高于|快于|好于|大于|多于|胜于"
-    "|劣于|不如|弱于|低于|慢于|差于|小于|少于|落后于"
-)
+_COMPARE_VERBS = "优于|胜过|强于|高于|快于|好于|大于|多于|胜于|劣于|不如|弱于|低于|慢于|差于|小于|少于|落后于"
 _CHANGE_VERBS = "提升|提高|改善|增强|增长|上升|增加|促进|有助于|加快|加速|降低|下降|减少|削弱|恶化|抑制|减慢|拖累"
-_ATTRIBUTE_VERBS = "有效|可靠|稳健|适合|有益|合理|可行|重要|关键|优秀|出色|无效|不可靠|不适合|有害|不合理|不可行|不足|较差"
+_ATTRIBUTE_VERBS = (
+    "有效|可靠|稳健|适合|有益|合理|可行|重要|关键|优秀|出色|无效|不可靠|不适合|有害|不合理|不可行|不足|较差"
+)
 
 _VERB_RE = re.compile(
     rf"(?P<subject>[^，。；、\s,;]{{2,24}}?)(?P<rel>{_COMPARE_VERBS}|{_CHANGE_VERBS}|{_ATTRIBUTE_VERBS})(?P<target>[^，。；、\s,;]{{0,24}})"
@@ -206,9 +205,7 @@ def persist_claim_conflicts(store: SemanticStore, candidates: list[dict]) -> dic
         active_ids = {candidate["claim_a_id"] for candidate in candidates} | {
             candidate["claim_b_id"] for candidate in candidates
         }
-        stale = conn.execute(
-            "SELECT id, payload_json FROM review_queue WHERE item_kind = ?", (_ITEM_KIND,)
-        ).fetchall()
+        stale = conn.execute("SELECT id, payload_json FROM review_queue WHERE item_kind = ?", (_ITEM_KIND,)).fetchall()
         for row in stale:
             payload = json.loads(row["payload_json"] or "{}")
             if payload.get("claim_a_id") not in active_ids or payload.get("claim_b_id") not in active_ids:

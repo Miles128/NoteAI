@@ -33,10 +33,22 @@ def semantic_handler(tmp_path: Path):
                VALUES('block-1', 'doc-1', 'paragraph', '[\"检索\"]', 0,
                       '混合检索结合向量与关键词。', 'block-hash', 8, 8)"""
         )
-        conn.execute("INSERT INTO concepts VALUES('concept-1', '混合检索', '组合检索方式', 0.95, 'active')")
-        conn.execute("INSERT INTO entities VALUES('entity-1', 'BM25', 'algorithm', '关键词排序算法', 0.9, 'active')")
-        conn.execute("INSERT INTO entities VALUES('entity-2', '无来源实体', 'product', '', 0.4, 'active')")
-        conn.execute("INSERT INTO entities VALUES('entity-3', 'BM25', 'algorithm', '', 0.85, 'active')")
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-1', '混合检索', '组合检索方式', 0.95, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-1', 'BM25', 'algorithm', '关键词排序算法', 0.9, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-2', '无来源实体', 'product', '', 0.4, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-3', 'BM25', 'algorithm', '', 0.85, 'active')"
+        )
         conn.execute(
             """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
                VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG',
@@ -48,6 +60,11 @@ def semantic_handler(tmp_path: Path):
         )
         conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', 'block-1')")
         conn.execute("INSERT INTO semantic_mentions VALUES('entity-1', 'entity', 'block-1')")
+        # Entity → Concept co-occurrence relation (target endpoint is a concept, not an entity)
+        conn.execute(
+            """INSERT INTO relations(id, source_id, relation_type, target_id, confidence, evidence_id, block_id)
+               VALUES('rel-1', 'entity-1', 'RELATED_TO', 'concept-1', 0.9, NULL, 'block-1') """
+        )
         conn.execute(
             """INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at)
                VALUES('conflict-1', 'claim_conflict', '{"claim_a":"A","claim_b":"B"}',
@@ -112,10 +129,14 @@ def test_entity_quality_is_snapshot_only_and_reviewable(semantic_handler: Semant
     quality = semantic_handler._get_workbench({"tab": "quality", "status": "pending"})
 
     assert quality["success"] is True
-    assert quality["counts"]["isolated"] == 1
+    # entity-1 通过实体→概念共现关系（rel-1）已建立受控关系，不再孤立
+    assert quality["counts"]["isolated"] == 0
     assert quality["counts"]["missing_source"] == 2
     assert quality["counts"]["low_confidence"] == 1
     assert quality["counts"]["duplicate_candidate"] == 2
+    # An entity→concept relation is NOT dangling: concept endpoints are legitimate.
+    assert quality["counts"]["dangling_relation"] == 0
+    assert all(item["rule"] != "dangling_relation" for item in quality["items"])
     duplicate = next(item for item in quality["items"] if item["rule"] == "duplicate_candidate")
     assert duplicate["entity_name"] == "BM25"
     reviewed = semantic_handler._review_entity_quality({"id": duplicate["id"], "status": "reviewed"})
@@ -143,7 +164,9 @@ def test_entity_merge_preview_is_read_only(semantic_handler: SemanticHandler) ->
 def test_entity_merge_requires_confirmation_and_preserves_mentions(semantic_handler: SemanticHandler) -> None:
     denied = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "entity-3"})
     merged = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "entity-3", "confirmed": True})
-    entities = semantic_handler._get_workbench({"tab": "entities"})
+    # Use deep intensity so the assertion focuses on the merge result, not the
+    # default confidence filter (entity-2 has 0.4 and is hidden in standard).
+    entities = semantic_handler._get_workbench({"tab": "entities", "intensity": "deep"})
     detail = semantic_handler._get_detail({"kind": "entity", "id": "entity-3"})
 
     assert denied["success"] is False
@@ -234,10 +257,16 @@ def test_evidence_exclusion_and_entity_alias_are_audited(
 def test_topic_wiki_page_can_be_previewed_and_published(semantic_handler: SemanticHandler) -> None:
     preview = semantic_handler._get_topic_wiki_page({"topic": "AI > RAG"})
     published = semantic_handler._publish_topic_wiki_page({"topic": "AI > RAG"})
+    workspace = Path(semantic_handler.config.workspace_path)
 
     assert preview["success"] is True
-    assert "# AI > RAG" in preview["content"]
+    assert "# RAG" in preview["content"]
+    assert "## 已发布结论" in preview["content"]
     assert published["success"] is True
+    merged = workspace / "wiki" / "semantic" / "AI_语义.md"
+    assert merged.exists()
+    assert "## RAG" in merged.read_text(encoding="utf-8")
+    assert not (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
 
 
 def test_block_extraction_materializes_traceable_entity_concept_relation(
@@ -274,12 +303,94 @@ def test_block_extraction_materializes_traceable_entity_concept_relation(
     assert "混合检索" in page["content"]
 
 
+def test_extraction_dedups_variant_spellings_into_existing_object(
+    semantic_handler: SemanticHandler,
+) -> None:
+    """抽取时变体写法（括号注释/空白/大小写差异）必须合并到已有对象。
+
+    第二次抽取出现的变体名不能新建行：ID 复用已有对象，mentions 挂到
+    同一 ID，描述/置信度走 upsert 合并而 canonical_name 保持原名。
+    """
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        for i in (1, 2):
+            conn.execute(
+                """INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal,
+                                      content, content_hash, start_line, end_line)
+                   VALUES(?, 'doc-1', 'paragraph', '["检索"]', ?,
+                          'block content', ?, ?, ?)""",
+                (f"block-v-{i}", i, f"hash-v-{i}", 30 + i, 30 + i),
+            )
+
+    store.save_block_extraction(
+        block_id="block-v-1",
+        block_hash="hash-v-1",
+        prompt_version=1,
+        extracted_at="2026-07-19T10:00:00Z",
+        concepts=[{"id": "concept-rag-1", "canonical_name": "RAG", "description": "基础描述", "confidence": 0.9}],
+        entities=[{"id": "entity-rag-1", "canonical_name": "RAG", "entity_type": "protocol", "description": "", "confidence": 0.8}],
+        claims=[],
+    )
+    # 第二个块抽到同一对象的不同变体：括号注释、空格、大小写均不同
+    store.save_block_extraction(
+        block_id="block-v-2",
+        block_hash="hash-v-2",
+        prompt_version=1,
+        extracted_at="2026-07-19T10:01:00Z",
+        concepts=[{"id": "concept-rag-2", "canonical_name": "RAG（Retrieval-Augmented Generation）", "description": "更长的描述", "confidence": 0.95}],
+        entities=[{"id": "entity-rag-2", "canonical_name": "R A G", "entity_type": "algorithm", "description": "混合检索", "confidence": 0.9}],
+        claims=[],
+    )
+
+    with store.connect() as conn:
+        crows = conn.execute(
+            "SELECT id, canonical_name, confidence FROM concepts WHERE id LIKE 'concept-rag-%'"
+        ).fetchall()
+        assert len(crows) == 1
+        assert crows[0]["id"] == "concept-rag-1"
+        assert crows[0]["canonical_name"] == "RAG"  # 原名保留，不被变体覆盖
+        assert crows[0]["confidence"] == 0.95  # 置信度取 max
+        cmentions = conn.execute(
+            "SELECT object_id, block_id FROM semantic_mentions WHERE object_kind='concept' AND object_id LIKE 'concept-rag-%' ORDER BY block_id"
+        ).fetchall()
+        assert [(m["object_id"], m["block_id"]) for m in cmentions] == [
+            ("concept-rag-1", "block-v-1"),
+            ("concept-rag-1", "block-v-2"),
+        ]
+        erows = conn.execute(
+            "SELECT id, canonical_name, entity_type, confidence FROM entities WHERE id LIKE 'entity-rag-%'"
+        ).fetchall()
+        assert len(erows) == 1
+        assert erows[0]["id"] == "entity-rag-1"
+        assert erows[0]["entity_type"] == "protocol"  # entity_type 不被变体覆盖
+        assert erows[0]["confidence"] == 0.9
+        ementions = conn.execute(
+            "SELECT object_id, block_id FROM semantic_mentions WHERE object_kind='entity' AND object_id LIKE 'entity-rag-%' ORDER BY block_id"
+        ).fetchall()
+        assert [(m["object_id"], m["block_id"]) for m in ementions] == [
+            ("entity-rag-1", "block-v-1"),
+            ("entity-rag-1", "block-v-2"),
+        ]
+
+
 def test_automatic_materializer_refreshes_only_document_views(
     semantic_handler: SemanticHandler,
 ) -> None:
     from sidecar.semantic.materializer import materialize_documents
 
     store = SemanticStore(semantic_handler.config.workspace_path)
+    # 聚合页只收录至少出现 3 次的对象：给 BM25/混合检索补足三个来源块
+    with store.connect() as conn:
+        for i in (2, 3):
+            conn.execute(
+                """INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal,
+                                      content, content_hash, start_line, end_line)
+                   VALUES(?, 'doc-1', 'paragraph', '["检索"]', ?,
+                          'BM25 是混合检索的核心。', ?, ?, ?)""",
+                (f"block-{i}", i, f"block-hash-{i}", 8 + i, 8 + i),
+            )
+            conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', ?)", (f"block-{i}",))
+            conn.execute("INSERT INTO semantic_mentions VALUES('entity-1', 'entity', ?)", (f"block-{i}",))
     result = materialize_documents(store, {"doc-1"})
     workspace = Path(semantic_handler.config.workspace_path)
 
@@ -345,14 +456,25 @@ def test_automatic_materializer_refreshes_old_and_new_topics(
     store = SemanticStore(semantic_handler.config.workspace_path)
     with store.connect() as conn:
         conn.execute("UPDATE documents SET topic = 'AI > 新主题' WHERE id = 'doc-1'")
+        conn.execute(
+            """INSERT INTO documents(id, path, content_hash, title, topic, compiled_at)
+               VALUES('doc-2', 'Notes/AI/RAG2.md', 'hash2', 'RAG2', 'AI > RAG',
+                      '2026-07-17T10:00:00Z') """
+        )
 
     result = materialize_documents(store, {"doc-1"}, affected_topics={"AI > RAG"}, include_objects=False)
     workspace = Path(semantic_handler.config.workspace_path)
 
     assert result["topics"] == 2
+    assert result["wiki_pages"] == 1
     assert not result["failures"]
-    assert (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
-    assert (workspace / "wiki" / "semantic" / "AI" / "新主题_语义.md").exists()
+    merged = workspace / "wiki" / "semantic" / "AI_语义.md"
+    assert merged.exists()
+    content = merged.read_text(encoding="utf-8")
+    assert "## RAG" in content
+    assert "## 新主题" in content
+    assert not (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
+    assert not (workspace / "wiki" / "semantic" / "AI" / "新主题_语义.md").exists()
 
 
 def test_automatic_materializer_retries_transient_database_lock(semantic_handler: SemanticHandler, monkeypatch) -> None:
@@ -434,8 +556,23 @@ def test_full_compile_purges_deleted_documents_and_refreshes_object_pages(
                'deleted-block', 'deleted-doc', 'paragraph', '[]', 0,
                'stale source', 'stale-hash', 1, 1)"""
         )
-        conn.execute("INSERT INTO entities VALUES('stale-entity', 'Stale', 'term', '', 0.7, 'active')")
+        conn.execute(
+            """INSERT INTO blocks VALUES(
+               'deleted-block-2', 'deleted-doc', 'paragraph', '[]', 1,
+               'stale source 2', 'stale-hash-2', 2, 2)"""
+        )
+        conn.execute(
+            """INSERT INTO blocks VALUES(
+               'deleted-block-3', 'deleted-doc', 'paragraph', '[]', 2,
+               'stale source 3', 'stale-hash-3', 3, 3)"""
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('stale-entity', 'Stale', 'term', '', 0.7, 'active')"
+        )
         conn.execute("INSERT INTO semantic_mentions VALUES('stale-entity', 'entity', 'deleted-block')")
+        conn.execute("INSERT INTO semantic_mentions VALUES('stale-entity', 'entity', 'deleted-block-2')")
+        conn.execute("INSERT INTO semantic_mentions VALUES('stale-entity', 'entity', 'deleted-block-3')")
     materialize_object_collection(store, "entity")
     assert "Stale" in (workspace / "wiki" / "semantic" / "实体.md").read_text(encoding="utf-8")
 
@@ -447,6 +584,7 @@ def test_full_compile_purges_deleted_documents_and_refreshes_object_pages(
             "blocks": 0,
             "extracted_blocks": 0,
             "claims": 0,
+            "rejected_claims": 0,
             "failed_blocks": 0,
             "pending_documents": 0,
             "failures": [],
@@ -543,3 +681,37 @@ def test_change_log_read_methods_self_heal_legacy_store(tmp_path: Path) -> None:
     items, total = store.recent_changes(days=7)
     assert total == 1
     assert items[0]["label"] == "测试命题"
+
+
+def test_workbench_intensity_filters_confidence(semantic_handler: SemanticHandler) -> None:
+    """Intensity light/standard/deep must filter claims and objects by confidence."""
+    store = semantic_handler._store()
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-4', '中置信实体', 'concept_type', '描述', 0.62, 'active')"
+        )
+        conn.execute(
+            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
+               VALUES('claim-2', '低置信命题。', 'RAG', 'hypothesis', 0.31, 'active')"""
+        )
+        conn.execute(
+            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
+               VALUES('evidence-2', 'claim-2', 'block-1', 'quote-hash-2')"""
+        )
+
+    entities_deep = semantic_handler._get_workbench({"tab": "entities", "intensity": "deep"})
+    entities_standard = semantic_handler._get_workbench({"tab": "entities", "intensity": "standard"})
+    entities_light = semantic_handler._get_workbench({"tab": "entities", "intensity": "light"})
+    claims_deep = semantic_handler._get_workbench({"tab": "claims", "intensity": "deep"})
+    claims_light = semantic_handler._get_workbench({"tab": "claims", "intensity": "light"})
+
+    assert entities_deep["total"] == 4
+    assert entities_standard["total"] == 3  # 0.4 被过滤
+    assert entities_light["total"] == 2  # 0.4 与 0.62 被过滤
+    assert claims_deep["total"] == 2
+    assert claims_light["total"] == 1  # 0.31 被过滤
+
+    # 未知强度回退到标准强度
+    fallback = semantic_handler._get_workbench({"tab": "entities", "intensity": "ultra"})
+    assert fallback["total"] == entities_standard["total"]

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 3
+PROMPT_VERSION = 4
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
 _CLAIM_TYPES = {"conclusion", "hypothesis"}
@@ -50,6 +50,96 @@ _HYPOTHESIS_MARKERS = re.compile(
     re.IGNORECASE,
 )
 
+# 噪声对象名确定性过滤：拦截把文件名、章节标题、纯符号/数字等抽成实体/概念。
+_FILE_SUFFIX_RE = re.compile(
+    r"\.(?:md|markdown|txt|docx?|pdf|pptx?|xlsx?|yaml|yml|json|csv|py|js|ts|jsx|tsx|css|html?|sql|sh|toml|ini|cfg)$",
+    re.IGNORECASE,
+)
+_VERSION_RE = re.compile(r"^\d+(?:\.\d+){1,3}(?:[-+][a-z0-9.-]+)?$", re.IGNORECASE)
+# 文件/章节序号前缀（00_、01-、1.2_）：NoteAI 文件名规范 ``00_xxx.md`` 的头部。
+_HEADING_NUMBER_RE = re.compile(r"^\d+(?:[._-]\d+)*[._-]")
+# 多对象合并名：LLM 常把多个实体拼成一个（斜杠/全角斜杠/顿号分隔），如 ``GPT-4o/5``、
+# ``华佗（华为）/ 润达医疗大模型``、``创客贴/来画/水母智能/Nui``。
+_SEPARATOR_MERGE_RE = re.compile(r"[/、／]")
+# 域名/网址样式（learnprompting.org、openai.com）：顶级域至少两个字母，
+# 排除 ``Qwen2.5``、``GLM 5.2`` 这类带版本号的模型名。
+_DOMAIN_RE = re.compile(r"^[\w-]+\.[a-zA-Z]{2,}$")
+# 隐藏文件/目录样式（.env、.gitignore、.claude）：第二字符小写或数字；
+# ``.NET``、``.NET Core`` 这类大写产品名不匹配，予以放行。
+_DOTFILE_RE = re.compile(r"^\.[a-z0-9][\w.-]*$")
+# MCP/工具引用语法（@file、@folder、@tool、@git）：LLM 把代码注释/提示词里的
+# 引用记号当成了对象名。
+_AT_REFERENCE_RE = re.compile(r"^@[\w-]+")
+# 全大写+下划线环境变量/配置键（AGENT_TRIGGERS、API_KEY）：不是实体。
+# 必须包含下划线，避免误杀 RAG、BM25 这类全大写缩写。
+_UPPER_UNDERSCORE_RE = re.compile(r"^[A-Z][A-Z0-9_]*_[A-Z0-9_]+$")
+# 数字+单位开头（200K token、8GB显存）：量纲描述不是实体。
+# 要求数字后紧跟 K/M/B 单位字母，避免误杀 36 氪、11 Labs 这类专名。
+_NUMERIC_PREFIX_RE = re.compile(r"^\d+[KMBkmb]+\s|^\d+\s*[×xX*]\s*\d")
+# 长句含中文标点（3步申请，24小时放款）：广告/流程描述被当成概念。
+_LONG_SENTENCE_RE = re.compile(r"[，。；、！？]")
+
+
+# 文章标题/资料名特征：LLM 经常把文档标题、专栏名抽成对象。
+_TITLE_MARKER_RE = re.compile(
+    r"(?:报告|指南|路线图|全景|速成|学习笔记|白皮书|专栏|合集|面试题|实践指南|入门教程|官方文档|源码解析|全梳理|知识体系全梳理)",
+    re.IGNORECASE,
+)
+
+# Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
+# variant-spelling dedup rules are spelled out so the model never emits them
+# in the first place. validate_extraction below remains the hard fallback.
+_OBJECT_NAME_RULES = """实体与概念名称必须是简洁规范名：
+- 先去除括号注释再输出：「RAG（检索增强生成）」「可灵(Kling)」应输出为「RAG」「可灵」；括号内容只是解释，不是名称的一部分。
+- 同一对象只输出一次：不要同时输出「RAG」与「RAG（检索增强生成）」这类变体；名称内不夹空格（「R A G」应写为「RAG」），统一用最简洁写法。
+- 不得输出：标题类短语（含「报告、指南、路线图、全景、速成、学习笔记、白皮书、专栏、合集、面试题、实践指南、入门教程、官方文档、源码解析、全梳理」等标题词）、@开头的引用（如 @file、@tool）、全大写下划线标记（如 AGENT_TRIGGERS）、带单位的数字短语（如 200K token、3步申请）、域名、点开头文件名（如 .env）、含标点的完整句子、纯符号或纯数字。"""
+
+
+def _is_noise_object_name(name: str) -> bool:
+    """Return True for names that are almost certainly not a real entity/concept.
+
+    Deterministic gate on top of the LLM schema: file names, heading-like names,
+    pure symbols/digits, flag-style tokens (``--ar``), merged multi-object names
+    (``A/B``), and domain names must never become semantic objects.  Keeps valid
+    short names (e.g. ``RAG``, ``模型``), versioned model names (``GLM 5.2``)
+    and capitalised product names (``.NET``).
+    """
+    if not name or len(name) < 2:
+        return True
+    stripped = name.strip()
+    if stripped != name:
+        return True  # 首尾空白说明抽取拼接了原文以外的内容
+    if name.endswith((".", "-", "_")):
+        return True
+    if name.startswith("."):
+        if _DOTFILE_RE.match(name):
+            return True  # .env、.gitignore、.claude 这类隐藏文件/目录
+    elif name.startswith(("-", "_", "--")):
+        return True  # --ar、-s、_private 这类标志/临时命名
+    if _AT_REFERENCE_RE.match(name):
+        return True  # @file、@tool 这类 MCP/工具引用语法
+    if _UPPER_UNDERSCORE_RE.fullmatch(name):
+        return True  # AGENT_TRIGGERS 这类环境变量/配置键
+    if _NUMERIC_PREFIX_RE.match(name):
+        return True  # 200K token、8GB显存、3×3网格 这类量纲描述
+    if len(name) > 20 and _LONG_SENTENCE_RE.search(name):
+        return True  # 长句含中文标点：广告/流程描述被当成对象
+    if _TITLE_MARKER_RE.search(name):
+        return True  # 文章标题/资料名：xxx报告/指南/路线图/速成/CSDN
+    if _FILE_SUFFIX_RE.search(name):
+        return True
+    if _VERSION_RE.fullmatch(name):
+        return True
+    if _HEADING_NUMBER_RE.match(name):
+        return True  # ``06_四阶十二步法``、``01-基础`` 这类文件名/序号标题
+    if _SEPARATOR_MERGE_RE.search(name):
+        return True  # 斜杠/顿号分隔的多个对象被 LLM 合并成了一个名字
+    if _DOMAIN_RE.fullmatch(name):
+        return True  # ``learnprompting.org`` 域名不是实体
+    if not any(ch.isalpha() for ch in name):
+        return True  # 纯数字/符号/版本号（isalpha 覆盖中文）
+    return False
+
 
 class ExtractionValidationError(ValueError):
     pass
@@ -63,6 +153,26 @@ def _bounded_confidence(value) -> float:
     if not 0 <= number <= 1:
         raise ExtractionValidationError("confidence 必须在 0 到 1 之间")
     return number
+
+
+# 标点/空白（含全角）在证据引文中属于可容忍差异；文字序列必须保持逐字一致。
+_QUOTE_PUNCT_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
+
+
+def _quote_matches(quote: str, normalized_block: str) -> bool:
+    """证据引文必须逐字来自原文，但容忍首尾标点与空白差异。
+
+    LLM 复制证据时常多带/少带句号、引号或换行；只要去掉标点空白后的文字序列
+    仍是原文子序列（且足够长），就接受，避免因标点差异误杀全部命题。
+    """
+    if quote in normalized_block:
+        return True
+    core = quote.strip(" \t\u3000，。、；：？！,.!?;:\"'“”‘’（）()【】[]《》<>-–—…")
+    if core and core in normalized_block:
+        return True
+    compact_quote = _QUOTE_PUNCT_RE.sub("", quote)
+    compact_block = _QUOTE_PUNCT_RE.sub("", normalized_block)
+    return len(compact_quote) >= 8 and compact_quote in compact_block
 
 
 def parse_extraction_json(raw: str) -> dict:
@@ -108,10 +218,12 @@ def validate_extraction(
     block_id: str,
     block_content: str,
     block_type: str = "paragraph",
+    rejections: dict[str, int] | None = None,
 ) -> dict:
     """Validate and canonicalize one block extraction.
 
     Claims without an exact source quote are rejected rather than downgraded.
+    ``rejections`` collects per-rule drop counts for diagnostics (claims).
     """
     result: dict[str, list[dict]] = {"concepts": [], "entities": [], "claims": []}
     normalized_block = normalize_text(block_content)
@@ -122,6 +234,8 @@ def validate_extraction(
         name = normalize_text(str(item.get("name") or ""))
         if not name:
             raise ExtractionValidationError("concept 缺少 name")
+        if _is_noise_object_name(name):
+            continue
         result["concepts"].append(
             {
                 "id": stable_id("con", name.casefold()),
@@ -140,9 +254,12 @@ def validate_extraction(
             raise ExtractionValidationError("entity 缺少 name")
         if entity_type not in _ENTITY_TYPES:
             raise ExtractionValidationError(f"不支持的 entity type: {entity_type}")
+        if _is_noise_object_name(name):
+            continue
         result["entities"].append(
             {
-                "id": stable_id("ent", entity_type, name.casefold()),
+                # ID 只按名称生成，不包含 entity_type，确保同名实体合并为一个
+                "id": stable_id("ent", name.casefold()),
                 "canonical_name": name,
                 "entity_type": entity_type,
                 "description": normalize_text(str(item.get("description") or "")),
@@ -166,18 +283,30 @@ def validate_extraction(
         # Claim-level failures reject only that candidate. One bad candidate
         # must not discard valid Concepts, Entities, or Claims from the block.
         if not statement:
+            if rejections is not None:
+                rejections["claims_no_statement"] = rejections.get("claims_no_statement", 0) + 1
             continue
         if claim_type not in _CLAIM_TYPES:
+            if rejections is not None:
+                rejections["claims_no_type"] = rejections.get("claims_no_type", 0) + 1
             continue
         if not _claim_has_required_judgment(statement, claim_type):
+            if rejections is not None:
+                rejections["claims_no_judgment"] = rejections.get("claims_no_judgment", 0) + 1
             continue
         if not quote:
+            if rejections is not None:
+                rejections["claims_no_quote"] = rejections.get("claims_no_quote", 0) + 1
             continue
-        if quote not in normalized_block:
+        if not _quote_matches(quote, normalized_block):
+            if rejections is not None:
+                rejections["claims_quote_mismatch"] = rejections.get("claims_quote_mismatch", 0) + 1
             continue
         try:
             confidence = _bounded_confidence(item.get("confidence", 0.5))
         except ExtractionValidationError:
+            if rejections is not None:
+                rejections["claims_bad_confidence"] = rejections.get("claims_bad_confidence", 0) + 1
             continue
         claim_id = stable_id("clm", claim_type, statement.casefold(), scope.casefold())
         quote_hash = content_hash(quote)
@@ -224,7 +353,9 @@ def build_extraction_prompt(*, block_id: str, heading_path: str, content: str, b
 4. 例如“75+ 模型”“支持 75 种模型”“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
 5. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
 6. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
-7. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。"""
+7. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。
+8. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数（如 --port）、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
+9. {_OBJECT_NAME_RULES}"""
 
 
 def build_repair_prompt(original_prompt: str, invalid_output: str, error: str) -> str:
@@ -269,7 +400,9 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
 2. 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令/参数/API/配置说明、步骤、操作指引、示例、代码行为复述不得进入 claims；code 类型 Block 的 claims 必须为空。
 3. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
 4. 没有结论或假设的 Block 也必须返回，claims 为空；三个数组都无内容时均为空。
-5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。"""
+5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。
+6. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
+7. {_OBJECT_NAME_RULES}"""
 
 
 def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str) -> str:
@@ -313,7 +446,7 @@ def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
 code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。"""
 
 
-def validate_batch_extraction(data: dict, blocks: list[dict]) -> dict[str, dict]:
+def validate_batch_extraction(data: dict, blocks: list[dict], rejections: dict[str, int] | None = None) -> dict[str, dict]:
     raw_items = data.get("blocks")
     if not isinstance(raw_items, list):
         raise ExtractionValidationError("批量输出缺少 blocks 数组")
@@ -332,6 +465,7 @@ def validate_batch_extraction(data: dict, blocks: list[dict]) -> dict[str, dict]
             block_id=block_id,
             block_content=expected[block_id]["content"],
             block_type=expected[block_id]["type"],
+            rejections=rejections,
         )
     missing = set(expected) - set(actual)
     if missing:
@@ -387,6 +521,7 @@ def extract_document_semantics(
     skipped = 0
     failures: list[dict] = []
     pending_blocks: list[dict] = []
+    rejections: dict[str, int] = {}
     for stored_block in store.blocks_for_document(document_id):
         is_current = store.claim_extraction_is_current if claims_only else store.extraction_is_current
         if is_current(stored_block["id"], stored_block["content_hash"], PROMPT_VERSION):
@@ -451,6 +586,7 @@ def extract_document_semantics(
                     block_id=block["id"],
                     block_content=block["content"],
                     block_type=block["type"],
+                    rejections=rejections,
                 )
             except ExtractionValidationError as first_error:
                 repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
@@ -459,6 +595,7 @@ def extract_document_semantics(
                     block_id=block["id"],
                     block_content=block["content"],
                     block_type=block["type"],
+                    rejections=rejections,
                 )
             save_result(block, parsed, now)
         except Exception as exc:
@@ -476,10 +613,10 @@ def extract_document_semantics(
             try:
                 raw = llm_call(prompt)
                 try:
-                    parsed_group = validate_batch_extraction(parse_extraction_json(raw), group)
+                    parsed_group = validate_batch_extraction(parse_extraction_json(raw), group, rejections=rejections)
                 except ExtractionValidationError as first_error:
                     repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
-                    parsed_group = validate_batch_extraction(parse_extraction_json(repaired), group)
+                    parsed_group = validate_batch_extraction(parse_extraction_json(repaired), group, rejections=rejections)
                 now = datetime.now(timezone.utc).isoformat()
                 for pending_block in group:
                     save_result(pending_block, parsed_group[pending_block["id"]], now)
@@ -494,11 +631,26 @@ def extract_document_semantics(
 
     status = "semantic" if not failures else "partial"
     _retry_sqlite_lock(lambda: store.set_document_status(document_id, status))
+    rejected_total = sum(rejections.values())
+    if rejected_total:
+        from utils.logger import logger
+
+        logger.info(
+            f"[semantic-extract] 文档 {document_id}: 拒绝 {rejected_total} 条命题候选 "
+            f"(no_statement={rejections.get('claims_no_statement', 0)}, "
+            f"no_type={rejections.get('claims_no_type', 0)}, "
+            f"no_judgment={rejections.get('claims_no_judgment', 0)}, "
+            f"no_quote={rejections.get('claims_no_quote', 0)}, "
+            f"quote_mismatch={rejections.get('claims_quote_mismatch', 0)}, "
+            f"bad_confidence={rejections.get('claims_bad_confidence', 0)})"
+        )
     return {
         "success": not failures,
         "pending": False,
         "extracted": extracted,
         "claims": claim_count,
+        "rejected_claims": rejected_total,
+        "rejection_details": rejections,
         "skipped": skipped,
         "failed": len(failures),
         "failures": failures,

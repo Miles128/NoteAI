@@ -7,6 +7,7 @@ from pathlib import Path
 from sidecar.semantic.compiler import compile_note_semantics, compile_semantic_batch
 from sidecar.semantic.extractor import (
     ExtractionValidationError,
+    build_batch_extraction_prompt,
     build_extraction_prompt,
     extract_document_semantics,
     parse_extraction_json,
@@ -268,6 +269,38 @@ def test_claim_prompt_excludes_facts_and_command_documentation():
     assert "不是 Claim" in prompt
 
 
+def test_extraction_prompt_embeds_noise_gate_and_variant_dedup_rules():
+    """门禁与查重规则必须在 LLM 生成之前出现在 prompt 里。"""
+    prompt = build_extraction_prompt(
+        block_id="blk_test",
+        heading_path="检索",
+        content="RAG（检索增强生成）结合向量与关键词。",
+    )
+    # 变体查重：括号注释与变体写法不能输出
+    assert "「RAG（检索增强生成）」「可灵(Kling)」应输出为「RAG」「可灵」" in prompt
+    assert "同一对象只输出一次" in prompt
+    assert "名称内不夹空格" in prompt
+    # 噪声门禁：标题词、@引用、全大写下划线、量纲
+    assert "报告、指南、路线图、全景" in prompt
+    assert "@file、@tool" in prompt
+    assert "AGENT_TRIGGERS" in prompt
+    assert "200K token" in prompt
+
+    batch = build_batch_extraction_prompt(
+        [
+            {
+                "id": "b1",
+                "hash": "h1",
+                "type": "paragraph",
+                "heading": "检索",
+                "content": "GraphRAG 与 RAG 对比。",
+            }
+        ]
+    )
+    assert "同一对象只输出一次" in batch
+    assert "@file、@tool" in batch
+
+
 def test_extractor_persists_only_evidence_backed_claims(tmp_path: Path):
     note = _note(tmp_path, "## 定义\n\n混合检索结合向量检索与关键词检索。\n")
     compiled = compile_note_semantics(tmp_path, note)
@@ -310,8 +343,14 @@ def test_claim_only_compile_preserves_concepts_entities_and_full_extraction_stat
     store = SemanticStore(tmp_path)
     block = store.blocks_for_document(compiled["document_id"])[0]
     with store.connect() as conn:
-        conn.execute("INSERT INTO concepts VALUES('concept-keep', '保留概念', '不应变化', 0.8, 'active')")
-        conn.execute("INSERT INTO entities VALUES('entity-keep', '保留实体', 'product', '不应变化', 0.8, 'active')")
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-keep', '保留概念', '不应变化', 0.8, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-keep', '保留实体', 'product', '不应变化', 0.8, 'active')"
+        )
         conn.execute(
             "INSERT INTO semantic_mentions VALUES('concept-keep', 'concept', ?)",
             (block["id"],),

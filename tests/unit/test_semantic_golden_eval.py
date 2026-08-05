@@ -15,6 +15,7 @@ from pathlib import Path
 from sidecar.semantic.compiler import compile_note_semantics
 from sidecar.semantic.extractor import (
     _claim_has_required_judgment,
+    _is_noise_object_name,
     extract_document_semantics,
     validate_extraction,
 )
@@ -356,3 +357,150 @@ def test_removing_source_paragraph_invalidates_claim_and_logs_change(tmp_path: P
     invalidated = [item for item in items if item["change_kind"] == "invalidated" and item["object_kind"] == "claim"]
     assert invalidated, "删除证据段落后必须记录命题失效事件"
     assert invalidated[0]["detail"]["reason"] == "source_block_removed"
+
+
+NOISE_NAMES = [
+    # 文件名 / 路径
+    "SKILL.md",
+    "prepare.py",
+    "program.md",
+    "03_产品方法论/08_AI产品测试设计与测试用例设计.md",
+    # 隐藏文件 / 目录
+    ".env",
+    ".gitignore",
+    ".claude/CLAUDE.md",
+    ".worktrees/myrepo-auth",
+    # 命令参数 / 临时命名
+    "--ar",
+    "--style raw",
+    "-s",
+    "_private",
+    # 序号前缀（文件名 / 章节标题样式）
+    "06_四阶十二步法",
+    "08_AI产品测试设计",
+    "01-基础",
+    "1.2_进阶",
+    # 多对象合并名（斜杠 / 全角斜杠 / 顿号）
+    "GPT-4o/5",
+    "DeepSeek V3/R1",
+    "华佗（华为）/ 润达医疗大模型",
+    "创客贴/来画/水母智能/Nui",
+    "Build/Buy/Bake",
+    # 域名 / 纯版本号 / 纯符号
+    "learnprompting.org",
+    "2.5.1",
+    "12345",
+    "...",
+]
+
+VALID_NAMES = [
+    "RAG",
+    "模型",
+    "BM25",
+    "混合检索",
+    "GLM 5.2",
+    "Grok 4.5",
+    "DeepSeek V3.2",
+    "Qwen2.5-7B",
+    "36 氪",
+    "11 Labs",
+    "Claude Code",
+    ".NET",
+    ".NET Core",
+    "MCP Server",
+    "ChatBot",
+    "Anthropic",
+]
+
+
+def test_noise_object_name_gate_keeps_valid_objects() -> None:
+    """Deterministic noise gate must reject every noise pattern above."""
+    rejected = [name for name in NOISE_NAMES if not _is_noise_object_name(name)]
+    assert not rejected, f"以下噪声名漏过门禁: {rejected}"
+
+
+def test_noise_object_name_gate_keeps_real_objects() -> None:
+    """Versioned model names, orgs and capitalised products must survive."""
+    dropped = [name for name in VALID_NAMES if _is_noise_object_name(name)]
+    assert not dropped, f"以下真实对象被误杀: {dropped}"
+
+
+def test_noise_names_never_reach_storage(tmp_path: Path) -> None:
+    """Noise names must be filtered by validate_extraction, not persisted."""
+    note = tmp_path / "Notes" / "AI" / "噪声.md"
+    note.parent.mkdir(parents=True)
+    note.write_text("# 噪声\n\n## 工具\n\n使用 --ar 参数与 prepare.py 脚本。\n", encoding="utf-8")
+    compiled = compile_note_semantics(tmp_path, note)
+    assert compiled["success"] is True
+    store = SemanticStore(tmp_path)
+
+    def llm(_prompt: str) -> str:
+        return json.dumps(
+            {
+                "concepts": [{"name": "混合检索", "description": "组合检索", "confidence": 0.9}],
+                "entities": [
+                    {"name": "--ar", "type": "other", "description": "参数", "confidence": 0.9},
+                    {"name": "prepare.py", "type": "artifact", "description": "脚本", "confidence": 0.9},
+                    {"name": "BM25", "type": "other", "description": "算法", "confidence": 0.9},
+                ],
+                "claims": [],
+            }
+        )
+
+    extract_document_semantics(store, compiled["document_id"], llm_call=llm)
+    with store.connect() as conn:
+        names = [row["canonical_name"] for row in conn.execute("SELECT canonical_name FROM entities")]
+    assert "BM25" in names
+    assert "--ar" not in names
+    assert "prepare.py" not in names
+
+
+def test_deactivate_noise_objects_cleans_legacy_rows(tmp_path: Path) -> None:
+    """Legacy noise written before the gate must be deactivated with audit."""
+    store = SemanticStore(tmp_path)
+    store.initialize()
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO documents(id, path, content_hash, title, topic, compiled_at) "
+            "VALUES('doc-n', 'Notes/AI/x.md', 'h', 'x', 'AI', '2026-07-17T10:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal, "
+            "content, content_hash, start_line, end_line) "
+            "VALUES('block-n', 'doc-n', 'paragraph', '[]', 0, '内容', 'bh', 1, 1)"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('ent-n1', '--ar', 'other', '参数', 0.9, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('ent-n2', 'BM25', 'algorithm', '算法', 0.9, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('con-n1', 'prepare.py', '脚本', 0.9, 'active')"
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('ent-n1', 'entity', 'block-n')")
+        conn.execute("INSERT INTO semantic_mentions VALUES('ent-n2', 'entity', 'block-n')")
+        conn.execute("INSERT INTO semantic_mentions VALUES('con-n1', 'concept', 'block-n')")
+        conn.execute(
+            "INSERT INTO relations(id, source_id, relation_type, target_id, confidence, block_id) "
+            "VALUES('rel-n', 'ent-n1', 'RELATED_TO', 'con-n1', 0.8, 'block-n')"
+        )
+
+    stats = store.deactivate_noise_objects()
+    assert stats == {"entities": 1, "concepts": 1}
+    with store.connect() as conn:
+        assert conn.execute("SELECT status FROM entities WHERE id='ent-n1'").fetchone()[0] == "inactive"
+        assert conn.execute("SELECT status FROM entities WHERE id='ent-n2'").fetchone()[0] == "active"
+        assert conn.execute("SELECT status FROM concepts WHERE id='con-n1'").fetchone()[0] == "inactive"
+        assert conn.execute("SELECT count(*) FROM semantic_mentions WHERE object_id='ent-n1'").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM relations WHERE id='rel-n'").fetchone()[0] == 0
+        audit = conn.execute(
+            "SELECT count(*) FROM semantic_change_log WHERE change_kind='deactivated'"
+        ).fetchone()[0]
+    assert audit == 2
+
+    # Idempotent: a second pass must not touch anything.
+    assert store.deactivate_noise_objects() == {"entities": 0, "concepts": 0}

@@ -144,14 +144,53 @@ def compile_semantic_batch(
         "blocks": 0,
         "extracted_blocks": 0,
         "claims": 0,
+        "rejected_claims": 0,
         "failed_blocks": 0,
         "pending_documents": 0,
         "topics": set(),
         "affected_topics": set(),
+        "noise_cleanup": {"entities": 0, "concepts": 0},
+        "merge_duplicates": {"merged_groups": 0, "merged_entities": 0},
+        "purge_orphans": {"entities": 0, "concepts": 0},
+        "deactivate_orphans": {"entities": 0, "concepts": 0},
+        "delete_inactive": {"entities": 0, "concepts": 0},
         "failures": [],
     }
     total = len(file_paths)
     compiled_documents: list[dict] = []
+
+    # Deactivate legacy deterministic noise (file names, flag tokens, merged
+    # A/B names) written before the extraction gate existed. Idempotent and
+    # cheap; new noise is already rejected in extractor validation.
+    try:
+        stats["noise_cleanup"] = store.deactivate_noise_objects()
+    except Exception as exc:
+        stats["failures"].append({"file": "<noise-cleanup>", "error": str(exc)})
+
+    # Merge duplicate entities with the same name (legacy data from before the
+    # ID generation was fixed to use name-only). Idempotent.
+    try:
+        stats["merge_duplicates"] = store.merge_duplicate_entities()
+    except Exception as exc:
+        stats["failures"].append({"file": "<merge-duplicates>", "error": str(exc)})
+
+    # Purge orphan and mundane objects (isolated + low confidence + short name).
+    try:
+        stats["purge_orphans"] = store.purge_orphan_objects()
+    except Exception as exc:
+        stats["failures"].append({"file": "<purge-orphans>", "error": str(exc)})
+
+    # Deactivate objects with zero source mentions (no traceable evidence).
+    try:
+        stats["deactivate_orphans"] = store.deactivate_orphan_objects()
+    except Exception as exc:
+        stats["failures"].append({"file": "<deactivate-orphans>", "error": str(exc)})
+
+    # Permanently remove deactivated rows (audit lives in the change log).
+    try:
+        stats["delete_inactive"] = store.delete_inactive_objects()
+    except Exception as exc:
+        stats["failures"].append({"file": "<delete-inactive>", "error": str(exc)})
 
     # Phase A is deterministic and fast: snapshot every source document first.
     # This makes full-library coverage visible immediately even while LLM
@@ -204,6 +243,7 @@ def compile_semantic_batch(
                     semantic = future.result()
                     stats["extracted_blocks"] += int(semantic.get("extracted") or 0)
                     stats["claims"] += int(semantic.get("claims") or 0)
+                    stats["rejected_claims"] += int(semantic.get("rejected_claims") or 0)
                     stats["failed_blocks"] += int(semantic.get("failed") or 0)
                     if semantic.get("pending"):
                         stats["pending_documents"] += 1

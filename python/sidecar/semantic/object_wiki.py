@@ -14,6 +14,12 @@ from sidecar.semantic.store import SemanticStore
 
 _COLLECTION_NAMES = {"entity": "实体", "concept": "概念"}
 
+# 聚合页收录门槛：至少出现 3 次的对象才输出完整条目（1-2 次为偶发提及，
+# 代表性弱且会让聚合页膨胀到数 MB）。
+_MIN_MENTIONS = 3
+# 单条来源展示上限：超出部分折叠为「等 N 处」，避免长文笔记把页面撑爆。
+_MAX_SOURCES = 3
+
 
 def object_collection_target(store: SemanticStore, kind: str) -> Path:
     """Return the single Markdown target for one semantic object category."""
@@ -108,11 +114,14 @@ def _object_lines(snapshot: dict, kind: str, target: Path, *, heading_level: int
     if kind == "entity" and aliases:
         lines.extend([f"{child} 别名", "", *[f"- {alias}" for alias in aliases], ""])
     lines.extend([f"{child} 来源", ""])
-    for row in sources:
-        heading = " › ".join(json.loads(row["heading_path_json"] or "[]"))
+    shown = sources[:_MAX_SOURCES]
+    for row in shown:
+        heading = json.loads(row["heading_path_json"] or "[]")
         relative = os.path.relpath(target.parents[2] / row["path"], target.parent).replace(os.sep, "/")
         # ``target.parents[2]`` is the workspace for wiki/semantic/*.md.
-        lines.append(f"- [{row['path']}{(' · ' + heading) if heading else ''}]({relative})")
+        lines.append(f"- [{row['path']}{(' · ' + ' › '.join(heading)) if heading else ''}]({relative})")
+    if len(sources) > _MAX_SOURCES:
+        lines.append(f"- 等 {len(sources) - _MAX_SOURCES} 处来源（共 {len(sources)} 处）")
     if not sources:
         lines.append("暂无可用来源。")
     lines.extend(["", f"{child} 关联对象", ""])
@@ -167,10 +176,10 @@ def build_object_collection(store: SemanticStore, kind: str) -> dict:
         rows = conn.execute(
             f"""SELECT o.id FROM {table} o
                  WHERE o.status = 'active'
-                   AND EXISTS (
-                       SELECT 1 FROM semantic_mentions m
+                   AND (
+                       SELECT COUNT(*) FROM semantic_mentions m
                        WHERE m.object_id = o.id AND m.object_kind = ?
-                   )
+                   ) >= {_MIN_MENTIONS}
                  ORDER BY o.canonical_name COLLATE NOCASE, o.id""",
             (kind,),
         ).fetchall()
@@ -181,7 +190,7 @@ def build_object_collection(store: SemanticStore, kind: str) -> dict:
     body = [
         f"# {title}",
         "",
-        f"> 本页聚合当前全部有来源的{title}，共 {len(snapshots)} 条；由语义库自动生成。",
+        f"> 本页聚合当前有来源且至少出现 {_MIN_MENTIONS} 次的{title}，共 {len(snapshots)} 条；由语义库自动生成。",
         "",
     ]
     dependencies: set[str] = set()

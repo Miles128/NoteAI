@@ -505,6 +505,37 @@ class RagHandler(BaseHandler):
         citations: list[dict] = []
         seen_paths: set[str] = set()
 
+        # Claim-layer injection (P0): verified conclusions + conflict disclosure.
+        # Best-effort — a missing or broken semantic DB yields no claim items and
+        # the normal chunk-only path is unchanged.
+        claim_items: list[dict] = []
+        try:
+            from sidecar.rag.claim_context import retrieve_claim_context
+
+            claim_items = retrieve_claim_context(config.workspace_path, question, topics=topics, tags=tags)
+        except Exception as e:
+            logger.warning(f"[rag/claim_context] injection failed: {e}")
+        for r in claim_items:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
+            idx = len(context_parts) + 1
+            label = r.get("source_label") or "知识库结论"
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            fp = r.get("file_path", "")
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": fp,
+                    "file_name": r.get("file_name") or (Path(fp).stem if fp else ""),
+                    "source_label": label,
+                    "section_title": "",
+                    "topic": r.get("topic") or "",
+                    "source_type": "claim",
+                    "score": r.get("score", 0),
+                }
+            )
+
         for r in search_results:
             # Surveys and graph neighbors are helpful retrieval expansion, but
             # are not direct evidence for a conversational answer.

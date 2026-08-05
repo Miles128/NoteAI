@@ -784,11 +784,7 @@ def run_ingest(
                 removed_topics = set(store.purge_missing_documents())
             else:
                 # 统一走 note_scanner：排除点文件/点目录/综述，与工作台统计一致
-                semantic_targets = [
-                    md
-                    for md in iter_note_files(workspace)
-                    if "wiki" not in md.parts
-                ]
+                semantic_targets = [md for md in iter_note_files(workspace) if "wiki" not in md.parts]
                 removed_topics = set(store.purge_missing_documents(keep_paths=semantic_targets))
             if semantic_targets:
                 semantic_stats = compile_semantic_batch(

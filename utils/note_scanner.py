@@ -40,9 +40,7 @@ def iter_note_files(
         for md in folder.rglob("*.md"):
             if not include_hidden:
                 # 文件名以 "." 开头，或路径中任一部分以 "." 开头的隐藏目录
-                if md.name.startswith(".") or any(
-                    part.startswith(".") for part in md.relative_to(folder).parts[:-1]
-                ):
+                if md.name.startswith(".") or any(part.startswith(".") for part in md.relative_to(folder).parts[:-1]):
                     continue
             if not include_surveys and md.name.endswith(_SURVEY_SUFFIX):
                 continue

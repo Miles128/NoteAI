@@ -1299,8 +1299,7 @@ class SemanticStore:
             missing = [
                 row
                 for row in rows
-                if not (self.workspace / row["path"]).is_file()
-                or (keep is not None and row["path"] not in keep)
+                if not (self.workspace / row["path"]).is_file() or (keep is not None and row["path"] not in keep)
             ]
             if not missing:
                 return []

@@ -16,6 +16,9 @@ from sidecar.semantic.ids import stable_id
 
 SCHEMA_VERSION = 5
 CLAIM_POLICY_VERSION = 6
+# 抽取指纹算法版本：变更 name_fingerprint 算法时递增，initialize() 会全量重算
+# 存量对象的 name_fingerprint（如 v1 → v2 的英文复数词干化）。
+FINGERPRINT_ALGORITHM_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -182,16 +185,36 @@ CHANGE_LOG_LIMIT = 8000
 _PAREN_PAIR_RE = re.compile(r"[（(][^（()）]*[)）]")
 
 
+def _stem_english_suffix(word: str) -> str:
+    """轻量英文复数归一，仅供查重指纹使用，不做完整词干还原。
+
+    覆盖 Skill/Skills、Token/Tokens、Model/Models、Query/Queries、Box/Boxes
+    等常规复数形态；对 ss/us/is/os/as 结尾的词（class/status/analysis/chaos/
+    alias）保守跳过，避免误并专有名词。
+    """
+    if len(word) <= 3 or not word.isascii() or not word.isalpha():
+        return word
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith(("sses", "xes", "zes", "ches", "shes")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("ss", "us", "is", "os", "as")):
+        return word[:-1]
+    return word
+
+
 def name_fingerprint(name: str) -> str:
     """Normalize an object name for duplicate detection at extraction time.
 
     Strips parenthetical annotations (``RAG（检索增强生成）`` → ``RAG``), all
-    whitespace and case, so variant spellings of the same object resolve to
-    the same fingerprint and merge into one row instead of duplicating.
+    whitespace and case, and stems English plural suffixes (``Skills`` →
+    ``Skill``), so variant spellings of the same object resolve to the same
+    fingerprint and merge into one row instead of duplicating.
     """
     text = _PAREN_PAIR_RE.sub("", name)
-    fp = "".join(text.casefold().split())
-    return fp or "".join(name.casefold().split())
+    tokens = [_stem_english_suffix(token) for token in text.casefold().split()]
+    fp = "".join(tokens)
+    return fp or "".join(text.casefold().split())
 
 
 class SemanticStore:
@@ -234,6 +257,23 @@ class SemanticStore:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN name_fingerprint TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_fp ON entities(name_fingerprint)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_concepts_fp ON concepts(name_fingerprint)")
+            # 指纹算法升级（如英文复数词干化）后全量重算存量指纹，使
+            # Skill/Skills 这类历史变体也能被后续 merge_duplicate_entities 合并。
+            fingerprint_row = conn.execute(
+                "SELECT value FROM schema_meta WHERE key = 'fingerprint_algorithm_version'"
+            ).fetchone()
+            if fingerprint_row is None or fingerprint_row["value"] != str(FINGERPRINT_ALGORITHM_VERSION):
+                for table in ("entities", "concepts"):
+                    rows = conn.execute(f"SELECT id, canonical_name FROM {table}").fetchall()
+                    for row in rows:
+                        conn.execute(
+                            f"UPDATE {table} SET name_fingerprint = ? WHERE id = ?",
+                            (name_fingerprint(row["canonical_name"]), row["id"]),
+                        )
+                conn.execute(
+                    "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('fingerprint_algorithm_version', ?)",
+                    (str(FINGERPRINT_ALGORITHM_VERSION),),
+                )
             for table in ("entities", "concepts"):
                 rows = conn.execute(f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint IS NULL").fetchall()
                 for row in rows:
@@ -1278,6 +1318,102 @@ class SemanticStore:
                     for block in blocks
                 ),
             )
+
+    def rebuild_document_relations(self, document_ids: set[str]) -> None:
+        """重建受影响文档的对象共现关系（同块 + 跨块，频次加权）。
+
+        同块共现：任意对象组合（实体↔实体、概念↔概念、实体↔概念）建
+        RELATED_TO 边，置信度 = min(两端对象置信度)——实体↔概念的组合已由
+        save_block_extraction 在块级创建，这里补齐其余组合。
+
+        跨块共现：同一文档内 ≥2 个不同块共同提及同一对象对时，按共现块数
+        频次加权置信度（每块 +0.08，上限 +0.25），替换该文档内该对的自动
+        块级边（evidence_id IS NULL），低于 0.4 的弱共现不建边。
+
+        仅处理自动边：手工边（带 evidence_id 或 merge 来源）不受影响。
+        """
+        if not document_ids:
+            return
+        placeholders = ",".join("?" for _ in document_ids)
+        ids = tuple(sorted(document_ids))
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""SELECT m.object_kind AS kind, m.object_id AS id, b.document_id AS doc,
+                           b.id AS block_id
+                    FROM semantic_mentions m
+                    JOIN blocks b ON b.id = m.block_id
+                    WHERE b.document_id IN ({placeholders})
+                      AND m.object_kind IN ('entity', 'concept')
+                      AND (EXISTS (SELECT 1 FROM entities e WHERE e.id = m.object_id AND e.status = 'active')
+                           OR EXISTS (SELECT 1 FROM concepts c WHERE c.id = m.object_id AND c.status = 'active'))""",
+                ids,
+            ).fetchall()
+        if not rows:
+            return
+        conf: dict[tuple[str, str], float] = {}
+        with self.connect() as conn:
+            for row in conn.execute("SELECT id, COALESCE(confidence, 0.0) AS c FROM entities WHERE status = 'active'"):
+                conf[("entity", row["id"])] = float(row["c"])
+            for row in conn.execute("SELECT id, COALESCE(confidence, 0.0) AS c FROM concepts WHERE status = 'active'"):
+                conf[("concept", row["id"])] = float(row["c"])
+        # 按文档分组：对象 -> 出现的块集合。
+        docs: dict[str, dict[tuple[str, str], set[str]]] = {}
+        for row in rows:
+            docs.setdefault(row["doc"], {}).setdefault((row["kind"], row["id"]), set()).add(row["block_id"])
+        with self.connect() as conn:
+            for doc_id, objects in docs.items():
+                keys = sorted(objects)
+                for i, key_a in enumerate(keys):
+                    for key_b in keys[i + 1 :]:
+                        common = objects[key_a] & objects[key_b]
+                        if not common:
+                            continue
+                        base = min(conf.get(key_a, 0.0), conf.get(key_b, 0.0))
+                        source, target = sorted((key_a, key_b))
+                        if len(common) >= 2:
+                            # 跨块共现：频次加权，替换该文档内该对的自动块级边。
+                            weighted = min(0.99, base + 0.08 * len(common))
+                            if weighted < 0.4:
+                                continue
+                            conn.execute(
+                                """DELETE FROM relations
+                                   WHERE ((source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?))
+                                     AND evidence_id IS NULL
+                                     AND block_id IN (SELECT id FROM blocks WHERE document_id = ?)""",
+                                (source[1], target[1], target[1], source[1], doc_id),
+                            )
+                            conn.execute(
+                                """INSERT INTO relations(
+                                       id, source_id, relation_type, target_id, confidence, evidence_id, block_id
+                                   ) VALUES(?, ?, 'RELATED_TO', ?, ?, NULL, NULL)
+                                   ON CONFLICT(id) DO UPDATE SET
+                                       confidence=excluded.confidence""",
+                                (
+                                    stable_id("relation", "cooccur", doc_id, source[1], "RELATED_TO", target[1]),
+                                    source[1],
+                                    target[1],
+                                    round(weighted, 3),
+                                ),
+                            )
+                        else:
+                            # 同块共现：仅同一块出现，补齐非 entity↔concept 组合。
+                            if {key_a[0], key_b[0]} == {"entity", "concept"}:
+                                continue  # 已由 save_block_extraction 创建
+                            block_id = next(iter(common))
+                            conn.execute(
+                                """INSERT INTO relations(
+                                       id, source_id, relation_type, target_id, confidence, evidence_id, block_id
+                                   ) VALUES(?, ?, 'RELATED_TO', ?, ?, NULL, ?)
+                                   ON CONFLICT(id) DO UPDATE SET confidence=excluded.confidence,
+                                                                block_id=excluded.block_id""",
+                                (
+                                    stable_id("relation", block_id, source[1], "RELATED_TO", target[1]),
+                                    source[1],
+                                    target[1],
+                                    round(base, 3),
+                                    block_id,
+                                ),
+                            )
 
     def purge_missing_documents(self, keep_paths: Sequence[str | Path] | None = None) -> list[str]:
         """Delete documents whose source is missing or outside the compile set.

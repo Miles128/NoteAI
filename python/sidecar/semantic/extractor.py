@@ -9,10 +9,22 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+from prompts import (
+    SEMANTIC_BATCH_CLAIM_EXTRACT_PROMPT,
+    SEMANTIC_BATCH_EXTRACT_PROMPT,
+    SEMANTIC_CLAIM_EXTRACT_PROMPT,
+    SEMANTIC_EXTRACT_PROMPT,
+    SEMANTIC_OBJECT_NAME_RULES,
+    SEMANTIC_REPAIR_SUFFIX,
+)
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
 PROMPT_VERSION = 4
+# Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
+# variant-spelling dedup rules are spelled out so the model never emits them
+# in the first place. validate_extraction below remains the hard fallback.
+_OBJECT_NAME_RULES = SEMANTIC_OBJECT_NAME_RULES
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
 _CLAIM_TYPES = {"conclusion", "hypothesis"}
@@ -85,14 +97,6 @@ _TITLE_MARKER_RE = re.compile(
     r"(?:报告|指南|路线图|全景|速成|学习笔记|白皮书|专栏|合集|面试题|实践指南|入门教程|官方文档|源码解析|全梳理|知识体系全梳理)",
     re.IGNORECASE,
 )
-
-# Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
-# variant-spelling dedup rules are spelled out so the model never emits them
-# in the first place. validate_extraction below remains the hard fallback.
-_OBJECT_NAME_RULES = """实体与概念名称必须是简洁规范名：
-- 先去除括号注释再输出：「RAG（检索增强生成）」「可灵(Kling)」应输出为「RAG」「可灵」；括号内容只是解释，不是名称的一部分。
-- 同一对象只输出一次：不要同时输出「RAG」与「RAG（检索增强生成）」这类变体；名称内不夹空格（「R A G」应写为「RAG」），统一用最简洁写法。
-- 不得输出：标题类短语（含「报告、指南、路线图、全景、速成、学习笔记、白皮书、专栏、合集、面试题、实践指南、入门教程、官方文档、源码解析、全梳理」等标题词）、@开头的引用（如 @file、@tool）、全大写下划线标记（如 AGENT_TRIGGERS）、带单位的数字短语（如 200K token、3步申请）、域名、点开头文件名（如 .env）、含标点的完整句子、纯符号或纯数字。"""
 
 
 def _is_noise_object_name(name: str) -> bool:
@@ -176,13 +180,24 @@ def _bounded_confidence(value) -> float:
 
 # 标点/空白（含全角）在证据引文中属于可容忍差异；文字序列必须保持逐字一致。
 _QUOTE_PUNCT_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
+# LLM 常以省略号表示省略中间内容（如 “甲……乙”）
+_QUOTE_SEGMENT_SPLIT_RE = re.compile(r"…{1,3}|\.{3,}")
+# 引文与原文的模糊匹配阈值：去标点后 90% 以上字符一致即接受（容忍个别字差异）
+_QUOTE_FUZZY_RATIO = 0.90
+_QUOTE_MIN_COMPACT = 8
 
 
 def _quote_matches(quote: str, normalized_block: str) -> bool:
-    """证据引文必须逐字来自原文，但容忍首尾标点与空白差异。
+    """证据引文必须大致来自原文，按分级容忍度验证。
 
-    LLM 复制证据时常多带/少带句号、引号或换行；只要去掉标点空白后的文字序列
-    仍是原文子序列（且足够长），就接受，避免因标点差异误杀全部命题。
+    依次尝试（任一通过即接受）：
+    1. 原文精确包含；
+    2. 去掉引文首尾标点/空白后包含；
+    3. 去掉全部标点后为连续子序列（原逻辑，保留）；
+    4. 引文由省略号分隔的多个片段组成，每段都是原文子序列且顺序一致；
+    5. 去标点后与原文模糊相似度 ≥ 0.90（容忍 LLM 偶发删字/换字）。
+
+    任何一级只放行“文字高度重合”的引文，避免语义无关内容混入证据。
     """
     if quote in normalized_block:
         return True
@@ -191,7 +206,31 @@ def _quote_matches(quote: str, normalized_block: str) -> bool:
         return True
     compact_quote = _QUOTE_PUNCT_RE.sub("", quote)
     compact_block = _QUOTE_PUNCT_RE.sub("", normalized_block)
-    return len(compact_quote) >= 8 and compact_quote in compact_block
+    if len(compact_quote) >= _QUOTE_MIN_COMPACT and compact_quote in compact_block:
+        return True
+    # 4. 拼接片段（省略号拆段，逐段按顺序匹配）
+    segments = [seg.strip() for seg in _QUOTE_SEGMENT_SPLIT_RE.split(quote) if seg.strip()]
+    if len(segments) >= 2:
+        pos = 0
+        matched = 0
+        for seg in segments:
+            compact_seg = _QUOTE_PUNCT_RE.sub("", seg)
+            if len(compact_seg) < 3:
+                continue
+            idx = compact_block.find(compact_seg, pos)
+            if idx < 0:
+                matched = -1
+                break
+            pos = idx + len(compact_seg)
+            matched += 1
+        if matched > 0:
+            return True
+    # 5. 模糊相似度兜底
+    if len(compact_quote) >= _QUOTE_MIN_COMPACT:
+        from difflib import SequenceMatcher
+
+        return SequenceMatcher(None, compact_quote, compact_block).ratio() >= _QUOTE_FUZZY_RATIO
+    return False
 
 
 def parse_extraction_json(raw: str) -> dict:
@@ -355,44 +394,19 @@ def validate_extraction(
 
 
 def build_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str = "paragraph") -> str:
-    return f"""你是 NoteAI 的语义编译器。只抽取当前原文明确支持的知识，不补充外部知识。
-
-块 ID：{block_id}
-块类型：{block_type}
-章节：{heading_path or "（无）"}
-原文：
-<source>
-{content}
-</source>
-
-只输出一个 JSON 对象，不要 Markdown 代码围栏：
-{{
-  "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-  "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-  "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制的短证据"}}]
-}}
-
-规则：
-1. Claim 不是“任何可验证陈述”。只有作者明确得出的评价、比较、因果、趋势、预测、推荐等结论，才标为 conclusion。
-2. 只有作者明确提出、尚待验证或带条件成立的推测/研究命题，才标为 hypothesis。
-3. 定义、术语解释、产品属性、日期数字、背景事实、命令/参数/API/配置说明、安装步骤、操作指引、示例、代码行为复述，一律不要放进 claims。
-4. 例如“75+ 模型”“支持 75 种模型”“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
-5. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；转述他人立场的“作者认为/论文指出”仍可抽取。
-6. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
-7. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
-8. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。
-9. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数（如 --port）、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
-10. {_OBJECT_NAME_RULES}"""
+    return SEMANTIC_EXTRACT_PROMPT.format(
+        block_id=block_id,
+        block_type=block_type,
+        heading_path=heading_path or "（无）",
+        content=content,
+        object_name_rules=_OBJECT_NAME_RULES,
+    )
 
 
 def build_repair_prompt(original_prompt: str, invalid_output: str, error: str) -> str:
     return f"""{original_prompt}
 
-你上次的输出未通过编译器校验：{error}
-<invalid-output>
-{invalid_output[:6000]}
-</invalid-output>
-请只修复 JSON 结构或证据字段，仍然只能使用 source 中的原文。只输出修复后的 JSON。"""
+{SEMANTIC_REPAIR_SUFFIX.format(error=error, invalid_output=invalid_output[:6000])}"""
 
 
 def build_batch_extraction_prompt(blocks: list[dict]) -> str:
@@ -406,51 +420,16 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
 </block>"""
         )
     joined = "\n\n".join(sources)
-    return f"""你是 NoteAI 的语义编译器。只抽取各 Block 原文明确支持的知识，不补充外部知识。
-
-{joined}
-
-必须为每个输入 block_id 返回一项，不能遗漏、合并或改写 block_id。只输出 JSON：
-{{
-  "blocks": [
-    {{
-      "block_id": "输入中的原始 ID",
-      "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-      "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-      "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "只从该 block 原文逐字复制"}}]
-    }}
-  ]
-}}
-
-规则：
-1. Claim 不是普通事实。只允许作者的评价/比较/因果/趋势/预测/推荐等结论（conclusion），或明确待验证的假设/推测（hypothesis）。
-2. 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令/参数/API/配置说明、步骤、操作指引、示例、代码行为复述不得进入 claims；code 类型 Block 的 claims 必须为空。
-3. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-3. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
-4. 没有结论或假设的 Block 也必须返回，claims 为空；三个数组都无内容时均为空。
-5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。
-6. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
-7. {_OBJECT_NAME_RULES}"""
+    return SEMANTIC_BATCH_EXTRACT_PROMPT.format(blocks=joined, object_name_rules=_OBJECT_NAME_RULES)
 
 
 def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str) -> str:
-    return f"""你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
-
-块 ID：{block_id}
-块类型：{block_type}
-章节：{heading_path or "（无）"}
-原文：
-<source>
-{content}
-</source>
-
-只输出 JSON：
-{{"claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制"}}]}}
-
-只有评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测才可进入 claims。
-定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
-第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-code 类型块必须返回空 claims。evidence_quote 必须逐字来自原文。无结论或假设时返回 {{"claims": []}}。"""
+    return SEMANTIC_CLAIM_EXTRACT_PROMPT.format(
+        block_id=block_id,
+        block_type=block_type,
+        heading_path=heading_path or "（无）",
+        content=content,
+    )
 
 
 def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
@@ -463,17 +442,7 @@ def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
 {block["content"]}
 </block>"""
         )
-    return f"""你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
-
-{chr(10).join(sources)}
-
-必须为每个 block_id 返回一项，只输出 JSON：
-{{"blocks": [{{"block_id": "原始 ID", "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "同一块原文逐字复制"}}]}}]}}
-
-只允许评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测。
-定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
-第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。"""
+    return SEMANTIC_BATCH_CLAIM_EXTRACT_PROMPT.format(blocks=chr(10).join(sources))
 
 
 def validate_batch_extraction(

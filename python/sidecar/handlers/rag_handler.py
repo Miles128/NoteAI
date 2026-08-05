@@ -536,6 +536,36 @@ class RagHandler(BaseHandler):
                 }
             )
 
+        # Object-layer injection: extracted entities/concepts (with descriptions)
+        # ground the answer in the knowledge base's structured objects.
+        # Best-effort — a missing or broken semantic DB yields no object items.
+        object_items: list[dict] = []
+        try:
+            from sidecar.rag.object_context import retrieve_object_context
+
+            object_items = retrieve_object_context(config.workspace_path, question, topics=topics, tags=tags)
+        except Exception as e:
+            logger.warning(f"[rag/object_context] injection failed: {e}")
+        for r in object_items:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
+            idx = len(context_parts) + 1
+            label = r.get("source_label") or "知识库对象"
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": "",
+                    "file_name": "",
+                    "source_label": label,
+                    "section_title": "",
+                    "topic": r.get("topic") or "",
+                    "source_type": "object",
+                    "score": r.get("score", 0),
+                }
+            )
+
         for r in search_results:
             # Surveys and graph neighbors are helpful retrieval expansion, but
             # are not direct evidence for a conversational answer.

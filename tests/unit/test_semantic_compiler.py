@@ -6,15 +6,18 @@ from pathlib import Path
 
 from sidecar.semantic.compiler import compile_note_semantics, compile_semantic_batch
 from sidecar.semantic.extractor import (
+    _QUOTE_PUNCT_RE,
     ExtractionValidationError,
+    _quote_matches,
     build_batch_extraction_prompt,
     build_extraction_prompt,
     extract_document_semantics,
     parse_extraction_json,
     validate_extraction,
 )
+from sidecar.semantic.ids import stable_id
 from sidecar.semantic.parser import parse_semantic_blocks
-from sidecar.semantic.store import CLAIM_POLICY_VERSION, SemanticStore
+from sidecar.semantic.store import CLAIM_POLICY_VERSION, SemanticStore, name_fingerprint
 from sidecar.semantic.topic_state import build_topic_state, materialize_topic_state
 from sidecar.semantic.wiki import build_topic_wiki_page, materialize_topic_wiki_page
 
@@ -147,7 +150,34 @@ def test_validation_drops_claim_without_exact_evidence_but_keeps_valid_block_out
     assert [item["statement"] for item in parsed["claims"]] == ["混合检索比单一检索更稳健"]
 
 
+def test_quote_matches_accepts_ellipsis_segments_in_order():
+    """引文以省略号拼接多个片段时，片段按序存在于原文即接受。"""
+    block = "混合检索结合两种信号，排序后返回结果。"
+    ok = _quote_matches("混合检索结合……返回结果", block)
+    assert ok
+    # 顺序颠倒的片段不应接受
+    assert not _quote_matches("返回结果……混合检索结合", block)
+
+
+def test_quote_matches_accepts_minor_character_differences():
+    """去标点后与原文相似度 ≥0.90 的引文（个别字差异）可接受。"""
+    block = "混合检索结合两种信号，排序后返回结果"
+    compact = _QUOTE_PUNCT_RE.sub("", block)
+    # 把“结合”改为“组合”（1 字差异，长度 14 时相似度 > 0.9）
+    assert _quote_matches("混合检索组合两种信号排序后返回结果", block)
+    assert len(_QUOTE_PUNCT_RE.sub("", "混合检索组合两种信号排序后返回结果")) == len(compact)
+
+
+def test_quote_matches_rejects_unrelated_or_too_short_quotes():
+    """完全无关或过短的引文仍被拒绝，不因放宽而放行噪声。"""
+    block = "混合检索结合两种信号，排序后返回结果"
+    assert not _quote_matches("完全无关的句子内容", block)
+    # 过短（<8 紧凑字符）且不匹配
+    assert not _quote_matches("混合搜", block)
+
+
 def test_validation_drops_facts_instructions_and_missing_claim_type():
+
     for claim_type in (None, "fact", "instruction", "description"):
         item = {
             "statement": "--port 参数指定服务端口",
@@ -299,6 +329,118 @@ def test_extraction_prompt_embeds_noise_gate_and_variant_dedup_rules():
     )
     assert "同一对象只输出一次" in batch
     assert "@file、@tool" in batch
+
+
+def test_name_fingerprint_stems_english_plurals():
+    """英文复数变体（Skill/Skills、Token/Tokens）必须解析为同一指纹。"""
+    from sidecar.semantic.store import name_fingerprint
+
+    assert name_fingerprint("Skill") == name_fingerprint("Skills")
+    assert name_fingerprint("Token") == name_fingerprint("Tokens")
+    assert name_fingerprint("Model") == name_fingerprint("Models")
+    assert name_fingerprint("Query") == name_fingerprint("Queries")
+    assert name_fingerprint("Box") == name_fingerprint("Boxes")
+    assert name_fingerprint("Process") == name_fingerprint("Processes")
+    # 与既有能力保持兼容：括号注释、大小写、空白
+    assert name_fingerprint("RAG（检索增强生成）") == name_fingerprint("RAG")
+    assert name_fingerprint("R A G") == name_fingerprint("RAG")
+    assert name_fingerprint("large language models") == name_fingerprint("Large Language Model")
+
+
+def test_name_fingerprint_keeps_plural_like_proper_nouns():
+    """ss/us/is/os/as 结尾的词（class/status/analysis/alias）不能被误砍。"""
+    from sidecar.semantic.store import name_fingerprint
+
+    assert name_fingerprint("Class") != name_fingerprint("Cla")
+    assert name_fingerprint("Status") != name_fingerprint("Statu")
+    assert name_fingerprint("Analysis") != name_fingerprint("Analys")
+    assert name_fingerprint("Alias") != name_fingerprint("Alia")
+    # 非纯字母（数字、连字符）与短词不参与词干化
+    assert name_fingerprint("GPT-4") == "gpt-4"
+    assert name_fingerprint("RAG") == "rag"
+
+
+def test_extraction_dedups_variant_spellings_into_existing_object(tmp_path: Path):
+    """抽取落库时，变体写法（复数/括号/大小写）合并到既有 active 对象。"""
+    note = _note(tmp_path, "## 定义\n\nSkill 与 Token 是 AI 的核心概念。\n")
+    compiled = compile_note_semantics(tmp_path, note)
+    store = SemanticStore(tmp_path)
+    now = "2026-07-17T10:00:00Z"
+    with store.connect() as conn:
+        block = conn.execute("SELECT id, content_hash FROM blocks LIMIT 1").fetchone()
+    block_id, block_hash = block["id"], block["content_hash"]
+
+    def _claim():
+        return []
+
+    def _save(concept_name: str, entity_name: str) -> str:
+        concept_id = stable_id("con", concept_name.casefold())
+        entity_id = stable_id("ent", entity_name.casefold())
+        store.save_block_extraction(
+            block_id=block_id,
+            block_hash=block_hash,
+            prompt_version=4,
+            extracted_at=now,
+            concepts=[
+                {
+                    "id": concept_id,
+                    "canonical_name": concept_name,
+                    "description": "能力",
+                    "confidence": 0.9,
+                }
+            ],
+            entities=[
+                {
+                    "id": entity_id,
+                    "canonical_name": entity_name,
+                    "entity_type": "concept_type",
+                    "description": "单元",
+                    "confidence": 0.8,
+                }
+            ],
+            claims=_claim(),
+        )
+        with store.connect() as conn:
+            return conn.execute(
+                "SELECT id FROM concepts WHERE name_fingerprint = ?", (name_fingerprint(concept_name),)
+            ).fetchone()["id"]
+
+    first_id = _save("Skills", "Token")
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM concepts WHERE status = 'active'").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM entities WHERE status = 'active'").fetchone()[0] == 1
+
+    # 变体写法（Skill / Tokens）必须合并进既有对象而非新建行
+    merged_id = _save("Skill", "Tokens")
+    assert merged_id == first_id
+    with store.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM concepts WHERE status = 'active'").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM entities WHERE status = 'active'").fetchone()[0] == 1
+        concept = conn.execute("SELECT canonical_name FROM concepts WHERE status = 'active'").fetchone()
+        assert concept["canonical_name"] == "Skills"  # 保留首个规范名
+        concept = conn.execute("SELECT id FROM concepts WHERE status = 'active'").fetchone()
+        assert concept["id"] == first_id
+
+
+def test_merge_duplicate_entities_collapses_english_plural_variants(tmp_path: Path):
+    """编译期 merge 阶段把历史 Skill/Skills 复数变体合并为一行。"""
+    store = SemanticStore(tmp_path)
+    store.initialize()
+    with store.connect() as conn:
+        for name in ("Skill", "Skills", "Token", "Tokens"):
+            conn.execute(
+                """INSERT INTO concepts(id, canonical_name, description, confidence, status, name_fingerprint)
+                   VALUES(?, ?, '描述', 0.8, 'active', ?)""",
+                ("concept-" + name.lower(), name, name),
+            )
+    store.initialize()  # 触发指纹算法版本重算
+    stats = store.merge_duplicate_entities()
+    assert stats["merged_concepts"] == 2
+    with store.connect() as conn:
+        active = [
+            row["canonical_name"] for row in conn.execute("SELECT canonical_name FROM concepts WHERE status = 'active'")
+        ]
+        assert sorted(active) == ["Skill", "Token"]
 
 
 def test_extractor_persists_only_evidence_backed_claims(tmp_path: Path):

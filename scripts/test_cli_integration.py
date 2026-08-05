@@ -15,7 +15,6 @@ sys.path.insert(0, str(ROOT / "python"))
 
 from sidecar.cli_agent_runner import list_available_agents, run_cli_agent
 from sidecar.handlers.cli_agent_handler import CliAgentHandler
-from sidecar.handlers.mcp_config_handler import McpConfigHandler
 from sidecar.mcp_config_manager import get_mcp_status, register_mcp_server
 
 from config import config
@@ -69,11 +68,6 @@ def main() -> int:
     class _FakeServer:
         def _send_response(self, resp):
             pass
-
-    mcp_handler = McpConfigHandler(_FakeServer())
-    status_rpc = mcp_handler._status({})
-    assert status_rpc.get("success"), status_rpc
-    print("get_mcp_status RPC: OK")
 
     cli_handler = CliAgentHandler(_FakeServer())
     list_rpc = cli_handler._list_agents({})

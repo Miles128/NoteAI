@@ -265,3 +265,46 @@ def collect_survey_off_topics(
     workspace_str: str | Path | None = None,
 ) -> set[str]:
     return _collect_survey_off_topics_impl(workspace_str)
+
+
+def get_survey_overview(workspace_str: str | Path | None = None) -> dict[str, dict]:
+    """主题综述状态总览：{topic: {enabled, has_survey, stale, survey_path}}
+
+    - enabled: WIKI.md 综述开关（默认开）
+    - has_survey: wiki/{末级}_综述.md 是否存在
+    - stale: 主题下笔记最新修改晚于综述文件（仅 has_survey 时计算，轻量扫描）
+    """
+    if workspace_str is None:
+        workspace_str = config.workspace_path or ""
+    ws = Path(workspace_str)
+    if not ws.exists():
+        return {}
+
+    enabled_map = get_survey_status(workspace_str)
+    headings = _parse_wiki_headings_full()
+
+    from sidecar.cascade import collect_topic_notes, get_survey_path
+
+    overview: dict[str, dict] = {}
+    for topic in headings:
+        survey_path = get_survey_path(topic)
+        has_survey = bool(survey_path and survey_path.exists())
+        stale = False
+        if has_survey and survey_path is not None:
+            try:
+                survey_mtime = survey_path.stat().st_mtime
+                note_mtimes = []
+                for note in collect_topic_notes(topic, include_content=False):
+                    note_path = ws / note["file_path"]
+                    if note_path.exists():
+                        note_mtimes.append(note_path.stat().st_mtime)
+                stale = bool(note_mtimes) and max(note_mtimes) > survey_mtime
+            except Exception:
+                stale = False
+        overview[topic] = {
+            "enabled": enabled_map.get(topic, True),
+            "has_survey": has_survey,
+            "stale": stale,
+            "survey_path": str(survey_path.relative_to(ws)) if has_survey and survey_path else "",
+        }
+    return overview

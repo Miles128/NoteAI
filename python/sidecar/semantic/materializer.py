@@ -106,6 +106,13 @@ def materialize_documents(
         "removed": {"entities": 0, "concepts": 0},
         "failures": [],
     }
+    # Cross-block co-occurrence relations (frequency-weighted) for the affected
+    # documents; best-effort like every other derived view.
+    if document_ids:
+        try:
+            _retry_lock(partial(store.rebuild_document_relations, document_ids))
+        except Exception as exc:  # 派生视图 best-effort：任何异常都不拖垮编译
+            result["failures"].append({"kind": "relations", "id": "documents", "error": str(exc)})
     if not include_objects:
         objects.clear()
     dirty_kinds: set[str] = set()

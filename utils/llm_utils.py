@@ -7,8 +7,6 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypedDict
 
-from pydantic import SecretStr
-
 from utils.logger import logger
 
 
@@ -142,23 +140,40 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
-def _create_llm(temperature: float = 0.7, max_tokens: int | None = None):
-    """创建 ChatOpenAI 实例（内部复用）"""
+def _create_llm(
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    *,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    model_name: str | None = None,
+    disable_thinking: bool | None = None,
+):
+    """创建 ChatOpenAI 实例（内部复用）
+
+    api_key / api_base / model_name 未提供时从全局 config 读取；
+    disable_thinking 未提供时取 config.disable_thinking。
+    """
     from langchain_openai import ChatOpenAI
 
     from config import config
 
+    if disable_thinking is None:
+        disable_thinking = bool(getattr(config, "disable_thinking", True))
+    base_url = api_base if api_base is not None else config.api_base
+
     kwargs: dict[str, Any] = {
-        "api_key": config.api_key,
-        "base_url": config.api_base,
-        "model": config.model_name,
+        "api_key": api_key if api_key is not None else config.api_key,
+        "base_url": base_url,
+        "model": model_name if model_name is not None else config.model_name,
         "temperature": temperature,
         "max_tokens": max_tokens or config.max_tokens,
         "request_timeout": 60,
     }
 
-    if getattr(config, "disable_thinking", True):
-        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning
+    if disable_thinking and "deepseek.com" in base_url:
+        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning。
+        # 仅 DeepSeek 支持该参数，其他 provider 一律不传。
         kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
     return ChatOpenAI(**kwargs)
@@ -385,7 +400,7 @@ def _normalize_api_base(api_base: str) -> str:
     return api_base
 
 
-def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[bool, str]:
+def test_api_connection(api_key: str, api_base: str, model_name: str, disable_thinking: bool | None = None) -> tuple[bool, str]:
     """测试 API 连接是否可用"""
     logger.info("[API连接测试] 开始测试连接...")
     logger.info(f"[API连接测试] API Base: {api_base}")
@@ -413,18 +428,26 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[b
     if not url_pattern.match(api_base):
         return False, f"API Base URL 格式无效：{api_base}"
 
+    if disable_thinking is None:
+        try:
+            from config import config as _config
+
+            disable_thinking = bool(getattr(_config, "disable_thinking", True))
+        except Exception:
+            disable_thinking = True
+
     result: list[tuple[bool, str] | None] = [None]
 
     def _test():
         try:
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(
-                api_key=SecretStr(api_key),
-                base_url=api_base,
-                model=model_name,
+            llm = _create_llm(
                 temperature=0,
-                max_completion_tokens=10,
+                # reasoning 模型需预留思考 token，10 会导致部分模型无响应；50 足以完成 "Hi" 的应答
+                max_tokens=50,
+                api_key=api_key,
+                api_base=api_base,
+                model_name=model_name,
+                disable_thinking=disable_thinking,
             )
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
@@ -437,10 +460,10 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[b
     thread = threading.Thread(target=_test)
     thread.daemon = True
     thread.start()
-    thread.join(timeout=15)
+    thread.join(timeout=30)
 
     if thread.is_alive():
-        return False, f"API 连接超时（15秒），请检查 API 地址：{api_base}"
+        return False, f"API 连接超时（30秒），请检查 API 地址：{api_base}"
 
     if result[0]:
         is_connected, msg = result[0]

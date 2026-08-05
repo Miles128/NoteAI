@@ -232,7 +232,10 @@
       "copy": "Copy",
       "copied": "Copied",
       "copyFailed": "Copy failed"
-    }
+    },
+    "versionHint": "Extraction prompts upgraded to v{version}, consider recompiling",
+    "versionHintTitle": "Library compiled with v{current}, latest is v{latest}",
+    "degradedHint": "{count} low-frequency/low-confidence objects degraded (switch to Deep mode to view)"
   },
   "pending": {
     "moveToTopic": "Move to {topic}",
@@ -1208,6 +1211,9 @@
     }
   },
   "tags": {
+    "loading": "Loading tags…",
+    "empty": "No tags yet. Click + at the bottom right to create one.",
+    "loadError": "Failed to load tags",
     "changeName": "Rename",
     "deleteTag": "Delete tag",
     "addFailed": "Add tag failed: ",

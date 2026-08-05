@@ -79,6 +79,8 @@ async function loadModules() {
         window.toggleSidebar = function _toggleSidebarMissing() {};
     }
 
+    await import('./tags.js');
+
     await import('./tiptap-editor.js');
     const { TiptapEditorModule, TiptapEditor } = window;
     window.TiptapEditorModule = TiptapEditorModule;

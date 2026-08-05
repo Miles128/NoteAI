@@ -6,6 +6,7 @@ var _objectKind = 'entities';
 var _items = [];
 var _selectedIndex = -1;
 var _overview = {};
+var _promptVersionStatus = null;
 var _loadSeq = 0;
 var _detailSeq = 0;
 var _searchTimer = null;
@@ -15,6 +16,7 @@ var _activeDetailKind = null;
 var _lastBrief = '';
 var _pendingTargetId = null;
 var _suppressAutoSelect = false;
+var _degradedHidden = 0;
 var _intensity = 'standard';
 var _enabledCategories = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
 var _workbenchEnabled = true;
@@ -189,6 +191,7 @@ function loadList() {
         if (seq !== _loadSeq) return;
         if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
         _items = result.items || [];
+        _degradedHidden = result.degraded_hidden || 0;
         _selectedIndex = -1;
         var count = document.getElementById('semantic-list-count');
         if (count) count.textContent = t('semantic.itemCount', { count: result.total || 0 });
@@ -315,6 +318,9 @@ function renderList() {
         var meta = listMeta(item);
         return '<button type="button" class="semantic-list-item' + (index === _selectedIndex ? ' active' : '') + '" data-semantic-index="' + index + '"><strong>' + esc(title) + '</strong>' + (description ? '<p>' + esc(description) + '</p>' : '') + '<span class="semantic-list-item-meta">' + meta + '</span></button>';
     }).join('');
+    if (_degradedHidden > 0 && _category === 'objects') {
+        list.insertAdjacentHTML('beforeend', '<div class="semantic-degraded-hint">' + esc(t('semantic.degradedHint', { count: _degradedHidden })) + '</div>');
+    }
 }
 
 function listMeta(item) {
@@ -561,6 +567,7 @@ function loadOverview() {
     window.api.getSemanticWorkbench({ tab: 'overview' }).then(function(result) {
         if (!result || !result.success) return;
         _overview = result.overview || {};
+        _promptVersionStatus = result.prompt_version_status || null;
         renderCoverage(result.compile_job || null);
         if (_selectedIndex < 0 && !_suppressAutoSelect) renderEmptyDetail();
         if (result.compile_job && result.compile_job.status === 'running') scheduleCompilePoll();
@@ -571,12 +578,23 @@ function renderCoverage(job) {
     var coverage = document.getElementById('semantic-coverage');
     var button = document.getElementById('semantic-compile-all');
     var progress = document.getElementById('semantic-compile-progress');
+    var versionHint = document.getElementById('semantic-version-hint');
     var source = _overview.source_documents || 0;
     var compiled = _overview.documents || 0;
     var percent = source ? Math.min(100, Math.round(compiled * 100 / source)) : 0;
     if (coverage) {
         coverage.textContent = compiled + '/' + source;
         coverage.title = t('semantic.coverageLabel', { percent: percent, uncompiled: _overview.uncompiled_documents || 0 });
+    }
+    if (versionHint) {
+        var pvs = _promptVersionStatus;
+        if (pvs && pvs.prompt_version_stale) {
+            versionHint.textContent = t('semantic.versionHint', { version: pvs.prompt_version_latest });
+            versionHint.hidden = false;
+            versionHint.title = t('semantic.versionHintTitle', { current: pvs.prompt_version, latest: pvs.prompt_version_latest });
+        } else {
+            versionHint.hidden = true;
+        }
     }
     var running = job && job.status === 'running';
     if (button) { button.disabled = !!running; button.textContent = t(running ? 'semantic.compiling' : 'semantic.compileAll'); }

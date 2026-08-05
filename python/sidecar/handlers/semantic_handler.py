@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from sidecar import job_status
@@ -20,6 +21,9 @@ class SemanticHandler(BaseHandler):
     # Workbench display intensity → minimum confidence for claims/objects.
     # "deep" keeps every item (including legacy rows without confidence).
     _INTENSITY_MIN_CONFIDENCE = {"light": 0.8, "standard": 0.5, "deep": 0.0}
+    # 低频对象降级策略：mention 低于 min_mentions 且置信度低于 min_confidence 的
+    # 对象视为偶发提及（代表性弱），在非 deep 强度下默认隐藏；主动搜索仍可命中。
+    _LOW_FREQ_DEGRADE = {"min_mentions": 2, "min_confidence": 0.6}
 
     def _store(self) -> SemanticStore | None:
         workspace = self.config.workspace_path
@@ -88,6 +92,31 @@ class SemanticHandler(BaseHandler):
             "uncompiled_documents": 0,
         }
 
+    def _manifest_prompt_version(self, store: SemanticStore):
+        """读取 manifest 中记录的抽取提示词版本（库实际使用的 PROMPT_VERSION）。"""
+        manifest_path = store.root / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        try:
+            import json
+
+            return json.loads(manifest_path.read_text(encoding="utf-8")).get("prompt_version")
+        except Exception:
+            return None
+
+    def _prompt_version_status(self, store: SemanticStore):
+        from sidecar.semantic.extractor import PROMPT_VERSION
+
+        manifest_version = self._manifest_prompt_version(store)
+        return {
+            "prompt_version": manifest_version,
+            "prompt_version_latest": PROMPT_VERSION,
+            "prompt_version_stale": (
+                manifest_version is not None and manifest_version != PROMPT_VERSION
+            ),
+        }
+
+
     def _overview(self, store: SemanticStore):
         source_documents = len(self._all_note_paths())
         if not store.path.exists():
@@ -101,6 +130,7 @@ class SemanticHandler(BaseHandler):
                 "compile_job": job_status.get_job(self._COMPILE_JOB_ID),
                 "items": [],
                 "total": 0,
+                "prompt_version_status": self._prompt_version_status(store),
             }
         tables = ("documents", "blocks", "concepts", "entities", "claims", "evidence")
         with store.connect() as conn:
@@ -137,6 +167,7 @@ class SemanticHandler(BaseHandler):
             "compile_job": job_status.get_job(self._COMPILE_JOB_ID),
             "items": [],
             "total": 0,
+            "prompt_version_status": self._prompt_version_status(store),
         }
 
     def _get_changes(self, params):
@@ -250,6 +281,75 @@ class SemanticHandler(BaseHandler):
         """
         return self._start_semantic_compile(_params, claims_only=True)
 
+    def _retry_failed_blocks(self, params):
+        """重试抽取失败的块（claim_extractions / block_extractions 中 status='failed'）。
+
+        失败块不会被 is_current 跳过（is_current 只认 'complete'），因此直接对
+        失败块所属文档重新抽取即可；成功后会写回 complete 状态。同步执行并
+        限制单次数量，避免 API 长时间不可用时一次重试上千块阻塞 sidecar。
+        """
+        claims_only = bool(params.get("claims_only", True))
+        try:
+            limit = max(1, min(int(params.get("limit", 100)), 500))
+        except (TypeError, ValueError):
+            limit = 100
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        store = SemanticStore(workspace)
+        if not store.path.exists():
+            return {"success": False, "message": "语义库不存在"}
+        table = "claim_extractions" if claims_only else "block_extractions"
+        with store.connect() as conn:
+            failed = conn.execute(
+                f"""SELECT ce.block_id, ce.error, b.document_id
+                    FROM {table} ce JOIN blocks b ON b.id = ce.block_id
+                    WHERE ce.status = 'failed'
+                    ORDER BY ce.extracted_at
+                    LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        if not failed:
+            return {"success": True, "failed_blocks": 0, "documents": 0, "extracted_blocks": 0, "failures": []}
+        # 同一文档的多个失败块一次抽取即可覆盖；失败块数量通常远小于文档数。
+        doc_ids = sorted({row["document_id"] for row in failed})
+        from sidecar.semantic.extractor import extract_document_semantics
+
+        def extract_one(doc_id: str) -> dict:
+            try:
+                return extract_document_semantics(store, doc_id, claims_only=claims_only)
+            except Exception as exc:  # 抽取器内部异常也归为失败，不让单文档拖垮整批
+                return {"success": False, "extracted": 0, "claims": 0, "failures": [{"block_id": None, "error": str(exc)}]}
+
+        results: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=min(4, len(doc_ids)), thread_name_prefix="semantic-retry") as pool:
+            futures = {pool.submit(extract_one, doc_id): doc_id for doc_id in doc_ids}
+            for future in as_completed(futures):
+                results[futures[future]] = future.result()
+        extracted = sum(int(result.get("extracted") or 0) for result in results.values())
+        failures = []
+        seen_failures: set[tuple[str, str]] = set()
+        for doc_id in doc_ids:
+            result = results[doc_id]
+            for failure in result.get("failures") or []:
+                key = (doc_id, failure.get("error") or "")
+                if key not in seen_failures:
+                    seen_failures.add(key)
+                    failures.append({"document_id": doc_id, "error": key[1]})
+        with store.connect() as conn:
+            remaining = conn.execute(
+                f"SELECT count(*) FROM {table} ce JOIN blocks b ON b.id = ce.block_id WHERE ce.status = 'failed'"
+            ).fetchone()[0]
+        return {
+            "success": True,
+            "failed_blocks": len(failed),
+            "documents": len(doc_ids),
+            "extracted_blocks": extracted,
+            "remaining_failed": remaining,
+            "failures": failures[:20],
+        }
+
+
     def _start_semantic_compile(self, _params, *, claims_only: bool):
         workspace, err = self._require_workspace()
         if err:
@@ -358,6 +458,7 @@ class SemanticHandler(BaseHandler):
         limit, offset = self._page(params)
         query = str(params.get("query", "") or "").strip()
         like = f"%{query}%"
+        degraded_hidden = 0
         with store.connect() as conn:
             if tab == "claims":
                 status = str(params.get("status", "active") or "active")
@@ -430,6 +531,27 @@ class SemanticHandler(BaseHandler):
                 if min_confidence is not None:
                     where += " AND o.confidence >= ?"
                     args = (*args, min_confidence)
+                # 低频降级：非 deep 强度且未主动搜索时，隐藏 mention<2 且
+                # confidence<0.6 的对象（偶发提及，稀释列表但无代表性）。
+                degrade_mentions = int(self._LOW_FREQ_DEGRADE["min_mentions"])
+                degrade_confidence = float(self._LOW_FREQ_DEGRADE["min_confidence"])
+                apply_degrade = (
+                    min_confidence is not None and min_confidence > 0 and not query
+                )
+                if apply_degrade:
+                    degraded_hidden = conn.execute(
+                        f"""SELECT count(*) FROM {table} o
+                            WHERE o.status = 'active'
+                              AND o.confidence >= ? AND o.confidence < ?
+                              AND (SELECT count(*) FROM semantic_mentions m
+                                   WHERE m.object_id = o.id AND m.object_kind = ?) < ?""",
+                        (min_confidence, degrade_confidence, kind, degrade_mentions),
+                    ).fetchone()[0]
+                    where += (
+                        " AND NOT (o.confidence < ? AND (SELECT count(*) FROM semantic_mentions m"
+                        " WHERE m.object_id = o.id AND m.object_kind = ?) < ?)"
+                    )
+                    args = (*args, degrade_confidence, kind, degrade_mentions)
                 total = conn.execute(f"SELECT count(*) FROM {table} o {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT o.id, o.canonical_name, {description_column}, o.confidence{type_select},
@@ -443,7 +565,15 @@ class SemanticHandler(BaseHandler):
                     (kind, *args, limit, offset),
                 ).fetchall()
                 items = [dict(row) for row in rows]
-        return {"success": True, "tab": tab, "items": items, "total": total, "limit": limit, "offset": offset}
+        return {
+            "success": True,
+            "tab": tab,
+            "items": items,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "degraded_hidden": degraded_hidden,
+        }
 
     @staticmethod
     def _evidence_row(row) -> dict:
@@ -1306,6 +1436,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_topic_brief", self._get_topic_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("start_semantic_claims_compile", self._start_claims_compile)
+        router.register("retry_semantic_failed_blocks", self._retry_failed_blocks)
         router.register("review_semantic_conflict", self._review_conflict)
         router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)

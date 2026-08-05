@@ -58,6 +58,7 @@
 .semantic-compile-all:hover { border-color: var(--primary); color: var(--primary); }
 .semantic-compile-all:disabled { opacity: .55; cursor: default; }
 .semantic-compile-progress { margin: 6px 5px 0; overflow: hidden; color: var(--sidebar-text-muted); font-size: 9px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.semantic-version-hint { margin: 6px 5px 0; padding: 5px 8px; border: 1px dashed var(--warning, #d69e2e); border-radius: 6px; color: var(--warning, #d69e2e); font-size: 10px; line-height: 1.5; cursor: help; background: color-mix(in srgb, var(--warning, #d69e2e) 8%, transparent); }
 
 .note-list-normal { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .note-list-normal[hidden], .semantic-list-pane[hidden], .semantic-detail-pane[hidden] { display: none !important; }
@@ -131,6 +132,7 @@
 .semantic-audit > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 10px; }
 .semantic-audit time { font-variant-numeric: tabular-nums; }
 .semantic-empty, .semantic-error, .semantic-loading { padding: 48px 20px; color: var(--text-muted); text-align: center; font-size: 12px; }
+.semantic-degraded-hint { padding: 8px 14px; color: var(--text-muted); font-size: 11px; border-top: 1px solid var(--border); }
 .semantic-metrics { display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); margin-top: 25px; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .semantic-metric { padding: 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
 .semantic-metric:nth-child(3n) { border-right: 0; }

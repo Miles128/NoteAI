@@ -232,7 +232,10 @@
       "copy": "复制",
       "copied": "已复制",
       "copyFailed": "复制失败"
-    }
+    },
+    "versionHint": "抽取提示词已升级至 v{version}，建议重新编译",
+    "versionHintTitle": "当前库使用 v{current}，最新 v{latest}",
+    "degradedHint": "已降级 {count} 条低频低置信对象（切换「深度」模式查看）"
   },
   "pending": {
     "moveToTopic": "挪到 {topic}",
@@ -1217,6 +1220,9 @@
     }
   },
   "tags": {
+    "loading": "正在加载标签...",
+    "empty": "还没有标签，点击右下角 + 创建",
+    "loadError": "标签加载失败",
     "changeName": "更改名称",
     "deleteTag": "删除标签",
     "addFailed": "添加标签失败: ",

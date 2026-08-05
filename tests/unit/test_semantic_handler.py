@@ -780,3 +780,173 @@ def test_workbench_intensity_filters_confidence(semantic_handler: SemanticHandle
     # 未知强度回退到标准强度
     fallback = semantic_handler._get_workbench({"tab": "entities", "intensity": "ultra"})
     assert fallback["total"] == entities_standard["total"]
+
+
+def test_low_frequency_objects_are_degraded_outside_deep_mode(semantic_handler: SemanticHandler) -> None:
+    """低频低置信对象（mention<2 且 confidence<0.6）默认隐藏，deep 可见、搜索可命中。"""
+    store = semantic_handler._store()
+    with store.connect() as conn:
+        # 降级候选：0.55 置信 + 仅 1 次 mention
+        conn.execute(
+            """INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)
+               VALUES('entity-5', '低频低置信实体', 'product', '描述', 0.55, 'active')"""
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('entity-5', 'entity', 'block-1')")
+        # 高频低置信：5 次 mention + 0.55 置信 → 不应被降级（条件需同时满足）
+        conn.execute(
+            """INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)
+               VALUES('entity-6', '高频低置信实体', 'product', '描述', 0.55, 'active')"""
+        )
+        for block_id in ('block-1', 'block-2', 'block-3', 'block-4', 'block-5'):
+            conn.execute(
+                """INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal,
+                                      content, content_hash, start_line, end_line)
+                   VALUES(?, 'doc-1', 'paragraph', '[]', 1, '内容', 'hash-' || ?, 9, 9)
+                   ON CONFLICT(id) DO NOTHING""",
+                (block_id, block_id),
+            )
+            conn.execute("INSERT OR IGNORE INTO semantic_mentions VALUES('entity-6', 'entity', ?)", (block_id,))
+
+    entities_standard = semantic_handler._get_workbench({"tab": "entities", "intensity": "standard"})
+    entities_deep = semantic_handler._get_workbench({"tab": "entities", "intensity": "deep"})
+    entities_search = semantic_handler._get_workbench(
+        {"tab": "entities", "intensity": "standard", "query": "低频低置信"}
+    )
+
+    names_standard = {item["canonical_name"] for item in entities_standard["items"]}
+    assert "低频低置信实体" not in names_standard
+    assert "高频低置信实体" in names_standard  # 仅低置信但高频 → 保留
+    assert entities_standard["degraded_hidden"] == 1
+    assert entities_deep["degraded_hidden"] == 0  # deep 不降级
+    names_deep = {item["canonical_name"] for item in entities_deep["items"]}
+    assert "低频低置信实体" in names_deep
+    # 主动搜索仍可命中降级对象
+    names_search = {item["canonical_name"] for item in entities_search["items"]}
+    assert "低频低置信实体" in names_search
+    assert entities_search["degraded_hidden"] == 0
+
+
+def _mark_claim_failed(store: SemanticStore, block_id: str, error: str = "LLM 超时") -> None:
+    with store.connect() as conn:
+        conn.execute(
+            """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+               VALUES(?, 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', ?)""",
+            (block_id, error),
+        )
+
+
+def test_retry_failed_blocks_no_failures(semantic_handler: SemanticHandler) -> None:
+    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    assert result["success"] is True
+    assert result["failed_blocks"] == 0
+    assert result["extracted_blocks"] == 0
+
+
+def test_retry_failed_blocks_retries_and_completes(
+    semantic_handler: SemanticHandler, monkeypatch
+) -> None:
+    _mark_claim_failed(semantic_handler._store(), "block-1")
+    calls: list[tuple[str, bool]] = []
+
+    def fake_extract(store, doc_id, claims_only=False):
+        calls.append((doc_id, claims_only))
+        with store.connect() as conn:
+            conn.execute(
+                """UPDATE claim_extractions SET status='complete', error=NULL
+                   WHERE block_id='block-1'"""
+            )
+        return {"success": True, "extracted": 1, "claims": 1, "failed": 0, "failures": []}
+
+    monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
+    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    assert result["success"] is True
+    assert result["failed_blocks"] == 1
+    assert result["documents"] == 1
+    assert result["extracted_blocks"] == 1
+    assert result["remaining_failed"] == 0
+    assert calls == [("doc-1", True)]
+
+
+def test_retry_failed_blocks_limit(semantic_handler: SemanticHandler, monkeypatch) -> None:
+    with semantic_handler._store().connect() as conn:
+        conn.execute(
+            """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+               VALUES('block-1', 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', 'err-1')"""
+        )
+        for i in (2, 3):
+            conn.execute(
+                """INSERT INTO documents(id, path, content_hash, title, topic, compiled_at)
+                   VALUES(?, ?, 'hash', ?, '', '2026-07-17T10:00:00Z')""",
+                (f"doc-{i}", f"Notes/AI/RAG{i}.md", f"RAG{i}"),
+            )
+            conn.execute(
+                """INSERT INTO blocks(id, document_id, block_type, heading_path_json, ordinal,
+                                      content, content_hash, start_line, end_line)
+                   VALUES(?, ?, 'paragraph', '[]', 0, '内容', 'hash', 1, 1)""",
+                (f"block-{i}", f"doc-{i}"),
+            )
+            conn.execute(
+                """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                   VALUES(?, 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', ?)""",
+                (f"block-{i}", f"err-{i}"),
+            )
+    calls: list[str] = []
+
+    def fake_extract(store, doc_id, claims_only=False):
+        calls.append(doc_id)
+        return {"success": True, "extracted": 0, "claims": 0, "failures": []}
+
+    monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
+    result = semantic_handler._retry_failed_blocks({"claims_only": True, "limit": 1})
+    assert result["failed_blocks"] == 1
+    assert result["documents"] == 1
+    assert len(calls) == 1
+    # fake 不写库，剩余失败数保持原值。
+    assert result["remaining_failed"] == 3
+
+
+def test_retry_failed_blocks_reports_failure(
+    semantic_handler: SemanticHandler, monkeypatch
+) -> None:
+    _mark_claim_failed(semantic_handler._store(), "block-1", "解析失败")
+
+    def fake_extract(store, doc_id, claims_only=False):
+        return {
+            "success": True,
+            "extracted": 0,
+            "claims": 0,
+            "failures": [{"block_id": "block-1", "error": "解析失败"}],
+        }
+
+    monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
+    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    assert result["failures"] == [{"document_id": "doc-1", "error": "解析失败"}]
+    assert result["remaining_failed"] == 1
+
+
+def test_retry_failed_blocks_full_mode_uses_block_extractions(
+    semantic_handler: SemanticHandler, monkeypatch
+) -> None:
+    with semantic_handler._store().connect() as conn:
+        conn.execute(
+            """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+               VALUES('block-1', 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', '超时')"""
+        )
+    calls: list[bool] = []
+
+    def fake_extract(store, doc_id, claims_only=False):
+        calls.append(claims_only)
+        with store.connect() as conn:
+            conn.execute(
+                """UPDATE block_extractions SET status='complete', error=NULL
+                   WHERE block_id='block-1'"""
+            )
+        return {"success": True, "extracted": 1, "claims": 0, "failures": []}
+
+    monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
+    result = semantic_handler._retry_failed_blocks({"claims_only": False})
+    assert result["success"] is True
+    assert result["failed_blocks"] == 1
+    assert result["extracted_blocks"] == 1
+    assert result["remaining_failed"] == 0
+    assert calls == [False]

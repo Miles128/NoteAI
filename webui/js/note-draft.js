@@ -188,9 +188,7 @@ async function openDraft(draft) {
     refreshDraftChrome(draft.content);
 
     if (!window.TiptapEditorModule || !window.TiptapEditorModule.openMarkdownInEditor) {
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('noteDraft.editorUnavailable'));
-        }
+        window.updateStatus(window.t('noteDraft.editorUnavailable'));
         return false;
     }
 
@@ -206,7 +204,7 @@ async function openDraft(draft) {
         });
     }
 
-    if (!ok && typeof window.updateStatus === 'function') {
+    if (!ok) {
         window.updateStatus(window.t('noteDraft.editorUnavailable'));
     }
     return !!ok;
@@ -218,15 +216,13 @@ async function createNoteInContext(template) {
         : null;
 
     if (!info || !info.folderPath) {
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('noteDraft.selectFolderFirst'));
-        }
+        window.updateStatus(window.t('noteDraft.selectFolderFirst'));
         return false;
     }
 
     var draft = createDraft(info.topic, info.folderPath, template || 'blank');
     var ok = await openDraft(draft);
-    if (ok && typeof window.updateStatus === 'function') {
+    if (ok) {
         window.updateStatus(window.t('noteDraft.openedInFolder', { folder: info.folderName || info.folderPath }));
     }
     return ok;
@@ -261,9 +257,7 @@ async function commitCurrentDraft() {
             if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
                 window.StatusbarModule.updateSaveStatus('error', window.t('editor.saveFailed'));
             }
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('quickCreate.createFailed', { message: createMsg }));
-            }
+            window.updateStatus(window.t('quickCreate.createFailed', { message: createMsg }));
             return { success: false, message: createMsg };
         }
 
@@ -299,9 +293,7 @@ async function commitCurrentDraft() {
         if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
             window.refreshWorkspaceViewsAfterChange();
         }
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('noteDraft.savedToWorkspace', { path: createRes.path }));
-        }
+        window.updateStatus(window.t('noteDraft.savedToWorkspace', { path: createRes.path }));
 
         return { success: true, path: createRes.path };
     } catch (err) {
@@ -309,9 +301,7 @@ async function commitCurrentDraft() {
         if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
             window.StatusbarModule.updateSaveStatus('error', window.t('editor.saveFailed'));
         }
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('quickCreate.createFailed', { message: msg }));
-        }
+        window.updateStatus(window.t('quickCreate.createFailed', { message: msg }));
         return { success: false, message: msg };
     } finally {
         _committing = false;
@@ -355,9 +345,7 @@ async function discardCurrentDraft() {
     if (window.StatusbarModule && window.StatusbarModule.clearStats) {
         window.StatusbarModule.clearStats();
     }
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus((window.t && window.t('noteDraft.discarded')) || '草稿已作废');
-    }
+    window.updateStatus((window.t && window.t('noteDraft.discarded')) || '草稿已作废');
     return { success: true };
 }
 

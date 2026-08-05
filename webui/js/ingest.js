@@ -35,17 +35,13 @@ function updateBar(stage, progress, message) {
     if (fill) fill.style.width = Math.round((progress || 0) * 100) + '%';
     if (label) label.textContent = STAGE_LABELS[stage] || stage || window.t('ingest.label');
     if (msg) msg.textContent = message || '';
-    if (typeof window.updateStatus === 'function') {
-        window.updateStatus(message || window.t('ingest.pipelineRunning'));
-    }
+    window.updateStatus(message || window.t('ingest.pipelineRunning'));
 }
 
 function onIngestComplete(data) {
     hideBar();
     if (data.cancelled) {
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('ingest.cancelled'));
-        }
+        window.updateStatus(window.t('ingest.cancelled'));
         return;
     }
     if (data.success) {
@@ -56,13 +52,9 @@ function onIngestComplete(data) {
         if (stats.indexed_files) parts.push(window.t('ingest.statIndexed', { count: stats.indexed_files }));
         if (stats.cascade_updated) parts.push(window.t('ingest.statCascade', { count: stats.cascade_updated }));
         if (stats.lint && stats.lint.total) parts.push('Lint ' + stats.lint.total);
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('ingest.done') + (parts.length ? ' — ' + parts.join('，') : ''));
-        }
+        window.updateStatus(window.t('ingest.done') + (parts.length ? ' — ' + parts.join('，') : ''));
     } else {
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('ingest.failed') + (data.error || window.t('common.unknownError')));
-        }
+        window.updateStatus(window.t('ingest.failed') + (data.error || window.t('common.unknownError')));
     }
     if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
         window.refreshWorkspaceViewsAfterChange();
@@ -82,12 +74,10 @@ function handleEvent(data) {
         updateBar('cascade', 0, window.t('ingest.cascadeBackgroundStarted'));
     } else if (data.type === 'ingest_cascade_complete') {
         hideBar();
-        if (typeof window.updateStatus === 'function') {
-            if (data.success) {
-                window.updateStatus(window.t('ingest.cascadeBackgroundDone', { count: data.updated || 0 }));
-            } else {
-                window.updateStatus(window.t('ingest.cascadeBackgroundFailed', { count: (data.failed || []).length }));
-            }
+        if (data.success) {
+            window.updateStatus(window.t('ingest.cascadeBackgroundDone', { count: data.updated || 0 }));
+        } else {
+            window.updateStatus(window.t('ingest.cascadeBackgroundFailed', { count: (data.failed || []).length }));
         }
     }
 }

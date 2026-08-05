@@ -1552,8 +1552,9 @@
         </div>
         <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
     </div>
+    <!-- error-handler/storage 保持经典脚本：需在模块执行前尽早安装错误捕获与存储层；
+         G3.js 已迁入 main.mjs 动态加载序列（其顶层依赖的 window.Storage 由上方经典脚本先行提供） -->
     <script src="js/error-handler.js"></script>
     <script src="js/storage.js"></script>
-    <script src="js/G3.js"></script>
 </body>
 </html>

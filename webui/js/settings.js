@@ -315,7 +315,8 @@ function initReliabilitySettings() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+// 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接初始化（不再依赖 DOMContentLoaded 重放）
+(function() {
     var settingsPanel = document.getElementById('settings-panel');
     if (settingsPanel) {
         settingsPanel.addEventListener('click', function(e) {
@@ -340,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initMergePresetSettings();
     initMergeAdvancedSettings();
     initSemanticWorkbenchSettings();
-});
+})();
 
 async function autoSaveConfig() {
     try {

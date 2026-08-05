@@ -186,7 +186,7 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
         }
 
         function onMouseMove(e) {
@@ -207,7 +207,7 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
@@ -225,7 +225,7 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
         }
 
         function onMouseMove(e) {
@@ -244,7 +244,7 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);

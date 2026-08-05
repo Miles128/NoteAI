@@ -1080,7 +1080,5 @@
         isCliAgentMode: function() { return _selectedAgent !== null; }
     };
 
-    document.addEventListener('DOMContentLoaded', function() {
-        init();
-    });
+    // init() 由 main.mjs 在 import 本模块时显式调用，不再监听 DOMContentLoaded
 })();

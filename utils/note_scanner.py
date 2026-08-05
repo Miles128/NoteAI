@@ -24,7 +24,8 @@ def iter_note_files(
         workspace: 工作区根路径。
         folders: 要扫描的子文件夹列表，默认仅 Notes/。
         include_surveys: 是否包含 *_综述.md（默认排除）。
-        include_hidden: 是否包含以 "." 开头的文件（默认排除）。
+        include_hidden: 是否包含以 "." 开头的文件及隐藏目录
+            （如 .workbuddy/、.mimocode/）下的文件（默认排除）。
 
     Returns:
         笔记文件路径列表（rglob 顺序，未排序）。
@@ -37,8 +38,10 @@ def iter_note_files(
         if not folder.exists():
             continue
         for md in folder.rglob("*.md"):
-            if not include_hidden and md.name.startswith("."):
-                continue
+            if not include_hidden:
+                # 文件名以 "." 开头，或路径中任一部分以 "." 开头的隐藏目录
+                if md.name.startswith(".") or any(part.startswith(".") for part in md.relative_to(folder).parts[:-1]):
+                    continue
             if not include_surveys and md.name.endswith(_SURVEY_SUFFIX):
                 continue
             out.append(md)

@@ -11,7 +11,7 @@ from typing import Any, TypeVar
 from sidecar.semantic.object_wiki import materialize_object_collection
 from sidecar.semantic.store import SemanticStore
 from sidecar.semantic.topic_state import materialize_topic_state
-from sidecar.semantic.wiki import materialize_topic_wiki_page
+from sidecar.semantic.wiki import materialize_topic_wiki_page, top_level_topic
 
 _LOCK_RETRIES = 4
 _LOCK_DELAY = 0.05
@@ -102,6 +102,7 @@ def materialize_documents(
         "entities": 0,
         "concepts": 0,
         "topics": 0,
+        "wiki_pages": 0,
         "removed": {"entities": 0, "concepts": 0},
         "failures": [],
     }
@@ -146,8 +147,14 @@ def materialize_documents(
     for topic in sorted(topics):
         try:
             _retry_lock(partial(materialize_topic_state, store, topic))
-            _retry_lock(partial(materialize_topic_wiki_page, store, topic))
             result["topics"] += 1
         except (OSError, ValueError, sqlite3.Error) as exc:
             result["failures"].append({"kind": "topic", "id": topic, "error": str(exc)})
+    # Topic wiki pages aggregate per top-level topic (one merged file per top).
+    for top in sorted({top_level_topic(topic) for topic in topics if topic.strip()}):
+        try:
+            _retry_lock(partial(materialize_topic_wiki_page, store, top))
+            result["wiki_pages"] += 1
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            result["failures"].append({"kind": "topic_wiki", "id": top, "error": str(exc)})
     return result

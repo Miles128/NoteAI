@@ -15,6 +15,9 @@ var _activeDetailKind = null;
 var _lastBrief = '';
 var _pendingTargetId = null;
 var _suppressAutoSelect = false;
+var _intensity = 'standard';
+var _enabledCategories = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
+var _workbenchEnabled = true;
 var _verifyAgents = [];
 
 function esc(value) {
@@ -23,9 +26,15 @@ function esc(value) {
 function t(key, vars) { return window.t ? window.t(key, vars) : key; }
 function currentTab() { return _category === 'objects' ? _objectKind : _category; }
 
+function isEnabled() {
+    var ui = window.uiConfig;
+    return ui ? ui.semantic_workbench_enabled !== false : _workbenchEnabled;
+}
+
 function toggle() { _visible ? hide() : show(_category); }
 
 function show(category) {
+    if (!isEnabled()) return;
     if (category) _category = category;
     _visible = true;
     var notePanel = document.getElementById('note-list-panel');
@@ -156,6 +165,7 @@ function requestOptions() {
         tab: currentTab(),
         query: search ? search.value.trim() : '',
         status: status && !status.hidden ? status.value : undefined,
+        intensity: _intensity,
         limit: 100,
         offset: 0
     };
@@ -346,6 +356,7 @@ function loadDetail(item) {
 
 function openObject(kind, id) {
     if (kind !== 'entity' && kind !== 'concept') return;
+    if (!isEnabled()) return;
     _category = 'objects';
     _objectKind = kind === 'entity' ? 'entities' : 'concepts';
     _pendingTargetId = id;
@@ -833,6 +844,55 @@ function onDetailSubmit(event) {
     }
 }
 
+function applyVisibilityConfig() {
+    var ui = window.uiConfig;
+    if (ui) {
+        applyVisibilityConfigWith(ui);
+        return;
+    }
+    if (window.api && window.api.getUiConfig) {
+        window.api.getUiConfig().then(function(cfg) {
+            if (cfg) applyVisibilityConfigWith(cfg);
+        }).catch(function() {});
+    }
+}
+
+function applyVisibilityConfigWith(ui) {
+    if (!ui) return;
+    _workbenchEnabled = ui.semantic_workbench_enabled !== false;
+    var group = document.getElementById('semantic-sidebar-group');
+    if (group) group.style.display = _workbenchEnabled ? '' : 'none';
+    if (!_workbenchEnabled) {
+        if (_visible) hide();
+        return;
+    }
+    var tabs = Array.isArray(ui.semantic_workbench_tabs) && ui.semantic_workbench_tabs.length
+        ? ui.semantic_workbench_tabs
+        : ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
+    _enabledCategories = tabs.slice();
+    var visible = {};
+    tabs.forEach(function(tab) { visible[tab] = true; });
+    document.querySelectorAll('#semantic-categories [data-category]').forEach(function(button) {
+        button.style.display = visible[button.dataset.category] ? '' : 'none';
+    });
+    if (_category && !visible[_category]) {
+        var fallback = tabs[0] || 'objects';
+        _category = fallback;
+        document.querySelectorAll('#semantic-categories [data-category]').forEach(function(button) {
+            button.classList.toggle('active', button.dataset.category === _category);
+        });
+        if (_visible) {
+            _selectedIndex = -1;
+            loadList();
+        }
+    }
+    if (['light', 'standard', 'deep'].indexOf(ui.semantic_workbench_intensity) !== -1) {
+        _intensity = ui.semantic_workbench_intensity;
+    } else {
+        _intensity = 'standard';
+    }
+}
+
 function init() {
     var categories = document.getElementById('semantic-categories');
     if (categories) categories.addEventListener('click', function(event) {
@@ -867,10 +927,11 @@ function init() {
     if (scan) scan.addEventListener('click', function() { scanConflicts(scan); });
     configureStatusFilter();
     loadOverview();
+    applyVisibilityConfig();
     loadVerifyAgents();
 }
 
-window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; } };
+window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };
 window.toggleSemanticWorkbench = toggle;
 
 })();

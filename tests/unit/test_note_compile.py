@@ -73,6 +73,6 @@ def test_discover_cross_refs_no_forced_minimum(workspace: Path) -> None:
     assert result["success"] is True
     links = load_links().get("links", [])
     outgoing = [l for l in links if l.get("from") == rel]
-    assert len(outgoing) >= 1
-    assert len(outgoing) <= 25
-    assert {l.get("status") for l in outgoing} == {"confirmed"}
+    # 同主题不连双向链接：workspace 里所有文件都是同主题（AI > 子题），
+    # 所以不应生成任何链接
+    assert len(outgoing) == 0

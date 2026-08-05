@@ -38,7 +38,8 @@ def test_discover_cross_refs_finds_related(workspace: Path) -> None:
     links = load_links().get("links", [])
     outgoing = [l for l in links if l.get("from") == rel]
     assert len(outgoing) >= 1
-    assert {l.get("status") for l in outgoing} == {"confirmed"}
+    # 严格判断：启发式/LLM 候选一律 pending，等待人工确认
+    assert {l.get("status") for l in outgoing} == {"pending"}
 
 
 def test_discover_cross_refs_ignores_readme_notes(workspace: Path) -> None:

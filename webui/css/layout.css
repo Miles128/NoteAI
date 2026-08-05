@@ -3328,6 +3328,36 @@ body {
     grid-row: 1 / span 2;
 }
 
+.settings-semantic-tabs-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px 16px;
+    margin-top: 12px;
+}
+
+.settings-check-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    padding: 4px 0;
+}
+
+.settings-check-row input[type="checkbox"] {
+    accent-color: var(--accent-color, #4A90D9);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+.settings-check-row:has(input:disabled),
+.settings-check-row input:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .about-panel-close {
     position: absolute;
     top: 12px;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,10 +27,10 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
                 (topic, topic_prefix),
             )
         )
-        claims = list(
+        claim_rows = list(
             conn.execute(
                 """
-                SELECT DISTINCT c.id, c.statement, c.scope, c.claim_type, c.confidence
+                SELECT DISTINCT c.id, c.statement, c.scope, c.claim_type, c.confidence, d.topic
                 FROM claims c
                 JOIN evidence e ON e.claim_id = c.id
                 JOIN blocks b ON b.id = e.block_id
@@ -41,6 +42,15 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
                 (topic, topic_prefix),
             )
         )
+        # A claim may be evidenced by documents from several topics; DISTINCT
+        # rows then repeat the claim id, so deduplicate while keeping order.
+        seen_claim_ids: set[str] = set()
+        claims: list[sqlite3.Row] = []
+        for row in claim_rows:
+            if row["id"] in seen_claim_ids:
+                continue
+            seen_claim_ids.add(row["id"])
+            claims.append(row)
         evidence_rows = list(
             conn.execute(
                 """

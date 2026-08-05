@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -178,6 +179,20 @@ CREATE INDEX IF NOT EXISTS idx_claim_verifications_claim
 
 CHANGE_LOG_LIMIT = 8000
 
+_PAREN_PAIR_RE = re.compile(r"[（(][^（()）]*[)）]")
+
+
+def name_fingerprint(name: str) -> str:
+    """Normalize an object name for duplicate detection at extraction time.
+
+    Strips parenthetical annotations (``RAG（检索增强生成）`` → ``RAG``), all
+    whitespace and case, so variant spellings of the same object resolve to
+    the same fingerprint and merge into one row instead of duplicating.
+    """
+    text = _PAREN_PAIR_RE.sub("", name)
+    fp = "".join(text.casefold().split())
+    return fp or "".join(name.casefold().split())
+
 
 class SemanticStore:
     def __init__(self, workspace: str | Path):
@@ -210,6 +225,22 @@ class SemanticStore:
                 # origin lets a later extraction replace exactly its own edges.
                 conn.execute("ALTER TABLE relations ADD COLUMN block_id TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_block ON relations(block_id)")
+            # Extraction-time duplicate detection: a name fingerprint column
+            # lets variant spellings (parenthetical annotations, whitespace,
+            # case) merge into the existing row the moment a block is saved.
+            for table in ("entities", "concepts"):
+                cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+                if "name_fingerprint" not in cols:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN name_fingerprint TEXT")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_fp ON entities(name_fingerprint)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_concepts_fp ON concepts(name_fingerprint)")
+            for table in ("entities", "concepts"):
+                rows = conn.execute(f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint IS NULL").fetchall()
+                for row in rows:
+                    conn.execute(
+                        f"UPDATE {table} SET name_fingerprint = ? WHERE id = ?",
+                        (name_fingerprint(row["canonical_name"]), row["id"]),
+                    )
             conn.execute(
                 "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -775,79 +806,96 @@ class SemanticStore:
         extracted_at: str,
         claims: list[dict],
     ) -> None:
-        """Replace only one block's Claim/Evidence layer."""
+        """Replace only one block's Claim/Evidence layer.
+
+        Guard: when the source content is unchanged and this round produced no
+        claims, the previous claims/evidence are preserved instead of being
+        destroyed — a transient empty extraction must not wipe existing claims.
+        """
         with self.connect() as conn:
             source_path, source_topic = self._block_source(conn, block_id)
-            incoming_ids = [claim["id"] for claim in claims]
-            previous_claims: dict[str, sqlite3.Row] = {}
-            if incoming_ids:
-                placeholders = ",".join("?" * len(incoming_ids))
-                previous_claims = {
-                    row["id"]: row
-                    for row in conn.execute(
-                        f"SELECT id, statement, user_edited FROM claims WHERE id IN ({placeholders})",
-                        incoming_ids,
-                    )
+            previous_row = conn.execute(
+                "SELECT block_hash FROM claim_extractions WHERE block_id = ?", (block_id,)
+            ).fetchone()
+            content_changed = previous_row is None or previous_row["block_hash"] != block_hash
+            keep_legacy = not claims and not content_changed
+            if not keep_legacy:
+                incoming_ids = [claim["id"] for claim in claims]
+                previous_claims: dict[str, sqlite3.Row] = {}
+                if incoming_ids:
+                    placeholders = ",".join("?" * len(incoming_ids))
+                    previous_claims = {
+                        row["id"]: row
+                        for row in conn.execute(
+                            f"SELECT id, statement, user_edited FROM claims WHERE id IN ({placeholders})",
+                            incoming_ids,
+                        )
+                    }
+                evidence_statuses = {
+                    row["id"]: row["status"]
+                    for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
                 }
-            evidence_statuses = {
-                row["id"]: row["status"]
-                for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
-            }
-            conn.execute(
-                "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind = 'claim'",
-                (block_id,),
-            )
-            conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
-            for claim in claims:
                 conn.execute(
-                    """
-                    INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-                    VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
-                    ON CONFLICT(id) DO UPDATE SET
-                        statement=CASE WHEN user_edited = 1 THEN statement ELSE excluded.statement END,
-                        scope=CASE WHEN user_edited = 1 THEN scope ELSE excluded.scope END,
-                        claim_type=CASE WHEN user_edited = 1 THEN claim_type ELSE excluded.claim_type END,
-                        confidence=max(confidence, excluded.confidence), status=status
-                    """,
-                    claim,
+                    "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind = 'claim'",
+                    (block_id,),
                 )
-                previous = previous_claims.get(claim["id"])
-                if previous is None:
-                    self._record_change(
-                        conn,
-                        change_kind="added",
-                        object_kind="claim",
-                        object_id=claim["id"],
-                        label=claim["statement"],
-                        detail={"claim_type": claim["claim_type"], "scope": claim.get("scope", "")},
-                        source_path=source_path,
-                        topic=source_topic,
+                conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
+                for claim in claims:
+                    conn.execute(
+                        """
+                        INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
+                        VALUES(:id, :statement, :scope, :claim_type, :confidence, 'active')
+                        ON CONFLICT(id) DO UPDATE SET
+                            statement=CASE WHEN user_edited = 1 THEN statement ELSE excluded.statement END,
+                            scope=CASE WHEN user_edited = 1 THEN scope ELSE excluded.scope END,
+                            claim_type=CASE WHEN user_edited = 1 THEN claim_type ELSE excluded.claim_type END,
+                            confidence=max(confidence, excluded.confidence), status=status
+                        """,
+                        claim,
                     )
-                elif not previous["user_edited"] and previous["statement"] != claim["statement"]:
-                    self._record_change(
-                        conn,
-                        change_kind="updated",
-                        object_kind="claim",
-                        object_id=claim["id"],
-                        label=claim["statement"],
-                        detail={"claim_type": claim["claim_type"], "previous_statement": previous["statement"]},
-                        source_path=source_path,
-                        topic=source_topic,
+                    previous = previous_claims.get(claim["id"])
+                    if previous is None:
+                        self._record_change(
+                            conn,
+                            change_kind="added",
+                            object_kind="claim",
+                            object_id=claim["id"],
+                            label=claim["statement"],
+                            detail={"claim_type": claim["claim_type"], "scope": claim.get("scope", "")},
+                            source_path=source_path,
+                            topic=source_topic,
+                        )
+                    elif not previous["user_edited"] and previous["statement"] != claim["statement"]:
+                        self._record_change(
+                            conn,
+                            change_kind="updated",
+                            object_kind="claim",
+                            object_id=claim["id"],
+                            label=claim["statement"],
+                            detail={"claim_type": claim["claim_type"], "previous_statement": previous["statement"]},
+                            source_path=source_path,
+                            topic=source_topic,
+                        )
+                    conn.execute(
+                        "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'claim', ?)",
+                        (claim["id"], block_id),
                     )
-                conn.execute(
-                    "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'claim', ?)",
-                    (claim["id"], block_id),
-                )
-                conn.execute(
-                    """
-                    INSERT INTO evidence(id, claim_id, block_id, quote_hash, status)
-                    VALUES(:id, :claim_id, :block_id, :quote_hash, :status)
-                    ON CONFLICT(id) DO NOTHING
-                    """,
-                    {
-                        **claim["evidence"],
-                        "status": evidence_statuses.get(claim["evidence"]["id"], "active"),
-                    },
+                    conn.execute(
+                        """
+                        INSERT INTO evidence(id, claim_id, block_id, quote_hash, status)
+                        VALUES(:id, :claim_id, :block_id, :quote_hash, :status)
+                        ON CONFLICT(id) DO NOTHING
+                        """,
+                        {
+                            **claim["evidence"],
+                            "status": evidence_statuses.get(claim["evidence"]["id"], "active"),
+                        },
+                    )
+                self._invalidate_orphan_claims(
+                    conn,
+                    reason="replaced_by_recompile",
+                    source_path=source_path,
+                    topic=source_topic,
                 )
             conn.execute(
                 """
@@ -861,12 +909,6 @@ class SemanticStore:
                     error=NULL
                 """,
                 (block_id, block_hash, prompt_version, extracted_at),
-            )
-            self._invalidate_orphan_claims(
-                conn,
-                reason="replaced_by_recompile",
-                source_path=source_path,
-                topic=source_topic,
             )
             self._trim_change_log(conn)
 
@@ -904,12 +946,34 @@ class SemanticStore:
         entities: list[dict],
         claims: list[dict],
     ) -> None:
-        """Replace one block's semantic output in a single transaction."""
+        """Replace one block's semantic output in a single transaction.
+
+        Guard: when the source content is unchanged and this round produced no
+        claims, the previous claims/evidence are preserved instead of being
+        destroyed — a transient empty extraction must not wipe existing claims.
+        """
         with self.connect() as conn:
             source_path, source_topic = self._block_source(conn, block_id)
+            # Extraction-time dedup: when a variant spelling (parenthetical
+            # annotation, whitespace, case) matches an existing active object,
+            # reuse that id so mentions/relations merge instead of duplicating.
+            # The upsert below then refreshes description/confidence on the
+            # existing row while keeping its canonical name.
+            for obj, table in [(c, "concepts") for c in concepts] + [(e, "entities") for e in entities]:
+                existing = conn.execute(
+                    f"SELECT id FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
+                    (name_fingerprint(obj["canonical_name"]), obj["id"]),
+                ).fetchone()
+                if existing is not None:
+                    obj["id"] = existing["id"]
             concept_ids = [concept["id"] for concept in concepts]
             entity_ids = [entity["id"] for entity in entities]
             claim_ids = [claim["id"] for claim in claims]
+            previous_extraction = conn.execute(
+                "SELECT block_hash FROM block_extractions WHERE block_id = ?", (block_id,)
+            ).fetchone()
+            content_changed = previous_extraction is None or previous_extraction["block_hash"] != block_hash
+            keep_legacy_claims = not claims and not content_changed
             existing_concepts = (
                 {
                     row["id"]
@@ -943,21 +1007,27 @@ class SemanticStore:
                 row["id"]: row["status"]
                 for row in conn.execute("SELECT id, status FROM evidence WHERE block_id = ?", (block_id,))
             }
-            conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
+            conn.execute(
+                "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind != 'claim'",
+                (block_id,),
+            ) if keep_legacy_claims else conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
             conn.execute("DELETE FROM relations WHERE block_id = ?", (block_id,))
-            conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
+            if not keep_legacy_claims:
+                conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
 
             for concept in concepts:
                 conn.execute(
                     """
-                    INSERT INTO concepts(id, canonical_name, description, confidence, status)
-                    VALUES(:id, :canonical_name, :description, :confidence, 'active')
+                    INSERT INTO concepts(
+                        id, canonical_name, description, confidence, status, name_fingerprint
+                    )
+                    VALUES(:id, :canonical_name, :description, :confidence, 'active', :name_fingerprint)
                     ON CONFLICT(id) DO UPDATE SET
                         description=CASE WHEN length(excluded.description) > length(description)
                             THEN excluded.description ELSE description END,
                         confidence=max(confidence, excluded.confidence), status='active'
                     """,
-                    concept,
+                    {**concept, "name_fingerprint": name_fingerprint(concept["canonical_name"])},
                 )
                 if concept["id"] not in existing_concepts:
                     self._record_change(
@@ -977,14 +1047,18 @@ class SemanticStore:
             for entity in entities:
                 conn.execute(
                     """
-                    INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)
-                    VALUES(:id, :canonical_name, :entity_type, :description, :confidence, 'active')
+                    INSERT INTO entities(
+                        id, canonical_name, entity_type, description, confidence, status, name_fingerprint
+                    )
+                    VALUES(
+                        :id, :canonical_name, :entity_type, :description, :confidence, 'active', :name_fingerprint
+                    )
                     ON CONFLICT(id) DO UPDATE SET
                         description=CASE WHEN length(excluded.description) > length(description)
                             THEN excluded.description ELSE description END,
                         confidence=max(confidence, excluded.confidence), status='active'
                     """,
-                    entity,
+                    {**entity, "name_fingerprint": name_fingerprint(entity["canonical_name"])},
                 )
                 if entity["id"] not in existing_entities:
                     self._record_change(
@@ -1104,7 +1178,7 @@ class SemanticStore:
                 reason="replaced_by_recompile",
                 source_path=source_path,
                 topic=source_topic,
-            )
+            ) if not keep_legacy_claims else None
             self._trim_change_log(conn)
 
     def mark_extraction_failed(
@@ -1205,12 +1279,28 @@ class SemanticStore:
                 ),
             )
 
-    def purge_missing_documents(self) -> list[str]:
-        """Delete missing source snapshots and return their affected topics."""
+    def purge_missing_documents(self, keep_paths: Sequence[str | Path] | None = None) -> list[str]:
+        """Delete documents whose source is missing or outside the compile set.
+
+        Args:
+            keep_paths: 本次编译覆盖的笔记绝对路径集合。提供时，磁盘上存在但
+                不在该集合内的记录（如隐藏目录中的文件）也会被清理；为 None 时
+                仅清理磁盘上已不存在的记录。
+
+        Returns:
+            受影响的主题列表。
+        """
         self.initialize()
+        keep: set[str] | None = None
+        if keep_paths is not None:
+            keep = {str(Path(p).relative_to(self.workspace)) for p in keep_paths}
         with self.connect() as conn:
             rows = list(conn.execute("SELECT id, path, title, topic FROM documents"))
-            missing = [row for row in rows if not (self.workspace / row["path"]).is_file()]
+            missing = [
+                row
+                for row in rows
+                if not (self.workspace / row["path"]).is_file() or (keep is not None and row["path"] not in keep)
+            ]
             if not missing:
                 return []
             conn.executemany("DELETE FROM documents WHERE id = ?", ((row["id"],) for row in missing))
@@ -1248,6 +1338,270 @@ class SemanticStore:
             )
             self._trim_change_log(conn)
             return sorted({row["topic"] for row in missing if row["topic"]})
+
+    def deactivate_noise_objects(self) -> dict:
+        """Deactivate stored objects whose names are deterministic noise.
+
+        Covers legacy noise written before the extraction gate existed (file
+        names like ``prepare.py``, flag tokens like ``--ar``, heading-number
+        prefixes like ``06_四阶十二步法``, merged ``A/B`` names, domain names).
+        Rows are kept with ``status='inactive'`` so audit history survives, but
+        they stop appearing in workbench lists and aggregated pages.
+        """
+        from sidecar.semantic.extractor import _is_noise_object_name
+
+        self.initialize()
+        stats = {"entities": 0, "concepts": 0}
+        with self.connect() as conn:
+            for table, kind in (("entities", "entity"), ("concepts", "concept")):
+                rows = list(conn.execute(f"SELECT id, canonical_name FROM {table} WHERE status = 'active'"))
+                for row in rows:
+                    if not _is_noise_object_name(row["canonical_name"]):
+                        continue
+                    conn.execute(f"UPDATE {table} SET status = 'inactive' WHERE id = ?", (row["id"],))
+                    conn.execute(
+                        "DELETE FROM semantic_mentions WHERE object_id = ? AND object_kind = ?",
+                        (row["id"], kind),
+                    )
+                    conn.execute(
+                        "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                        (row["id"], row["id"]),
+                    )
+                    self._record_change(
+                        conn,
+                        change_kind="deactivated",
+                        object_kind=kind,
+                        object_id=row["id"],
+                        label=row["canonical_name"],
+                        detail={"reason": "noise_object_name"},
+                    )
+                    stats["entities" if kind == "entity" else "concepts"] += 1
+            self._trim_change_log(conn)
+        return stats
+
+    def purge_orphan_objects(
+        self,
+        *,
+        min_confidence: float = 0.8,
+        max_name_length: int = 20,
+    ) -> dict:
+        """清理孤立且平庸的实体/概念。
+
+        条件：
+        - 无 mentions（孤立）
+        - 置信度 < min_confidence
+        - 名称长度 <= max_name_length（短名称更可能是平庸的）
+        - 名称不是专有名词（不含数字、不全是英文大写）
+
+        返回清理统计。
+        """
+        import re
+
+        self.initialize()
+        stats = {"entities": 0, "concepts": 0}
+
+        def _is_mundane_name(name: str) -> bool:
+            """判断名称是否平庸（通用词、单个人名等）。"""
+            # 全是英文大写（如 RAG、API）不是平庸的
+            if name.isupper() and name.isalpha():
+                return False
+            # 包含数字（如 GPT-4、Python 3）不是平庸的
+            if re.search(r"\d", name):
+                return False
+            # 包含连字符或下划线（如 LangChain-2）不是平庸的
+            if "-" in name or "_" in name:
+                return False
+            # 长度超过阈值不是平庸的
+            if len(name) > max_name_length:
+                return False
+            # 中文名称长度放宽
+            if any("\u4e00" <= c <= "\u9fff" for c in name) and len(name) > max_name_length * 1.5:
+                return False
+            return True
+
+        with self.connect() as conn:
+            for table, kind in (("entities", "entity"), ("concepts", "concept")):
+                # 查找孤立的对象
+                rows = list(
+                    conn.execute(
+                        f"""SELECT id, canonical_name, confidence FROM {table}
+                           WHERE status = 'active'
+                             AND confidence < ?
+                             AND id NOT IN (
+                                 SELECT DISTINCT object_id FROM semantic_mentions
+                                 WHERE object_kind = ?
+                             )""",
+                        (min_confidence, kind),
+                    )
+                )
+                for row in rows:
+                    if not _is_mundane_name(row["canonical_name"]):
+                        continue
+                    conn.execute(f"UPDATE {table} SET status = 'inactive' WHERE id = ?", (row["id"],))
+                    conn.execute(
+                        "DELETE FROM semantic_mentions WHERE object_id = ? AND object_kind = ?",
+                        (row["id"], kind),
+                    )
+                    conn.execute(
+                        "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                        (row["id"], row["id"]),
+                    )
+                    self._record_change(
+                        conn,
+                        change_kind="deactivated",
+                        object_kind=kind,
+                        object_id=row["id"],
+                        label=row["canonical_name"],
+                        detail={"reason": "orphan_mundane_object", "confidence": row["confidence"]},
+                    )
+                    stats["entities" if kind == "entity" else "concepts"] += 1
+            self._trim_change_log(conn)
+        return stats
+
+    def merge_duplicate_entities(self) -> dict:
+        """Merge same-object rows across entities AND concepts.
+
+        Grouping key is the name fingerprint (case/whitespace/parenthetical-
+        annotation insensitive), so variant spellings (``RAG`` vs
+        ``RAG（检索增强生成）``) collapse into one row. The highest-confidence
+        row is kept; mentions/relations are moved over, duplicates become
+        inactive, and each merge is audited in the change log.
+
+        Returns merge statistics per kind.
+        """
+        self.initialize()
+        stats = {"merged_groups": 0, "merged_entities": 0, "merged_concepts": 0}
+
+        with self.connect() as conn:
+            for table, kind, group_key in (
+                ("entities", "entity", "merged_entities"),
+                ("concepts", "concept", "merged_concepts"),
+            ):
+                groups: dict[str, list[dict]] = {}
+                for row in conn.execute(
+                    f"""SELECT id, canonical_name, description, confidence
+                        FROM {table} WHERE status = 'active'
+                        ORDER BY confidence DESC"""
+                ):
+                    fp = name_fingerprint(row["canonical_name"])
+                    groups.setdefault(fp, []).append(dict(row))
+
+                for fp, group in groups.items():
+                    if len(group) <= 1:
+                        continue
+                    keeper_id = group[0]["id"]
+                    stats["merged_groups"] += 1
+                    stats[group_key] += len(group) - 1
+
+                    for dup in group[1:]:
+                        dup_id = dup["id"]
+                        # 转移 mentions（同 block 重复 mention 自动忽略，避免主键冲突）
+                        conn.execute(
+                            """INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id)
+                               SELECT ?, object_kind, block_id FROM semantic_mentions
+                               WHERE object_id = ? AND object_kind = ?""",
+                            (keeper_id, dup_id, kind),
+                        )
+                        conn.execute(
+                            "DELETE FROM semantic_mentions WHERE object_id = ? AND object_kind = ?",
+                            (dup_id, kind),
+                        )
+                        # 转移 relations（source）
+                        conn.execute(
+                            """UPDATE relations SET source_id = ?
+                               WHERE source_id = ? AND target_id != ?""",
+                            (keeper_id, dup_id, keeper_id),
+                        )
+                        # 转移 relations（target）
+                        conn.execute(
+                            """UPDATE relations SET target_id = ?
+                               WHERE target_id = ? AND source_id != ?""",
+                            (keeper_id, dup_id, keeper_id),
+                        )
+                        # 删除自引用关系
+                        conn.execute(
+                            "DELETE FROM relations WHERE source_id = ? AND target_id = ?",
+                            (keeper_id, keeper_id),
+                        )
+                        # 标记为 inactive
+                        conn.execute(
+                            f"UPDATE {table} SET status = 'inactive' WHERE id = ?",
+                            (dup_id,),
+                        )
+                        self._record_change(
+                            conn,
+                            change_kind="merged",
+                            object_kind=kind,
+                            object_id=dup_id,
+                            label=dup["canonical_name"],
+                            detail={"merged_into": keeper_id, "reason": "duplicate_name"},
+                        )
+
+            self._trim_change_log(conn)
+        return stats
+
+    def deactivate_orphan_objects(self) -> dict:
+        """Deactivate objects with zero source mentions.
+
+        Zero-mention objects carry no traceable evidence (their mentions were
+        removed with source blocks, or they were never linked). They bloat the
+        aggregated pages while adding no verifiable value, so they are
+        deactivated regardless of confidence. Idempotent.
+        """
+        self.initialize()
+        stats = {"entities": 0, "concepts": 0}
+        with self.connect() as conn:
+            for table, kind in (("entities", "entity"), ("concepts", "concept")):
+                rows = list(
+                    conn.execute(
+                        f"""SELECT id, canonical_name FROM {table}
+                           WHERE status = 'active'
+                             AND NOT EXISTS (
+                                 SELECT 1 FROM semantic_mentions
+                                 WHERE object_id = {table}.id AND object_kind = ?
+                             )""",
+                        (kind,),
+                    )
+                )
+                for row in rows:
+                    conn.execute(f"UPDATE {table} SET status = 'inactive' WHERE id = ?", (row["id"],))
+                    conn.execute(
+                        "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                        (row["id"], row["id"]),
+                    )
+                    self._record_change(
+                        conn,
+                        change_kind="deactivated",
+                        object_kind=kind,
+                        object_id=row["id"],
+                        label=row["canonical_name"],
+                        detail={"reason": "orphan_no_mentions"},
+                    )
+                    stats["entities" if kind == "entity" else "concepts"] += 1
+            self._trim_change_log(conn)
+        return stats
+
+    def delete_inactive_objects(self) -> dict:
+        """Permanently delete inactive entity/concept rows.
+
+        Deactivated objects are normally kept for audit; this method removes
+        them outright after their mentions/relations have already been dropped.
+        The deactivation events already exist in the change log, so no per-row
+        audit is appended here. Returns per-kind deletion counts.
+        """
+        self.initialize()
+        stats = {"entities": 0, "concepts": 0}
+        with self.connect() as conn:
+            for table, kind in (("entities", "entity"), ("concepts", "concept")):
+                rows = list(conn.execute(f"SELECT id FROM {table} WHERE status = 'inactive'"))
+                for row in rows:
+                    conn.execute(f"DELETE FROM {table} WHERE id = ?", (row["id"],))
+                    conn.execute(
+                        "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                        (row["id"], row["id"]),
+                    )
+                    stats["entities" if kind == "entity" else "concepts"] += 1
+        return stats
 
     def change_counts(self, *, days: int = 7) -> list[dict]:
         """Aggregate change events per kind inside the window (read-only)."""

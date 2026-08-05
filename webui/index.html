@@ -154,7 +154,7 @@
                     <div class="file-tree-container" id="file-tree">
                         <div class="tree-empty" data-i18n="common.noWorkspace"></div>
                     </div>
-                    <section class="sidebar-semantic-group" aria-labelledby="sidebar-semantic-title">
+                    <section class="sidebar-semantic-group" id="semantic-sidebar-group" aria-labelledby="sidebar-semantic-title">
                         <div class="sidebar-semantic-heading" id="sidebar-semantic-title">
                             <span data-i18n="semantic.title"></span>
                             <span class="sidebar-semantic-coverage" id="semantic-coverage"></span>
@@ -702,6 +702,10 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
                             <span data-i18n="settings.nav.rag"></span>
                         </button>
+                        <button class="settings-nav-btn" data-tab="semantic">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="m19.1 4.9-2.8 2.8"/><path d="m7.7 16.3-2.8 2.8"/></svg>
+                            <span data-i18n="settings.nav.semantic"></span>
+                        </button>
                         <button class="settings-nav-btn" data-tab="cli">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                             <span data-i18n="settings.nav.cli"></span>
@@ -1151,6 +1155,42 @@
                                     </div>
                                     <div id="settings-assistant-rebuild-progress-text" class="settings-hint" style="margin-top:6px;font-size:12px"></div>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="settings-tab" id="tab-semantic">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.semanticWorkbenchTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticWorkbenchHint"></p>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.semanticWorkbenchEnabledLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.semanticWorkbenchEnabledDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-semantic-workbench-enabled" class="switch-input" checked>
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                            <div class="card" id="settings-semantic-tabs-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.semanticTabsTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticTabsHint"></p>
+                                <div class="settings-semantic-tabs-list" id="settings-semantic-tabs-list">
+                                    <label class="settings-check-row"><input type="checkbox" value="objects" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabObjects"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="claims" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabClaims"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="quality" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabQuality"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="conflicts" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabConflicts"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="links" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabLinks"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="brief" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabBrief"></span></label>
+                                </div>
+                            </div>
+                            <div class="card" id="settings-semantic-intensity-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.semanticIntensityTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticIntensityHint"></p>
+                                <div class="schema-option-list schema-option-list-inline">
+                                    <label class="schema-option-card"><input type="radio" name="settings-semantic-intensity" value="light"> <span data-i18n="settings.semanticIntensityLight"></span></label>
+                                    <label class="schema-option-card selected"><input type="radio" name="settings-semantic-intensity" value="standard" checked> <span data-i18n="settings.semanticIntensityStandard"></span></label>
+                                    <label class="schema-option-card"><input type="radio" name="settings-semantic-intensity" value="deep"> <span data-i18n="settings.semanticIntensityDeep"></span></label>
+                                </div>
+                                <p class="settings-hint" style="margin-top:8px" data-i18n="settings.semanticIntensityDesc"></p>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-cli">

@@ -182,6 +182,19 @@ def _create_llm(
 create_llm = _create_llm
 
 
+def _run_llm_with_timeout(invoke_fn: Callable) -> Any:
+    """在共享线程池中执行 LLM 调用，并施加 90 秒超时保护（与 call_llm_raw 语义一致）"""
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    executor = _get_executor()
+    future = executor.submit(invoke_fn)
+    try:
+        return future.result(timeout=90)
+    except FutureTimeout:
+        future.cancel()
+        raise RuntimeError("LLM 调用超时（90秒）")
+
+
 def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | None = None, **kwargs) -> str:
     """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
     if not kwargs:
@@ -195,7 +208,7 @@ def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | N
         chain = prompt | llm
         return chain.invoke(kwargs)
 
-    response = _retry_with_backoff(_invoke)
+    response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -217,8 +230,6 @@ def call_llm_raw(
     max_tokens: int | None = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
-    from concurrent.futures import TimeoutError as FutureTimeout
-
     if not prompt_text:
         return ""
 
@@ -231,16 +242,7 @@ def call_llm_raw(
         llm = _create_llm(temperature, max_tokens)
         return llm.invoke(prompt_text)
 
-    def _invoke_with_timeout():
-        executor = _get_executor()
-        future = executor.submit(_invoke)
-        try:
-            return future.result(timeout=90)
-        except FutureTimeout:
-            future.cancel()
-            raise RuntimeError("LLM 调用超时（90秒）")
-
-    response = _retry_with_backoff(_invoke_with_timeout)
+    response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -271,7 +273,12 @@ def call_llm_raw_stream(
     return _retry_with_backoff(_invoke)
 
 
-def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+def _run_stream_with_timeout(
+    stream_fn: Callable[[], Any],
+    chunk_callback=None,
+    join_timeout: int = 120,
+) -> str:
+    """流式执行通用包装：信号量限流 + 后台线程执行 + join 超时保护（_do_stream 同款结构）"""
     acquired = _LLM_SEMAPHORE.acquire(timeout=60)
     if not acquired:
         raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
@@ -280,16 +287,13 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
 
     def _run():
         try:
-            logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
-            llm = _create_llm(temperature, max_tokens)
             full_text = ""
-            for chunk in llm.stream(prompt_text):
+            for chunk in stream_fn():
                 token = chunk.content if hasattr(chunk, "content") else str(chunk)
                 full_text += token
                 if chunk_callback:
                     chunk_callback(token)
             result["text"] = full_text.strip()
-            logger.info(f"LLM stream done, response length: {len(full_text)}")
         except Exception as e:
             logger.warning(f"[llm_utils] stream error: {e}\n")
             result["error"] = e
@@ -299,17 +303,28 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
-    t.join(timeout=120)
+    t.join(timeout=join_timeout)
 
     if not result["done"]:
-        logger.warning("[llm_utils] stream timeout after 120s")
-        raise RuntimeError("LLM 流式调用超时（120秒）")
+        logger.warning(f"[llm_utils] stream timeout after {join_timeout}s")
+        raise RuntimeError(f"LLM 流式调用超时（{join_timeout}秒）")
 
     stream_error = result["error"]
     if stream_error is not None:
         raise stream_error
 
     return result["text"]
+
+
+def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+    def _stream():
+        logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+        llm = _create_llm(temperature, max_tokens)
+        return llm.stream(prompt_text)
+
+    text = _run_stream_with_timeout(_stream, chunk_callback)
+    logger.info(f"LLM stream done, response length: {len(text)}")
+    return text
 
 
 def check_api_config() -> tuple[bool, str]:
@@ -596,22 +611,13 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
 
     from prompts import LLM_REWRITE_PROMPT
 
-    llm = _create_llm(temperature=0.3)
-    prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
-    chain = prompt | llm
+    def _stream():
+        llm = _create_llm(temperature=0.3)
+        prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
+        chain = prompt | llm
+        return chain.stream({"content": content})
 
-    full_text = ""
-    if chunk_callback:
-        for chunk in chain.stream({"content": content}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            chunk_callback(token)
-    else:
-        for chunk in chain.stream({"content": content}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-
-    return full_text.strip()
+    return _run_stream_with_timeout(_stream, chunk_callback)
 
 
 def reformat_markdown_with_llm(content: str) -> str:

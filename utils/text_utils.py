@@ -4,13 +4,24 @@ from pathlib import Path
 
 from utils.logger import logger
 
-try:
-    import jieba
+_jieba_mod = None
+_jieba_checked = False
 
-    JIEBA_AVAILABLE = True
-except ImportError:
-    jieba = None
-    JIEBA_AVAILABLE = False
+
+def _get_jieba():
+    global _jieba_mod, _jieba_checked
+    if _jieba_checked:
+        return _jieba_mod
+    _jieba_checked = True
+    try:
+        import jieba as _jb
+        _jieba_mod = _jb
+    except ImportError:
+        _jieba_mod = None
+    return _jieba_mod
+
+
+JIEBA_AVAILABLE = True  # resolved lazily by _get_jieba()
 
 MIN_TAG_LENGTH = 2
 OCCURRENCE_THRESHOLD = 3
@@ -62,9 +73,10 @@ def tokenize(text: str) -> list:
 
     text = _split_camel_case(text)
 
-    if JIEBA_AVAILABLE and jieba:
+    _jb = _get_jieba()
+    if _jb:
         try:
-            tokens = jieba.lcut(text)
+            tokens = _jb.lcut(text)
             return [t.strip() for t in tokens if t.strip() and len(t.strip()) >= MIN_TAG_LENGTH]
         except Exception as e:
             logger.warning(f"[tokenize] jieba lcut failed: {e}")

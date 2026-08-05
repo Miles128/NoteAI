@@ -111,7 +111,8 @@ class SidecarServer(PathHelpersMixin):
         # Read-only status RPCs must never mutate a live ingest into interrupted.
         normalize_ingest_state()
         self._start_workspace_watcher()
-        self._startup_sync()
+        # Run heavy startup sync in background so stdin reader is not blocked.
+        threading.Thread(target=self._startup_sync, daemon=True, name="startup-sync").start()
         self._start_rss_scheduler()
 
     def _build_router(self):

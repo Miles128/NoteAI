@@ -10,13 +10,14 @@ from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
-try:
-    import jieba  # noqa: F811
-    import jieba.analyse  # noqa: F401
 
-    _HAS_JIEBA = True
-except ImportError:
-    _HAS_JIEBA = False
+def _jieba_analyse_available():
+    """Check if jieba.analyse is importable (lazy, cached)."""
+    try:
+        import jieba.analyse  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 class RagHandler(BaseHandler):
@@ -583,10 +584,11 @@ class RagHandler(BaseHandler):
                 if last:
                     first = first + "…" + last
 
-            if not _HAS_JIEBA:
+            if not _jieba_analyse_available():
                 parts.append(f"{role}: {first}…")
                 continue
 
+            import jieba.analyse
             keywords = jieba.analyse.extract_tags(text, topK=3, withWeight=False)
             kw_str = "、".join(keywords) if keywords else ""
 

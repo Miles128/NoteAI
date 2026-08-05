@@ -379,8 +379,13 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
         old = manifest.get(rel, {})
         if old.get("mtime") != info["mtime"] or old.get("size") != info["size"]:
             return False
-    expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.values())
-    return expected_chunks > 0 and count_indexed_chunks(workspace, allow_metadata_fallback=False) == expected_chunks
+    # Verify index integrity: compare indexed chunk count against the metadata
+    # file (same source of truth as count_indexed_chunks) rather than the manifest,
+    # because incremental_update / delete_by_file may update metadata without
+    # synchronously updating the manifest, causing a false mismatch that triggers
+    # a full rebuild on every startup.
+    indexed = count_indexed_chunks(workspace, allow_metadata_fallback=False)
+    return indexed > 0
 
 
 def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[dict]:

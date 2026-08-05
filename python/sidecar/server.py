@@ -27,7 +27,6 @@ from sidecar.handlers import (
     JobHandler,
     KbHandler,
     LinksHandler,
-    McpConfigHandler,
     RagHandler,
     ReliabilityHandler,
     SemanticHandler,
@@ -97,7 +96,6 @@ class SidecarServer(PathHelpersMixin):
         self._ingest_handler = IngestHandler(self)
         self._kb_handler = KbHandler(self)
         self._cli_agent_handler = CliAgentHandler(self)
-        self._mcp_config_handler = McpConfigHandler(self)
         self._build_router()
 
     def start(self):
@@ -134,7 +132,6 @@ class SidecarServer(PathHelpersMixin):
         self._ingest_handler.register_routes(self._router)
         self._kb_handler.register_routes(self._router)
         self._cli_agent_handler.register_routes(self._router)
-        self._mcp_config_handler.register_routes(self._router)
 
     def _send_response(self, resp):
         with self._stdout_lock:

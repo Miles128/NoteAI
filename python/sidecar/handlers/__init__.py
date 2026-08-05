@@ -8,7 +8,6 @@ from .intel_handler import IntelHandler
 from .job_handler import JobHandler
 from .kb_handler import KbHandler
 from .links_handler import LinksHandler
-from .mcp_config_handler import McpConfigHandler
 from .rag_handler import RagHandler
 from .reliability_handler import ReliabilityHandler
 from .semantic_handler import SemanticHandler
@@ -35,5 +34,4 @@ __all__ = [
     "IngestHandler",
     "KbHandler",
     "CliAgentHandler",
-    "McpConfigHandler",
 ]

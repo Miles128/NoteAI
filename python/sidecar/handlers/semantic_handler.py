@@ -757,6 +757,15 @@ class SemanticHandler(BaseHandler):
             )
         return {"success": cursor.rowcount > 0, "id": item_id, "status": status}
 
+    def _scan_conflicts(self, params):
+        """手动触发结构化冲突检测：重扫 claims 快照并落库（幂等）。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.conflict_detector import scan_and_persist
+
+        return scan_and_persist(store)
+
     @staticmethod
     def _quality_key(*parts: str) -> str:
         payload = "\0".join(parts).encode("utf-8")
@@ -1249,6 +1258,7 @@ class SemanticHandler(BaseHandler):
         router.register("get_topic_brief", self._get_topic_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
+        router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)

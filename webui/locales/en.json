@@ -81,6 +81,8 @@
     "notCompiled": "Semantic compilation has not completed",
     "updatedAt": "Last compiled {time}",
     "conflictCount": "{count} conflicts to review",
+    "rescanConflicts": "Rescan",
+    "scanConflictsDone": "Conflict scan complete",
     "scope": "Scope: {scope}",
     "evidenceCount": "{count} evidence items",
     "claimTypes": {

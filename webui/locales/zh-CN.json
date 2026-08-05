@@ -81,6 +81,8 @@
     "notCompiled": "尚未完成语义编译",
     "updatedAt": "最近编译 {time}",
     "conflictCount": "{count} 项待审阅冲突",
+    "rescanConflicts": "重新扫描",
+    "scanConflictsDone": "冲突扫描完成",
     "scope": "适用范围：{scope}",
     "evidenceCount": "{count} 条证据",
     "claimTypes": {

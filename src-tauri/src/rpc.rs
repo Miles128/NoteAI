@@ -140,6 +140,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "retry_convert_file",
     "retry_ingest",
     "review_semantic_conflict",
+    "scan_semantic_conflicts",
     "update_semantic_claim",
     "set_semantic_claim_status",
     "set_semantic_evidence_status",

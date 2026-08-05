@@ -136,6 +136,8 @@ function configureStatusFilter() {
     var status = document.getElementById('semantic-status-filter');
     if (!status) return;
     status.hidden = _category !== 'claims' && _category !== 'quality' && _category !== 'conflicts' && _category !== 'links';
+    var scan = document.getElementById('semantic-scan-conflicts');
+    if (scan) scan.hidden = _category !== 'conflicts';
     if (_category === 'claims') {
         status.innerHTML = '<option value="active">' + esc(t('semantic.status.active')) + '</option><option value="deleted">' + esc(t('semantic.status.deleted')) + '</option><option value="all">' + esc(t('semantic.status.all')) + '</option>';
     } else if (_category === 'conflicts') {
@@ -587,6 +589,23 @@ function startCompileAll() {
     });
 }
 
+function scanConflicts(button) {
+    if (!window.api || !window.api.scanSemanticConflicts) return;
+    var original = button.textContent;
+    button.disabled = true;
+    window.api.scanSemanticConflicts().then(function(result) {
+        if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        if (window.ToastModule) window.ToastModule.success(t('semantic.scanConflictsDone'));
+        loadOverview();
+        loadList();
+    }).catch(function(error) {
+        if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+    }).finally(function() {
+        button.disabled = false;
+        button.textContent = original;
+    });
+}
+
 function scheduleCompilePoll() {
     clearTimeout(_compileTimer);
     if (!_visible) return;
@@ -844,6 +863,8 @@ function init() {
     if (search) search.addEventListener('input', function() { clearTimeout(_searchTimer); _searchTimer = setTimeout(loadList, 220); });
     var status = document.getElementById('semantic-status-filter');
     if (status) status.addEventListener('change', loadList);
+    var scan = document.getElementById('semantic-scan-conflicts');
+    if (scan) scan.addEventListener('click', function() { scanConflicts(scan); });
     configureStatusFilter();
     loadOverview();
     loadVerifyAgents();

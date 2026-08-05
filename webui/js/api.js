@@ -436,6 +436,7 @@ var API_DEFS = [
     { name: 'restoreWorkspaceBackup', method: 'restore_workspace_backup', params: function(options) { return options || {}; }, write: true },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
+    { name: 'scanSemanticConflicts', method: 'scan_semantic_conflicts', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'enqueueSemanticEntityQuality', method: 'enqueue_semantic_entity_quality', params: function(id) { return { id: id }; }, write: true },
     { name: 'getSemanticEntityMergePreview', method: 'get_semantic_entity_merge_preview', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId }; } },

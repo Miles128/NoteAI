@@ -238,6 +238,16 @@ def compile_semantic_batch(
             "removed": {"entities": 0, "concepts": 0},
             "failures": [],
         }
+    # Structured conflict detection is a derived view over the fresh claim
+    # snapshot; rerun it after extraction settles so the Conflicts tab always
+    # reflects the latest conclusions.
+    if extract and compiled_documents and not (cancelled and cancelled()):
+        try:
+            from sidecar.semantic.conflict_detector import scan_and_persist
+
+            stats["conflicts"] = scan_and_persist(store)
+        except Exception as exc:
+            stats["failures"].append({"conflict_scan": str(exc)})
     stats["topics"] = sorted(stats["topics"])
     stats["affected_topics"] = sorted(stats["affected_topics"])
     return stats

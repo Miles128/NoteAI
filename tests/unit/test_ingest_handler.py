@@ -42,18 +42,6 @@ def test_get_ingest_status_does_not_interrupt_running_pipeline(workspace: Path, 
     assert status["running"] is True
 
 
-def test_needs_schema_setup_flag(workspace: Path, ingest_handler: IngestHandler) -> None:
-    result = ingest_handler._needs_schema_setup({})
-    assert result["needs_setup"] is True
-
-    (workspace / SCHEMA_FILENAME).write_text(
-        "# s\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",
-        encoding="utf-8",
-    )
-    result2 = ingest_handler._needs_schema_setup({})
-    assert result2["needs_setup"] is False
-
-
 def test_ensure_running_respects_auto_ingest_switch(workspace: Path, ingest_handler: IngestHandler) -> None:
     (workspace / SCHEMA_FILENAME).write_text(
         "# s\n<!-- noteai-schema-version: 2 -->\n<!-- noteai-schema-configured -->\n",

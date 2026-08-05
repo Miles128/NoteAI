@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import pytest
 from sidecar.handlers.kb_handler import KbHandler
-from sidecar.kb_lint import run_kb_lint
 
 from config import config
 
@@ -44,13 +43,6 @@ def test_run_kb_lint_rpc(workspace: Path, kb_handler: KbHandler) -> None:
     assert result["summary"]["broken_link"] == 0
     assert "[[不存在的链接]]" not in note.read_text(encoding="utf-8")
     assert result["summary"]["orphan_topic"] >= 1
-
-
-def test_get_lint_report_cached(workspace: Path, kb_handler: KbHandler) -> None:
-    run_kb_lint(str(workspace))
-    cached = kb_handler._get_lint_report({})
-    assert cached["success"] is True
-    assert cached.get("cached") is True
 
 
 def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None:

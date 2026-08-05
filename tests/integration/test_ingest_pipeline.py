@@ -194,24 +194,6 @@ class TestIngestHandler:
         assert status.get("success") is True
         assert status.get("status") in ("idle", "running", "complete", "failed", "cancelled")
 
-    def test_needs_schema_setup(self, workspace: Path) -> None:
-        from sidecar.handlers.ingest_handler import IngestHandler
-
-        srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
-        handler = IngestHandler(srv)
-
-        result = handler._needs_schema_setup({})
-        assert result.get("needs_setup") is True
-
-    def test_ensure_schema(self, workspace: Path) -> None:
-        from sidecar.handlers.ingest_handler import IngestHandler
-
-        srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
-        handler = IngestHandler(srv)
-
-        result = handler._ensure_schema({})
-        assert result is not None
-
 
 class TestTransferHandler:
     """Test file transfer operations."""

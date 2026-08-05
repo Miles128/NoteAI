@@ -348,10 +348,6 @@ async function autoSaveConfig() {
             web_ai_assist: document.getElementById('web-ai-toggle')?.checked || false,
             web_include_images: document.getElementById('web-include-images')?.checked || false,
             conv_ai_assist: document.getElementById('conv-ai-toggle')?.checked || false,
-            web_save_path: document.getElementById('web-save-path')?.value || '',
-            conv_save_path: document.getElementById('conv-save-path')?.value || '',
-            integration_source_path: document.getElementById('integration-source-path')?.value || '',
-            integration_output_path: document.getElementById('integration-output-path')?.value || '',
             auto_topic: true,
             topic_list: document.getElementById('topic-list')?.value || ''
         };

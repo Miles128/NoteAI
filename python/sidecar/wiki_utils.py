@@ -286,7 +286,8 @@ def get_survey_overview(workspace_str: str | Path | None = None) -> dict[str, di
     from sidecar.cascade import collect_topic_notes, get_survey_path
 
     overview: dict[str, dict] = {}
-    for topic in headings:
+    for heading in headings:
+        topic = heading["name"]
         survey_path = get_survey_path(topic)
         has_survey = bool(survey_path and survey_path.exists())
         stale = False

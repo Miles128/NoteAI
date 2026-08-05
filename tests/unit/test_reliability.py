@@ -39,16 +39,6 @@ def workspace(tmp_path: Path) -> Path:
     return d
 
 
-def test_create_note_writes_file(workspace: Path) -> None:
-    srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
-    handler = FilesHandler(srv)
-    res = handler._create_note({"title": "可靠笔记", "topic": ""})
-    assert res["success"] is True
-    path = workspace / res["path"]
-    assert path.exists()
-    assert "可靠笔记" in path.read_text(encoding="utf-8")
-
-
 def test_create_note_from_draft_writes_complete_content(workspace: Path) -> None:
     srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
     handler = FilesHandler(srv)

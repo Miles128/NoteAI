@@ -93,9 +93,6 @@ class TagsHandler(BaseHandler):
             "preview": changes,
         }
 
-    def _save_tags_md(self, _params):
-        return save_tags_md(config.workspace_path)
-
     def _ensure_tags_md(self, _params):
         workspace, err = self._require_workspace()
         if err:
@@ -296,7 +293,6 @@ class TagsHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_all_tags", self._get_all_tags)
         router.register("auto_tag_files", self._auto_tag_files)
-        router.register("save_tags_md", self._save_tags_md)
         router.register("ensure_tags_md", self._ensure_tags_md)
         router.register("create_tag", self._create_tag)
         router.register("rename_tag", self._rename_tag)

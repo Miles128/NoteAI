@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from config import config
 from utils.text_utils import parse_frontmatter
 from utils.topic_assigner import sync_wiki_with_files
-from utils.topic_manager import MAX_LEVEL, TopicManager
+from utils.topic_manager import TopicManager
 from utils.topic_pending import load_pending
 
 
@@ -16,8 +16,6 @@ class _TopicsHost(Protocol):
     def _require_workspace(self, extra: dict | None = None, message: str = "") -> tuple[str | None, dict | None]: ...
 
     def _get_topic_tree_3tier(self, params: dict[str, Any]) -> dict[str, Any]: ...
-
-    def _create_topic_folder(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
     def _set_abstract_config(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
@@ -88,45 +86,6 @@ class Topics3TierMixin:
             "success": True,
             "topics": TopicManager.tree_to_json(tree),
             "pending": pending,
-        }
-
-    def _create_topic_folder(self: _TopicsHost, params):  # noqa: PLR0911
-        """创建新主题文件夹（自动判定一二三级）"""
-        folder_name = params.get("name", "").strip()
-        parent_path = params.get("parent_path", "")
-        level_hint = params.get("level", 0)
-
-        if not folder_name:
-            return {"success": False, "message": "名称不能为空"}
-        if "/" in folder_name or ".." in folder_name:
-            return {"success": False, "message": "名称含非法字符"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-        assert workspace is not None
-
-        resolved_parent = self._resolve_path(parent_path) if parent_path else None
-        parent = Path(resolved_parent or "") if parent_path else Path(workspace) / config.NOTES_FOLDER
-
-        if not parent.exists():
-            return {"success": False, "message": "父目录不存在"}
-
-        level = TopicManager.determine_folder_level(str(parent), workspace) if level_hint == 0 else level_hint
-
-        new_path = parent / folder_name
-        if new_path.exists():
-            return {"success": False, "message": "已存在同名文件夹"}
-
-        new_path.mkdir(parents=True)
-        with suppress(Exception):
-            sync_wiki_with_files()
-        topic_label = f"L{level}" if 1 <= level <= MAX_LEVEL else "普通文件夹"
-        return {
-            "success": True,
-            "message": f"已创建 {topic_label}: {folder_name}",
-            "topic": str(new_path.relative_to(Path(workspace))),
-            "level": level if 1 <= level <= MAX_LEVEL else None,
         }
 
     def _set_abstract_config(self: _TopicsHost, params):
@@ -318,7 +277,6 @@ class Topics3TierMixin:
     def register_routes_3tier(self: _TopicsHost, router):
         """注册三层主题相关路由"""
         router.register("get_topic_tree_3tier", self._get_topic_tree_3tier)
-        router.register("create_topic_folder", self._create_topic_folder)
         router.register("set_abstract_config", self._set_abstract_config)
         router.register("get_graph_data", self._get_graph_data)
         router.register("delete_topic_safe", self._delete_topic_safe)

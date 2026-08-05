@@ -9,7 +9,7 @@ from sidecar.cascade_runner import (
 from sidecar.dashboard_status import get_dashboard_status
 from sidecar.duplicate_review import get_duplicate_review, merge_duplicate_notes, merge_note_group
 from sidecar.handlers.base import BaseHandler
-from sidecar.kb_lint import load_lint_report, log_lint_report, run_kb_lint
+from sidecar.kb_lint import log_lint_report, run_kb_lint
 from sidecar.survey_append import append_chat_to_survey
 
 
@@ -17,15 +17,12 @@ class KbHandler(BaseHandler):
     def register_routes(self, router) -> None:
         router.register("get_dashboard_status", self._get_dashboard_status)
         router.register("run_kb_lint", self._run_kb_lint)
-        router.register("get_lint_report", self._get_lint_report)
         router.register("get_duplicate_review", self._get_duplicate_review)
         router.register("merge_duplicate_notes", self._merge_duplicate_notes)
         router.register("merge_note_group", self._merge_note_group)
-        router.register("get_chunk_merge_candidates", self._get_chunk_merge_candidates)
         router.register("scan_merge_candidates", self._scan_merge_candidates)
         router.register("archive_chat_answer", self._archive_chat_answer)
         router.register("append_chat_to_survey", self._append_chat_to_survey)
-        router.register("get_cascade_failures", self._get_cascade_failures)
         router.register("retry_cascade_topic", self._retry_cascade_topic)
         router.register("retry_all_cascade_failures", self._retry_all_cascade_failures)
         router.register("dismiss_cascade_failure", self._dismiss_cascade_failure)
@@ -43,9 +40,6 @@ class KbHandler(BaseHandler):
         report = run_kb_lint(send_response=self._send_response)
         log_lint_report(report)
         return report
-
-    def _get_lint_report(self, _params):
-        return load_lint_report()
 
     def _get_duplicate_review(self, params):
         workspace, err = self._require_workspace()
@@ -88,15 +82,6 @@ class KbHandler(BaseHandler):
         except (OSError, ValueError) as exc:
             return {"success": False, "message": str(exc)}
 
-    def _get_chunk_merge_candidates(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": True, "items": []}
-        from sidecar.chunk_similarity import load_chunk_similarity_graph
-
-        graph = load_chunk_similarity_graph(workspace)
-        return {"success": True, "items": graph.get("candidates") or [], "needs_build": not bool(graph)}
-
     def _scan_merge_candidates(self, params):
         workspace, err = self._require_workspace()
         if err:
@@ -132,9 +117,6 @@ class KbHandler(BaseHandler):
             topic=params.get("topic", ""),
             context_file=params.get("context_file", ""),
         )
-
-    def _get_cascade_failures(self, _params):
-        return {"success": True, "items": load_cascade_failures()}
 
     def _retry_cascade_topic(self, params):
         topic = (params.get("topic") or "").strip()

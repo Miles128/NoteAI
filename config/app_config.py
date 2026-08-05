@@ -50,11 +50,6 @@ class AppConfig:
     timeout: int = 30
     max_retries: int = 3
 
-    max_content_length: int = 10000
-    max_html_length: int = 15000
-    max_chunk_length: int = 8000
-    min_chunk_size: int = 200
-
     theme: str = "light"
     theme_preference: str = "system"
     font_size: str = "small"
@@ -62,15 +57,12 @@ class AppConfig:
     sidebar_font_family: str = "system"
     preview_font_family: str = "system"
     typography: dict[str, Any] = field(default_factory=dict)
-    window_width: int = 1400
-    window_height: int = 900
 
     web_ai_assist: bool = False
     web_include_images: bool = False
     conv_ai_assist: bool = False
 
     web_save_path: str = ""
-    download_mode: str = "standard"
     conv_save_path: str = ""
 
     integration_source_path: str = ""

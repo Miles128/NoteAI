@@ -1220,6 +1220,73 @@
     line-height: 18px;
 }
 
+/* 综述状态：开关 / 无综述标记 / 预览 / 可更新 */
+.sidebar-tag-survey {
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 1px 7px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    max-width: 74px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-tag-survey-ok {
+    color: #2e7d32;
+    background: rgba(46, 125, 50, 0.12);
+    cursor: pointer;
+}
+
+.sidebar-tag-survey-missing {
+    color: #b26a00;
+    background: rgba(183, 101, 0, 0.13);
+}
+
+.sidebar-tag-survey-stale {
+    color: #1565c0;
+    background: rgba(21, 101, 192, 0.12);
+    cursor: pointer;
+}
+
+.sidebar-tag-survey-off {
+    color: var(--text-muted);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-tag-survey-toggle {
+    width: 26px;
+    height: 14px;
+    border-radius: 7px;
+    background: #c8c8c8;
+    position: relative;
+    margin-left: 2px;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.sidebar-tag-survey-toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    transition: left 0.15s;
+}
+
+.sidebar-tag-survey-toggle.on {
+    background: #4caf50;
+}
+
+.sidebar-tag-survey-toggle.on::after {
+    left: 14px;
+}
+
 .sidebar-tag-file {
     cursor: pointer;
 }

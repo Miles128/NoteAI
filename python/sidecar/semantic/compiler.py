@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -297,3 +298,152 @@ def compile_semantic_batch(
     stats["topics"] = sorted(stats["topics"])
     stats["affected_topics"] = sorted(stats["affected_topics"])
     return stats
+
+
+def retry_failed_blocks(
+    store: SemanticStore,
+    *,
+    claims_only: bool,
+    limit: int,
+) -> dict:
+    """重试抽取失败的块（claim_extractions / block_extractions 中 status='failed'）。
+
+    失败块不会被 is_current 跳过（is_current 只认 'complete'），因此直接对
+    失败块所属文档重新抽取即可；成功后会写回 complete 状态。同步执行并
+    限制单次数量，避免 API 长时间不可用时一次重试上千块阻塞 sidecar。
+    """
+    table = "claim_extractions" if claims_only else "block_extractions"
+    with store.connect() as conn:
+        failed = conn.execute(
+            f"""SELECT ce.block_id, ce.error, b.document_id
+                FROM {table} ce JOIN blocks b ON b.id = ce.block_id
+                WHERE ce.status = 'failed'
+                ORDER BY ce.extracted_at
+                LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    if not failed:
+        return {"success": True, "failed_blocks": 0, "documents": 0, "extracted_blocks": 0, "failures": []}
+    # 同一文档的多个失败块一次抽取即可覆盖；失败块数量通常远小于文档数。
+    doc_ids = sorted({row["document_id"] for row in failed})
+    from sidecar.semantic.extractor import extract_document_semantics
+
+    def extract_one(doc_id: str) -> dict:
+        try:
+            return extract_document_semantics(store, doc_id, claims_only=claims_only)
+        except Exception as exc:  # 抽取器内部异常也归为失败，不让单文档拖垮整批
+            return {
+                "success": False,
+                "extracted": 0,
+                "claims": 0,
+                "failures": [{"block_id": None, "error": str(exc)}],
+            }
+
+    results: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=min(4, len(doc_ids)), thread_name_prefix="semantic-retry") as pool:
+        futures = {pool.submit(extract_one, doc_id): doc_id for doc_id in doc_ids}
+        for future in as_completed(futures):
+            results[futures[future]] = future.result()
+    extracted = sum(int(result.get("extracted") or 0) for result in results.values())
+    failures = []
+    seen_failures: set[tuple[str, str]] = set()
+    for doc_id in doc_ids:
+        result = results[doc_id]
+        for failure in result.get("failures") or []:
+            key = (doc_id, failure.get("error") or "")
+            if key not in seen_failures:
+                seen_failures.add(key)
+                failures.append({"document_id": doc_id, "error": key[1]})
+    with store.connect() as conn:
+        remaining = conn.execute(
+            f"SELECT count(*) FROM {table} ce JOIN blocks b ON b.id = ce.block_id WHERE ce.status = 'failed'"
+        ).fetchone()[0]
+    return {
+        "success": True,
+        "failed_blocks": len(failed),
+        "documents": len(doc_ids),
+        "extracted_blocks": extracted,
+        "remaining_failed": remaining,
+        "failures": failures[:20],
+    }
+
+
+def run_full_compile(
+    workspace: str | Path,
+    paths: Sequence[str | Path],
+    *,
+    claims_only: bool = False,
+    progress_cb=None,
+    done_cb=None,
+) -> None:
+    """全库语义编译的完整流程：清理失联文档 → 批量编译 → 重建聚合页/主题页。
+
+    ``progress_cb(progress, message, metadata)`` 汇报中间进度，
+    ``done_cb(message, metadata)`` 汇报最终结果；任务状态推送由调用方
+    （handler 的 job 通道）负责，本函数不感知 job 体系。
+    """
+    from sidecar.semantic.object_wiki import materialize_object_collection
+    from sidecar.semantic.topic_state import materialize_topic_state
+    from sidecar.semantic.wiki import materialize_topic_wiki_page
+
+    total = max(len(paths), 1)
+    store = SemanticStore(workspace)
+    # keep_paths=paths：同时清理磁盘上已不存在、以及不在本次编译集合内
+    # （如隐藏目录中的残留文档）的记录，保证工作台计数与源文档一致。
+    removed_topics = set(store.purge_missing_documents(keep_paths=paths))
+
+    def progress(current, _total, message):
+        if progress_cb:
+            progress_cb(
+                current / total,
+                message,
+                {"processed_documents": current, "total_documents": len(paths)},
+            )
+
+    stats = compile_semantic_batch(workspace, paths, progress_cb=progress, claims_only=claims_only)
+    cleanup_failures = []
+    if not claims_only:
+        for kind in ("entity", "concept"):
+            try:
+                materialize_object_collection(store, kind)
+            except (OSError, ValueError, sqlite3.Error) as exc:
+                cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
+    for topic in sorted(removed_topics):
+        try:
+            materialize_topic_state(store, topic)
+            materialize_topic_wiki_page(store, topic)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            cleanup_failures.append({"kind": "removed_topic", "topic": topic, "error": str(exc)})
+    if cleanup_failures:
+        stats["failures"].extend({"cleanup": item} for item in cleanup_failures)
+    materialized = stats.get("materialized", {})
+    if claims_only:
+        message = (
+            f"全库命题编译完成：{stats['documents']} 篇，"
+            f"命题 {stats['claims']} 条（拒绝 {stats['rejected_claims']}），失败块 {stats['failed_blocks']}"
+        )
+    else:
+        materialized_message = (
+            f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
+            f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
+            f"主题页 {materialized.get('topics', 0)}"
+        )
+        message = (
+            f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
+        )
+    if done_cb:
+        done_cb(
+            message,
+            {
+                "processed_documents": stats["documents"],
+                "total_documents": len(paths),
+                "blocks": stats["blocks"],
+                "claims": stats["claims"],
+                "rejected_claims": stats["rejected_claims"],
+                "failed_blocks": stats["failed_blocks"],
+                "pending_documents": stats["pending_documents"],
+                "failure_count": len(stats["failures"]),
+                "removed_topics": sorted(removed_topics),
+                "materialized": materialized,
+            },
+        )

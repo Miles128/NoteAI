@@ -105,15 +105,6 @@ class FilesHandler(BaseHandler):
             "done": next_off >= sz,
         }
 
-    def _can_preview_file(self, params):
-        path = params.get("path", "")
-        full_path = self._resolve_path(path)
-        if not full_path:
-            full_path = self._find_file_by_name(path)
-        if not full_path:
-            return False
-        return self.file_previewer.can_preview(full_path)
-
     def _save_file_content(self, params):
         path = params.get("path", "")
         full_path = self._resolve_path(path)
@@ -360,33 +351,6 @@ class FilesHandler(BaseHandler):
                 n += 1
         return candidate, None
 
-    def _create_note(self, params):
-        title = (params.get("title") or "").strip()
-        topic = (params.get("topic") or "").strip()
-        candidate, err = self._note_target_path(title, topic)
-        if err:
-            return err
-
-        fm_lines = ["---"]
-        if topic:
-            fm_lines.append(f"topic: {topic}")
-        fm_lines.append("---")
-        body = f"# {title}\n\n"
-        candidate.write_text("\n".join(fm_lines) + "\n\n" + body, encoding="utf-8")
-        rel = str(candidate.relative_to(Path(self.config.workspace_path)))
-
-        from sidecar.cascade import append_changelog
-
-        append_changelog(f"新建笔记: {rel}" + (f"（{topic}）" if topic else ""))
-
-        return {
-            "success": True,
-            "path": rel,
-            "title": title,
-            "topic": topic,
-            "message": f"已创建 {rel}",
-        }
-
     def _create_note_from_draft(self, params):
         title = (params.get("title") or "").strip()
         topic = (params.get("topic") or "").strip()
@@ -414,9 +378,7 @@ class FilesHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_file_preview", self._get_file_preview)
         router.register("read_preview_raw_slice", self._read_preview_raw_slice)
-        router.register("can_preview_file", self._can_preview_file)
         router.register("save_file_content", self._save_file_content)
-        router.register("create_note", self._create_note)
         router.register("create_note_from_draft", self._create_note_from_draft)
         router.register("read_file_raw", self._read_file_raw)
         router.register("reveal_in_finder", self._reveal_in_finder)

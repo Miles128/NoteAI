@@ -350,15 +350,13 @@ var API_DEFS = [
     // ---- 工作区 / 主题 / 标签 ----
     { name: 'getWorkspaceTree', method: 'get_workspace_tree' },
     { name: 'getTopicTree', method: 'get_topic_tree' },
+    { name: 'getSurveyOverview', method: 'get_survey_overview' },
+    { name: 'toggleSurvey', method: 'toggle_survey', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'getAllTags', method: 'get_all_tags' },
     { name: 'autoTagFiles', method: 'auto_tag_files', params: function(dryRun) { return { dry_run: !!dryRun }; } },
-    { name: 'saveTagsMd', method: 'save_tags_md' },
     { name: 'ensureTagsMd', method: 'ensure_tags_md' },
-    { name: 'autoAssignTopic', method: 'auto_assign_topic', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'batchAutoAssignTopics', method: 'batch_auto_assign_topics', params: function() { return {}; } },
     { name: 'createTopic', method: 'create_topic', params: function(name, parent) { return { name: name, parent: parent || '' }; } },
-    { name: 'createTopicFolder', method: 'create_topic_folder', params: function(name, parentPath, level) { return { name: name, parent_path: parentPath || '', level: level || 0 }; } },
-    { name: 'createNote', method: 'create_note', params: function(title, topic) { return { title: title, topic: topic || '' }; }, write: true },
     { name: 'createNoteFromDraft', method: 'create_note_from_draft', params: function(title, topic, content) { return { title: title, topic: topic || '', content: content || '' }; }, write: true },
     { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; } },
     { name: 'getAllPending', method: 'get_all_pending' },
@@ -400,7 +398,6 @@ var API_DEFS = [
     { name: 'startNoteIntegration', method: 'start_note_integration', params: function(autoTopic, topics) { return { auto_topic: autoTopic, topics: topics }; } },
     { name: 'refreshLog', method: 'refresh_log' },
     { name: 'onFileSelected', method: 'on_file_selected', params: function(path) { return { path: path }; } },
-    { name: 'canPreviewFile', method: 'can_preview_file', params: function(path) { return { path: path }; } },
     { name: 'saveFileContent', method: 'save_file_content', params: function(path, content) { return { path: path, content: content }; }, write: true },
     { name: 'readFileRaw', method: 'read_file_raw', params: function(path) { return { path: path }; } },
     { name: 'importFilesDirect', method: 'import_files', params: function(files) { return { files: files }; }, write: true },
@@ -416,7 +413,6 @@ var API_DEFS = [
     { name: 'scanWatchedFolder', method: 'scan_watched_folder', params: function(path, recursive) { return { path: path || '', recursive: !!recursive }; }, write: true },
 
     // ---- 知识图谱 / 链接 ----
-    { name: 'discoverLinks', method: 'discover_links', params: function() { return {}; } },
     { name: 'getBacklinks', method: 'get_backlinks', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'getLinkStats', method: 'get_link_stats', params: function() { return {}; } },
     { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
@@ -451,10 +447,8 @@ var API_DEFS = [
     { name: 'addSemanticEntityAlias', method: 'add_semantic_entity_alias', params: function(id, alias) { return { id: id, alias: alias }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
     { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
-    { name: 'getTopicFiles', method: 'get_topic_files', params: function(topicName, level) { return { topic_name: topicName, level: level }; } },
 
     // ---- LLM 改写 ----
-    { name: 'llmRewrite', method: 'llm_rewrite', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'llmRewriteStream', method: 'llm_rewrite_stream', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'llmRewriteApply', method: 'llm_rewrite_apply', params: function(filePath, rewrittenText) { return { file_path: filePath, rewritten_text: rewrittenText }; }, write: true },
 
@@ -472,7 +466,6 @@ var API_DEFS = [
     { name: 'getDuplicateReview', method: 'get_duplicate_review', params: function(filePath, relatedFile) { return { file_path: filePath, related_file: relatedFile }; } },
     { name: 'mergeDuplicateNotes', method: 'merge_duplicate_notes', params: function(filePath, relatedFile, title) { return { file_path: filePath, related_file: relatedFile, title: title || '' }; }, write: true },
     { name: 'mergeNoteGroup', method: 'merge_note_group', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
-    { name: 'getChunkMergeCandidates', method: 'get_chunk_merge_candidates', params: function() { return {}; } },
     { name: 'scanMergeCandidates', method: 'scan_merge_candidates', params: function(preset, overrides) { return { preset: preset || 'balanced', overrides: overrides || {} }; }, write: true },
     { name: 'suggestTopicMergeNames', method: 'suggest_topic_merge_names', params: function(topics) { return { topics: topics || [] }; }, write: true },
     { name: 'previewTopicMerge', method: 'preview_topic_merge', params: function(topics, newTopic) { return { topics: topics || [], new_topic: newTopic || '' }; } },
@@ -493,8 +486,6 @@ var API_DEFS = [
     { name: 'getWorkspaceRules', method: 'get_workspace_rules', params: function() { return {}; } },
     { name: 'saveWorkspaceRules', method: 'save_workspace_rules', params: function(opts) { return opts || {}; }, write: true },
     { name: 'needsWorkspaceRulesSetup', method: 'needs_workspace_rules_setup', params: function() { return {}; } },
-    { name: 'needsSchemaSetup', method: 'needs_workspace_rules_setup', params: function() { return {}; } },
-    { name: 'ensureSchema', method: 'ensure_schema', params: function() { return {}; } },
     { name: 'startIngest', method: 'start_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [], resume: !!opts.resume }; }, write: true },
     { name: 'cancelIngest', method: 'cancel_ingest', params: function() { return {}; }, write: true },
     { name: 'retryIngest', method: 'retry_ingest', params: function(options) { var opts = options || {}; return { mode: opts.mode || 'full', file_paths: opts.file_paths || [] }; }, write: true },
@@ -502,7 +493,6 @@ var API_DEFS = [
     { name: 'checkIngestUpdates', method: 'check_ingest_updates', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; } },
     { name: 'ensureIngest', method: 'ensure_ingest', params: function(options) { var opts = options || {}; return { file_paths: opts.file_paths || [] }; }, write: true },
     { name: 'getJobs', method: 'get_jobs', params: function(options) { var opts = options || {}; return { include_finished: opts.include_finished !== false, limit: opts.limit || 50 }; } },
-    { name: 'getJob', method: 'get_job', params: function(jobId) { return { job_id: jobId }; } },
 
     // ---- 搜索 ----
     { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } }

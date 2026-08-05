@@ -8,7 +8,6 @@ from modules.note_integration import NoteIntegration
 from sidecar import job_status
 from sidecar.convert_failures import (
     clear_convert_failure,
-    load_convert_failures,
     record_convert_batch_results,
 )
 from sidecar.handlers.base import BaseHandler
@@ -23,13 +22,10 @@ class TransferHandler(BaseHandler):
         router.register("auto_convert_pending", self._auto_convert_pending)
         router.register("extract_topics", self._extract_topics)
         router.register("start_note_integration", self._start_note_integration)
-        router.register("get_convert_failures", self._get_convert_failures)
         router.register("retry_convert_file", self._retry_convert_file)
-        router.register("retry_all_convert_failures", self._retry_all_convert_failures)
         router.register("dismiss_convert_failure", self._dismiss_convert_failure)
         router.register("import_rss_feed", self._import_rss_feed)
         router.register("import_transcript", self._import_transcript)
-        router.register("convert_raw_archive", self._convert_raw_archive)
         router.register("save_rss_subscription", self._save_rss_subscription)
         router.register("remove_rss_subscription", self._remove_rss_subscription)
         router.register("list_rss_subscriptions", self._list_rss_subscriptions)
@@ -297,9 +293,6 @@ class TransferHandler(BaseHandler):
             logger.warning(f"[ERROR] auto_convert: {e}\n{traceback.format_exc()}")
             self._send_response({"id": "event", "result": {"type": "auto_convert_error", "error": str(e)}})
 
-    def _get_convert_failures(self, _params):
-        return {"success": True, "items": load_convert_failures()}
-
     def _retry_convert_file(self, params):
         file_path = (params.get("file") or params.get("path") or "").strip()
         workspace = self.config.workspace_path
@@ -321,24 +314,6 @@ class TransferHandler(BaseHandler):
         output_path = str(ws / NOTES_FOLDER)
         results = self.file_converter.convert_batch([str(full)], output_path, raw_path=raw_path)
         record_convert_batch_results(results)
-
-    def _retry_all_convert_failures(self, _params):
-        items = load_convert_failures()
-        files = [x.get("file") for x in items if x.get("file")]
-        if not files:
-            return {"success": True, "message": "无失败项"}
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-        if not self._start_task(
-            "convert_retry_all",
-            self._do_retry_all_converts,
-            args=(files, workspace),
-            kind="conversion",
-            label="Retry conversions",
-        ):
-            return {"success": False, "message": "转换任务正在进行中"}
-        return {"success": True, "message": f"已开始重试 {len(files)} 个文件"}
 
     def _do_retry_all_converts(self, files: list[str], workspace: str) -> None:
         ws = Path(workspace)
@@ -440,63 +415,6 @@ class TransferHandler(BaseHandler):
             params.get("content", ""),
             source=params.get("source", ""),
             speakers=params.get("speakers", ""),
-        )
-
-    def _convert_raw_archive(self, _params):
-        """Batch re-convert supported files under Raw/."""
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-
-        if not self._start_task(
-            "convert_raw",
-            self._do_convert_raw_archive,
-            args=(workspace,),
-            kind="conversion",
-            label="Raw conversion",
-        ):
-            return {"success": False, "message": "转换任务正在进行中"}
-
-        return {"success": True, "message": "Raw 批量转换已开始", "status": "started"}
-
-    def _do_convert_raw_archive(self, workspace: str) -> None:
-        supported = set(FileConverterManager.get_supported_formats())
-        ws = Path(workspace)
-        raw_root = ws / RAW_FOLDER
-        pending: list[str] = []
-        if raw_root.exists():
-            for f in raw_root.rglob("*"):
-                if f.is_file() and not f.name.startswith(".") and f.suffix.lower() in supported:
-                    pending.append(str(f))
-        if not pending:
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "raw_convert_complete",
-                        "success": True,
-                        "converted": 0,
-                        "message": "Raw/ 下无可转换文件",
-                    },
-                }
-            )
-            return
-        raw_path = str(raw_root)
-        output_path = str(ws / NOTES_FOLDER)
-        results = self.file_converter.convert_batch(pending, output_path, raw_path=raw_path)
-        record_convert_batch_results(results)
-        converted = sum(1 for r in results if r.get("success"))
-        self._send_response(
-            {
-                "id": "event",
-                "result": {
-                    "type": "raw_convert_complete",
-                    "success": True,
-                    "converted": converted,
-                    "total": len(pending),
-                    "message": f"Raw 转换完成: {converted}/{len(pending)}",
-                },
-            }
         )
 
     # ── RSS Subscription Management ──

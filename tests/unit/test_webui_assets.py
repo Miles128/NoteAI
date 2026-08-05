@@ -54,7 +54,7 @@ def test_job_and_status_api_methods_are_allowed_by_tauri_rpc() -> None:
     allowed_block = rpc_rs.split("static ALLOWED_PYTHON_METHODS", 1)[1].split("];", 1)[0]
     allowed = set(re.findall(r'"([a-zA-Z0-9_]+)"', allowed_block))
 
-    required = {"get_jobs", "get_job", "get_link_stats", "run_kb_lint"}
+    required = {"get_jobs", "get_link_stats", "run_kb_lint"}
     declared = set(re.findall(r"""method:\s*['"]([^'"]+)['"]""", api_js))
 
     assert required <= declared

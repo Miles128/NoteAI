@@ -150,72 +150,6 @@ class RagHandler(BaseHandler):
                 json.dumps({"ts": time.time(), "msg": msg}, ensure_ascii=False), encoding="utf-8"
             )
 
-    def _rag_add_chunks(self, params):
-        if not config.rag_enabled:
-            return {"success": False, "message": self._rag_disabled_message()}
-
-        file_path = params.get("file_path", "")
-        if not file_path:
-            return {"success": False, "message": "未指定文件路径"}
-
-        full_path = self._resolve_path(file_path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        from sidecar.rag.chunker import chunk_file
-        from sidecar.rag.embedder import encode_documents
-        from sidecar.rag.index import index_operation, replace_file_chunks
-
-        try:
-            text = Path(full_path).read_text(encoding="utf-8")
-            rel_path = str(Path(full_path).relative_to(workspace))
-            chunks = chunk_file(rel_path, text)
-            if not chunks:
-                return {"success": False, "message": "文件无可索引内容"}
-            embeddings = encode_documents([c["content"] for c in chunks])
-            stat = Path(full_path).stat()
-            with index_operation(workspace, blocking=False) as acquired:
-                if not acquired:
-                    return {"success": False, "message": "索引更新正在进行中"}
-                replace_file_chunks(
-                    workspace,
-                    {
-                        rel_path: {
-                            "chunks": chunks,
-                            "embeddings": embeddings,
-                            "mtime": stat.st_mtime,
-                            "size": stat.st_size,
-                        }
-                    },
-                )
-            return {"success": True, "message": f"已添加 {len(chunks)} 个文本块"}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    def _rag_remove_chunks(self, params):
-        if not config.rag_enabled:
-            return {"success": True}
-
-        file_path = params.get("file_path", "")
-        if not file_path:
-            return {"success": False, "message": "未指定文件路径"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        from sidecar.rag.index import delete_by_file
-
-        try:
-            delete_by_file(workspace, file_path)
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
     def _emit_rag_error(self, message: str) -> None:
         self._send_response(
             {
@@ -252,12 +186,6 @@ class RagHandler(BaseHandler):
 
         threading.Thread(target=_worker, daemon=True).start()
         return {"success": True, "started": True}
-
-    def _rag_clear_memory(self, params):
-        from sidecar.rag.memory import save_short_memory
-
-        save_short_memory("")
-        return {"success": True}
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
         from utils.llm_utils import APIConfigError, check_api_config
@@ -749,10 +677,6 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def register_routes(self, router):
-        router.register("init_rag_index", self._init_rag_index)
         router.register("rag_rebuild_index", self._rag_rebuild_index)
-        router.register("rag_add_chunks", self._rag_add_chunks)
-        router.register("rag_remove_chunks", self._rag_remove_chunks)
         router.register("rag_chat", self._rag_chat, async_mode=True)
-        router.register("rag_clear_memory", self._rag_clear_memory)
         router.register("rag_index_status", self._rag_index_status)

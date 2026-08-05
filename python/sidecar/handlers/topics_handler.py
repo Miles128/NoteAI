@@ -3,8 +3,6 @@ import threading
 import time
 from pathlib import Path
 
-import yaml
-
 from config import config, is_ignored_dir
 from config.constants import TOPIC_SEP
 from sidecar.cascade import (
@@ -18,7 +16,6 @@ from sidecar.wiki_utils import (
     create_topic as wiki_create_topic,
 )
 from sidecar.wiki_utils import (
-    get_all_topic_names,
     get_survey_status,
     parse_wiki_headings,
     sync_wiki_with_files,
@@ -73,31 +70,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
     def _parse_wiki_headings(self):
         return parse_wiki_headings()
-
-    def _auto_assign_topic(self, params):  # noqa: PLR0911
-        path = params.get("path", "")
-        if not path:
-            return {"success": False, "message": "未指定文件"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            result = auto_assign_topic_for_file(str(full_path))
-            if not result:
-                return {"success": False, "message": "未找到匹配主题"}
-            if result.get("status") != "auto_assigned":
-                return {"success": False, "message": "需要人工确认主题", "candidates": result.get("candidates", [])}
-            topic = result.get("topic", "")
-            if not topic:
-                return {"success": False, "message": "未找到匹配主题"}
-            self._sync_wiki_with_folder_system()
-            self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
-            return {"success": True, "topic": topic}
-        except Exception as e:
-            return {"success": False, "message": f"自动分配失败: {str(e)}"}
 
     def _batch_auto_assign_topics(self, _params):
         if not config.workspace_path:
@@ -338,99 +310,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             return {"success": False, "message": f"删除失败: {str(e)}"}
 
-    def _get_all_topic_names(self, _params):
-        topics = get_all_topic_names()
-        return {"success": True, "topics": topics}
-
-    def _get_file_topics(self, params):
-        path = params.get("path", "")
-        if not path:
-            return {"success": False, "message": "未指定文件"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            text = full_path.read_text(encoding="utf-8")
-            fm, _ = self._parse_frontmatter(text)
-            if fm is None:
-                return {"success": True, "topics": []}
-            t = fm.get("topic", "")
-            return {"success": True, "topics": [t] if t else []}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    def _get_topic_files(self, params):
-        topic_name = params.get("topic", "").strip()
-        workspace = config.workspace_path
-        workspace_path = Path(workspace)
-        if not topic_name or not workspace or not workspace_path.exists():
-            return {"success": True, "files": []}
-        files = []
-        from sidecar.workspace_meta import is_workspace_meta_path
-
-        for md_file in sorted(workspace_path.rglob("*.md")):
-            if md_file.name.startswith(".") or "wiki" in md_file.parts:
-                continue
-            if is_workspace_meta_path(md_file):
-                continue
-            try:
-                text = md_file.read_text(encoding="utf-8")
-                fm, _ = self._parse_frontmatter(text)
-                if fm is None:
-                    continue
-                file_topic = fm.get("topic", "")
-                if file_topic and file_topic.strip().strip("'\"") == topic_name:
-                    files.append(str(md_file.relative_to(workspace_path)))
-            except Exception:
-                continue
-        return {"success": True, "files": files, "topic": topic_name}
-
-    def _remove_file_from_topic(self, params):
-        path = params.get("path", "")
-        topic_name = params.get("topic", "").strip()
-        if not path or not topic_name:
-            return {"success": False, "message": "参数缺失"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            text = full_path.read_text(encoding="utf-8")
-            had_bom = text.startswith("\ufeff")
-            meta, body = self._parse_frontmatter(text)
-            if meta is None:
-                return {"success": True, "message": "无需修改"}
-            if isinstance(meta.get("topic"), str) and meta["topic"] == topic_name:
-                meta.pop("topic", None)
-                if meta:
-                    new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-                    prefix = "\ufeff" if had_bom else ""
-                    new_content = prefix + "---\n" + new_fm + "\n---\n" + body.lstrip("\n")
-                else:
-                    prefix = "\ufeff" if had_bom else ""
-                    new_content = prefix + body.lstrip("\n")
-                full_path.write_text(new_content, encoding="utf-8")
-                notes_root = Path(config.workspace_path) / config.NOTES_FOLDER
-                notes_root.mkdir(parents=True, exist_ok=True)
-                if full_path.parent != notes_root:
-                    dst = notes_root / full_path.name
-                    if dst.exists():
-                        stem = full_path.stem
-                        counter = 1
-                        while dst.exists():
-                            dst = notes_root / f"{stem}_{counter}{full_path.suffix}"
-                            counter += 1
-                    shutil.move(str(full_path), str(dst))
-                self._sync_wiki_with_folder_system()
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
     def _do_cascade_survey_update(self, topic):
         from sidecar.cascade_runner import run_cascade_survey_update
 
@@ -649,7 +528,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def register_routes(self, router):
         router.register("get_topic_tree", self._get_topic_tree)
         router.register("sync_wiki_with_files", self._sync_wiki_with_folder_system)
-        router.register("auto_assign_topic", self._auto_assign_topic)
         router.register("batch_auto_assign_topics", self._batch_auto_assign_topics)
         router.register("move_file_to_topic", self._move_file_to_topic)
         router.register("create_topic", self._create_topic)
@@ -661,10 +539,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("suggest_topic_merge_names", self._suggest_topic_merge_names)
         router.register("merge_similar_topics", self._merge_similar_topics)
         router.register("preview_topic_merge", self._preview_topic_merge)
-        router.register("get_all_topic_names", self._get_all_topic_names)
-        router.register("get_file_topics", self._get_file_topics)
-        router.register("get_topic_files", self._get_topic_files)
-        router.register("remove_file_from_topic", self._remove_file_from_topic)
         router.register("get_all_pending", self._get_all_pending)
         router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)

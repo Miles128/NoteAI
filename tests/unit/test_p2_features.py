@@ -64,18 +64,3 @@ def test_import_transcript(workspace: Path) -> None:
     tr = import_transcript("会议记录", "说话内容", source="Zoom")
     assert tr["success"] is True
     assert tr["path"].endswith(".md")
-
-
-def test_create_note(workspace: Path) -> None:
-    from types import SimpleNamespace
-
-    from sidecar.handlers.files_handler import FilesHandler
-
-    from config import config as app_config
-
-    app_config.workspace_path = str(workspace)
-    srv = SimpleNamespace(_ctx=SimpleNamespace(config=app_config, logger=None))
-    h = FilesHandler(srv)
-    res = h._create_note({"title": "测试笔记", "topic": ""})
-    assert res["success"] is True
-    assert "Notes/_未分类" in res["path"]

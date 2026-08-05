@@ -177,7 +177,8 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
 
             if topic_match:
                 content = body.strip()
-                if include_content or content:
+                # 轻量模式（include_content=False）始终收录（body 可能为空），全量模式跳过空正文。
+                if not include_content or content:
                     notes.append(
                         {
                             "file_name": md_file.name,

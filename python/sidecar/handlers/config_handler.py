@@ -21,7 +21,6 @@ class ConfigHandler(BaseHandler):
         router.register("save_ui_config", self._save_ui_config)
         router.register("get_theme_preference", self._get_theme_preference)
         router.register("save_theme_preference", self._save_theme_preference)
-        router.register("test_api_connection", self._test_api_connection)
         router.register("get_project_rules", self._get_project_rules)
         router.register("save_project_rules", self._save_project_rules)
         router.register("get_workspace_rules", self._get_workspace_rules)
@@ -238,20 +237,6 @@ class ConfigHandler(BaseHandler):
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True}
-
-    def _test_api_connection(self, params):
-        try:
-            api_key = params.get("api_key", self.config.api_key or "")
-            api_base = params.get("api_base", self.config.api_base or "https://api.openai.com/v1")
-            model_name = params.get("model_name", self.config.model_name or "gpt-4")
-            if "■■■■" in api_key:
-                api_key = self.config.api_key
-            connected, conn_msg = test_api_connection(api_key, api_base, model_name)
-            if connected:
-                return {"success": True, "message": conn_msg}
-            return {"success": False, "message": conn_msg}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
 
     def _get_project_rules(self, params):
         workspace = self.config.workspace_path

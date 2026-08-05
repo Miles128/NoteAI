@@ -34,19 +34,11 @@ def _is_readme_note(path: Path) -> bool:
 class WorkspaceHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_workspace_status", self._get_workspace_status)
-        router.register("check_workspace_path_valid", self._check_workspace_path_valid)
-        router.register("clear_saved_workspace", self._clear_saved_workspace)
         router.register("set_workspace_path", self._set_workspace_path)
         router.register("create_sample_workspace", self._create_sample_workspace)
         router.register("get_workspace_tree", self._get_workspace_tree)
         router.register("on_file_selected", self._on_file_selected)
         router.register("refresh_log", self._refresh_log)
-        router.register("get_kb_health", self._get_kb_health)
-
-    def _get_kb_health(self, _params):
-        from sidecar.kb_health import compute_kb_health
-
-        return compute_kb_health(self.config.workspace_path)
 
     def _get_workspace_status(self, _params):
         saved_path, _ = workspace_manager.load_workspace()
@@ -69,19 +61,6 @@ class WorkspaceHandler(BaseHandler):
                 "needs_schema_setup": needs_workspace_rules_setup(path),
             }
         return {"is_set": False, "saved_workspace": False}
-
-    def _check_workspace_path_valid(self, params):
-        path = params.get("path", self.config.workspace_path)
-        if path and Path(path).exists():
-            return {"is_valid": True, "message": "工作区路径有效", "path": path}
-        return {"is_valid": False, "message": "工作区路径无效", "path": path}
-
-    def _clear_saved_workspace(self, _params):
-        success, message = workspace_manager.clear_workspace_state()
-        if not success:
-            return {"success": False, "message": message}
-        self.config._set_attr("workspace_path", "")
-        return {"success": True, "message": "已清除保存的工作区"}
 
     def _set_workspace_path(self, params):
         path = params.get("path", "")

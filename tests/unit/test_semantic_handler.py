@@ -234,10 +234,16 @@ def test_evidence_exclusion_and_entity_alias_are_audited(
 def test_topic_wiki_page_can_be_previewed_and_published(semantic_handler: SemanticHandler) -> None:
     preview = semantic_handler._get_topic_wiki_page({"topic": "AI > RAG"})
     published = semantic_handler._publish_topic_wiki_page({"topic": "AI > RAG"})
+    workspace = Path(semantic_handler.config.workspace_path)
 
     assert preview["success"] is True
-    assert "# AI > RAG" in preview["content"]
+    assert "# RAG" in preview["content"]
+    assert "## 已发布结论" in preview["content"]
     assert published["success"] is True
+    merged = workspace / "wiki" / "semantic" / "AI_语义.md"
+    assert merged.exists()
+    assert "## RAG" in merged.read_text(encoding="utf-8")
+    assert not (workspace / "wiki" / "semantic" / "AI" / "RAG_语义.md").exists()
 
 
 def test_block_extraction_materializes_traceable_entity_concept_relation(

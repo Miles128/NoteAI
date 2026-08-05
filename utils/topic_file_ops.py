@@ -72,7 +72,8 @@ def move_file_to_notes_topic_folder(file_path, topic):
         return {"success": False, "message": f"文件移动失败: {e}"}
 
 
-def _check_topic_needs_processing(meta) -> bool:
+def check_topic_needs_processing(meta) -> bool:
+    """契约：输入笔记 frontmatter 字典，返回该文件是否仍需主题处理（无 topic、空值或多值）；只读无副作用。"""
     if not meta:
         return True
     topic = meta.get("topic")

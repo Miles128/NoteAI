@@ -9,18 +9,18 @@ from utils.text_utils import (
     parse_frontmatter,
 )
 from utils.topic_classifier import (
-    _collect_topic_candidates,
-    _find_best_topic_match,
-    _llm_suggest_topic,
-    _match_llm_suggestions,
+    collect_topic_candidates,
+    find_best_topic_match,
+    llm_suggest_topic,
+    match_llm_suggestions,
 )
 from utils.topic_file_ops import (
-    _check_topic_needs_processing,
+    check_topic_needs_processing,
     move_file_to_notes_topic_folder,
     write_topic_to_file,
 )
 from utils.topic_pending import (
-    _drop_pending_for_rel,
+    drop_pending_for_rel,
     load_pending,
     save_pending,
 )
@@ -56,7 +56,7 @@ def sync_topic_from_folder_if_needed(file_path) -> dict | None:
     text, meta, title, tags = _load_assignment_text(full_path)
     if text is None:
         return None
-    if meta is not None and not _check_topic_needs_processing(meta):
+    if meta is not None and not check_topic_needs_processing(meta):
         current = meta.get("topic")
         if isinstance(current, list):
             current = current[0] if len(current) == 1 else None
@@ -162,9 +162,9 @@ def _apply_auto_topic(
 
     new_rel = str(move_result.get("new_path") or original_rel)
     add_file_to_wiki_topic(new_rel, topic, title)
-    _drop_pending_for_rel(original_rel)
+    drop_pending_for_rel(original_rel)
     if new_rel != original_rel:
-        _drop_pending_for_rel(new_rel)
+        drop_pending_for_rel(new_rel)
     prefix = "AI 分配" if source == "llm" else "自动分配"
     _log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
     result = {
@@ -219,7 +219,7 @@ def _try_assign_survey(full_path: Path, workspace: str, title: str, format_optim
         return None
     from sidecar.workspace_rules import list_topic_headings
 
-    best_match = _find_best_topic_match(survey_hint, list_topic_headings(workspace))
+    best_match = find_best_topic_match(survey_hint, list_topic_headings(workspace))
     if not best_match:
         return None
     return _apply_auto_topic(full_path, workspace, best_match, title, "survey", format_optimized)
@@ -251,10 +251,10 @@ def _try_assign_with_llm(
     body = text[match.end() :] if match else text
     content_preview = body[:1500].strip()
     topic_names = [h["name"] for h in headings]
-    llm_suggestions = _llm_suggest_topic(title, tags, content_preview, topic_names)
+    llm_suggestions = llm_suggest_topic(title, tags, content_preview, topic_names)
     if not llm_suggestions:
         return None, []
-    matched = _match_llm_suggestions(llm_suggestions, headings)
+    matched = match_llm_suggestions(llm_suggestions, headings)
     # The classifier currently exposes a ranked suggestion but no calibrated
     # probability. A single exact match is treated as 0.85 confidence; the
     # setting lets users choose how conservative automatic filing should be.
@@ -270,7 +270,7 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if text is None:
         return None
 
-    if meta is not None and not _check_topic_needs_processing(meta):
+    if meta is not None and not check_topic_needs_processing(meta):
         return None
 
     format_optimized = False
@@ -292,7 +292,7 @@ def _auto_assign_existing_file(full_path: Path, workspace: str, use_llm=True):  
     if not headings:
         return _save_pending_assignment(full_path, workspace, title, tags, [], "none", format_optimized)
 
-    high_priority_candidates, candidates, extra_candidates = _collect_topic_candidates(headings, full_path.stem, tags)
+    high_priority_candidates, candidates, extra_candidates = collect_topic_candidates(headings, full_path.stem, tags)
     single_candidate_result = _try_assign_single_candidate(
         full_path, workspace, title, candidates, high_priority_candidates, format_optimized
     )
@@ -352,7 +352,7 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
             file_topic = file_topic[0] if len(file_topic) == 1 else None
         if isinstance(file_topic, str):
             file_topic = file_topic.strip() or None
-        if meta is None or _check_topic_needs_processing(meta) or file_topic != folder_topic:
+        if meta is None or check_topic_needs_processing(meta) or file_topic != folder_topic:
             try:
                 if _write_file_topic_from_folder(path, folder_topic):
                     if mark_wiki_sync:
@@ -364,7 +364,7 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
     if not is_inbox_orphan_path(path):
         return
 
-    if meta is None or _check_topic_needs_processing(meta):
+    if meta is None or check_topic_needs_processing(meta):
         try:
             result = auto_assign_topic_for_file(file_path)
             if result and result.get("status") == "auto_assigned" and result.get("topic"):

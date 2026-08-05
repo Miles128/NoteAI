@@ -34,7 +34,8 @@ def _alias_target(value: str) -> str | None:
     return None
 
 
-def _find_best_topic_match(hint: str, headings: list) -> str | None:
+def find_best_topic_match(hint: str, headings: list) -> str | None:
+    """契约：输入提示词与主题 heading 列表，返回归一化/别名/分词匹配到的最佳主题名；只读无副作用，无匹配返回 None。"""
     alias = _alias_target(hint)
     if alias:
         return alias
@@ -94,7 +95,8 @@ def _has_meaningful_word_match(word: str, topic_name: str) -> bool:
     return _normalize_for_match(word) in _normalize_for_match(topic_name)
 
 
-def _llm_suggest_topic(title, tags, content_preview, topic_names):
+def llm_suggest_topic(title, tags, content_preview, topic_names):
+    """契约：输入标题/标签/正文预览与已有主题名列表，调用 LLM 返回至多 4 个建议主题名；只读无副作用，失败或未配置 API 返回空列表。"""
     if not config.api_key:
         return []
     if not topic_names:
@@ -139,7 +141,8 @@ def _llm_suggest_topic(title, tags, content_preview, topic_names):
         return []
 
 
-def _collect_topic_candidates(headings, filename: str, tags: list[str]):
+def collect_topic_candidates(headings, filename: str, tags: list[str]):
+    """契约：输入主题 heading 列表、文件名与标签，返回 (高优先级 heading 列表, 候选主题名列表, 补充候选名列表)；只读无副作用。"""
     high_priority_candidates = []
     low_priority_candidates = []
     normalized_filename = _normalize_for_match(filename)
@@ -173,7 +176,8 @@ def _collect_topic_candidates(headings, filename: str, tags: list[str]):
     return high_priority_candidates, candidates, extra_candidates
 
 
-def _match_llm_suggestions(llm_suggestions, headings):
+def match_llm_suggestions(llm_suggestions, headings):
+    """契约：输入 LLM 建议主题名与主题 heading 列表，返回经别名解析与归一化匹配到的已有主题名列表；只读无副作用。"""
     matched = []
     for suggestion in llm_suggestions:
         alias = _alias_target(suggestion)

@@ -328,7 +328,15 @@ def test_extraction_dedups_variant_spellings_into_existing_object(
         prompt_version=1,
         extracted_at="2026-07-19T10:00:00Z",
         concepts=[{"id": "concept-rag-1", "canonical_name": "RAG", "description": "基础描述", "confidence": 0.9}],
-        entities=[{"id": "entity-rag-1", "canonical_name": "RAG", "entity_type": "protocol", "description": "", "confidence": 0.8}],
+        entities=[
+            {
+                "id": "entity-rag-1",
+                "canonical_name": "RAG",
+                "entity_type": "protocol",
+                "description": "",
+                "confidence": 0.8,
+            }
+        ],
         claims=[],
     )
     # 第二个块抽到同一对象的不同变体：括号注释、空格、大小写均不同
@@ -337,8 +345,23 @@ def test_extraction_dedups_variant_spellings_into_existing_object(
         block_hash="hash-v-2",
         prompt_version=1,
         extracted_at="2026-07-19T10:01:00Z",
-        concepts=[{"id": "concept-rag-2", "canonical_name": "RAG（Retrieval-Augmented Generation）", "description": "更长的描述", "confidence": 0.95}],
-        entities=[{"id": "entity-rag-2", "canonical_name": "R A G", "entity_type": "algorithm", "description": "混合检索", "confidence": 0.9}],
+        concepts=[
+            {
+                "id": "concept-rag-2",
+                "canonical_name": "RAG（Retrieval-Augmented Generation）",
+                "description": "更长的描述",
+                "confidence": 0.95,
+            }
+        ],
+        entities=[
+            {
+                "id": "entity-rag-2",
+                "canonical_name": "R A G",
+                "entity_type": "algorithm",
+                "description": "混合检索",
+                "confidence": 0.9,
+            }
+        ],
         claims=[],
     )
 

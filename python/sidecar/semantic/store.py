@@ -235,9 +235,7 @@ class SemanticStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_fp ON entities(name_fingerprint)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_concepts_fp ON concepts(name_fingerprint)")
             for table in ("entities", "concepts"):
-                rows = conn.execute(
-                    f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint IS NULL"
-                ).fetchall()
+                rows = conn.execute(f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint IS NULL").fetchall()
                 for row in rows:
                     conn.execute(
                         f"UPDATE {table} SET name_fingerprint = ? WHERE id = ?",
@@ -961,12 +959,9 @@ class SemanticStore:
             # reuse that id so mentions/relations merge instead of duplicating.
             # The upsert below then refreshes description/confidence on the
             # existing row while keeping its canonical name.
-            for obj, table in (
-                [(c, "concepts") for c in concepts] + [(e, "entities") for e in entities]
-            ):
+            for obj, table in [(c, "concepts") for c in concepts] + [(e, "entities") for e in entities]:
                 existing = conn.execute(
-                    f"SELECT id FROM {table}"
-                    " WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
+                    f"SELECT id FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
                     (name_fingerprint(obj["canonical_name"]), obj["id"]),
                 ).fetchone()
                 if existing is not None:
@@ -1015,9 +1010,7 @@ class SemanticStore:
             conn.execute(
                 "DELETE FROM semantic_mentions WHERE block_id = ? AND object_kind != 'claim'",
                 (block_id,),
-            ) if keep_legacy_claims else conn.execute(
-                "DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,)
-            )
+            ) if keep_legacy_claims else conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
             conn.execute("DELETE FROM relations WHERE block_id = ?", (block_id,))
             if not keep_legacy_claims:
                 conn.execute("DELETE FROM evidence WHERE block_id = ?", (block_id,))
@@ -1345,9 +1338,7 @@ class SemanticStore:
         stats = {"entities": 0, "concepts": 0}
         with self.connect() as conn:
             for table, kind in (("entities", "entity"), ("concepts", "concept")):
-                rows = list(
-                    conn.execute(f"SELECT id, canonical_name FROM {table} WHERE status = 'active'")
-                )
+                rows = list(conn.execute(f"SELECT id, canonical_name FROM {table} WHERE status = 'active'"))
                 for row in rows:
                     if not _is_noise_object_name(row["canonical_name"]):
                         continue
@@ -1586,9 +1577,7 @@ class SemanticStore:
         stats = {"entities": 0, "concepts": 0}
         with self.connect() as conn:
             for table, kind in (("entities", "entity"), ("concepts", "concept")):
-                rows = list(
-                    conn.execute(f"SELECT id FROM {table} WHERE status = 'inactive'")
-                )
+                rows = list(conn.execute(f"SELECT id FROM {table} WHERE status = 'inactive'"))
                 for row in rows:
                     conn.execute(f"DELETE FROM {table} WHERE id = ?", (row["id"],))
                     conn.execute(

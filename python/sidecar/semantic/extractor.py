@@ -476,7 +476,9 @@ def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
 code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。"""
 
 
-def validate_batch_extraction(data: dict, blocks: list[dict], rejections: dict[str, int] | None = None) -> dict[str, dict]:
+def validate_batch_extraction(
+    data: dict, blocks: list[dict], rejections: dict[str, int] | None = None
+) -> dict[str, dict]:
     raw_items = data.get("blocks")
     if not isinstance(raw_items, list):
         raise ExtractionValidationError("批量输出缺少 blocks 数组")
@@ -646,7 +648,9 @@ def extract_document_semantics(
                     parsed_group = validate_batch_extraction(parse_extraction_json(raw), group, rejections=rejections)
                 except ExtractionValidationError as first_error:
                     repaired = llm_call(build_repair_prompt(prompt, raw, str(first_error)))
-                    parsed_group = validate_batch_extraction(parse_extraction_json(repaired), group, rejections=rejections)
+                    parsed_group = validate_batch_extraction(
+                        parse_extraction_json(repaired), group, rejections=rejections
+                    )
                 now = datetime.now(timezone.utc).isoformat()
                 for pending_block in group:
                     save_result(pending_block, parsed_group[pending_block["id"]], now)

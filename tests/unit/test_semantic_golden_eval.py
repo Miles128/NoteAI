@@ -508,9 +508,7 @@ def test_deactivate_noise_objects_cleans_legacy_rows(tmp_path: Path) -> None:
         assert conn.execute("SELECT status FROM concepts WHERE id='con-n1'").fetchone()[0] == "inactive"
         assert conn.execute("SELECT count(*) FROM semantic_mentions WHERE object_id='ent-n1'").fetchone()[0] == 0
         assert conn.execute("SELECT count(*) FROM relations WHERE id='rel-n'").fetchone()[0] == 0
-        audit = conn.execute(
-            "SELECT count(*) FROM semantic_change_log WHERE change_kind='deactivated'"
-        ).fetchone()[0]
+        audit = conn.execute("SELECT count(*) FROM semantic_change_log WHERE change_kind='deactivated'").fetchone()[0]
     assert audit == 2
 
     # Idempotent: a second pass must not touch anything.

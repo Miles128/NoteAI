@@ -367,15 +367,15 @@ class SemanticHandler(BaseHandler):
                 if status not in {"active", "deleted", "all"}:
                     status = "active"
                 status_clause = "" if status == "all" else "c.status = ? AND "
-                args = (() if status == "all" else (status,)) + (query, like, like)
+                args: tuple = (() if status == "all" else (status,)) + (query, like, like)
                 evidence_clause = (
                     "AND (c.status = 'deleted' OR EXISTS "
                     "(SELECT 1 FROM evidence ae WHERE ae.claim_id = c.id AND ae.status = 'active'))"
                 )
                 where = f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) {evidence_clause}"
-                if min_confidence:
+                if min_confidence is not None:
                     where += " AND c.confidence >= ?"
-                    args = args + (min_confidence,)
+                    args = (*args, min_confidence)
                 total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
@@ -430,9 +430,9 @@ class SemanticHandler(BaseHandler):
                 description_column = "o.description"
                 where = "WHERE o.status = 'active' AND (? = '' OR o.canonical_name LIKE ? OR o.description LIKE ?)"
                 args = (query, like, like)
-                if min_confidence:
+                if min_confidence is not None:
                     where += " AND o.confidence >= ?"
-                    args = args + (min_confidence,)
+                    args = (*args, min_confidence)
                 total = conn.execute(f"SELECT count(*) FROM {table} o {where}", args).fetchone()[0]
                 rows = conn.execute(
                     f"""SELECT o.id, o.canonical_name, {description_column}, o.confidence{type_select},
@@ -847,10 +847,7 @@ class SemanticHandler(BaseHandler):
                 )
             }
             aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
-            concept_ids = {
-                row["id"]
-                for row in conn.execute("SELECT id FROM concepts WHERE status = 'active'")
-            }
+            concept_ids = {row["id"] for row in conn.execute("SELECT id FROM concepts WHERE status = 'active'")}
             relation_endpoint_ids = {
                 row["entity_id"]
                 for row in conn.execute(

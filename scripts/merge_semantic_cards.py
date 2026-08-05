@@ -51,9 +51,7 @@ def main() -> None:
         raise SystemExit(f"语义数据库不存在：{db}")
 
     with store.connect() as conn:
-        topic_rows = conn.execute(
-            "SELECT DISTINCT topic FROM documents WHERE topic != ''"
-        ).fetchall()
+        topic_rows = conn.execute("SELECT DISTINCT topic FROM documents WHERE topic != ''").fetchall()
     tops = sorted({top_level_topic(row["topic"]) for row in topic_rows})
     print(f"顶层主题 {len(tops)} 个：{', '.join(tops)}")
 

@@ -90,6 +90,8 @@
     --ai-panel-bg: #252525;
     --chat-user-bg: rgba(255, 255, 255, 0.08);
     --modal-bg: #2d2d2d;
+    /* 标题栏/状态栏/各列顶栏的边框色（浅色主题比 --border 更淡） */
+    --chrome-border: var(--border);
 }
 
 body {
@@ -372,6 +374,7 @@ body[data-theme="paper"] {
 [data-theme="light"],
 [data-theme="paper"] {
     --border: rgba(35, 31, 25, 0.08);
+    --chrome-border: rgba(35, 31, 25, 0.06);
     --card-radius: 6px;
     --btn-radius: 5px;
     --input-radius: 5px;

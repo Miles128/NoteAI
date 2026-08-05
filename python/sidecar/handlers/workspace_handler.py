@@ -44,7 +44,7 @@ class WorkspaceHandler(BaseHandler):
         saved_path, _ = workspace_manager.load_workspace()
         path = saved_path if saved_path and Path(saved_path).exists() else ""
         if path and path != self.config.workspace_path:
-            self.config._set_attr("workspace_path", path)
+            self.config.workspace_path = path
             self._setup_workspace()
             self._setup_watcher(path)
         if path and Path(path).exists():
@@ -65,7 +65,7 @@ class WorkspaceHandler(BaseHandler):
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
-            self.config._set_attr("workspace_path", path)
+            self.config.workspace_path = path
             self.file_previewer.workspace_path = path
             self._setup_watcher(path)
             self._invalidate_cache()

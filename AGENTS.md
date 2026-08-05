@@ -104,7 +104,7 @@ Tauri v2 shell (src-tauri/)
 - **`rag_chat_with_actions` RPC 已移除**：它只是 `rag_chat` 的别名。文件操作现在通过 CLI Agent 对话框完成（PRD §3.8）。内置的 `agent_runner.py` / `agent_handler.py`（6 个结构化工具）已删除。
 - **`rag/index.py:hybrid_search()`**：sparse-only 命中会查询 zvec 的 body text；空 chunk 被丢弃（`filter_usable_chunks`），过期的 sparse id 被清理。
 - **Embedder 模块**（`rag/embedder.py`）：HF 环境变量（`HF_ENDPOINT`、`NO_PROXY`）与 `FASTEMBED_CACHE_PATH` 在首次加载模型时惰性设置，而非导入时。使用 hf-mirror.com。
-- **主题分配**：逻辑分布在 `utils/topic_assigner.py`、`topic_classifier.py`、`topic_file_ops.py`、`topic_manager.py`、`topic_dedup.py`、`topic_pending.py`。新增主题相关逻辑放在这一组模块中，不要继续膨胀 handler。
+- **主题分配**：逻辑分布在 `utils/topic_assigner.py`、`topic_classifier.py`、`topic_file_ops.py`、`topic_manager.py`、`topic_dedup.py`、`topic_pending.py`、`topic_merge.py`。新增主题相关逻辑放在这一组模块中，不要继续膨胀 handler。
 - **`IGNORED_DIRS`**（`constants.py`）：小写匹配集合 `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`。
 - **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层解析/CRUD 辅助函数在 `utils/wiki_manager.py`、`utils/wiki_crud.py`、`utils/wiki_sync.py`。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。

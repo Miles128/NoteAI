@@ -52,7 +52,7 @@ class ConfigHandler(BaseHandler):
         model_name = params.get("model_name", "gpt-4")
 
         if "■■■■" in api_key:
-            api_key = self.config._get_attr("api_key")
+            api_key = self.config.api_key
 
         if not api_key or not api_key.strip():
             return {"success": False, "message": "API Key 不能为空"}

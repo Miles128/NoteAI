@@ -545,6 +545,33 @@ def compress_with_llm(content: str, compression_level: str = "medium") -> str:
         return content
 
 
+def check_content_within_context(
+    content: str,
+    max_context_tokens: int | None = None,
+    model_name: str | None = None,
+) -> tuple:
+    """检查内容是否在上下文窗口内，超出时经 LLM 摘要/压缩/截断处理。
+
+    从 AppConfig 迁移而来的内容处理职责。未显式传入的预算/模型参数
+    从全局 config 单例读取，保持与原实现一致的行为。
+    """
+    from config import config
+
+    budget = config.max_context_tokens if max_context_tokens is None else max_context_tokens
+    model = config.model_name if model_name is None else model_name
+
+    estimated_tokens = _estimate_tokens(content, model)
+
+    if estimated_tokens <= budget:
+        return (True, estimated_tokens, content)
+
+    processed_content, _was_summarized, _was_truncated, final_tokens = process_content_with_llm(
+        content, max_tokens=budget, model_name=model
+    )
+
+    return (False, final_tokens, processed_content)
+
+
 def process_content_with_llm(content: str, max_tokens: int = 131072, model_name: str = "gpt-4") -> tuple:
     """使用LLM智能处理内容，当超出上下文限制时进行摘要、压缩、截断"""
     estimated_tokens = _estimate_tokens(content, model_name)

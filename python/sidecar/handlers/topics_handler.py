@@ -484,7 +484,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import suggest_merged_topic_names
+        from utils.topic_merge import suggest_merged_topic_names
 
         return suggest_merged_topic_names(workspace, [str(topic) for topic in (params.get("topics") or [])])
 
@@ -492,7 +492,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import merge_topics
+        from utils.topic_merge import merge_topics
 
         result = merge_topics(
             workspace,
@@ -508,7 +508,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import preview_topic_merge
+        from utils.topic_merge import preview_topic_merge
 
         return preview_topic_merge(
             workspace,

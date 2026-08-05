@@ -17,7 +17,7 @@ from config.settings import workspace_manager
 def restore_workspace():
     previous = config.workspace_path
     yield
-    config._set_attr("workspace_path", previous)
+    config.workspace_path = previous
 
 
 def test_bundled_sample_notes_exist() -> None:

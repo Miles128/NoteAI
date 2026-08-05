@@ -1,4 +1,9 @@
-"""LLM-assisted naming and safe migration for similar topic pairs."""
+"""LLM-assisted naming and safe migration for similar topic pairs.
+
+主题合并（文件/frontmatter 侧）在 utils/ 的唯一入口；WIKI 段侧的合并去重
+见 utils.topic_dedup。前端 RPC 经 handlers/topics_handler.py 调用本模块的
+suggest_merged_topic_names / preview_topic_merge / merge_topics。
+"""
 
 from __future__ import annotations
 
@@ -151,7 +156,7 @@ def merge_topics(workspace: str | Path, topics: list[str], new_topic: str) -> di
     if not all(source.is_dir() for source in sources):
         return {"success": False, "message": "源主题目录不存在"}
     target.mkdir(parents=True, exist_ok=True)
-    from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+    from utils.topic_file_ops import move_file_to_notes_topic_folder, write_topic_to_file
 
     moved: list[str] = []
     renamed: list[dict] = []

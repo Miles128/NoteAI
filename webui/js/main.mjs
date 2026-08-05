@@ -20,14 +20,20 @@ async function loadModules() {
     const { IconsModule } = window;
     window.IconsModule = IconsModule;
 
-    // 顺序契约：G3.js 顶层读取 window.Storage.KEYS，依赖 index.html 末尾经典脚本
+    // 顺序契约：graph-layout-params.js 顶层读取 window.Storage.KEYS，依赖 index.html 末尾经典脚本
     // storage.js 先行——经典脚本在 HTML 解析期执行，必早于本模块脚本，顺序恒成立。
+    // G3.js 顶层读取 window.GraphLayoutParams，须在其之前加载。
+    await import('./graph-layout-params.js');
     await import('./G3.js');
 
     await import('./toast.js');
     const { ToastModule } = window;
     window.ToastModule = ToastModule;
 
+    // settings 子模块须先于薄主入口 settings.js 加载（主入口组装 window.SettingsModule）
+    await import('./settings-general.js');
+    await import('./settings-components.js');
+    await import('./settings-semantic.js');
     await import('./settings.js');
     const {
         SettingsModule, saveApiConfig, refreshLog, closeSettingsPanel,

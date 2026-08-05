@@ -52,8 +52,6 @@ def _ensure_fastembed_cache():
     _FASTEMBED_CACHE_PATH_CONFIGURED = True
 
 
-from fastembed import TextEmbedding
-
 from utils.logger import logger
 
 _DENSE_MODEL = None

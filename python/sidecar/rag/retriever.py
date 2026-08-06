@@ -106,21 +106,41 @@ def retrieve(
     tags: list | None = None,
     current_file: str = "",
     progress_callback=None,
-) -> list:
+) -> dict[str, Any]:
+    """Run the hybrid retrieval pipeline.
+
+    Returns {"results": [...chunks...], "retrieval_debug": {...}} so callers
+    can inspect the pipeline while still getting the chunk list directly.
+    """
     workspace = config.workspace_path
+    debug: dict[str, Any] = {
+        "hyde_enabled": False,
+        "hyde_query": None,
+        "raw_hits": 0,
+        "mmr_kept": 0,
+        "final": 0,
+        "cached": False,
+    }
     if not workspace:
-        return []
+        return {"results": [], "retrieval_debug": debug}
 
     cached = _get_cached(query, topics, tags, current_file)
     if cached is not None:
-        return cached[0]
+        cached_results, cached_debug = cached
+        if isinstance(cached_debug, dict) and cached_debug:
+            debug = dict(cached_debug)
+        else:
+            # Cache entry predates debug capture: pipeline stats unavailable.
+            debug["degraded"] = True
+        debug["cached"] = True
+        return {"results": cached_results, "retrieval_debug": debug}
 
     from sidecar.rag.embedder import encode_query
     from sidecar.rag.index import filter_usable_chunks, hybrid_search
 
     query_emb = encode_query(query)
     if not query_emb.get("dense_vec"):
-        return []
+        return {"results": [], "retrieval_debug": debug}
 
     configured_top_k = rag_top_k(has_filters=bool(topics or tags))
     candidate_k = min(max(configured_top_k * 3, 12), 24)
@@ -160,6 +180,8 @@ def retrieve(
 
     # HyDE only if enabled and the original search is weak, avoiding a mandatory LLM call.
     if hyde_enabled() and (not results or results[0].get("score", 0) < hyde_threshold()):
+        debug["hyde_enabled"] = True
+        debug["hyde_query"] = query
         try:
             hyde_results = _hyde_search(workspace, query, topics, tags, candidate_k, progress_callback)
             if hyde_results:
@@ -176,9 +198,13 @@ def retrieve(
     if len(results) > _MMR_CANDIDATE_CAP:
         results = results[:_MMR_CANDIDATE_CAP]
 
+    debug["raw_hits"] = len(results)
+
     dynamic_top_k = select_dynamic_top_k(query, results)
     if len(results) >= 2:
         results = _mmr_dedup(results, top_k=dynamic_top_k)
+
+    debug["mmr_kept"] = len(results)
 
     if len(results) >= 2 and rerank_enabled():
         results = _rerank(query, results[:_RERANK_CANDIDATE_CAP], top_k=dynamic_top_k)
@@ -192,8 +218,9 @@ def retrieve(
     expanded = filter_usable_chunks(expanded)
     expanded = limit_unique_sources(expanded, dynamic_top_k)
 
-    _set_cached(query, topics, tags, current_file, (expanded, []))
-    return expanded
+    debug["final"] = len(expanded)
+    _set_cached(query, topics, tags, current_file, (expanded, debug))
+    return {"results": expanded, "retrieval_debug": debug}
 
 
 def _hyde_search(workspace, query, topics, tags, top_k, progress_callback=None) -> list:

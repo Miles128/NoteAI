@@ -44,4 +44,4 @@ INTENT_ROUTER_PROMPT: |
   用户：今天北京天气怎么样
   {{"intent": "web", "confidence": "high", "reason": "需要实时天气信息"}}
 
-  用户输入：{question}
+  {history_section}用户输入：{question}

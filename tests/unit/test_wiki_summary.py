@@ -66,3 +66,15 @@ def test_wiki_tag_headings_are_not_topics(workspace: Path) -> None:
 
     assert all(item["label"] != "标签索引" for item in parse_wiki_headings())
     assert all(item["label"] != "标签索引" for item in parse_wiki_structure())
+
+
+def test_sync_wiki_preserves_root_readme_topic(workspace: Path) -> None:
+    """根目录 README 的 topic 不应被 wiki 同步移除（导航元文档）。"""
+    readme = workspace / "Notes" / "README.md"
+    readme.write_text(
+        "---\ntype: Note\ntopic: 知识库导航\nupdated: '2026-08-07'\n---\n# AI 全栈知识库\n",
+        encoding="utf-8",
+    )
+    sync_wiki_with_files()
+    text = readme.read_text(encoding="utf-8")
+    assert "topic: 知识库导航" in text

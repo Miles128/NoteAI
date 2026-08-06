@@ -241,6 +241,9 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
                 updated_files += 1
 
     for md_file in root_md_files:
+        # 根目录 README/知识图谱是导航元文档，不强制移除 topic
+        if md_file.stem.casefold() in ("readme", "知识图谱"):
+            continue
         if _write_file_topic_from_folder(md_file, None):
             updated_files += 1
 

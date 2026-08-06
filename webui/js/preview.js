@@ -382,12 +382,7 @@ async function loadPdfViewer(path, fileName, requestId) {
             return;
         }
 
-        var binaryStr = atob(rawResult.content);
-        var len = binaryStr.length;
-        var bytes = new Uint8Array(len);
-        for (var i = 0; i < len; i++) {
-            bytes[i] = binaryStr.charCodeAt(i);
-        }
+        var bytes = window.b64ToUint8(rawResult.content);
 
         if (typeof pdfjsLib === 'undefined') {
             showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));

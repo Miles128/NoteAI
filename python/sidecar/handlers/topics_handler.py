@@ -10,7 +10,6 @@ from config import config, is_ignored_dir
 from config.constants import TOPIC_SEP, WORKSPACE_APP_FOLDER
 from sidecar.cascade import (
     append_changelog,
-    cascade_on_topic_resolved,
     ensure_topic_folder,
 )
 from sidecar.handlers.base import BaseHandler
@@ -19,7 +18,6 @@ from sidecar.wiki_utils import (
     create_topic as wiki_create_topic,
 )
 from sidecar.wiki_utils import (
-    get_survey_status,
     parse_wiki_headings,
     read_wiki_text,
     sync_wiki_with_files,
@@ -635,18 +633,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         run_cascade_survey_update(topic, send_response=self._send_response)
 
-    def _do_file_added_cascade(self, file_path: Path):
-        try:
-            text = file_path.read_text(encoding="utf-8")
-            fm, _ = self._parse_frontmatter(text)
-            topic = fm.get("topic") if fm else None
-            if topic:
-                self._start_task(
-                    f"cascade_{topic}_{file_path.stem}", cascade_on_topic_resolved, args=(str(file_path), topic)
-                )
-        except Exception as e:
-            logger.error(f"[topics_handler] file_added_cascade error: {e}")
-
     def _get_all_pending(self, _params):
         workspace = config.workspace_path
         topic_options: list[str] = []
@@ -863,7 +849,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("get_all_pending", self._get_all_pending)
         router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)
-        router.register("get_survey_status", self._get_survey_status)
         router.register("get_survey_overview", self._get_survey_overview)
         router.register("toggle_survey", self._toggle_survey)
         router.register("fix_survey_topics", self._fix_survey_topics)
@@ -877,10 +862,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             logger.warning(f"[fix_survey_topics] failed: {e}")
             return {"success": False, "message": str(e)}
-
-    def _get_survey_status(self, _params):
-        surveys = get_survey_status()
-        return {"success": True, "surveys": surveys}
 
     def _get_survey_overview(self, _params):
         from sidecar.wiki_utils import get_survey_overview

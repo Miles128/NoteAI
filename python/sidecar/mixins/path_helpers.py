@@ -1,33 +1,21 @@
-"""Path / frontmatter helpers for sidecar (delegates to shared utils)."""
+"""Path / frontmatter helpers for sidecar (delegates to shared utils).
+
+Handler-facing helpers that mirror these (``_parse_frontmatter``,
+``_load_pending_topics``, ``_save_pending_topics``) live on
+``sidecar.handlers.base.BaseHandler``; this mixin only hosts the server-level
+helpers handlers forward to via ``BaseHandler`` properties.
+"""
 
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
 from sidecar.wiki_utils import parse_wiki_headings as _parse_wiki_headings_impl
-from utils.text_utils import parse_frontmatter as _parse_frontmatter_impl
-from utils.topic_pending import (
-    get_pending_path,
-    load_pending,
-    save_pending,
-)
 
 
 class PathHelpersMixin:
-    def _parse_frontmatter(self, text):
-        return _parse_frontmatter_impl(text)
-
     def _resolve_path(self, path):
         return resolve_workspace_path(path)
 
     def _find_file_by_name(self, path):
         return find_file_by_name_in_workspace(path)
-
-    def _get_pending_topics_path(self):
-        return get_pending_path()
-
-    def _load_pending_topics(self):
-        return load_pending()
-
-    def _save_pending_topics(self, pending):
-        return save_pending(pending)
 
     def _parse_wiki_headings(self):
         return _parse_wiki_headings_impl()

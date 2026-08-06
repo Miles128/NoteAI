@@ -86,8 +86,8 @@ function refreshCurrentSidebarView(forceRefresh) {
             window.loadTagsView(true);
         }
     } else if (view === 'graph') {
-        if (window.LinksModule && typeof window.LinksModule.loadLinksData === 'function') {
-            window.LinksModule.loadLinksData();
+        if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
+            window.Graph3Tier.load('all');
         }
     } else if (view === 'relation') {
         if (typeof window.loadRelationGraphData === 'function') {

@@ -142,7 +142,9 @@ class FilesHandler(BaseHandler):
     def _do_suggest_links_for_file(self, rel_path: str) -> None:
         from utils.link_indexer import discover_cross_refs_for_file
 
-        discover_cross_refs_for_file(rel_path)
+        # 保存后走轻量启发式发现：快速产出待确认链接，不阻塞保存也不消耗 LLM；
+        # 全库级 LLM 精判由后续手动交叉引用操作承担。
+        discover_cross_refs_for_file(rel_path, use_llm=False)
 
     def _read_file_raw(self, params):
         path = params.get("path", "")
@@ -367,6 +369,12 @@ class FilesHandler(BaseHandler):
         from sidecar.cascade import append_changelog
 
         append_changelog(f"新建笔记: {rel}" + (f"（{topic}）" if topic else ""))
+        if rel.lower().endswith(".md"):
+            self._start_task(
+                f"suggest_links_{Path(rel).stem}",
+                self._do_suggest_links_for_file,
+                args=(rel,),
+            )
         return {
             "success": True,
             "path": rel,

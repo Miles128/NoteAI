@@ -207,7 +207,6 @@ function switchSidebarView(view) {
     }
 
     if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); }).catch(function() {});
-    if (view === 'graph' && window.LinksModule) { window.LinksModule.loadGraphView(); setTimeout(updateSidebarStats, 500); }
 
     // 联动知识图谱过滤
     if (window.Graph3Tier && window.Graph3Tier.load) {

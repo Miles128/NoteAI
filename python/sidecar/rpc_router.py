@@ -33,11 +33,10 @@ def _sanitize_error_message(message: str) -> str:
 
 
 class RpcHandler:
-    __slots__ = ("fn", "async_mode")
+    __slots__ = ("fn",)
 
-    def __init__(self, fn: Callable, async_mode: bool = False):
+    def __init__(self, fn: Callable):
         self.fn = fn
-        self.async_mode = async_mode
 
 
 class RpcRouter:
@@ -48,8 +47,8 @@ class RpcRouter:
         self.send_response = send_response
         self._executor = ThreadPoolExecutor(max_workers=self._MAX_WORKERS)
 
-    def register(self, method: str, handler: Callable, *, async_mode: bool = False) -> None:
-        self._handlers[method] = RpcHandler(handler, async_mode=async_mode)
+    def register(self, method: str, handler: Callable) -> None:
+        self._handlers[method] = RpcHandler(handler)
 
     def handle(self, request: dict, extra_ctx: dict | None = None) -> None:
         method = request.get("method", "")

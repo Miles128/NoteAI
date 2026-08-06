@@ -557,9 +557,9 @@ class IntelHandler(BaseHandler):
         return None
 
     def register_routes(self, router):
-        router.register("llm_rewrite_stream", self._llm_rewrite_stream, async_mode=True)
+        router.register("llm_rewrite_stream", self._llm_rewrite_stream)
         router.register("llm_rewrite_apply", self._llm_rewrite_apply)
         router.register("search_files", self._search_files)
         router.register("ai_topic_analyze", self._ai_topic_analyze)
-        router.register("ai_topic_survey", self._ai_topic_survey, async_mode=True)
+        router.register("ai_topic_survey", self._ai_topic_survey)
         router.register("apply_topic_suggestion", self._apply_topic_suggestion)

@@ -45,9 +45,16 @@ CREATE TABLE IF NOT EXISTS entity_aliases (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_entity_aliases_entity ON entity_aliases(entity_id);
+CREATE TABLE IF NOT EXISTS concept_aliases (
+    alias TEXT PRIMARY KEY COLLATE NOCASE,
+    concept_id TEXT NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_concept_aliases_concept ON concept_aliases(concept_id);
 """
 
 _PAREN_PAIR_RE = re.compile(r"[（(][^（()）]*[)）]")
+_NON_ALNUM_RE = re.compile(r"[^\w\u4e00-\u9fff]+", re.UNICODE)
 
 
 def _stem_english_suffix(word: str) -> str:
@@ -72,13 +79,26 @@ def name_fingerprint(name: str) -> str:
     """Normalize an object name for duplicate detection at extraction time.
 
     Strips parenthetical annotations (``RAG（检索增强生成）`` → ``RAG``), all
-    whitespace and case, and stems English plural suffixes (``Skills`` →
-    ``Skill``), so variant spellings of the same object resolve to the same
-    fingerprint and merge into one row instead of duplicating.
+    whitespace, case and inter-word punctuation (``DALL-E``/``DALL·E`` →
+    ``dalle``, ``DeepSeek V3``/``DeepSeek-V3`` → ``deepseekv3``,
+    ``《感知机》`` → ``感知机``), and stems English plural suffixes
+    (``Skills`` → ``Skill``), so variant spellings of the same object resolve
+    to the same fingerprint and merge into one row instead of duplicating.
+
+    Punctuation inside a token is stripped only when at least two characters
+    survive, so symbol-heavy short names (``C++``, ``C#``) stay distinct from
+    single-letter names (``C``).
     """
     text = _PAREN_PAIR_RE.sub("", name)
     tokens = [_stem_english_suffix(token) for token in text.casefold().split()]
-    fp = "".join(tokens)
+    parts = []
+    for token in tokens:
+        stripped = _NON_ALNUM_RE.sub("", token)
+        if stripped and len(stripped) > 1:
+            parts.append(stripped)
+        else:
+            parts.append(token)
+    fp = "".join(parts)
     return fp or "".join(text.casefold().split())
 
 
@@ -408,9 +428,12 @@ class ObjectsStore(SemanticStoreBase):
         """Merge same-object rows across entities AND concepts.
 
         Grouping key is the name fingerprint (case/whitespace/parenthetical-
-        annotation insensitive), so variant spellings (``RAG`` vs
-        ``RAG（检索增强生成）``) collapse into one row. The highest-confidence
-        row is kept; mentions/relations are moved over, duplicates become
+        annotation/punctuation insensitive), so variant spellings (``RAG`` vs
+        ``RAG（检索增强生成）``, ``DALL-E`` vs ``DALL·E``) collapse into one
+        row. The highest-confidence row is kept; mentions/relations/aliases are
+        moved over, the duplicate's canonical name is recorded as an alias of
+        the keeper (so the alternate spelling survives), duplicate relations
+        are re-keyed keeping the highest confidence, duplicates become
         inactive, and each merge is audited in the change log.
 
         Returns merge statistics per kind.
@@ -419,9 +442,9 @@ class ObjectsStore(SemanticStoreBase):
         stats = {"merged_groups": 0, "merged_entities": 0, "merged_concepts": 0}
 
         with self.connect() as conn:
-            for table, kind, group_key in (
-                ("entities", "entity", "merged_entities"),
-                ("concepts", "concept", "merged_concepts"),
+            for table, kind, group_key, alias_table, alias_column in (
+                ("entities", "entity", "merged_entities", "entity_aliases", "entity_id"),
+                ("concepts", "concept", "merged_concepts", "concept_aliases", "concept_id"),
             ):
                 groups: dict[str, list[dict]] = {}
                 for row in conn.execute(
@@ -431,11 +454,13 @@ class ObjectsStore(SemanticStoreBase):
                 ):
                     fp = name_fingerprint(row["canonical_name"])
                     groups.setdefault(fp, []).append(dict(row))
+                merged_keeper_ids: list[str] = []
 
                 for fp, group in groups.items():
                     if len(group) <= 1:
                         continue
                     keeper_id = group[0]["id"]
+                    merged_keeper_ids.append(keeper_id)
                     stats["merged_groups"] += 1
                     stats[group_key] += len(group) - 1
 
@@ -452,19 +477,34 @@ class ObjectsStore(SemanticStoreBase):
                             "DELETE FROM semantic_mentions WHERE object_id = ? AND object_kind = ?",
                             (dup_id, kind),
                         )
-                        # 转移 relations（source）
+                        # 转移关系（source/target），保留 dup↔keeper 的环待清理
                         conn.execute(
                             """UPDATE relations SET source_id = ?
                                WHERE source_id = ? AND target_id != ?""",
                             (keeper_id, dup_id, keeper_id),
                         )
-                        # 转移 relations（target）
                         conn.execute(
                             """UPDATE relations SET target_id = ?
                                WHERE target_id = ? AND source_id != ?""",
                             (keeper_id, dup_id, keeper_id),
                         )
-                        # 删除自引用关系
+                        # 转移别名到 keeper（dup 行保留为 inactive，CASCADE 不会触发）
+                        conn.execute(
+                            f"UPDATE {alias_table} SET {alias_column} = ? WHERE {alias_column} = ?",
+                            (keeper_id, dup_id),
+                        )
+                        # 变体规范名记录为 keeper 的别名，使「不同名称」不再丢失
+                        if dup["canonical_name"].casefold() != group[0]["canonical_name"].casefold():
+                            conn.execute(
+                                f"INSERT OR IGNORE INTO {alias_table}(alias, {alias_column}, created_at) VALUES(?, ?, ?)",
+                                (dup["canonical_name"], keeper_id, self._now()),
+                            )
+                        # 清理转移后残留的 dup 端点（self-loop 与 dup↔keeper 环）
+                        conn.execute(
+                            "DELETE FROM relations WHERE source_id = ? OR target_id = ?",
+                            (dup_id, dup_id),
+                        )
+                        # 删除 keeper 自引用关系
                         conn.execute(
                             "DELETE FROM relations WHERE source_id = ? AND target_id = ?",
                             (keeper_id, keeper_id),
@@ -482,6 +522,28 @@ class ObjectsStore(SemanticStoreBase):
                             label=dup["canonical_name"],
                             detail={"merged_into": keeper_id, "reason": "duplicate_name"},
                         )
+                # 合并产生的同键关系（同 source/target/type/来源块）去重，保留高置信度。
+                # 仅扫描被本次合并触及的 keeper 相关关系，避免对全表做 O(n²) 相关子查询。
+                if merged_keeper_ids:
+                    keepers = ",".join("?" for _ in merged_keeper_ids)
+                    conn.execute(
+                        f"""DELETE FROM relations WHERE id IN (
+                               SELECT r.id FROM relations r
+                               WHERE (r.source_id IN ({keepers}) OR r.target_id IN ({keepers}))
+                                 AND EXISTS (
+                                     SELECT 1 FROM relations x
+                                     WHERE x.rowid != r.rowid
+                                       AND x.source_id = r.source_id
+                                       AND x.target_id = r.target_id
+                                       AND x.relation_type = r.relation_type
+                                       AND COALESCE(x.evidence_id, '') = COALESCE(r.evidence_id, '')
+                                       AND COALESCE(x.block_id, '') = COALESCE(r.block_id, '')
+                                       AND (x.confidence > r.confidence
+                                            OR (x.confidence = r.confidence AND x.rowid > r.rowid))
+                                 )
+                           )""",
+                        tuple(merged_keeper_ids) * 2,
+                    )
 
             self._trim_change_log(conn)
         return stats

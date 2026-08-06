@@ -98,14 +98,7 @@ async function pyCall(method, params, options) {
 var PREVIEW_RAW_SLICE_CHUNK_BYTES = 384 * 1024;
 
 function b64Utf8Decode(b64) {
-    if (!b64) return '';
-    var bin = typeof atob === 'function' ? atob(b64) : '';
-    var out = new Uint8Array(bin.length);
-    var i = 0;
-    for (; i < bin.length; i++) {
-        out[i] = bin.charCodeAt(i) & 0xff;
-    }
-    return new TextDecoder('utf-8').decode(out);
+    return window.b64DecodeUtf8(b64);
 }
 
 function concatUint8(chunks) {
@@ -159,14 +152,7 @@ async function assembleRawSlicesAsUtf8Preview(path, totalByteSize) {
 }
 
 function sliceChunkToUint8(b64) {
-    if (!b64) return new Uint8Array(0);
-    var bin = typeof atob === 'function' ? atob(b64) : '';
-    var out = new Uint8Array(bin.length);
-    var i = 0;
-    for (; i < bin.length; i++) {
-        out[i] = bin.charCodeAt(i) & 0xff;
-    }
-    return out;
+    return window.b64ToUint8(b64);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,16 +421,19 @@ var API_DEFS = [
     { name: 'getSemanticCompileStatus', method: 'get_semantic_compile_status', params: function() { return {}; } },
     { name: 'getSemanticChanges', method: 'get_semantic_changes', params: function(options) { return options || {}; } },
     { name: 'getTopicBrief', method: 'get_topic_brief', params: function(options) { return options || {}; } },
+    { name: 'generateWeeklyBrief', method: 'generate_weekly_brief', params: function(options) { return options || {}; } },
+    { name: 'getNoteMergeSuggestions', method: 'get_note_merge_suggestions', params: function(options) { return options || {}; } },
+    { name: 'mergeSuggestedNotes', method: 'merge_suggested_notes', params: function(filePaths, title, deleteAuthorized) { return { file_paths: filePaths || [], title: title || '', delete_authorized: deleteAuthorized === true }; }, write: true },
     { name: 'getIndexHealth', method: 'get_index_health', params: function() { return {}; } },
     { name: 'backupWorkspace', method: 'backup_workspace', params: function(options) { return options || {}; }, write: true },
     { name: 'exportNotes', method: 'export_notes', params: function(options) { return options || {}; }, write: true },
     { name: 'restoreWorkspaceBackup', method: 'restore_workspace_backup', params: function(options) { return options || {}; }, write: true },
     { name: 'startSemanticFullCompile', method: 'start_semantic_full_compile', params: function() { return {}; }, write: true },
-    { name: 'startSemanticClaimsCompile', method: 'start_semantic_claims_compile', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticConflict', method: 'review_semantic_conflict', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'scanSemanticConflicts', method: 'scan_semantic_conflicts', params: function() { return {}; }, write: true },
     { name: 'reviewSemanticEntityQuality', method: 'review_semantic_entity_quality', params: function(id, status) { return { id: id, status: status || 'reviewed' }; }, write: true },
     { name: 'enqueueSemanticEntityQuality', method: 'enqueue_semantic_entity_quality', params: function(id) { return { id: id }; }, write: true },
+    { name: 'enqueueCrossKindSemanticMerges', method: 'enqueue_cross_kind_semantic_merges', params: function() { return {}; }, write: true },
     { name: 'getSemanticEntityMergePreview', method: 'get_semantic_entity_merge_preview', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId }; } },
     { name: 'mergeSemanticEntities', method: 'merge_semantic_entities', params: function(sourceId, targetId) { return { source_id: sourceId, target_id: targetId, confirmed: true }; }, write: true },
     { name: 'updateSemanticClaim', method: 'update_semantic_claim', params: function(id, statement, scope, claimType) { return { id: id, statement: statement, scope: scope || '', claim_type: claimType }; }, write: true },

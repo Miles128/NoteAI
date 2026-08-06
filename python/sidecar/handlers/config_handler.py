@@ -115,7 +115,6 @@ class ConfigHandler(BaseHandler):
             "semantic_workbench_enabled": self.config.semantic_workbench_enabled,
             "semantic_workbench_tabs": list(self.config.semantic_workbench_tabs),
             "semantic_workbench_intensity": self.config.semantic_workbench_intensity,
-            "assistant_agent_mode": self.config.assistant_agent_mode,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "rag_hyde_enabled": self.config.rag_hyde_enabled,
@@ -198,8 +197,6 @@ class ConfigHandler(BaseHandler):
                 intensity = str(params["semantic_workbench_intensity"] or "").strip()
                 if intensity in {"light", "standard", "deep"}:
                     self.config.semantic_workbench_intensity = intensity
-            if "assistant_agent_mode" in params:
-                self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
             if "cli_agent_id" in params:
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:

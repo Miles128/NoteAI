@@ -56,6 +56,8 @@ class TestRpcRouter:
         assert "Unknown method" in err["message"]
 
     def test_async_method(self, captured):
+        """All handlers run in the thread pool; a slow handler must not block
+        the router and must still deliver its result."""
         import threading
 
         router, cap = captured
@@ -65,7 +67,7 @@ class TestRpcRouter:
             event.set()
             return {"done": True}
 
-        router.register("slow", slow, async_mode=True)
+        router.register("slow", slow)
         router.handle({"id": "3", "method": "slow", "params": {}})
         event.wait(timeout=2)
         assert len(cap.responses) >= 1

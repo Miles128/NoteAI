@@ -116,3 +116,46 @@ def test_get_topic_brief_uses_llm_when_available(brief_handler, monkeypatch):
     assert result["success"] is True
     assert result["fallback"] is False
     assert "新增 2 项变化" in result["brief"]
+
+
+def test_generate_weekly_brief_no_changes_returns_empty_brief(brief_handler, monkeypatch):
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no llm")))
+    store = brief_handler._store()
+    assert store is not None
+    with store.connect() as conn:
+        conn.execute("DELETE FROM semantic_change_log")
+    result = brief_handler._generate_weekly_brief({"days": 7})
+    assert result["success"] is True
+    assert "没有语义变化" in result["brief"]
+    assert result["fallback"] is False
+
+
+def test_generate_weekly_brief_fallback_without_llm(brief_handler, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("no llm")
+
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw", boom)
+    result = brief_handler._generate_weekly_brief({"days": 7})
+    assert result["success"] is True
+    assert result["fallback"] is True
+    assert "统计概览" in result["brief"]
+    assert "BM25" in result["brief"]
+    assert "混合检索结合向量与关键词" in result["brief"]
+    # 口语化统计：不暴露内部英文键
+    assert "added" not in result["brief"]
+    assert "claim" not in result["brief"]
+
+
+def test_generate_weekly_brief_uses_llm_when_available(brief_handler, monkeypatch):
+    def fake_llm(prompt, **kwargs):
+        assert "普通人都能看懂" in prompt
+        assert "统计概览" in prompt
+        assert "新增了知识" in prompt
+        assert "BM25" in prompt
+        assert "claim" not in prompt
+        return "## 知识库周报\n\n这一周你新增了 2 条知识。"
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw", fake_llm)
+    result = brief_handler._generate_weekly_brief({"days": 7})
+    assert result["success"] is True
+    assert result["fallback"] is False
+    assert "知识库周报" in result["brief"]

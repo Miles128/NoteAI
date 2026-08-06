@@ -207,6 +207,83 @@ def test_entity_merge_preserves_unrelated_self_relations_and_deduplicates_edges(
         )
 
 
+def test_cross_kind_duplicate_rule_preview_and_batch_enqueue(semantic_handler: SemanticHandler) -> None:
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-2', 'BM25', '关键词检索算法', 0.9, 'active')"
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-1')")
+
+    quality = semantic_handler._get_workbench({"tab": "quality", "status": "pending"})
+    cross = [item for item in quality["items"] if item["rule"] == "cross_kind_duplicate"]
+    assert len(cross) == 2  # entity-1 与 entity-3 都同名命中概念
+    assert cross[0]["entity_name"] == "BM25"
+    assert cross[0]["candidate_names"] == ["BM25"]
+    assert cross[0]["candidate_kinds"] == ["concept"]
+    assert quality["counts"]["cross_kind_duplicate"] == 2
+
+    # 批量入队
+    result = semantic_handler._enqueue_cross_kind_merges({})
+    assert result["success"] is True
+    assert result["count"] == 2
+    with store.connect() as conn:
+        queued = conn.execute(
+            "SELECT count(*) FROM review_queue WHERE item_kind = 'entity_quality'"
+            " AND status = 'pending' AND payload_json LIKE '%cross_kind_duplicate%'"
+        ).fetchone()[0]
+        assert queued == 2
+
+    # preview 支持概念 target
+    preview = semantic_handler._get_entity_merge_preview({"source_id": "entity-1", "target_id": "concept-2"})
+    assert preview["success"] is True
+    assert preview["source"]["kind"] == "entity"
+    assert preview["target"]["kind"] == "concept"
+    assert preview["impact"]["concept-2"]["mentions"] == 1
+
+
+def test_cross_kind_merge_moves_mentions_and_relations_into_target_kind(
+    semantic_handler: SemanticHandler,
+) -> None:
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-2', 'BM25', '关键词检索算法', 0.9, 'active')"
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-1')")
+
+    merged = semantic_handler._merge_entities(
+        {"source_id": "entity-1", "target_id": "concept-2", "confirmed": True}
+    )
+
+    assert merged["success"] is True
+    assert "概念" in merged["message"]
+    with store.connect() as conn:
+        # 源实体行已删除，目标概念保留
+        assert conn.execute("SELECT count(*) FROM entities WHERE id = 'entity-1'").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM concepts WHERE id = 'concept-2'").fetchone()[0] == 1
+        # mentions 转移并改写 object_kind
+        moved = conn.execute(
+            "SELECT count(*) FROM semantic_mentions WHERE object_id = 'concept-2' AND object_kind = 'concept'"
+        ).fetchone()[0]
+        assert moved == 1
+        # fixture 的 rel-1（entity-1 → concept-1）端点改指向概念 concept-2
+        relation = conn.execute(
+            "SELECT * FROM relations WHERE source_id = 'concept-2' AND target_id = 'concept-1'"
+        ).fetchone()
+        assert relation is not None
+        assert relation["relation_type"] == "RELATED_TO"
+        # 无残留实体 mentions
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM semantic_mentions WHERE object_id = 'entity-1' AND object_kind = 'entity'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
 def test_claim_can_be_edited_deleted_and_restored_with_audit(
     semantic_handler: SemanticHandler,
 ) -> None:

@@ -21,8 +21,8 @@ from config.settings import WORKSPACE_APP_FOLDER
 SCHEMA_VERSION = 5
 CLAIM_POLICY_VERSION = 6
 # 抽取指纹算法版本：变更 name_fingerprint 算法时递增，initialize() 会全量重算
-# 存量对象的 name_fingerprint（如 v1 → v2 的英文复数词干化）。
-FINGERPRINT_ALGORITHM_VERSION = 2
+# 存量对象的 name_fingerprint（如 v2 → v3 的标点变体归一：DALL-E/DALL·E）。
+FINGERPRINT_ALGORITHM_VERSION = 3
 CHANGE_LOG_LIMIT = 8000
 
 # 不属于任何单一表族的基础设施表（元信息、编译运行记录、物化视图依赖、审阅队列）。

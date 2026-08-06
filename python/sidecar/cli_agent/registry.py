@@ -21,7 +21,6 @@ class AgentRegistry:
 
     Claude 默认走 MCP 模式（spawn Claude CLI + --mcp-config）。
     其余 agent 启动前也会自动注册 NoteAI vault MCP server。
-    旧版直连实现仍保留在 agents/claude.py 中，需要时可手动注册。
     """
 
     _AGENTS: dict[str, type[BaseCliAgent]] = {

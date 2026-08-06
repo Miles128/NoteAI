@@ -1,5 +1,13 @@
 from sidecar.handlers.base import BaseHandler
-from utils.link_indexer import confirm_all_links, confirm_link, get_backlinks, load_links, reject_link
+from utils.link_indexer import (
+    backfill_semantic_bidirectional,
+    confirm_all_links,
+    confirm_link,
+    get_backlinks,
+    load_links,
+    purge_weak_links,
+    reject_link,
+)
 
 
 class LinksHandler(BaseHandler):
@@ -35,9 +43,17 @@ class LinksHandler(BaseHandler):
     def _confirm_all_links(self, _params):
         return confirm_all_links()
 
+    def _purge_weak_links(self, _params):
+        return purge_weak_links()
+
+    def _backfill_semantic_bidirectional(self, _params):
+        return backfill_semantic_bidirectional()
+
     def register_routes(self, router):
         router.register("get_backlinks", self._get_backlinks)
         router.register("get_link_stats", self._get_link_stats)
         router.register("confirm_link", self._confirm_link)
         router.register("reject_link", self._reject_link)
         router.register("confirm_all_links", self._confirm_all_links)
+        router.register("purge_weak_links", self._purge_weak_links)
+        router.register("backfill_semantic_bidirectional", self._backfill_semantic_bidirectional)

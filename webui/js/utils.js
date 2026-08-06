@@ -50,12 +50,32 @@ function Path_stem(p) {
     return dotIdx > 0 ? name.substring(0, dotIdx) : name;
 }
 
+/** Base64 → Uint8Array；非 Tauri/畸形输入返回空数组。 */
+function b64ToUint8(b64) {
+    if (!b64) return new Uint8Array(0);
+    var bin = typeof atob === 'function' ? atob(b64) : '';
+    var out = new Uint8Array(bin.length);
+    var i = 0;
+    for (; i < bin.length; i++) {
+        out[i] = bin.charCodeAt(i) & 0xff;
+    }
+    return out;
+}
+
+/** Base64 → UTF-8 字符串（用于后端 base64 编码的文本流）。 */
+function b64DecodeUtf8(b64) {
+    if (!b64) return '';
+    return new TextDecoder('utf-8').decode(b64ToUint8(b64));
+}
+
 window.escapeHtml = escapeHtml;
 window.escapeAttr = escapeAttr;
 window.safeUrl = safeUrl;
 window.formatFileSize = formatFileSize;
 window.formatModifiedTime = formatModifiedTime;
 window.Path_stem = Path_stem;
+window.b64ToUint8 = b64ToUint8;
+window.b64DecodeUtf8 = b64DecodeUtf8;
 
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
 function _noop() {}

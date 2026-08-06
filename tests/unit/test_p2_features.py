@@ -5,7 +5,13 @@ from sidecar.multi_source import import_transcript
 from sidecar.schema_manager import SCHEMA_FILENAME
 
 from config import config
-from utils.link_indexer import discover_cross_refs_for_file, load_links
+from utils.link_indexer import (
+    backfill_semantic_bidirectional,
+    discover_cross_refs_for_file,
+    load_links,
+    purge_weak_links,
+    save_links,
+)
 
 
 @pytest.fixture
@@ -64,3 +70,75 @@ def test_import_transcript(workspace: Path) -> None:
     tr = import_transcript("会议记录", "说话内容", source="Zoom")
     assert tr["success"] is True
     assert tr["path"].endswith(".md")
+
+
+def test_purge_weak_links_removes_heuristic_reasons(workspace: Path) -> None:
+    save_links(
+        {
+            "links": [
+                {"from": "a.md", "to": "b.md", "reason": "共享标签「AI」", "status": "confirmed"},
+                {"from": "a.md", "to": "c.md", "reason": "语义相关", "status": "confirmed"},
+                {"from": "a.md", "to": "d.md", "reason": "已确认链接的邻居", "status": "confirmed"},
+                {"from": "a.md", "to": "e.md", "reason": "同主题「AI > 测试」", "status": "confirmed"},
+                {"from": "a.md", "to": "f.md", "reason": "正文提及「实体文档」", "status": "confirmed"},
+                {"from": "g.md", "to": "h.md", "reason": "共享 4 个实体/概念", "status": "pending"},
+            ],
+            "last_scan": 12345,
+        }
+    )
+    result = purge_weak_links()
+    assert result["success"] is True
+    assert result["total"] == 6
+    assert result["removed"] == 4
+    assert result["kept"] == 2
+    kept = load_links().get("links", [])
+    assert [l["to"] for l in kept] == ["f.md", "h.md"]
+    assert load_links().get("last_scan") == 12345
+
+
+def test_purge_weak_links_empty(workspace: Path) -> None:
+    save_links({"links": [], "last_scan": None})
+    result = purge_weak_links()
+    assert result["success"] is True
+    assert result["removed"] == 0
+
+
+def test_backfill_semantic_bidirectional_skips_existing(workspace: Path, monkeypatch) -> None:
+    import utils.link_indexer as li
+
+    save_links(
+        {
+            "links": [
+                {"from": "a.md", "to": "b.md", "reason": "正文提及", "status": "confirmed"},
+            ],
+            "last_scan": None,
+        }
+    )
+    monkeypatch.setattr(
+        li,
+        "_load_all_metas_cached",
+        lambda ws: {"a.md": {"title": "A"}, "b.md": {"title": "B"}, "c.md": {"title": "C"}},
+    )
+    monkeypatch.setattr(li, "_BIDIRECTIONAL_SHARE_MIN", 1)
+    monkeypatch.setattr("sidecar.semantic.store.SemanticStore", lambda ws: object())
+
+    def fake_names(store, cache, doc_id):
+        from sidecar.semantic.ids import stable_id as _sid
+
+        names = {
+            _sid("doc", "a.md", length=24): {"x", "y", "z"},
+            _sid("doc", "b.md", length=24): {"x", "y", "z"},
+            _sid("doc", "c.md", length=24): {"x"},
+        }
+        return names.get(doc_id, set())
+
+    monkeypatch.setattr(li, "_object_names_for", fake_names)
+
+    result = backfill_semantic_bidirectional()
+    assert result["success"] is True
+    assert result["added"] == 4  # c↔a 与 c↔b 各两条；a↔b 已有边跳过
+    links = load_links().get("links", [])
+    pairs = {(l["from"], l["to"]) for l in links}
+    assert ("a.md", "b.md") in pairs  # 原链接保留
+    assert ("c.md", "a.md") in pairs and ("a.md", "c.md") in pairs
+    assert ("c.md", "b.md") in pairs and ("b.md", "c.md") in pairs

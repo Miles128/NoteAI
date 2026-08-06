@@ -304,6 +304,13 @@
                         </div>
                     </div>
                     <div class="home-section-grid">
+                        <section class="home-section home-section-activity">
+                            <div class="home-section-header">
+                                <h3 data-i18n="home.activityTitle"></h3>
+                                <button type="button" class="home-section-action" id="home-weekly-brief-btn" data-i18n="home.weeklyBrief"></button>
+                            </div>
+                            <div class="home-section-body" id="home-activity-body"></div>
+                        </section>
                         <section class="home-section">
                             <div class="home-section-header">
                                 <h3 data-i18n="home.pendingTitle"></h3>
@@ -460,20 +467,6 @@
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
             <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
-
-            <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
-                <div class="pending-links-header">
-                    <span class="pending-links-title" data-i18n="links.pendingTitle"></span>
-                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>
-                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" data-i18n-title="common.close">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="pending-links-body" id="pending-links-body">
-                    <div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>
-                    <div class="pending-links-list" id="pending-links-list"></div>
-                </div>
-            </div>
 
             <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
 
@@ -1353,6 +1346,31 @@
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
 
+    <div class="modal-overlay" id="weekly-brief-modal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 data-i18n="weeklyBrief.title"></h3>
+                <button class="modal-close-btn" onclick="window.WeeklyBriefModule && WeeklyBriefModule.close()" data-i18n-title="common.close">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="hint" data-i18n="weeklyBrief.desc"></p>
+                <div class="weekly-brief-status" id="weekly-brief-status" hidden></div>
+                <div class="weekly-brief-content" id="weekly-brief-content" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="weekly-brief-regenerate-btn" data-i18n="weeklyBrief.regenerate"></button>
+                <div class="right">
+                    <button type="button" class="btn btn-primary" id="weekly-brief-save-btn" data-i18n="weeklyBrief.saveAsNote"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="organize-rules-modal" style="display:none;">
         <div class="modal-dialog">
             <div class="modal-header">
@@ -1503,9 +1521,6 @@
                 <span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>
             </div>
             <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
-                <button type="button" class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" data-i18n-title="sidebar.discoverLinksTitle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                </button>
                 <span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>
             </div>
         </div>

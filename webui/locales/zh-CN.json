@@ -66,8 +66,7 @@
     "tagPlaceholder": "输入标签名称...",
     "confirmCreateTag": "确认创建标签",
     "autoTagTitle": "自动匹配标签：扫描文件标题匹配已有标签",
-    "addTagTitle": "新加标签：创建新的标签分类",
-    "discoverLinksTitle": "发现链接：AI 分析文章关联"
+    "addTagTitle": "新加标签：创建新的标签分类"
   },
   "semantic": {
     "eyebrow": "Semantic IR",
@@ -186,16 +185,18 @@
       "all": "全部"
     },
     "qualityReason": "发现原因",
-    "qualityCandidates": "关联候选实体",
-    "openEntity": "打开实体",
+    "qualityCandidates": "关联候选对象",
+    "openEntity": "打开对象",
     "addToInbox": "加入 Inbox",
     "qualityAddedToInbox": "已加入 Inbox",
-    "mergePreview": "实体合并影响预览",
+    "enqueueAllCrossKind": "全部同名双表入 Inbox",
+    "enqueueAllCrossKindDone": "已将 {count} 组同名双表候选加入 Inbox",
+    "mergePreview": "对象合并影响预览",
     "mergeImpact": "影响范围",
     "mergeImpactSummary": "{mentions} 次出现 · {aliases} 个别名 · {relations} 条关系",
-    "confirmEntityMerge": "确认合并到右侧实体",
-    "confirmEntityMergeWarning": "确认合并这两个实体？该操作会更新语义层的提及、别名和关系，但不会修改 Notes。",
-    "entityMerged": "实体已合并",
+    "confirmEntityMerge": "确认合并到右侧对象",
+    "confirmEntityMergeWarning": "确认合并这两个对象（实体/概念）？该操作会更新语义层的提及、别名和关系，但不会修改 Notes。",
+    "entityMerged": "对象已合并",
     "qualityRules": {
       "missing_source": "缺少来源",
       "isolated": "孤立实体",
@@ -204,7 +205,8 @@
       "missing_description": "描述为空",
       "dangling_relation": "关系悬空",
       "alias_conflict": "别名冲突",
-      "duplicate_candidate": "疑似重复"
+      "duplicate_candidate": "疑似重复",
+      "cross_kind_duplicate": "同名双表"
     },
     "changes": {
       "title": "知识变化",
@@ -505,9 +507,7 @@
     "mode": {
       "rag": "RAG",
       "cli": "CLI",
-      "qa": "问答模式",
-      "agent": "助手模式",
-      "badgeHint": "知识问答模式（文件操作请用 CLI Tab）"
+      "qa": "问答模式"
     },
     "send": "发送",
     "name": "RAG助手",
@@ -728,16 +728,7 @@
     "cliGenerateMdRunning": "正在生成…",
     "cliGenerateMdDone": "已生成: {path}",
     "cliGenerateMdFailed": "生成失败: {message}",
-    "assistantIntro1": "RAG 助手是你的知识库问答伙伴。默认使用<strong>主题树 + 全文搜索</strong>检索笔记与综述来回答，无需向量索引。开启「向量 RAG 检索」后可做语义相似搜索。",
-    "assistantIntro2": "开启<strong>助手模式</strong>后，RAG 助手还可以在你的工作区里<strong>动手修改</strong>，例如：",
-    "assistantCap1": "<strong>新建主题</strong> — 可建一级或二级主题；二级主题必须您明确指定所属一级，RAG 助手不会自动猜测",
-    "assistantCap2": "<strong>移动笔记</strong> — 把某篇笔记归到指定主题下",
-    "assistantCap3": "<strong>更新综述</strong> — 为某个主题重新生成或刷新主题综述",
-    "assistantCap4": "<strong>整理知识库</strong> — 在需要时触发入库流水线（转换、分类、索引等）",
-    "assistantIntro3": "问答模式下也可随时说「有哪些主题」「搜一下 xxx 相关的笔记」。助手模式会逐步执行写操作并在对话里显示进度。LLM 接口请在「模型」分页配置。",
-    "agentModeTitle": "助手模式",
-    "agentModeLabel": "开启助手模式",
-    "agentModeDesc": "关闭时仅问答与只读查询；开启后可新建主题、移动笔记、更新综述等",
+    "assistantIntro1": "RAG 助手是你的知识库问答伙伴。它检索已编译的笔记与主题综述来回答，引用可点击定位与验证。",
     "ragModeTitle": "检索模式",
     "ragModeLabel": "向量 RAG 检索",
     "ragModeDesc": "关闭时使用主题树与全文搜索（默认，依赖更少）；开启后使用向量索引做语义检索",
@@ -937,6 +928,21 @@
       "pending": "待处理",
       "running": "运行中"
     },
+    "activityTitle": "最近动态",
+    "weeklyBrief": "生成本周简报",
+    "activityEmpty": "这一周还没有新的知识进来。整理或入库后，变化会出现在这里。",
+    "activityViewAll": "查看全部",
+    "activity": {
+      "gained": "新学到",
+      "corrected": "补充了看法",
+      "doubted": "存疑待查",
+      "removed": "不再收录",
+      "added": "本周新增",
+      "updated": "本周更新",
+      "invalidated": "本周失效",
+      "pending": "待处理",
+      "more": "及其他 {count} 项"
+    },
     "pendingTitle": "待处理资料",
     "openPending": "查看",
     "pendingEmpty": "没有待处理资料",
@@ -966,6 +972,18 @@
       "needsReview": "需处理",
       "needsRebuild": "需重建"
     }
+  },
+  "weeklyBrief": {
+    "title": "知识库周报",
+    "desc": "汇总过去 7 天知识库中的命题、实体与概念变化，生成可回顾的周报。",
+    "generating": "正在生成周报…",
+    "notAvailable": "周报功能不可用",
+    "failed": "周报生成失败",
+    "fallbackHint": "未配置 LLM，以下为结构化变化记录。",
+    "regenerate": "重新生成",
+    "saveAsNote": "保存为笔记",
+    "saved": "周报已保存：{path}",
+    "saveFailed": "周报保存失败"
   },
   "ingest": {
     "label": "入库",
@@ -1028,10 +1046,6 @@
     "integrateFailedShort": "整合失败: "
   },
   "links": {
-    "pendingTitle": "待确认链接",
-    "confirmAll": "一键确认所有待确认链接",
-    "pendingEmpty": "暂无待确认链接",
-    "confirmAllBtn": "全部确认",
     "title": "双向链接",
     "loadFailed": "无法加载链接数据",
     "empty": "暂无链接",

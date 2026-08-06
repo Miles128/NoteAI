@@ -854,11 +854,6 @@ function selectFile(path, fileName) {
         if (graphBtn) graphBtn.classList.remove('active');
     }
 
-    var pendingLinksPanel = document.getElementById('pending-links-panel');
-    if (pendingLinksPanel && pendingLinksPanel.style.display !== 'none') {
-        pendingLinksPanel.style.display = 'none';
-    }
-
     var pendingPanel = document.getElementById('topic-pending-panel');
     if (pendingPanel && pendingPanel.style.display !== 'none') {
         pendingPanel.style.display = 'none';
@@ -866,11 +861,6 @@ function selectFile(path, fileName) {
 
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(path, fileName);
-    }
-    if (window.AppState.currentSidebarView === 'graph') {
-        if (window.LinksModule && window.LinksModule.loadGraphView) {
-            window.LinksModule.loadGraphView();
-        }
     }
 }
 
@@ -929,7 +919,11 @@ window.toggleGraphPanel = function() {
             }
         }
 };
-window.togglePendingLinksPanel = function() { window.LinksModule && window.LinksModule.togglePendingLinksPanel(); };
+window.togglePendingLinksPanel = function() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.show) {
+        window.SemanticWorkbenchModule.show('links');
+    }
+};
 window.loadRelationGraphData = function() {
     if (window.Graph3Tier && window.Graph3Tier.load) {
         window.Graph3Tier.load();
@@ -941,9 +935,12 @@ window.graphZoomIn = function() {
 window.graphZoomOut = function() {
     if (window.Graph3Tier && window.Graph3Tier.zoomOut) window.Graph3Tier.zoomOut();
 };
-window.onDiscoverLinks = function() { window.LinksModule && window.LinksModule.onDiscoverLinks(); };
-window.onConfirmLink = function(f, t) { window.LinksModule && window.LinksModule.onConfirmLink(f, t); };
-window.onRejectLink = function(f, t) { window.LinksModule && window.LinksModule.onRejectLink(f, t); };
+window.onConfirmLink = function(f, t) {
+    if (window.api && window.api.confirmLink) window.api.confirmLink(f, t);
+};
+window.onRejectLink = function(f, t) {
+    if (window.api && window.api.rejectLink) window.api.rejectLink(f, t);
+};
 
 window.hideTreeContextMenu = hideTreeContextMenu;
 window.revealInFinder = revealInFinder;

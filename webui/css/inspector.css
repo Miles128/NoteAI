@@ -142,7 +142,7 @@
 }
 
 .note-list-item.is-active {
-    background: var(--surface-active, var(--surface-hover));
+    background: var(--surface-hover); /* 原 --surface-active */
     border-left: 2px solid var(--primary);
     padding-left: 12px;
 }
@@ -661,7 +661,7 @@
 }
 
 .cli-process-block.is-running {
-    border-left-color: color-mix(in srgb, var(--accent-color, var(--primary)) 65%, transparent);
+    border-left-color: color-mix(in srgb, var(--primary) 65%, transparent);
 }
 
 .cli-process-summary {
@@ -744,7 +744,7 @@
 }
 
 .cli-tool-activity.is-running {
-    border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+    border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
 }
 
 .cli-tool-activity.is-done .cli-tool-summary {
@@ -805,7 +805,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--accent-color, var(--primary));
+    background: var(--primary);
     flex-shrink: 0;
 }
 
@@ -861,8 +861,8 @@
 .cli-timeout-notice {
     margin: 0 0 10px;
     padding: 8px 10px;
-    border: 1px solid color-mix(in srgb, var(--accent-color, var(--primary)) 35%, var(--border));
-    background: color-mix(in srgb, var(--accent-color, var(--primary)) 8%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface));
     color: var(--text);
     font-size: 12px;
     line-height: 1.45;
@@ -907,8 +907,8 @@
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--accent-color, var(--primary)) 12%, var(--surface));
-    color: var(--accent-color, var(--primary));
+    background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+    color: var(--primary);
     white-space: nowrap;
     flex-shrink: 0;
 }

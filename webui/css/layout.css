@@ -185,7 +185,7 @@ body {
 }
 
 .sidebar-workspace-switch-btn:hover {
-    background: var(--background-modifier-hover);
+    background: var(--surface-hover);
     color: var(--text);
 }
 
@@ -217,7 +217,7 @@ body {
     bottom: var(--statusbar-height);
     z-index: 99;
     border-top: 1px solid var(--border);
-    background: var(--background-secondary);
+    background: var(--surface);
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
 }
 
@@ -296,7 +296,7 @@ body {
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 16px;
     line-height: 18px;
     padding: 0;
@@ -831,8 +831,8 @@ body {
 }
 
 .sidebar-footer-btn:hover {
-    color: var(--text-normal);
-    background: var(--background-modifier-hover);
+    color: var(--text);
+    background: var(--surface-hover);
     border-color: var(--border);
 }
 
@@ -862,13 +862,13 @@ body {
     gap: 6px;
     padding: 0 12px;
     font-size: 13px;
-    color: var(--accent);
-    border-color: var(--accent);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 .link-discover-footer-btn:hover {
     color: var(--on-primary);
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--primary);
+    border-color: var(--primary);
 }
 .link-discover-footer-btn:disabled {
     color: var(--text-muted);
@@ -893,15 +893,15 @@ body {
     min-width: 0;
     padding: 6px 10px;
     font-size: 14px;
-    background: var(--background-modifier-hover);
+    background: var(--surface-hover);
     border: 1px solid var(--border);
     border-radius: 4px;
-    color: var(--text-normal);
+    color: var(--text);
     outline: none;
 }
 
 .topic-input:focus {
-    border-color: var(--text-accent);
+    border-color: var(--primary);
 }
 
 .topic-input-btn {
@@ -923,8 +923,8 @@ body {
 }
 
 .topic-input-cancel:hover {
-    color: var(--text-normal);
-    background: var(--background-modifier-hover);
+    color: var(--text);
+    background: var(--surface-hover);
     border-color: var(--border);
 }
 
@@ -933,16 +933,16 @@ body {
 }
 
 .topic-input-confirm:not(:disabled):hover {
-    background: var(--background-modifier-hover);
+    background: var(--surface-hover);
     border-color: var(--border);
 }
 
 .topic-input-confirm:not(:disabled):hover {
-    color: var(--text-accent);
+    color: var(--primary);
 }
 
 .topic-input-confirm.has-text {
-    color: var(--text-accent);
+    color: var(--primary);
 }
 
 .topic-input-confirm:disabled {
@@ -1270,7 +1270,7 @@ body {
 .multi-source-tab.active {
     color: var(--primary);
     border-color: var(--primary);
-    background: var(--background-modifier-hover);
+    background: var(--surface-hover);
 }
 
 .multi-source-pane[hidden] {
@@ -1947,7 +1947,7 @@ body {
 .home-dashboard {
     --home-ink: var(--text);
     --home-muted: var(--text-muted);
-    --home-panel: color-mix(in srgb, var(--bg-elevated) 92%, #ffffff);
+    --home-panel: color-mix(in srgb, var(--surface) 92%, #ffffff); /* 原 --bg-elevated */
     --home-line: color-mix(in srgb, var(--border) 72%, transparent);
     --home-blue: #1f5fbf;
     --home-cyan: #0891b2;
@@ -2397,7 +2397,7 @@ body {
 }
 
 .home-job-status.is-running {
-    color: var(--accent, #4A90D9);
+    color: var(--primary);
 }
 
 .home-job-status.is-failed {
@@ -2407,14 +2407,14 @@ body {
 .home-job-track {
     height: 4px;
     border-radius: 999px;
-    background: var(--bg-hover);
+    background: var(--surface-hover);
     overflow: hidden;
     margin-top: 8px;
 }
 
 .home-job-track > div {
     height: 100%;
-    background: var(--accent, #4A90D9);
+    background: var(--primary);
     transition: width 160ms ease;
 }
 
@@ -2621,7 +2621,7 @@ body {
     margin: 4px 0 12px;
     padding: 8px 10px;
     border-radius: 8px;
-    background: var(--bg-soft, rgba(127, 127, 127, 0.08));
+    background: var(--surface-hover); /* 原 --bg-soft */
 }
 
 .pending-item-match {
@@ -2631,7 +2631,7 @@ body {
 }
 
 .pending-item-match strong {
-    color: var(--accent, var(--text));
+    color: var(--primary);
 }
 
 .pending-item-assign {
@@ -3105,13 +3105,13 @@ body {
 }
 
 .settings-nav-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
+    background: var(--surface-hover);
+    color: var(--text);
 }
 
 .settings-nav-btn.active {
-    background: var(--accent-light, rgba(74,144,217,0.1));
-    color: var(--accent, #4A90D9);
+    background: var(--primary-light);
+    color: var(--primary);
 }
 
 .settings-nav-btn svg {
@@ -3269,7 +3269,7 @@ body {
     justify-content: space-between;
     gap: 16px;
     padding: 12px 0;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border);
 }
 
 .settings-component-row:first-of-type {
@@ -3298,7 +3298,7 @@ body {
 }
 
 .settings-component-badge.is-ok {
-    color: var(--accent-color, #4A90D9);
+    color: var(--primary);
 }
 
 .settings-component-badge.is-warn {
@@ -3351,7 +3351,7 @@ body {
 }
 
 .settings-check-row input[type="checkbox"] {
-    accent-color: var(--accent-color, #4A90D9);
+    accent-color: var(--primary);
     width: 15px;
     height: 15px;
     cursor: pointer;
@@ -3526,7 +3526,7 @@ body {
     padding: 8px 0;
     font-size: 13px;
     color: var(--text);
-    border-bottom: 1px solid var(--border-subtle, rgba(128,128,128,0.15));
+    border-bottom: 1px solid var(--border);
 }
 
 .settings-log-item:last-child {
@@ -3612,11 +3612,11 @@ body {
 
 /* Index health report (settings → backup & restore) */
 .settings-health-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid rgba(128,128,128,0.18);border-radius:8px;margin-bottom:8px;font-size:13px}
-.settings-health-name{flex:0 0 88px;font-weight:600;color:var(--text-primary, #333)}
+.settings-health-name{flex:0 0 88px;font-weight:600;color:var(--text)}
 .settings-health-badge{flex:0 0 auto;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .settings-health-ok{background:rgba(56,161,105,0.14);color:#38a169}
 .settings-health-bad{background:rgba(229,62,62,0.14);color:#e53e3e}
-.settings-health-detail{flex:1;min-width:0;color:var(--text-secondary, #777);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings-health-detail{flex:1;min-width:0;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media (max-width: 980px) {
     .home-stat-grid,

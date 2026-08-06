@@ -518,7 +518,8 @@ def test_merge_duplicate_entities_collapses_punctuation_variants_and_records_ali
         entity = conn.execute("SELECT * FROM entities WHERE status = 'active'").fetchone()
         assert entity["canonical_name"] == "DALL-E"
         aliases = [
-            row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (entity["id"],))
+            row["alias"]
+            for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (entity["id"],))
         ]
         assert "DALL·E" in aliases
         concept = conn.execute("SELECT * FROM concepts WHERE status = 'active'").fetchone()
@@ -543,7 +544,9 @@ def test_merge_duplicate_entities_transfers_aliases_and_dedups_relations(tmp_pat
             """INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status, name_fingerprint)
                VALUES('e-2', 'LLM（大语言模型）', 'model', 'd', 0.8, 'active', '')"""
         )
-        conn.execute("INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES('大语言模型', 'e-2', '2026-01-01')")
+        conn.execute(
+            "INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES('大语言模型', 'e-2', '2026-01-01')"
+        )
         conn.execute(
             "INSERT INTO relations(id, source_id, relation_type, target_id, confidence, evidence_id, block_id)"
             " VALUES('r-1', 'e-1', 'RELATED_TO', 'x', 0.6, NULL, NULL)"
@@ -558,9 +561,7 @@ def test_merge_duplicate_entities_transfers_aliases_and_dedups_relations(tmp_pat
         relation = conn.execute("SELECT * FROM relations").fetchone()
         assert relation["source_id"] == "e-1"
         assert relation["confidence"] == 0.9
-        aliases = {
-            row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = 'e-1'")
-        }
+        aliases = {row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = 'e-1'")}
         assert "大语言模型" in aliases  # dup 的存量别名转移
         assert "LLM（大语言模型）" in aliases  # dup 的变体规范名入别名
 
@@ -610,12 +611,8 @@ def test_extraction_time_variant_spelling_records_alias(tmp_path: Path):
     with store.connect() as conn:
         assert conn.execute("SELECT COUNT(*) FROM entities WHERE status = 'active'").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM concepts WHERE status = 'active'").fetchone()[0] == 1
-        entity_aliases = [
-            row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases")
-        ]
-        concept_aliases = [
-            row["alias"] for row in conn.execute("SELECT alias FROM concept_aliases")
-        ]
+        entity_aliases = [row["alias"] for row in conn.execute("SELECT alias FROM entity_aliases")]
+        concept_aliases = [row["alias"] for row in conn.execute("SELECT alias FROM concept_aliases")]
         assert "DALL·E" in entity_aliases
         assert "M×N 个适配器" in concept_aliases
 

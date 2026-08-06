@@ -154,6 +154,7 @@ def test_generate_weekly_brief_uses_llm_when_available(brief_handler, monkeypatc
         assert "BM25" in prompt
         assert "claim" not in prompt
         return "## 知识库周报\n\n这一周你新增了 2 条知识。"
+
     monkeypatch.setattr("utils.llm_utils.call_llm_raw", fake_llm)
     result = brief_handler._generate_weekly_brief({"days": 7})
     assert result["success"] is True

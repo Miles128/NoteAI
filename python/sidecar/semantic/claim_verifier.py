@@ -254,11 +254,12 @@ def parse_batch_verification_json(raw: str) -> dict[int, dict]:
             if not isinstance(item, dict):
                 continue
             try:
-                claim_id = int(item.get("claim_id"))
+                raw_claim_id = item.get("claim_id")
+                claim_id = int(raw_claim_id) if raw_claim_id is not None else None
             except (TypeError, ValueError):
                 continue
             verdict = str(item.get("verdict") or "").strip().lower()
-            if verdict not in VERDICTS:
+            if verdict not in VERDICTS or claim_id is None:
                 continue
             results[claim_id] = {
                 "verdict": verdict,
@@ -272,11 +273,7 @@ def parse_batch_verification_json(raw: str) -> dict[int, dict]:
 def build_batch_verify_prompt(claims: list[dict]) -> str:
     lines = []
     for index, claim in enumerate(claims, 1):
-        lines.append(
-            f"Claim {index}:\n"
-            f"  陈述: {claim['statement']}\n"
-            f"  适用范围: {claim.get('scope') or '（无）'}"
-        )
+        lines.append(f"Claim {index}:\n  陈述: {claim['statement']}\n  适用范围: {claim.get('scope') or '（无）'}")
     return CLAIM_BATCH_VERIFY_PROMPT.format(claims="\n\n".join(lines))
 
 
@@ -319,9 +316,7 @@ def verify_claims_batch(
             result = verdicts.get(index)
             if result is None:
                 stats["failed"] += 1
-                outcomes.append(
-                    {"claim_id": claim["id"], "statement": claim["statement"], "verdict": "missing"}
-                )
+                outcomes.append({"claim_id": claim["id"], "statement": claim["statement"], "verdict": "missing"})
                 continue
             verification = store.save_claim_verification(
                 claim_id=claim["id"],

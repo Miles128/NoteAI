@@ -49,10 +49,7 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
         }
         aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
         concepts = [
-            dict(row)
-            for row in conn.execute(
-                "SELECT id, canonical_name FROM concepts WHERE status = 'active'"
-            )
+            dict(row) for row in conn.execute("SELECT id, canonical_name FROM concepts WHERE status = 'active'")
         ]
         concept_ids = {row["id"] for row in concepts}
         relation_endpoint_ids = {
@@ -117,7 +114,9 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
                 "candidate_ids": candidate_ids,
                 "candidate_names": candidate_names,
                 "candidate_kinds": [
-                    "entity" if value in by_id else "concept" for value in candidate_ids if value in by_id or value in concept_by_id
+                    "entity" if value in by_id else "concept"
+                    for value in candidate_ids
+                    if value in by_id or value in concept_by_id
                 ],
                 "fingerprint": fingerprint,
                 "status": status,
@@ -141,10 +140,7 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
         # 全小写普通英文词 + 类型兜底 other：几乎不可能是具名对象
         # （合法库名 pandas/numpy/curl 的类型是 product/artifact，从不落 other）。
         name = str(entity["canonical_name"] or "")
-        if (
-            entity["entity_type"] == "other"
-            and re.fullmatch(r"[a-z]{3,12}", name)
-        ):
+        if entity["entity_type"] == "other" and re.fullmatch(r"[a-z]{3,12}", name):
             add("unlikely_entity_name", entity, "小写普通英文词被当作实体，疑似分类错误")
 
         name_key = normalized_entity_name(entity["canonical_name"])

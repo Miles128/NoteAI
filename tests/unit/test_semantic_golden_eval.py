@@ -545,6 +545,7 @@ def test_prompt_version_advances_with_rules_changes() -> None:
     """提示词规则（OBJECT_NAME_RULES）与 PROMPT_VERSION 必须联动：
     任何规则变更都必须递增版本号，否则存量块不会重抽，新规则形同虚设。"""
     from sidecar.semantic.extractor import PROMPT_VERSION
+
     from prompts import SEMANTIC_OBJECT_NAME_RULES
 
     assert PROMPT_VERSION >= 7, "PROMPT_VERSION 必须随提示词规则变更递增（当前规则为 v7）"

@@ -539,10 +539,7 @@ class SemanticHandler(BaseHandler):
         # （Rust 侧超时后重试不会重复跑已完成的 20 分钟全量任务）。
         if params.get("force") is not True:
             with store.connect() as conn:
-                verified = {
-                    row[0]
-                    for row in conn.execute("SELECT DISTINCT claim_id FROM claim_verifications")
-                }
+                verified = {row[0] for row in conn.execute("SELECT DISTINCT claim_id FROM claim_verifications")}
             claims = [c for c in claims if c["id"] not in verified]
         from sidecar.semantic.claim_verifier import verify_claims_batch
 
@@ -938,7 +935,7 @@ class SemanticHandler(BaseHandler):
         if not source_id or not target_id or source_id == target_id or store is None or not store.path.exists():
             return {"success": False, "message": "请选择两个不同的对象"}
         with store.connect() as conn:
-            from sidecar.semantic.entity_merge import _locate, _KIND_ALIASES, _KIND_ALIAS_COLUMN
+            from sidecar.semantic.entity_merge import _KIND_ALIAS_COLUMN, _KIND_ALIASES, _locate
 
             source = _locate(conn, source_id)
             target = _locate(conn, target_id)

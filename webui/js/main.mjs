@@ -208,10 +208,19 @@ async function loadModules() {
     window.App = App;
     window.importFiles = importFiles;
 
+    await import('./onboarding.js');
+
     // 显式调用应用初始化，取代旧的“重放 DOMContentLoaded”做法：
     // app.js 已改为导出 init()；其余模块的初始化均已改为 import 时直接执行
     // （或由 main.mjs 显式调用 init），不再依赖事件重放。
     await App.init();
+
+    // 首启引导 wizard：workspace 未设置且未完成引导时打开（检查在 App.init 末尾）
+    if (window.OnboardingModule && window.OnboardingModule.maybeStart) {
+        window.OnboardingModule.maybeStart().catch(function(err) {
+            console.warn('[Onboarding] maybeStart failed:', err);
+        });
+    }
 }
 
 loadModules();

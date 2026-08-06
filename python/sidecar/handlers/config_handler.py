@@ -17,6 +17,7 @@ class ConfigHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_api_config", self._get_api_config)
         router.register("save_api_config", self._save_api_config)
+        router.register("test_api_config", self._test_api_config)
         router.register("get_ui_config", self._get_ui_config)
         router.register("save_ui_config", self._save_ui_config)
         router.register("get_theme_preference", self._get_theme_preference)
@@ -75,6 +76,26 @@ class ConfigHandler(BaseHandler):
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True, "message": f"配置已保存，{conn_msg}"}
+
+    def _test_api_config(self, params):
+        """仅测试 API 连通性，不落盘（首启引导 wizard / 设置页预校验用）。"""
+        api_key = str(params.get("api_key") or "").strip()
+        api_base = str(params.get("api_base") or "").strip() or "https://api.openai.com/v1"
+        model_name = str(params.get("model_name") or "").strip() or "gpt-4"
+        if not api_key:
+            return {"success": False, "connected": False, "message": "请先填写 API Key"}
+        if "■■■■" in api_key:
+            return {
+                "success": False,
+                "connected": False,
+                "message": "已保存的 Key 为掩码形式，请输入完整 API Key 后测试",
+            }
+        try:
+            connected, message = test_api_connection(api_key, api_base, model_name)
+        except Exception as e:
+            logger.error(f"[config_handler] test_api_config error: {e}")
+            return {"success": False, "connected": False, "message": f"连接测试异常：{e}"}
+        return {"success": connected, "connected": connected, "message": message}
 
     def _get_ui_config(self, params):
         return {

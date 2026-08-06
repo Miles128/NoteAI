@@ -538,10 +538,9 @@ class ClaimsStore(SemanticStoreBase):
             # existing row's kind-specific fields (upsert never overwrites
             # canonical_name / entity_type) and its name is recorded as an
             # alias of the surviving row.
-            for obj, table, alias_table, alias_column in (
-                [(c, "concepts", "concept_aliases", "concept_id") for c in concepts]
-                + [(e, "entities", "entity_aliases", "entity_id") for e in entities]
-            ):
+            for obj, table, alias_table, alias_column in [
+                (c, "concepts", "concept_aliases", "concept_id") for c in concepts
+            ] + [(e, "entities", "entity_aliases", "entity_id") for e in entities]:
                 existing = conn.execute(
                     f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
                     (name_fingerprint(obj["canonical_name"]), obj["id"]),

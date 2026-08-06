@@ -27,10 +27,10 @@ from utils.wiki_crud import (  # noqa: F401  (facade re-exports)
     remove_file_from_wiki_topic,
     rename_topic,
 )
+from utils.wiki_manager import _get_wiki_path as _resolve_wiki_path_impl
 from utils.wiki_manager import (
     collect_survey_off_topics as _collect_survey_off_topics_impl,
 )
-from utils.wiki_manager import _get_wiki_path as _resolve_wiki_path_impl
 from utils.wiki_manager import (
     parse_wiki_headings as _parse_wiki_headings_full,
 )

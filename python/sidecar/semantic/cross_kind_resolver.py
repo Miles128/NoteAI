@@ -89,11 +89,12 @@ def parse_verdicts(raw: str) -> dict[int, str]:
             if not isinstance(item, dict):
                 continue
             try:
-                pair_id = int(item.get("pair_id"))
+                raw_pair_id = item.get("pair_id")
+                pair_id = int(raw_pair_id) if raw_pair_id is not None else None
             except (TypeError, ValueError):
                 continue
             verdict = str(item.get("verdict") or "").strip().lower()
-            if verdict in _VERDICTS:
+            if verdict in _VERDICTS and pair_id is not None:
                 verdicts[pair_id] = verdict
         return verdicts
     return {}

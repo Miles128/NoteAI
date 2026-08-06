@@ -50,6 +50,7 @@ function _renderTopicTree(node, expandedTopics, depth) {
             html += '<span class="sidebar-tag-count">' + totalFiles + '</span>';
         }
         // 一级主题行挂综述状态：开关 / 无综述标记 / 综述预览 / 可更新
+        var surveyStaleShown = false;
         if (depth === 0) {
             var ov = (window._surveyOverviewMap || {})[child.name] || {};
             var enabled = ov.enabled !== false;
@@ -60,8 +61,14 @@ function _renderTopicTree(node, expandedTopics, depth) {
             } else {
                 html += '<span class="sidebar-tag-survey sidebar-tag-survey-ok" onclick="event.stopPropagation(); window.previewTopicSurvey(\'' + escapeAttr(child.name) + '\')">' + escapeHtml(window.t('topic.surveyDoc')) + '</span>';
                 if (ov.stale) {
+                    surveyStaleShown = true;
                     html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.updateTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyUpdateTitle')) + '">' + escapeHtml(window.t('topic.surveyStale')) + '</span>';
                 }
+            }
+            // P5：语义知识页（wiki/semantic/*_语义.md）可更新提示，来自 get_topic_tree 的 stale_topics；
+            // 综述 stale 徽标已展示同一级主题时不重复展示
+            if ((window._topicStaleMap || {})[child.name] && !surveyStaleShown) {
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.previewSemanticWikiPage(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.wikiStaleTitle')) + '">' + escapeHtml(window.t('topic.wikiStale')) + '</span>';
             }
             html += '<span class="sidebar-tag-survey-toggle' + (enabled ? ' on' : '') + '" onclick="event.stopPropagation(); window.toggleTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyToggleTitle')) + '"></span>';
         }
@@ -125,6 +132,19 @@ function topicRowClick(rowEl) {
 
 function previewTopicSurvey(topic) {
     _openSurveyPreview(topic);
+}
+
+// P5：语义知识页路径与后端 wiki._target_path 对齐（wiki/semantic/{安全段}_语义.md）
+function _semanticWikiPagePath(topic) {
+    var safe = String(topic == null ? '' : topic).trim().replace(/[\\/:*?"<>|]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
+    if (!safe) return '';
+    return 'wiki/semantic/' + safe + '_语义.md';
+}
+
+function previewSemanticWikiPage(topic) {
+    var path = _semanticWikiPagePath(topic);
+    if (!path || typeof window.showPreview !== 'function') return;
+    window.showPreview({ path: path, name: topic + ' · 语义知识' });
 }
 
 async function toggleTopicSurvey(topic) {
@@ -195,6 +215,13 @@ async function loadTopicTree(silent, forceRefresh) {
             container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(result.message || window.t('common.backendError')) + '</span></div>';
             return;
         }
+
+        // P5：语义知识页可更新主题集（仅 wiki 已有该主题段时纳入），供一级主题行渲染徽标
+        var staleMap = {};
+        (result.stale_topics || []).forEach(function(name) {
+            staleMap[name] = true;
+        });
+        window._topicStaleMap = staleMap;
 
         var topics = result.topics || [];
         var hasTopics = topics.length > 0;
@@ -740,7 +767,7 @@ function showAISuggestionPanel() {
             'assign_topic': window.t('topic.typeAssignTopic'),
             'merge_topic': window.t('topic.typeMergeTopic'),
             'change_topic': window.t('topic.typeChangeTopic')
-        }[s.type] || s.type;
+        }[s.type] || escapeHtml(s.type || '');
 
         var body = '';
         if (s.type === 'change_topic') {
@@ -791,7 +818,7 @@ function showAISuggestionPanel() {
         }
 
         card.innerHTML = '<div class="ai-sg-header">' +
-            '<span class="ai-sg-type ai-sg-type-' + s.type + '">' + typeLabel + '</span>' +
+            '<span class="ai-sg-type ai-sg-type-' + escapeAttr(s.type || '') + '">' + typeLabel + '</span>' +
             '<div class="ai-sg-actions">' +
             '<button class="ai-sg-yes" data-action="accept" title="' + window.t('topic.acceptSuggestion') + '">' + window.Icons.get('check', 14) + '</button>' +
             '<button class="ai-sg-no" data-action="reject" title="' + window.t('topic.rejectSuggestion') + '">' + window.Icons.get('close', 14) + '</button>' +
@@ -1439,6 +1466,7 @@ window.onAITopicAnalyze = onAITopicAnalyze;
 window.onAITopicSurvey = onAITopicSurvey;
 window.topicRowClick = topicRowClick;
 window.previewTopicSurvey = previewTopicSurvey;
+window.previewSemanticWikiPage = previewSemanticWikiPage;
 window.toggleTopicSurvey = toggleTopicSurvey;
 window.updateTopicSurvey = updateTopicSurvey;
 window.onShowTopicInput = onShowTopicInput;

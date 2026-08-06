@@ -104,7 +104,7 @@
 .semantic-actions { display: flex; gap: 8px; margin-top: 18px; }
 .semantic-actions button { border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px; background: var(--surface); color: var(--text); cursor: pointer; }
 .semantic-actions button.primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
-.semantic-actions button.danger { border-color: color-mix(in srgb, var(--danger, #c94b4b) 55%, var(--border)); color: var(--danger, #c94b4b); }
+.semantic-actions button.danger { border-color: color-mix(in srgb, var(--error) 55%, var(--border)); color: var(--error); }
 .semantic-claim-editor { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
 .semantic-claim-editor[hidden] { display: none; }
 .semantic-claim-editor label { display: grid; gap: 6px; color: var(--text-muted); font-size: 11px; }
@@ -113,7 +113,7 @@
 .semantic-actions select { border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; background: var(--surface); color: var(--text); font: inherit; }
 .semantic-verdict { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 1.7; }
 .semantic-verdict-supported { background: color-mix(in srgb, #2e8b57 16%, transparent); color: #2e8b57; }
-.semantic-verdict-refuted { background: color-mix(in srgb, var(--danger, #c94b4b) 16%, transparent); color: var(--danger, #c94b4b); }
+.semantic-verdict-refuted { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
 .semantic-verdict-unclear { background: color-mix(in srgb, #b8860b 16%, transparent); color: #b8860b; }
 .semantic-verification { border: 1px solid var(--border); border-radius: 7px; padding: 12px; margin-top: 10px; background: var(--surface); }
 .semantic-verification-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); }
@@ -165,3 +165,6 @@
 .semantic-brief-body ul, .semantic-brief-body ol { padding-left: 20px; }
 .semantic-brief-body code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
 .semantic-brief-fallback { margin-top: 12px; padding: 8px 10px; border: 1px solid rgba(180, 83, 9, .35); border-radius: 5px; color: #b45309; background: var(--surface); font-size: 11px; }
+.semantic-narrative-card { margin-top: 25px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.semantic-narrative-title { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); cursor: help; }
+.semantic-narrative-text { margin: 0; font-size: 13px; line-height: 1.6; }

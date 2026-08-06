@@ -66,8 +66,7 @@
     "tagPlaceholder": "Enter tag name…",
     "confirmCreateTag": "Confirm create tag",
     "autoTagTitle": "Auto-match tags from file titles",
-    "addTagTitle": "Create a new tag",
-    "discoverLinksTitle": "Discover links via AI"
+    "addTagTitle": "Create a new tag"
   },
   "semantic": {
     "eyebrow": "Semantic IR",
@@ -186,16 +185,18 @@
       "all": "All"
     },
     "qualityReason": "Why this was found",
-    "qualityCandidates": "Related entity candidates",
-    "openEntity": "Open entity",
+    "qualityCandidates": "Related object candidates",
+    "openEntity": "Open object",
     "addToInbox": "Add to Inbox",
     "qualityAddedToInbox": "Added to Inbox",
-    "mergePreview": "Entity merge impact preview",
+    "enqueueAllCrossKind": "Enqueue all same-name cross-kind pairs",
+    "enqueueAllCrossKindDone": "Added {count} same-name cross-kind candidates to Inbox",
+    "mergePreview": "Object merge impact preview",
     "mergeImpact": "Impact scope",
     "mergeImpactSummary": "{mentions} mentions · {aliases} aliases · {relations} relations",
-    "confirmEntityMerge": "Merge into right entity",
-    "confirmEntityMergeWarning": "Merge these entities? This updates semantic mentions, aliases, and relations, but never Notes.",
-    "entityMerged": "Entity merged",
+    "confirmEntityMerge": "Merge into right object",
+    "confirmEntityMergeWarning": "Merge these objects (entity/concept)? This updates semantic mentions, aliases, and relations, but never Notes.",
+    "entityMerged": "Object merged",
     "qualityRules": {
       "missing_source": "Missing source",
       "isolated": "Isolated entity",
@@ -204,7 +205,8 @@
       "missing_description": "Missing description",
       "dangling_relation": "Dangling relation",
       "alias_conflict": "Alias conflict",
-      "duplicate_candidate": "Possible duplicate"
+      "duplicate_candidate": "Possible duplicate",
+      "cross_kind_duplicate": "Same name in both tables"
     },
     "changes": {
       "title": "Knowledge changes",
@@ -496,9 +498,7 @@
     "mode": {
       "rag": "RAG",
       "cli": "CLI",
-      "qa": "Q&A mode",
-      "agent": "Agent mode",
-      "badgeHint": "Q&A mode (use CLI tab for file operations)"
+      "qa": "Q&A mode"
     },
     "send": "Send",
     "name": "RAG Assistant",
@@ -719,16 +719,7 @@
     "cliGenerateMdRunning": "Generating…",
     "cliGenerateMdDone": "Generated: {path}",
     "cliGenerateMdFailed": "Generation failed: {message}",
-    "assistantIntro1": "The RAG Assistant is your knowledge Q&A partner. By default it uses <strong>topic tree + full-text search</strong> over notes and surveys—no vector index. Enable vector RAG for semantic similarity search.",
-    "assistantIntro2": "With <strong>Agent mode</strong>, the RAG Assistant can <strong>modify your workspace</strong>, for example:",
-    "assistantCap1": "<strong>Create topics</strong> — L1 or L2; L2 requires you to specify the L1 parent",
-    "assistantCap2": "<strong>Move notes</strong> — assign a note to a topic",
-    "assistantCap3": "<strong>Update surveys</strong> — regenerate topic surveys",
-    "assistantCap4": "<strong>Organize KB</strong> — run ingest pipeline when needed",
-    "assistantIntro3": "In Q&A mode, ask for topics or to search notes. Agent mode shows progress for write actions. Configure LLM under Model tab.",
-    "agentModeTitle": "Agent mode",
-    "agentModeLabel": "Enable Agent mode",
-    "agentModeDesc": "Off: Q&A and read-only queries. On: create topics, move notes, update surveys, etc.",
+    "assistantIntro1": "The RAG Assistant is your knowledge Q&A partner. It searches your compiled notes and topic surveys to answer questions, with citations you can open and verify.",
     "ragModeTitle": "Retrieval mode",
     "ragModeLabel": "Vector RAG retrieval",
     "ragModeDesc": "Off (default): topic tree + full-text search, fewer dependencies. On: semantic search via vector index.",
@@ -928,6 +919,21 @@
       "pending": "Pending",
       "running": "Running"
     },
+    "activityTitle": "Recent activity",
+    "weeklyBrief": "Weekly brief",
+    "activityEmpty": "Nothing new in your notes this week. Add or organize sources and changes will show up here.",
+    "activityViewAll": "View all",
+    "activity": {
+      "gained": "Learned",
+      "corrected": "Refined",
+      "doubted": "Open to question",
+      "removed": "No longer kept",
+      "added": "Added",
+      "updated": "Updated",
+      "invalidated": "Invalidated",
+      "pending": "Pending",
+      "more": "and {count} more items"
+    },
     "pendingTitle": "Pending sources",
     "openPending": "Open",
     "pendingEmpty": "No pending sources",
@@ -957,6 +963,18 @@
       "needsReview": "Review",
       "needsRebuild": "Needs rebuild"
     }
+  },
+  "weeklyBrief": {
+    "title": "Knowledge Base Weekly Brief",
+    "desc": "Summarizes claims, entities and concepts added to the knowledge base over the past 7 days.",
+    "generating": "Generating weekly brief…",
+    "notAvailable": "Weekly brief unavailable",
+    "failed": "Failed to generate weekly brief",
+    "fallbackHint": "LLM not configured; showing structured change records.",
+    "regenerate": "Regenerate",
+    "saveAsNote": "Save as note",
+    "saved": "Brief saved: {path}",
+    "saveFailed": "Failed to save brief"
   },
   "ingest": {
     "label": "Ingest",
@@ -1019,10 +1037,6 @@
     "integrateFailedShort": "Integration failed: "
   },
   "links": {
-    "pendingTitle": "Links to confirm",
-    "confirmAll": "Confirm all links",
-    "pendingEmpty": "No links to confirm",
-    "confirmAllBtn": "Confirm all",
     "title": "Bidirectional links",
     "loadFailed": "Could not load links",
     "empty": "No links yet",

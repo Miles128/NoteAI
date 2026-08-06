@@ -30,6 +30,7 @@ from utils.wiki_crud import (  # noqa: F401  (facade re-exports)
 from utils.wiki_manager import (
     collect_survey_off_topics as _collect_survey_off_topics_impl,
 )
+from utils.wiki_manager import _get_wiki_path as _resolve_wiki_path_impl
 from utils.wiki_manager import (
     parse_wiki_headings as _parse_wiki_headings_full,
 )
@@ -39,16 +40,9 @@ from utils.wiki_manager import (
 
 
 def resolve_wiki_path(workspace_str: str | Path | None = None) -> Path:
-    if workspace_str is None:
-        workspace_str = config.workspace_path or ""
-    ws = Path(workspace_str)
-    new_path = ws / "wiki" / "WIKI.md"
-    if new_path.exists():
-        return new_path
-    old_path = ws / "WIKI.md"
-    if old_path.exists():
-        return old_path
-    return new_path
+    wiki_path = _resolve_wiki_path_impl(workspace_str)
+    assert wiki_path is not None, "workspace not configured"
+    return wiki_path
 
 
 def parse_wiki_headings() -> list:

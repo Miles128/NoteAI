@@ -17,8 +17,6 @@ class _TopicsHost(Protocol):
 
     def _get_topic_tree_3tier(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
-    def _set_abstract_config(self, params: dict[str, Any]) -> dict[str, Any]: ...
-
     def _get_graph_data(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
     def _delete_topic_safe(self, params: dict[str, Any]) -> dict[str, Any]: ...
@@ -87,35 +85,6 @@ class Topics3TierMixin:
             "topics": TopicManager.tree_to_json(tree),
             "pending": pending,
         }
-
-    def _set_abstract_config(self: _TopicsHost, params):
-        """设置综述开关（仅二级主题可用）"""
-        topic_name = params.get("topic_name", "").strip()
-        level = params.get("level", 1)
-        enable = params.get("enable", False)
-
-        if not topic_name:
-            return {"success": False, "message": "未指定主题"}
-
-        if level == 1:
-            return {"success": False, "message": "一级主题是组织容器，请给二级主题开启综述"}
-
-        if enable:
-            tree_result = self._get_topic_tree_3tier({})
-            tree = tree_result.get("topics", [])
-            can, reason = TopicManager.can_generate_abstract(topic_name, tree, level=level)
-            if not can:
-                return {"success": False, "message": reason}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        result = self._toggle_survey({"topic": topic_name})
-        if not result.get("success"):
-            return result
-
-        return {"success": True, "message": f"综述已{'开启' if enable else '关闭'}: {topic_name}"}
 
     def _append_topic_graph_nodes(self, topics, nodes, edges, seen_ids):
         workspace = config.workspace_path or ""
@@ -276,7 +245,5 @@ class Topics3TierMixin:
 
     def register_routes_3tier(self: _TopicsHost, router):
         """注册三层主题相关路由"""
-        router.register("get_topic_tree_3tier", self._get_topic_tree_3tier)
-        router.register("set_abstract_config", self._set_abstract_config)
         router.register("get_graph_data", self._get_graph_data)
         router.register("delete_topic_safe", self._delete_topic_safe)

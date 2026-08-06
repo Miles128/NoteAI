@@ -313,12 +313,17 @@ function renderList() {
         list.innerHTML = '<div class="semantic-empty">' + esc(t(_category === 'conflicts' ? 'semantic.emptyConflicts' : 'semantic.empty')) + '</div>';
         return;
     }
-    list.innerHTML = _items.map(function(item, index) {
+    var html = '';
+    if (_category === 'quality' && window.api.enqueueCrossKindSemanticMerges) {
+        html += '<button type="button" class="semantic-list-action" data-quality-enqueue-all-cross-kind>' + esc(t('semantic.enqueueAllCrossKind')) + '</button>';
+    }
+    html += _items.map(function(item, index) {
         var title = item.canonical_name || item.statement || item.reason || linkTitle(item);
         var description = item.description || item.scope || conflictSummary(item) || item.reason || '';
         var meta = listMeta(item);
         return '<button type="button" class="semantic-list-item' + (index === _selectedIndex ? ' active' : '') + '" data-semantic-index="' + index + '"><strong>' + esc(title) + '</strong>' + (description ? '<p>' + esc(description) + '</p>' : '') + '<span class="semantic-list-item-meta">' + meta + '</span></button>';
     }).join('');
+    list.innerHTML = html;
     if (_degradedHidden > 0 && _category === 'objects') {
         list.insertAdjacentHTML('beforeend', '<div class="semantic-degraded-hint">' + esc(t('semantic.degradedHint', { count: _degradedHidden })) + '</div>');
     }
@@ -822,6 +827,18 @@ function onDetailClick(event) {
             if (window.ToastModule) window.ToastModule.success(t('semantic.qualityAddedToInbox'));
         }).catch(function(error) {
             enqueueQuality.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var enqueueAllCrossKind = event.target.closest('[data-quality-enqueue-all-cross-kind]');
+    if (enqueueAllCrossKind && window.api.enqueueCrossKindSemanticMerges) {
+        enqueueAllCrossKind.disabled = true;
+        window.api.enqueueCrossKindSemanticMerges().then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            if (window.ToastModule) window.ToastModule.success(t('semantic.enqueueAllCrossKindDone', { count: result.count || 0 }));
+        }).catch(function(error) {
+            enqueueAllCrossKind.disabled = false;
             if (window.ToastModule) window.ToastModule.error(String(error.message || error));
         });
         return;

@@ -10,7 +10,6 @@ from sidecar.dashboard_status import get_dashboard_status
 from sidecar.duplicate_review import get_duplicate_review, merge_duplicate_notes, merge_note_group
 from sidecar.handlers.base import BaseHandler
 from sidecar.kb_lint import log_lint_report, run_kb_lint
-from sidecar.survey_append import append_chat_to_survey
 
 
 class KbHandler(BaseHandler):
@@ -22,7 +21,6 @@ class KbHandler(BaseHandler):
         router.register("merge_note_group", self._merge_note_group)
         router.register("scan_merge_candidates", self._scan_merge_candidates)
         router.register("archive_chat_answer", self._archive_chat_answer)
-        router.register("append_chat_to_survey", self._append_chat_to_survey)
         router.register("retry_cascade_topic", self._retry_cascade_topic)
         router.register("retry_all_cascade_failures", self._retry_all_cascade_failures)
         router.register("dismiss_cascade_failure", self._dismiss_cascade_failure)
@@ -108,14 +106,6 @@ class KbHandler(BaseHandler):
             context_file=params.get("context_file", ""),
             citations=params.get("citations") or [],
             preview_only=params.get("preview_only") is True,
-        )
-
-    def _append_chat_to_survey(self, params):
-        return append_chat_to_survey(
-            question=params.get("question", ""),
-            answer=params.get("answer", ""),
-            topic=params.get("topic", ""),
-            context_file=params.get("context_file", ""),
         )
 
     def _retry_cascade_topic(self, params):

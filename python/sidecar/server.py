@@ -68,6 +68,7 @@ class SidecarServer(PathHelpersMixin):
         self._running_tasks_lock = threading.Lock()
         self._stdout_lock = threading.Lock()
         self._watcher_observer = None
+        self._watcher_lock = threading.Lock()
         self._watcher_debounce_timer = None
         self._watcher_debounce_generation = 0
         self._watcher_needs_wiki_sync = False
@@ -77,7 +78,6 @@ class SidecarServer(PathHelpersMixin):
         self._auto_convert_lock = threading.Lock()
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
-        self._cache_lock = threading.Lock()  # retained for _cached_or_compat compat
         self._router = RpcRouter(send_response=self._send_response)
         self._ctx = ServiceContext(config=config, logger=logger)
         self._config_handler = ConfigHandler(self)
@@ -309,38 +309,39 @@ class SidecarServer(PathHelpersMixin):
             logger.warning(f"[startup] auto rag index failed: {e}")
 
     def _setup_watcher(self, workspace_path):
-        self._stop_watcher()
+        with self._watcher_lock:
+            self._stop_watcher_locked()
 
-        server = self
+            server = self
 
-        class WorkspaceHandler(FileSystemEventHandler):
-            def on_created(self, event):
-                server._on_workspace_file_changed("created", event.src_path, is_directory=event.is_directory)
+            class WorkspaceHandler(FileSystemEventHandler):
+                def on_created(self, event):
+                    server._on_workspace_file_changed("created", event.src_path, is_directory=event.is_directory)
 
-            def on_deleted(self, event):
-                server._on_workspace_file_changed("deleted", event.src_path, is_directory=event.is_directory)
+                def on_deleted(self, event):
+                    server._on_workspace_file_changed("deleted", event.src_path, is_directory=event.is_directory)
 
-            def on_moved(self, event):
-                server._on_workspace_file_changed(
-                    "moved",
-                    event.dest_path,
-                    src_path=event.src_path,
-                    is_directory=event.is_directory,
-                )
+                def on_moved(self, event):
+                    server._on_workspace_file_changed(
+                        "moved",
+                        event.dest_path,
+                        src_path=event.src_path,
+                        is_directory=event.is_directory,
+                    )
 
-            def on_modified(self, event):
-                if not event.is_directory:
-                    server._on_workspace_file_changed("modified", event.src_path, is_directory=False)
+                def on_modified(self, event):
+                    if not event.is_directory:
+                        server._on_workspace_file_changed("modified", event.src_path, is_directory=False)
 
-        try:
-            observer = Observer()
-            observer.schedule(WorkspaceHandler(), workspace_path, recursive=True)
-            observer.daemon = True
-            observer.start()
-            self._watcher_observer = observer
-        except Exception as e:
-            logger.warning(f"[watcher] start failed: {e}\n")
-        self._restart_folder_monitor()
+            try:
+                observer = Observer()
+                observer.schedule(WorkspaceHandler(), workspace_path, recursive=True)
+                observer.daemon = True
+                observer.start()
+                self._watcher_observer = observer
+            except Exception as e:
+                logger.warning(f"[watcher] start failed: {e}\n")
+            self._restart_folder_monitor()
 
     def _restart_folder_monitor(self):
         """按当前工作区重新加载并启动文件夹监控（切换工作区后自动生效）。"""
@@ -359,6 +360,10 @@ class SidecarServer(PathHelpersMixin):
         self._rss_scheduler.start()
 
     def _stop_watcher(self):
+        with self._watcher_lock:
+            self._stop_watcher_locked()
+
+    def _stop_watcher_locked(self):
         if self._watcher_observer:
             try:
                 self._watcher_observer.stop()

@@ -1,5 +1,4 @@
 import re
-import shutil
 import threading
 from pathlib import Path
 
@@ -80,45 +79,6 @@ def ensure_topic_folder(topic: str) -> dict:
     return {"success": True, "topic_dir": str(notes_dir), "organized_dir": str(wiki_dir), "is_new": is_new}
 
 
-def move_file_to_topic_folder(file_path: str, topic: str) -> dict:
-    workspace = config.workspace_path
-    if not workspace:
-        return {"success": False, "message": "未设置工作区"}
-
-    src = Path(file_path)
-    if not src.exists():
-        src = Path(workspace) / file_path
-    if not src.exists():
-        return {"success": False, "message": f"文件不存在: {file_path}"}
-
-    safe_topic = _safe_topic_path(topic)
-    if not safe_topic:
-        return {"success": False, "message": "主题名称非法"}
-
-    topic_dir = Path(workspace) / config.NOTES_FOLDER / safe_topic
-    topic_dir.mkdir(parents=True, exist_ok=True)
-
-    dst = topic_dir / src.name
-    if dst.exists() and dst.resolve() != src.resolve():
-        stem = src.stem
-        suffix = src.suffix
-        counter = 1
-        while dst.exists():
-            dst = topic_dir / f"{stem}_{counter}{suffix}"
-            counter += 1
-
-    if dst.resolve() == src.resolve():
-        return {"success": True, "message": "文件已在目标位置", "new_path": str(dst.relative_to(workspace))}
-
-    try:
-        shutil.move(str(src), str(dst))
-        new_rel = str(dst.relative_to(workspace))
-        append_changelog(f"文件归类: {src.name} → Notes/{safe_topic}/")
-        return {"success": True, "message": f"已移动到 {new_rel}", "new_path": new_rel}
-    except Exception as e:
-        return {"success": False, "message": f"文件操作失败: {e}"}
-
-
 def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
     workspace = config.workspace_path
     if not workspace:
@@ -128,6 +88,7 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
     notes_dir = workspace_path / config.NOTES_FOLDER
     topic_parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
     notes = []
+    seen_paths: set[str] = set()
 
     for md_file in sorted(workspace_path.rglob("*.md")):
         if md_file.name.startswith("."):
@@ -176,13 +137,17 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
                                 topic_match = True
 
             if topic_match:
+                rel_path = str(md_file.relative_to(workspace_path))
+                if rel_path in seen_paths:
+                    continue
+                seen_paths.add(rel_path)
                 content = body.strip()
                 # 轻量模式（include_content=False）始终收录（body 可能为空），全量模式跳过空正文。
                 if not include_content or content:
                     notes.append(
                         {
                             "file_name": md_file.name,
-                            "file_path": str(md_file.relative_to(workspace_path)),
+                            "file_path": rel_path,
                             "content": content,
                         }
                     )
@@ -419,47 +384,6 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
         return {"success": True, "survey_path": str(survey_path)}
     except Exception as e:
         return {"success": False, "message": f"综述更新失败: {e}"}
-
-
-def cascade_on_topic_resolved(file_path: str, topic: str, on_chunk=None) -> dict:
-    workspace = config.workspace_path
-    if not workspace:
-        return {"success": False, "message": "未设置工作区"}
-
-    folder_result = ensure_topic_folder(topic)
-    if not folder_result["success"]:
-        return folder_result
-
-    is_new_topic = folder_result.get("is_new", False)
-
-    move_result = move_file_to_topic_folder(file_path, topic)
-
-    notes = collect_topic_notes(topic)
-
-    survey_path = get_survey_path(topic)
-    survey_exists = survey_path and survey_path.exists()
-
-    survey_result = None
-    if is_new_topic or not survey_exists:
-        if notes:
-            survey_result = generate_new_survey(topic, notes, on_chunk)
-        else:
-            append_changelog(f"主题「{topic}」暂无笔记，跳过综述生成")
-    else:
-        new_file_name = Path(file_path).name if Path(file_path).exists() else file_path
-        new_file_notes = [n for n in notes if n["file_name"] == new_file_name]
-        if not new_file_notes and notes:
-            new_file_notes = [notes[-1]]
-        if new_file_notes:
-            survey_result = update_existing_survey(topic, new_file_notes, on_chunk)
-
-    return {
-        "success": True,
-        "is_new_topic": is_new_topic,
-        "move_result": move_result,
-        "survey_result": survey_result,
-        "notes_count": len(notes),
-    }
 
 
 def append_changelog(message: str):

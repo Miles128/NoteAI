@@ -186,9 +186,147 @@ class SemanticHandler(BaseHandler):
             return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
         return {"success": True, "days": days, "counts": counts, "items": items, "total": total}
 
+    def _generate_weekly_brief(self, params):
+        """One-click weekly brief for the whole knowledge base.
+
+        LLM-generated when configured; otherwise falls back to a structured
+        Markdown digest. Read-only — never writes to the store or Notes.
+        """
+        from prompts import WEEKLY_BRIEF_PROMPT
+
+        store = self._store()
+        if store is None:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            days = max(1, min(int(params.get("days", 7) or 7), 90))
+        except (TypeError, ValueError):
+            days = 7
+        if not store.path.exists():
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+        try:
+            counts = store.change_counts(days=days)
+            items, total = store.recent_changes(days=days, limit=60)
+        except sqlite3.OperationalError:
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+
+        if total < 1:
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+
+        by_kind: dict[str, int] = {}
+        by_object: dict[str, int] = {}
+        for c in counts:
+            by_kind[c["change_kind"]] = by_kind.get(c["change_kind"], 0) + c["count"]
+            by_object[c["object_kind"]] = by_object.get(c["object_kind"], 0) + c["count"]
+        # 面向普通用户的口语化表述：不暴露内部英文键名。
+        kind_label = {
+            "added": "新增了知识",
+            "updated": "补充/修正了旧内容",
+            "invalidated": "存疑或暂时无法确认",
+            "removed": "不再收录",
+        }
+        object_label = {
+            "claim": "知识点",
+            "entity": "笔记中提到的人/事物",
+            "concept": "概念",
+            "document": "笔记",
+        }
+        counts_summary = (
+            "\n".join(
+                f"- {kind_label.get(kind, kind)}：{n} 条" for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1])
+            )
+            + "\n"
+            + "\n".join(
+                f"- {object_label.get(kind, kind)}：{n} 条"
+                for kind, n in sorted(by_object.items(), key=lambda kv: -kv[1])
+            )
+        )
+
+        records = "\n".join(
+            f"- [{c['created_at'][:10]}] {kind_label.get(c['change_kind'], c['change_kind'])}"
+            f"（{object_label.get(c['object_kind'], c['object_kind'])}）: {c['label'] or c['object_id']}"
+            + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
+            for c in items
+        )
+        brief, fallback = self._compose_weekly_brief(days, counts_summary, records, WEEKLY_BRIEF_PROMPT)
+        return {"success": True, "days": days, "brief": brief, "fallback": fallback}
+
+    @staticmethod
+    def _compose_weekly_brief(days: int, counts_summary: str, records: str, prompt_template: str) -> tuple[str, bool]:
+        """LLM-generated weekly brief when available; structured fallback otherwise."""
+        from utils.llm_utils import call_llm_raw
+
+        try:
+            prompt = prompt_template.format(days=days, counts_summary=counts_summary, change_records=records)
+            text = call_llm_raw(prompt, temperature=0.3)
+        except Exception:
+            text = ""
+        if not text or not text.strip():
+            fallback = (
+                f"## 知识库周报\n\n"
+                f"（未配置 LLM 或生成失败，以下为结构化变化记录）\n\n"
+                f"## 统计概览\n\n{counts_summary}\n\n"
+                f"## 变化记录\n\n{records}\n"
+            )
+            return fallback, True
+        return text.strip(), False
+
+    def _get_note_merge_suggestions(self, params):
+        """基于 RAG 索引向量相似度 + 语义库实体共享的笔记合并建议。
+
+        只读分析，不修改任何数据；索引或语义未建立时优雅降级。
+        """
+        try:
+            min_score = float(params.get("min_score", 0) or 0)
+        except (TypeError, ValueError):
+            min_score = 0.0
+        try:
+            max_results = max(1, min(int(params.get("max_results", 60)), 200))
+        except (TypeError, ValueError):
+            max_results = 60
+        from utils.note_merge_analyzer import get_note_merge_suggestions
+
+        result = get_note_merge_suggestions(min_score=min_score, max_results=max_results)
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", ""),
+            "total": result.get("total", 0),
+            "has_index": result.get("has_index", False),
+            "has_semantics": result.get("has_semantics", False),
+            "stale_count": result.get("stale_count", 0),
+            "suggestions": result.get("suggestions", []),
+        }
+
+    def _merge_suggested_notes(self, params):
+        """执行建议中的笔记合并（复用 merge_note_group 的 LLM 整合）。"""
+        try:
+            file_paths = [str(p) for p in (params.get("file_paths") or [])]
+        except (TypeError, ValueError):
+            return {"success": False, "message": "file_paths 参数无效"}
+        from utils.note_merge_analyzer import merge_suggested_notes
+
+        return merge_suggested_notes(
+            file_paths,
+            title=str(params.get("title") or ""),
+            delete_authorized=params.get("delete_authorized") is True,
+        )
+
     def _get_topic_brief(self, params):
         """One-topic review brief from the change log.
-
         Uses the LLM when configured; otherwise falls back to a structured
         Markdown change list. Read-only — never writes to the store.
         """
@@ -263,15 +401,6 @@ class SemanticHandler(BaseHandler):
 
     def _start_full_compile(self, _params):
         return self._start_semantic_compile(_params, claims_only=False)
-
-    def _start_claims_compile(self, _params):
-        """只重抽命题/证据，不触碰实体/概念。
-
-        历史遗留场景：早期严格校验导致 claims 被整体清空，而 block_extractions
-        已记录为 complete，常规全量编译会跳过这些块；本入口走 claim_extractions
-        表，可只花一次 LLM 调用重抽全部命题。
-        """
-        return self._start_semantic_compile(_params, claims_only=True)
 
     def _retry_failed_blocks(self, params):
         claims_only = bool(params.get("claims_only", True))
@@ -640,6 +769,7 @@ class SemanticHandler(BaseHandler):
                 "dangling_relation",
                 "alias_conflict",
                 "duplicate_candidate",
+                "cross_kind_duplicate",
             ),
             0,
         )
@@ -740,42 +870,68 @@ class SemanticHandler(BaseHandler):
             )
         return {"success": True, "id": issue_id}
 
+    def _enqueue_cross_kind_merges(self, params):
+        """一次性把全部同名双表（实体↔概念）候选取样入队 Inbox，供人工合并。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.quality import collect_quality_issues
+
+        count = 0
+        for issue in collect_quality_issues(store):
+            if issue["rule"] != "cross_kind_duplicate" or issue["status"] != "pending":
+                continue
+            payload = json.dumps(issue, ensure_ascii=False, sort_keys=True)
+            with store.connect() as conn:
+                conn.execute(
+                    """INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at)
+                       VALUES(?, 'entity_quality', ?, ?, 'pending', ?)
+                       ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json,
+                                                     reason = excluded.reason, status = 'pending'""",
+                    (issue["id"], payload, issue["reason"], store._now()),
+                )
+            count += 1
+        return {"success": True, "count": count, "message": f"已将 {count} 组同名双表候选加入 Inbox"}
+
     def _get_entity_merge_preview(self, params):
         source_id = str(params.get("source_id", "") or "")
         target_id = str(params.get("target_id", "") or "")
         store = self._store()
         if not source_id or not target_id or source_id == target_id or store is None or not store.path.exists():
-            return {"success": False, "message": "请选择两个不同的实体"}
+            return {"success": False, "message": "请选择两个不同的对象"}
         with store.connect() as conn:
-            rows = conn.execute(
-                "SELECT id, canonical_name, entity_type FROM entities WHERE id IN (?, ?)", (source_id, target_id)
-            ).fetchall()
-            if len(rows) != 2:
-                return {"success": False, "message": "实体不存在"}
-            entities = {row["id"]: dict(row) for row in rows}
+            from sidecar.semantic.entity_merge import _locate, _KIND_ALIASES, _KIND_ALIAS_COLUMN
+
+            source = _locate(conn, source_id)
+            target = _locate(conn, target_id)
+            if source is None or target is None:
+                return {"success": False, "message": "对象不存在"}
+            objects = {source["id"]: source, target["id"]: target}
             impact = {}
-            for entity_id in (source_id, target_id):
-                impact[entity_id] = {
+            for obj_id in (source_id, target_id):
+                kind = objects[obj_id]["kind"]
+                impact[obj_id] = {
                     "mentions": conn.execute(
-                        "SELECT count(*) FROM semantic_mentions WHERE object_kind = 'entity' AND object_id = ?",
-                        (entity_id,),
+                        "SELECT count(*) FROM semantic_mentions WHERE object_kind = ? AND object_id = ?",
+                        (kind, obj_id),
                     ).fetchone()[0],
                     "aliases": [
                         row["alias"]
                         for row in conn.execute(
-                            "SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias", (entity_id,)
+                            f"SELECT alias FROM {_KIND_ALIASES[kind]} WHERE {_KIND_ALIAS_COLUMN[kind]} = ? ORDER BY alias",
+                            (obj_id,),
                         )
                     ],
                     "relations": conn.execute(
-                        "SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (entity_id, entity_id)
+                        "SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (obj_id, obj_id)
                     ).fetchone()[0],
                 }
         return {
             "success": True,
-            "source": entities[source_id],
-            "target": entities[target_id],
+            "source": source,
+            "target": target,
             "impact": impact,
-            "message": "这是只读影响预览；确认前不会修改任何实体、证据或 Notes。",
+            "message": "这是只读影响预览；确认前不会修改任何对象、证据或 Notes。",
         }
 
     def _merge_entities(self, params):
@@ -839,13 +995,15 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_compile_status", self._get_compile_status)
         router.register("get_semantic_changes", self._get_changes)
         router.register("get_topic_brief", self._get_topic_brief)
+        router.register("get_note_merge_suggestions", self._get_note_merge_suggestions)
+        router.register("merge_suggested_notes", self._merge_suggested_notes)
+        router.register("generate_weekly_brief", self._generate_weekly_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
-        router.register("start_semantic_claims_compile", self._start_claims_compile)
-        router.register("retry_semantic_failed_blocks", self._retry_failed_blocks)
         router.register("review_semantic_conflict", self._review_conflict)
         router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
+        router.register("enqueue_cross_kind_semantic_merges", self._enqueue_cross_kind_merges)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)
         router.register("merge_semantic_entities", self._merge_entities)
         router.register("update_semantic_claim", self._update_claim)

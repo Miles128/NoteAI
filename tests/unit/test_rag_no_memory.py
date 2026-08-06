@@ -162,3 +162,37 @@ def test_user_profile_is_read_only_background(tmp_path) -> None:
     assert "仅用于理解用户背景" in context
     assert "最近的问题" in context
     assert json.loads(profile_path.read_text(encoding="utf-8"))["profile_md"] == "偏好中文回答"
+
+
+def test_empty_retrieval_switches_to_no_evidence_prompt(monkeypatch, tmp_path) -> None:
+    config.workspace_path = str(tmp_path)
+    events = []
+    handler = RagHandler(
+        SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _send_response=lambda resp: events.append(resp),
+        )
+    )
+    captured = {}
+    monkeypatch.setattr(
+        "sidecar.classic_retriever.retrieve",
+        lambda *_args, **_kwargs: [
+            {"content": "综述内容", "file_path": "wiki/topic.md", "source_type": "survey"}
+        ],
+    )
+
+    def fake_stream(prompt, **kwargs):
+        captured["prompt"] = prompt
+        return "知识库中没有找到与该问题直接相关的资料。\n【存档建议】否"
+
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
+
+    result = handler._answer_with_rag({}, "完全不存在的话题", "", use_vector_rag=False)
+
+    assert result["success"] is True
+    assert "检索不到" in captured["prompt"]
+    assert "直接相关的资料" in captured["prompt"]
+    done = events[-1]["result"]
+    assert done["type"] == "rag_chat_done"
+    assert done["citations"] == []
+    assert done["citation_quality"]["level"] == "none"

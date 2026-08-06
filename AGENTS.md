@@ -109,6 +109,7 @@ Tauri v2 shell (src-tauri/)
 - **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层解析/CRUD 辅助函数在 `utils/wiki_manager.py`、`utils/wiki_crud.py`、`utils/wiki_sync.py`。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
 - **命题验证**（`python/sidecar/semantic/claim_verifier.py`）：基于同主题活跃证据交叉验证命题，结果写入 `claim_verifications` 表，语义工作台展示验证结论；抽取提示词见 `prompts/yaml/claim_verify.yaml`。
+- **笔记合并建议**（`utils/note_merge_analyzer.py`，RPC `get_note_merge_suggestions`）：利用 RAG 索引（zvec 向量相似度）与语义库（实体/概念共享计数）分析笔记合并候选，分级 A（≥0.96 同源）/B（≥0.92 深度重叠）/C（≥0.85 主题关联）。只读分析；索引被占用或未建立时优雅降级；stale 过滤（索引中已删除/移动的文件剔除）。执行合并走 `merge_suggested_notes` RPC，复用 `sidecar/duplicate_review.py` 的 `merge_note_group`（LLM 整合 + send2trash 删除 + .links.json 链接重定向）。注意：`chunk_similarity.py` 是另一条既有向量相似度路径（`scan_merge_candidates`，chunk 级图），与文档级建议互补不重复。
 - **RAG 端点**除 LLM 信号量外无额外速率限制。
 
 ## 6. 项目记忆
@@ -125,4 +126,5 @@ Tauri v2 shell (src-tauri/)
 
 ## 7. 产品行为规范
 
-NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。
+- **链接索引**（`utils/link_indexer.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），api.js 未暴露属预期。
+- NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

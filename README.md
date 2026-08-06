@@ -39,7 +39,7 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 - ✍️ **WYSIWYG** — Tiptap Markdown editor; in-app PDF / DOCX preview
 - 🔄 **Ingest pipeline** — convert → compile → classify → index → crossref → cascade → lint → sync (resumable)
 - 🕸️ **Knowledge graph** — topics, tags, bidirectional links (force-directed)
-- 🤖 **RAG Assistant assistant** — HyDE + hybrid search + rerank; Q&A mode vs Agent mode
+- 🤖 **RAG Assistant assistant** — HyDE + hybrid search + rerank; Q&A mode with optional follow-up suggestions
 - 🔌 **CLI agent bridge** — dispatch Claude Code / OpenCode / Codex / Gemini into your vault with auto-generated `AGENTS.md`
 - 📬 **Unified inbox** — ingest status, pending topics/links, conversion & survey failures, and Lint issues in one place
 - 🔎 **Selection lookup** — instant LLM explanation, then cited local knowledge or Bing-first web evidence
@@ -126,12 +126,13 @@ python run.py
 
 #### 🤖 RAG Assistant Assistant
 
-| Mode | Capabilities |
+| Feature | Description |
 |------|----------------|
 | 💬 **Q&A mode** (default) | RAG over notes & surveys; selection lookup returns a quick explanation, then cited local or web evidence |
-| 🛠️ **Agent mode** | Also **create topics**, **move notes**, **refresh surveys**, **trigger ingest** |
 
-Agent mode notes:
+File operations (create topics, move notes, refresh surveys, trigger ingest) are handled exclusively by the **[CLI Agent bridge](#-cli-agent-bridge)**.
+
+Q&A mode notes:
 
 - 🆕 **Create topic** — L1 or L2; for L2 you must **explicitly name the L1 parent** — no auto-guessing
 - 💾 **Save answers** — to `Notes/RAG对话/`, `wiki/`, or append to topic survey
@@ -278,7 +279,7 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 - ✍️ **所见即所得** — Tiptap 编辑 Markdown；PDF / DOCX 应用内预览
 - 🔄 **自动入库流水线** — 转换 → 编译 → 分类 → 索引 → 交叉引用 → 综述 → 健康检查（可断点续跑）
 - 🕸️ **知识图谱** — 主题、标签、双向链接力导向可视化
-- 🤖 **RAG助手** — HyDE + 混合检索 + 重排序；问答模式 / 助手模式双档
+- 🤖 **RAG助手** — HyDE + 混合检索 + 重排序；引用可点击定位到段落，问答后可追问
 - 🔌 **CLI agent 桥接** — 在 vault 内调用 Claude Code / OpenCode / Codex / Gemini，自动生成 `AGENTS.md`
 - 📬 **统一待处理** — 入库状态、待分类/链接、转换与综述失败、Lint 问题一处处理
 - 🔎 **划词检索** — 先得 LLM 快速解释，再补本地引用或 Bing 优先的联网证据
@@ -358,11 +359,11 @@ python run.py
 | 模式 | 能做什么 |
 |------|----------|
 | 💬 **问答模式**（默认） | RAG 检索笔记与综述；划词后先快速解释，再补本地或联网引用 |
-| 🛠️ **助手模式** | 在上述基础上可 **新建主题**、**移动笔记**、**更新综述**、**触发入库整理** |
 
-助手模式要点：
+文件操作（新建主题、移动笔记、更新综述、触发入库）一律由 **[CLI Agent 桥接](#-cli-agent-桥接)** 完成。
 
-- 🆕 **新建主题** — 支持一级 / 二级；建二级时须你**明确说出**所属一级，RAG 助手不会自动猜测挂靠
+问答模式要点：
+
 - 💾 **存为笔记** — 优质回答可存到 `Notes/RAG对话/` 或 `wiki/`，或追加到主题综述
 - 🧠 **用户画像** — 设置 → RAG助手，Markdown 描述背景与偏好
 

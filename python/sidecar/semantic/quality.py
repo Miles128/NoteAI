@@ -11,6 +11,7 @@ import hashlib
 import json
 
 from sidecar.semantic.store import SemanticStore
+from sidecar.semantic.store_objects import name_fingerprint
 
 
 def quality_key(*parts: str) -> str:
@@ -46,7 +47,13 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
             )
         }
         aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
-        concept_ids = {row["id"] for row in conn.execute("SELECT id FROM concepts WHERE status = 'active'")}
+        concepts = [
+            dict(row)
+            for row in conn.execute(
+                "SELECT id, canonical_name FROM concepts WHERE status = 'active'"
+            )
+        ]
+        concept_ids = {row["id"] for row in concepts}
         relation_endpoint_ids = {
             row["entity_id"]
             for row in conn.execute(
@@ -61,8 +68,12 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
         }
 
     by_id = {entity["id"]: entity for entity in entities}
+    concept_by_id = {concept["id"]: concept for concept in concepts}
     canonical_groups: dict[str, list[str]] = {}
     alias_groups: dict[str, list[str]] = {}
+    concept_by_fp: dict[str, str] = {}
+    for concept in concepts:
+        concept_by_fp.setdefault(name_fingerprint(concept["canonical_name"]), concept["id"])
     # Relations legitimately link entities to concepts (RELATED_TO co-occurrence),
     # so concept endpoints must count as known. Only truly missing endpoints are dangling.
     dangling_relations = relation_endpoint_ids - set(by_id) - concept_ids
@@ -86,6 +97,12 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
         )
         persisted = reviewed.get(issue_id, {})
         status = "reviewed" if persisted.get("fingerprint") == fingerprint else "pending"
+        candidate_names = []
+        for value in candidate_ids:
+            if value in by_id:
+                candidate_names.append(by_id[value]["canonical_name"])
+            elif value in concept_by_id:
+                candidate_names.append(concept_by_id[value]["canonical_name"])
         issues.append(
             {
                 "id": issue_id,
@@ -97,7 +114,10 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
                 "mention_count": mentions.get(entity["id"], 0),
                 "reason": reason,
                 "candidate_ids": candidate_ids,
-                "candidate_names": [by_id[value]["canonical_name"] for value in candidate_ids if value in by_id],
+                "candidate_names": candidate_names,
+                "candidate_kinds": [
+                    "entity" if value in by_id else "concept" for value in candidate_ids if value in by_id or value in concept_by_id
+                ],
                 "fingerprint": fingerprint,
                 "status": status,
             }
@@ -123,6 +143,11 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
         duplicate_ids = sorted(set(duplicate_ids))
         if duplicate_ids:
             add("duplicate_candidate", entity, "规范名称或别名与其他实体重合，需人工确认", duplicate_ids)
+
+        # 同名概念已存在：同一名字不应同时出现在实体与概念两表。
+        cross_kind_id = concept_by_fp.get(name_fingerprint(entity["canonical_name"]))
+        if cross_kind_id is not None:
+            add("cross_kind_duplicate", entity, "同名概念已存在，需确认合并到实体或概念", [cross_kind_id])
 
     for alias_key, entity_ids in alias_groups.items():
         normalized_ids = sorted(set(entity_ids))

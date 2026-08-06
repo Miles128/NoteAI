@@ -16,7 +16,6 @@ from .constants import (
     RAG_INDEX_FOLDER,
     RAW_FOLDER,
     SYSTEM_APP_DATA_DIR,
-    USED_FOLDER,
     WORKSPACE_APP_FOLDER,
     WORKSPACE_STATE_FILE,
 )
@@ -30,7 +29,6 @@ class AppConfig:
     NOTES_FOLDER: str = NOTES_FOLDER
     ABSTRACT_FOLDER: str = ABSTRACT_FOLDER
     RAW_FOLDER: str = RAW_FOLDER
-    USED_FOLDER: str = USED_FOLDER
     WORKSPACE_APP_FOLDER: str = WORKSPACE_APP_FOLDER
     RAG_INDEX_FOLDER: str = RAG_INDEX_FOLDER
 
@@ -46,14 +44,11 @@ class AppConfig:
     workspace_path: str = ""
     log_path: str = str(SYSTEM_APP_DATA_DIR / "logs")
 
-    batch_size: int = 5
     timeout: int = 30
-    max_retries: int = 3
 
     theme: str = "light"
     theme_preference: str = "system"
     font_size: str = "small"
-    accent_color: str = "#4A90D9"
     sidebar_font_family: str = "system"
     preview_font_family: str = "system"
     typography: dict[str, Any] = field(default_factory=dict)
@@ -62,11 +57,6 @@ class AppConfig:
     web_include_images: bool = False
     conv_ai_assist: bool = False
 
-    web_save_path: str = ""
-    conv_save_path: str = ""
-
-    integration_source_path: str = ""
-    integration_output_path: str = ""
     integration_strategy: str = "ml"
     auto_topic: bool = True
     # Minimum confidence used when a single LLM topic suggestion is eligible
@@ -83,7 +73,6 @@ class AppConfig:
         default_factory=lambda: ["objects", "claims", "quality", "conflicts", "links", "brief"]
     )
     semantic_workbench_intensity: str = "standard"
-    assistant_agent_mode: bool = False
     cli_agent_id: str = ""
     rag_enabled: bool = True
     rag_hyde_enabled: bool = True
@@ -106,16 +95,6 @@ class AppConfig:
         # GIL and intentionally left unlocked.
         self._lock = threading.RLock()
 
-    @classmethod
-    def for_test(cls, **overrides: Any) -> "AppConfig":
-        """Test injection point: pure-default instance without touching
-        config files, environment variables or the keyring.
-
-        Production code keeps using the module-level ``config`` singleton;
-        this factory only gives future tests a clean construction entry point.
-        """
-        return cls(**overrides)
-
     def is_workspace_set(self) -> bool:
         if not self.workspace_path:
             return False
@@ -135,11 +114,6 @@ class AppConfig:
         if not self.workspace_path:
             return ""
         return str(Path(self.workspace_path) / RAW_FOLDER)
-
-    def get_used_folder(self) -> str:
-        if not self.workspace_path:
-            return ""
-        return str(Path(self.workspace_path) / USED_FOLDER)
 
     def get_workspace_app_folder(self) -> str:
         if not self.workspace_path:
@@ -298,6 +272,20 @@ class AppConfig:
 
         valid_keys = {f.name for f in fields(cls)}
         init_kwargs = {k: v for k, v in init_kwargs.items() if k in valid_keys}
+
+        # One-time purge: drop config.json keys that no longer map to fields,
+        # so removed settings do not persist forever.
+        stale_keys = set(file_data) - valid_keys
+        if stale_keys and os.path.exists(config_path):
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                data = {k: v for k, v in data.items() if k in valid_keys}
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                _logger.info("配置清理: 移除 %d 个失效键", len(stale_keys))
+            except Exception as e:
+                _logger.warning("配置清理失败: %s", e)
 
         return cls(**init_kwargs)
 

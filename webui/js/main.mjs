@@ -1,7 +1,6 @@
 async function loadModules() {
     await Promise.all([
         import('./utils.js'),
-        import('./window.js'),
         import('./api.js'),
         import('./state.js'),
     ]);

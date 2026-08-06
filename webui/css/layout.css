@@ -2357,6 +2357,102 @@ body {
     font-weight: 650;
 }
 
+.home-activity-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.home-activity-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--home-ink);
+}
+
+.home-activity-kind {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: var(--home-blue);
+    border: 1px solid color-mix(in srgb, var(--home-blue) 35%, transparent);
+    border-radius: 4px;
+    padding: 1px 5px;
+    text-transform: lowercase;
+}
+
+.home-activity-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-activity-source {
+    flex-shrink: 0;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--home-muted);
+    font-size: 11px;
+}
+
+.home-activity-more-btn {
+    align-self: flex-start;
+    border: none;
+    background: none;
+    color: var(--home-blue);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.weekly-brief-status {
+    color: var(--home-muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.weekly-brief-content {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    padding: 14px 16px;
+    max-height: 420px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+}
+
+.weekly-brief-content h1,
+.weekly-brief-content h2,
+.weekly-brief-content h3 {
+    margin: 12px 0 6px;
+    font-size: 14px;
+    color: var(--text);
+}
+
+.weekly-brief-content ul,
+.weekly-brief-content ol {
+    padding-left: 18px;
+    margin: 6px 0;
+}
+
+.weekly-brief-content p {
+    margin: 6px 0;
+}
+
+.weekly-brief-content code {
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 12px;
+}
+
 .home-job-row {
     border: 1px solid var(--home-line);
     border-radius: 6px;

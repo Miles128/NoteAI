@@ -523,17 +523,52 @@ class ClaimsStore(SemanticStoreBase):
         with self.connect() as conn:
             source_path, source_topic = self._block_source(conn, block_id)
             # Extraction-time dedup: when a variant spelling (parenthetical
-            # annotation, whitespace, case) matches an existing active object,
-            # reuse that id so mentions/relations merge instead of duplicating.
-            # The upsert below then refreshes description/confidence on the
-            # existing row while keeping its canonical name.
-            for obj, table in [(c, "concepts") for c in concepts] + [(e, "entities") for e in entities]:
+            # annotation, whitespace, case, punctuation) matches an existing
+            # active object, reuse that id so mentions/relations merge instead
+            # of duplicating. The upsert below then refreshes
+            # description/confidence on the existing row while keeping its
+            # canonical name. The differing spelling is preserved as an alias
+            # (entity_aliases / concept_aliases) so the alternate name of the
+            # same object survives.
+            #
+            # Cross-kind dedup: a concept whose fingerprint matches an active
+            # entity (or vice versa) is re-assigned to the pre-existing kind
+            # and reuses its id — the earlier object wins, so the same name
+            # never lives in both tables at once. The moved object keeps the
+            # existing row's kind-specific fields (upsert never overwrites
+            # canonical_name / entity_type) and its name is recorded as an
+            # alias of the surviving row.
+            for obj, table, alias_table, alias_column in (
+                [(c, "concepts", "concept_aliases", "concept_id") for c in concepts]
+                + [(e, "entities", "entity_aliases", "entity_id") for e in entities]
+            ):
                 existing = conn.execute(
-                    f"SELECT id FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
+                    f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
                     (name_fingerprint(obj["canonical_name"]), obj["id"]),
                 ).fetchone()
+                if existing is None:
+                    other_table = "entities" if table == "concepts" else "concepts"
+                    existing = conn.execute(
+                        f"SELECT id, canonical_name FROM {other_table} WHERE name_fingerprint = ? AND status = 'active' LIMIT 1",
+                        (name_fingerprint(obj["canonical_name"]),),
+                    ).fetchone()
+                    if existing is not None:
+                        if table == "concepts":
+                            concepts[:] = [c for c in concepts if c is not obj]
+                            entities.append(obj)
+                            obj["entity_type"] = obj.get("entity_type", "")
+                            alias_table, alias_column = "entity_aliases", "entity_id"
+                        else:
+                            entities[:] = [e for e in entities if e is not obj]
+                            concepts.append(obj)
+                            alias_table, alias_column = "concept_aliases", "concept_id"
                 if existing is not None:
                     obj["id"] = existing["id"]
+                    if obj["canonical_name"].casefold() != existing["canonical_name"].casefold():
+                        conn.execute(
+                            f"INSERT OR IGNORE INTO {alias_table}(alias, {alias_column}, created_at) VALUES(?, ?, ?)",
+                            (obj["canonical_name"], existing["id"], self._now()),
+                        )
             concept_ids = [concept["id"] for concept in concepts]
             entity_ids = [entity["id"] for entity in entities]
             claim_ids = [claim["id"] for claim in claims]

@@ -213,6 +213,47 @@ def cleanup_stale_links() -> int:
     return changed
 
 
+#: 弱启发式原因：标签/语义/邻居产生的高对称链接，不视为真实引用
+_WEAK_LINK_REASONS = ("共享标签", "语义相关", "已确认链接的邻居", "同主题")
+
+
+def _is_weak_heuristic_link(reason: str) -> bool:
+    """启发式对称信号（标签/向量/邻居/同主题）产生的链接是否属于弱链接。"""
+    return any(reason.startswith(prefix) for prefix in _WEAK_LINK_REASONS)
+
+
+def purge_weak_links() -> dict[str, Any]:
+    """
+    清洗 .links.json：删除由弱启发式（共享标签 / 语义相关 / 邻居 / 同主题）
+    产生的低置信链接，只保留真实引用（正文/摘要提及）与实体/概念共享。
+
+    返回统计信息；保留最新 last_scan，避免触发重复扫描。
+    """
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区", "removed": 0}
+    data = load_links()
+    links = data.get("links", [])
+    original_count = len(links)
+    kept: list[dict[str, Any]] = []
+    removed = 0
+    for link in links:
+        reason = str(link.get("reason") or "").strip()
+        if _is_weak_heuristic_link(reason):
+            removed += 1
+            continue
+        kept.append(link)
+    if removed:
+        save_links({"links": kept, "last_scan": data.get("last_scan")})
+        logger.info(f"[link_indexer] 弱启发式清洗: 删除 {removed} 条，保留 {len(kept)} 条")
+    return {
+        "success": True,
+        "total": original_count,
+        "removed": removed,
+        "kept": len(kept),
+    }
+
+
 def _title_mentioned_in_text(title: str, body: str) -> bool:
     if not title or not body:
         return False
@@ -385,6 +426,139 @@ def _one_hop_neighbors(rel_path: str, links: list[dict]) -> list[tuple[str, str]
     return neighbors
 
 
+#: 两篇文章共享多少实体/概念才算「实质关联」并建议双向链接
+_SEMANTIC_SHARE_MIN = 3
+
+
+def _semantic_share_candidates(
+    store: Any,
+    rel_path: str,
+    all_metas: dict[str, dict[str, Any]],
+    links: list[dict],
+) -> list[tuple[str, str, float]]:
+    """
+    通过语义提取的实体/概念共享发现双向关联候选。
+
+    同一批实体/概念在「源与目标」两侧都出现，通常是同一实体的多份资料
+    （同主题、同产品、同论文），属于真实的双向引用；共享量越多越可靠。
+    返回 [(rel_path, reason, score)]，仅返回双向都有语义证据的候选对。
+    """
+    try:
+        from sidecar.semantic.ids import stable_id
+
+        existing_keys = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in links) if k}
+        # 已存在任一方向的边则跳过，避免重复建议
+        pending_keys = existing_keys
+
+        out: list[tuple[str, str, float]] = []
+        src_id = stable_id("doc", rel_path)
+        src_objects = _store_objects_for(store, src_id)
+        if not src_objects:
+            return out
+        src_names = {o["name"] for o in src_objects}
+        available = set(all_metas) - {rel_path}
+        cache: dict[str, set[str]] = {}
+        for other in available:
+            key = _link_key(rel_path, other)
+            if not key or key in pending_keys:
+                continue
+            other_id = stable_id("doc", other)
+            shared = src_names & _object_names_for(store, cache, other_id)
+            # 分成两档：强共享（≥5）高置信；中等（≥3）次之
+            if len(shared) >= 5:
+                out.append((other, f"共享 {len(shared)} 个实体/概念", 90.0 + min(len(shared), 10)))
+            elif len(shared) >= _SEMANTIC_SHARE_MIN:
+                out.append((other, f"共享 {len(shared)} 个实体/概念", 70.0 + len(shared)))
+        return out
+    except Exception as e:
+        logger.warning(f"[link_indexer] 语义共享计算失败: {e}")
+        return []
+
+
+def _store_objects_for(store: Any, document_id: str) -> list[dict]:
+    try:
+        return store.objects_for_document(document_id)
+    except Exception:
+        return []
+
+
+def _object_names_for(store: Any, cache: dict[str, set[str]], document_id: str) -> set[str]:
+    if document_id not in cache:
+        raw = (o.get("name") for o in _store_objects_for(store, document_id))
+        names = {name for name in raw if isinstance(name, str) and name.strip()}
+        cache[document_id] = names
+    return cache[document_id]
+
+
+#: 全库回填双向链接时，两篇文章共享实体/概念的强阈值
+_BIDIRECTIONAL_SHARE_MIN = 6
+
+
+def backfill_semantic_bidirectional() -> dict[str, Any]:
+    """
+    全库回填：对「共享大量实体/概念」的文档对建立双向链接。
+
+    仅在两侧（A→B 与 B→A）都尚无任何边时才补（avoid the hub-diameter
+    麻团：只把真正多次共同出现的实体对连通，不重复叠加）。
+    产出的是 pending，等待人工确认。
+    """
+    workspace = config.workspace_path
+    if not workspace:
+        return {"success": False, "message": "未设置工作区", "added": 0}
+    ws = Path(workspace)
+    try:
+        from sidecar.semantic.ids import stable_id
+        from sidecar.semantic.store import SemanticStore
+    except Exception as e:
+        return {"success": False, "message": f"语义库不可用: {e}", "added": 0}
+
+    all_metas = _load_all_metas_cached(ws)
+    if len(all_metas) < 2:
+        return {"success": False, "message": "可解析文件不足", "added": 0}
+
+    store = SemanticStore(ws)
+    names: dict[str, set[str]] = {}
+    for rel in all_metas:
+        doc_id = stable_id("doc", rel)
+        s = _object_names_for(store, names, doc_id)
+        # 空集合也要占位（不缓存会反复查库）
+        names[rel] = s
+
+    existing = load_links()
+    existing_links = existing.get("links", [])
+    directed = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k}
+
+    rels = list(all_metas)
+    added = 0
+    for i in range(len(rels)):
+        a = rels[i]
+        a_names = names.get(a) or set()
+        if not a_names:
+            continue
+        for b in rels[i + 1 :]:
+            bn = names.get(b) or set()
+            shared = a_names & bn
+            if len(shared) < _BIDIRECTIONAL_SHARE_MIN:
+                continue
+            k_ab = _link_key(a, b)
+            k_ba = _link_key(b, a)
+            if k_ab is None or k_ba is None:
+                continue
+            if k_ab in directed or k_ba in directed:
+                continue
+            reason = f"共享 {len(shared)} 个实体/概念"
+            existing_links.append({"from": a, "to": b, "reason": reason, "status": "pending"})
+            existing_links.append({"from": b, "to": a, "reason": reason, "status": "pending"})
+            directed.add(k_ab)
+            directed.add(k_ba)
+            added += 2
+
+    if added:
+        save_links({"links": existing_links, "last_scan": existing.get("last_scan")})
+        logger.info(f"[link_indexer] 双向语义回填: 新增 {added} 条")
+    return {"success": True, "added": added, "total": len(existing_links)}
+
+
 def _llm_pick_cross_refs(
     source_meta: dict[str, Any],
     body_excerpt: str,
@@ -506,6 +680,21 @@ def discover_cross_refs_for_file(
             "auto_confirm": auto_confirm,
         }
 
+    # 实体/概念共享：两篇文章共同出现足够的实体/概念，视为实质关联
+    _SemanticStore: Any = None
+    try:
+        from sidecar.semantic.store import SemanticStore as _SemanticStore
+    except Exception:  # pragma: no cover - sidecar 依赖不可用时跳过
+        _SemanticStore = None  # type: ignore[assignment]
+
+    if _SemanticStore is not None:
+        try:
+            shared_semantic = _semantic_share_candidates(_SemanticStore(ws), rel, all_metas, existing_links)
+            for path, reason, score in shared_semantic:
+                _add(path, score, reason, auto_confirm=False)
+        except Exception as e:
+            logger.warning(f"[link_indexer] 语义共享候选失败: {e}")
+
     # 同主题不连双向链接：仅同属一个主题目录并不是实质关联，直接跳过
 
     for path, meta in all_metas.items():
@@ -513,19 +702,6 @@ def discover_cross_refs_for_file(
             _add(path, 85.0, f"正文提及「{meta['title']}」", False)
         elif _title_mentioned_in_text(source.get("title", ""), meta.get("summary", "")):
             _add(path, 75.0, f"对方摘要提及「{source['title']}」", False)
-
-    src_tags = set(source.get("tags") or [])
-    if src_tags:
-        for path, meta in all_metas.items():
-            shared = src_tags & set(meta.get("tags") or [])
-            if shared:
-                _add(path, 65.0, f"共享标签「{next(iter(shared))}」", False)
-
-    for path, _score, reason in _vector_search_candidates(source, body, rel):
-        _add(path, 60.0 + min(_score, 1.0) * 20.0, reason, False)
-
-    for path, reason in _one_hop_neighbors(rel, existing_links):
-        _add(path, 55.0, reason, False)
 
     ranked = sorted(scored.values(), key=lambda x: x["score"], reverse=True)
     if use_llm and len(ranked) > 3:

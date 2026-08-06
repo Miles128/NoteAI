@@ -40,13 +40,32 @@ def workspace(tmp_path: Path) -> Path:
 
 
 def test_create_note_from_draft_writes_complete_content(workspace: Path) -> None:
-    srv = SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None))
+    srv = SimpleNamespace(
+        _ctx=SimpleNamespace(config=config, logger=None),
+        _start_task=lambda *a, **k: None,
+    )
     handler = FilesHandler(srv)
     content = "---\ntopic: \n---\n\n# 一次写入\n\n正文不会经历半成品文件。\n"
     res = handler._create_note_from_draft({"title": "一次写入", "topic": "", "content": content})
     assert res["success"] is True
     path = workspace / res["path"]
     assert path.read_text(encoding="utf-8") == content
+
+
+def test_create_note_from_draft_triggers_crossref_task(workspace: Path) -> None:
+    started = []
+
+    def fake_start_task(task_name, target, args=(), kwargs=None, kind="task", label=None):
+        started.append((task_name, args, kwargs or {}))
+
+    srv = SimpleNamespace(
+        _ctx=SimpleNamespace(config=config, logger=None),
+        _start_task=fake_start_task,
+    )
+    handler = FilesHandler(srv)
+    res = handler._create_note_from_draft({"title": "触发交叉引用", "topic": "", "content": "# 触发交叉引用\n\n正文。\n"})
+    assert res["success"] is True
+    assert any(name.startswith("suggest_links_") and args for name, args, _kwargs in started)
 
 
 def test_get_ingest_status_includes_progress(workspace: Path) -> None:

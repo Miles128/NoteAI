@@ -24,9 +24,6 @@ def _jieba_analyse_available():
 class RagHandler(BaseHandler):
     _rag_chat_lock = threading.Lock()
     _rag_build_lock = threading.Lock()
-    # In-memory snapshot of the latest retrieval pipeline run (P9 transparency);
-    # session-scoped only, never persisted.
-    _last_retrieval_debug: dict = {}
 
     _SUGGESTIONS_SENTINEL_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\]]*\])")
 
@@ -634,13 +631,25 @@ class RagHandler(BaseHandler):
                 },
             }
         )
-        RagHandler._last_retrieval_debug = meta_data
 
-        prompt = RAG_CHAT_PROMPT.format(
-            context=context,
-            history=compressed_history if compressed_history else "无历史对话",
-            question=question,
-        )
+        if not context.strip():
+            # No evidence at all: explicitly declare the knowledge base has no
+            # directly relevant material instead of letting the model improvise
+            # with an empty context (which encourages fabricated citations).
+            from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_EVIDENCE_PROMPT
+
+            memory_section = f"对话历史：{compressed_history}\n\n" if compressed_history else ""
+            prompt = RAG_ASSISTANT_NO_EVIDENCE_PROMPT.format(
+                persona=ASSISTANT_PERSONA_PROMPT,
+                memory_section=memory_section,
+                question=question,
+            )
+        else:
+            prompt = RAG_CHAT_PROMPT.format(
+                context=context,
+                history=compressed_history if compressed_history else "无历史对话",
+                question=question,
+            )
 
         try:
             answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
@@ -819,15 +828,7 @@ class RagHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
-    def _rag_retrieval_debug(self, params):
-        """Return the latest retrieval pipeline snapshot (P9 transparency)."""
-        data = RagHandler._last_retrieval_debug
-        if not data:
-            return {"success": True, "available": False}
-        return {"success": True, "available": True, **data}
-
     def register_routes(self, router):
         router.register("rag_rebuild_index", self._rag_rebuild_index)
-        router.register("rag_chat", self._rag_chat, async_mode=True)
+        router.register("rag_chat", self._rag_chat)
         router.register("rag_index_status", self._rag_index_status)
-        router.register("rag_retrieval_debug", self._rag_retrieval_debug)

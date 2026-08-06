@@ -243,6 +243,71 @@ def test_cross_kind_duplicate_rule_preview_and_batch_enqueue(semantic_handler: S
     assert preview["impact"]["concept-2"]["mentions"] == 1
 
 
+def test_claims_batch_verify_writes_verifications(semantic_handler: SemanticHandler) -> None:
+    """内置 LLM 批量核查：verdict 写入 claim_verifications（method='llm'）。"""
+    from sidecar.semantic.claim_verifier import parse_batch_verification_json, verify_claims_batch
+
+    parsed = parse_batch_verification_json(
+        '```json\n{"results": [{"claim_id": 1, "verdict": "supported", "confidence": 0.9}, '
+        '{"claim_id": 2, "verdict": "refuted", "confidence": 0.7, "reason": "有反例"}]}\n```'
+    )
+    assert parsed[1]["verdict"] == "supported"
+    assert parsed[2]["verdict"] == "refuted" and parsed[2]["reason"] == "有反例"
+    # 非法 verdict 被丢弃
+    assert 3 not in parse_batch_verification_json('{"results": [{"claim_id": 3, "verdict": "nope"}]}')
+
+    store = SemanticStore(semantic_handler.config.workspace_path)
+
+    def fake_llm(_prompt: str) -> str:
+        return '{"results": [{"claim_id": 1, "verdict": "refuted", "confidence": 0.8, "reason": "反例"}]}'
+
+    claims = [{"id": "claim-1", "statement": "混合检索结合向量与关键词。", "scope": "RAG"}]
+    result = verify_claims_batch(store, claims, llm_call=fake_llm)
+    assert result["success"] is True
+    assert result["stats"]["refuted"] == 1
+    with store.connect() as conn:
+        row = conn.execute(
+            "SELECT verdict, confidence, method, agent, summary FROM claim_verifications WHERE claim_id = 'claim-1'"
+        ).fetchone()
+        assert row is not None
+        assert row["verdict"] == "refuted"
+        assert row["method"] == "llm"
+        assert row["agent"] == "builtin"
+        assert row["summary"] == "反例"
+
+
+def test_claims_batch_verify_rpc_filters_by_scope(semantic_handler: SemanticHandler) -> None:
+    """RPC 入口：scope 过滤 + limit，返回统计。"""
+    from unittest.mock import patch
+
+    with patch("sidecar.semantic.claim_verifier.verify_claims_batch") as mock_verify:
+        mock_verify.return_value = {"success": True, "total": 1, "outcomes": [], "stats": {"supported": 1}}
+        result = semantic_handler._verify_claims_batch({"scope": "RAG", "limit": 5})
+        assert result["success"] is True
+        called_claims = mock_verify.call_args[0][1]
+        assert len(called_claims) <= 5
+        assert all("rag" in str(c.get("scope", "")).casefold() for c in called_claims)
+
+
+def test_quality_flags_lowercase_english_word_entities(semantic_handler: SemanticHandler) -> None:
+    """type=other 的全小写普通英文词实体被标记为疑似分类错误。"""
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-4', 'bundled', 'other', '描述', 0.9, 'active')"
+        )
+        conn.execute(
+            "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
+            " VALUES('entity-5', 'pandas', 'product', '库', 0.9, 'active')"
+        )
+
+    quality = semantic_handler._get_workbench({"tab": "quality", "status": "pending"})
+    flagged = [item for item in quality["items"] if item["rule"] == "unlikely_entity_name"]
+    assert [item["entity_name"] for item in flagged] == ["bundled"]
+    assert quality["counts"]["unlikely_entity_name"] == 1
+
+
 def test_cross_kind_merge_moves_mentions_and_relations_into_target_kind(
     semantic_handler: SemanticHandler,
 ) -> None:
@@ -282,6 +347,67 @@ def test_cross_kind_merge_moves_mentions_and_relations_into_target_kind(
             ).fetchone()[0]
             == 0
         )
+
+
+def test_cross_kind_resolver_merges_concept_into_entity(semantic_handler: SemanticHandler) -> None:
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-2', 'BM25', '关键词检索算法', 0.9, 'active')"
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-1')")
+    queued = semantic_handler._enqueue_cross_kind_merges({})
+    assert queued["success"] is True and queued["count"] >= 1
+
+    def fake_llm(_prompt: str) -> str:
+        return '```json\n{"pairs": [{"pair_id": 1, "verdict": "merge_entity", "reason": "same object"}]}\n```'
+
+    from sidecar.semantic.cross_kind_resolver import resolve_cross_kind_merges
+
+    result = resolve_cross_kind_merges(store, llm_call=fake_llm)
+    assert result["success"] is True
+    assert result["stats"]["merge_entity"] == 1
+    with store.connect() as conn:
+        # 概念并入实体：概念行已删、实体保留、该对 issue 已审（另一对因 entity-3 存在而 skip）
+        assert conn.execute("SELECT count(*) FROM concepts WHERE id = 'concept-2'").fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM entities WHERE id = 'entity-1' AND status = 'active'").fetchone()[0] == 1
+        pending = conn.execute(
+            "SELECT count(*) FROM review_queue WHERE item_kind = 'entity_quality' AND status = 'pending'"
+        ).fetchone()[0]
+        assert pending == 1
+
+
+def test_cross_kind_resolver_keeps_distinct_pairs_and_parses_partial_batch(
+    semantic_handler: SemanticHandler,
+) -> None:
+    from sidecar.semantic.cross_kind_resolver import parse_verdicts, resolve_cross_kind_merges
+
+    parsed = parse_verdicts('前文 {"pairs": [{"pair_id": 2, "verdict": "keep_both"}, {"pair_id": 3, "verdict": "merge_concept", "reason": "x"}]} 后文')
+    assert parsed == {2: "keep_both", 3: "merge_concept"}
+
+    store = SemanticStore(semantic_handler.config.workspace_path)
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-2', 'BM25', '关键词检索算法', 0.9, 'active')"
+        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-1')")
+    semantic_handler._enqueue_cross_kind_merges({})
+
+    def fake_llm(_prompt: str) -> str:
+        return '{"pairs": [{"pair_id": 1, "verdict": "keep_both"}]}'
+
+    result = resolve_cross_kind_merges(store, llm_call=fake_llm)
+    assert result["stats"]["keep_both"] == 1
+    with store.connect() as conn:
+        assert conn.execute("SELECT count(*) FROM concepts WHERE status = 'active'").fetchone()[0] == 2
+        assert conn.execute("SELECT count(*) FROM entities WHERE status = 'active'").fetchone()[0] == 3
+        # keep_both 的对已审，另一对（entity-3 变体）因未裁决而保留 pending
+        pending = conn.execute(
+            "SELECT count(*) FROM review_queue WHERE item_kind = 'entity_quality' AND status = 'pending'"
+        ).fetchone()[0]
+        assert pending == 1
 
 
 def test_claim_can_be_edited_deleted_and_restored_with_audit(

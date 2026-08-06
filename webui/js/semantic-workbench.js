@@ -314,6 +314,9 @@ function renderList() {
         return;
     }
     var html = '';
+    if (_category === 'quality' && window.api.resolveCrossKindMerges) {
+        html += '<button type="button" class="semantic-list-action" data-quality-resolve-cross-kind>' + esc(t('semantic.resolveAllCrossKind')) + '</button>';
+    }
     if (_category === 'quality' && window.api.enqueueCrossKindSemanticMerges) {
         html += '<button type="button" class="semantic-list-action" data-quality-enqueue-all-cross-kind>' + esc(t('semantic.enqueueAllCrossKind')) + '</button>';
     }
@@ -839,6 +842,21 @@ function onDetailClick(event) {
             if (window.ToastModule) window.ToastModule.success(t('semantic.enqueueAllCrossKindDone', { count: result.count || 0 }));
         }).catch(function(error) {
             enqueueAllCrossKind.disabled = false;
+            if (window.ToastModule) window.ToastModule.error(String(error.message || error));
+        });
+        return;
+    }
+    var resolveCrossKind = event.target.closest('[data-quality-resolve-cross-kind]');
+    if (resolveCrossKind && window.api.resolveCrossKindMerges) {
+        if (!window.confirm(t('semantic.resolveAllCrossKindConfirm'))) return;
+        resolveCrossKind.disabled = true;
+        window.api.resolveCrossKindMerges().then(function(result) {
+            if (!result || !result.success) throw new Error((result && result.message) || t('common.unknownError'));
+            var stats = result.stats || {};
+            if (window.ToastModule) window.ToastModule.success(t('semantic.resolveAllCrossKindDone', { total: result.total || 0, merged: (stats.merge_entity || 0) + (stats.merge_concept || 0), kept: stats.keep_both || 0, skipped: stats.skip || 0 }));
+            loadList();
+        }).catch(function(error) {
+            resolveCrossKind.disabled = false;
             if (window.ToastModule) window.ToastModule.error(String(error.message || error));
         });
         return;

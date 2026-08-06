@@ -72,6 +72,8 @@ CROSS_REF_LLM_PROMPT = get_prompt("link_indexer", "CROSS_REF_LLM_PROMPT")
 LINK_PAIR_JUDGE_PROMPT = get_prompt("link_indexer", "LINK_PAIR_JUDGE_PROMPT")
 
 CLAIM_VERIFY_CLI_PROMPT = get_prompt("claim_verify", "CLAIM_VERIFY_CLI_PROMPT")
+CLAIM_BATCH_VERIFY_PROMPT = get_prompt("claim_batch_verify", "CLAIM_BATCH_VERIFY_PROMPT")
+CROSS_KIND_RESOLVE_PROMPT = get_prompt("cross_kind_resolve", "CROSS_KIND_RESOLVE_PROMPT")
 SEMANTIC_OBJECT_NAME_RULES = get_prompt("semantic_extract", "OBJECT_NAME_RULES")
 SEMANTIC_EXTRACT_PROMPT = get_prompt("semantic_extract", "EXTRACTION_PROMPT")
 SEMANTIC_BATCH_EXTRACT_PROMPT = get_prompt("semantic_extract", "BATCH_EXTRACTION_PROMPT")

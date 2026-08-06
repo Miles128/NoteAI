@@ -287,6 +287,29 @@ def test_validation_still_rejects_malformed_claim_collection():
         raise AssertionError("expected malformed claims collection to fail validation")
 
 
+def test_validation_falls_back_unknown_entity_type_to_other():
+    """非法 entity type 降级为 other + 计数，不再炸掉整块。"""
+    rejections: dict[str, int] = {}
+    parsed = validate_extraction(
+        {
+            "concepts": [],
+            "entities": [
+                {"name": "MCP", "type": "protocol", "description": "协议", "confidence": 0.9},
+                {"name": "MyCustomThing", "type": "algorithm", "description": "自定义类型", "confidence": 0.8},
+            ],
+            "claims": [],
+        },
+        block_id="blk_types",
+        block_content="MCP 是协议。",
+        rejections=rejections,
+    )
+    assert rejections.get("entities_type_fallback") == 1
+    entities = {item["canonical_name"]: item for item in parsed["entities"]}
+    assert entities["MCP"]["entity_type"] == "protocol"  # 合法类型原样保留
+    assert entities["MyCustomThing"]["entity_type"] == "other"  # 非法类型降级
+    assert len(parsed["entities"]) == 2  # 两条都保留，未炸块
+
+
 def test_claim_prompt_excludes_facts_and_command_documentation():
     prompt = build_extraction_prompt(
         block_id="blk_test",
@@ -315,6 +338,10 @@ def test_extraction_prompt_embeds_noise_gate_and_variant_dedup_rules():
     assert "@file、@tool" in prompt
     assert "AGENT_TRIGGERS" in prompt
     assert "200K token" in prompt
+    # 实体/概念判别与普通英文词规则
+    assert "一律放入 entities" in prompt
+    assert "所有英文常用词不得输出" in prompt
+    assert "amount、city、fetch" in prompt
 
     batch = build_batch_extraction_prompt(
         [

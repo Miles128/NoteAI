@@ -127,6 +127,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "retry_convert_file",
     "retry_ingest",
     "reveal_in_finder",
+    "resolve_cross_kind_merges",
     "review_semantic_conflict",
     "review_semantic_entity_quality",
     "run_cli_agent",
@@ -158,6 +159,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "topic_meta",
     "uninstall_component",
     "update_semantic_claim",
+    "verify_claims_batch",
     "verify_semantic_claim",
 ];
 
@@ -166,6 +168,9 @@ fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         "rag_chat" => 60,
         "verify_semantic_claim" => 360,
+        // 批量长任务：全量命题核查 / 同名双表裁决可达 10-30 分钟
+        "verify_claims_batch" => 3600,
+        "resolve_cross_kind_merges" => 1800,
         "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
         | "rag_rebuild_index" | "cancel_ingest" => 120,
         _ => 60,

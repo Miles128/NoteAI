@@ -191,6 +191,9 @@
     "qualityAddedToInbox": "已加入 Inbox",
     "enqueueAllCrossKind": "全部同名双表入 Inbox",
     "enqueueAllCrossKindDone": "已将 {count} 组同名双表候选加入 Inbox",
+    "resolveAllCrossKind": "AI 自动裁决同名双表",
+    "resolveAllCrossKindConfirm": "将用 AI 批量裁决 Inbox 中的同名双表候选并自动合并/保留，确定继续？",
+    "resolveAllCrossKindDone": "已裁决 {total} 组：合并 {merged}、保留 {kept}、留人工 {skipped}",
     "mergePreview": "对象合并影响预览",
     "mergeImpact": "影响范围",
     "mergeImpactSummary": "{mentions} 次出现 · {aliases} 个别名 · {relations} 条关系",
@@ -206,7 +209,8 @@
       "dangling_relation": "关系悬空",
       "alias_conflict": "别名冲突",
       "duplicate_candidate": "疑似重复",
-      "cross_kind_duplicate": "同名双表"
+      "cross_kind_duplicate": "同名双表",
+      "unlikely_entity_name": "疑似普通英文词"
     },
     "changes": {
       "title": "知识变化",

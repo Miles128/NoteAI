@@ -17,10 +17,11 @@ from prompts import (
     SEMANTIC_OBJECT_NAME_RULES,
     SEMANTIC_REPAIR_SUFFIX,
 )
+from sidecar.semantic.english_common_words import _COMMON_ENGLISH_WORDS
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 5
+PROMPT_VERSION = 8
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
 # variant-spelling dedup rules are spelled out so the model never emits them
 # in the first place. validate_extraction below remains the hard fallback.
@@ -61,6 +62,17 @@ _HYPOTHESIS_MARKERS = re.compile(
     r"hypothes(?:is|ize|ized)|unverified)",
     re.IGNORECASE,
 )
+# 主观评价/价值判断（最强大、更好用、友好度最高、优先级 P1、no.1、best）：
+# 这类陈述无法用事实证据证实或证伪，不是 conclusion/hypothesis 的合格候选。
+# 只覆盖纯主观评价词；事实性比较（最高/最低/最快/更强/更好/最佳实践/信号最强处）放行。
+_SUBJECTIVE_COMPARATIVE_RE = re.compile(
+    r"(?:最(?:好|强大|优秀|出色|合适|适合|友好|流行|受欢迎|方便|好用|理想|完美|推荐)|"
+    r"更好(?:用|看|使)|更(?:友好|方便|好用|完美|出色)|"
+    r"最佳(?!实践)(?:选择|选项|方案|工具|模型|组合|平衡点|体验|效果)?|"
+    r"优先级\s*P\d|no\.?\s*1|"
+    r"(?:the\s+)?best(?:est)?\b|strongest|easiest|most\s+popular|most\s+friendly|highly\s+recommended)",
+    re.IGNORECASE,
+)
 
 # 噪声对象名确定性过滤：拦截把文件名、章节标题、纯符号/数字等抽成实体/概念。
 _FILE_SUFFIX_RE = re.compile(
@@ -88,6 +100,56 @@ _UPPER_UNDERSCORE_RE = re.compile(r"^[A-Z][A-Z0-9_]*_[A-Z0-9_]+$")
 # 数字+单位开头（200K token、8GB显存）：量纲描述不是实体。
 # 要求数字后紧跟 K/M/B 单位字母，避免误杀 36 氪、11 Labs 这类专名。
 _NUMERIC_PREFIX_RE = re.compile(r"^\d+[KMBkmb]+\s|^\d+\s*[×xX*]\s*\d")
+# 中文量纲开头（200 份 JD、420亿美元、500+ 项目）：数量短语不是对象名。
+# 单位词限定 个/份/篇/亿/万/+/%，避免误杀 36 氪、11 Labs、3Blue1Brown。
+_QUANTITY_PREFIX_RE = re.compile(r"^\d+\s*[个份篇亿万+%]")
+# HTTP 状态码（200 OK、404 找不到、503 服务不可用）：被 LLM 当成"协议实体"。
+# 词表限定状态词/中文状态描述，避免误杀 360 安全卫士、101 大厦 这类 3 位数字专名。
+_HTTP_STATUS_RE = re.compile(
+    r"^[1-5]\d\d[\s\u4e00-\u9fffA-Za-z]*?"
+    r"(?:OK|Created|Accepted|Moved|Found|Bad\s?Request|Unauthorized|Forbidden|Not\s?Found|"
+    r"服务器|请求|错误|没登录|没权限|找不到|搬家|跳转|网关|炸了|服务不可用|响应超时)",
+    re.IGNORECASE,
+)
+# 引文/论文标题（Rumelhart et al. (1986)、Andrej Karpathy. A Recipe (2019)）：
+# 含 et al、作者名+年份、末尾/括号年份引注都是引用格式，不是知识对象。
+# 括号年份命中时若同名主体对象存在（如 Batch Normalization（2015）），
+# 杀注解变体正确；主体缺失的论文标题（Emergent Abilities of LLMs）也按噪音处理。
+_CITATION_RE = re.compile(
+    r"et al\.|,\s*[A-Z][a-z]+(?:\s*&\s*[A-Z][a-z]+)*\s*[（(](?:19|20)\d{2}[)）]|"
+    r"[（(](?:19|20)\d{2}[)）]\s*$|(?:19|20)\d{2}\s*$",
+    re.IGNORECASE,
+)
+# 随机混合码（5038HVQRHO、AEARMS3JN0、S9XTOGN1W1）：全大写数字 8+ 位且含数字。
+# 纯字母缩写（REINFORCE、RAG、BM25）不含数字不命中；大小写混合（3Blue1Brown）不命中。
+_RANDOM_CODE_RE = re.compile(r"^[A-Z0-9]{8,}$")
+
+# 全小写英文词（3-12 字母）：普通英文常用词门禁。
+_LOWERCASE_WORD_RE = re.compile(r"^[a-z]{3,12}$")
+
+# 英文常用词黑名单（基础词 + 高频屈折形态）：普通名词/动词/形容词/副词、
+# 功能词与技术泛词（data/model/system）在语义库里几乎不可能是具名对象。
+# 词表来自 Google Trillion Word Corpus 词频表前 3000 词（english_common_words.py），
+# 收录词干与常见 -s/-ed/-ing/-er 形态；弱词干兜底见 _is_common_english_word。
+
+# 英文专名白名单（规则预设）：知名库/工具/框架/算法/平台/算子名，全小写且
+# 不在常用词表内。命中白名单的对象名不被常用词门禁拦截。
+_ALLOWED_ENGLISH_OBJECT_NAMES = frozenset(
+    ["aider", "bcrypt", "checkpointer", "curl", "dotenv", "esbuild", "goose", "helmet", "jieba", "lucia", "matplotlib", "morgan", "npm", "numpy", "nvm", "openpyxl", "pandas", "pgvector", "pino", "pnpm", "postgres", "puppeteer", "pyenv", "pyqlib", "ripgrep", "seccomp", "stdio", "tiktoken", "uvicorn", "yarn", "yfinance", "grad", "tanh", "vmap", "pmap", "jit", "localhost", "fastapi", "flask", "django", "pytorch", "tensorflow", "redis", "kafka", "mysql", "sqlite", "python", "node", "docker", "git", "rust", "java", "golang", "postgresql", "mongodb", "elasticsearch", "chromadb", "vectorstore", "pandas", "numpy", "matplotlib", "scipy", "pillow", "ffmpeg", "gunicorn", "uvicorn", "celery", "sqlalchemy", "requests", "asyncio", "pytest", "prefect", "airflow", "dbt", "terraform", "ansible", "kubernetes", "prometheus", "grafana", "okta", "auth0", "sentry", "newrelic", "datadog"]
+)
+
+
+def _is_common_english_word(name: str) -> bool:
+    """True if a lowercase word is a common English word (direct or weak-stem
+    match, e.g. ``managed`` → ``manage``, ``bundled`` → ``bundle``)."""
+    if name in _COMMON_ENGLISH_WORDS:
+        return True
+    for suffix in ("ing", "ed", "er", "ies", "es", "s"):
+        if len(name) > len(suffix) + 3 and name.endswith(suffix):
+            stem = name[: -len(suffix)]
+            if stem in _COMMON_ENGLISH_WORDS or stem + "e" in _COMMON_ENGLISH_WORDS:
+                return True
+    return False
 # 长句含中文标点（3步申请，24小时放款）：广告/流程描述被当成概念。
 _LONG_SENTENCE_RE = re.compile(r"[，。；、！？]")
 
@@ -126,6 +188,21 @@ def _is_noise_object_name(name: str) -> bool:
         return True  # AGENT_TRIGGERS 这类环境变量/配置键
     if _NUMERIC_PREFIX_RE.match(name):
         return True  # 200K token、8GB显存、3×3网格 这类量纲描述
+    if _QUANTITY_PREFIX_RE.match(name):
+        return True  # 200 份 JD、420亿美元、500+ 项目 这类数量短语
+    if _HTTP_STATUS_RE.match(name):
+        return True  # 200 OK、404 找不到、503 服务不可用 这类 HTTP 状态码
+    if _CITATION_RE.search(name):
+        return True  # Rumelhart et al. (1986)、Andrej Karpathy. A Recipe (2019) 这类引文
+    if _RANDOM_CODE_RE.match(name) and any(c.isdigit() for c in name):
+        return True  # 5038HVQRHO、AEARMS3JN0 这类随机混合码
+    if _LOWERCASE_WORD_RE.match(name):
+        # 普通英文常用词门禁：白名单（知名库/工具/算子名）放行，
+        # 黑名单（常用词/技术泛词/屈折形态）一律拒绝。
+        if name in _ALLOWED_ENGLISH_OBJECT_NAMES:
+            pass
+        elif _is_common_english_word(name):
+            return True
     if len(name) > 20 and _LONG_SENTENCE_RE.search(name):
         return True  # 长句含中文标点：广告/流程描述被当成对象
     if _TITLE_MARKER_RE.search(name):
@@ -260,6 +337,8 @@ def _claim_has_required_judgment(statement: str, claim_type: str) -> bool:
     """
     if _OPINION_MARKERS.search(statement):
         return False
+    if _SUBJECTIVE_COMPARATIVE_RE.search(statement):
+        return False  # 主观评价/价值判断（最强大、更好用、优先级 P1）非事实结论
     if claim_type == "hypothesis":
         return _HYPOTHESIS_MARKERS.search(statement) is not None
     return _CONCLUSION_MARKERS.search(statement) is not None
@@ -318,7 +397,11 @@ def validate_extraction(
         if not name:
             raise ExtractionValidationError("entity 缺少 name")
         if entity_type not in _ENTITY_TYPES:
-            raise ExtractionValidationError(f"不支持的 entity type: {entity_type}")
+            # 非法类型降级为 other 并计数，而不是炸掉整块：与 claims 的
+            # 单条拒绝哲学一致（一个坏候选不能丢弃同块其他有效对象）。
+            entity_type = "other"
+            if rejections is not None:
+                rejections["entities_type_fallback"] = rejections.get("entities_type_fallback", 0) + 1
         if _is_noise_object_name(name):
             continue
         result["entities"].append(

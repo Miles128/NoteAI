@@ -146,6 +146,22 @@ GOLDEN_GATE_CASES: list[tuple[str, str, bool]] = [
     ("I think this approach is better", "conclusion", False),
     ("作者认为该基准不足以衡量真实能力", "conclusion", True),
     ("论文指出该方案值得在更大语料上复现", "conclusion", True),
+    # --- round 4: subjective value judgments must be rejected ----------------
+    ("ComfyUI 是最强大的 AI 图像生成工具", "conclusion", False),
+    ("Cursor 的 Tab 补全体验最佳", "conclusion", False),
+    ("该方案是当前的最佳选择", "conclusion", False),
+    ("建议优先实现该功能，优先级 P1", "conclusion", False),
+    ("X 更好用", "conclusion", False),
+    ("Suno 是生成音乐的最佳工具", "conclusion", False),
+    ("React Native 是 AI 生成移动端 App 的最佳选择", "conclusion", False),
+    ("Claude Code CLI 是最强大的 CLI Agent", "conclusion", False),
+    # 事实性比较/术语仍然放行（避免误杀）
+    ("在该数据集上混合检索优于纯向量检索", "conclusion", True),
+    ("GoogLeNet 以远少于 AlexNet 的参数实现了更好的性能", "conclusion", True),
+    ("分层评估是评估 Agent 的最佳实践", "conclusion", True),
+    ("最大池化关注信号最强处", "conclusion", True),
+    ("UMAP 在 t-SNE 基础上实现了更好的性能", "conclusion", True),
+    ("Chinchilla 给出的是给定计算预算下的最优配比", "conclusion", True),
 ]
 
 
@@ -402,6 +418,71 @@ NOISE_NAMES = [
     "2.5.1",
     "12345",
     "...",
+    # HTTP 状态码被抽成"协议实体"
+    "200 OK",
+    "201 Created",
+    "301 永久搬家",
+    "404 找不到",
+    "500 服务器炸了",
+    "503 服务不可用",
+    # 引文 / 论文标题
+    "Rumelhart, Hinton & Williams (1986)",
+    "Hochreiter & Schmidhuber (1997)",
+    "He, K., et al. (2015). Delving Deep into Rectifiers. ICCV 2015",
+    "Andrej Karpathy. A Recipe for Training Neural Networks (2019)",
+    "Are Emergent Abilities a Mirage? (Schaeffer et al., 2023)",
+    "Batch Normalization（2015）",
+    # 随机混合码 / 股票代码
+    "5038HVQRHO",
+    "AEARMS3JN0",
+    "S9XTOGN1W1",
+    "SH600519",
+    # 中文量纲 / 数量短语
+    "200 份 JD 真相",
+    "200个AI产品经理JD",
+    "420亿美元",
+    "500+ AI Agent Projects",
+    # 英文常用词（黑名单门禁）
+    "fetch",
+    "local",
+    "bundled",
+    "managed",
+    "manifesting",
+    "interrupt",
+    "researcher",
+    "reviewer",
+    "writer",
+    "amount",
+    "city",
+    "unit",
+    "users",
+    "orders",
+    "todos",
+    "search",
+    "calculator",
+    "finalize",
+    "coder",
+    "main",
+    "only",
+    "vibe",
+    "vision",
+    "warmup",
+    "border",
+    "margin",
+    "padding",
+    "gap",
+    "plugin",
+    "inline",
+    "ignore",
+    "approval",
+    "filesystem",
+    "source",
+    "description",
+    "data",
+    "model",
+    "system",
+    "output",
+    "status",
 ]
 
 VALID_NAMES = [
@@ -421,6 +502,30 @@ VALID_NAMES = [
     "MCP Server",
     "ChatBot",
     "Anthropic",
+    # 白名单放行的英文专名（库/工具/算子名）
+    "pandas",
+    "numpy",
+    "curl",
+    "jieba",
+    "matplotlib",
+    "pgvector",
+    "postgres",
+    "fastapi",
+    "pytorch",
+    "tensorflow",
+    "redis",
+    "kafka",
+    "tiktoken",
+    "dotenv",
+    "ripgrep",
+    "pyenv",
+    "pnpm",
+    "yarn",
+    "uvicorn",
+    "helm",
+    "tanh",
+    "grad",
+    "vmap",
 ]
 
 
@@ -434,6 +539,17 @@ def test_noise_object_name_gate_keeps_real_objects() -> None:
     """Versioned model names, orgs and capitalised products must survive."""
     dropped = [name for name in VALID_NAMES if _is_noise_object_name(name)]
     assert not dropped, f"以下真实对象被误杀: {dropped}"
+
+
+def test_prompt_version_advances_with_rules_changes() -> None:
+    """提示词规则（OBJECT_NAME_RULES）与 PROMPT_VERSION 必须联动：
+    任何规则变更都必须递增版本号，否则存量块不会重抽，新规则形同虚设。"""
+    from sidecar.semantic.extractor import PROMPT_VERSION
+    from prompts import SEMANTIC_OBJECT_NAME_RULES
+
+    assert PROMPT_VERSION >= 7, "PROMPT_VERSION 必须随提示词规则变更递增（当前规则为 v7）"
+    assert "所有英文常用词不得输出" in SEMANTIC_OBJECT_NAME_RULES
+    assert "实体与概念的区别" in SEMANTIC_OBJECT_NAME_RULES
 
 
 def test_noise_names_never_reach_storage(tmp_path: Path) -> None:

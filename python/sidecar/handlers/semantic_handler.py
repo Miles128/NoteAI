@@ -521,6 +521,33 @@ class SemanticHandler(BaseHandler):
         finally:
             CliAgentHandler._cli_agent_lock.release()
 
+    def _verify_claims_batch(self, params):
+        """内置 LLM 批量核查命题真伪（不依赖外部 CLI agent），结果落库。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        claims = store.list_claims_for_verification(limit=5000)
+        if not claims:
+            return {"success": True, "total": 0, "stats": {}, "message": "暂无可核查命题"}
+        scope = str(params.get("scope", "") or "").strip().casefold()
+        if scope:
+            claims = [c for c in claims if scope in str(c.get("scope", "")).casefold()]
+        limit = int(params.get("limit") or 0)
+        if limit > 0:
+            claims = claims[:limit]
+        # 幂等：默认跳过已有验证结果的命题；force=true 可全量重验证
+        # （Rust 侧超时后重试不会重复跑已完成的 20 分钟全量任务）。
+        if params.get("force") is not True:
+            with store.connect() as conn:
+                verified = {
+                    row[0]
+                    for row in conn.execute("SELECT DISTINCT claim_id FROM claim_verifications")
+                }
+            claims = [c for c in claims if c["id"] not in verified]
+        from sidecar.semantic.claim_verifier import verify_claims_batch
+
+        return verify_claims_batch(store, claims)
+
     def _get_note_semantic_context(self, params):
         path = str(params.get("path", "") or "").replace("\\", "/")
         store = self._store()
@@ -770,6 +797,7 @@ class SemanticHandler(BaseHandler):
                 "alias_conflict",
                 "duplicate_candidate",
                 "cross_kind_duplicate",
+                "unlikely_entity_name",
             ),
             0,
         )
@@ -893,6 +921,16 @@ class SemanticHandler(BaseHandler):
             count += 1
         return {"success": True, "count": count, "message": f"已将 {count} 组同名双表候选加入 Inbox"}
 
+    def _resolve_cross_kind_merges(self, params):
+        """用 LLM 批处理裁决 Inbox 中的同名双表候选并自动执行。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.cross_kind_resolver import resolve_cross_kind_merges
+
+        dry_run = params.get("dry_run") is True
+        return resolve_cross_kind_merges(store, dry_run=dry_run)
+
     def _get_entity_merge_preview(self, params):
         source_id = str(params.get("source_id", "") or "")
         target_id = str(params.get("target_id", "") or "")
@@ -1004,6 +1042,7 @@ class SemanticHandler(BaseHandler):
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
         router.register("enqueue_cross_kind_semantic_merges", self._enqueue_cross_kind_merges)
+        router.register("resolve_cross_kind_merges", self._resolve_cross_kind_merges)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)
         router.register("merge_semantic_entities", self._merge_entities)
         router.register("update_semantic_claim", self._update_claim)
@@ -1011,6 +1050,7 @@ class SemanticHandler(BaseHandler):
         router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
         router.register("verify_semantic_claim", self._verify_claim)
+        router.register("verify_claims_batch", self._verify_claims_batch)
         router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)

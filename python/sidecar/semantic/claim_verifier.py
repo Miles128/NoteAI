@@ -4,15 +4,19 @@
 自带联网能力做多轮深度研究后，输出结构化判定
 （verdict/confidence/summary/sources）写入 SemanticStore 的
 claim_verifications 表，供语义工作台只读展示。
+
+内置批量模式（verify_claims_batch）不依赖外部 agent：用项目自身 LLM 能力
+批量判定命题真伪，结果同样写入 claim_verifications（method='llm'）。
 """
 
 from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
-from prompts import CLAIM_VERIFY_CLI_PROMPT
+from prompts import CLAIM_BATCH_VERIFY_PROMPT, CLAIM_VERIFY_CLI_PROMPT
 from sidecar.semantic.store import SemanticStore
 
 VERDICTS = {"supported", "refuted", "unclear"}
@@ -224,3 +228,119 @@ def verify_statement_via_cli(
     except ValueError as exc:
         return {"success": False, "message": f"CLI 深度研究已完成，但输出无法解析：{exc}", "output": output[-4000:]}
     return {"success": True, **parsed, "method": "cli", "agent": agent_id, "output": output}
+
+
+def parse_batch_verification_json(raw: str) -> dict[int, dict]:
+    """Extract claim_id → verdict dict from a batched LLM output.
+
+    Tolerates fences, embedded JSON and partial batches; invalid entries are
+    dropped (the claim is left unverified rather than mislabelled).
+    """
+    text = (raw or "").strip()
+    stripped = _FENCE.sub("", text).strip()
+    candidates = [stripped] if stripped else []
+    candidates.extend(_extract_json_candidates(text))
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("results"), list):
+            continue
+        results: dict[int, dict] = {}
+        for item in parsed["results"]:
+            if not isinstance(item, dict):
+                continue
+            try:
+                claim_id = int(item.get("claim_id"))
+            except (TypeError, ValueError):
+                continue
+            verdict = str(item.get("verdict") or "").strip().lower()
+            if verdict not in VERDICTS:
+                continue
+            results[claim_id] = {
+                "verdict": verdict,
+                "confidence": _clamp(item.get("confidence")),
+                "reason": str(item.get("reason") or "").strip()[:200],
+            }
+        return results
+    return {}
+
+
+def build_batch_verify_prompt(claims: list[dict]) -> str:
+    lines = []
+    for index, claim in enumerate(claims, 1):
+        lines.append(
+            f"Claim {index}:\n"
+            f"  陈述: {claim['statement']}\n"
+            f"  适用范围: {claim.get('scope') or '（无）'}"
+        )
+    return CLAIM_BATCH_VERIFY_PROMPT.format(claims="\n\n".join(lines))
+
+
+def verify_claims_batch(
+    store: SemanticStore,
+    claims: list[dict],
+    llm_call=None,
+    *,
+    batch_size: int = 40,
+    agent: str = "builtin",
+) -> dict:
+    """内置批量命题真伪核查：分批 LLM 裁决并写入 claim_verifications。
+
+    ``llm_call(prompt) -> str`` 可注入（测试用）；默认用 call_llm_raw。
+    结果落库 method='llm'；单批失败不影响其他批。返回统计与明细。
+    """
+    if llm_call is None:
+        from utils.llm_utils import call_llm_raw
+
+        def llm_call(prompt: str) -> str:
+            return call_llm_raw(prompt, temperature=0.0)
+
+    if not claims:
+        return {"success": True, "total": 0, "outcomes": [], "stats": {}}
+    stats: dict[str, int] = {"supported": 0, "refuted": 0, "unclear": 0, "failed": 0}
+    outcomes: list[dict] = []
+    for start in range(0, len(claims), batch_size):
+        batch = claims[start : start + batch_size]
+        prompt = build_batch_verify_prompt(batch)
+        raw = ""
+        try:
+            raw = llm_call(prompt)
+        except Exception as exc:
+            stats["failed"] += len(batch)
+            outcomes.append({"batch": start // batch_size, "error": str(exc)})
+            continue
+        verdicts = parse_batch_verification_json(raw)
+        # LLM 对每批输出批内序号 1..n，与 batch 内枚举对齐
+        for index, claim in enumerate(batch, 1):
+            result = verdicts.get(index)
+            if result is None:
+                stats["failed"] += 1
+                outcomes.append(
+                    {"claim_id": claim["id"], "statement": claim["statement"], "verdict": "missing"}
+                )
+                continue
+            verification = store.save_claim_verification(
+                claim_id=claim["id"],
+                verdict=result["verdict"],
+                confidence=result["confidence"],
+                summary=result["reason"],
+                method="llm",
+                agent=agent,
+            )
+            stats[result["verdict"]] += 1
+            outcomes.append(
+                {
+                    "claim_id": claim["id"],
+                    "statement": claim["statement"],
+                    "verdict": result["verdict"],
+                    "confidence": result["confidence"],
+                    "reason": result["reason"],
+                    "saved": verification is not None,
+                }
+            )
+        time.sleep(0.5)  # 批间限速
+    return {"success": True, "total": len(claims), "outcomes": outcomes, "stats": stats}

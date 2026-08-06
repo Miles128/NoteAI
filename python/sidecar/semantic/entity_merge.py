@@ -31,7 +31,7 @@ def _locate(conn, object_id: str) -> dict | None:
     return None
 
 
-def merge_entities(store: SemanticStore, source_id: str, target_id: str) -> dict:
+def merge_entities(store: SemanticStore, source_id: str, target_id: str, *, rebuild: bool = True) -> dict:
     """Merge ``source_id`` into ``target_id`` in one transaction, then rebuild
     the affected semantic pages. Returns the RPC-ready result dict.
 
@@ -39,6 +39,9 @@ def merge_entities(store: SemanticStore, source_id: str, target_id: str) -> dict
     are inferred from the store. Mentions, relations and aliases of the source
     move to the target, the source's canonical name becomes an alias of the
     target, the source row goes inactive, and the change is audited.
+
+    ``rebuild=False`` skips the semantic-page materialization (topics/object
+    collections) so callers can merge many pairs first and rebuild once.
     """
     affected_topics: set[str] = set()
     affected_concept_ids: set[str] = set()
@@ -184,10 +187,22 @@ def merge_entities(store: SemanticStore, source_id: str, target_id: str) -> dict
             "aliases_added": aliases,
         }
         SemanticStore._audit(
-            conn, action="merge_entity", object_kind=target_kind, object_id=target_id,
-            before=before, after=after,
+            conn,
+            action="merge_entity",
+            object_kind=target_kind,
+            object_id=target_id,
+            before=before,
+            after=after,
         )
     materialized = []
+    if not rebuild:
+        return {
+            "success": True,
+            "target_id": target_id,
+            "affected_topics": sorted(affected_topics),
+            "affected_concept_ids": sorted(affected_concept_ids),
+            "message": f"已将「{source['canonical_name']}」（{_KIND_LABEL[source_kind]}）合并到「{target['canonical_name']}」（{_KIND_LABEL[target_kind]}）",
+        }
     try:
         from sidecar.semantic.object_wiki import materialize_object_collection
         from sidecar.semantic.topic_state import materialize_topic_state

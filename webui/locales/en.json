@@ -191,6 +191,9 @@
     "qualityAddedToInbox": "Added to Inbox",
     "enqueueAllCrossKind": "Enqueue all same-name cross-kind pairs",
     "enqueueAllCrossKindDone": "Added {count} same-name cross-kind candidates to Inbox",
+    "resolveAllCrossKind": "AI auto-resolve cross-kind pairs",
+    "resolveAllCrossKindConfirm": "AI will batch-judge pending same-name pairs and auto-merge/keep them. Continue?",
+    "resolveAllCrossKindDone": "Resolved {total} pairs: {merged} merged, {kept} kept, {skipped} left for review",
     "mergePreview": "Object merge impact preview",
     "mergeImpact": "Impact scope",
     "mergeImpactSummary": "{mentions} mentions · {aliases} aliases · {relations} relations",
@@ -206,7 +209,8 @@
       "dangling_relation": "Dangling relation",
       "alias_conflict": "Alias conflict",
       "duplicate_candidate": "Possible duplicate",
-      "cross_kind_duplicate": "Same name in both tables"
+      "cross_kind_duplicate": "Same name in both tables",
+      "unlikely_entity_name": "Likely common English word"
     },
     "changes": {
       "title": "Knowledge changes",

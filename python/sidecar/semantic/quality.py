@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from sidecar.semantic.store import SemanticStore
 from sidecar.semantic.store_objects import name_fingerprint
@@ -136,6 +137,15 @@ def collect_quality_issues(store: SemanticStore) -> list[dict]:
             add("uncontrolled_type", entity, "实体缺少受控类型")
         if not str(entity.get("description") or "").strip():
             add("missing_description", entity, "实体缺少说明描述")
+
+        # 全小写普通英文词 + 类型兜底 other：几乎不可能是具名对象
+        # （合法库名 pandas/numpy/curl 的类型是 product/artifact，从不落 other）。
+        name = str(entity["canonical_name"] or "")
+        if (
+            entity["entity_type"] == "other"
+            and re.fullmatch(r"[a-z]{3,12}", name)
+        ):
+            add("unlikely_entity_name", entity, "小写普通英文词被当作实体，疑似分类错误")
 
         name_key = normalized_entity_name(entity["canonical_name"])
         duplicate_ids = [value for value in canonical_groups.get(name_key, []) if value != entity_id]

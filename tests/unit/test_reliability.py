@@ -63,7 +63,9 @@ def test_create_note_from_draft_triggers_crossref_task(workspace: Path) -> None:
         _start_task=fake_start_task,
     )
     handler = FilesHandler(srv)
-    res = handler._create_note_from_draft({"title": "触发交叉引用", "topic": "", "content": "# 触发交叉引用\n\n正文。\n"})
+    res = handler._create_note_from_draft(
+        {"title": "触发交叉引用", "topic": "", "content": "# 触发交叉引用\n\n正文。\n"}
+    )
     assert res["success"] is True
     assert any(name.startswith("suggest_links_") and args for name, args, _kwargs in started)
 

@@ -176,9 +176,7 @@ def test_empty_retrieval_switches_to_no_evidence_prompt(monkeypatch, tmp_path) -
     captured = {}
     monkeypatch.setattr(
         "sidecar.classic_retriever.retrieve",
-        lambda *_args, **_kwargs: [
-            {"content": "综述内容", "file_path": "wiki/topic.md", "source_type": "survey"}
-        ],
+        lambda *_args, **_kwargs: [{"content": "综述内容", "file_path": "wiki/topic.md", "source_type": "survey"}],
     )
 
     def fake_stream(prompt, **kwargs):

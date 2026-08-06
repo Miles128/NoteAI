@@ -319,9 +319,7 @@ def test_cross_kind_merge_moves_mentions_and_relations_into_target_kind(
         )
         conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-1')")
 
-    merged = semantic_handler._merge_entities(
-        {"source_id": "entity-1", "target_id": "concept-2", "confirmed": True}
-    )
+    merged = semantic_handler._merge_entities({"source_id": "entity-1", "target_id": "concept-2", "confirmed": True})
 
     assert merged["success"] is True
     assert "概念" in merged["message"]
@@ -371,7 +369,9 @@ def test_cross_kind_resolver_merges_concept_into_entity(semantic_handler: Semant
     with store.connect() as conn:
         # 概念并入实体：概念行已删、实体保留、该对 issue 已审（另一对因 entity-3 存在而 skip）
         assert conn.execute("SELECT count(*) FROM concepts WHERE id = 'concept-2'").fetchone()[0] == 0
-        assert conn.execute("SELECT count(*) FROM entities WHERE id = 'entity-1' AND status = 'active'").fetchone()[0] == 1
+        assert (
+            conn.execute("SELECT count(*) FROM entities WHERE id = 'entity-1' AND status = 'active'").fetchone()[0] == 1
+        )
         pending = conn.execute(
             "SELECT count(*) FROM review_queue WHERE item_kind = 'entity_quality' AND status = 'pending'"
         ).fetchone()[0]
@@ -383,7 +383,9 @@ def test_cross_kind_resolver_keeps_distinct_pairs_and_parses_partial_batch(
 ) -> None:
     from sidecar.semantic.cross_kind_resolver import parse_verdicts, resolve_cross_kind_merges
 
-    parsed = parse_verdicts('前文 {"pairs": [{"pair_id": 2, "verdict": "keep_both"}, {"pair_id": 3, "verdict": "merge_concept", "reason": "x"}]} 后文')
+    parsed = parse_verdicts(
+        '前文 {"pairs": [{"pair_id": 2, "verdict": "keep_both"}, {"pair_id": 3, "verdict": "merge_concept", "reason": "x"}]} 后文'
+    )
     assert parsed == {2: "keep_both", 3: "merge_concept"}
 
     store = SemanticStore(semantic_handler.config.workspace_path)

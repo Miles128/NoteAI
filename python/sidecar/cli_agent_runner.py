@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sidecar.cli_agent import list_available_agents, run_cli_agent
 
 __all__ = ["list_available_agents", "run_cli_agent"]

@@ -316,7 +316,7 @@ async function showDeleteTopicFolderConfirm(path, name) {
             return;
         }
 
-        var fileResult = await window.api.invoke('delete_file', { path: path });
+        var fileResult = await window.api.deleteFile(path);
         if (fileResult && fileResult.success) {
             window.TreeModule.loadFileTree();
         } else {
@@ -397,7 +397,7 @@ function showDeleteConfirm(itemEl, path, name) {
 async function doDeleteFile(path, name, confirmBar) {
     if (confirmBar) confirmBar.remove();
     try {
-        var result = await window.api.invoke('delete_file', { path: path });
+        var result = await window.api.deleteFile(path);
         if (result && result.success) {
             if (selectedFilePath === path) {
                 setSelectedFile(null, null);
@@ -412,15 +412,15 @@ async function doDeleteFile(path, name, confirmBar) {
 }
 
 function revealInFinder(path) {
-    if (window.api && window.api.invoke) {
-        window.api.invoke('reveal_in_finder', { path: path });
+    if (window.api && window.api.revealInFinder) {
+        window.api.revealInFinder(path);
     }
 }
 
 async function deleteFile(path, name) {
     if (!(await window._customConfirm(window.t('tree.confirmDeleteItem', { name: name })))) return;
-    if (window.api && window.api.invoke) {
-        window.api.invoke('delete_file', { path: path }).then(function(result) {
+    if (window.api && window.api.deleteFile) {
+        window.api.deleteFile(path).then(function(result) {
             if (result && result.success) {
                 window.TreeModule.loadFileTree();
             } else {
@@ -533,7 +533,8 @@ document.addEventListener('contextmenu', function(e) {
 });
 
 var _virtualScrollRAF = null;
-document.addEventListener('DOMContentLoaded', function() {
+// 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接初始化（不再依赖 DOMContentLoaded 重放）
+(function() {
     initTreeFileCountSetting();
     var container = document.getElementById('file-tree');
     if (container) {
@@ -547,7 +548,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-});
+})();
 
 var _lastFileTreeData = null;
 var _flatVisibleNodes = null;
@@ -853,11 +854,6 @@ function selectFile(path, fileName) {
         if (graphBtn) graphBtn.classList.remove('active');
     }
 
-    var pendingLinksPanel = document.getElementById('pending-links-panel');
-    if (pendingLinksPanel && pendingLinksPanel.style.display !== 'none') {
-        pendingLinksPanel.style.display = 'none';
-    }
-
     var pendingPanel = document.getElementById('topic-pending-panel');
     if (pendingPanel && pendingPanel.style.display !== 'none') {
         pendingPanel.style.display = 'none';
@@ -865,11 +861,6 @@ function selectFile(path, fileName) {
 
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(path, fileName);
-    }
-    if (window.AppState.currentSidebarView === 'graph') {
-        if (window.LinksModule && window.LinksModule.loadGraphView) {
-            window.LinksModule.loadGraphView();
-        }
     }
 }
 
@@ -928,7 +919,11 @@ window.toggleGraphPanel = function() {
             }
         }
 };
-window.togglePendingLinksPanel = function() { window.LinksModule && window.LinksModule.togglePendingLinksPanel(); };
+window.togglePendingLinksPanel = function() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.show) {
+        window.SemanticWorkbenchModule.show('links');
+    }
+};
 window.loadRelationGraphData = function() {
     if (window.Graph3Tier && window.Graph3Tier.load) {
         window.Graph3Tier.load();
@@ -940,9 +935,12 @@ window.graphZoomIn = function() {
 window.graphZoomOut = function() {
     if (window.Graph3Tier && window.Graph3Tier.zoomOut) window.Graph3Tier.zoomOut();
 };
-window.onDiscoverLinks = function() { window.LinksModule && window.LinksModule.onDiscoverLinks(); };
-window.onConfirmLink = function(f, t) { window.LinksModule && window.LinksModule.onConfirmLink(f, t); };
-window.onRejectLink = function(f, t) { window.LinksModule && window.LinksModule.onRejectLink(f, t); };
+window.onConfirmLink = function(f, t) {
+    if (window.api && window.api.confirmLink) window.api.confirmLink(f, t);
+};
+window.onRejectLink = function(f, t) {
+    if (window.api && window.api.rejectLink) window.api.rejectLink(f, t);
+};
 
 window.hideTreeContextMenu = hideTreeContextMenu;
 window.revealInFinder = revealInFinder;

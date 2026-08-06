@@ -246,12 +246,7 @@
             var rawContent = result.content || '';
             var text = '';
             try {
-                var bin = atob(rawContent);
-                var bytes = new Uint8Array(bin.length);
-                for (var i = 0; i < bin.length; i++) {
-                    bytes[i] = bin.charCodeAt(i);
-                }
-                text = new TextDecoder('utf-8').decode(bytes);
+                text = window.b64DecodeUtf8(rawContent);
             } catch (e) {
                 text = rawContent;
             }

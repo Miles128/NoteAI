@@ -222,7 +222,7 @@ function createMcpServer(workspacePath) {
   ];
 
   const server = new Server(
-    { name: 'noteai-vault', version: '0.1.0' },
+    { name: 'noteai-vault', version: '1.1.0' },
     { capabilities: { tools: {} } }
   );
 

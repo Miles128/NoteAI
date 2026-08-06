@@ -90,7 +90,7 @@
 .preview-header {
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--chrome-border);
     gap: 10px;
 }
 
@@ -231,7 +231,7 @@
 }
 
 .docx-preview table th {
-    background: var(--bg-hover);
+    background: var(--surface-hover);
     font-weight: 600;
 }
 
@@ -644,4 +644,61 @@
 
 [data-theme="dark"] .pdf-canvas-wrapper canvas {
     box-shadow: none;
+}
+
+/* ============================================================
+   P5：语义页可信度元信息条（preview.js maybeLoadSemanticPageMeta 注入）
+   ============================================================ */
+.semantic-page-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.02);
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+[data-theme="dark"] .semantic-page-meta {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.semantic-page-meta-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.semantic-page-meta-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.semantic-page-meta-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 10px;
+    font-size: 11px;
+    line-height: 1.6;
+    white-space: nowrap;
+    color: #b26a00;
+    background: rgba(183, 101, 0, 0.13);
+}
+
+button.semantic-page-meta-badge {
+    cursor: pointer;
+    font-family: inherit;
+}
+
+button.semantic-page-meta-badge:hover {
+    background: rgba(183, 101, 0, 0.22);
 }

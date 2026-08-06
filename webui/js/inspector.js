@@ -120,12 +120,7 @@
             var rawContent = result.content || '';
             var text = '';
             try {
-                var bin = atob(rawContent);
-                var bytes = new Uint8Array(bin.length);
-                for (var i = 0; i < bin.length; i++) {
-                    bytes[i] = bin.charCodeAt(i);
-                }
-                text = new TextDecoder('utf-8').decode(bytes);
+                text = window.b64DecodeUtf8(rawContent);
             } catch (e) {
                 text = rawContent;
             }
@@ -204,10 +199,11 @@
                 return '<span class="inspector-prop-chip">#' + _escapeHtml(t) + '</span>';
             }).join('');
         }
-        // URL 字段
+        // URL 字段：仅允许 http/https 协议（防 javascript: 等注入）
         if (key === 'url' || key === 'source' || key === '链接') {
-            if (str.startsWith('http')) {
-                return '<a href="' + _escapeHtml(str) + '" target="_blank" rel="noopener">' + _escapeHtml(str) + '</a>';
+            if (/^https?:\/\//i.test(str)) {
+                var safeHref = window.safeUrl ? window.safeUrl(str) : str;
+                return '<a href="' + _escapeHtml(safeHref) + '" target="_blank" rel="noopener">' + _escapeHtml(str) + '</a>';
             }
         }
         // 日期字段
@@ -376,7 +372,5 @@
         getCurrentTab: function() { return _currentTab; }
     };
 
-    document.addEventListener('DOMContentLoaded', function() {
-        init();
-    });
+    // init() 由 main.mjs 在 import 本模块时显式调用，不再监听 DOMContentLoaded
 })();

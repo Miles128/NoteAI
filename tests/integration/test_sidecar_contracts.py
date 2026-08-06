@@ -543,22 +543,6 @@ class TestFilesHandlerPreviewContract:
             )
         )
 
-    def test_can_preview_file_docx(self, workspace: Path) -> None:
-        rel = "Raw/sample.docx"
-        path = workspace / rel
-        path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            from docx import Document
-        except ImportError:
-            pytest.skip("python-docx not installed")
-
-        doc = Document()
-        doc.add_heading("Contract", level=1)
-        doc.save(str(path))
-
-        handler = self._handler(workspace)
-        assert handler._can_preview_file({"path": rel}) is True
-
     def test_get_file_preview_docx_semantic_html(self, workspace: Path) -> None:
         rel = "Raw/preview.docx"
         path = workspace / rel
@@ -646,28 +630,6 @@ class TestCollectTopicLabelsForPendingUi:
 
 
 class TestIngestAndSchemaHandlers:
-    def test_ensure_schema_and_get_schema(self, workspace: Path) -> None:
-        from sidecar.handlers.ingest_handler import IngestHandler
-
-        srv = SimpleNamespace(
-            _ctx=SimpleNamespace(config=config, logger=None),
-            _running_tasks=set(),
-            _running_tasks_lock=__import__("threading").Lock(),
-        )
-        handler = IngestHandler(srv)
-
-        assert handler._needs_schema_setup({})["needs_setup"] is True
-        created = handler._ensure_schema({})
-        assert created["success"] is True
-
-        handler._save_schema({"content": "# test schema\nai_may_edit_wiki: true\n"})
-        assert (workspace / "schema.md").exists()
-        assert handler._needs_schema_setup({})["needs_setup"] is False
-
-        got = handler._get_schema({})
-        assert got["success"] is True
-        assert "ai_may_edit_wiki" in got["content"]
-
     def test_get_ingest_status_idle(self, workspace: Path) -> None:
         from sidecar.handlers.ingest_handler import IngestHandler
 

@@ -7,8 +7,6 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypedDict
 
-from pydantic import SecretStr
-
 from utils.logger import logger
 
 
@@ -142,29 +140,59 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
-def _create_llm(temperature: float = 0.7, max_tokens: int | None = None):
-    """创建 ChatOpenAI 实例（内部复用）"""
+def _create_llm(
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+    *,
+    api_key: str | None = None,
+    api_base: str | None = None,
+    model_name: str | None = None,
+    disable_thinking: bool | None = None,
+):
+    """创建 ChatOpenAI 实例（内部复用）
+
+    api_key / api_base / model_name 未提供时从全局 config 读取；
+    disable_thinking 未提供时取 config.disable_thinking。
+    """
     from langchain_openai import ChatOpenAI
 
     from config import config
 
+    if disable_thinking is None:
+        disable_thinking = bool(getattr(config, "disable_thinking", True))
+    base_url = api_base if api_base is not None else config.api_base
+
     kwargs: dict[str, Any] = {
-        "api_key": config.api_key,
-        "base_url": config.api_base,
-        "model": config.model_name,
+        "api_key": api_key if api_key is not None else config.api_key,
+        "base_url": base_url,
+        "model": model_name if model_name is not None else config.model_name,
         "temperature": temperature,
         "max_tokens": max_tokens or config.max_tokens,
         "request_timeout": 60,
     }
 
-    if getattr(config, "disable_thinking", True):
-        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning
+    if disable_thinking and "deepseek.com" in base_url:
+        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning。
+        # 仅 DeepSeek 支持该参数，其他 provider 一律不传。
         kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
 
     return ChatOpenAI(**kwargs)
 
 
 create_llm = _create_llm
+
+
+def _run_llm_with_timeout(invoke_fn: Callable) -> Any:
+    """在共享线程池中执行 LLM 调用，并施加 90 秒超时保护（与 call_llm_raw 语义一致）"""
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    executor = _get_executor()
+    future = executor.submit(invoke_fn)
+    try:
+        return future.result(timeout=90)
+    except FutureTimeout:
+        future.cancel()
+        raise RuntimeError("LLM 调用超时（90秒）")
 
 
 def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | None = None, **kwargs) -> str:
@@ -180,7 +208,7 @@ def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | N
         chain = prompt | llm
         return chain.invoke(kwargs)
 
-    response = _retry_with_backoff(_invoke)
+    response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -202,8 +230,6 @@ def call_llm_raw(
     max_tokens: int | None = None,
 ) -> str:
     """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
-    from concurrent.futures import TimeoutError as FutureTimeout
-
     if not prompt_text:
         return ""
 
@@ -216,16 +242,7 @@ def call_llm_raw(
         llm = _create_llm(temperature, max_tokens)
         return llm.invoke(prompt_text)
 
-    def _invoke_with_timeout():
-        executor = _get_executor()
-        future = executor.submit(_invoke)
-        try:
-            return future.result(timeout=90)
-        except FutureTimeout:
-            future.cancel()
-            raise RuntimeError("LLM 调用超时（90秒）")
-
-    response = _retry_with_backoff(_invoke_with_timeout)
+    response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
     if hasattr(response, "content"):
         return response.content.strip()
     return str(response).strip()
@@ -256,7 +273,12 @@ def call_llm_raw_stream(
     return _retry_with_backoff(_invoke)
 
 
-def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+def _run_stream_with_timeout(
+    stream_fn: Callable[[], Any],
+    chunk_callback=None,
+    join_timeout: int = 120,
+) -> str:
+    """流式执行通用包装：信号量限流 + 后台线程执行 + join 超时保护（_do_stream 同款结构）"""
     acquired = _LLM_SEMAPHORE.acquire(timeout=60)
     if not acquired:
         raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
@@ -265,16 +287,13 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
 
     def _run():
         try:
-            logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
-            llm = _create_llm(temperature, max_tokens)
             full_text = ""
-            for chunk in llm.stream(prompt_text):
+            for chunk in stream_fn():
                 token = chunk.content if hasattr(chunk, "content") else str(chunk)
                 full_text += token
                 if chunk_callback:
                     chunk_callback(token)
             result["text"] = full_text.strip()
-            logger.info(f"LLM stream done, response length: {len(full_text)}")
         except Exception as e:
             logger.warning(f"[llm_utils] stream error: {e}\n")
             result["error"] = e
@@ -284,17 +303,28 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
-    t.join(timeout=120)
+    t.join(timeout=join_timeout)
 
     if not result["done"]:
-        logger.warning("[llm_utils] stream timeout after 120s")
-        raise RuntimeError("LLM 流式调用超时（120秒）")
+        logger.warning(f"[llm_utils] stream timeout after {join_timeout}s")
+        raise RuntimeError(f"LLM 流式调用超时（{join_timeout}秒）")
 
     stream_error = result["error"]
     if stream_error is not None:
         raise stream_error
 
     return result["text"]
+
+
+def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+    def _stream():
+        logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
+        llm = _create_llm(temperature, max_tokens)
+        return llm.stream(prompt_text)
+
+    text = _run_stream_with_timeout(_stream, chunk_callback)
+    logger.info(f"LLM stream done, response length: {len(text)}")
+    return text
 
 
 def check_api_config() -> tuple[bool, str]:
@@ -385,7 +415,9 @@ def _normalize_api_base(api_base: str) -> str:
     return api_base
 
 
-def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[bool, str]:
+def test_api_connection(
+    api_key: str, api_base: str, model_name: str, disable_thinking: bool | None = None
+) -> tuple[bool, str]:
     """测试 API 连接是否可用"""
     logger.info("[API连接测试] 开始测试连接...")
     logger.info(f"[API连接测试] API Base: {api_base}")
@@ -413,18 +445,26 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[b
     if not url_pattern.match(api_base):
         return False, f"API Base URL 格式无效：{api_base}"
 
+    if disable_thinking is None:
+        try:
+            from config import config as _config
+
+            disable_thinking = bool(getattr(_config, "disable_thinking", True))
+        except Exception:
+            disable_thinking = True
+
     result: list[tuple[bool, str] | None] = [None]
 
     def _test():
         try:
-            from langchain_openai import ChatOpenAI
-
-            llm = ChatOpenAI(
-                api_key=SecretStr(api_key),
-                base_url=api_base,
-                model=model_name,
+            llm = _create_llm(
                 temperature=0,
-                max_completion_tokens=10,
+                # reasoning 模型需预留思考 token，10 会导致部分模型无响应；50 足以完成 "Hi" 的应答
+                max_tokens=50,
+                api_key=api_key,
+                api_base=api_base,
+                model_name=model_name,
+                disable_thinking=disable_thinking,
             )
             response = llm.invoke("Hi")
             if response and hasattr(response, "content"):
@@ -437,10 +477,10 @@ def test_api_connection(api_key: str, api_base: str, model_name: str) -> tuple[b
     thread = threading.Thread(target=_test)
     thread.daemon = True
     thread.start()
-    thread.join(timeout=15)
+    thread.join(timeout=30)
 
     if thread.is_alive():
-        return False, f"API 连接超时（15秒），请检查 API 地址：{api_base}"
+        return False, f"API 连接超时（30秒），请检查 API 地址：{api_base}"
 
     if result[0]:
         is_connected, msg = result[0]
@@ -503,6 +543,33 @@ def compress_with_llm(content: str, compression_level: str = "medium") -> str:
             raise NetworkError("大模型服务连接失败，请检查您的网络连接状态后重试")
         logger.error(f"LLM压缩失败: {e}, 返回原始内容")
         return content
+
+
+def check_content_within_context(
+    content: str,
+    max_context_tokens: int | None = None,
+    model_name: str | None = None,
+) -> tuple:
+    """检查内容是否在上下文窗口内，超出时经 LLM 摘要/压缩/截断处理。
+
+    从 AppConfig 迁移而来的内容处理职责。未显式传入的预算/模型参数
+    从全局 config 单例读取，保持与原实现一致的行为。
+    """
+    from config import config
+
+    budget = config.max_context_tokens if max_context_tokens is None else max_context_tokens
+    model = config.model_name if model_name is None else model_name
+
+    estimated_tokens = _estimate_tokens(content, model)
+
+    if estimated_tokens <= budget:
+        return (True, estimated_tokens, content)
+
+    processed_content, _was_summarized, _was_truncated, final_tokens = process_content_with_llm(
+        content, max_tokens=budget, model_name=model
+    )
+
+    return (False, final_tokens, processed_content)
 
 
 def process_content_with_llm(content: str, max_tokens: int = 131072, model_name: str = "gpt-4") -> tuple:
@@ -571,22 +638,13 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
 
     from prompts import LLM_REWRITE_PROMPT
 
-    llm = _create_llm(temperature=0.3)
-    prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
-    chain = prompt | llm
+    def _stream():
+        llm = _create_llm(temperature=0.3)
+        prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
+        chain = prompt | llm
+        return chain.stream({"content": content})
 
-    full_text = ""
-    if chunk_callback:
-        for chunk in chain.stream({"content": content}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-            chunk_callback(token)
-    else:
-        for chunk in chain.stream({"content": content}):
-            token = chunk.content if hasattr(chunk, "content") else str(chunk)
-            full_text += token
-
-    return full_text.strip()
+    return _run_stream_with_timeout(_stream, chunk_callback)
 
 
 def reformat_markdown_with_llm(content: str) -> str:

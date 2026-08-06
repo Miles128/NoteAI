@@ -17,9 +17,7 @@ function initWorkspaceFileWatcher() {
         if (!data || !data.type) return;
 
         if (data.type === 'auto_topic_assigned') {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus('✓ ' + (data.topic ? window.t('app.autoAssignedTo', { topic: data.topic }) : window.t('app.autoAssignedTopic')));
-            }
+            window.updateStatus('✓ ' + (data.topic ? window.t('app.autoAssignedTo', { topic: data.topic }) : window.t('app.autoAssignedTopic')));
             if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
             if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
             refreshWorkspaceViewsAfterChange();
@@ -88,8 +86,8 @@ function refreshCurrentSidebarView(forceRefresh) {
             window.loadTagsView(true);
         }
     } else if (view === 'graph') {
-        if (window.LinksModule && typeof window.LinksModule.loadLinksData === 'function') {
-            window.LinksModule.loadLinksData();
+        if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
+            window.Graph3Tier.load('all');
         }
     } else if (view === 'relation') {
         if (typeof window.loadRelationGraphData === 'function') {
@@ -117,26 +115,18 @@ function initSidecarErrorListener() {
         if (data.type === 'sidecar_died') {
             var diedMsg = data.message || window.t('app.backendExited');
             console.error('[App] Sidecar died:', diedMsg);
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(diedMsg);
-            }
+            window.updateStatus(diedMsg);
         } else if (data.type === 'sidecar_ready') {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(data.message || window.t('app.backendRecovered'));
-            }
+            window.updateStatus(data.message || window.t('app.backendRecovered'));
         } else if (data.type === 'sidecar_error') {
             var msg = data.message || window.t('app.backendStartFailed');
             console.error('[App] Sidecar error:', msg);
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('app.errorPrefix') + msg);
-            }
+            window.updateStatus(window.t('app.errorPrefix') + msg);
             alert(window.t('app.startFailedAlert', { message: msg }));
         } else if (data.type === 'auto_convert_complete') {
             var info = data.data || {};
             if (info.converted > 0) {
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(window.t('app.autoConvertDone', { done: info.converted, total: info.total }));
-                }
+                window.updateStatus(window.t('app.autoConvertDone', { done: info.converted, total: info.total }));
                 refreshWorkspaceViewsAfterChange();
             }
         } else if (data.type === 'auto_convert_error') {
@@ -153,17 +143,13 @@ function initRagEventListener() {
         var data = event.payload;
         if (!data) return;
         if (data.type === 'progress' && data.element_id === 'rag-index') {
-            if (typeof window.updateStatus === 'function') {
-                var pct = Math.round((data.progress || 0) * 100);
-                var msg = data.message || window.t('app.indexBuilding');
-                window.updateStatus(pct > 0 ? msg + ' (' + pct + '%)' : msg);
-            }
+            var pct = Math.round((data.progress || 0) * 100);
+            var msg = data.message || window.t('app.indexBuilding');
+            window.updateStatus(pct > 0 ? msg + ' (' + pct + '%)' : msg);
         } else if (data.type === 'job_update') {
             document.dispatchEvent(new CustomEvent('job_update', { detail: data.job || data }));
         } else if (data.type === 'progress' && data.element_id === 'survey_check') {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(data.message || window.t('app.checkingSurveys'));
-            }
+            window.updateStatus(data.message || window.t('app.checkingSurveys'));
         } else if (data.type === 'progress' && data.element_id === 'component-install') {
             var compMsg = document.getElementById('settings-component-rag-msg');
             if (compMsg) {
@@ -175,6 +161,7 @@ function initRagEventListener() {
             var compEvent = new CustomEvent('component_installed', { detail: data });
             document.dispatchEvent(compEvent);
         } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done'
+            || data.type === 'rag_retrieval'
             || data.type === 'rag_error' || data.type === 'rag_index_built') {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {
                 window.AssistantModule.handleEvent(data);
@@ -184,13 +171,9 @@ function initRagEventListener() {
             if (data.type === 'rag_index_built') {
                 var indexPayload = data.data || data;
                 if (indexPayload.success) {
-                    if (typeof window.updateStatus === 'function') {
-                        window.updateStatus('RAG Ready');
-                    }
+                    window.updateStatus('RAG Ready');
                 } else {
-                    if (typeof window.updateStatus === 'function') {
-                        window.updateStatus(window.t('app.ragIndexFailed'));
-                    }
+                    window.updateStatus(window.t('app.ragIndexFailed'));
                 }
             }
         } else if (data.type === 'progress' && data.element_id === 'rag-index-progress') {
@@ -208,29 +191,21 @@ function initRagEventListener() {
                 window.IngestModule.handleEvent(data);
             }
         } else if (data.type === 'cascade_survey_chunk') {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('app.updatingSurvey', { topic: data.topic || '' }));
-            }
+            window.updateStatus(window.t('app.updatingSurvey', { topic: data.topic || '' }));
         } else if (data.type === 'cascade_done') {
             var d = data.data || {};
             if (d.success) {
                 var msg = d.is_new_topic ? window.t('app.surveyNewTopic') : window.t('app.surveyUpdated');
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(msg + ': ' + (data.topic || ''));
-                }
+                window.updateStatus(msg + ': ' + (data.topic || ''));
             } else {
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(window.t('app.cascadeFailed', { topic: data.topic || '' }));
-                }
+                window.updateStatus(window.t('app.cascadeFailed', { topic: data.topic || '' }));
             }
             if (window.TreeModule && window.TreeModule.loadFileTree) {
                 window.TreeModule.loadFileTree();
             }
         } else if (data.type === 'batch_assign_progress') {
             if (data.message) {
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(data.message);
-                }
+                window.updateStatus(data.message);
             }
             if (data.message && data.message.startsWith('完成')) {
                 if (window.TreeModule && window.TreeModule.loadFileTree) {

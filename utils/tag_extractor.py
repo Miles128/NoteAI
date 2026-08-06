@@ -19,7 +19,7 @@ from utils.text_utils import (
 
 
 def _collect_workspace_md_filenames(workspace_path: str) -> list[str]:
-    """收集 Notes、Abstract、Used 文件夹中所有 MD 文件的文件名（只读文件名，不读内容）
+    """收集 Notes、wiki 文件夹中所有 MD 文件的文件名（只读文件名，不读内容）
 
     Args:
         workspace_path: 工作区根路径
@@ -29,7 +29,7 @@ def _collect_workspace_md_filenames(workspace_path: str) -> list[str]:
     """
     from utils.note_scanner import iter_note_files
 
-    files = iter_note_files(workspace_path, folders=["Notes", "Abstract", "Used"], include_surveys=True)
+    files = iter_note_files(workspace_path, folders=["Notes", "wiki"], include_surveys=True)
     return [path.name for path in files]
 
 

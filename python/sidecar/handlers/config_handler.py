@@ -17,11 +17,11 @@ class ConfigHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_api_config", self._get_api_config)
         router.register("save_api_config", self._save_api_config)
+        router.register("test_api_config", self._test_api_config)
         router.register("get_ui_config", self._get_ui_config)
         router.register("save_ui_config", self._save_ui_config)
         router.register("get_theme_preference", self._get_theme_preference)
         router.register("save_theme_preference", self._save_theme_preference)
-        router.register("test_api_connection", self._test_api_connection)
         router.register("get_project_rules", self._get_project_rules)
         router.register("save_project_rules", self._save_project_rules)
         router.register("get_workspace_rules", self._get_workspace_rules)
@@ -53,7 +53,7 @@ class ConfigHandler(BaseHandler):
         model_name = params.get("model_name", "gpt-4")
 
         if "■■■■" in api_key:
-            api_key = self.config._get_attr("api_key")
+            api_key = self.config.api_key
 
         if not api_key or not api_key.strip():
             return {"success": False, "message": "API Key 不能为空"}
@@ -77,6 +77,26 @@ class ConfigHandler(BaseHandler):
             return {"success": False, "message": save_msg}
         return {"success": True, "message": f"配置已保存，{conn_msg}"}
 
+    def _test_api_config(self, params):
+        """仅测试 API 连通性，不落盘（首启引导 wizard / 设置页预校验用）。"""
+        api_key = str(params.get("api_key") or "").strip()
+        api_base = str(params.get("api_base") or "").strip() or "https://api.openai.com/v1"
+        model_name = str(params.get("model_name") or "").strip() or "gpt-4"
+        if not api_key:
+            return {"success": False, "connected": False, "message": "请先填写 API Key"}
+        if "■■■■" in api_key:
+            return {
+                "success": False,
+                "connected": False,
+                "message": "已保存的 Key 为掩码形式，请输入完整 API Key 后测试",
+            }
+        try:
+            connected, message = test_api_connection(api_key, api_base, model_name)
+        except Exception as e:
+            logger.error(f"[config_handler] test_api_config error: {e}")
+            return {"success": False, "connected": False, "message": f"连接测试异常：{e}"}
+        return {"success": connected, "connected": connected, "message": message}
+
     def _get_ui_config(self, params):
         return {
             "web_ai_assist": self.config.web_ai_assist,
@@ -92,7 +112,9 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
-            "assistant_agent_mode": self.config.assistant_agent_mode,
+            "semantic_workbench_enabled": self.config.semantic_workbench_enabled,
+            "semantic_workbench_tabs": list(self.config.semantic_workbench_tabs),
+            "semantic_workbench_intensity": self.config.semantic_workbench_intensity,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "rag_hyde_enabled": self.config.rag_hyde_enabled,
@@ -162,8 +184,19 @@ class ConfigHandler(BaseHandler):
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
                 self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
-            if "assistant_agent_mode" in params:
-                self.config.assistant_agent_mode = bool(params["assistant_agent_mode"])
+            if "semantic_workbench_enabled" in params:
+                self.config.semantic_workbench_enabled = bool(params["semantic_workbench_enabled"])
+            if "semantic_workbench_tabs" in params:
+                tabs = params["semantic_workbench_tabs"]
+                if isinstance(tabs, list):
+                    valid_tabs = {"objects", "claims", "quality", "conflicts", "links", "brief"}
+                    cleaned = [str(tab) for tab in tabs if str(tab) in valid_tabs]
+                    if cleaned:
+                        self.config.semantic_workbench_tabs = cleaned
+            if "semantic_workbench_intensity" in params:
+                intensity = str(params["semantic_workbench_intensity"] or "").strip()
+                if intensity in {"light", "standard", "deep"}:
+                    self.config.semantic_workbench_intensity = intensity
             if "cli_agent_id" in params:
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:
@@ -222,20 +255,6 @@ class ConfigHandler(BaseHandler):
         if not save_ok:
             return {"success": False, "message": save_msg}
         return {"success": True}
-
-    def _test_api_connection(self, params):
-        try:
-            api_key = params.get("api_key", self.config.api_key or "")
-            api_base = params.get("api_base", self.config.api_base or "https://api.openai.com/v1")
-            model_name = params.get("model_name", self.config.model_name or "gpt-4")
-            if "■■■■" in api_key:
-                api_key = self.config.api_key
-            connected, conn_msg = test_api_connection(api_key, api_base, model_name)
-            if connected:
-                return {"success": True, "message": conn_msg}
-            return {"success": False, "message": conn_msg}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
 
     def _get_project_rules(self, params):
         workspace = self.config.workspace_path

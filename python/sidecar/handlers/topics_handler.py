@@ -1,15 +1,15 @@
+import json
+import re
 import shutil
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
-import yaml
-
 from config import config, is_ignored_dir
-from config.constants import TOPIC_SEP
+from config.constants import TOPIC_SEP, WORKSPACE_APP_FOLDER
 from sidecar.cascade import (
     append_changelog,
-    cascade_on_topic_resolved,
     ensure_topic_folder,
 )
 from sidecar.handlers.base import BaseHandler
@@ -18,14 +18,14 @@ from sidecar.wiki_utils import (
     create_topic as wiki_create_topic,
 )
 from sidecar.wiki_utils import (
-    get_all_topic_names,
-    get_survey_status,
     parse_wiki_headings,
+    read_wiki_text,
     sync_wiki_with_files,
     toggle_survey,
 )
 from utils.activity_log import get_entries
 from utils.logger import logger
+from utils.text_utils import parse_frontmatter
 from utils.topic_assigner import (
     auto_assign_topic_for_file,
     load_pending,
@@ -38,6 +38,173 @@ from utils.topic_dedup import (
     _merge_duplicate_topics_in_wiki,
 )
 from utils.topic_manager import TopicManager
+
+_HEADING_RE = re.compile(r"^(#{2,4})\s+(.+)$")
+_META_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
+
+
+def _parse_heading_comment(comment: str) -> dict:
+    """解析段头注释内容，兼容 JSON 对象与 `key: value` 行两种格式。"""
+    body = comment.strip()
+    try:
+        data = json.loads(body)
+        if isinstance(data, dict):
+            return data
+    except (TypeError, ValueError):
+        pass
+    result: dict = {}
+    for line in body.splitlines():
+        key, sep, value = line.strip().partition(":")
+        if sep and key.strip():
+            result[key.strip()] = value.strip()
+    return result
+
+
+def parse_topic_wiki_meta(topic: str) -> dict | None:
+    """读取 WIKI.md 中指定主题段头的 HTML 注释元数据。
+
+    Returns:
+        dict —— 主题段存在（元数据可能为空字典）；None —— WIKI.md 不存在或主题段不存在。
+    """
+    text = read_wiki_text()
+    if text is None:
+        return None
+    topic_stack: list[str] = []
+    found = False
+    section_lines: list[str] = []
+    comment_balance = 0
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped == "<!-- NOTEAI_TAGS_START -->":
+            break
+        match = _HEADING_RE.match(stripped)
+        if match:
+            if found:
+                break
+            label = match.group(2).strip()
+            if label in ("目录", "来源文件"):
+                continue
+            level = len(match.group(1)) - 1
+            while len(topic_stack) >= level:
+                topic_stack.pop()
+            parent = topic_stack[-1] if topic_stack else ""
+            full = f"{parent}{TOPIC_SEP}{label}" if parent else label
+            topic_stack.append(full)
+            if full == topic:
+                found = True
+                section_lines = []
+                comment_balance = 0
+            continue
+        if found:
+            section_lines.append(line)
+            comment_balance += stripped.count("<!--") - stripped.count("-->")
+            if comment_balance <= 0 and stripped and not stripped.startswith("<!--") and "-->" not in stripped:
+                break
+    if not found:
+        return None
+    meta: dict = {}
+    for m in _META_COMMENT_RE.finditer("\n".join(section_lines)):
+        meta.update(_parse_heading_comment(m.group(1)))
+    return meta
+
+
+def _read_topic_state(workspace: str, topic: str) -> dict | None:
+    """读取主题的语义编译状态文件（topic_states/{topic_id}.json），不存在时返回 None。"""
+    from sidecar.semantic.ids import stable_id
+
+    topic_id = stable_id("top", topic.casefold())
+    state_path = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "topic_states" / f"{topic_id}.json"
+    if not state_path.is_file():
+        return None
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _parse_iso_timestamp(value) -> float | None:
+    """将 ISO 时间字符串转为 epoch 秒，失败返回 None。"""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text).timestamp()
+    except ValueError:
+        return None
+
+
+def _latest_note_mtime(topic: str, workspace: str) -> float | None:
+    """主题下源笔记的最新 mtime（复用 get_survey_overview 同款 collect_topic_notes 判定）。"""
+    from sidecar.cascade import collect_topic_notes
+
+    ws = Path(workspace)
+    mtimes: list[float] = []
+    for note in collect_topic_notes(topic, include_content=False):
+        note_path = ws / note["file_path"]
+        try:
+            mtimes.append(note_path.stat().st_mtime)
+        except OSError:
+            continue
+    return max(mtimes) if mtimes else None
+
+
+def _note_matches_topic(
+    file_topic: str, file_topics: list, rel_parts: tuple, topic: str, topic_parts: list[str]
+) -> bool:
+    """单篇笔记是否归属指定主题：判定标准与 cascade.collect_topic_notes 完全一致
+    （frontmatter topic/前缀、frontmatter topics 列表、Notes 目录路径前缀）。"""
+    if file_topic and (
+        file_topic == topic
+        or topic_parts
+        and file_topic.startswith(topic + TOPIC_SEP)
+        or len(topic_parts) == 1
+        and (file_topic == topic_parts[0] or file_topic.startswith(topic_parts[0] + TOPIC_SEP))
+    ):
+        return True
+    if isinstance(file_topics, list) and topic in file_topics:
+        return True
+    if topic_parts and rel_parts and rel_parts[0] == topic_parts[0]:
+        if len(topic_parts) == 1:
+            return True
+        if len(rel_parts) >= 2 and rel_parts[1] == topic_parts[1]:
+            if len(topic_parts) == 2 or len(rel_parts) >= 3 and rel_parts[2] == topic_parts[2]:
+                return True
+    return False
+
+
+def _topic_conflict_pending_count(workspace: str, topic: str) -> int:
+    """该主题未裁决的 claim_conflict 数（同 semantic_handler overview 的 review_queue 查询）。"""
+    import sqlite3
+
+    db_path = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "semantic.db"
+    if not db_path.is_file():
+        return 0
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return 0
+    try:
+        row = conn.execute(
+            """SELECT count(DISTINCT rq.id) AS cnt FROM review_queue rq
+               JOIN claims c ON c.id IN (
+                   json_extract(rq.payload_json, '$.claim_a_id'),
+                   json_extract(rq.payload_json, '$.claim_b_id'))
+               JOIN evidence e ON e.claim_id = c.id AND e.status = 'active'
+               JOIN blocks b ON b.id = e.block_id
+               JOIN documents d ON d.id = b.document_id
+               WHERE rq.item_kind = 'claim_conflict' AND rq.status = 'pending'
+                 AND (d.topic = ? OR instr(d.topic, ?) = 1)""",
+            (topic, topic + " > "),
+        ).fetchone()
+        return int(row["cnt"]) if row else 0
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
@@ -71,33 +238,156 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def _get_topic_tree(self, params):
         return self._get_topic_tree_3tier(params)
 
+    def _get_topic_tree_3tier(self, params):
+        """三层主题树 + stale_topics（仅新增字段，既有结构不变）。"""
+        result = super()._get_topic_tree_3tier(params)
+        stale: list[str] = []
+        workspace = config.workspace_path
+        if workspace:
+            try:
+                stale = self._collect_stale_topics(workspace)
+            except Exception as e:
+                logger.warning(f"[topics_handler] stale topics scan failed: {e}\n")
+        result["stale_topics"] = stale
+        return result
+
+    def _collect_stale_topics(self, workspace: str) -> list[str]:
+        """轻量 stale 扫描：仅检查已有 topic_states 的主题，判定逻辑与 get_survey_overview 一致。
+
+        单次全库遍历：一次 rglob + 逐文件头部 frontmatter 解析，按候选主题聚合
+        最新 mtime，避免逐主题调用 collect_topic_notes 造成 O(主题数×全库文件数)。
+        """
+        states_dir = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "topic_states"
+        if not states_dir.is_dir():
+            return []
+        candidates: list[tuple[str, float]] = []
+        for state_file in sorted(states_dir.glob("*.json")):
+            try:
+                data = json.loads(state_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            topic = data.get("topic")
+            compiled_ts = _parse_iso_timestamp(data.get("generated_at"))
+            if not topic or compiled_ts is None:
+                continue
+            candidates.append((str(topic), compiled_ts))
+        if not candidates:
+            return []
+
+        ws = Path(workspace)
+        notes_dir = ws / config.NOTES_FOLDER
+        notes_dir_exists = notes_dir.exists()
+        topic_parts_cache: dict[str, list[str]] = {}
+        latest_mtime: dict[str, float] = {}
+        for md_file in ws.rglob("*.md"):
+            if md_file.name.startswith("."):
+                continue
+            if "wiki" in md_file.parts:
+                continue
+            if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
+                continue
+            try:
+                # 只读文件头部解析 frontmatter（同 collect_topic_notes 轻量模式），大文件不读全文
+                with md_file.open("r", encoding="utf-8") as fh:
+                    text = fh.read(8192)
+                fm, _body = parse_frontmatter(text)
+            except Exception:
+                continue
+            file_topic = ""
+            file_topics: list = []
+            if fm:
+                ft = fm.get("topic", "")
+                if isinstance(ft, str):
+                    file_topic = ft
+                fts = fm.get("topics", [])
+                if isinstance(fts, list):
+                    file_topics = fts
+            rel_parts: tuple = ()
+            if notes_dir_exists:
+                try:
+                    rel_parts = md_file.relative_to(notes_dir).parts
+                except ValueError:
+                    rel_parts = ()
+            try:
+                mtime = md_file.stat().st_mtime
+            except OSError:
+                continue
+            for topic, _compiled_ts in candidates:
+                parts = topic_parts_cache.get(topic)
+                if parts is None:
+                    parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+                    topic_parts_cache[topic] = parts
+                if _note_matches_topic(file_topic, file_topics, rel_parts, topic, parts):
+                    if mtime > latest_mtime.get(topic, float("-inf")):
+                        latest_mtime[topic] = mtime
+
+        stale: list[str] = []
+        for topic, compiled_ts in candidates:
+            latest = latest_mtime.get(topic)
+            if latest is not None and latest > compiled_ts:
+                stale.append(topic)
+        return stale
+
+    def _topic_meta(self, params):
+        """主题可信度元数据（只读）：来源数/冲突待处理数/编译时间/是否过期。"""
+        topic = str(params.get("topic") or "").strip()
+        if not topic:
+            return {"success": False, "message": "未指定主题"}
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        try:
+            wiki_meta = parse_topic_wiki_meta(topic)
+        except Exception as e:
+            logger.warning(f"[topics_handler] parse wiki meta failed: {e}\n")
+            wiki_meta = None
+        state = _read_topic_state(workspace, topic)
+        if wiki_meta is None and state is None:
+            try:
+                latest = _latest_note_mtime(topic, workspace)
+            except Exception:
+                latest = None
+            if latest is None:
+                return {"exists": False}
+        wiki_meta = wiki_meta or {}
+        stats = state.get("stats") if state else None
+        stats_documents = stats.get("documents") if isinstance(stats, dict) else None
+        try:
+            source_count = int(
+                stats_documents if isinstance(stats_documents, int) else wiki_meta.get("source_count", 0)
+            )
+        except (TypeError, ValueError):
+            source_count = 0
+        try:
+            conflict_count = int(wiki_meta.get("conflict_pending_count", 0))
+        except (TypeError, ValueError):
+            conflict_count = 0
+        if conflict_count == 0:
+            try:
+                conflict_count = _topic_conflict_pending_count(workspace, topic)
+            except Exception:
+                conflict_count = 0
+        compiled_at = state.get("generated_at") if state else None
+        is_stale = False
+        try:
+            latest_mtime = _latest_note_mtime(topic, workspace)
+        except Exception:
+            latest_mtime = None
+        if latest_mtime is not None:
+            compiled_ts = _parse_iso_timestamp(compiled_at)
+            is_stale = compiled_ts is None or latest_mtime > compiled_ts
+        return {
+            "exists": True,
+            "source_count": source_count,
+            "conflict_pending_count": conflict_count,
+            "compiled_at": compiled_at,
+            "is_stale": is_stale,
+        }
+
     def _parse_wiki_headings(self):
         return parse_wiki_headings()
-
-    def _auto_assign_topic(self, params):  # noqa: PLR0911
-        path = params.get("path", "")
-        if not path:
-            return {"success": False, "message": "未指定文件"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            result = auto_assign_topic_for_file(str(full_path))
-            if not result:
-                return {"success": False, "message": "未找到匹配主题"}
-            if result.get("status") != "auto_assigned":
-                return {"success": False, "message": "需要人工确认主题", "candidates": result.get("candidates", [])}
-            topic = result.get("topic", "")
-            if not topic:
-                return {"success": False, "message": "未找到匹配主题"}
-            self._sync_wiki_with_folder_system()
-            self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
-            return {"success": True, "topic": topic}
-        except Exception as e:
-            return {"success": False, "message": f"自动分配失败: {str(e)}"}
 
     def _batch_auto_assign_topics(self, _params):
         if not config.workspace_path:
@@ -338,115 +628,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             return {"success": False, "message": f"删除失败: {str(e)}"}
 
-    def _get_all_topic_names(self, _params):
-        topics = get_all_topic_names()
-        return {"success": True, "topics": topics}
-
-    def _get_file_topics(self, params):
-        path = params.get("path", "")
-        if not path:
-            return {"success": False, "message": "未指定文件"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            text = full_path.read_text(encoding="utf-8")
-            fm, _ = self._parse_frontmatter(text)
-            if fm is None:
-                return {"success": True, "topics": []}
-            t = fm.get("topic", "")
-            return {"success": True, "topics": [t] if t else []}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    def _get_topic_files(self, params):
-        topic_name = params.get("topic", "").strip()
-        workspace = config.workspace_path
-        workspace_path = Path(workspace)
-        if not topic_name or not workspace or not workspace_path.exists():
-            return {"success": True, "files": []}
-        files = []
-        from sidecar.workspace_meta import is_workspace_meta_path
-
-        for md_file in sorted(workspace_path.rglob("*.md")):
-            if md_file.name.startswith(".") or "wiki" in md_file.parts:
-                continue
-            if is_workspace_meta_path(md_file):
-                continue
-            try:
-                text = md_file.read_text(encoding="utf-8")
-                fm, _ = self._parse_frontmatter(text)
-                if fm is None:
-                    continue
-                file_topic = fm.get("topic", "")
-                if file_topic and file_topic.strip().strip("'\"") == topic_name:
-                    files.append(str(md_file.relative_to(workspace_path)))
-            except Exception:
-                continue
-        return {"success": True, "files": files, "topic": topic_name}
-
-    def _remove_file_from_topic(self, params):
-        path = params.get("path", "")
-        topic_name = params.get("topic", "").strip()
-        if not path or not topic_name:
-            return {"success": False, "message": "参数缺失"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        try:
-            text = full_path.read_text(encoding="utf-8")
-            had_bom = text.startswith("\ufeff")
-            meta, body = self._parse_frontmatter(text)
-            if meta is None:
-                return {"success": True, "message": "无需修改"}
-            if isinstance(meta.get("topic"), str) and meta["topic"] == topic_name:
-                meta.pop("topic", None)
-                if meta:
-                    new_fm = yaml.dump(meta, allow_unicode=True, default_flow_style=False).strip()
-                    prefix = "\ufeff" if had_bom else ""
-                    new_content = prefix + "---\n" + new_fm + "\n---\n" + body.lstrip("\n")
-                else:
-                    prefix = "\ufeff" if had_bom else ""
-                    new_content = prefix + body.lstrip("\n")
-                full_path.write_text(new_content, encoding="utf-8")
-                notes_root = Path(config.workspace_path) / config.NOTES_FOLDER
-                notes_root.mkdir(parents=True, exist_ok=True)
-                if full_path.parent != notes_root:
-                    dst = notes_root / full_path.name
-                    if dst.exists():
-                        stem = full_path.stem
-                        counter = 1
-                        while dst.exists():
-                            dst = notes_root / f"{stem}_{counter}{full_path.suffix}"
-                            counter += 1
-                    shutil.move(str(full_path), str(dst))
-                self._sync_wiki_with_folder_system()
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
     def _do_cascade_survey_update(self, topic):
         from sidecar.cascade_runner import run_cascade_survey_update
 
         run_cascade_survey_update(topic, send_response=self._send_response)
-
-    def _do_file_added_cascade(self, file_path: Path):
-        try:
-            text = file_path.read_text(encoding="utf-8")
-            fm, _ = self._parse_frontmatter(text)
-            topic = fm.get("topic") if fm else None
-            if topic:
-                self._start_task(
-                    f"cascade_{topic}_{file_path.stem}", cascade_on_topic_resolved, args=(str(file_path), topic)
-                )
-        except Exception as e:
-            logger.error(f"[topics_handler] file_added_cascade error: {e}")
 
     def _get_all_pending(self, _params):
         workspace = config.workspace_path
@@ -605,7 +790,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import suggest_merged_topic_names
+        from utils.topic_merge import suggest_merged_topic_names
 
         return suggest_merged_topic_names(workspace, [str(topic) for topic in (params.get("topics") or [])])
 
@@ -613,7 +798,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import merge_topics
+        from utils.topic_merge import merge_topics
 
         result = merge_topics(
             workspace,
@@ -629,7 +814,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.topic_merge import preview_topic_merge
+        from utils.topic_merge import preview_topic_merge
 
         return preview_topic_merge(
             workspace,
@@ -648,8 +833,8 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
     def register_routes(self, router):
         router.register("get_topic_tree", self._get_topic_tree)
+        router.register("topic_meta", self._topic_meta)
         router.register("sync_wiki_with_files", self._sync_wiki_with_folder_system)
-        router.register("auto_assign_topic", self._auto_assign_topic)
         router.register("batch_auto_assign_topics", self._batch_auto_assign_topics)
         router.register("move_file_to_topic", self._move_file_to_topic)
         router.register("create_topic", self._create_topic)
@@ -661,14 +846,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("suggest_topic_merge_names", self._suggest_topic_merge_names)
         router.register("merge_similar_topics", self._merge_similar_topics)
         router.register("preview_topic_merge", self._preview_topic_merge)
-        router.register("get_all_topic_names", self._get_all_topic_names)
-        router.register("get_file_topics", self._get_file_topics)
-        router.register("get_topic_files", self._get_topic_files)
-        router.register("remove_file_from_topic", self._remove_file_from_topic)
         router.register("get_all_pending", self._get_all_pending)
         router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)
-        router.register("get_survey_status", self._get_survey_status)
+        router.register("get_survey_overview", self._get_survey_overview)
         router.register("toggle_survey", self._toggle_survey)
         router.register("fix_survey_topics", self._fix_survey_topics)
 
@@ -682,9 +863,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             logger.warning(f"[fix_survey_topics] failed: {e}")
             return {"success": False, "message": str(e)}
 
-    def _get_survey_status(self, _params):
-        surveys = get_survey_status()
-        return {"success": True, "surveys": surveys}
+    def _get_survey_overview(self, _params):
+        from sidecar.wiki_utils import get_survey_overview
+
+        return {"success": True, "overview": get_survey_overview()}
 
     def _toggle_survey(self, params):
         topic_name = params.get("topic", "").strip()

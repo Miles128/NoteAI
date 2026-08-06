@@ -39,15 +39,38 @@ function _renderTopicTree(node, expandedTopics, depth) {
         var totalFiles = _countAllFiles(child);
 
         html += '<div class="sidebar-tag-group' + isExpanded + '" data-topic-name="' + escapeAttr(child.name) + '">';
-        html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-topic-name="' + escapeAttr(child.name) + '" style="padding-left:' + (8 + indent) + 'px">';
+        html += '<div class="sidebar-tag-row" onclick="window.topicRowClick(this)" data-topic-name="' + escapeAttr(child.name) + '" style="padding-left:' + (8 + indent) + 'px">';
         if (hasChildren || hasFiles) {
-            html += '<span class="sidebar-tag-toggle">' + window.Icons.get('chevronDown') + '</span>';
+            html += '<span class="sidebar-tag-toggle" onclick="event.stopPropagation(); this.parentElement.classList.toggle(\'expanded\')">' + window.Icons.get('chevronDown') + '</span>';
         } else {
             html += '<span class="sidebar-tag-toggle" style="visibility:hidden">' + window.Icons.get('chevronDown') + '</span>';
         }
         html += '<span class="sidebar-tag-name" data-topic-name="' + escapeAttr(child.name) + '">' + escapeHtml(child.label) + '</span>';
         if (totalFiles > 0) {
             html += '<span class="sidebar-tag-count">' + totalFiles + '</span>';
+        }
+        // 一级主题行挂综述状态：开关 / 无综述标记 / 综述预览 / 可更新
+        var surveyStaleShown = false;
+        if (depth === 0) {
+            var ov = (window._surveyOverviewMap || {})[child.name] || {};
+            var enabled = ov.enabled !== false;
+            if (!enabled) {
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-off" title="' + escapeAttr(window.t('topic.surveyOffTitle')) + '">' + escapeHtml(window.t('topic.surveyOff')) + '</span>';
+            } else if (!ov.has_survey) {
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-missing" title="' + escapeAttr(window.t('topic.noSurveyTitle')) + '">' + escapeHtml(window.t('topic.noSurvey')) + '</span>';
+            } else {
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-ok" onclick="event.stopPropagation(); window.previewTopicSurvey(\'' + escapeAttr(child.name) + '\')">' + escapeHtml(window.t('topic.surveyDoc')) + '</span>';
+                if (ov.stale) {
+                    surveyStaleShown = true;
+                    html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.updateTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyUpdateTitle')) + '">' + escapeHtml(window.t('topic.surveyStale')) + '</span>';
+                }
+            }
+            // P5：语义知识页（wiki/semantic/*_语义.md）可更新提示，来自 get_topic_tree 的 stale_topics；
+            // 综述 stale 徽标已展示同一级主题时不重复展示
+            if ((window._topicStaleMap || {})[child.name] && !surveyStaleShown) {
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.previewSemanticWikiPage(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.wikiStaleTitle')) + '">' + escapeHtml(window.t('topic.wikiStale')) + '</span>';
+            }
+            html += '<span class="sidebar-tag-survey-toggle' + (enabled ? ' on' : '') + '" onclick="event.stopPropagation(); window.toggleTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyToggleTitle')) + '"></span>';
         }
         html += '</div>';
 
@@ -87,6 +110,75 @@ function _countAllFiles(node) {
     return count;
 }
 
+function _surveyState(topic) {
+    return (window._surveyOverviewMap || {})[topic] || { enabled: true, has_survey: false, stale: false, survey_path: '' };
+}
+
+function _openSurveyPreview(topic) {
+    var ov = _surveyState(topic);
+    if (ov.has_survey && ov.survey_path && typeof showPreview === 'function') {
+        showPreview({ path: ov.survey_path, name: topic + ' ' + window.t('topic.surveyDoc') });
+        return true;
+    }
+    return false;
+}
+
+function topicRowClick(rowEl) {
+    var topic = rowEl.getAttribute('data-topic-name') || '';
+    // 有综述的主题：点行直接打开综述预览；否则展开/收起
+    if (_openSurveyPreview(topic)) return;
+    rowEl.parentElement.classList.toggle('expanded');
+}
+
+function previewTopicSurvey(topic) {
+    _openSurveyPreview(topic);
+}
+
+// P5：语义知识页路径与后端 wiki._target_path 对齐（wiki/semantic/{安全段}_语义.md）
+function _semanticWikiPagePath(topic) {
+    var safe = String(topic == null ? '' : topic).trim().replace(/[\\/:*?"<>|]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
+    if (!safe) return '';
+    return 'wiki/semantic/' + safe + '_语义.md';
+}
+
+function previewSemanticWikiPage(topic) {
+    var path = _semanticWikiPagePath(topic);
+    if (!path || typeof window.showPreview !== 'function') return;
+    window.showPreview({ path: path, name: topic + ' · 语义知识' });
+}
+
+async function toggleTopicSurvey(topic) {
+    var ov = _surveyState(topic);
+    var enable = ov.enabled !== false;
+    var actionText = enable ? window.t('topic.surveyTurnOff') : window.t('topic.surveyTurnOn');
+    var message = window.t('topic.surveyToggleConfirm', { topic: topic, action: actionText });
+    var ok = false;
+    if (typeof window._customConfirm === 'function') {
+        ok = await window._customConfirm(message);
+    } else {
+        ok = window.confirm(message);
+    }
+    if (!ok) return;
+    try {
+        var r = await window.api.toggleSurvey(topic);
+        if (r && r.success === false) {
+            alert(r.message || window.t('common.errorOccurred'));
+            return;
+        }
+        if (window._surveyOverviewMap) {
+            window._surveyOverviewMap[topic] = Object.assign({}, ov, { enabled: !enable });
+        }
+        await loadTopicTree(true, true);
+    } catch (e) {
+        console.error('[Topic] toggleSurvey error:', e);
+        alert(e.message || window.t('common.unknownError'));
+    }
+}
+
+function updateTopicSurvey(topic) {
+    onAITopicSurvey(topic);
+}
+
 async function loadTopicTree(silent, forceRefresh) {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
@@ -96,6 +188,18 @@ async function loadTopicTree(silent, forceRefresh) {
 
     try {
         var result = await window.api.getTopicTree();
+
+        // 并行拉取综述状态总览（开关 / 是否有综述 / 可更新）
+        var overview = {};
+        try {
+            var ovResult = await window.api.getSurveyOverview();
+            if (ovResult && typeof ovResult === 'object' && ovResult.overview) {
+                overview = ovResult.overview;
+            }
+        } catch (e) {
+            console.warn('[Topic] getSurveyOverview failed:', e);
+        }
+        window._surveyOverviewMap = overview;
 
         if (!result || typeof result !== 'object') {
             container.innerHTML = '<div class="sidebar-view-empty">' + window.t('topic.invalidResponse') + '</div>';
@@ -111,6 +215,13 @@ async function loadTopicTree(silent, forceRefresh) {
             container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(result.message || window.t('common.backendError')) + '</span></div>';
             return;
         }
+
+        // P5：语义知识页可更新主题集（仅 wiki 已有该主题段时纳入），供一级主题行渲染徽标
+        var staleMap = {};
+        (result.stale_topics || []).forEach(function(name) {
+            staleMap[name] = true;
+        });
+        window._topicStaleMap = staleMap;
 
         var topics = result.topics || [];
         var hasTopics = topics.length > 0;
@@ -656,7 +767,7 @@ function showAISuggestionPanel() {
             'assign_topic': window.t('topic.typeAssignTopic'),
             'merge_topic': window.t('topic.typeMergeTopic'),
             'change_topic': window.t('topic.typeChangeTopic')
-        }[s.type] || s.type;
+        }[s.type] || escapeHtml(s.type || '');
 
         var body = '';
         if (s.type === 'change_topic') {
@@ -707,7 +818,7 @@ function showAISuggestionPanel() {
         }
 
         card.innerHTML = '<div class="ai-sg-header">' +
-            '<span class="ai-sg-type ai-sg-type-' + s.type + '">' + typeLabel + '</span>' +
+            '<span class="ai-sg-type ai-sg-type-' + escapeAttr(s.type || '') + '">' + typeLabel + '</span>' +
             '<div class="ai-sg-actions">' +
             '<button class="ai-sg-yes" data-action="accept" title="' + window.t('topic.acceptSuggestion') + '">' + window.Icons.get('check', 14) + '</button>' +
             '<button class="ai-sg-no" data-action="reject" title="' + window.t('topic.rejectSuggestion') + '">' + window.Icons.get('close', 14) + '</button>' +
@@ -862,7 +973,7 @@ function _flushSurveyBuffer() {
     }
 }
 
-async function onAITopicSurvey() {
+async function onAITopicSurvey(prefillTopic) {
     var headings = [];
     try {
         var treeResult = await window.api.getTopicTree();
@@ -877,9 +988,12 @@ async function onAITopicSurvey() {
         return;
     }
 
-    var topic = prompt(window.t('topic.enterSurveyTopic', { topics: headings.join('、') }));
-    if (!topic || !topic.trim()) return;
-    topic = topic.trim();
+    var topic = (prefillTopic || '').trim();
+    if (!topic) {
+        topic = prompt(window.t('topic.enterSurveyTopic', { topics: headings.join('、') }));
+        if (!topic || !topic.trim()) return;
+        topic = topic.trim();
+    }
 
     var btn = document.getElementById('btn-ai-survey');
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
@@ -1350,6 +1464,11 @@ window.loadTopicPendingPanel = loadTopicPendingPanel;
 window.onBatchAutoAssignTopics = onBatchAutoAssignTopics;
 window.onAITopicAnalyze = onAITopicAnalyze;
 window.onAITopicSurvey = onAITopicSurvey;
+window.topicRowClick = topicRowClick;
+window.previewTopicSurvey = previewTopicSurvey;
+window.previewSemanticWikiPage = previewSemanticWikiPage;
+window.toggleTopicSurvey = toggleTopicSurvey;
+window.updateTopicSurvey = updateTopicSurvey;
 window.onShowTopicInput = onShowTopicInput;
 window.onHideTopicInput = onHideTopicInput;
 window.onTopicInputChange = onTopicInputChange;

@@ -26,7 +26,6 @@ API_CONFIG_FILE = SYSTEM_APP_DATA_DIR / "api_config.json"
 NOTES_FOLDER = "Notes"
 ABSTRACT_FOLDER = "wiki"
 RAW_FOLDER = "Raw"
-USED_FOLDER = "Used"
 WORKSPACE_APP_FOLDER = ".noteai"
 RAG_INDEX_FOLDER = "rag_index"
 

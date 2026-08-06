@@ -166,7 +166,7 @@ class CliAgentHandler(BaseHandler):
 
     def register_routes(self, router) -> None:
         router.register("list_cli_agents", self._list_agents)
-        router.register("run_cli_agent", self._run_agent, async_mode=True)
+        router.register("run_cli_agent", self._run_agent)
         router.register("stop_cli_agent", self._stop_agent)
         router.register("clear_cli_agent_session", self._clear_session)
         router.register("generate_vault_agents_md", self._generate_agents_md)

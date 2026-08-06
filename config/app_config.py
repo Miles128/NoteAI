@@ -16,7 +16,6 @@ from .constants import (
     RAG_INDEX_FOLDER,
     RAW_FOLDER,
     SYSTEM_APP_DATA_DIR,
-    USED_FOLDER,
     WORKSPACE_APP_FOLDER,
     WORKSPACE_STATE_FILE,
 )
@@ -30,7 +29,6 @@ class AppConfig:
     NOTES_FOLDER: str = NOTES_FOLDER
     ABSTRACT_FOLDER: str = ABSTRACT_FOLDER
     RAW_FOLDER: str = RAW_FOLDER
-    USED_FOLDER: str = USED_FOLDER
     WORKSPACE_APP_FOLDER: str = WORKSPACE_APP_FOLDER
     RAG_INDEX_FOLDER: str = RAG_INDEX_FOLDER
 
@@ -46,35 +44,19 @@ class AppConfig:
     workspace_path: str = ""
     log_path: str = str(SYSTEM_APP_DATA_DIR / "logs")
 
-    batch_size: int = 5
     timeout: int = 30
-    max_retries: int = 3
-
-    max_content_length: int = 10000
-    max_html_length: int = 15000
-    max_chunk_length: int = 8000
-    min_chunk_size: int = 200
 
     theme: str = "light"
     theme_preference: str = "system"
     font_size: str = "small"
-    accent_color: str = "#4A90D9"
     sidebar_font_family: str = "system"
     preview_font_family: str = "system"
     typography: dict[str, Any] = field(default_factory=dict)
-    window_width: int = 1400
-    window_height: int = 900
 
     web_ai_assist: bool = False
     web_include_images: bool = False
     conv_ai_assist: bool = False
 
-    web_save_path: str = ""
-    download_mode: str = "standard"
-    conv_save_path: str = ""
-
-    integration_source_path: str = ""
-    integration_output_path: str = ""
     integration_strategy: str = "ml"
     auto_topic: bool = True
     # Minimum confidence used when a single LLM topic suggestion is eligible
@@ -84,7 +66,13 @@ class AppConfig:
     topic_list: str = ""
     ingest_auto_enabled: bool = True
     semantic_compile_enabled: bool = True
-    assistant_agent_mode: bool = False
+    # Semantic workbench UI: master switch, enabled categories, display intensity.
+    # Tabs mirror the sidebar categories; intensity filters low-confidence items.
+    semantic_workbench_enabled: bool = True
+    semantic_workbench_tabs: list[str] = field(
+        default_factory=lambda: ["objects", "claims", "quality", "conflicts", "links", "brief"]
+    )
+    semantic_workbench_intensity: str = "standard"
     cli_agent_id: str = ""
     rag_enabled: bool = True
     rag_hyde_enabled: bool = True
@@ -98,15 +86,14 @@ class AppConfig:
     locale: str = "zh-CN"
 
     def __post_init__(self):
-        self._lock = threading.Lock()
-
-    def _get_attr(self, name):
-        with self._lock:
-            return getattr(self, name, None)
-
-    def _set_attr(self, name, value):
-        with self._lock:
-            setattr(self, name, value)
+        # Snapshot lock: only guards the __dict__ snapshot taken by
+        # save_to_file/to_dict against concurrent mutation mid-iteration.
+        # RLock (not Lock) because handlers legitimately hold the lock around
+        # compound read-modify-write batches that call save()/save_to_file(),
+        # which re-acquires it; a non-reentrant Lock would self-deadlock.
+        # Plain attribute reads/writes elsewhere are atomic under CPython's
+        # GIL and intentionally left unlocked.
+        self._lock = threading.RLock()
 
     def is_workspace_set(self) -> bool:
         if not self.workspace_path:
@@ -127,11 +114,6 @@ class AppConfig:
         if not self.workspace_path:
             return ""
         return str(Path(self.workspace_path) / RAW_FOLDER)
-
-    def get_used_folder(self) -> str:
-        if not self.workspace_path:
-            return ""
-        return str(Path(self.workspace_path) / USED_FOLDER)
 
     def get_workspace_app_folder(self) -> str:
         if not self.workspace_path:
@@ -192,22 +174,6 @@ class AppConfig:
         if self.max_context_tokens < 1000 or self.max_context_tokens > 1000000:
             return False
         return True
-
-    def check_content_within_context(self, content: str) -> tuple:
-        from utils.llm_utils import _estimate_tokens
-
-        estimated_tokens = _estimate_tokens(content, self.model_name)
-
-        if estimated_tokens <= self.max_context_tokens:
-            return (True, estimated_tokens, content)
-
-        from utils.llm_utils import process_content_with_llm
-
-        processed_content, was_summarized, was_truncated, final_tokens = process_content_with_llm(
-            content, max_tokens=self.max_context_tokens, model_name=self.model_name
-        )
-
-        return (False, final_tokens, processed_content)
 
     @classmethod
     def load_from_file(cls, config_path: str | None = None) -> "AppConfig":
@@ -306,6 +272,20 @@ class AppConfig:
 
         valid_keys = {f.name for f in fields(cls)}
         init_kwargs = {k: v for k, v in init_kwargs.items() if k in valid_keys}
+
+        # One-time purge: drop config.json keys that no longer map to fields,
+        # so removed settings do not persist forever.
+        stale_keys = set(file_data) - valid_keys
+        if stale_keys and os.path.exists(config_path):
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                data = {k: v for k, v in data.items() if k in valid_keys}
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                _logger.info("配置清理: 移除 %d 个失效键", len(stale_keys))
+            except Exception as e:
+                _logger.warning("配置清理失败: %s", e)
 
         return cls(**init_kwargs)
 

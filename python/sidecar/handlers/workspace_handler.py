@@ -34,25 +34,50 @@ def _is_readme_note(path: Path) -> bool:
 class WorkspaceHandler(BaseHandler):
     def register_routes(self, router):
         router.register("get_workspace_status", self._get_workspace_status)
-        router.register("check_workspace_path_valid", self._check_workspace_path_valid)
-        router.register("clear_saved_workspace", self._clear_saved_workspace)
         router.register("set_workspace_path", self._set_workspace_path)
         router.register("create_sample_workspace", self._create_sample_workspace)
         router.register("get_workspace_tree", self._get_workspace_tree)
         router.register("on_file_selected", self._on_file_selected)
         router.register("refresh_log", self._refresh_log)
-        router.register("get_kb_health", self._get_kb_health)
+        router.register("get_onboarding_status", self._get_onboarding_status)
+        router.register("mark_onboarding_done", self._mark_onboarding_done)
 
-    def _get_kb_health(self, _params):
-        from sidecar.kb_health import compute_kb_health
+    def _get_onboarding_status(self, _params):
+        """首启引导状态：工作区/API Key/模型就绪三要素 + 完成标记。"""
+        from sidecar.rag.model_preload import ModelWarmupManager
 
-        return compute_kb_health(self.config.workspace_path)
+        saved_path, state_data = workspace_manager.load_workspace()
+        workspace_set = bool(saved_path and Path(saved_path).exists())
+        return {
+            "workspace_set": workspace_set,
+            "workspace_path": saved_path if workspace_set else "",
+            "api_key_configured": bool(self.config.api_key),
+            "models_ready": ModelWarmupManager.is_ready(),
+            "onboarding_done": bool(state_data.get("onboarding_done")),
+        }
+
+    def _mark_onboarding_done(self, _params):
+        """将 onboarding_done 写入 workspace_state.json 的 additional_data。
+
+        未设置工作区时无持久化载体（跳过场景），由前端 localStorage 兜底。
+        """
+        saved_path, state_data = workspace_manager.load_workspace()
+        if not saved_path or not Path(saved_path).exists():
+            return {"success": True, "persisted": False}
+        # save_workspace 自身会重写 workspace_path/last_opened_at/version，
+        # 这里只回传其余既有字段，避免丢失历史 additional_data。
+        extra = {k: v for k, v in state_data.items() if k not in ("workspace_path", "last_opened_at", "version")}
+        extra["onboarding_done"] = True
+        ok, msg = workspace_manager.save_workspace(saved_path, additional_data=extra)
+        if not ok:
+            return {"success": False, "message": msg}
+        return {"success": True, "persisted": True}
 
     def _get_workspace_status(self, _params):
         saved_path, _ = workspace_manager.load_workspace()
         path = saved_path if saved_path and Path(saved_path).exists() else ""
         if path and path != self.config.workspace_path:
-            self.config._set_attr("workspace_path", path)
+            self.config.workspace_path = path
             self._setup_workspace()
             self._setup_watcher(path)
         if path and Path(path).exists():
@@ -70,23 +95,10 @@ class WorkspaceHandler(BaseHandler):
             }
         return {"is_set": False, "saved_workspace": False}
 
-    def _check_workspace_path_valid(self, params):
-        path = params.get("path", self.config.workspace_path)
-        if path and Path(path).exists():
-            return {"is_valid": True, "message": "工作区路径有效", "path": path}
-        return {"is_valid": False, "message": "工作区路径无效", "path": path}
-
-    def _clear_saved_workspace(self, _params):
-        success, message = workspace_manager.clear_workspace_state()
-        if not success:
-            return {"success": False, "message": message}
-        self.config._set_attr("workspace_path", "")
-        return {"success": True, "message": "已清除保存的工作区"}
-
     def _set_workspace_path(self, params):
         path = params.get("path", "")
         if path and Path(path).exists():
-            self.config._set_attr("workspace_path", path)
+            self.config.workspace_path = path
             self.file_previewer.workspace_path = path
             self._setup_watcher(path)
             self._invalidate_cache()

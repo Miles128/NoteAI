@@ -13,8 +13,10 @@
     <link rel="stylesheet" href="css/preview.css">
     <link rel="stylesheet" href="css/ingest.css">
     <link rel="stylesheet" href="css/schema-wizard.css">
+    <link rel="stylesheet" href="css/onboarding.css">
     <link rel="stylesheet" href="css/inspector.css">
     <link rel="stylesheet" href="css/semantic-workbench.css">
+    <link rel="stylesheet" href="css/assistant.css">
 
     <script src="d3.min.js"></script>
     <script src="marked.min.js"></script>
@@ -154,7 +156,7 @@
                     <div class="file-tree-container" id="file-tree">
                         <div class="tree-empty" data-i18n="common.noWorkspace"></div>
                     </div>
-                    <section class="sidebar-semantic-group" aria-labelledby="sidebar-semantic-title">
+                    <section class="sidebar-semantic-group" id="semantic-sidebar-group" aria-labelledby="sidebar-semantic-title">
                         <div class="sidebar-semantic-heading" id="sidebar-semantic-title">
                             <span data-i18n="semantic.title"></span>
                             <span class="sidebar-semantic-coverage" id="semantic-coverage"></span>
@@ -169,6 +171,7 @@
                         </nav>
                         <button type="button" class="semantic-compile-all" id="semantic-compile-all" data-i18n="semantic.compileAll"></button>
                         <div class="semantic-compile-progress" id="semantic-compile-progress" hidden></div>
+                        <div class="semantic-version-hint" id="semantic-version-hint" hidden></div>
                     </section>
                 </div>
                 <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
@@ -217,6 +220,7 @@
                 <div class="semantic-toolbar" id="semantic-toolbar">
                     <input type="search" id="semantic-search" data-i18n-placeholder="semantic.searchPlaceholder" autocomplete="off">
                     <select id="semantic-status-filter" hidden aria-label="Status"></select>
+                    <button type="button" id="semantic-scan-conflicts" hidden data-i18n="semantic.rescanConflicts"></button>
                 </div>
                 <div class="semantic-list" id="semantic-workbench-list" aria-live="polite"></div>
             </section>
@@ -300,6 +304,13 @@
                         </div>
                     </div>
                     <div class="home-section-grid">
+                        <section class="home-section home-section-activity">
+                            <div class="home-section-header">
+                                <h3 data-i18n="home.activityTitle"></h3>
+                                <button type="button" class="home-section-action" id="home-weekly-brief-btn" data-i18n="home.weeklyBrief"></button>
+                            </div>
+                            <div class="home-section-body" id="home-activity-body"></div>
+                        </section>
                         <section class="home-section">
                             <div class="home-section-header">
                                 <h3 data-i18n="home.pendingTitle"></h3>
@@ -456,20 +467,6 @@
 
             <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
             <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
-
-            <div class="pending-links-panel" id="pending-links-panel" style="display: none;">
-                <div class="pending-links-header">
-                    <span class="pending-links-title" data-i18n="links.pendingTitle"></span>
-                    <button class="pending-links-confirm-all" onclick="onConfirmAllLinks()" data-i18n-title="links.confirmAll" data-i18n="links.confirmAllBtn"></button>
-                    <button class="graph-panel-close" onclick="togglePendingLinksPanel()" data-i18n-title="common.close">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-                <div class="pending-links-body" id="pending-links-body">
-                    <div class="pending-links-empty" id="pending-links-empty" data-i18n="links.pendingEmpty"></div>
-                    <div class="pending-links-list" id="pending-links-list"></div>
-                </div>
-            </div>
 
             <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
 
@@ -700,6 +697,10 @@
                         <button class="settings-nav-btn" data-tab="rag">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
                             <span data-i18n="settings.nav.rag"></span>
+                        </button>
+                        <button class="settings-nav-btn" data-tab="semantic">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="m19.1 4.9-2.8 2.8"/><path d="m7.7 16.3-2.8 2.8"/></svg>
+                            <span data-i18n="settings.nav.semantic"></span>
                         </button>
                         <button class="settings-nav-btn" data-tab="cli">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -1152,6 +1153,42 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="settings-tab" id="tab-semantic">
+                            <div class="card">
+                                <div class="card-title" data-i18n="settings.semanticWorkbenchTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticWorkbenchHint"></p>
+                                <label class="settings-toggle-row">
+                                    <span class="settings-toggle-label" data-i18n="settings.semanticWorkbenchEnabledLabel"></span>
+                                    <span class="settings-toggle-desc" data-i18n="settings.semanticWorkbenchEnabledDesc"></span>
+                                    <label class="switch-container">
+                                        <input type="checkbox" id="settings-semantic-workbench-enabled" class="switch-input" checked>
+                                        <span class="switch-slider"></span>
+                                    </label>
+                                </label>
+                            </div>
+                            <div class="card" id="settings-semantic-tabs-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.semanticTabsTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticTabsHint"></p>
+                                <div class="settings-semantic-tabs-list" id="settings-semantic-tabs-list">
+                                    <label class="settings-check-row"><input type="checkbox" value="objects" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabObjects"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="claims" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabClaims"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="quality" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabQuality"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="conflicts" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabConflicts"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="links" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabLinks"></span></label>
+                                    <label class="settings-check-row"><input type="checkbox" value="brief" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabBrief"></span></label>
+                                </div>
+                            </div>
+                            <div class="card" id="settings-semantic-intensity-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.semanticIntensityTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.semanticIntensityHint"></p>
+                                <div class="schema-option-list schema-option-list-inline">
+                                    <label class="schema-option-card"><input type="radio" name="settings-semantic-intensity" value="light"> <span data-i18n="settings.semanticIntensityLight"></span></label>
+                                    <label class="schema-option-card selected"><input type="radio" name="settings-semantic-intensity" value="standard" checked> <span data-i18n="settings.semanticIntensityStandard"></span></label>
+                                    <label class="schema-option-card"><input type="radio" name="settings-semantic-intensity" value="deep"> <span data-i18n="settings.semanticIntensityDeep"></span></label>
+                                </div>
+                                <p class="settings-hint" style="margin-top:8px" data-i18n="settings.semanticIntensityDesc"></p>
+                            </div>
+                        </div>
                         <div class="settings-tab" id="tab-cli">
                             <div class="card">
                                 <div class="card-title" data-i18n="settings.cliIntroTitle"></div>
@@ -1309,6 +1346,31 @@
     </div>
     <div class="custom-tooltip" id="custom-tooltip"></div>
 
+    <div class="modal-overlay" id="weekly-brief-modal" style="display:none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 data-i18n="weeklyBrief.title"></h3>
+                <button class="modal-close-btn" onclick="window.WeeklyBriefModule && WeeklyBriefModule.close()" data-i18n-title="common.close">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18"></path>
+                        <path d="m6 6 12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="hint" data-i18n="weeklyBrief.desc"></p>
+                <div class="weekly-brief-status" id="weekly-brief-status" hidden></div>
+                <div class="weekly-brief-content" id="weekly-brief-content" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="weekly-brief-regenerate-btn" data-i18n="weeklyBrief.regenerate"></button>
+                <div class="right">
+                    <button type="button" class="btn btn-primary" id="weekly-brief-save-btn" data-i18n="weeklyBrief.saveAsNote"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="organize-rules-modal" style="display:none;">
         <div class="modal-dialog">
             <div class="modal-header">
@@ -1459,9 +1521,6 @@
                 <span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>
             </div>
             <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
-                <button type="button" class="sidebar-footer-btn" id="btn-discover-links" onclick="onDiscoverLinks()" data-i18n-title="sidebar.discoverLinksTitle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.5"></circle><circle cx="5" cy="19" r="2.5"></circle><circle cx="19" cy="19" r="2.5"></circle><line x1="12" y1="7.5" x2="5" y2="16.5"></line><line x1="12" y1="7.5" x2="19" y2="16.5"></line><line x1="7.5" y1="19" x2="16.5" y2="19"></line></svg>
-                </button>
                 <span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>
             </div>
         </div>
@@ -1510,8 +1569,9 @@
         </div>
         <pre id="js-error-log" style="margin:0;white-space:pre-wrap"></pre>
     </div>
+    <!-- error-handler/storage 保持经典脚本：需在模块执行前尽早安装错误捕获与存储层；
+         G3.js 已迁入 main.mjs 动态加载序列（其顶层依赖的 window.Storage 由上方经典脚本先行提供） -->
     <script src="js/error-handler.js"></script>
     <script src="js/storage.js"></script>
-    <script src="js/G3.js"></script>
 </body>
 </html>

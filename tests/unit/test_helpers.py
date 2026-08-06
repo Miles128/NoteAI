@@ -96,26 +96,26 @@ class TestMaxContextTokens(unittest.TestCase):
         self.assertFalse(config.validate_context_config())
 
     def test_check_content_within_limit_small(self):
-        from config.settings import AppConfig
+        from utils.llm_utils import check_content_within_context
 
-        config = AppConfig(max_context_tokens=131072)
         content = "This is a short test content"
-        is_within, tokens, result = config.check_content_within_context(content)
+        is_within, tokens, result = check_content_within_context(content, max_context_tokens=131072)
         self.assertTrue(is_within)
         self.assertEqual(result, content)
 
     def test_check_content_truncation(self):
         from unittest.mock import patch
 
-        from config.settings import AppConfig
+        from utils.llm_utils import check_content_within_context
 
-        config = AppConfig(max_context_tokens=1000, model_name="gpt-4")
         content = "A" * 10000
         with patch(
             "utils.llm_utils.process_content_with_llm",
             return_value=("truncated summary", True, True, 400),
         ):
-            is_within, tokens, result = config.check_content_within_context(content)
+            is_within, tokens, result = check_content_within_context(
+                content, max_context_tokens=1000, model_name="gpt-4"
+            )
         self.assertFalse(is_within)
         self.assertLess(tokens, 1000)
         self.assertNotEqual(result, content)

@@ -17,40 +17,6 @@ from utils.logger import logger
 
 
 class IntelHandler(BaseHandler):
-    def _llm_rewrite(self, params):
-        from utils.llm_utils import APIConfigError, rewrite_with_llm
-
-        file_path = params.get("file_path", "")
-        if not file_path:
-            return {"success": False, "message": "未指定文件"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        full_path = self._resolve_path(file_path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-
-        try:
-            content = full_path.read_text(encoding="utf-8")
-            fm, body = self._parse_frontmatter(content)
-            rewritten_body = rewrite_with_llm(body)
-            if fm is not None:
-                fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-                rewritten = "---\n" + fm_str + "\n---\n" + rewritten_body
-            else:
-                rewritten = rewritten_body
-            full_path.write_text(rewritten, encoding="utf-8")
-            return {"success": True, "message": "改写完成"}
-        except APIConfigError as e:
-            return {"success": False, "message": str(e)}
-        except Exception as e:
-            return {"success": False, "message": f"改写失败: {str(e)}"}
-
     def _llm_rewrite_stream(self, params):
         from utils.llm_utils import APIConfigError, rewrite_with_llm_stream
 
@@ -591,10 +557,9 @@ class IntelHandler(BaseHandler):
         return None
 
     def register_routes(self, router):
-        router.register("llm_rewrite", self._llm_rewrite)
-        router.register("llm_rewrite_stream", self._llm_rewrite_stream, async_mode=True)
+        router.register("llm_rewrite_stream", self._llm_rewrite_stream)
         router.register("llm_rewrite_apply", self._llm_rewrite_apply)
         router.register("search_files", self._search_files)
         router.register("ai_topic_analyze", self._ai_topic_analyze)
-        router.register("ai_topic_survey", self._ai_topic_survey, async_mode=True)
+        router.register("ai_topic_survey", self._ai_topic_survey)
         router.register("apply_topic_suggestion", self._apply_topic_suggestion)

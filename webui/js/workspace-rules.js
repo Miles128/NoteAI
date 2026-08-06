@@ -138,9 +138,7 @@ async function finishModal() {
         await saveOrganizeRules(true);
         hideModal();
         await loadOrganizeRules();
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('organizeRules.saved'));
-        }
+        window.updateStatus(window.t('organizeRules.saved'));
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             await window.TreeModule.loadFileTree(true);
         }
@@ -150,9 +148,7 @@ async function finishModal() {
         if (_resolveOpen) _resolveOpen(true);
     } catch (e) {
         console.error('[OrganizeRules] save failed:', e);
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(window.t('organizeRules.saveFailed', { message: e.message }));
-        }
+        window.updateStatus(window.t('organizeRules.saveFailed', { message: e.message }));
     }
 }
 
@@ -248,9 +244,7 @@ function initOrganizeRules() {
                 await saveOrganizeRules(false);
                 await loadOrganizeRules();
                 showStatus(window.t('settings.organizeRulesSaved'));
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(window.t('settings.organizeRulesSaved'));
-                }
+                window.updateStatus(window.t('settings.organizeRulesSaved'));
             } catch (e) {
                 showStatus(e.message, true);
             }
@@ -270,9 +264,7 @@ function initOrganizeRules() {
                     statusEl.style.color = '';
                     setTimeout(function() { statusEl.style.display = 'none'; }, 3000);
                 }
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(window.t('settings.projectRulesSaved'));
-                }
+                window.updateStatus(window.t('settings.projectRulesSaved'));
             } catch (e) {
                 if (statusEl) {
                     statusEl.textContent = e.message || String(e);

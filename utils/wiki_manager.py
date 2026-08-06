@@ -19,11 +19,18 @@ class WikiTopic(TypedDict):
     files: list[str]
 
 
-def _get_wiki_path():
-    workspace = config.workspace_path
-    if not workspace:
+def _get_wiki_path(workspace_str=None):
+    """Resolve WIKI.md path with legacy fallback.
+
+    Prefers ``<ws>/wiki/WIKI.md`` (modern layout) but falls back to the legacy
+    ``<ws>/WIKI.md`` (pre-wiki/ workspaces). Read/write of the index must agree,
+    so all WIKI consumers go through this single provider.
+    """
+    if workspace_str is None:
+        workspace_str = config.workspace_path
+    if not workspace_str:
         return None
-    ws = Path(workspace)
+    ws = Path(workspace_str)
     new_path = ws / "wiki" / "WIKI.md"
     if new_path.exists():
         return new_path
@@ -37,8 +44,8 @@ def parse_wiki_headings():
     workspace = config.workspace_path
     if not workspace:
         return []
-    wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-    if not wiki_path.exists():
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
         return []
     try:
         text = wiki_path.read_text(encoding="utf-8")
@@ -70,8 +77,8 @@ def parse_wiki_structure():
     workspace = config.workspace_path
     if not workspace:
         return []
-    wiki_path = Path(workspace) / "wiki" / "WIKI.md"
-    if not wiki_path.exists():
+    wiki_path = _get_wiki_path()
+    if not wiki_path or not wiki_path.exists():
         return []
     try:
         text = wiki_path.read_text(encoding="utf-8")
@@ -126,12 +133,7 @@ def parse_wiki_structure():
 
 
 def collect_survey_off_topics(workspace_str=None) -> set[str]:
-    wiki_path = _get_wiki_path()
-    if workspace_str is not None:
-        ws = Path(workspace_str)
-        new_path = ws / "wiki" / "WIKI.md"
-        old_path = ws / "WIKI.md"
-        wiki_path = new_path if new_path.exists() else (old_path if old_path.exists() else new_path)
+    wiki_path = _get_wiki_path(workspace_str)
     if not wiki_path or not wiki_path.exists():
         return set()
     try:

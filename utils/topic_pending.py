@@ -5,7 +5,7 @@ from pathlib import Path
 from config import config
 from utils.logger import logger
 from utils.text_utils import parse_frontmatter
-from utils.topic_file_ops import _check_topic_needs_processing
+from utils.topic_file_ops import check_topic_needs_processing
 
 _pending_lock = threading.Lock()
 
@@ -43,7 +43,8 @@ def save_pending(pending):
         tmp_path.replace(path)
 
 
-def _drop_pending_for_rel(rel_path: str) -> None:
+def drop_pending_for_rel(rel_path: str) -> None:
+    """契约：输入工作区相对路径，从待分配主题待办列表中移除对应条目并持久化；副作用为改写 .pending_topics.json（仅在确有匹配时）。"""
     pending = load_pending()
     filtered = [p for p in pending if p.get("file") != rel_path]
     if len(filtered) != len(pending):
@@ -86,7 +87,7 @@ def cleanup_stale_pending():
         try:
             text = full.read_text(encoding="utf-8")
             meta, _ = parse_frontmatter(text)
-            if meta is not None and not _check_topic_needs_processing(meta):
+            if meta is not None and not check_topic_needs_processing(meta):
                 logger.info(f"[topic_assigner] 清理已处理待办: {file_path} 已有主题")
                 continue
         except Exception as e:

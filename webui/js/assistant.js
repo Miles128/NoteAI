@@ -186,7 +186,7 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
         }
 
         function onMouseMove(e) {
@@ -207,7 +207,7 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
@@ -225,7 +225,7 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
         }
 
         function onMouseMove(e) {
@@ -244,7 +244,7 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
@@ -253,6 +253,10 @@ window.AssistantModule = (function() {
     var _currentStreamEl = null;
     var _streamRawText = '';
     var _lastArchive = null;
+    /** 本轮 rag_retrieval 元信息（先于回答流到达），用于检索过程面板 */
+    var _pendingRetrieval = null;
+    /** 检索面板是否已插入当前占位 bubble，避免重复挂载 */
+    var _retrievalAttached = false;
     var _savePreviewState = null;
     var _savePreviewBindingsDone = false;
 
@@ -288,8 +292,15 @@ window.AssistantModule = (function() {
 
         if (!questionOverride) input.value = '';
 
+        /* 新一轮提问开始：清除上一轮追问 chips 与检索元信息 */
+        _clearSuggestionChips();
+        _pendingRetrieval = null;
+        _retrievalAttached = false;
+
         addUserMessage(question);
-        var requestHistory = _chatHistory.slice(-6).map(function(message) {
+        /* 上送最近 12 条：后端主题锚定需要 >6 条历史才能提取锚点词（P4），
+           prompt 内历史仍由后端 _limited_history 截取最近 6 条，互不影响 */
+        var requestHistory = _chatHistory.slice(-12).map(function(message) {
             return {
                 role: message.role,
                 content: String(message.content || '').slice(0, 1200)
@@ -438,7 +449,14 @@ window.AssistantModule = (function() {
     function handleEvent(eventData) {
         if (!eventData) return;
 
-        if (eventData.type === 'rag_chat_chunk') {
+        if (eventData.type === 'rag_retrieval') {
+            /* 检索元信息先于 chunk 到达：缓存并立即挂到占位 bubble 上（折叠面板骨架） */
+            _pendingRetrieval = eventData.data || {};
+            if (_currentStreamEl && !_retrievalAttached) {
+                _attachRetrievalPanel(_currentStreamEl, _pendingRetrieval);
+                _retrievalAttached = true;
+            }
+        } else if (eventData.type === 'rag_chat_chunk') {
             if (_currentStreamEl) {
                 _streamRawText += eventData.token || '';
                 _setAssistantMarkdown(_currentStreamEl, _streamRawText);
@@ -455,6 +473,13 @@ window.AssistantModule = (function() {
                     _linkifyCitationRefs(_currentStreamEl, eventData.citations);
                     _renderCitations(_currentStreamEl, eventData.citations, eventData.citation_quality);
                 }
+                /* 兜底：若检索事件晚于 bubble 创建后仍未挂载，则在回答完成时补挂（位置仍在顶部） */
+                if (_pendingRetrieval && !_retrievalAttached) {
+                    _attachRetrievalPanel(_currentStreamEl, _pendingRetrieval);
+                    _retrievalAttached = true;
+                }
+                /* P4：引用区之下渲染追问 chips（位于保存操作之前） */
+                _renderSuggestionChips(_currentStreamEl, eventData.suggestions);
                 if (_lastArchive) {
                     _lastArchive.answer = answerText;
                     _lastArchive.citations = eventData.citations || [];
@@ -466,6 +491,8 @@ window.AssistantModule = (function() {
             }
             _streamRawText = '';
             _currentStreamEl = null;
+            _pendingRetrieval = null;
+            _retrievalAttached = false;
         } else if (eventData.type === 'rag_error') {
             _isStreaming = false;
             if (_currentStreamEl) {
@@ -474,6 +501,8 @@ window.AssistantModule = (function() {
             }
             _streamRawText = '';
             _currentStreamEl = null;
+            _pendingRetrieval = null;
+            _retrievalAttached = false;
         } else if (eventData.type === 'rag_index_built') {
             var indexPayload = eventData.data || eventData;
             _indexBuilt = !!indexPayload.success;
@@ -508,6 +537,138 @@ window.AssistantModule = (function() {
         window.api.ragRebuildIndex().catch(function(err) {
             addSystemMessage(window.t('assistant.indexRequestFailed', { message: err.message }));
         });
+    }
+
+    /** window.t 对缺失 key 会返回 key 本身，这里提供中文兜底文案 */
+    function _tr(key, fallback) {
+        var v = window.t ? window.t(key) : '';
+        return (v && v !== key) ? v : fallback;
+    }
+
+    function _scoreText(value) {
+        var n = Number(value);
+        return isFinite(n) ? n.toFixed(3) : '-';
+    }
+
+    function _clearSuggestionChips() {
+        var container = document.getElementById('ai-panel-messages');
+        if (!container) return;
+        var rows = container.querySelectorAll('.ai-suggestion-chips');
+        for (var i = 0; i < rows.length; i++) {
+            rows[i].parentNode.removeChild(rows[i]);
+        }
+    }
+
+    /** P4：在当前回答 bubble 的引用区下方渲染一行追问 chips，点击即以该文本发起新一轮提问 */
+    function _renderSuggestionChips(contentEl, suggestions) {
+        if (!contentEl || !suggestions || !suggestions.length) return;
+        var bubble = contentEl.closest('.ai-msg');
+        if (!bubble || bubble.querySelector('.ai-suggestion-chips')) return;
+
+        var items = [];
+        for (var i = 0; i < suggestions.length && items.length < 3; i++) {
+            var text = String(suggestions[i] == null ? '' : suggestions[i]).trim();
+            if (text) items.push(text);
+        }
+        if (!items.length) return;
+
+        var row = document.createElement('div');
+        row.className = 'ai-suggestion-chips';
+        items.forEach(function(suggestion) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'ai-suggestion-chip';
+            chip.textContent = suggestion; /* textContent 天然转义 */
+            chip.title = suggestion;
+            chip.addEventListener('click', function() {
+                if (_isStreaming) return;
+                sendMessage(suggestion);
+            });
+            row.appendChild(chip);
+        });
+        bubble.appendChild(row);
+    }
+
+    /** P9：在回答 bubble 顶部（引用区之上）插入默认折叠的检索过程面板 */
+    function _attachRetrievalPanel(contentEl, data) {
+        if (!contentEl || !data) return;
+        var bubble = contentEl.closest('.ai-msg');
+        if (!bubble || bubble.querySelector('.ai-retrieval-details')) return;
+
+        var esc = window.escapeHtml;
+        var escAttr = window.escapeAttr || window.escapeHtml;
+        var debug = data.retrieval_debug || {};
+
+        var badges = '';
+        if (debug.cached) {
+            badges += '<span class="ai-retrieval-badge ai-retrieval-badge-cached">'
+                + esc(_tr('assistant.retrievalCached', '缓存命中')) + '</span>';
+        }
+        if (debug.degraded) {
+            badges += '<span class="ai-retrieval-badge ai-retrieval-badge-degraded">'
+                + esc(_tr('assistant.retrievalDegraded', '部分中间数据缺失')) + '</span>';
+        }
+
+        var rows = '';
+        function addRow(label, value) {
+            if (value === '' || value == null) return;
+            rows += '<div class="ai-retrieval-row"><span class="ai-retrieval-label">' + esc(label) + '</span>'
+                + '<span class="ai-retrieval-value">' + esc(value) + '</span></div>';
+        }
+
+        addRow(_tr('assistant.retrievalIntent', '意图分类'), data.intent || '-');
+
+        var hydeOn = !!(debug.hyde_enabled != null ? debug.hyde_enabled : data.hyde_enabled);
+        var hydeQuery = debug.hyde_query != null ? debug.hyde_query : data.hyde_query;
+        var hydeText = hydeOn
+            ? (_tr('assistant.retrievalHydeOn', '已触发') + (hydeQuery ? ' · ' + hydeQuery : ''))
+            : _tr('assistant.retrievalHydeOff', '未触发');
+        addRow('HyDE', hydeText);
+
+        var funnel = [debug.raw_hits, debug.mmr_kept, debug.final].map(function(n) {
+            return n == null ? '-' : esc(String(n));
+        }).join(' <span class="ai-retrieval-arrow">→</span> ');
+        rows += '<div class="ai-retrieval-row"><span class="ai-retrieval-label">'
+            + esc(_tr('assistant.retrievalFunnel', '候选收敛')) + '</span>'
+            + '<span class="ai-retrieval-value">' + funnel + '</span></div>';
+
+        if (debug.anchor_terms && debug.anchor_terms.length) {
+            var terms = '';
+            debug.anchor_terms.forEach(function(term) {
+                terms += '<span class="ai-retrieval-term">' + esc(String(term == null ? '' : term)) + '</span>';
+            });
+            rows += '<div class="ai-retrieval-row"><span class="ai-retrieval-label">'
+                + esc(_tr('assistant.retrievalAnchors', '锚点词')) + '</span>'
+                + '<span class="ai-retrieval-value ai-retrieval-terms">' + terms + '</span></div>';
+        }
+
+        var sources = data.top_sources || [];
+        if (sources.length) {
+            var listHtml = '';
+            sources.forEach(function(src) {
+                src = src || {};
+                var path = String(src.path || '');
+                var section = String(src.section_title || '');
+                listHtml += '<div class="ai-retrieval-source">'
+                    + '<span class="ai-retrieval-source-path" title="' + escAttr(path) + '">' + esc(path) + '</span>'
+                    + (section ? '<span class="ai-retrieval-source-section">' + esc(section) + '</span>' : '')
+                    + '<span class="ai-retrieval-source-score">'
+                    + esc(_scoreText(src.score)) + ' / ' + esc(_scoreText(src.rerank_score)) + '</span>'
+                    + '</div>';
+            });
+            rows += '<div class="ai-retrieval-sources">'
+                + '<div class="ai-retrieval-label">' + esc(_tr('assistant.retrievalSources', 'Top 片段')) + '</div>'
+                + listHtml + '</div>';
+        }
+
+        var details = document.createElement('details');
+        details.className = 'ai-retrieval-details';
+        details.innerHTML = '<summary class="ai-retrieval-summary">'
+            + '<span class="ai-retrieval-title">' + esc(_tr('assistant.retrievalTitle', '检索过程')) + '</span>'
+            + badges + '</summary>'
+            + '<div class="ai-retrieval-body">' + rows + '</div>';
+        /* 顶部插入：回答流式渲染只重写 content 元素 innerHTML，面板位置保持稳定 */
+        bubble.insertBefore(details, bubble.firstChild);
     }
 
     function _attachSaveNoteActions(contentEl, archive) {

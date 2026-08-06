@@ -88,7 +88,8 @@ class BaseHandler:
         return self._server._link_discovery_lock
 
     @staticmethod
-    def _parse_frontmatter(md_text: str) -> dict:
+    def _parse_frontmatter(md_text: str) -> tuple[dict | None, str]:
+        """解析 frontmatter，返回 (meta_dict|None, body_str)，与 utils.text_utils.parse_frontmatter 一致。"""
         from utils.text_utils import parse_frontmatter
 
         return parse_frontmatter(md_text)

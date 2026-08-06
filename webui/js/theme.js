@@ -293,7 +293,7 @@ function initResizer() {
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
-        if (typeof Graph3Tier !== 'undefined') Graph3Tier.pauseResize();
+        if (window.Graph3Tier) window.Graph3Tier.pauseResize();
         e.preventDefault();
         e.stopPropagation();
     });
@@ -317,7 +317,7 @@ function initResizer() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         window.Storage.setRaw(window.Storage.KEYS.SIDEBAR_WIDTH, String(sidebar.offsetWidth));
-        if (typeof Graph3Tier !== 'undefined') Graph3Tier.resumeResize();
+        if (window.Graph3Tier) window.Graph3Tier.resumeResize();
     });
 }
 
@@ -400,11 +400,12 @@ window.setTheme = setTheme;
 window.setAccentColor = setAccentColor;
 window.setFontSize = applyFontSize;
 
-document.addEventListener('DOMContentLoaded', function() {
+// 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接同步（不再依赖 DOMContentLoaded 重放）
+(function() {
     var savedTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true });
     syncThemeRadioInputs(savedTheme);
     syncAccentInputs(currentAccentColor);
-});
+})();
 
 var FONT_SCALE_MAP = { small: 1, medium: 1.15, large: 1.3 };
 

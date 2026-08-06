@@ -2,6 +2,7 @@
 
 var _lastPending = null;
 var _refreshTimer = null;
+var _weeklyBriefTimer = null;
 
 function esc(text) {
     return window.escapeHtml ? window.escapeHtml(String(text || '')) : String(text || '');
@@ -236,6 +237,38 @@ function runRecommendedAction() {
     refresh();
 }
 
+function renderActivityItems(result) {
+    var body = document.getElementById('home-activity-body');
+    if (!body) return;
+    if (!result || !result.success || !result.items || !result.items.length) {
+        body.innerHTML = '<div class="home-empty">' + esc(window.t('home.activityEmpty')) + '</div>';
+        return;
+    }
+    var rows = result.items.slice(0, 5).map(function(item) {
+        var label = esc(item.label || item.object_id || '');
+        var source = item.source_path ? '<span class="home-activity-source">' + esc(item.source_path) + '</span>' : '';
+        var kindKey = item.change_kind === 'added' ? 'activity.gained' :
+            item.change_kind === 'updated' ? 'activity.corrected' :
+            item.change_kind === 'invalidated' ? 'activity.doubted' :
+            item.change_kind === 'removed' ? 'activity.removed' : null;
+        var kindText = kindKey ? window.t(kindKey) : (window.t('semantic.changes.' + item.change_kind, {}) || item.change_kind);
+        return '<div class="home-activity-row">' +
+            '<span class="home-activity-kind">' + esc(kindText) + '</span>' +
+            '<span class="home-activity-label" title="' + label + '">' + label + '</span>' +
+            source +
+            '</div>';
+    }).join('');
+    body.innerHTML = '<div class="home-activity-list">' + rows + '</div>' +
+        (result.total > 5 ? '<button type="button" class="home-activity-more-btn" onclick="window.HomeDashboardModule.openSemanticChanges()">' + esc(window.t('home.activityViewAll')) + '</button>' : '');
+}
+
+function loadActivity() {
+    if (!window.api || !window.api.getSemanticChanges) return;
+    window.api.getSemanticChanges({ days: 7, limit: 5 }).then(function(result) {
+        renderActivityItems(result);
+    }).catch(function() {});
+}
+
 function renderDashboardStatus(status) {
     var summary = status.pending_summary || summarizePending(status.pending || {});
     var jobs = status.jobs || [];
@@ -263,6 +296,7 @@ function renderDashboardStatus(status) {
     renderOrganize(ingestStatus, jobs);
     renderCompile(jobs);
     renderFlow(summary, ingestStatus, jobs, status.index || {});
+    loadActivity();
 }
 
 function refreshFallback() {
@@ -387,6 +421,113 @@ function show() {
     refresh();
 }
 
+function openSemanticChanges() {
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.show) {
+        window.SemanticWorkbenchModule.show('overview');
+    }
+}
+
+function renderMarkdown(md) {
+    if (!md) return '';
+    var rendered = md;
+    if (window.marked) {
+        try { rendered = window.marked.parse(md); } catch (e) { /* fallback */ }
+    } else {
+        rendered = md.split('\n').map(function(line) {
+            var t = String(line).trim();
+            if (/^#{1,6}\s/.test(t)) {
+                var level = t.match(/^#{1,6}/)[0].length;
+                return '<h' + level + '>' + esc(t.replace(/^#{1,6}\s*/, '')) + '</h' + level + '>';
+            }
+            return '<p>' + esc(t) + '</p>';
+        }).join('');
+    }
+    return rendered;
+}
+
+function showWeeklyBriefModal() {
+    var modal = document.getElementById('weekly-brief-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    generateWeeklyBrief();
+}
+
+function closeWeeklyBriefModal() {
+    var modal = document.getElementById('weekly-brief-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function setWeeklyBriefBusy(busy) {
+    var genBtn = document.getElementById('weekly-brief-regenerate-btn');
+    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    if (genBtn) genBtn.disabled = busy;
+    if (saveBtn) saveBtn.disabled = busy;
+}
+
+function generateWeeklyBrief() {
+    var status = document.getElementById('weekly-brief-status');
+    var content = document.getElementById('weekly-brief-content');
+    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    if (!status || !content) return;
+    status.hidden = false;
+    content.hidden = true;
+    status.textContent = window.t('weeklyBrief.generating');
+    setWeeklyBriefBusy(true);
+    if (saveBtn) saveBtn.dataset.path = '';
+    if (!window.api || !window.api.generateWeeklyBrief) {
+        status.textContent = window.t('weeklyBrief.notAvailable');
+        setWeeklyBriefBusy(false);
+        return;
+    }
+    window.api.generateWeeklyBrief({ days: 7 }).then(function(result) {
+        setWeeklyBriefBusy(false);
+        if (!result || !result.success) {
+            status.textContent = (result && result.message) || window.t('weeklyBrief.failed');
+            return;
+        }
+        if (result.fallback) {
+            status.textContent = window.t('weeklyBrief.fallbackHint');
+            status.hidden = false;
+        } else {
+            status.hidden = true;
+        }
+        content.innerHTML = renderMarkdown(result.brief || '');
+        content.dataset.markdown = result.brief || '';
+        content.hidden = false;
+        if (saveBtn) saveBtn.dataset.path = '';
+    }).catch(function(err) {
+        setWeeklyBriefBusy(false);
+        status.textContent = (err && err.message) || window.t('weeklyBrief.failed');
+    });
+}
+
+function saveWeeklyBriefAsNote() {
+    var content = document.getElementById('weekly-brief-content');
+    var status = document.getElementById('weekly-brief-status');
+    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    if (!content || !saveBtn || saveBtn.dataset.saving) return;
+    var brief = (content.dataset && content.dataset.markdown) || '';
+    if (!brief.trim()) return;
+    saveBtn.dataset.saving = '1';
+    saveBtn.disabled = true;
+    var title = '知识库周报 ' + new Date().toISOString().slice(0, 10);
+    window.api.createNoteFromDraft(title, '知识库周报', brief).then(function(result) {
+        delete saveBtn.dataset.saving;
+        saveBtn.disabled = false;
+        if (!result || !result.success) {
+            if (status) { status.hidden = false; status.textContent = (result && result.message) || window.t('weeklyBrief.saveFailed'); }
+            return;
+        }
+        if (window.ToastModule) window.ToastModule.success(window.t('weeklyBrief.saved', { path: result.path || '' }));
+        closeWeeklyBriefModal();
+        scheduleRefresh();
+    }).catch(function(err) {
+        delete saveBtn.dataset.saving;
+        saveBtn.disabled = false;
+        if (status) { status.hidden = false; status.textContent = (err && err.message) || window.t('weeklyBrief.saveFailed'); }
+    });
+}
+
 function init() {
     var refreshBtn = document.getElementById('home-refresh-btn');
     if (refreshBtn && !refreshBtn.dataset.bound) {
@@ -403,6 +544,29 @@ function init() {
         actionBtn.dataset.bound = '1';
         actionBtn.addEventListener('click', runRecommendedAction);
     }
+    var weeklyBtn = document.getElementById('home-weekly-brief-btn');
+    if (weeklyBtn && !weeklyBtn.dataset.bound) {
+        weeklyBtn.dataset.bound = '1';
+        weeklyBtn.addEventListener('click', showWeeklyBriefModal);
+    }
+    var regenerateBtn = document.getElementById('weekly-brief-regenerate-btn');
+    if (regenerateBtn && !regenerateBtn.dataset.bound) {
+        regenerateBtn.dataset.bound = '1';
+        regenerateBtn.addEventListener('click', generateWeeklyBrief);
+    }
+    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    if (saveBtn && !saveBtn.dataset.bound) {
+        saveBtn.dataset.bound = '1';
+        saveBtn.addEventListener('click', saveWeeklyBriefAsNote);
+    }
+    var weeklyModal = document.getElementById('weekly-brief-modal');
+    if (weeklyModal && !weeklyModal.dataset.bound) {
+        weeklyModal.dataset.bound = '1';
+        weeklyModal.addEventListener('click', function(e) { if (e.target === weeklyModal) closeWeeklyBriefModal(); });
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeWeeklyBriefModal();
+    });
     document.addEventListener('noteai_jobs_changed', scheduleRefresh);
     document.addEventListener('localechange', scheduleRefresh);
     refresh();
@@ -416,7 +580,12 @@ window.HomeDashboardModule = {
     runRecommendedAction: runRecommendedAction,
     deriveRecommendation: deriveRecommendation,
     countFiles: countFiles,
-    countTopics: countTopics
+    countTopics: countTopics,
+    openSemanticChanges: openSemanticChanges,
+    generateWeeklyBrief: generateWeeklyBrief,
+    saveWeeklyBriefAsNote: saveWeeklyBriefAsNote,
+    showWeeklyBriefModal: showWeeklyBriefModal,
+    close: closeWeeklyBriefModal
 };
 
 })();

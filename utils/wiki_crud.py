@@ -116,6 +116,7 @@ def rename_wiki_topic(old_topic, new_topic):  # noqa: PLR0912, PLR0915
     file_item_pattern = re.compile(r"^(\d+)\.\s+\*\*(.+?)\*\*\s*$")
     new_lines = []
     in_target = False
+    found = False
     file_titles = []
 
     old_heading = f"## {old_topic}"
@@ -125,6 +126,7 @@ def rename_wiki_topic(old_topic, new_topic):  # noqa: PLR0912, PLR0915
         stripped = line.strip()
         if stripped == old_heading:
             in_target = True
+            found = True
             new_lines.append(new_heading)
             continue
         if in_target:
@@ -138,6 +140,10 @@ def rename_wiki_topic(old_topic, new_topic):  # noqa: PLR0912, PLR0915
             new_lines.append(line)
             continue
         new_lines.append(line)
+
+    if not found:
+        # 目标主题不存在：不做任何写入，返回失败信号以便调用方区分
+        return False, []
 
     _renumber_wiki_files(new_lines)
 
@@ -503,14 +509,16 @@ def rename_topic(old_topic, new_topic):  # noqa: PLR0911, PLR0912, PLR0915
 
     wiki_success, old_file_titles = rename_wiki_topic(old_topic, new_topic)
 
-    old_topic_parts = [p.strip() for p in old_topic.split(TOPIC_SEP) if p.strip()]
-    old_topic_dir = workspace_path / config.NOTES_FOLDER
-    for part in old_topic_parts:
-        old_topic_dir = old_topic_dir / part
+    # rename_wiki_topic 已将 Notes/旧主题 目录改名为 Notes/新主题，
+    # 文件扫描必须按新目录路径进行，否则 frontmatter 永远无法更新
+    scan_dir = workspace_path / config.NOTES_FOLDER / new_topic
+    if not scan_dir.exists():
+        # 目录改名未发生（如 WIKI 写入失败或旧目录本不存在）时回退旧目录
+        scan_dir = workspace_path / config.NOTES_FOLDER / old_topic
 
     updated_count = 0
     for title in old_file_titles:
-        full_path = old_topic_dir / f"{title}.md"
+        full_path = scan_dir / f"{title}.md"
         if full_path.exists():
             try:
                 write_topic_to_file(str(full_path), new_topic)

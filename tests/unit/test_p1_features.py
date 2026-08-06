@@ -47,9 +47,11 @@ def test_suggest_links_same_topic(workspace: Path) -> None:
     b.write_text("---\ntopic: AI > 测试\n---\n\n其他\n", encoding="utf-8")
     result = suggest_links_for_file(str(a.relative_to(workspace)))
     assert result["success"] is True
-    assert result["added"] >= 1
+    # 同主题不连双向链接：仅同属一个主题目录并不是实质关联，直接跳过
+    assert result["added"] == 0
     links = load_links().get("links", [])
-    assert any(l.get("status") == "confirmed" for l in links)
+    # 不应生成任何链接
+    assert not any(l.get("from") == str(a.relative_to(workspace)) for l in links)
 
 
 def test_suggest_links_ignores_readme(workspace: Path) -> None:

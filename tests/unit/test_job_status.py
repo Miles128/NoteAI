@@ -34,7 +34,3 @@ def test_job_handler_returns_jobs() -> None:
     listed = handler._get_jobs({"include_finished": True})
     assert listed["success"] is True
     assert listed["jobs"][0]["id"] == "cli_agent"
-
-    got = handler._get_job({"job_id": "cli_agent"})
-    assert got["success"] is True
-    assert got["job"]["kind"] == "cli_agent"

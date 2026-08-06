@@ -21,6 +21,12 @@ from sidecar.semantic.topic_state import build_topic_state
 
 _UNSAFE_PATH = re.compile(r'[\\/:*?"<>|]')
 
+# 主题页对象摘要：与语义工作台降级策略一致，低频低置信度对象不展示。
+_SUMMARY_MIN_MENTIONS = 2
+_SUMMARY_MIN_CONFIDENCE = 0.6
+_SUMMARY_LIMIT = 6
+_SUMMARY_DESC_CHARS = 60
+
 
 def _safe_segment(value: str) -> str:
     cleaned = _UNSAFE_PATH.sub("_", value.strip()).strip(". ")
@@ -101,15 +107,83 @@ def _group_claims_by_topic(
     return groups
 
 
+def _topic_object_summary(store: SemanticStore, topic: str) -> list[dict]:
+    """Return top entities/concepts mentioned in a topic's documents.
+
+    Deterministic and free of LLM calls: the summary is a quality-gated,
+    frequency-ranked list of extracted objects, so a topic page stays useful
+    even before its claims are recovered.
+    """
+    with store.connect() as conn:
+        rows = conn.execute(
+            """SELECT m.object_kind AS kind, m.object_id AS id,
+                      CASE m.object_kind WHEN 'entity' THEN e.canonical_name ELSE c.canonical_name END AS name,
+                      CASE m.object_kind WHEN 'entity' THEN e.description ELSE c.description END AS description,
+                      COALESCE(CASE m.object_kind WHEN 'entity' THEN e.confidence ELSE c.confidence END, 0.0)
+                          AS confidence,
+                      COUNT(*) AS mention_count
+               FROM semantic_mentions m
+               JOIN blocks b ON b.id = m.block_id
+               JOIN documents d ON d.id = b.document_id
+               LEFT JOIN entities e
+                 ON m.object_kind = 'entity' AND e.id = m.object_id AND e.status = 'active'
+               LEFT JOIN concepts c
+                 ON m.object_kind = 'concept' AND c.id = m.object_id AND c.status = 'active'
+               WHERE d.topic = ? AND m.object_kind IN ('entity', 'concept')
+               GROUP BY m.object_kind, m.object_id
+               ORDER BY mention_count DESC, name
+               LIMIT ?""",
+            (topic, _SUMMARY_LIMIT * 2),
+        ).fetchall()
+    items: list[dict] = []
+    for row in rows:
+        if row["name"] is None:
+            continue
+        if row["mention_count"] < _SUMMARY_MIN_MENTIONS and row["confidence"] < _SUMMARY_MIN_CONFIDENCE:
+            continue
+        description = (row["description"] or "").strip()
+        if len(description) > _SUMMARY_DESC_CHARS:
+            description = description[:_SUMMARY_DESC_CHARS] + "…"
+        items.append(
+            {
+                "kind": row["kind"],
+                "id": row["id"],
+                "name": row["name"],
+                "description": description,
+                "mention_count": row["mention_count"],
+            }
+        )
+        if len(items) >= _SUMMARY_LIMIT:
+            break
+    return items
+
+
+def _render_object_summary(lines: list[str], topic: str, store: SemanticStore) -> None:
+    """Render the top-object summary for a topic with no publishable claims."""
+    items = _topic_object_summary(store, topic)
+    if not items:
+        return
+    lines.extend(["**高频对象：**", ""])
+    for item in items:
+        kind_label = "概念" if item["kind"] == "concept" else "实体"
+        description = f"：{item['description']}" if item["description"] else ""
+        lines.append(f"- [{kind_label}] **{item['name']}**{description}（提及 {item['mention_count']} 次）")
+    lines.append("")
+
+
 def _render_claim_group(
     lines: list[str],
     group: list[dict],
     heading: str,
     target: Path,
     store: SemanticStore,
+    topic: str = "",
 ) -> None:
     conclusion = [claim for claim in group if claim["claim_type"] == "conclusion"]
     hypothesis = [claim for claim in group if claim["claim_type"] == "hypothesis"]
+    if not conclusion and not hypothesis and topic:
+        # 命题尚未恢复时，用高频对象摘要避免主题页空壳观感。
+        _render_object_summary(lines, topic, store)
     for title, claims, prefix in (("已发布结论", conclusion, ""), ("待验证假设", hypothesis, "**假设：** ")):
         lines.extend([f"{heading} {title}", ""])
         if not claims:
@@ -203,7 +277,7 @@ def build_topic_wiki_page(store: SemanticStore, topic: str) -> dict:
         lines.extend([f"{heading} {label}", ""])
         if not is_full_page and key.count(TOPIC_SEP):
             lines.extend([f"> 主题：{key}", ""])
-        _render_claim_group(lines, groups[key], f"{heading}#", target, store)
+        _render_claim_group(lines, groups[key], f"{heading}#", target, store, topic=key)
     return {
         "topic": top,
         "target": target,

@@ -1,21 +1,24 @@
-"""Read-only semantic workbench queries and explicit review actions."""
+"""Semantic workbench queries, explicit review actions and claim verification."""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from pathlib import Path
 
 from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
-from sidecar.semantic.ids import stable_id
+from sidecar.handlers.cli_agent_handler import CliAgentHandler
+from sidecar.semantic.detail import list_semantic_objects
 from sidecar.semantic.store import SemanticStore
 
 
 class SemanticHandler(BaseHandler):
     _TABS = {"overview", "claims", "concepts", "entities", "quality", "conflicts", "links"}
     _COMPILE_JOB_ID = "semantic-full-compile"
+    # Workbench display intensity → minimum confidence for claims/objects.
+    # "deep" keeps every item (including legacy rows without confidence).
+    _INTENSITY_MIN_CONFIDENCE = {"light": 0.8, "standard": 0.5, "deep": 0.0}
 
     def _store(self) -> SemanticStore | None:
         workspace = self.config.workspace_path
@@ -42,6 +45,10 @@ class SemanticHandler(BaseHandler):
         tab = str(params.get("tab", "overview") or "overview")
         if tab not in self._TABS:
             return {"success": False, "message": "未知语义视图"}
+        intensity = str(params.get("intensity", "standard") or "standard")
+        min_confidence = self._INTENSITY_MIN_CONFIDENCE.get(intensity)
+        if min_confidence is None:
+            min_confidence = self._INTENSITY_MIN_CONFIDENCE["standard"]
         store = self._store()
         if store is None:
             return {"success": False, "message": "未设置工作区"}
@@ -58,7 +65,7 @@ class SemanticHandler(BaseHandler):
             return self._conflicts(store, params)
         if tab == "quality":
             return self._quality(store, params)
-        return self._semantic_list(store, tab, params)
+        return self._semantic_list(store, tab, params, min_confidence=min_confidence)
 
     @staticmethod
     def _empty_overview() -> dict:
@@ -80,6 +87,28 @@ class SemanticHandler(BaseHandler):
             "uncompiled_documents": 0,
         }
 
+    def _manifest_prompt_version(self, store: SemanticStore):
+        """读取 manifest 中记录的抽取提示词版本（库实际使用的 PROMPT_VERSION）。"""
+        manifest_path = store.root / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        try:
+            import json
+
+            return json.loads(manifest_path.read_text(encoding="utf-8")).get("prompt_version")
+        except Exception:
+            return None
+
+    def _prompt_version_status(self, store: SemanticStore):
+        from sidecar.semantic.extractor import PROMPT_VERSION
+
+        manifest_version = self._manifest_prompt_version(store)
+        return {
+            "prompt_version": manifest_version,
+            "prompt_version_latest": PROMPT_VERSION,
+            "prompt_version_stale": (manifest_version is not None and manifest_version != PROMPT_VERSION),
+        }
+
     def _overview(self, store: SemanticStore):
         source_documents = len(self._all_note_paths())
         if not store.path.exists():
@@ -93,6 +122,7 @@ class SemanticHandler(BaseHandler):
                 "compile_job": job_status.get_job(self._COMPILE_JOB_ID),
                 "items": [],
                 "total": 0,
+                "prompt_version_status": self._prompt_version_status(store),
             }
         tables = ("documents", "blocks", "concepts", "entities", "claims", "evidence")
         with store.connect() as conn:
@@ -129,6 +159,7 @@ class SemanticHandler(BaseHandler):
             "compile_job": job_status.get_job(self._COMPILE_JOB_ID),
             "items": [],
             "total": 0,
+            "prompt_version_status": self._prompt_version_status(store),
         }
 
     def _get_changes(self, params):
@@ -155,9 +186,147 @@ class SemanticHandler(BaseHandler):
             return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
         return {"success": True, "days": days, "counts": counts, "items": items, "total": total}
 
+    def _generate_weekly_brief(self, params):
+        """One-click weekly brief for the whole knowledge base.
+
+        LLM-generated when configured; otherwise falls back to a structured
+        Markdown digest. Read-only — never writes to the store or Notes.
+        """
+        from prompts import WEEKLY_BRIEF_PROMPT
+
+        store = self._store()
+        if store is None:
+            return {"success": False, "message": "未设置工作区"}
+        try:
+            days = max(1, min(int(params.get("days", 7) or 7), 90))
+        except (TypeError, ValueError):
+            days = 7
+        if not store.path.exists():
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+        try:
+            counts = store.change_counts(days=days)
+            items, total = store.recent_changes(days=days, limit=60)
+        except sqlite3.OperationalError:
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+
+        if total < 1:
+            return {
+                "success": True,
+                "days": days,
+                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
+                "fallback": False,
+            }
+
+        by_kind: dict[str, int] = {}
+        by_object: dict[str, int] = {}
+        for c in counts:
+            by_kind[c["change_kind"]] = by_kind.get(c["change_kind"], 0) + c["count"]
+            by_object[c["object_kind"]] = by_object.get(c["object_kind"], 0) + c["count"]
+        # 面向普通用户的口语化表述：不暴露内部英文键名。
+        kind_label = {
+            "added": "新增了知识",
+            "updated": "补充/修正了旧内容",
+            "invalidated": "存疑或暂时无法确认",
+            "removed": "不再收录",
+        }
+        object_label = {
+            "claim": "知识点",
+            "entity": "笔记中提到的人/事物",
+            "concept": "概念",
+            "document": "笔记",
+        }
+        counts_summary = (
+            "\n".join(
+                f"- {kind_label.get(kind, kind)}：{n} 条" for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1])
+            )
+            + "\n"
+            + "\n".join(
+                f"- {object_label.get(kind, kind)}：{n} 条"
+                for kind, n in sorted(by_object.items(), key=lambda kv: -kv[1])
+            )
+        )
+
+        records = "\n".join(
+            f"- [{c['created_at'][:10]}] {kind_label.get(c['change_kind'], c['change_kind'])}"
+            f"（{object_label.get(c['object_kind'], c['object_kind'])}）: {c['label'] or c['object_id']}"
+            + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
+            for c in items
+        )
+        brief, fallback = self._compose_weekly_brief(days, counts_summary, records, WEEKLY_BRIEF_PROMPT)
+        return {"success": True, "days": days, "brief": brief, "fallback": fallback}
+
+    @staticmethod
+    def _compose_weekly_brief(days: int, counts_summary: str, records: str, prompt_template: str) -> tuple[str, bool]:
+        """LLM-generated weekly brief when available; structured fallback otherwise."""
+        from utils.llm_utils import call_llm_raw
+
+        try:
+            prompt = prompt_template.format(days=days, counts_summary=counts_summary, change_records=records)
+            text = call_llm_raw(prompt, temperature=0.3)
+        except Exception:
+            text = ""
+        if not text or not text.strip():
+            fallback = (
+                f"## 知识库周报\n\n"
+                f"（未配置 LLM 或生成失败，以下为结构化变化记录）\n\n"
+                f"## 统计概览\n\n{counts_summary}\n\n"
+                f"## 变化记录\n\n{records}\n"
+            )
+            return fallback, True
+        return text.strip(), False
+
+    def _get_note_merge_suggestions(self, params):
+        """基于 RAG 索引向量相似度 + 语义库实体共享的笔记合并建议。
+
+        只读分析，不修改任何数据；索引或语义未建立时优雅降级。
+        """
+        try:
+            min_score = float(params.get("min_score", 0) or 0)
+        except (TypeError, ValueError):
+            min_score = 0.0
+        try:
+            max_results = max(1, min(int(params.get("max_results", 60)), 200))
+        except (TypeError, ValueError):
+            max_results = 60
+        from utils.note_merge_analyzer import get_note_merge_suggestions
+
+        result = get_note_merge_suggestions(min_score=min_score, max_results=max_results)
+        return {
+            "success": result.get("success", False),
+            "message": result.get("message", ""),
+            "total": result.get("total", 0),
+            "has_index": result.get("has_index", False),
+            "has_semantics": result.get("has_semantics", False),
+            "stale_count": result.get("stale_count", 0),
+            "suggestions": result.get("suggestions", []),
+        }
+
+    def _merge_suggested_notes(self, params):
+        """执行建议中的笔记合并（复用 merge_note_group 的 LLM 整合）。"""
+        try:
+            file_paths = [str(p) for p in (params.get("file_paths") or [])]
+        except (TypeError, ValueError):
+            return {"success": False, "message": "file_paths 参数无效"}
+        from utils.note_merge_analyzer import merge_suggested_notes
+
+        return merge_suggested_notes(
+            file_paths,
+            title=str(params.get("title") or ""),
+            delete_authorized=params.get("delete_authorized") is True,
+        )
+
     def _get_topic_brief(self, params):
         """One-topic review brief from the change log.
-
         Uses the LLM when configured; otherwise falls back to a structured
         Markdown change list. Read-only — never writes to the store.
         """
@@ -224,18 +393,32 @@ class SemanticHandler(BaseHandler):
         workspace = self.config.workspace_path
         if not workspace:
             return []
-        notes = Path(workspace) / "Notes"
-        if not notes.is_dir():
-            return []
-        return sorted(
-            path
-            for path in notes.rglob("*.md")
-            if not path.name.startswith(".")
-            and not path.name.endswith("_综述.md")
-            and not any(part.startswith(".") for part in path.relative_to(notes).parts)
-        )
+        from utils.note_scanner import iter_note_files
+
+        # 统一走 note_scanner 扫描入口（排除点文件、点目录与 *_综述.md），
+        # 与 ingest 语义编译、增量扫描的过滤规则保持一致。
+        return sorted(iter_note_files(workspace), key=lambda p: str(p.relative_to(workspace)))
 
     def _start_full_compile(self, _params):
+        return self._start_semantic_compile(_params, claims_only=False)
+
+    def _retry_failed_blocks(self, params):
+        claims_only = bool(params.get("claims_only", True))
+        try:
+            limit = max(1, min(int(params.get("limit", 100)), 500))
+        except (TypeError, ValueError):
+            limit = 100
+        workspace, err = self._require_workspace()
+        if err:
+            return err
+        store = SemanticStore(workspace)
+        if not store.path.exists():
+            return {"success": False, "message": "语义库不存在"}
+        from sidecar.semantic.compiler import retry_failed_blocks
+
+        return retry_failed_blocks(store, claims_only=claims_only, limit=limit)
+
+    def _start_semantic_compile(self, _params, *, claims_only: bool):
         workspace, err = self._require_workspace()
         if err:
             return err
@@ -244,8 +427,9 @@ class SemanticHandler(BaseHandler):
             self._COMPILE_JOB_ID,
             self._run_full_compile,
             args=(workspace, paths),
+            kwargs={"claims_only": claims_only},
             kind="semantic_compile",
-            label="全库语义编译",
+            label="全库命题编译" if claims_only else "全库语义编译",
         )
         if not started:
             return {
@@ -261,62 +445,18 @@ class SemanticHandler(BaseHandler):
             "job": job_status.get_job(self._COMPILE_JOB_ID),
         }
 
-    def _run_full_compile(self, workspace: str, paths: list[Path]) -> None:
-        from sidecar.semantic.compiler import compile_semantic_batch
-        from sidecar.semantic.object_wiki import materialize_object_collection
-        from sidecar.semantic.topic_state import materialize_topic_state
-        from sidecar.semantic.wiki import materialize_topic_wiki_page
+    def _run_full_compile(self, workspace: str, paths: list[Path], *, claims_only: bool = False) -> None:
+        from sidecar.semantic.compiler import run_full_compile
 
-        total = max(len(paths), 1)
-        store = SemanticStore(workspace)
-        removed_topics = set(store.purge_missing_documents())
+        def progress(progress_value: float, message: str, metadata: dict) -> None:
+            self._send_job_update(self._COMPILE_JOB_ID, progress=progress_value, message=message, metadata=metadata)
 
-        def progress(current, _total, message):
+        def done(message: str, metadata: dict) -> None:
             self._send_job_update(
-                self._COMPILE_JOB_ID,
-                progress=current / total,
-                message=message,
-                metadata={"processed_documents": current, "total_documents": len(paths)},
+                self._COMPILE_JOB_ID, progress=1, status="complete", message=message, metadata=metadata
             )
 
-        stats = compile_semantic_batch(workspace, paths, progress_cb=progress)
-        cleanup_failures = []
-        for kind in ("entity", "concept"):
-            try:
-                materialize_object_collection(store, kind)
-            except (OSError, ValueError, sqlite3.Error) as exc:
-                cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
-        for topic in sorted(removed_topics):
-            try:
-                materialize_topic_state(store, topic)
-                materialize_topic_wiki_page(store, topic)
-            except (OSError, ValueError, sqlite3.Error) as exc:
-                cleanup_failures.append({"kind": "removed_topic", "topic": topic, "error": str(exc)})
-        if cleanup_failures:
-            stats["failures"].extend({"cleanup": item} for item in cleanup_failures)
-        materialized = stats.get("materialized", {})
-        materialized_message = (
-            f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
-            f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
-            f"主题页 {materialized.get('topics', 0)}"
-        )
-        self._send_job_update(
-            self._COMPILE_JOB_ID,
-            progress=1,
-            status="complete",
-            message=f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}",
-            metadata={
-                "processed_documents": stats["documents"],
-                "total_documents": len(paths),
-                "blocks": stats["blocks"],
-                "claims": stats["claims"],
-                "failed_blocks": stats["failed_blocks"],
-                "pending_documents": stats["pending_documents"],
-                "failure_count": len(stats["failures"]),
-                "removed_topics": sorted(removed_topics),
-                "materialized": materialized,
-            },
-        )
+        run_full_compile(workspace, paths, claims_only=claims_only, progress_cb=progress, done_cb=done)
 
     def _get_compile_status(self, _params):
         return {
@@ -325,100 +465,19 @@ class SemanticHandler(BaseHandler):
             "total_documents": len(self._all_note_paths()),
         }
 
-    def _semantic_list(self, store: SemanticStore, tab: str, params: dict):
+    def _semantic_list(self, store: SemanticStore, tab: str, params: dict, min_confidence: float | None = None):
         limit, offset = self._page(params)
         query = str(params.get("query", "") or "").strip()
-        like = f"%{query}%"
-        with store.connect() as conn:
-            if tab == "claims":
-                status = str(params.get("status", "active") or "active")
-                if status not in {"active", "deleted", "all"}:
-                    status = "active"
-                status_clause = "" if status == "all" else "c.status = ? AND "
-                args = (() if status == "all" else (status,)) + (query, like, like)
-                evidence_clause = (
-                    "AND (c.status = 'deleted' OR EXISTS "
-                    "(SELECT 1 FROM evidence ae WHERE ae.claim_id = c.id AND ae.status = 'active'))"
-                )
-                where = f"WHERE {status_clause}(? = '' OR c.statement LIKE ? OR c.scope LIKE ?) {evidence_clause}"
-                total = conn.execute(f"SELECT count(*) FROM claims c {where}", args).fetchone()[0]
-                rows = conn.execute(
-                    f"""SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status,
-                               sum(CASE WHEN e.status = 'active' THEN 1 ELSE 0 END) AS evidence_count,
-                               sum(CASE WHEN e.status = 'excluded' THEN 1 ELSE 0 END) AS excluded_evidence_count,
-                               v.verdict AS verification_verdict,
-                               v.confidence AS verification_confidence,
-                               v.method AS verification_method,
-                               v.agent AS verification_agent,
-                               v.created_at AS verified_at
-                        FROM claims c LEFT JOIN evidence e ON e.claim_id = c.id
-                        LEFT JOIN claim_verifications v ON v.id = (
-                            SELECT v2.id FROM claim_verifications v2
-                            WHERE v2.claim_id = c.id
-                            ORDER BY v2.created_at DESC, v2.rowid DESC LIMIT 1
-                        )
-                        {where} GROUP BY c.id ORDER BY c.confidence DESC, c.statement LIMIT ? OFFSET ?""",
-                    (*args, limit, offset),
-                ).fetchall()
-                items = []
-                for row in rows:
-                    item = dict(row)
-                    verdict = item.pop("verification_verdict", None)
-                    if verdict:
-                        item["verification"] = {
-                            "verdict": verdict,
-                            "confidence": item.pop("verification_confidence"),
-                            "method": item.pop("verification_method"),
-                            "agent": item.pop("verification_agent"),
-                            "verified_at": item.pop("verified_at"),
-                        }
-                    else:
-                        item.pop("verification_confidence", None)
-                        item.pop("verification_method", None)
-                        item.pop("verification_agent", None)
-                        item.pop("verified_at", None)
-                        item["verification"] = None
-                    evidence = conn.execute(
-                        """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
-                                  b.heading_path_json, b.content, b.start_line, b.end_line
-                           FROM evidence e JOIN blocks b ON b.id = e.block_id
-                           JOIN documents d ON d.id = b.document_id
-                           WHERE e.claim_id = ? ORDER BY d.path, b.ordinal""",
-                        (row["id"],),
-                    ).fetchall()
-                    item["evidence"] = [self._evidence_row(value) for value in evidence]
-                    items.append(item)
-            else:
-                table = tab
-                kind = "concept" if tab == "concepts" else "entity"
-                type_select = ", o.entity_type" if tab == "entities" else ""
-                description_column = "o.description"
-                where = "WHERE o.status = 'active' AND (? = '' OR o.canonical_name LIKE ? OR o.description LIKE ?)"
-                args = (query, like, like)
-                total = conn.execute(f"SELECT count(*) FROM {table} o {where}", args).fetchone()[0]
-                rows = conn.execute(
-                    f"""SELECT o.id, o.canonical_name, {description_column}, o.confidence{type_select},
-                               count(m.block_id) AS mention_count,
-                               count(DISTINCT b.document_id) AS source_count
-                        FROM {table} o
-                        LEFT JOIN semantic_mentions m ON m.object_id = o.id AND m.object_kind = ?
-                        LEFT JOIN blocks b ON b.id = m.block_id
-                        {where} GROUP BY o.id
-                        ORDER BY mention_count DESC, o.canonical_name LIMIT ? OFFSET ?""",
-                    (kind, *args, limit, offset),
-                ).fetchall()
-                items = [dict(row) for row in rows]
-        return {"success": True, "tab": tab, "items": items, "total": total, "limit": limit, "offset": offset}
-
-    @staticmethod
-    def _evidence_row(row) -> dict:
-        item = dict(row)
-        try:
-            item["heading_path"] = json.loads(item.pop("heading_path_json") or "[]")
-        except (TypeError, json.JSONDecodeError):
-            item["heading_path"] = []
-        item["excerpt"] = " ".join((item.pop("content", "") or "").split())[:220]
-        return item
+        status = str(params.get("status", "active") or "active")
+        return list_semantic_objects(
+            store,
+            tab,
+            query=query,
+            status=status,
+            limit=limit,
+            offset=offset,
+            min_confidence=min_confidence,
+        )
 
     def _get_detail(self, params):
         kind = str(params.get("kind", "") or "")
@@ -428,93 +487,39 @@ class SemanticHandler(BaseHandler):
         store = self._store()
         if store is None or not store.path.exists():
             return {"success": False, "message": "语义数据库不存在"}
-        with store.connect() as conn:
-            if kind == "claim":
-                row = conn.execute(
-                    "SELECT id, statement, scope, claim_type, confidence, status FROM claims WHERE id = ?",
-                    (object_id,),
-                ).fetchone()
-                if row is None:
-                    return {"success": False, "message": "命题不存在"}
-                item = dict(row)
-                rows = conn.execute(
-                    """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
-                              b.heading_path_json, b.content, b.start_line, b.end_line
-                       FROM evidence e JOIN blocks b ON b.id = e.block_id
-                       JOIN documents d ON d.id = b.document_id
-                       WHERE e.claim_id = ? ORDER BY d.path, b.ordinal""",
-                    (object_id,),
-                ).fetchall()
-            else:
-                table = "concepts" if kind == "concept" else "entities"
-                row = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (object_id,)).fetchone()
-                if row is None:
-                    return {"success": False, "message": "语义对象不存在"}
-                item = dict(row)
-                rows = conn.execute(
-                    """SELECT d.path, d.title, d.topic, b.id AS block_id,
-                              b.heading_path_json, b.content, b.start_line, b.end_line
-                       FROM semantic_mentions m JOIN blocks b ON b.id = m.block_id
-                       JOIN documents d ON d.id = b.document_id
-                       WHERE m.object_id = ? AND m.object_kind = ?
-                       ORDER BY d.path, b.ordinal""",
-                    (object_id, kind),
-                ).fetchall()
-                if kind == "entity":
-                    item["aliases"] = [
-                        value["alias"]
-                        for value in conn.execute(
-                            "SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias COLLATE NOCASE",
-                            (object_id,),
-                        )
-                    ]
-                related_rows = conn.execute(
-                    """SELECT r.id, r.relation_type, r.confidence, r.source_id, r.target_id,
-                              r.block_id
-                       FROM relations r WHERE r.source_id = ? OR r.target_id = ?
-                       ORDER BY r.relation_type, r.id""",
-                    (object_id, object_id),
-                ).fetchall()
-                related = []
-                for relation in related_rows:
-                    other_id = relation["target_id"] if relation["source_id"] == object_id else relation["source_id"]
-                    other = conn.execute(
-                        "SELECT canonical_name, 'entity' AS kind FROM entities WHERE id = ? AND status = 'active' "
-                        "UNION ALL SELECT canonical_name, 'concept' AS kind FROM concepts WHERE id = ? AND status = 'active'",
-                        (other_id, other_id),
-                    ).fetchone()
-                    if other:
-                        related.append(
-                            {
-                                "id": relation["id"],
-                                "relation_type": relation["relation_type"],
-                                "confidence": relation["confidence"],
-                                "block_id": relation["block_id"],
-                                "object_id": other_id,
-                                "object_name": other["canonical_name"],
-                                "object_kind": other["kind"],
-                            }
-                        )
-                item["related"] = related
-            audit_rows = conn.execute(
-                """SELECT id, action, before_json, after_json, created_at
-                   FROM semantic_audit_log WHERE object_kind = ? AND object_id = ?
-                   ORDER BY created_at DESC LIMIT 20""",
-                (kind, object_id),
-            ).fetchall()
-        item["sources"] = [self._evidence_row(value) for value in rows]
-        item["verifications"] = store.claim_verifications(object_id) if kind == "claim" else []
-        item["audit"] = [
-            {
-                "id": value["id"],
-                "action": value["action"],
-                "before": json.loads(value["before_json"] or "{}"),
-                "after": json.loads(value["after_json"] or "{}"),
-                "created_at": value["created_at"],
-            }
-            for value in audit_rows
-        ]
-        return {"success": True, "kind": kind, "item": item}
+        from sidecar.semantic.detail import build_object_detail
+
+        return build_object_detail(store, kind, object_id)
+
+    def _verify_claim(self, params):
+        """联网深度研究核查单个命题（CLI agent 模式），结果落库供工作台展示。
+
+        CLI 深度研究可能耗时数分钟；与 CLI Agent 对话共用同一执行通道，
+        因此复用 CliAgentHandler 的全局锁避免并发执行。
+        """
+        claim_id = str(params.get("id", "") or "")
+        agent_id = str(params.get("agent", "") or "")
+        if not claim_id or not agent_id:
+            return {"success": False, "message": "参数不完整"}
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        claims = store.list_claims_for_verification(limit=5000)
+        claim = next((item for item in claims if item["id"] == claim_id), None)
+        if claim is None:
+            return {"success": False, "message": "命题不存在或不可核查（仅支持 active 且有证据的命题）"}
+        if not CliAgentHandler._cli_agent_lock.acquire(blocking=False):
+            return {"success": False, "message": "CLI agent 正在运行其他任务，请稍后再试"}
+        try:
+            from sidecar.semantic.claim_verifier import verify_claim_via_cli
+
+            result = verify_claim_via_cli(store, claim, agent_id=agent_id)
+            if result.get("success"):
+                # 只保留原始输出尾部，避免超大 RPC 响应
+                result["output"] = (result.get("output") or "")[-2000:]
+            return result
+        finally:
+            CliAgentHandler._cli_agent_lock.release()
 
     def _get_note_semantic_context(self, params):
         path = str(params.get("path", "") or "").replace("\\", "/")
@@ -737,140 +742,23 @@ class SemanticHandler(BaseHandler):
             )
         return {"success": cursor.rowcount > 0, "id": item_id, "status": status}
 
-    @staticmethod
-    def _quality_key(*parts: str) -> str:
-        payload = "\0".join(parts).encode("utf-8")
-        return "entity-quality-" + hashlib.sha256(payload).hexdigest()[:20]
+    def _scan_conflicts(self, params):
+        """手动触发结构化冲突检测：重扫 claims 快照并落库（幂等）。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.conflict_detector import scan_and_persist
 
-    @staticmethod
-    def _normalized_entity_name(value: str) -> str:
-        return "".join(str(value or "").casefold().split())
-
-    def _quality_issues(self, store: SemanticStore) -> list[dict]:
-        """Derive entity-quality issues from the current SQLite snapshot only."""
-        with store.connect() as conn:
-            entities = [
-                dict(row)
-                for row in conn.execute(
-                    "SELECT id, canonical_name, entity_type, description, confidence FROM entities WHERE status = 'active'"
-                )
-            ]
-            mentions = {
-                row["entity_id"]: int(row["count"])
-                for row in conn.execute(
-                    """SELECT object_id AS entity_id, count(*) AS count FROM semantic_mentions
-                       WHERE object_kind = 'entity' GROUP BY object_id"""
-                )
-            }
-            linked = {
-                row["entity_id"]
-                for row in conn.execute(
-                    """SELECT source_id AS entity_id FROM relations
-                       UNION SELECT target_id AS entity_id FROM relations"""
-                )
-            }
-            aliases = [dict(row) for row in conn.execute("SELECT alias, entity_id FROM entity_aliases")]
-            relation_endpoint_ids = {
-                row["entity_id"]
-                for row in conn.execute(
-                    "SELECT source_id AS entity_id FROM relations UNION SELECT target_id AS entity_id FROM relations"
-                )
-            }
-            reviewed = {
-                row["id"]: json.loads(row["payload_json"] or "{}")
-                for row in conn.execute(
-                    "SELECT id, payload_json FROM review_queue WHERE item_kind = 'entity_quality' AND status = 'reviewed'"
-                )
-            }
-
-        by_id = {entity["id"]: entity for entity in entities}
-        canonical_groups: dict[str, list[str]] = {}
-        alias_groups: dict[str, list[str]] = {}
-        dangling_relations = relation_endpoint_ids - set(by_id)
-        for entity in entities:
-            canonical_groups.setdefault(self._normalized_entity_name(entity["canonical_name"]), []).append(entity["id"])
-        for alias in aliases:
-            alias_groups.setdefault(self._normalized_entity_name(alias["alias"]), []).append(alias["entity_id"])
-
-        issues: list[dict] = []
-
-        def add(rule: str, entity: dict, reason: str, candidates: list[str] | None = None) -> None:
-            candidate_ids = sorted(set(candidates or []))
-            issue_id = self._quality_key(rule, entity["id"], *candidate_ids)
-            fingerprint = self._quality_key(
-                rule,
-                entity["id"],
-                entity["canonical_name"],
-                str(entity["confidence"]),
-                str(mentions.get(entity["id"], 0)),
-                *candidate_ids,
-            )
-            persisted = reviewed.get(issue_id, {})
-            status = "reviewed" if persisted.get("fingerprint") == fingerprint else "pending"
-            issues.append(
-                {
-                    "id": issue_id,
-                    "rule": rule,
-                    "entity_id": entity["id"],
-                    "entity_name": entity["canonical_name"],
-                    "entity_type": entity["entity_type"],
-                    "confidence": entity["confidence"],
-                    "mention_count": mentions.get(entity["id"], 0),
-                    "reason": reason,
-                    "candidate_ids": candidate_ids,
-                    "candidate_names": [by_id[value]["canonical_name"] for value in candidate_ids if value in by_id],
-                    "fingerprint": fingerprint,
-                    "status": status,
-                }
-            )
-
-        for entity in entities:
-            entity_id = entity["id"]
-            mention_count = mentions.get(entity_id, 0)
-            if mention_count == 0:
-                add("missing_source", entity, "当前实体没有关联的来源块")
-            elif entity_id not in linked:
-                add("isolated", entity, "实体只有来源出现，尚未建立受控语义关系")
-            if float(entity["confidence"] or 0) < 0.6:
-                add("low_confidence", entity, "实体抽取置信度低于 60%")
-            if not str(entity["entity_type"] or "").strip():
-                add("uncontrolled_type", entity, "实体缺少受控类型")
-            if not str(entity.get("description") or "").strip():
-                add("missing_description", entity, "实体缺少说明描述")
-
-            name_key = self._normalized_entity_name(entity["canonical_name"])
-            duplicate_ids = [value for value in canonical_groups.get(name_key, []) if value != entity_id]
-            duplicate_ids += [value for value in alias_groups.get(name_key, []) if value != entity_id]
-            duplicate_ids = sorted(set(duplicate_ids))
-            if duplicate_ids:
-                add("duplicate_candidate", entity, "规范名称或别名与其他实体重合，需人工确认", duplicate_ids)
-
-        for alias_key, entity_ids in alias_groups.items():
-            normalized_ids = sorted(set(entity_ids))
-            if len(normalized_ids) > 1:
-                for entity_id in normalized_ids:
-                    matched_entity = by_id.get(entity_id)
-                    if matched_entity:
-                        add(
-                            "alias_conflict",
-                            matched_entity,
-                            "同一别名映射到多个规范实体",
-                            [value for value in normalized_ids if value != entity_id],
-                        )
-
-        for dangling_id in sorted(dangling_relations):
-            # Attach an orphaned relation to the first entity only as a visible
-            # repair signal; the relation ID itself remains untouched.
-            if entities:
-                add("dangling_relation", entities[0], f"发现关系端点「{dangling_id}」已不存在")
-        return sorted(issues, key=lambda item: (item["status"] != "pending", item["rule"], item["entity_name"]))
+        return scan_and_persist(store)
 
     def _quality(self, store: SemanticStore, params: dict):
+        from sidecar.semantic.quality import collect_quality_issues
+
         query = str(params.get("query", "") or "").strip().casefold()
         status = str(params.get("status", "pending") or "pending")
         if status not in {"pending", "reviewed", "all"}:
             status = "pending"
-        issues = self._quality_issues(store)
+        issues = collect_quality_issues(store)
         counts = dict.fromkeys(
             (
                 "missing_source",
@@ -881,6 +769,7 @@ class SemanticHandler(BaseHandler):
                 "dangling_relation",
                 "alias_conflict",
                 "duplicate_candidate",
+                "cross_kind_duplicate",
             ),
             0,
         )
@@ -916,7 +805,9 @@ class SemanticHandler(BaseHandler):
         store = self._store()
         if store is None or not store.path.exists():
             return {"success": False, "message": "语义数据库不存在"}
-        issue = next((item for item in self._quality_issues(store) if item["id"] == issue_id), None)
+        from sidecar.semantic.quality import collect_quality_issues
+
+        issue = next((item for item in collect_quality_issues(store) if item["id"] == issue_id), None)
         if issue is None:
             return {"success": False, "message": "质量问题已失效，请刷新后重试"}
         payload = json.dumps(issue, ensure_ascii=False, sort_keys=True)
@@ -949,7 +840,9 @@ class SemanticHandler(BaseHandler):
         store = self._store()
         if not issue_id or store is None or not store.path.exists():
             return {"success": False, "message": "参数不完整或语义数据库不存在"}
-        issue = next((item for item in self._quality_issues(store) if item["id"] == issue_id), None)
+        from sidecar.semantic.quality import collect_quality_issues
+
+        issue = next((item for item in collect_quality_issues(store) if item["id"] == issue_id), None)
         if issue is None:
             return {"success": False, "message": "质量问题已失效，请刷新后重试"}
         payload = json.dumps(issue, ensure_ascii=False, sort_keys=True)
@@ -977,42 +870,68 @@ class SemanticHandler(BaseHandler):
             )
         return {"success": True, "id": issue_id}
 
+    def _enqueue_cross_kind_merges(self, params):
+        """一次性把全部同名双表（实体↔概念）候选取样入队 Inbox，供人工合并。"""
+        store = self._store()
+        if store is None or not store.path.exists():
+            return {"success": False, "message": "语义数据库不存在"}
+        from sidecar.semantic.quality import collect_quality_issues
+
+        count = 0
+        for issue in collect_quality_issues(store):
+            if issue["rule"] != "cross_kind_duplicate" or issue["status"] != "pending":
+                continue
+            payload = json.dumps(issue, ensure_ascii=False, sort_keys=True)
+            with store.connect() as conn:
+                conn.execute(
+                    """INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at)
+                       VALUES(?, 'entity_quality', ?, ?, 'pending', ?)
+                       ON CONFLICT(id) DO UPDATE SET payload_json = excluded.payload_json,
+                                                     reason = excluded.reason, status = 'pending'""",
+                    (issue["id"], payload, issue["reason"], store._now()),
+                )
+            count += 1
+        return {"success": True, "count": count, "message": f"已将 {count} 组同名双表候选加入 Inbox"}
+
     def _get_entity_merge_preview(self, params):
         source_id = str(params.get("source_id", "") or "")
         target_id = str(params.get("target_id", "") or "")
         store = self._store()
         if not source_id or not target_id or source_id == target_id or store is None or not store.path.exists():
-            return {"success": False, "message": "请选择两个不同的实体"}
+            return {"success": False, "message": "请选择两个不同的对象"}
         with store.connect() as conn:
-            rows = conn.execute(
-                "SELECT id, canonical_name, entity_type FROM entities WHERE id IN (?, ?)", (source_id, target_id)
-            ).fetchall()
-            if len(rows) != 2:
-                return {"success": False, "message": "实体不存在"}
-            entities = {row["id"]: dict(row) for row in rows}
+            from sidecar.semantic.entity_merge import _locate, _KIND_ALIASES, _KIND_ALIAS_COLUMN
+
+            source = _locate(conn, source_id)
+            target = _locate(conn, target_id)
+            if source is None or target is None:
+                return {"success": False, "message": "对象不存在"}
+            objects = {source["id"]: source, target["id"]: target}
             impact = {}
-            for entity_id in (source_id, target_id):
-                impact[entity_id] = {
+            for obj_id in (source_id, target_id):
+                kind = objects[obj_id]["kind"]
+                impact[obj_id] = {
                     "mentions": conn.execute(
-                        "SELECT count(*) FROM semantic_mentions WHERE object_kind = 'entity' AND object_id = ?",
-                        (entity_id,),
+                        "SELECT count(*) FROM semantic_mentions WHERE object_kind = ? AND object_id = ?",
+                        (kind, obj_id),
                     ).fetchone()[0],
                     "aliases": [
                         row["alias"]
                         for row in conn.execute(
-                            "SELECT alias FROM entity_aliases WHERE entity_id = ? ORDER BY alias", (entity_id,)
+                            f"SELECT alias FROM {_KIND_ALIASES[kind]} WHERE {_KIND_ALIAS_COLUMN[kind]} = ? ORDER BY alias",
+                            (obj_id,),
                         )
                     ],
                     "relations": conn.execute(
-                        "SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (entity_id, entity_id)
+                        "SELECT count(*) FROM relations WHERE source_id = ? OR target_id = ?", (obj_id, obj_id)
                     ).fetchone()[0],
                 }
         return {
             "success": True,
-            "source": entities[source_id],
-            "target": entities[target_id],
+            "source": source,
+            "target": target,
             "impact": impact,
-            "message": "这是只读影响预览；确认前不会修改任何实体、证据或 Notes。",
+            "message": "这是只读影响预览；确认前不会修改任何对象、证据或 Notes。",
         }
 
     def _merge_entities(self, params):
@@ -1023,160 +942,9 @@ class SemanticHandler(BaseHandler):
         store = self._store()
         if not source_id or not target_id or source_id == target_id or store is None or not store.path.exists():
             return {"success": False, "message": "请选择两个不同的实体"}
-        affected_topics: set[str] = set()
-        affected_concept_ids: set[str] = set()
-        with store.connect() as conn:
-            rows = conn.execute("SELECT * FROM entities WHERE id IN (?, ?)", (source_id, target_id)).fetchall()
-            if len(rows) != 2:
-                return {"success": False, "message": "实体不存在"}
-            entities = {row["id"]: dict(row) for row in rows}
-            source, target = entities[source_id], entities[target_id]
-            before = {"source": source, "target": target}
-            # Preserve every unique mention while avoiding the composite-PK collision.
-            conn.execute(
-                """DELETE FROM semantic_mentions WHERE object_id = ? AND object_kind = 'entity'
-                   AND block_id IN (SELECT block_id FROM semantic_mentions WHERE object_id = ? AND object_kind = 'entity')""",
-                (source_id, target_id),
-            )
-            conn.execute(
-                "UPDATE semantic_mentions SET object_id = ? WHERE object_id = ? AND object_kind = 'entity'",
-                (target_id, source_id),
-            )
-            aliases = [
-                row["alias"]
-                for row in conn.execute("SELECT alias FROM entity_aliases WHERE entity_id = ?", (source_id,))
-            ]
-            if source["canonical_name"].casefold() != target["canonical_name"].casefold():
-                aliases.append(source["canonical_name"])
-            for alias in aliases:
-                existing = conn.execute(
-                    "SELECT entity_id FROM entity_aliases WHERE alias = ? COLLATE NOCASE", (alias,)
-                ).fetchone()
-                if existing is None:
-                    conn.execute(
-                        "INSERT INTO entity_aliases(alias, entity_id, created_at) VALUES(?, ?, ?)",
-                        (alias, target_id, store._now()),
-                    )
-                elif existing["entity_id"] == source_id:
-                    conn.execute(
-                        "UPDATE entity_aliases SET entity_id = ? WHERE alias = ? COLLATE NOCASE", (target_id, alias)
-                    )
-            conn.execute("UPDATE relations SET source_id = ? WHERE source_id = ?", (target_id, source_id))
-            conn.execute("UPDATE relations SET target_id = ? WHERE target_id = ?", (target_id, source_id))
-            # Re-key only relations touched by this merge. The former unscoped
-            # `source_id = target_id` delete removed every self-loop in the DB,
-            # including relations belonging to unrelated entities.
-            touched_relations = [
-                dict(row)
-                for row in conn.execute(
-                    "SELECT * FROM relations WHERE source_id = ? OR target_id = ?",
-                    (target_id, target_id),
-                )
-            ]
-            conn.executemany(
-                "DELETE FROM relations WHERE id = ?",
-                ((row["id"],) for row in touched_relations),
-            )
-            deduplicated_relations: dict[tuple, dict] = {}
-            for relation in touched_relations:
-                if relation["source_id"] == relation["target_id"]:
-                    continue
-                key = (
-                    relation["source_id"],
-                    relation["relation_type"],
-                    relation["target_id"],
-                    relation.get("evidence_id"),
-                    relation.get("block_id"),
-                )
-                current = deduplicated_relations.get(key)
-                if current is None or float(relation["confidence"]) > float(current["confidence"]):
-                    deduplicated_relations[key] = relation
-            for relation in deduplicated_relations.values():
-                origin_id = relation.get("block_id") or relation.get("evidence_id") or relation["id"]
-                relation_id = stable_id(
-                    "relation",
-                    origin_id,
-                    relation["source_id"],
-                    relation["relation_type"],
-                    relation["target_id"],
-                )
-                conn.execute(
-                    """INSERT INTO relations(
-                           id, source_id, relation_type, target_id, confidence, evidence_id, block_id
-                       ) VALUES(?, ?, ?, ?, ?, ?, ?)
-                       ON CONFLICT(id) DO UPDATE SET confidence = MAX(relations.confidence, excluded.confidence),
-                                                    evidence_id = excluded.evidence_id,
-                                                    block_id = excluded.block_id""",
-                    (
-                        relation_id,
-                        relation["source_id"],
-                        relation["relation_type"],
-                        relation["target_id"],
-                        relation["confidence"],
-                        relation.get("evidence_id"),
-                        relation.get("block_id"),
-                    ),
-                )
-            conn.execute(
-                "UPDATE review_queue SET status = 'reviewed' WHERE item_kind = 'entity_quality' AND payload_json LIKE ?",
-                (f'%"entity_id": "{source_id}"%',),
-            )
-            conn.execute("DELETE FROM entities WHERE id = ?", (source_id,))
-            affected_topics = {
-                row["topic"]
-                for row in conn.execute(
-                    """SELECT DISTINCT d.topic FROM semantic_mentions m
-                       JOIN blocks b ON b.id = m.block_id JOIN documents d ON d.id = b.document_id
-                       WHERE m.object_id = ? AND m.object_kind = 'entity' AND d.topic != ''""",
-                    (target_id,),
-                )
-            }
-            related_ids = {
-                row["other_id"]
-                for row in conn.execute(
-                    """SELECT CASE WHEN source_id = ? THEN target_id ELSE source_id END AS other_id
-                       FROM relations WHERE source_id = ? OR target_id = ?""",
-                    (target_id, target_id, target_id),
-                )
-            }
-            affected_concept_ids = (
-                {
-                    row["id"]
-                    for row in conn.execute(
-                        "SELECT id FROM concepts WHERE id IN ({}) AND status = 'active'".format(
-                            ",".join("?" for _ in related_ids) or "''"
-                        ),
-                        tuple(related_ids),
-                    )
-                }
-                if related_ids
-                else set()
-            )
-            after = {"merged_into": target_id, "source_id": source_id, "aliases_added": aliases}
-            SemanticStore._audit(
-                conn, action="merge_entity", object_kind="entity", object_id=target_id, before=before, after=after
-            )
-        materialized = []
-        try:
-            from sidecar.semantic.object_wiki import materialize_object_collection
-            from sidecar.semantic.topic_state import materialize_topic_state
-            from sidecar.semantic.wiki import materialize_topic_wiki_page
+        from sidecar.semantic.entity_merge import merge_entities
 
-            for topic in sorted(affected_topics):
-                materialize_topic_state(store, topic)
-                materialize_topic_wiki_page(store, topic)
-                materialized.append(topic)
-            materialize_object_collection(store, "entity")
-            if affected_concept_ids:
-                materialize_object_collection(store, "concept")
-        except OSError as exc:
-            return {"success": False, "message": f"实体已合并，但语义页重建失败：{exc}"}
-        return {
-            "success": True,
-            "target_id": target_id,
-            "affected_topics": materialized,
-            "message": f"已将「{source['canonical_name']}」合并到「{target['canonical_name']}」",
-        }
+        return merge_entities(store, source_id, target_id)
 
     def _links(self, params: dict):
         workspace, err = self._require_workspace()
@@ -1227,16 +995,22 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_compile_status", self._get_compile_status)
         router.register("get_semantic_changes", self._get_changes)
         router.register("get_topic_brief", self._get_topic_brief)
+        router.register("get_note_merge_suggestions", self._get_note_merge_suggestions)
+        router.register("merge_suggested_notes", self._merge_suggested_notes)
+        router.register("generate_weekly_brief", self._generate_weekly_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
+        router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
+        router.register("enqueue_cross_kind_semantic_merges", self._enqueue_cross_kind_merges)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)
         router.register("merge_semantic_entities", self._merge_entities)
         router.register("update_semantic_claim", self._update_claim)
         router.register("set_semantic_claim_status", self._set_claim_status)
         router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
+        router.register("verify_semantic_claim", self._verify_claim)
         router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)

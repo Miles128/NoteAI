@@ -10,18 +10,91 @@ from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
-try:
-    import jieba  # noqa: F811
-    import jieba.analyse  # noqa: F401
 
-    _HAS_JIEBA = True
-except ImportError:
-    _HAS_JIEBA = False
+def _jieba_analyse_available():
+    """Check if jieba.analyse is importable (lazy, cached)."""
+    try:
+        import jieba.analyse  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 class RagHandler(BaseHandler):
     _rag_chat_lock = threading.Lock()
     _rag_build_lock = threading.Lock()
+
+    _SUGGESTIONS_SENTINEL_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\]]*\])")
+
+    @staticmethod
+    def _strip_suggestions_sentinel(answer: str) -> tuple[str, list[str]]:
+        """Split the trailing SUGGESTIONS_JSON sentinel; return (body, suggestions)."""
+        raw = answer or ""
+        m = RagHandler._SUGGESTIONS_SENTINEL_RE.search(raw)
+        if not m:
+            return raw, []
+        body = raw[: m.start()].rstrip()
+        try:
+            data = json.loads(m.group(1))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return body, []
+        if not isinstance(data, list):
+            return body, []
+        suggestions = [str(s).strip() for s in data if str(s).strip()][:3]
+        return body, suggestions
+
+    @staticmethod
+    def _session_topic_anchors(history) -> list[str]:
+        """Session-only topic anchoring: extract anchor terms from early turns.
+
+        When the session history exceeds 6 messages, the messages before the
+        last 6 are compressed via _extractive_compress and mined for
+        high-value terms (jieba TF-IDF) used as extra retrieval keywords.
+        Lives only in-session: never persisted, no automatic extraction
+        pipeline (PRD §3/§12.6).
+        """
+        if not isinstance(history, list) or len(history) <= 6:
+            return []
+        older = [m for m in history[:-6] if isinstance(m, dict)]
+        if not older or not _jieba_analyse_available():
+            return []
+        try:
+            text = RagHandler._extractive_compress(older)
+            if not text.strip():
+                text = " ".join(str(m.get("content") or "")[:300] for m in older if m.get("role") == "user")
+            if not text.strip():
+                return []
+            import jieba.analyse
+
+            return list(jieba.analyse.extract_tags(text, topK=5, withWeight=False))
+        except Exception as e:
+            logger.warning(f"[rag] topic anchoring failed: {e}")
+            return []
+
+    @staticmethod
+    def _template_suggestions(citations: list | None) -> list[str]:
+        """Fallback follow-up suggestions built from citation metadata (no LLM)."""
+        suggestions: list[str] = []
+        seen: set[str] = set()
+        for c in citations or []:
+            if not isinstance(c, dict):
+                continue
+            topic = str(c.get("topic") or "").strip()
+            section = str(c.get("section_title") or "").strip()
+            label = str(c.get("source_label") or c.get("file_name") or "").strip()
+            if topic and topic not in seen:
+                suggestions.append(f"「{topic}」还有哪些相关笔记？")
+                seen.add(topic)
+            elif section and section not in seen:
+                suggestions.append(f"展开讲讲「{section}」")
+                seen.add(section)
+            elif label and label not in seen:
+                suggestions.append(f"《{label}》里还有什么要点？")
+                seen.add(label)
+            if len(suggestions) >= 3:
+                break
+        return suggestions[:3]
 
     @staticmethod
     def _rag_disabled_message() -> str:
@@ -150,72 +223,6 @@ class RagHandler(BaseHandler):
                 json.dumps({"ts": time.time(), "msg": msg}, ensure_ascii=False), encoding="utf-8"
             )
 
-    def _rag_add_chunks(self, params):
-        if not config.rag_enabled:
-            return {"success": False, "message": self._rag_disabled_message()}
-
-        file_path = params.get("file_path", "")
-        if not file_path:
-            return {"success": False, "message": "未指定文件路径"}
-
-        full_path = self._resolve_path(file_path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        from sidecar.rag.chunker import chunk_file
-        from sidecar.rag.embedder import encode_documents
-        from sidecar.rag.index import index_operation, replace_file_chunks
-
-        try:
-            text = Path(full_path).read_text(encoding="utf-8")
-            rel_path = str(Path(full_path).relative_to(workspace))
-            chunks = chunk_file(rel_path, text)
-            if not chunks:
-                return {"success": False, "message": "文件无可索引内容"}
-            embeddings = encode_documents([c["content"] for c in chunks])
-            stat = Path(full_path).stat()
-            with index_operation(workspace, blocking=False) as acquired:
-                if not acquired:
-                    return {"success": False, "message": "索引更新正在进行中"}
-                replace_file_chunks(
-                    workspace,
-                    {
-                        rel_path: {
-                            "chunks": chunks,
-                            "embeddings": embeddings,
-                            "mtime": stat.st_mtime,
-                            "size": stat.st_size,
-                        }
-                    },
-                )
-            return {"success": True, "message": f"已添加 {len(chunks)} 个文本块"}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    def _rag_remove_chunks(self, params):
-        if not config.rag_enabled:
-            return {"success": True}
-
-        file_path = params.get("file_path", "")
-        if not file_path:
-            return {"success": False, "message": "未指定文件路径"}
-
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        from sidecar.rag.index import delete_by_file
-
-        try:
-            delete_by_file(workspace, file_path)
-            return {"success": True}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
     def _emit_rag_error(self, message: str) -> None:
         self._send_response(
             {
@@ -252,12 +259,6 @@ class RagHandler(BaseHandler):
 
         threading.Thread(target=_worker, daemon=True).start()
         return {"success": True, "started": True}
-
-    def _rag_clear_memory(self, params):
-        from sidecar.rag.memory import save_short_memory
-
-        save_short_memory("")
-        return {"success": True}
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
         from utils.llm_utils import APIConfigError, check_api_config
@@ -350,7 +351,7 @@ class RagHandler(BaseHandler):
             route = "web"
         else:
             route_query = f"选中文本：{selection}\n上下文：{context}" if context else selection
-            route = classify_intent(route_query, history="").get("intent", "unknown")
+            route = classify_intent(route_query, history=params.get("history")).get("intent", "unknown")
 
         if route in {"workspace", "unknown"}:
             self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
@@ -393,7 +394,11 @@ class RagHandler(BaseHandler):
     def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
         from sidecar.archive_wiki import parse_save_suggestion
 
-        display_answer, suggest_save_note = parse_save_suggestion(answer)
+        display_answer, suggestions = RagHandler._strip_suggestions_sentinel(answer)
+        if not suggestions and citations:
+            # Model omitted the sentinel: fall back to template suggestions.
+            suggestions = RagHandler._template_suggestions(citations)
+        display_answer, suggest_save_note = parse_save_suggestion(display_answer)
         if not display_answer.strip():
             return self._fail_rag("AI 未生成回复")
 
@@ -406,12 +411,13 @@ class RagHandler(BaseHandler):
                     "type": "rag_chat_done",
                     "answer": display_answer,
                     "suggest_save_note": suggest_save_note,
+                    "suggestions": suggestions,
                     "citations": citations or [],
                     "citation_quality": self._citation_quality(citations),
                 },
             }
         )
-        return {"success": True, "suggest_save_note": suggest_save_note}
+        return {"success": True, "suggest_save_note": suggest_save_note, "suggestions": suggestions}
 
     def _answer_without_retrieval(self, question: str, compressed_history: str, *, intent: str = "general") -> dict:
         from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_CONTEXT_PROMPT, RAG_ASSISTANT_WEB_PROMPT
@@ -475,7 +481,9 @@ class RagHandler(BaseHandler):
             ]
         return self._finish_chat(question, answer, citations=citations)
 
-    def _answer_with_rag(self, params, question: str, compressed_history: str, *, use_vector_rag: bool) -> dict:
+    def _answer_with_rag(
+        self, params, question: str, compressed_history: str, *, use_vector_rag: bool, intent: str = "workspace"
+    ) -> dict:
         from prompts import RAG_CHAT_PROMPT
         from utils.llm_utils import APIConfigError, call_llm_raw_stream
 
@@ -483,16 +491,29 @@ class RagHandler(BaseHandler):
         tags = params.get("tags") or None
         current_file = params.get("current_file") or ""
 
+        retrieval_debug: dict | None = None
+        hyde_enabled_flag = False
+        hyde_query: str | None = None
         try:
             if use_vector_rag:
                 from sidecar.rag.retriever import retrieve as vector_retrieve
 
-                search_results = vector_retrieve(
-                    question,
+                # Session-only topic anchoring: append anchor terms from early
+                # turns as extra retrieval keywords (original query kept intact).
+                anchors = RagHandler._session_topic_anchors(params.get("history"))
+                retrieval_query = f"{question} {' '.join(anchors)}" if anchors else question
+                retrieval = vector_retrieve(
+                    retrieval_query,
                     topics=topics,
                     tags=tags,
                     current_file=current_file,
                 )
+                search_results = retrieval.get("results") or []
+                retrieval_debug = dict(retrieval.get("retrieval_debug") or {})
+                if anchors:
+                    retrieval_debug["anchor_terms"] = anchors
+                hyde_enabled_flag = bool(retrieval_debug.get("hyde_enabled"))
+                hyde_query = retrieval_debug.get("hyde_query")
             else:
                 from sidecar.classic_retriever import retrieve as classic_retrieve
 
@@ -504,6 +525,67 @@ class RagHandler(BaseHandler):
         context_parts: list[str] = []
         citations: list[dict] = []
         seen_paths: set[str] = set()
+
+        # Claim-layer injection (P0): verified conclusions + conflict disclosure.
+        # Best-effort — a missing or broken semantic DB yields no claim items and
+        # the normal chunk-only path is unchanged.
+        claim_items: list[dict] = []
+        try:
+            from sidecar.rag.claim_context import retrieve_claim_context
+
+            claim_items = retrieve_claim_context(config.workspace_path, question, topics=topics, tags=tags)
+        except Exception as e:
+            logger.warning(f"[rag/claim_context] injection failed: {e}")
+        for r in claim_items:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
+            idx = len(context_parts) + 1
+            label = r.get("source_label") or "知识库结论"
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            fp = r.get("file_path", "")
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": fp,
+                    "file_name": r.get("file_name") or (Path(fp).stem if fp else ""),
+                    "source_label": label,
+                    "section_title": "",
+                    "topic": r.get("topic") or "",
+                    "source_type": "claim",
+                    "score": r.get("score", 0),
+                }
+            )
+
+        # Object-layer injection: extracted entities/concepts (with descriptions)
+        # ground the answer in the knowledge base's structured objects.
+        # Best-effort — a missing or broken semantic DB yields no object items.
+        object_items: list[dict] = []
+        try:
+            from sidecar.rag.object_context import retrieve_object_context
+
+            object_items = retrieve_object_context(config.workspace_path, question, topics=topics, tags=tags)
+        except Exception as e:
+            logger.warning(f"[rag/object_context] injection failed: {e}")
+        for r in object_items:
+            body = (r.get("content") or "").strip()
+            if not body:
+                continue
+            idx = len(context_parts) + 1
+            label = r.get("source_label") or "知识库对象"
+            context_parts.append(f"[{idx}] {label}\n{body}")
+            citations.append(
+                {
+                    "index": idx,
+                    "file_path": "",
+                    "file_name": "",
+                    "source_label": label,
+                    "section_title": "",
+                    "topic": r.get("topic") or "",
+                    "source_type": "object",
+                    "score": r.get("score", 0),
+                }
+            )
 
         for r in search_results:
             # Surveys and graph neighbors are helpful retrieval expansion, but
@@ -535,11 +617,39 @@ class RagHandler(BaseHandler):
             )
         context = "\n\n".join(context_parts)
 
-        prompt = RAG_CHAT_PROMPT.format(
-            context=context,
-            history=compressed_history if compressed_history else "无历史对话",
-            question=question,
+        # P9: emit retrieval transparency meta after retrieval, before the
+        # answer stream starts.
+        meta_data = self._build_retrieval_meta(intent, hyde_enabled_flag, hyde_query, retrieval_debug, search_results)
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "rag_retrieval",
+                    "subtype": "meta",
+                    "session_id": str(params.get("session_id") or ""),
+                    "data": meta_data,
+                },
+            }
         )
+
+        if not context.strip():
+            # No evidence at all: explicitly declare the knowledge base has no
+            # directly relevant material instead of letting the model improvise
+            # with an empty context (which encourages fabricated citations).
+            from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_EVIDENCE_PROMPT
+
+            memory_section = f"对话历史：{compressed_history}\n\n" if compressed_history else ""
+            prompt = RAG_ASSISTANT_NO_EVIDENCE_PROMPT.format(
+                persona=ASSISTANT_PERSONA_PROMPT,
+                memory_section=memory_section,
+                question=question,
+            )
+        else:
+            prompt = RAG_CHAT_PROMPT.format(
+                context=context,
+                history=compressed_history if compressed_history else "无历史对话",
+                question=question,
+            )
 
         try:
             answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
@@ -551,6 +661,30 @@ class RagHandler(BaseHandler):
             return self._fail_rag(str(e))
 
         return self._finish_chat(question, answer, citations=self._cited_sources(answer, citations))
+
+    @staticmethod
+    def _build_retrieval_meta(
+        intent: str, hyde_enabled_flag: bool, hyde_query: str | None, retrieval_debug: dict | None, search_results: list
+    ) -> dict:
+        top_sources = []
+        for r in search_results[:5]:
+            if not isinstance(r, dict):
+                continue
+            top_sources.append(
+                {
+                    "path": r.get("file_path") or "",
+                    "section_title": r.get("section_title") or "",
+                    "score": r.get("score"),
+                    "rerank_score": r.get("rerank_score"),
+                }
+            )
+        return {
+            "intent": intent,
+            "hyde_enabled": bool(hyde_enabled_flag),
+            "hyde_query": (str(hyde_query)[:200] if hyde_query else None),
+            "retrieval_debug": retrieval_debug or {},
+            "top_sources": top_sources,
+        }
 
     @staticmethod
     def _cited_sources(answer: str, citations: list[dict]) -> list[dict]:
@@ -565,7 +699,8 @@ class RagHandler(BaseHandler):
                 seen.add(index)
         return used
 
-    def _extractive_compress(self, older_history):
+    @staticmethod
+    def _extractive_compress(older_history):
         if not older_history:
             return ""
         if isinstance(older_history, str):
@@ -573,8 +708,12 @@ class RagHandler(BaseHandler):
 
         parts = []
         for h in older_history:
-            role = "用户" if h["role"] == "user" else "助手"
-            text = h["content"]
+            if not isinstance(h, dict):
+                continue
+            role = "用户" if h.get("role") == "user" else "助手"
+            text = str(h.get("content") or "")
+            if not text:
+                continue
             if len(text) <= 80:
                 parts.append(f"{role}: {text}")
                 continue
@@ -594,9 +733,11 @@ class RagHandler(BaseHandler):
                 if last:
                     first = first + "…" + last
 
-            if not _HAS_JIEBA:
+            if not _jieba_analyse_available():
                 parts.append(f"{role}: {first}…")
                 continue
+
+            import jieba.analyse
 
             keywords = jieba.analyse.extract_tags(text, topK=3, withWeight=False)
             kw_str = "、".join(keywords) if keywords else ""
@@ -688,10 +829,6 @@ class RagHandler(BaseHandler):
             return {"success": False, "message": str(e)}
 
     def register_routes(self, router):
-        router.register("init_rag_index", self._init_rag_index)
         router.register("rag_rebuild_index", self._rag_rebuild_index)
-        router.register("rag_add_chunks", self._rag_add_chunks)
-        router.register("rag_remove_chunks", self._rag_remove_chunks)
-        router.register("rag_chat", self._rag_chat, async_mode=True)
-        router.register("rag_clear_memory", self._rag_clear_memory)
+        router.register("rag_chat", self._rag_chat)
         router.register("rag_index_status", self._rag_index_status)

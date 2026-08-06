@@ -19,6 +19,8 @@ class IterNoteFilesTestBase(unittest.TestCase):
         (self.notes / "sub" / "嵌套笔记.md").write_text("b", encoding="utf-8")
         (self.notes / "主题_综述.md").write_text("survey", encoding="utf-8")
         (self.notes / ".隐藏.md").write_text("hidden", encoding="utf-8")
+        (self.notes / ".workbuddy").mkdir()
+        (self.notes / ".workbuddy" / "memory.md").write_text("hidden-dir", encoding="utf-8")
         (self.notes / "not-markdown.txt").write_text("txt", encoding="utf-8")
 
     def tearDown(self):
@@ -31,6 +33,10 @@ class IterNoteFilesTestBase(unittest.TestCase):
 class TestIterNoteFilesDefaults(IterNoteFilesTestBase):
     def test_default_excludes_surveys_hidden_and_non_md(self):
         self.assertEqual(self.names(), sorted(["普通笔记.md", "嵌套笔记.md"]))
+
+    def test_default_excludes_hidden_directories(self):
+        names = self.names()
+        self.assertNotIn("memory.md", names)
 
     def test_default_recursive(self):
         names = self.names()
@@ -46,6 +52,7 @@ class TestIterNoteFilesFlags(IterNoteFilesTestBase):
     def test_include_hidden(self):
         names = self.names(include_hidden=True)
         self.assertIn(".隐藏.md", names)
+        self.assertIn("memory.md", names)
 
     def test_missing_folder_returns_empty(self):
         result = iter_note_files(self.ws, folders=["NotExist"])

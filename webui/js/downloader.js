@@ -58,9 +58,7 @@ function handleGlobalDownloadEvent(event) {
     } else if (data.type === 'rss_poll_complete') {
         var imported = data.data && data.data.imported ? data.data.imported : 0;
         if (imported > 0) {
-            if (typeof window.updateStatus === 'function') {
-                window.updateStatus(window.t('download.rssFetchAllDone', { count: imported }));
-            }
+            window.updateStatus(window.t('download.rssFetchAllDone', { count: imported }));
             if (window.TreeModule && window.TreeModule.loadFileTree) {
                 window.TreeModule.loadFileTree(true);
             }
@@ -68,11 +66,9 @@ function handleGlobalDownloadEvent(event) {
     } else if (data.type === 'folder_watch_complete') {
         var fwData = data.data || {};
         var fwImported = fwData.imported || 0;
-        if (typeof window.updateStatus === 'function') {
-            window.updateStatus(fwImported > 0
-                ? window.t('download.folderImportDone', { count: fwImported })
-                : window.t('download.folderImportNone'));
-        }
+        window.updateStatus(fwImported > 0
+            ? window.t('download.folderImportDone', { count: fwImported })
+            : window.t('download.folderImportNone'));
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             window.TreeModule.loadFileTree(true);
         }
@@ -593,9 +589,7 @@ async function scanAllWatchedFolders() {
         var result = await window.api.scanWatchedFolder('', true);
         if (result && result.success) {
             if (result.scanned > 0) {
-                if (typeof window.updateStatus === 'function') {
-                    window.updateStatus(_rssT('download.folderScanDone', { count: result.scanned }));
-                }
+                window.updateStatus(_rssT('download.folderScanDone', { count: result.scanned }));
             } else {
                 alert(_rssT('download.folderScanNone'));
             }

@@ -1,0 +1,182 @@
+/* ==========================================================================
+   AI 助手面板：追问建议 chips（P4）与检索过程面板（P9）
+   仅新增类，不覆盖既有样式。
+   ========================================================================== */
+
+/* ---- P4：追问建议 chips ---- */
+
+.ai-suggestion-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.ai-suggestion-chip {
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 4px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--ai-faint-border, var(--border));
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: color 150ms, border-color 150ms, background 150ms;
+}
+
+.ai-suggestion-chip:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-light, var(--surface-hover));
+}
+
+/* ---- P9：检索过程面板（原生 details，默认折叠） ---- */
+
+.ai-retrieval-details {
+    margin-bottom: 6px;
+    border: 1px solid var(--ai-faint-border, var(--border));
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ai-retrieval-summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+}
+
+.ai-retrieval-summary::-webkit-details-marker {
+    display: none;
+}
+
+.ai-retrieval-summary::before {
+    content: '▸';
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 150ms;
+}
+
+.ai-retrieval-details[open] > .ai-retrieval-summary::before {
+    transform: rotate(90deg);
+}
+
+.ai-retrieval-summary:hover {
+    color: var(--text);
+}
+
+.ai-retrieval-title {
+    font-weight: 600;
+}
+
+.ai-retrieval-badge {
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    line-height: 1.5;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+}
+
+.ai-retrieval-badge-cached {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.ai-retrieval-badge-degraded {
+    color: var(--color-pending, #b58a00);
+    border-color: var(--color-pending, #b58a00);
+}
+
+.ai-retrieval-body {
+    padding: 6px 8px 8px;
+    border-top: 1px solid var(--ai-faint-border, var(--border));
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ai-retrieval-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ai-retrieval-label {
+    flex: 0 0 auto;
+    min-width: 5em;
+    color: var(--text-muted);
+}
+
+.ai-retrieval-value {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.ai-retrieval-arrow {
+    color: var(--text-muted);
+}
+
+.ai-retrieval-terms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.ai-retrieval-term {
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--primary-light, var(--surface-hover));
+    color: var(--primary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.ai-retrieval-sources {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.ai-retrieval-source {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* path 可能很长：单行截断，title 属性展示全文 */
+.ai-retrieval-source-path {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 55%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.ai-retrieval-source-section {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.ai-retrieval-source-score {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+}

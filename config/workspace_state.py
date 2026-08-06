@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -6,6 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from .constants import WORKSPACE_STATE_FILE
+
+# 使用标准 logging：config 包在 utils.logger 之前被导入（utils.logger 依赖 config），
+# 此处不能反向引用 utils.logger，否则会循环导入。
+logger = logging.getLogger(__name__)
 
 
 class WorkspaceStateError(Exception):
@@ -53,7 +58,7 @@ class WorkspaceStateManager:
                     try:
                         Path(temp_path).unlink()
                     except Exception as e:
-                        print(f"清理临时文件失败: {e}")
+                        logger.warning(f"清理临时文件失败: {e}")
         except PermissionError:
             raise WorkspaceStateError("保存工作区状态失败：没有写入权限")
         except OSError as e:
@@ -102,7 +107,7 @@ class WorkspaceStateManager:
         except json.JSONDecodeError:
             return self._try_restore_from_backup()
         except (PermissionError, OSError) as e:
-            print(f"加载工作区状态时出错: {e}")
+            logger.warning(f"加载工作区状态时出错: {e}")
             return self._try_restore_from_backup()
 
     def _try_restore_from_backup(self) -> tuple[str | None, dict[str, Any]]:
@@ -120,7 +125,7 @@ class WorkspaceStateManager:
                 if not workspace.exists():
                     return None, data
 
-            print("已从备份文件恢复工作区状态")
+            logger.info("已从备份文件恢复工作区状态")
             return workspace_path, data
         except Exception:
             return None, {}

@@ -116,5 +116,9 @@ def is_inbox_orphan_path(path: str | Path, workspace: str | None = None) -> bool
     if len(parts) == 1 and parts[0].lower().endswith(".md"):
         return not is_workspace_meta_path(p) and p.stem.casefold() != "readme"
     if len(parts) == 2 and parts[0] == NOTES_FOLDER and parts[1].lower().endswith(".md"):
+        # Notes/ 根部的 README 与知识图谱是导航/元文档，不视为待分类孤儿
+        stem = p.stem.casefold()
+        if stem == "readme" or stem == "知识图谱":
+            return False
         return not is_workspace_meta_path(p)
     return False

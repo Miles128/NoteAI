@@ -45,6 +45,9 @@ def test_is_inbox_orphan_path(workspace: Path) -> None:
     assert not is_inbox_orphan_path(workspace / "Notes" / "AI" / "note.md", str(workspace))
     assert not is_inbox_orphan_path(workspace / "AGENTS.md", str(workspace))
     assert not is_inbox_orphan_path(workspace / "README.md", str(workspace))
+    # Notes/ 根部的导航/元文档（README、知识图谱）不视为待分类孤儿
+    assert not is_inbox_orphan_path(workspace / "Notes" / "README.md", str(workspace))
+    assert not is_inbox_orphan_path(workspace / "Notes" / "知识图谱.md", str(workspace))
 
 
 def test_sync_folder_topics_for_subfolder_file(workspace: Path) -> None:

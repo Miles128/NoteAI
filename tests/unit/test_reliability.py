@@ -96,4 +96,5 @@ def test_retrieve_filters_empty_before_expand(workspace: Path) -> None:
         patch("sidecar.rag.context_expand.expand_retrieval_context", side_effect=lambda hits, **kw: hits),
     ):
         results = retrieve("test query")
-    assert results == []
+    assert results["results"] == []
+    assert results["retrieval_debug"]["final"] == 0

@@ -33,8 +33,8 @@
     padding: 4px 10px;
     border-radius: 999px;
     font-size: 12px;
-    background: var(--bg-muted, rgba(255, 255, 255, 0.06));
-    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+    background: var(--surface); /* 原 --bg-muted */
+    border: 1px solid var(--border); /* 原 --border-subtle */
 }
 
 .schema-option-list-inline {
@@ -63,7 +63,7 @@
 
 .schema-wizard-dot.active,
 .schema-wizard-dot.done {
-    background: var(--accent, #4a90d9);
+    background: var(--primary);
 }
 
 .schema-wizard-step {
@@ -108,11 +108,11 @@
 }
 
 .schema-option-card:hover {
-    border-color: var(--accent, #4a90d9);
+    border-color: var(--primary);
 }
 
 .schema-option-card.selected {
-    border-color: var(--accent, #4a90d9);
+    border-color: var(--primary);
     background: rgba(74, 144, 217, 0.08);
 }
 

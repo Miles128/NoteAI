@@ -213,3 +213,79 @@ def test_keyword_rules_take_precedence_over_llm(llm_env):
     result = classify_intent("我的笔记里有什么")
     assert result["intent"] == "workspace"
     assert calls == []  # 关键词命中后不应触发 LLM 调用
+
+
+# ---------------------------------------------------------------------------
+# classify_intent：history 参数（多轮对话增强，仅 LLM 模式注入）
+# ---------------------------------------------------------------------------
+
+
+def test_history_absent_prompt_unchanged(llm_env):
+    """无 history 时 LLM prompt 与基线一致，不出现近期对话区块。"""
+    calls = []
+
+    def fake(prompt, temperature=None, max_tokens=None):
+        calls.append(prompt)
+        return '{"intent": "general"}'
+
+    llm_env(fake)
+    result_no_arg = classify_intent("解释一下量子纠缠")
+    result_none = classify_intent("解释一下量子纠缠", history=None)
+    result_empty = classify_intent("解释一下量子纠缠", history=[])
+    assert result_no_arg["intent"] == result_none["intent"] == result_empty["intent"] == "general"
+    assert len(calls) == 3
+    assert all("近期对话" not in p for p in calls)
+
+
+def test_history_injected_into_llm_prompt(llm_env):
+    """LLM 模式下最近 2 轮对话被拼入意图判断 prompt。"""
+    calls = []
+
+    def fake(prompt, temperature=None, max_tokens=None):
+        calls.append(prompt)
+        return '{"intent": "workspace"}'
+
+    llm_env(fake)
+    history = [
+        {"role": "user", "content": "我笔记里 RAG 是怎么实现的？"},
+        {"role": "assistant", "content": "你的笔记描述了混合检索流程。"},
+        {"role": "user", "content": "那它呢？"},
+    ]
+    result = classify_intent("那它呢？", history=history)
+    assert result["intent"] == "workspace"
+    assert len(calls) == 1
+    prompt = calls[0]
+    assert "近期对话" in prompt
+    assert "混合检索流程" in prompt
+    assert "那它呢？" in prompt
+
+
+def test_history_invalid_entries_are_skipped(llm_env):
+    """非法条目（非 dict / 未知 role / 空内容）被跳过，全部无效时不注入。"""
+    calls = []
+
+    def fake(prompt, temperature=None, max_tokens=None):
+        calls.append(prompt)
+        return '{"intent": "general"}'
+
+    llm_env(fake)
+    classify_intent(
+        "解释一下量子纠缠",
+        history=["not-a-dict", {"role": "system", "content": "x"}, {"role": "user", "content": "  "}],
+    )
+    assert len(calls) == 1
+    assert "近期对话" not in calls[0]
+
+
+def test_history_does_not_affect_keyword_shortcut(llm_env):
+    """纯规则/关键词模式不注入 history，也不触发 LLM。"""
+    calls = []
+
+    def fake(prompt, temperature=None, max_tokens=None):
+        calls.append(prompt)
+        return '{"intent": "web"}'
+
+    llm_env(fake)
+    result = classify_intent("你好", history=[{"role": "user", "content": "我笔记里的 RAG"}])
+    assert result["intent"] == "chat"
+    assert calls == []

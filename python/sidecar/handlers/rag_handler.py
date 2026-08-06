@@ -24,6 +24,80 @@ def _jieba_analyse_available():
 class RagHandler(BaseHandler):
     _rag_chat_lock = threading.Lock()
     _rag_build_lock = threading.Lock()
+    # In-memory snapshot of the latest retrieval pipeline run (P9 transparency);
+    # session-scoped only, never persisted.
+    _last_retrieval_debug: dict = {}
+
+    _SUGGESTIONS_SENTINEL_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\]]*\])")
+
+    @staticmethod
+    def _strip_suggestions_sentinel(answer: str) -> tuple[str, list[str]]:
+        """Split the trailing SUGGESTIONS_JSON sentinel; return (body, suggestions)."""
+        raw = answer or ""
+        m = RagHandler._SUGGESTIONS_SENTINEL_RE.search(raw)
+        if not m:
+            return raw, []
+        body = raw[: m.start()].rstrip()
+        try:
+            data = json.loads(m.group(1))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return body, []
+        if not isinstance(data, list):
+            return body, []
+        suggestions = [str(s).strip() for s in data if str(s).strip()][:3]
+        return body, suggestions
+
+    @staticmethod
+    def _session_topic_anchors(history) -> list[str]:
+        """Session-only topic anchoring: extract anchor terms from early turns.
+
+        When the session history exceeds 6 messages, the messages before the
+        last 6 are compressed via _extractive_compress and mined for
+        high-value terms (jieba TF-IDF) used as extra retrieval keywords.
+        Lives only in-session: never persisted, no automatic extraction
+        pipeline (PRD §3/§12.6).
+        """
+        if not isinstance(history, list) or len(history) <= 6:
+            return []
+        older = [m for m in history[:-6] if isinstance(m, dict)]
+        if not older or not _jieba_analyse_available():
+            return []
+        try:
+            text = RagHandler._extractive_compress(older)
+            if not text.strip():
+                text = " ".join(str(m.get("content") or "")[:300] for m in older if m.get("role") == "user")
+            if not text.strip():
+                return []
+            import jieba.analyse
+
+            return list(jieba.analyse.extract_tags(text, topK=5, withWeight=False))
+        except Exception as e:
+            logger.warning(f"[rag] topic anchoring failed: {e}")
+            return []
+
+    @staticmethod
+    def _template_suggestions(citations: list | None) -> list[str]:
+        """Fallback follow-up suggestions built from citation metadata (no LLM)."""
+        suggestions: list[str] = []
+        seen: set[str] = set()
+        for c in citations or []:
+            if not isinstance(c, dict):
+                continue
+            topic = str(c.get("topic") or "").strip()
+            section = str(c.get("section_title") or "").strip()
+            label = str(c.get("source_label") or c.get("file_name") or "").strip()
+            if topic and topic not in seen:
+                suggestions.append(f"「{topic}」还有哪些相关笔记？")
+                seen.add(topic)
+            elif section and section not in seen:
+                suggestions.append(f"展开讲讲「{section}」")
+                seen.add(section)
+            elif label and label not in seen:
+                suggestions.append(f"《{label}》里还有什么要点？")
+                seen.add(label)
+            if len(suggestions) >= 3:
+                break
+        return suggestions[:3]
 
     @staticmethod
     def _rag_disabled_message() -> str:
@@ -280,7 +354,7 @@ class RagHandler(BaseHandler):
             route = "web"
         else:
             route_query = f"选中文本：{selection}\n上下文：{context}" if context else selection
-            route = classify_intent(route_query, history="").get("intent", "unknown")
+            route = classify_intent(route_query, history=params.get("history")).get("intent", "unknown")
 
         if route in {"workspace", "unknown"}:
             self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
@@ -323,7 +397,11 @@ class RagHandler(BaseHandler):
     def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
         from sidecar.archive_wiki import parse_save_suggestion
 
-        display_answer, suggest_save_note = parse_save_suggestion(answer)
+        display_answer, suggestions = RagHandler._strip_suggestions_sentinel(answer)
+        if not suggestions and citations:
+            # Model omitted the sentinel: fall back to template suggestions.
+            suggestions = RagHandler._template_suggestions(citations)
+        display_answer, suggest_save_note = parse_save_suggestion(display_answer)
         if not display_answer.strip():
             return self._fail_rag("AI 未生成回复")
 
@@ -336,12 +414,13 @@ class RagHandler(BaseHandler):
                     "type": "rag_chat_done",
                     "answer": display_answer,
                     "suggest_save_note": suggest_save_note,
+                    "suggestions": suggestions,
                     "citations": citations or [],
                     "citation_quality": self._citation_quality(citations),
                 },
             }
         )
-        return {"success": True, "suggest_save_note": suggest_save_note}
+        return {"success": True, "suggest_save_note": suggest_save_note, "suggestions": suggestions}
 
     def _answer_without_retrieval(self, question: str, compressed_history: str, *, intent: str = "general") -> dict:
         from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_CONTEXT_PROMPT, RAG_ASSISTANT_WEB_PROMPT
@@ -405,7 +484,9 @@ class RagHandler(BaseHandler):
             ]
         return self._finish_chat(question, answer, citations=citations)
 
-    def _answer_with_rag(self, params, question: str, compressed_history: str, *, use_vector_rag: bool) -> dict:
+    def _answer_with_rag(
+        self, params, question: str, compressed_history: str, *, use_vector_rag: bool, intent: str = "workspace"
+    ) -> dict:
         from prompts import RAG_CHAT_PROMPT
         from utils.llm_utils import APIConfigError, call_llm_raw_stream
 
@@ -413,16 +494,29 @@ class RagHandler(BaseHandler):
         tags = params.get("tags") or None
         current_file = params.get("current_file") or ""
 
+        retrieval_debug: dict | None = None
+        hyde_enabled_flag = False
+        hyde_query: str | None = None
         try:
             if use_vector_rag:
                 from sidecar.rag.retriever import retrieve as vector_retrieve
 
-                search_results = vector_retrieve(
-                    question,
+                # Session-only topic anchoring: append anchor terms from early
+                # turns as extra retrieval keywords (original query kept intact).
+                anchors = RagHandler._session_topic_anchors(params.get("history"))
+                retrieval_query = f"{question} {' '.join(anchors)}" if anchors else question
+                retrieval = vector_retrieve(
+                    retrieval_query,
                     topics=topics,
                     tags=tags,
                     current_file=current_file,
                 )
+                search_results = retrieval.get("results") or []
+                retrieval_debug = dict(retrieval.get("retrieval_debug") or {})
+                if anchors:
+                    retrieval_debug["anchor_terms"] = anchors
+                hyde_enabled_flag = bool(retrieval_debug.get("hyde_enabled"))
+                hyde_query = retrieval_debug.get("hyde_query")
             else:
                 from sidecar.classic_retriever import retrieve as classic_retrieve
 
@@ -526,6 +620,22 @@ class RagHandler(BaseHandler):
             )
         context = "\n\n".join(context_parts)
 
+        # P9: emit retrieval transparency meta after retrieval, before the
+        # answer stream starts.
+        meta_data = self._build_retrieval_meta(intent, hyde_enabled_flag, hyde_query, retrieval_debug, search_results)
+        self._send_response(
+            {
+                "id": "event",
+                "result": {
+                    "type": "rag_retrieval",
+                    "subtype": "meta",
+                    "session_id": str(params.get("session_id") or ""),
+                    "data": meta_data,
+                },
+            }
+        )
+        RagHandler._last_retrieval_debug = meta_data
+
         prompt = RAG_CHAT_PROMPT.format(
             context=context,
             history=compressed_history if compressed_history else "无历史对话",
@@ -544,6 +654,30 @@ class RagHandler(BaseHandler):
         return self._finish_chat(question, answer, citations=self._cited_sources(answer, citations))
 
     @staticmethod
+    def _build_retrieval_meta(
+        intent: str, hyde_enabled_flag: bool, hyde_query: str | None, retrieval_debug: dict | None, search_results: list
+    ) -> dict:
+        top_sources = []
+        for r in search_results[:5]:
+            if not isinstance(r, dict):
+                continue
+            top_sources.append(
+                {
+                    "path": r.get("file_path") or "",
+                    "section_title": r.get("section_title") or "",
+                    "score": r.get("score"),
+                    "rerank_score": r.get("rerank_score"),
+                }
+            )
+        return {
+            "intent": intent,
+            "hyde_enabled": bool(hyde_enabled_flag),
+            "hyde_query": (str(hyde_query)[:200] if hyde_query else None),
+            "retrieval_debug": retrieval_debug or {},
+            "top_sources": top_sources,
+        }
+
+    @staticmethod
     def _cited_sources(answer: str, citations: list[dict]) -> list[dict]:
         """Return only valid source IDs the model actually used in its answer."""
         by_index = {str(c.get("index")): c for c in citations if c.get("index") is not None}
@@ -556,7 +690,8 @@ class RagHandler(BaseHandler):
                 seen.add(index)
         return used
 
-    def _extractive_compress(self, older_history):
+    @staticmethod
+    def _extractive_compress(older_history):
         if not older_history:
             return ""
         if isinstance(older_history, str):
@@ -564,8 +699,12 @@ class RagHandler(BaseHandler):
 
         parts = []
         for h in older_history:
-            role = "用户" if h["role"] == "user" else "助手"
-            text = h["content"]
+            if not isinstance(h, dict):
+                continue
+            role = "用户" if h.get("role") == "user" else "助手"
+            text = str(h.get("content") or "")
+            if not text:
+                continue
             if len(text) <= 80:
                 parts.append(f"{role}: {text}")
                 continue
@@ -680,7 +819,15 @@ class RagHandler(BaseHandler):
         except Exception as e:
             return {"success": False, "message": str(e)}
 
+    def _rag_retrieval_debug(self, params):
+        """Return the latest retrieval pipeline snapshot (P9 transparency)."""
+        data = RagHandler._last_retrieval_debug
+        if not data:
+            return {"success": True, "available": False}
+        return {"success": True, "available": True, **data}
+
     def register_routes(self, router):
         router.register("rag_rebuild_index", self._rag_rebuild_index)
         router.register("rag_chat", self._rag_chat, async_mode=True)
         router.register("rag_index_status", self._rag_index_status)
+        router.register("rag_retrieval_debug", self._rag_retrieval_debug)

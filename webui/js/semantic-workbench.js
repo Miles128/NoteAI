@@ -17,6 +17,7 @@ var _lastBrief = '';
 var _pendingTargetId = null;
 var _suppressAutoSelect = false;
 var _degradedHidden = 0;
+var _recentAdded = null;
 var _intensity = 'standard';
 var _enabledCategories = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
 var _workbenchEnabled = true;
@@ -451,7 +452,8 @@ function renderVerifications(item) {
     var history = records.length > 1 ? '<span class="semantic-muted">' + esc(t('semantic.verificationHistory', { count: records.length })) + '</span>' : '';
     var cards = records.map(function(record) {
         var sources = (record.sources || []).map(function(source) {
-            return '<li><a href="' + esc(source.url || '#') + '" target="_blank" rel="noopener">' + esc(source.title || source.url || '') + '</a></li>';
+            var safeHref = window.safeUrl ? window.safeUrl(source.url || '#') : '#';
+            return '<li><a href="' + esc(safeHref) + '" target="_blank" rel="noopener">' + esc(source.title || source.url || '') + '</a></li>';
         }).join('');
         return '<article class="semantic-verification"><div class="semantic-verification-head"><span class="semantic-verdict semantic-verdict-' + esc(record.verdict) + '">' + esc(t('semantic.verdicts.' + record.verdict)) + '</span><span>' + Math.round((record.confidence || 0) * 100) + '%</span><span>' + esc(record.agent || record.method || '') + '</span><time>' + esc(record.created_at || '') + '</time></div>' + (record.summary ? '<p>' + esc(record.summary) + '</p>' : '') + (sources ? '<ul class="semantic-verification-sources">' + sources + '</ul>' : '') + '</article>';
     }).join('');
@@ -519,11 +521,49 @@ function renderEmptyDetail(error) {
         return;
     }
     var keys = ['documents', 'blocks', 'concepts', 'entities', 'claims', 'evidence'];
+    // 展示层用用户语言，原治理术语以 tooltip 次级标注保留（避免治理场景歧义）。
+    var metricHints = { claims: 'Claim', evidence: 'Evidence' };
     var metrics = keys.map(function(key) {
-        return '<div class="semantic-metric"><strong>' + esc(_overview[key] || 0) + '</strong><span>' + esc(t('semantic.metrics.' + key)) + '</span></div>';
+        var hint = metricHints[key] ? ' title="' + metricHints[key] + '"' : '';
+        return '<div class="semantic-metric"><strong>' + esc(_overview[key] || 0) + '</strong><span' + hint + '>' + esc(t('semantic.metrics.' + key)) + '</span></div>';
     }).join('');
-    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">Semantic IR</p><h2>' + esc(t('semantic.categoryEmptyTitle')) + '</h2><p class="semantic-detail-description">' + esc(t(_category === 'conflicts' ? 'semantic.emptyConflicts' : 'semantic.selectHint')) + '</p><div class="semantic-metrics">' + metrics + '</div><section class="semantic-changes" id="semantic-changes"><h3>' + esc(t('semantic.changes.title')) + ' <span class="semantic-changes-window">' + esc(t('semantic.changes.window')) + '</span></h3><p class="semantic-detail-description">' + esc(t('semantic.changes.empty')) + '</p></section></div>';
+    detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">Semantic IR</p><h2>' + esc(t('semantic.categoryEmptyTitle')) + '</h2><p class="semantic-detail-description">' + esc(t(_category === 'conflicts' ? 'semantic.emptyConflicts' : 'semantic.selectHint')) + '</p>' + narrativeSummaryHtml() + '<div class="semantic-metrics">' + metrics + '</div><section class="semantic-changes" id="semantic-changes"><h3>' + esc(t('semantic.changes.title')) + ' <span class="semantic-changes-window">' + esc(t('semantic.changes.window')) + '</span></h3><p class="semantic-detail-description">' + esc(t('semantic.changes.empty')) + '</p></section></div>';
+    _recentAdded = null;
     loadChanges();
+}
+
+// 「你的知识库」叙事卡片：把概览指标转译为用户语言（PRD §10.10.1：仅陈述事实数量，无任何评分/健康度）。
+// X=结论数、主题覆盖数来自 get_semantic_overview；Z=近 7 天新增来自 get_semantic_changes。
+// 某数据缺失时优雅降级（省略对应短语）。
+function narrativePhrases() {
+    var overview = _overview || {};
+    var phrases = [];
+    if (typeof overview.claims === 'number') {
+        phrases.push(t('semantic.narrative.conclusions', { count: overview.claims }));
+    }
+    var topics = overview.topics_with_changes;
+    if (Array.isArray(topics)) topics = topics.length;
+    if (typeof topics !== 'number' && typeof overview.topics === 'number') topics = overview.topics;
+    if (typeof topics === 'number') {
+        phrases.push(t('semantic.narrative.topics', { count: topics }));
+    }
+    if (typeof _recentAdded === 'number') {
+        phrases.push(t('semantic.narrative.recent', { count: _recentAdded }));
+    }
+    return phrases;
+}
+
+function narrativeSummaryHtml() {
+    var phrases = narrativePhrases();
+    if (!phrases.length) return '';
+    return '<section class="semantic-narrative-card" aria-label="' + esc(t('semantic.narrative.title')) + '"><h3 class="semantic-narrative-title" title="Claim / Evidence">' + esc(t('semantic.narrative.title')) + '</h3><p class="semantic-narrative-text">' + phrases.map(esc).join(' &middot; ') + '</p></section>';
+}
+
+function updateNarrativeText() {
+    var text = document.querySelector('.semantic-narrative-text');
+    if (!text) return;
+    var phrases = narrativePhrases();
+    if (phrases.length) text.innerHTML = phrases.map(esc).join(' &middot; ');
 }
 
 function loadChanges() {
@@ -547,6 +587,8 @@ function renderChanges(result) {
     counts.forEach(function(entry) {
         summary[entry.change_kind] = (summary[entry.change_kind] || 0) + entry.count;
     });
+    _recentAdded = summary.added || 0;
+    updateNarrativeText();
     var badgeOrder = ['added', 'updated', 'invalidated', 'removed'];
     var badges = badgeOrder.filter(function(kind) { return summary[kind]; }).map(function(kind) {
         return '<span class="semantic-change-badge semantic-change-' + kind + '">' + esc(t('semantic.changes.' + kind)) + ' ' + summary[kind] + '</span>';

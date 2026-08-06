@@ -32,6 +32,7 @@ KNOWN_BACKEND_ONLY_METHODS = {
     "delete_topic_safe",  # 3 层主题树内部使用
     "get_survey_status",  # 综述轮询内部使用
     "get_topic_tree_3tier",  # 3 层主题树内部使用
+    "rag_retrieval_debug",  # 检索透明化面板，前端 P9 任务对接后移出
     "retry_semantic_failed_blocks",  # 语义编译重试内部使用
     "set_abstract_config",  # 3 层主题树内部使用
 }

@@ -39,6 +39,39 @@ class WorkspaceHandler(BaseHandler):
         router.register("get_workspace_tree", self._get_workspace_tree)
         router.register("on_file_selected", self._on_file_selected)
         router.register("refresh_log", self._refresh_log)
+        router.register("get_onboarding_status", self._get_onboarding_status)
+        router.register("mark_onboarding_done", self._mark_onboarding_done)
+
+    def _get_onboarding_status(self, _params):
+        """首启引导状态：工作区/API Key/模型就绪三要素 + 完成标记。"""
+        from sidecar.rag.model_preload import ModelWarmupManager
+
+        saved_path, state_data = workspace_manager.load_workspace()
+        workspace_set = bool(saved_path and Path(saved_path).exists())
+        return {
+            "workspace_set": workspace_set,
+            "workspace_path": saved_path if workspace_set else "",
+            "api_key_configured": bool(self.config.api_key),
+            "models_ready": ModelWarmupManager.is_ready(),
+            "onboarding_done": bool(state_data.get("onboarding_done")),
+        }
+
+    def _mark_onboarding_done(self, _params):
+        """将 onboarding_done 写入 workspace_state.json 的 additional_data。
+
+        未设置工作区时无持久化载体（跳过场景），由前端 localStorage 兜底。
+        """
+        saved_path, state_data = workspace_manager.load_workspace()
+        if not saved_path or not Path(saved_path).exists():
+            return {"success": True, "persisted": False}
+        # save_workspace 自身会重写 workspace_path/last_opened_at/version，
+        # 这里只回传其余既有字段，避免丢失历史 additional_data。
+        extra = {k: v for k, v in state_data.items() if k not in ("workspace_path", "last_opened_at", "version")}
+        extra["onboarding_done"] = True
+        ok, msg = workspace_manager.save_workspace(saved_path, additional_data=extra)
+        if not ok:
+            return {"success": False, "message": msg}
+        return {"success": True, "persisted": True}
 
     def _get_workspace_status(self, _params):
         saved_path, _ = workspace_manager.load_workspace()

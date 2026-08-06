@@ -161,6 +161,7 @@ function initRagEventListener() {
             var compEvent = new CustomEvent('component_installed', { detail: data });
             document.dispatchEvent(compEvent);
         } else if (data.type === 'rag_chat_chunk' || data.type === 'rag_chat_done'
+            || data.type === 'rag_retrieval'
             || data.type === 'rag_error' || data.type === 'rag_index_built') {
             if (window.AssistantModule && window.AssistantModule.handleEvent) {
                 window.AssistantModule.handleEvent(data);

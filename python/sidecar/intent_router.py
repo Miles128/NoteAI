@@ -32,7 +32,29 @@ def _parse_intent_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def classify_intent(question: str, history: str = "") -> dict[str, Any]:
+def _format_recent_history(history: list[dict] | None) -> str:
+    """Render the last 2 conversation turns for the LLM classifier.
+
+    Returns an empty string when there is no usable history so the prompt
+    stays byte-identical to the history-less baseline.
+    """
+    if not history:
+        return ""
+    lines: list[str] = []
+    for msg in history[-4:]:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = str(msg.get("content") or "").strip()[:200]
+        if role not in ("user", "assistant") or not content:
+            continue
+        lines.append(f"{'用户' if role == 'user' else '助手'}: {content}")
+    if not lines:
+        return ""
+    return "近期对话（仅供理解指代与上下文，以用户输入为准）：\n" + "\n".join(lines) + "\n\n"
+
+
+def classify_intent(question: str, history: list[dict] | None = None) -> dict[str, Any]:
     """Classify the user question into an intent category.
 
     Returns a dict with keys: intent, confidence, reason.
@@ -97,7 +119,7 @@ def classify_intent(question: str, history: str = "") -> dict[str, Any]:
     except APIConfigError:
         return {"intent": "workspace", "confidence": "low", "reason": "API unavailable, default to workspace"}
 
-    prompt = INTENT_ROUTER_PROMPT.format(question=question)
+    prompt = INTENT_ROUTER_PROMPT.format(question=question, history_section=_format_recent_history(history))
     try:
         raw = call_llm_raw(prompt, temperature=0.1, max_tokens=120)
     except Exception as e:

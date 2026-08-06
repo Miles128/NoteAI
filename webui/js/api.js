@@ -355,6 +355,7 @@ var API_DEFS = [
     // ---- 工作区 / 主题 / 标签 ----
     { name: 'getWorkspaceTree', method: 'get_workspace_tree' },
     { name: 'getTopicTree', method: 'get_topic_tree' },
+    { name: 'topicMeta', method: 'topic_meta', params: function(topic) { return { topic: topic }; } },
     { name: 'getSurveyOverview', method: 'get_survey_overview' },
     { name: 'toggleSurvey', method: 'toggle_survey', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'getAllTags', method: 'get_all_tags' },
@@ -387,6 +388,9 @@ var API_DEFS = [
     // ---- 配置 ----
     { name: 'getApiConfig', method: 'get_api_config' },
     { name: 'saveApiConfig', method: 'save_api_config', params: function(cfg) { return cfg; }, write: true },
+    { name: 'testApiConfig', method: 'test_api_config', params: function(cfg) { return cfg || {}; } },
+    { name: 'getOnboardingStatus', method: 'get_onboarding_status' },
+    { name: 'markOnboardingDone', method: 'mark_onboarding_done', params: function() { return {}; }, write: true },
     { name: 'getUiConfig', method: 'get_ui_config' },
     { name: 'saveUiConfig', method: 'save_ui_config', params: function(cfg) { return cfg; }, write: true },
     { name: 'getComponentsStatus', method: 'get_components_status' },

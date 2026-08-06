@@ -83,6 +83,109 @@ function showEditButton(show) {
     }
 }
 
+// ============================================================================
+// P5：语义页可信度元信息条
+// 识别 wiki 语义页（frontmatter semantic_page: true 或 wiki/semantic/*_语义.md），
+// 异步拉取 topic_meta 后在正文上方注入元信息条；不阻塞正文渲染。
+// 所有动态文本一律经 window.escapeHtml 转义（XSS 加固要求）。
+// ============================================================================
+
+function parseMarkdownFrontmatter(content) {
+    if (typeof content !== 'string') return null;
+    var m = content.slice(0, 2000).match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---/);
+    if (!m) return null;
+    var fm = {};
+    m[1].split(/\r?\n/).forEach(function(line) {
+        var kv = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+        if (kv) fm[kv[1]] = kv[2].trim();
+    });
+    return fm;
+}
+
+function isSemanticWikiPath(path) {
+    if (!path) return false;
+    return /(^|[/\\])wiki[/\\]semantic[/\\][^/\\]*_语义\.md$/i.test(String(path));
+}
+
+function removeSemanticMetaBar() {
+    document.querySelectorAll('.semantic-page-meta').forEach(function(el) {
+        el.remove();
+    });
+}
+
+function formatRelativeTime(value) {
+    var d = new Date(typeof value === 'number' ? value * 1000 : value);
+    if (isNaN(d.getTime())) return '';
+    var diff = Date.now() - d.getTime();
+    if (diff < 0) diff = 0;
+    if (diff < 60000) return window.t('preview.justNow');
+    if (diff < 3600000) return window.t('preview.minutesAgo', { count: Math.floor(diff / 60000) });
+    if (diff < 86400000) return window.t('preview.hoursAgo', { count: Math.floor(diff / 3600000) });
+    if (diff < 604800000) return window.t('preview.daysAgo', { count: Math.floor(diff / 86400000) });
+    return window.formatModifiedTime(d.getTime() / 1000);
+}
+
+function buildSemanticMetaBarHtml(meta) {
+    var sourceCount = Number(meta.source_count) || 0;
+    var parts = [escapeHtml(window.t('preview.semanticSources', { count: sourceCount }))];
+    var compiledLabel = meta.compiled_at ? formatRelativeTime(meta.compiled_at) : '';
+    if (compiledLabel) {
+        parts.push(escapeHtml(window.t('preview.semanticCompiled', { time: compiledLabel })));
+    }
+    var html = '<div class="semantic-page-meta-text">' + parts.join(' · ') + '</div>';
+    html += '<div class="semantic-page-meta-badges">';
+    if (meta.is_stale) {
+        html += '<span class="semantic-page-meta-badge semantic-page-meta-badge-stale" title="'
+            + escapeAttr(window.t('preview.semanticStaleTitle')) + '">'
+            + escapeHtml(window.t('preview.semanticStale')) + '</span>';
+    }
+    var conflictCount = Number(meta.conflict_pending_count) || 0;
+    if (conflictCount > 0) {
+        html += '<button type="button" class="semantic-page-meta-badge semantic-page-meta-badge-conflict" data-meta-action="conflicts" title="'
+            + escapeAttr(window.t('preview.semanticConflictsTitle')) + '">'
+            + escapeHtml(window.t('preview.semanticConflicts', { count: conflictCount })) + '</button>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function insertSemanticMetaBar(html) {
+    var wrapper = document.querySelector('#preview-panel .preview-content-wrapper');
+    if (!wrapper) return;
+    var bar = document.createElement('div');
+    bar.className = 'semantic-page-meta';
+    bar.innerHTML = html;
+    var conflictBtn = bar.querySelector('[data-meta-action="conflicts"]');
+    if (conflictBtn) {
+        conflictBtn.addEventListener('click', function() {
+            if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.show) {
+                window.SemanticWorkbenchModule.show('conflicts');
+            }
+        });
+    }
+    removeSemanticMetaBar();
+    wrapper.insertBefore(bar, wrapper.firstChild);
+}
+
+function maybeLoadSemanticPageMeta(path, content, requestId) {
+    removeSemanticMetaBar();
+    if (!isPreviewActive || requestId !== currentLoadRequestId) return;
+    var fm = parseMarkdownFrontmatter(content);
+    var semantic = !!(fm && /^(true|yes)$/i.test(String(fm.semantic_page || '')));
+    if (!semantic && !isSemanticWikiPath(path)) return;
+    var topic = fm && fm.topic ? String(fm.topic).replace(/^["']|["']$/g, '').trim() : '';
+    if (!topic) return;
+    if (!window.api || typeof window.api.topicMeta !== 'function') return;
+    // 异步获取，不阻塞正文渲染；到达后再插入元信息条
+    window.api.topicMeta(topic).then(function(meta) {
+        if (requestId !== currentLoadRequestId || !isPreviewActive) return;
+        if (!meta || meta.exists === false) return;
+        insertSemanticMetaBar(buildSemanticMetaBarHtml(meta));
+    }).catch(function(err) {
+        console.warn('[Preview] topicMeta load failed:', err);
+    });
+}
+
 async function loadFilePreview(path, fileName) {
     const requestId = generateLoadRequestId();
     
@@ -122,6 +225,7 @@ async function loadFilePreview(path, fileName) {
 
     previewPanel.classList.add('active');
     showPreviewView();
+    removeSemanticMetaBar();
 
     try {
         const result = await window.api.getFilePreview(path);
@@ -151,7 +255,11 @@ async function loadFilePreview(path, fileName) {
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
-            
+
+            if (isMarkdown) {
+                maybeLoadSemanticPageMeta(path, currentPreviewData.content, requestId);
+            }
+
             if (isPdf) {
                 if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
                     await window.TiptapEditorModule.hideEditorUI();
@@ -430,7 +538,7 @@ function renderPreviewContent(previewData) {
             <div class="preview-file-info">
                 <div class="preview-file-info-row">
                     <span class="preview-file-info-label">${window.t('preview.typeLabel')}</span>
-                    <span class="preview-file-info-value">${metadata.type || window.t('preview.unknownType')}</span>
+                    <span class="preview-file-info-value">${escapeHtml(metadata.type || window.t('preview.unknownType'))}</span>
                 </div>
                 ${metadata.size ? `
                     <div class="preview-file-info-row">
@@ -457,9 +565,11 @@ function renderPreviewContent(previewData) {
     } else if (type === 'docx' || type === 'word') {
         previewHtml += renderDocxPreviewHtml(content, previewData.contentKind);
     } else if (type === 'image') {
+        var rawMime = (metadata && metadata.mime) || 'image/png';
+        var safeMime = /^[a-z0-9]+\/[a-z0-9.+-]+$/i.test(rawMime) ? rawMime : 'image/png';
         previewHtml += `
             <div class="preview-content" style="display: flex; justify-content: center; align-items: center; padding: 20px;">
-                <img src="data:${metadata?.mime || 'image/png'};base64,${content}" 
+                <img src="data:${safeMime};base64,${content}" 
                      style="max-width: 100%; max-height: 80vh; border-radius: 8px;" 
                      alt="Image">
             </div>
@@ -511,7 +621,9 @@ function showPreviewError(title, message) {
 
 function closePreview() {
     currentLoadRequestId += 1;
-    
+
+    removeSemanticMetaBar();
+
     if (pdfViewerState && pdfViewerState.pdfDoc) {
         try {
             pdfViewerState.pdfDoc.destroy();

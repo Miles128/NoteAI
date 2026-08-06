@@ -9,12 +9,63 @@ import hashlib
 import logging
 import os
 import secrets
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 _log = logging.getLogger("NoteAI")
 
 _PBKDF2_ITERATIONS = 600_000
+
+# Legacy OS-keychain backend identifiers (pre-2026-08 file-based migration).
+_KEYCHAIN_SERVICE = "NoteAI"
+_KEYCHAIN_ACCOUNT = "api_key"
+
+
+def _read_legacy_macos_keychain() -> str:
+    """Read a credential previously stored by the pre-2026-08 OS keychain backend.
+
+    Used only as a one-time compatibility migration for users who upgraded after
+    NoteAI switched to file-based encrypted storage. Returns "" when the entry
+    does not exist or the command is unavailable.
+    """
+    if sys.platform != "darwin":
+        return ""
+    try:
+        proc = subprocess.run(
+            [
+                "security",
+                "find-generic-password",
+                "-s",
+                _KEYCHAIN_SERVICE,
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        _log.debug("keychain migration lookup unavailable: %s", exc)
+        return ""
+    if proc.returncode != 0:
+        return ""
+    value = (proc.stdout or "").strip()
+    return value if value and not value.lower().startswith(("error", "security")) else ""
+
+
+def _delete_legacy_macos_keychain() -> None:
+    if sys.platform != "darwin":
+        return
+    try:
+        subprocess.run(
+            ["security", "delete-generic-password", "-s", _KEYCHAIN_SERVICE],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        _log.debug("keychain migration cleanup unavailable: %s", exc)
 
 
 def _app_data_dir() -> Path:
@@ -191,7 +242,19 @@ def store_api_key(api_key: str) -> bool:
 
 
 def load_api_key() -> str:
-    return _load_with_migration(_fallback_path(), _legacy_fallback_path(), ".api_key_")
+    value = _load_with_migration(_fallback_path(), _legacy_fallback_path(), ".api_key_")
+    if value:
+        return value
+
+    # One-time compatibility migration from the pre-2026-08 OS keychain backend.
+    legacy_key = _read_legacy_macos_keychain()
+    if not legacy_key:
+        return ""
+    if _atomic_write(_fallback_path(), legacy_key, ".api_key_"):
+        _delete_legacy_macos_keychain()
+        _log.info("已从 macOS Keychain 迁移 API key 到加密凭据文件")
+        return legacy_key
+    return ""
 
 
 def delete_api_key() -> bool:

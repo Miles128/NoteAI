@@ -204,10 +204,11 @@
                 return '<span class="inspector-prop-chip">#' + _escapeHtml(t) + '</span>';
             }).join('');
         }
-        // URL 字段
+        // URL 字段：仅允许 http/https 协议（防 javascript: 等注入）
         if (key === 'url' || key === 'source' || key === '链接') {
-            if (str.startsWith('http')) {
-                return '<a href="' + _escapeHtml(str) + '" target="_blank" rel="noopener">' + _escapeHtml(str) + '</a>';
+            if (/^https?:\/\//i.test(str)) {
+                var safeHref = window.safeUrl ? window.safeUrl(str) : str;
+                return '<a href="' + _escapeHtml(safeHref) + '" target="_blank" rel="noopener">' + _escapeHtml(str) + '</a>';
             }
         }
         // 日期字段

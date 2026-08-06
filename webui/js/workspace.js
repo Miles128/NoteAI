@@ -83,9 +83,9 @@ function updateWorkspaceDisplay(workspacePath) {
                     ${window.Icons.get('folderFilled')}
                     <span>打开工作区</span>
                 </button>
-                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${sampleLabel}">
+                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${escapeHtml(sampleLabel)}">
                     ${window.Icons.get('folderFilled')}
-                    <span>${sampleLabel}</span>
+                    <span>${escapeHtml(sampleLabel)}</span>
                 </button>
             `;
         }

@@ -490,7 +490,8 @@
     "saveFailed": "保存失败",
     "draftMode": "草稿模式 · 用一级标题作为笔记名，点击保存写入当前文件夹",
     "draftUnsaved": "草稿未保存到工作区",
-    "draftAutoSaved": "草稿已自动保存"
+    "draftAutoSaved": "草稿已自动保存",
+    "parseFailed": "解析失败"
   },
   "noteDraft": {
     "labelSuffix": "(草稿)",
@@ -1047,7 +1048,8 @@
     "integrateDone": "整合完成",
     "integrateFailed": "整合失败：{message}",
     "integratingWait": "正在整合，请稍候",
-    "integrateFailedShort": "整合失败: "
+    "integrateFailedShort": "整合失败: ",
+    "extractTopicsFirst": "请先在下方选择主题"
   },
   "links": {
     "title": "双向链接",
@@ -1064,7 +1066,8 @@
     "discoverDone": "完成：扫描 {files} 个文件，发现 {count} 个新关联",
     "discoverNone": "完成：扫描 {files} 个文件，未发现新关联",
     "discoverFailed": "发现失败",
-    "startFailed": "启动失败"
+    "startFailed": "启动失败",
+    "confirmAllBtn": "全部确认"
   },
   "quickCreate": {
     "title": "快速新建",

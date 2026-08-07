@@ -247,10 +247,10 @@ function renderActivityItems(result) {
     var rows = result.items.slice(0, 5).map(function(item) {
         var label = esc(item.label || item.object_id || '');
         var source = item.source_path ? '<span class="home-activity-source">' + esc(item.source_path) + '</span>' : '';
-        var kindKey = item.change_kind === 'added' ? 'activity.gained' :
-            item.change_kind === 'updated' ? 'activity.corrected' :
-            item.change_kind === 'invalidated' ? 'activity.doubted' :
-            item.change_kind === 'removed' ? 'activity.removed' : null;
+        var kindKey = item.change_kind === 'added' ? 'home.activity.gained' :
+            item.change_kind === 'updated' ? 'home.activity.corrected' :
+            item.change_kind === 'invalidated' ? 'home.activity.doubted' :
+            item.change_kind === 'removed' ? 'home.activity.removed' : null;
         var kindText = kindKey ? window.t(kindKey) : (window.t('semantic.changes.' + item.change_kind, {}) || item.change_kind);
         return '<div class="home-activity-row">' +
             '<span class="home-activity-kind">' + esc(kindText) + '</span>' +

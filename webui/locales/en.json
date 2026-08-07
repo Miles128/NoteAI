@@ -481,7 +481,8 @@
     "saveFailed": "Save failed",
     "draftMode": "Draft mode · use H1 as the note title, then Save to write into the current folder",
     "draftUnsaved": "Draft not saved to workspace",
-    "draftAutoSaved": "Draft auto-saved"
+    "draftAutoSaved": "Draft auto-saved",
+    "parseFailed": "Parse failed"
   },
   "noteDraft": {
     "labelSuffix": "(draft)",
@@ -1038,7 +1039,8 @@
     "integrateDone": "Integration complete",
     "integrateFailed": "Integration failed: {message}",
     "integratingWait": "Integrating — please wait",
-    "integrateFailedShort": "Integration failed: "
+    "integrateFailedShort": "Integration failed: ",
+    "extractTopicsFirst": "Select topics below first"
   },
   "links": {
     "title": "Bidirectional links",
@@ -1055,7 +1057,8 @@
     "discoverDone": "Done: scanned {files} files, found {count} new links",
     "discoverNone": "Done: scanned {files} files, no new links",
     "discoverFailed": "Discovery failed",
-    "startFailed": "Start failed"
+    "startFailed": "Start failed",
+    "confirmAllBtn": "Confirm all"
   },
   "quickCreate": {
     "title": "Quick create",

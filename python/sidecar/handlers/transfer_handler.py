@@ -30,6 +30,7 @@ class TransferHandler(BaseHandler):
         router.register("remove_rss_subscription", self._remove_rss_subscription)
         router.register("list_rss_subscriptions", self._list_rss_subscriptions)
         router.register("fetch_all_rss", self._fetch_all_rss)
+        router.register("discover_rss_sources", self._discover_rss_sources)
         router.register("list_watched_folders", self._list_watched_folders)
         router.register("add_watched_folder", self._add_watched_folder)
         router.register("remove_watched_folder", self._remove_watched_folder)
@@ -445,6 +446,15 @@ class TransferHandler(BaseHandler):
         from sidecar.multi_source import load_subscriptions
 
         return {"success": True, "subscriptions": load_subscriptions(workspace)}
+
+    def _discover_rss_sources(self, _params):
+        """自动发现 RSS 源：内置目录 LLM 匹配 + 联网搜索发现。"""
+        workspace, err = self._require_workspace(message="请先设置工作区")
+        if err:
+            return err
+        from sidecar.rss_discovery import discover_rss_sources
+
+        return discover_rss_sources(workspace)
 
     def _fetch_all_rss(self, _params):
         workspace, err = self._require_workspace(message="请先设置工作区")

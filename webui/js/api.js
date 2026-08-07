@@ -401,6 +401,7 @@ var API_DEFS = [
     { name: 'saveRssSubscription', method: 'save_rss_subscription', params: function(url, name) { return { url: url, name: name || '' }; }, write: true },
     { name: 'removeRssSubscription', method: 'remove_rss_subscription', params: function(url) { return { url: url }; }, write: true },
     { name: 'fetchAllRss', method: 'fetch_all_rss', params: function() { return {}; }, write: true },
+    { name: 'discoverRssSources', method: 'discover_rss_sources', params: function() { return {}; } },
     { name: 'importTranscript', method: 'import_transcript', params: function(title, content, source) { return { title: title, content: content, source: source }; }, write: true },
     { name: 'listWatchedFolders', method: 'list_watched_folders', params: function() { return {}; } },
     { name: 'addWatchedFolder', method: 'add_watched_folder', params: function(path, recursive) { return { path: path || '', recursive: !!recursive }; }, write: true },

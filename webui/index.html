@@ -1303,9 +1303,13 @@
                         </div>
                         <div class="rss-sub-header" style="margin-top:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
                             <span class="rss-sub-title" data-i18n="download.rssSubscriptions" style="font-size:12px;color:var(--text-muted);"></span>
-                            <button type="button" class="btn btn-secondary btn-sm" id="ms-rss-fetch-all-btn" data-i18n="download.rssFetchAll"></button>
+                            <div style="display:flex;gap:8px;">
+                                <button type="button" class="btn btn-secondary btn-sm" id="ms-rss-discover-btn" data-i18n="download.rssDiscover"></button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="ms-rss-fetch-all-btn" data-i18n="download.rssFetchAll"></button>
+                            </div>
                         </div>
                         <div id="ms-rss-sub-list" class="rss-sub-list"></div>
+                        <div id="ms-rss-recommend" class="rss-recommend" hidden></div>
                     </div>
                     <div class="multi-source-pane" id="ms-pane-folder" hidden>
                         <div class="form-row" style="gap:8px;align-items:center;flex-wrap:wrap;">

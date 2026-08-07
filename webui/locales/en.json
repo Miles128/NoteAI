@@ -881,7 +881,16 @@
     "downloading": "Downloading…",
     "enterUrlSingle": "Enter URL to download",
     "waiting": "Downloading — please wait",
-    "reasonPrefix": "   Reason: "
+    "reasonPrefix": "   Reason: ",
+    "rssDiscover": "Discover",
+    "rssDiscovering": "Discovering...",
+    "rssDiscoverFail": "Discovery failed",
+    "rssDiscoverEmpty": "No new sources found",
+    "rssRecommendTitle": "Recommended feeds (matched to your topics)",
+    "rssSourceBuiltin": "built-in",
+    "rssSourceSearch": "search",
+    "rssSubscribe": "Subscribe",
+    "rssSubscribed": "Subscribed"
   },
   "home": {
     "eyebrow": "Knowledge Base",

@@ -665,12 +665,71 @@ function initRssTab() {
     fetchAllBtn.addEventListener('click', fetchAllRssSubscriptions);
     fetchAllBtn._rssBound = true;
   }
+  var discoverBtn = document.getElementById('ms-rss-discover-btn');
+  if (discoverBtn && !discoverBtn._rssBound) {
+    discoverBtn.addEventListener('click', discoverRssSources);
+    discoverBtn._rssBound = true;
+  }
   var transcriptBtn = document.getElementById('ms-transcript-import-btn');
   if (transcriptBtn && !transcriptBtn._trBound) {
     transcriptBtn.addEventListener('click', startTranscriptImport);
     transcriptBtn._trBound = true;
   }
   loadRssSubscriptions();
+}
+
+async function discoverRssSources() {
+  if (!window.api || !window.api.discoverRssSources) return;
+  var btn = document.getElementById('ms-rss-discover-btn');
+  var container = document.getElementById('ms-rss-recommend');
+  if (!container) return;
+  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssDiscovering'); }
+  try {
+    var result = await window.api.discoverRssSources();
+    if (!result || !result.success) {
+      container.hidden = false;
+      container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml((result && result.message) || _rssT('download.rssDiscoverFail')) + '</div>';
+      return;
+    }
+    var recs = result.recommendations || [];
+    if (!recs.length) {
+      container.hidden = false;
+      container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.rssDiscoverEmpty')) + '</div>';
+      return;
+    }
+    container.hidden = false;
+    container.innerHTML = '<div class="rss-sub-header"><span class="rss-sub-title">' + _escapeHtml(_rssT('download.rssRecommendTitle')) + '</span><span class="rss-sub-title">' + _escapeHtml(result.message || '') + '</span></div>' +
+      '<div class="rss-rec-list">' + recs.map(function(rec) {
+        var topicTag = (rec.topics || []).length
+          ? '<span class="rss-rec-tag">' + _escapeHtml((rec.topics || []).join(' · ')) + '</span>' : '';
+        var sourceTag = '<span class="rss-rec-source rss-rec-source-' + _escapeHtml(rec.source || '') + '">' + _escapeHtml(_rssT(rec.source === 'search' ? 'download.rssSourceSearch' : 'download.rssSourceBuiltin')) + '</span>';
+        var action = rec.subscribed
+          ? '<span class="rss-rec-subscribed">' + _escapeHtml(_rssT('download.rssSubscribed')) + '</span>'
+          : '<button type="button" class="btn btn-secondary btn-sm" data-rss-subscribe="' + _escapeHtml(rec.url) + '">' + _escapeHtml(_rssT('download.rssSubscribe')) + '</button>';
+        return '<div class="rss-sub-item rss-rec-item">' +
+          '<div><span class="rss-rec-name">' + _escapeHtml(rec.name || rec.url) + '</span>' + sourceTag + topicTag +
+          '<div class="rss-rec-url" title="' + _escapeHtml(rec.url) + '">' + _escapeHtml(rec.url) + '</div></div>' + action + '</div>';
+      }).join('') + '</div>';
+    container.querySelectorAll('[data-rss-subscribe]').forEach(function(subBtn) {
+      subBtn.addEventListener('click', async function() {
+        var url = decodeURIComponent(subBtn.dataset.rssSubscribe);
+        try {
+          var saved = await window.api.saveRssSubscription(url, '');
+          if (saved && saved.success) {
+            subBtn.outerHTML = '<span class="rss-rec-subscribed">' + _escapeHtml(_rssT('download.rssSubscribed')) + '</span>';
+            await loadRssSubscriptions();
+          } else {
+            alert('RSS: ' + ((saved && saved.message) || _rssT('common.unknownError')));
+          }
+        } catch (e) { alert('RSS: ' + e.message); }
+      });
+    });
+  } catch (e) {
+    container.hidden = false;
+    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml('RSS: ' + e.message) + '</div>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssDiscover'); }
+  }
 }
 
 async function startRssImport() {

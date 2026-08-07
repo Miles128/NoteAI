@@ -890,7 +890,16 @@
     "downloading": "下载中",
     "enterUrlSingle": "请输入要下载的 URL",
     "waiting": "正在下载，请稍候",
-    "reasonPrefix": "   原因: "
+    "reasonPrefix": "   原因: ",
+    "rssDiscover": "自动发现",
+    "rssDiscovering": "发现中...",
+    "rssDiscoverFail": "自动发现失败",
+    "rssDiscoverEmpty": "未发现新的推荐源",
+    "rssRecommendTitle": "推荐订阅（按知识库主题匹配）",
+    "rssSourceBuiltin": "内置",
+    "rssSourceSearch": "搜索发现",
+    "rssSubscribe": "订阅",
+    "rssSubscribed": "已订阅"
   },
   "home": {
     "eyebrow": "Knowledge Base",

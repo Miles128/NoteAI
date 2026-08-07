@@ -39,6 +39,7 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "delete_tag",
     "delete_topic",
     "delete_topic_safe",
+    "discover_rss_sources",
     "dismiss_cascade_failure",
     "dismiss_convert_failure",
     "enqueue_cross_kind_semantic_merges",

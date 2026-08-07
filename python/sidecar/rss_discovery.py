@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from prompts import RSS_DISCOVERY_PROMPT
+from prompts import RSS_DISCOVERY_PROMPT, DEEPSEEK_WEB_DISCOVERY_PROMPT
 from sidecar.multi_source import _fetch_rss, _rss_title, load_subscriptions
 
 # 内置 AI 主题候选源（name | url | topics 标签）
@@ -154,6 +154,75 @@ def _validate_feed(url: str) -> str | None:
         return None
 
 
+def _deepseek_web_discovery(topics: list[str]) -> list[dict]:
+    """DeepSeek response API 内置 web_search 工具：模型自主搜索并直接给出
+    feed 地址，比 DDG 搜索+域名探测更精准。仅当 api_base 为 deepseek.com
+    时启用；失败/不可用时返回空（调用方降级到 DDG 路径）。"""
+    from config import config
+
+    if "deepseek.com" not in (config.api_base or ""):
+        return []
+    import json as _json
+    import requests as _requests
+
+    payload = {
+        "model": config.model_name,
+        "input": DEEPSEEK_WEB_DISCOVERY_PROMPT.format(topics="、".join(topics)),
+        "tools": [{"type": "web_search"}],
+        "max_output_tokens": 2048,
+    }
+    try:
+        resp = _requests.post(
+            f"{config.api_base.rstrip('/')}/responses",
+            headers={"Authorization": f"Bearer {config.api_key}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=120,
+        )
+        if resp.status_code != 200:
+            return []
+        body = resp.json()
+    except Exception:
+        return []
+
+    text_parts: list[str] = []
+    for item in body.get("output") or []:
+        if item.get("type") == "message":
+            for content in item.get("content") or []:
+                text_parts.append(str(content.get("text") or ""))
+    text = "\n".join(text_parts)
+
+    feeds: list[dict] = []
+    seen: set[str] = set()
+    # 1) 模型按 JSON 输出（name/url 对）
+    json_block = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    raw_json = json_block.group(1) if json_block else ""
+    if not raw_json:
+        start, end = text.find("{"), text.rfind("}")
+        raw_json = text[start : end + 1] if 0 <= start < end else ""
+    if raw_json:
+        try:
+            data = _json.loads(raw_json)
+            for item in data.get("feeds") or data.get("sources") or []:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("url") or item.get("feed") or "").strip()
+                name = str(item.get("name") or "").strip()
+                if url.startswith("http") and url not in seen:
+                    seen.add(url)
+                    feeds.append({"url": url, "name": name})
+        except Exception:
+            pass
+    # 2) 兜底：抓取文本中所有 http URL，逐个验证
+    if not feeds:
+        for url in re.findall(r"https?://[^\s<>\"']+", text):
+            url = url.rstrip(".,;)]}")
+            if url in seen:
+                continue
+            seen.add(url)
+            feeds.append({"url": url, "name": ""})
+    return feeds
+
+
 def discover_rss_sources(workspace: str, llm_call=None) -> dict[str, Any]:
     """自动发现并推荐 RSS 源（内置目录匹配 + 联网搜索发现）。
 
@@ -198,47 +267,47 @@ def discover_rss_sources(workspace: str, llm_call=None) -> dict[str, Any]:
             )
 
     # ── B 路：联网搜索发现新源 ──
+    # 优先 DeepSeek response API 内置 web_search（模型自主搜索直接给 feed）；
+    # 不可用时降级 DDG 搜索 + 站点域名 feed 路径探测。
     discovered: dict[str, str] = {}  # url -> title
-    pending_domains: dict[str, str] = {}  # domain -> title
-    for query in queries:
-        candidates = _search_web(query)
-        for candidate in candidates:
-            url = candidate["url"]
-            if url in seen or url in discovered:
-                continue
-            if _FEED_PATH_RE.search(url):
-                discovered[url] = candidate.get("title", "")
-            else:
-                from urllib.parse import urlsplit
+    deepseek_feeds = _deepseek_web_discovery(topics)
+    for feed in deepseek_feeds:
+        url, name = feed["url"], feed["name"]
+        if url in seen or url in discovered:
+            continue
+        feed_title = _validate_feed(url)
+        if feed_title is None:
+            continue
+        discovered[url] = name or feed_title
 
-                domain = (urlsplit(url).netloc or "").lower()
-                if domain and domain not in pending_domains:
-                    pending_domains[domain] = candidate.get("title", "")
+    if not discovered:
+        pending_domains: dict[str, str] = {}  # domain -> title
+        for query in queries:
+            candidates = _search_web(query)
+            for candidate in candidates:
+                url = candidate["url"]
+                if url in seen or url in discovered:
+                    continue
+                if _FEED_PATH_RE.search(url):
+                    discovered[url] = candidate.get("title", "")
+                else:
+                    from urllib.parse import urlsplit
+
+                    domain = (urlsplit(url).netloc or "").lower()
+                    if domain and domain not in pending_domains:
+                        pending_domains[domain] = candidate.get("title", "")
+                if len(discovered) >= _MAX_VALIDATE:
+                    break
             if len(discovered) >= _MAX_VALIDATE:
                 break
-        if len(discovered) >= _MAX_VALIDATE:
-            break
 
-    # 页面 <link> 探测：对少量无 feed 特征的结果抓页面找 feed（限 3 个）
-    try:
-        from sidecar.rag.web_search import fetch_page_content
-
-        for candidate in [c for c in _search_web(queries[0]) if c] if queries else []:
-            if len(discovered) >= _MAX_VALIDATE:
-                break
-            feed_url = _find_feed_url(candidate)
+        # 站点域名常见 feed 路径探测（每域名最多 4 个路径，≤6 域名）
+        for domain, title in list(pending_domains.items())[:6]:
+            feed_url = _guess_feed_from_domain(domain)
             if feed_url and feed_url not in seen and feed_url not in discovered:
-                discovered[feed_url] = candidate.get("title", "")
-    except Exception:
-        pass
-
-    # 站点域名常见 feed 路径探测（每域名最多 4 个路径，≤6 域名）
-    for domain, title in list(pending_domains.items())[:6]:
-        feed_url = _guess_feed_from_domain(domain)
-        if feed_url and feed_url not in seen and feed_url not in discovered:
-            discovered[feed_url] = title
-        if len(discovered) >= _MAX_VALIDATE:
-            break
+                discovered[feed_url] = title
+            if len(discovered) >= _MAX_VALIDATE:
+                break
 
     for feed_url, title in list(discovered.items()):
         feed_title = _validate_feed(feed_url)

@@ -17,3 +17,17 @@ RSS_DISCOVERY_PROMPT: |-
   只输出一个 JSON 对象（不要 Markdown 代码围栏）：
   {{"builtin_urls": ["https://...", "..."], "queries": ["搜索词1", "搜索词2"]}}
   builtin_urls 只能来自上面的内置目录；queries 为英文短语。
+
+DEEPSEEK_WEB_DISCOVERY_PROMPT: |-
+  你是 NoteAI 的 RSS 源发现器。用户的知识库主题：{topics}
+
+  请使用 web_search 工具搜索这些主题方向的优质技术博客/资讯站，并给出它们
+  的真实 RSS/Atom feed 地址（如 https://example.com/feed 或 /rss.xml）。
+  要求：
+  1. 每个主题方向找 1-2 个源，总共 3-8 个；
+  2. feed 地址必须来自搜索结果或站点页面的真实引用，不要编造 URL；
+  3. 优先官方博客与持续更新的技术站。
+
+  最后输出一个 JSON 对象（不要 Markdown 代码围栏）：
+  {{"feeds": [{{"name": "站点名", "url": "https://example.com/feed", "topics": ["llm"]}}]}}
+

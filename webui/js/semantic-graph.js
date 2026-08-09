@@ -20,6 +20,7 @@ var _state = {
     data: null
 };
 
+var _data = null;
 var _svg = null;
 var _simulation = null;
 var _zoom = null;

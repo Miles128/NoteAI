@@ -915,7 +915,7 @@ window.switchGraphMode = function(mode) {
         }
         if (window.Graph3Tier && window.Graph3Tier.resumeResize) window.Graph3Tier.resumeResize();
         // 恢复笔记图 stats/legend 显示
-        var statsSuffixes = document.querySelectorAll('#graph-stats-bar [data-i18n]');
+        var statsSuffixes = document.querySelectorAll('.graph-stats-bar [data-i18n]');
         statsSuffixes.forEach(function(el) { el.style.display = ''; });
         var legend = document.getElementById('graph-legend');
         if (legend) legend.style.display = '';

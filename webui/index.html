@@ -429,22 +429,24 @@
                                 </button>
                             </div>
                             <div class="graph-semantic-controls" id="graph-semantic-controls" style="display:none;">
-                                <label class="graph-semantic-control" data-i18n="graph.semantic.scope">
+                                <label class="graph-semantic-control">
+                                    <span data-i18n="graph.semantic.scope"></span>
                                     <select id="semantic-graph-scope">
                                         <option value="auto" data-i18n="graph.semantic.scopeAuto"></option>
                                         <option value="all" data-i18n="graph.semantic.scopeAll"></option>
                                         <option value="doc" data-i18n="graph.semantic.scopeDoc"></option>
                                     </select>
                                 </label>
-                                <label class="graph-semantic-control" data-i18n="graph.semantic.limit">
+                                <label class="graph-semantic-control">
+                                    <span data-i18n="graph.semantic.limit"></span>
                                     <input type="number" id="semantic-graph-limit" value="80" min="20" max="300" step="10">
                                 </label>
                                 <label class="graph-semantic-control graph-semantic-check">
                                     <input type="checkbox" id="semantic-graph-docs">
                                     <span data-i18n="graph.semantic.docs"></span>
                                 </label>
-                                <button class="graph-toolbar-btn" onclick="semanticGraphRefresh()" data-i18n="graph.semantic.refresh">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                <button class="graph-toolbar-btn" onclick="semanticGraphRefresh()" data-i18n-title="graph.semantic.refresh" title="">
+                                    <span data-i18n="graph.semantic.refresh"></span>
                                 </button>
                             </div>
                             <div class="graph-zoom-control" aria-label="Zoom">

@@ -30,11 +30,14 @@
 
 ### 1.4 应用启动
 
-启动应用必须通过 Tauri 入口，禁止直接用浏览器打开 `webui/index.html` 或用 `python -m http.server` 等方式启动：
+桌面 App 本身就是 **Tauri 应用**：Tauri 壳加载 `webui/` 并拉起 Python sidecar。启动方式：
 
 ```bash
-uv run python run.py   # 开发者启动器：检查依赖后执行 cargo tauri dev
+uv run python run.py     # 开发者启动器（推荐）：检查 Python 依赖 + Tauri CLI 后执行 cargo tauri dev
+cargo tauri dev          # 等效命令：依赖已就绪时直接启动 Tauri 开发模式
 ```
+
+禁止直接用浏览器打开 `webui/index.html` 或用 `python -m http.server` 等方式启动（前端必须经由 Tauri IPC 调 sidecar）。
 
 不要与 `python/main.py`（sidecar 进程入口，由 Tauri 壳拉起）混淆。
 

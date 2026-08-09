@@ -2160,6 +2160,13 @@
     flex-shrink: 0;
 }
 
+.graph-panel-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
 .graph-mode-btn {
     height: 28px;
     min-width: 56px;

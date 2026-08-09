@@ -401,10 +401,16 @@
                 </div>
                 <div class="graph-panel" id="graph-panel" style="display: none;">
                     <div class="graph-panel-header">
-                        <div class="graph-stats-bar">
-                            <span class="graph-stat-chip"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>
-                            <span class="graph-stats-sep" aria-hidden="true">·</span>
-                            <span class="graph-stat-chip"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
+                        <div class="graph-panel-header-left">
+                            <div class="graph-mode-switcher" id="graph-mode-switcher">
+                                <button class="graph-mode-btn active" data-graph-mode="notes" onclick="switchGraphMode('notes')" data-i18n="graph.mode.notes"></button>
+                                <button class="graph-mode-btn" data-graph-mode="semantic" onclick="switchGraphMode('semantic')" data-i18n="graph.mode.semantic"></button>
+                            </div>
+                            <div class="graph-stats-bar">
+                                <span class="graph-stat-chip"><span id="graph-stat-notes">0</span><span data-i18n="graph.stats.notesSuffix"></span></span>
+                                <span class="graph-stats-sep" aria-hidden="true">·</span>
+                                <span class="graph-stat-chip"><span id="graph-stat-topics">0</span><span data-i18n="graph.stats.topicsSuffix"></span></span>
+                            </div>
                         </div>
                         <div class="graph-layout-mode" id="graph-layout-mode">
                             <button class="graph-layout-mode-btn" data-layout-mode="constellation" data-i18n="graph.layoutMode.constellation" data-i18n-title="graph.layoutMode.constellation"></button>
@@ -420,6 +426,25 @@
                                 </button>
                                 <button class="graph-filter-btn" data-filter="all" data-i18n-title="graph.filter.all" data-i18n-aria="graph.filter.all">
                                     <path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z"/>
+                                </button>
+                            </div>
+                            <div class="graph-semantic-controls" id="graph-semantic-controls" style="display:none;">
+                                <label class="graph-semantic-control" data-i18n="graph.semantic.scope">
+                                    <select id="semantic-graph-scope">
+                                        <option value="auto" data-i18n="graph.semantic.scopeAuto"></option>
+                                        <option value="all" data-i18n="graph.semantic.scopeAll"></option>
+                                        <option value="doc" data-i18n="graph.semantic.scopeDoc"></option>
+                                    </select>
+                                </label>
+                                <label class="graph-semantic-control" data-i18n="graph.semantic.limit">
+                                    <input type="number" id="semantic-graph-limit" value="80" min="20" max="300" step="10">
+                                </label>
+                                <label class="graph-semantic-control graph-semantic-check">
+                                    <input type="checkbox" id="semantic-graph-docs">
+                                    <span data-i18n="graph.semantic.docs"></span>
+                                </label>
+                                <button class="graph-toolbar-btn" onclick="semanticGraphRefresh()" data-i18n="graph.semantic.refresh">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                                 </button>
                             </div>
                             <div class="graph-zoom-control" aria-label="Zoom">
@@ -447,6 +472,7 @@
                         <div class="graph-panel-body" id="graph-panel-body">
                             <div class="graph-loading" id="graph-loading" style="display:none;" data-i18n="graph.loading"></div>
                             <div class="graph-empty" id="graph-empty" style="display:none;" data-i18n="graph.empty"></div>
+                            <div id="semantic-graph-container" style="display:none; width:100%; height:100%;"></div>
                         </div>
                         <div class="graph-legend-float" id="graph-legend" aria-label="Legend"></div>
                         <aside id="graph-settings-sidebar" class="graph-settings-sidebar" hidden aria-labelledby="graph-settings-title">

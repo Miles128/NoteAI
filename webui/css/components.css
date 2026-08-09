@@ -2149,6 +2149,78 @@
     z-index: 2;
 }
 
+.graph-mode-switcher {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--text-muted));
+    border-radius: 10px;
+    background: var(--surface);
+    flex-shrink: 0;
+}
+
+.graph-mode-btn {
+    height: 28px;
+    min-width: 56px;
+    padding: 0 13px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 28px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.graph-mode-btn:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+}
+
+.graph-mode-btn.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.graph-semantic-controls {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+.graph-semantic-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.graph-semantic-control select,
+.graph-semantic-control input[type="number"] {
+    height: 26px;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, var(--text-muted));
+    border-radius: 7px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+    padding: 0 6px;
+}
+
+.graph-semantic-check {
+    cursor: pointer;
+}
+
+.graph-semantic-node {
+    transition: opacity 0.15s ease;
+}
+
 .graph-layout-mode-btn {
     height: 28px;
     min-width: 42px;
@@ -2350,6 +2422,22 @@
     gap: 4px;
     font-size: 11px;
     color: var(--text-muted);
+}
+
+.graph-legend-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 2px;
+}
+
+.graph-legend-line {
+    display: inline-block;
+    width: 16px;
+    height: 2px;
+    background: rgba(120,140,170,0.6);
+    margin-right: 2px;
 }
 
 .graph-legend-float .graph-legend-label {

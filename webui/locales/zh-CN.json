@@ -338,6 +338,27 @@
       "constellation": "点阵",
       "tree": "思维导图"
     },
+    "mode": {
+      "notes": "笔记图谱",
+      "semantic": "语义图谱"
+    },
+    "semantic": {
+      "scope": "范围",
+      "scopeAuto": "自动",
+      "scopeAll": "全库",
+      "scopeDoc": "当前文档",
+      "limit": "节点数",
+      "docs": "文档",
+      "refresh": "刷新",
+      "objectSuffix": " 对象",
+      "edgeSuffix": " 关系",
+      "entity": "实体",
+      "concept": "概念",
+      "doc": "文档",
+      "edge": "共现关系",
+      "empty": "当前范围没有语义对象",
+      "hint": "节点=实体/概念（蓝=实体、紫=概念），连线=共现关系（粗细=共同来源块数）。点击对象打开语义工作台，点击文档打开笔记。"
+    },
     "toggleFilenames": "显示/隐藏文件名",
     "zoomIn": "放大",
     "zoomOut": "缩小",

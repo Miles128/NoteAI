@@ -647,6 +647,13 @@ const Graph3Tier = {
         }
     },
 
+    stopSimulation() {
+        if (this.simulation) {
+            this.simulation.stop();
+            this.simulation = null;
+        }
+    },
+
     _disconnectGraphPanelBodyResize() {
         if (this._graphBodyResizeObserver) {
             this._graphBodyResizeObserver.disconnect();

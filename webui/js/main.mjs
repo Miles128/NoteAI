@@ -164,6 +164,9 @@ async function loadModules() {
     window.toggleSemanticWorkbench = window.SemanticWorkbenchModule.toggle;
     if (window.SemanticWorkbenchModule.init) window.SemanticWorkbenchModule.init();
 
+    await import('./semantic-graph.js');
+    window.SemanticGraphModule = window.SemanticGraphModule || {};
+
     await import('./tabs.js');
     const { TabsModule } = window;
     window.TabsModule = TabsModule;

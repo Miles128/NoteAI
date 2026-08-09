@@ -329,6 +329,27 @@
       "constellation": "Map",
       "tree": "Mind map"
     },
+    "mode": {
+      "notes": "Notes graph",
+      "semantic": "Semantic graph"
+    },
+    "semantic": {
+      "scope": "Scope",
+      "scopeAuto": "Auto",
+      "scopeAll": "All",
+      "scopeDoc": "Current note",
+      "limit": "Nodes",
+      "docs": "Notes",
+      "refresh": "Refresh",
+      "objectSuffix": " objects",
+      "edgeSuffix": " relations",
+      "entity": "Entity",
+      "concept": "Concept",
+      "doc": "Note",
+      "edge": "Co-occurrence",
+      "empty": "No semantic objects in current scope",
+      "hint": "Nodes are entities/concepts (blue=entity, purple=concept); edges are co-occurrence relations (thickness = shared source blocks). Click an object to open the semantic workbench, click a note to open it."
+    },
     "toggleFilenames": "Toggle filenames",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",

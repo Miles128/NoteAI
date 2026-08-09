@@ -882,6 +882,61 @@ window.TreeModule = {
 };
 
 window.switchSidebarView = window.switchSidebarView;
+window.switchGraphMode = function(mode) {
+    if (mode !== 'semantic') mode = 'notes';
+    var prev = (window.AppState && window.AppState.graphMode) || 'notes';
+    if (prev === mode) return;
+    if (window.AppState) window.AppState.graphMode = mode;
+
+    var modeBtns = document.querySelectorAll('#graph-mode-switcher .graph-mode-btn');
+    modeBtns.forEach(function(btn) {
+        btn.classList.toggle('active', btn.getAttribute('data-graph-mode') === mode);
+    });
+
+    var isNotes = mode === 'notes';
+    // 笔记图控件组
+    ['graph-layout-mode', 'graph-filter-bar', 'graph-toolbar'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = isNotes ? '' : 'none';
+    });
+    var layoutSettingsBtn = document.getElementById('graph-layout-settings-btn');
+    if (layoutSettingsBtn) layoutSettingsBtn.style.display = isNotes ? '' : 'none';
+
+    // 语义图控件组
+    var semanticControls = document.getElementById('graph-semantic-controls');
+    if (semanticControls) semanticControls.style.display = isNotes ? 'none' : 'flex';
+
+    var body = document.getElementById('graph-panel-body');
+    var notesSvg = body ? body.querySelector('svg') : null;
+
+    if (isNotes) {
+        if (window.SemanticGraphModule && window.SemanticGraphModule.setModeActive) {
+            window.SemanticGraphModule.setModeActive(false);
+        }
+        if (window.Graph3Tier && window.Graph3Tier.resumeResize) window.Graph3Tier.resumeResize();
+        // 恢复笔记图 stats/legend 显示
+        var statsSuffixes = document.querySelectorAll('#graph-stats-bar [data-i18n]');
+        statsSuffixes.forEach(function(el) { el.style.display = ''; });
+        var legend = document.getElementById('graph-legend');
+        if (legend) legend.style.display = '';
+        if (window.Graph3Tier && window.Graph3Tier.load) {
+            window.Graph3Tier.load();
+        }
+    } else {
+        // 清空笔记图 svg
+        if (notesSvg) notesSvg.remove();
+        if (window.Graph3Tier && window.Graph3Tier.pauseResize) window.Graph3Tier.pauseResize();
+        if (window.Graph3Tier && window.Graph3Tier.stopSimulation) window.Graph3Tier.stopSimulation();
+        if (window.SemanticGraphModule && window.SemanticGraphModule.setModeActive) {
+            window.SemanticGraphModule.setModeActive(true);
+        }
+    }
+};
+window.semanticGraphRefresh = function() {
+    if (window.SemanticGraphModule && window.SemanticGraphModule.refresh) {
+        window.SemanticGraphModule.refresh();
+    }
+};
 window.toggleGraphPanel = function() {
         if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
         var panel = document.getElementById('graph-panel');
@@ -901,7 +956,12 @@ window.toggleGraphPanel = function() {
         var contentArea = document.getElementById('content-area');
         if (graphHome) graphHome.style.display = 'none';
         if (contentArea) contentArea.style.display = 'none';
-        if (window.Graph3Tier && window.Graph3Tier.load) {
+        var isSemantic = (window.AppState && window.AppState.graphMode === 'semantic') || false;
+        if (isSemantic) {
+            if (window.SemanticGraphModule && window.SemanticGraphModule.setModeActive) {
+                window.SemanticGraphModule.setModeActive(true);
+            }
+        } else if (window.Graph3Tier && window.Graph3Tier.load) {
             window.Graph3Tier.load();
         }
         } else {
@@ -925,15 +985,29 @@ window.togglePendingLinksPanel = function() {
     }
 };
 window.loadRelationGraphData = function() {
+    var isSemantic = (window.AppState && window.AppState.graphMode === 'semantic') || false;
+    if (isSemantic) {
+        if (window.SemanticGraphModule && window.SemanticGraphModule.refresh) window.SemanticGraphModule.refresh();
+        return;
+    }
     if (window.Graph3Tier && window.Graph3Tier.load) {
         window.Graph3Tier.load();
     }
 };
 window.graphZoomIn = function() {
+    var isSemantic = (window.AppState && window.AppState.graphMode === 'semantic') || false;
+    if (isSemantic && window.SemanticGraphModule && window.SemanticGraphModule.zoomIn) { window.SemanticGraphModule.zoomIn(); return; }
     if (window.Graph3Tier && window.Graph3Tier.zoomIn) window.Graph3Tier.zoomIn();
 };
 window.graphZoomOut = function() {
+    var isSemantic = (window.AppState && window.AppState.graphMode === 'semantic') || false;
+    if (isSemantic && window.SemanticGraphModule && window.SemanticGraphModule.zoomOut) { window.SemanticGraphModule.zoomOut(); return; }
     if (window.Graph3Tier && window.Graph3Tier.zoomOut) window.Graph3Tier.zoomOut();
+};
+window.graphZoomReset = function() {
+    var isSemantic = (window.AppState && window.AppState.graphMode === 'semantic') || false;
+    if (isSemantic && window.SemanticGraphModule && window.SemanticGraphModule.zoomReset) { window.SemanticGraphModule.zoomReset(); return; }
+    if (window.Graph3Tier && window.Graph3Tier.zoomReset) window.Graph3Tier.zoomReset();
 };
 window.onConfirmLink = function(f, t) {
     if (window.api && window.api.confirmLink) window.api.confirmLink(f, t);

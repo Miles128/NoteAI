@@ -412,6 +412,7 @@ var API_DEFS = [
     { name: 'getBacklinks', method: 'get_backlinks', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'getLinkStats', method: 'get_link_stats', params: function() { return {}; } },
     { name: 'getGraphData', method: 'get_graph_data', params: function(filter) { return { filter: filter || 'topic' }; } },
+    { name: 'getSemanticGraphData', method: 'get_semantic_graph_data', params: function(options) { return options || {}; } },
     { name: 'confirmLink', method: 'confirm_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
     { name: 'rejectLink', method: 'reject_link', params: function(fromPath, toPath) { return { from: fromPath, to: toPath }; }, write: true },
     { name: 'getSemanticWorkbench', method: 'get_semantic_workbench', params: function(options) { return options || {}; } },

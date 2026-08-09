@@ -1052,3 +1052,22 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)
         router.register("publish_semantic_topic_wiki_page", self._publish_topic_wiki_page)
+        router.register("get_semantic_graph_data", self._get_semantic_graph_data)
+
+    def _get_semantic_graph_data(self, params):
+        """语义关系星云图数据（只读）。"""
+        from sidecar.semantic.graph_data import get_semantic_graph_data
+
+        workspace = self.config.workspace_path
+        try:
+            return get_semantic_graph_data(
+                workspace,
+                scope=str(params.get("scope", "all") or "all"),
+                filter_path=str(params.get("filter", "") or ""),
+                limit=params.get("limit", 80),
+                min_share=params.get("min_share", 2),
+                include_docs=bool(params.get("include_docs", False)),
+                max_docs=params.get("max_docs", 60),
+            )
+        except Exception as e:
+            return {"success": False, "message": f"语义图谱查询失败: {e}"}

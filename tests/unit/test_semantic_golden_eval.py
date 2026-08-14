@@ -162,6 +162,17 @@ GOLDEN_GATE_CASES: list[tuple[str, str, bool]] = [
     ("最大池化关注信号最强处", "conclusion", True),
     ("UMAP 在 t-SNE 基础上实现了更好的性能", "conclusion", True),
     ("Chinchilla 给出的是给定计算预算下的最优配比", "conclusion", True),
+    # --- round 5: aphorism / system-behavior descriptions must be rejected ---
+    ("选择比努力更重要", "conclusion", False),
+    ("压缩比扩展更重要", "conclusion", False),
+    ("少而精，比多而杂强", "conclusion", False),
+    ("分步构建比一步到位更好", "conclusion", False),
+    ("切换成本远高于模型差价", "conclusion", False),
+    ("负面约束比建议更清晰", "conclusion", False),
+    ("忠实度下降自动告警", "conclusion", False),
+    ("负载过高自动降级", "conclusion", False),
+    # 带专名/场景的短比较仍然放行
+    ("GPT-4o比Claude强", "conclusion", True),
 ]
 
 

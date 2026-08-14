@@ -20,7 +20,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "ai_topic_survey",
     "apply_topic_placement_threshold",
     "apply_topic_suggestion",
-    "archive_chat_answer",
     "auto_convert_pending",
     "auto_tag_files",
     "backfill_semantic_bidirectional",
@@ -66,7 +65,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "get_ingest_status",
     "get_jobs",
     "get_link_stats",
-    "get_note_merge_suggestions",
     "get_note_semantic_context",
     "get_onboarding_status",
     "get_project_rules",
@@ -102,7 +100,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "merge_note_group",
     "merge_semantic_entities",
     "merge_similar_topics",
-    "merge_suggested_notes",
     "move_file",
     "move_file_to_topic",
     "needs_workspace_rules_setup",
@@ -161,7 +158,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "topic_meta",
     "uninstall_component",
     "update_semantic_claim",
-    "verify_claims_batch",
     "verify_semantic_claim",
 ];
 
@@ -169,9 +165,9 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         "rag_chat" => 60,
-        "verify_semantic_claim" => 360,
-        // 批量长任务：全量命题核查 / 同名双表裁决可达 10-30 分钟
-        "verify_claims_batch" => 3600,
+        // CLI 联网深度研究需多轮检索+打开网页核对，实测约 5-6 分钟；
+        // Python 侧硬超时 840s，此处留 60s 余量。
+        "verify_semantic_claim" => 900,
         "resolve_cross_kind_merges" => 1800,
         "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
         | "rag_rebuild_index" | "cancel_ingest" => 120,

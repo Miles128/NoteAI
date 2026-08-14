@@ -1404,8 +1404,7 @@ body {
     margin-bottom: 0;
 }
 
-.ai-panel-messages .ai-msg.ai-assistant > .ai-citations,
-.ai-panel-messages .ai-msg.ai-assistant > .ai-msg-actions {
+.ai-panel-messages .ai-msg.ai-assistant > .ai-citations {
     display: block;
     margin-top: 8px;
     padding-top: 0;
@@ -1574,8 +1573,7 @@ body {
     margin: 6px 0;
 }
 
-#inspector-content-ai .ai-panel-messages .ai-msg.ai-assistant > .ai-citations,
-#inspector-content-ai .ai-panel-messages .ai-msg.ai-assistant > .ai-msg-actions {
+#inspector-content-ai .ai-panel-messages .ai-msg.ai-assistant > .ai-citations {
     margin-top: 4px;
 }
 
@@ -1658,82 +1656,6 @@ body {
 @keyframes ai-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
-}
-
-.ai-save-note-hint {
-    margin: 0 0 6px;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--text-muted);
-}
-
-.ai-msg-actions {
-    margin-top: 8px;
-    padding-top: 0;
-    border-top: none;
-}
-
-.ai-save-note-btn {
-    font-size: 12px;
-    padding: 4px 10px;
-    border-radius: 0;
-    border: 1px solid var(--ai-faint-border);
-    background: var(--surface);
-    color: var(--text-muted);
-    cursor: pointer;
-}
-
-.ai-save-note-btn:hover:not(:disabled) {
-    color: var(--text);
-    border-color: var(--ai-faint-border);
-    background: #f5f5f5;
-}
-
-.ai-save-note-btn:disabled {
-    opacity: 0.6;
-    cursor: default;
-}
-
-.ai-save-note-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.assistant-save-dialog {
-    width: min(720px, 92vw);
-    max-height: min(760px, 88vh);
-}
-
-.assistant-save-target {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-bottom: 12px;
-    color: var(--text-muted);
-    font-size: 12px;
-}
-
-.assistant-save-target code {
-    color: var(--text);
-    overflow-wrap: anywhere;
-}
-
-.assistant-save-content {
-    max-height: 52vh;
-    margin: 0;
-    padding: 14px;
-    overflow: auto;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}
-
-.ai-save-wiki-btn {
-    margin-left: 0;
 }
 
 .ai-panel-input {

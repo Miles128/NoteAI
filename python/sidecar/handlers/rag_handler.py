@@ -392,13 +392,10 @@ class RagHandler(BaseHandler):
         return {"source_count": source_count, "level": level, "top_score": top_score}
 
     def _finish_chat(self, question: str, answer: str, citations: list | None = None) -> dict:
-        from sidecar.archive_wiki import parse_save_suggestion
-
         display_answer, suggestions = RagHandler._strip_suggestions_sentinel(answer)
         if not suggestions and citations:
             # Model omitted the sentinel: fall back to template suggestions.
             suggestions = RagHandler._template_suggestions(citations)
-        display_answer, suggest_save_note = parse_save_suggestion(display_answer)
         if not display_answer.strip():
             return self._fail_rag("AI 未生成回复")
 
@@ -410,14 +407,13 @@ class RagHandler(BaseHandler):
                 "result": {
                     "type": "rag_chat_done",
                     "answer": display_answer,
-                    "suggest_save_note": suggest_save_note,
                     "suggestions": suggestions,
                     "citations": citations or [],
                     "citation_quality": self._citation_quality(citations),
                 },
             }
         )
-        return {"success": True, "suggest_save_note": suggest_save_note, "suggestions": suggestions}
+        return {"success": True, "suggestions": suggestions}
 
     def _answer_without_retrieval(self, question: str, compressed_history: str, *, intent: str = "general") -> dict:
         from prompts import ASSISTANT_PERSONA_PROMPT, RAG_ASSISTANT_NO_CONTEXT_PROMPT, RAG_ASSISTANT_WEB_PROMPT

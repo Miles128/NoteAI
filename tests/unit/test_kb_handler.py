@@ -45,28 +45,6 @@ def test_run_kb_lint_rpc(workspace: Path, kb_handler: KbHandler) -> None:
     assert result["summary"]["orphan_topic"] >= 1
 
 
-def test_archive_chat_answer_rpc(workspace: Path, kb_handler: KbHandler) -> None:
-    source = workspace / "Notes" / "source.md"
-    source.write_text("# Source\n", encoding="utf-8")
-    payload = {
-        "question": "Q",
-        "answer": "A",
-        "target": "note",
-        "citations": [{"index": 1, "file_path": "Notes/source.md"}],
-    }
-    preview = kb_handler._archive_chat_answer({**payload, "preview_only": True})
-    result = kb_handler._archive_chat_answer(
-        {
-            **payload,
-        }
-    )
-    assert preview["success"] is True
-    assert preview["preview"] is True
-    assert "Notes/source.md" in preview["content"]
-    assert result["success"] is True
-    assert (workspace / "Notes" / "RAG对话").exists()
-
-
 def test_get_dashboard_status_aggregates_home_data(workspace: Path, kb_handler: KbHandler) -> None:
     note_dir = workspace / "Notes" / "AI" / "RAG"
     note_dir.mkdir(parents=True)

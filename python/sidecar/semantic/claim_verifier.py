@@ -1,23 +1,89 @@
-"""Claim 联网证实/证伪：CLI 深度研究模式。
+"""Claim 联网证实/证伪：CLI 深度研究 + 内置 LLM 推理双模式。
 
-把命题交给第三方 CLI agent（claude/codex/gemini/kimi/opencode），由 agent
-自带联网能力做多轮深度研究后，输出结构化判定
+CLI 模式：把命题交给第三方 CLI agent（claude/codex/gemini/kimi/opencode），
+由 agent 自带联网能力做多轮深度研究后，输出结构化判定
 （verdict/confidence/summary/sources）写入 SemanticStore 的
 claim_verifications 表，供语义工作台只读展示。
 
-内置批量模式（verify_claims_batch）不依赖外部 agent：用项目自身 LLM 能力
-批量判定命题真伪，结果同样写入 claim_verifications（method='llm'）。
+内置 LLM 模式（verify_claim_via_llm）不依赖外部 agent：用项目自身 LLM 能力
+（DeepSeek reasoning）流式判定单条命题真伪，结果同样写入
+claim_verifications（method='llm'）。
 """
 
 from __future__ import annotations
 
 import json
 import re
-import time
 from typing import Any
 
 from prompts import CLAIM_BATCH_VERIFY_PROMPT, CLAIM_VERIFY_CLI_PROMPT
 from sidecar.semantic.store import SemanticStore
+
+
+def _opencode_model_params() -> tuple[str | None, str | None]:
+    """决定 opencode agent 的模型与推理强度。
+
+    优先级：
+    1. NoteAI 配置中的 model_name（用户在设置里选择的模型）——若格式为
+       provider/model 则直接使用；
+    2. 纯模型名（如 deepseek-v4-flash）——探测用户 opencode 已认证的
+       provider（auth.json），组合成 provider/model；无可用 provider 时
+       返回 (None, 'high')，让 opencode 用自身默认路由。
+    3. 未配置模型时返回 (None, 'high')。
+
+    推理强度固定 high：联网深度研究需要较强的 reasoning。
+    """
+    from config import config as _config
+
+    model = (getattr(_config, "model_name", "") or "").strip()
+    if not model:
+        return None, "high"
+    if "/" in model:
+        return model, "high"
+    provider = _opencode_auth_providers()
+    if provider and _model_matches_provider(model, provider):
+        return f"{provider}/{model}", "high"
+    return None, "high"
+
+
+def _model_matches_provider(model: str, provider: str) -> bool:
+    """模型名是否属于该 provider 家族（deepseek 模型含 deepseek 字样等）。"""
+    model_l = model.casefold()
+    provider_l = provider.casefold()
+    family = {
+        "deepseek": ("deepseek",),
+        "opencode": ("opencode", "deepseek", "gpt", "claude", "sonnet", "opus"),
+        "opencode-go": ("deepseek", "gpt", "claude", "sonnet", "opus"),
+        "openai": ("gpt", "o1", "o3", "o4"),
+        "anthropic": ("claude", "sonnet", "opus", "haiku"),
+    }
+    keywords = family.get(provider_l, (provider_l,))
+    return any(kw in model_l for kw in keywords)
+
+
+def _opencode_auth_providers() -> str | None:
+    """返回用户 opencode 已认证的第一个 provider 名（auth.json）。"""
+    import os
+    from pathlib import Path
+
+    candidates = []
+    xdg = os.environ.get("XDG_DATA_HOME", "").strip()
+    if xdg:
+        candidates.append(Path(xdg) / "opencode" / "auth.json")
+    candidates.append(Path.home() / ".local" / "share" / "opencode" / "auth.json")
+    candidates.append(Path.home() / "Library" / "Application Support" / "opencode" / "auth.json")
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            providers = [k for k in data if k not in ("version", "type")]
+            if providers:
+                return providers[0]
+        except (OSError, ValueError):
+            continue
+    return None
+
 
 VERDICTS = {"supported", "refuted", "unclear"}
 _VERDICT_LABELS = {"supported": "已证实", "refuted": "已证伪", "unclear": "存疑"}
@@ -173,7 +239,18 @@ def verify_claim_via_cli(
         return {"success": False, "message": error}
 
     prompt = build_cli_research_prompt(claim, context=_claim_source_context(store, claim["id"]))
-    result = run_cli_agent(agent_id, prompt, send_event=send_event)
+    result = run_cli_agent(
+        agent_id,
+        prompt,
+        send_event=send_event,
+        # CLI 深度研究实测约 5-6 分钟；硬超时须小于 Rust 侧
+        # verify_semantic_claim 的 900s 窗口，保证超时即终止、RPC 内返回失败。
+        timeout=840.0,
+        # opencode 默认路由可能随机选到不可用模型（gpt-5.3-chat 曾 840s 零输出）；
+        # 优先使用 NoteAI 配置的模型（用户可自行选择），未配置则交给 opencode 路由。
+        model=(_opencode_model_params()[0] if agent_id == "opencode" else None),
+        variant=(_opencode_model_params()[1] if agent_id == "opencode" else None),
+    )
     if not result.get("success"):
         return {
             "success": False,
@@ -215,7 +292,14 @@ def verify_statement_via_cli(
     if not ok:
         return {"success": False, "message": error}
     prompt = build_cli_research_prompt({"statement": statement, "scope": scope}, context="")
-    result = run_cli_agent(agent_id, prompt, send_event=send_event)
+    result = run_cli_agent(
+        agent_id,
+        prompt,
+        send_event=send_event,
+        timeout=840.0,
+        model=_opencode_model_params()[0] if agent_id == "opencode" else None,
+        variant=_opencode_model_params()[1] if agent_id == "opencode" else None,
+    )
     if not result.get("success"):
         return {
             "success": False,
@@ -228,6 +312,80 @@ def verify_statement_via_cli(
     except ValueError as exc:
         return {"success": False, "message": f"CLI 深度研究已完成，但输出无法解析：{exc}", "output": output[-4000:]}
     return {"success": True, **parsed, "method": "cli", "agent": agent_id, "output": output}
+
+
+def verify_claim_via_llm(
+    store: SemanticStore,
+    claim: dict,
+    *,
+    send_event: Any | None = None,
+    temperature: float = 0.0,
+) -> dict:
+    """内置 LLM 模式：单条命题用 DeepSeek reasoning 流式核查，结果落库。
+
+    判定过程经 send_event 推送 ``verify_llm_output``（token 增量）与
+    ``verify_llm_done``（完成摘要）事件，供前端实时展示研究进度。
+    与 verify_claims_batch 共用批量判定提示词（单条 batch），
+    method='llm' 落库，agent='api'。
+    """
+    from utils.llm_utils import call_llm_raw_stream
+
+    def _emit(event: dict) -> None:
+        if send_event is None:
+            return
+        try:
+            send_event(event)
+        except Exception:
+            pass
+
+    _emit({"type": "verify_llm_start", "claim_id": claim["id"], "statement": claim["statement"]})
+    prompt = build_batch_verify_prompt([claim])
+    chunks: list[str] = []
+
+    def _on_chunk(chunk: str) -> None:
+        chunks.append(chunk)
+        _emit({"type": "verify_llm_output", "claim_id": claim["id"], "content": chunk})
+
+    try:
+        raw = call_llm_raw_stream(
+            prompt,
+            temperature=temperature,
+            disable_thinking=False,  # 命题核查是判断类任务：显式走 DeepSeek reasoning
+            chunk_callback=_on_chunk,
+        )
+    except Exception as exc:
+        _emit({"type": "verify_llm_error", "claim_id": claim["id"], "error": str(exc)})
+        return {"success": False, "message": f"LLM 核查失败: {exc}"}
+
+    full = "".join(chunks) or raw
+    try:
+        verdicts = parse_batch_verification_json(full)
+    except ValueError as exc:
+        _emit({"type": "verify_llm_error", "claim_id": claim["id"], "error": str(exc)})
+        return {"success": False, "message": f"LLM 输出无法解析: {exc}", "output": full[-2000:]}
+    result = verdicts.get(1) or {}
+    verdict = result.get("verdict")
+    if verdict not in ("supported", "refuted", "unclear"):
+        _emit({"type": "verify_llm_error", "claim_id": claim["id"], "error": "verdict 无效"})
+        return {"success": False, "message": "LLM 输出缺少有效 verdict", "output": full[-2000:]}
+    verification = store.save_claim_verification(
+        claim_id=claim["id"],
+        verdict=verdict,
+        confidence=result.get("confidence", 0.5),
+        summary=result.get("reason", ""),
+        method="llm",
+        agent="api",
+    )
+    _emit(
+        {
+            "type": "verify_llm_done",
+            "claim_id": claim["id"],
+            "verdict": verdict,
+            "confidence": result.get("confidence", 0.5),
+            "reason": result.get("reason", ""),
+        }
+    )
+    return {"success": True, "verification": verification, "output": full}
 
 
 def parse_batch_verification_json(raw: str) -> dict[int, dict]:
@@ -275,67 +433,3 @@ def build_batch_verify_prompt(claims: list[dict]) -> str:
     for index, claim in enumerate(claims, 1):
         lines.append(f"Claim {index}:\n  陈述: {claim['statement']}\n  适用范围: {claim.get('scope') or '（无）'}")
     return CLAIM_BATCH_VERIFY_PROMPT.format(claims="\n\n".join(lines))
-
-
-def verify_claims_batch(
-    store: SemanticStore,
-    claims: list[dict],
-    llm_call=None,
-    *,
-    batch_size: int = 40,
-    agent: str = "builtin",
-) -> dict:
-    """内置批量命题真伪核查：分批 LLM 裁决并写入 claim_verifications。
-
-    ``llm_call(prompt) -> str`` 可注入（测试用）；默认用 call_llm_raw。
-    结果落库 method='llm'；单批失败不影响其他批。返回统计与明细。
-    """
-    if llm_call is None:
-        from utils.llm_utils import call_llm_raw
-
-        def llm_call(prompt: str) -> str:
-            return call_llm_raw(prompt, temperature=0.0)
-
-    if not claims:
-        return {"success": True, "total": 0, "outcomes": [], "stats": {}}
-    stats: dict[str, int] = {"supported": 0, "refuted": 0, "unclear": 0, "failed": 0}
-    outcomes: list[dict] = []
-    for start in range(0, len(claims), batch_size):
-        batch = claims[start : start + batch_size]
-        prompt = build_batch_verify_prompt(batch)
-        raw = ""
-        try:
-            raw = llm_call(prompt)
-        except Exception as exc:
-            stats["failed"] += len(batch)
-            outcomes.append({"batch": start // batch_size, "error": str(exc)})
-            continue
-        verdicts = parse_batch_verification_json(raw)
-        # LLM 对每批输出批内序号 1..n，与 batch 内枚举对齐
-        for index, claim in enumerate(batch, 1):
-            result = verdicts.get(index)
-            if result is None:
-                stats["failed"] += 1
-                outcomes.append({"claim_id": claim["id"], "statement": claim["statement"], "verdict": "missing"})
-                continue
-            verification = store.save_claim_verification(
-                claim_id=claim["id"],
-                verdict=result["verdict"],
-                confidence=result["confidence"],
-                summary=result["reason"],
-                method="llm",
-                agent=agent,
-            )
-            stats[result["verdict"]] += 1
-            outcomes.append(
-                {
-                    "claim_id": claim["id"],
-                    "statement": claim["statement"],
-                    "verdict": result["verdict"],
-                    "confidence": result["confidence"],
-                    "reason": result["reason"],
-                    "saved": verification is not None,
-                }
-            )
-        time.sleep(0.5)  # 批间限速
-    return {"success": True, "total": len(claims), "outcomes": outcomes, "stats": stats}

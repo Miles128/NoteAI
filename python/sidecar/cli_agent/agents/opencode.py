@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sidecar.cli_agent.base import BaseCliAgent
@@ -16,6 +17,27 @@ class OpenCodeAgent(BaseCliAgent):
     aliases = ["oc"]
     env_keys = ["OPENCODE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
     mcp_target = "opencode"
+
+    @classmethod
+    def _saved_auth_exists(cls) -> bool:
+        """OpenCode 已登录凭据（auth.json）是否已保存。
+
+        opencode 自己维护登录态（`opencode auth login`），凭据存于
+        XDG data dir 下的 auth.json，无需环境变量。
+        """
+        candidates = []
+        xdg = os.environ.get("XDG_DATA_HOME", "").strip()
+        if xdg:
+            candidates.append(Path(xdg) / "opencode" / "auth.json")
+        candidates.append(Path.home() / ".local" / "share" / "opencode" / "auth.json")
+        candidates.append(Path.home() / "Library" / "Application Support" / "opencode" / "auth.json")
+        return any(p.is_file() for p in candidates)
+
+    def has_api_key(self) -> bool:
+        """环境变量 key 或 opencode 已保存的登录凭据，满足其一即可。"""
+        if super().has_api_key():
+            return True
+        return self._saved_auth_exists()
 
     @staticmethod
     def enrich_prompt(prompt: str, workspace: Path) -> str:
@@ -47,10 +69,16 @@ class OpenCodeAgent(BaseCliAgent):
         skip_permissions: bool = True,
         *,
         continue_session: bool = False,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> list[str]:
         args: list[str] = ["run", "--dir", str(workspace)]
         if skip_permissions:
             args.append("--dangerously-skip-permissions")
+        if model:
+            args += ["-m", model]
+        if variant:
+            args += ["--variant", variant]
         if continue_session:
             args.append("-c")
         body = prompt.strip()

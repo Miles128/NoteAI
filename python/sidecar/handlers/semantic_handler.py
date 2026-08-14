@@ -285,46 +285,6 @@ class SemanticHandler(BaseHandler):
             return fallback, True
         return text.strip(), False
 
-    def _get_note_merge_suggestions(self, params):
-        """基于 RAG 索引向量相似度 + 语义库实体共享的笔记合并建议。
-
-        只读分析，不修改任何数据；索引或语义未建立时优雅降级。
-        """
-        try:
-            min_score = float(params.get("min_score", 0) or 0)
-        except (TypeError, ValueError):
-            min_score = 0.0
-        try:
-            max_results = max(1, min(int(params.get("max_results", 60)), 200))
-        except (TypeError, ValueError):
-            max_results = 60
-        from utils.note_merge_analyzer import get_note_merge_suggestions
-
-        result = get_note_merge_suggestions(min_score=min_score, max_results=max_results)
-        return {
-            "success": result.get("success", False),
-            "message": result.get("message", ""),
-            "total": result.get("total", 0),
-            "has_index": result.get("has_index", False),
-            "has_semantics": result.get("has_semantics", False),
-            "stale_count": result.get("stale_count", 0),
-            "suggestions": result.get("suggestions", []),
-        }
-
-    def _merge_suggested_notes(self, params):
-        """执行建议中的笔记合并（复用 merge_note_group 的 LLM 整合）。"""
-        try:
-            file_paths = [str(p) for p in (params.get("file_paths") or [])]
-        except (TypeError, ValueError):
-            return {"success": False, "message": "file_paths 参数无效"}
-        from utils.note_merge_analyzer import merge_suggested_notes
-
-        return merge_suggested_notes(
-            file_paths,
-            title=str(params.get("title") or ""),
-            delete_authorized=params.get("delete_authorized") is True,
-        )
-
     def _get_topic_brief(self, params):
         """One-topic review brief from the change log.
         Uses the LLM when configured; otherwise falls back to a structured
@@ -492,13 +452,19 @@ class SemanticHandler(BaseHandler):
         return build_object_detail(store, kind, object_id)
 
     def _verify_claim(self, params):
-        """联网深度研究核查单个命题（CLI agent 模式），结果落库供工作台展示。
+        """研究核查单个命题（CLI agent 深度研究 / 内置 API LLM reasoning），结果落库。
 
-        CLI 深度研究可能耗时数分钟；与 CLI Agent 对话共用同一执行通道，
-        因此复用 CliAgentHandler 的全局锁避免并发执行。
+        method='cli'（默认）：CLI 深度研究，可能耗时数分钟；与 CLI Agent 对话
+        共用同一执行通道，复用 CliAgentHandler 的全局锁避免并发执行。
+        method='llm'：内置 LLM（DeepSeek reasoning）流式核查，不占用 CLI 通道。
+        两种方式都经 send_event 推送研究过程事件（cli_agent_output /
+        verify_llm_output），供前端实时展示。
         """
         claim_id = str(params.get("id", "") or "")
         agent_id = str(params.get("agent", "") or "")
+        method = str(params.get("method", "") or "").strip().lower()
+        if method not in ("cli", "llm"):
+            method = "cli"
         if not claim_id or not agent_id:
             return {"success": False, "message": "参数不完整"}
         store = self._store()
@@ -508,42 +474,24 @@ class SemanticHandler(BaseHandler):
         claim = next((item for item in claims if item["id"] == claim_id), None)
         if claim is None:
             return {"success": False, "message": "命题不存在或不可核查（仅支持 active 且有证据的命题）"}
+        if method == "llm":
+            from sidecar.semantic.claim_verifier import verify_claim_via_llm
+
+            result = verify_claim_via_llm(store, claim, send_event=self._send_response)
+            result["output"] = (result.get("output") or "")[-2000:]
+            return result
         if not CliAgentHandler._cli_agent_lock.acquire(blocking=False):
             return {"success": False, "message": "CLI agent 正在运行其他任务，请稍后再试"}
         try:
             from sidecar.semantic.claim_verifier import verify_claim_via_cli
 
-            result = verify_claim_via_cli(store, claim, agent_id=agent_id)
+            result = verify_claim_via_cli(store, claim, agent_id=agent_id, send_event=self._send_response)
             if result.get("success"):
                 # 只保留原始输出尾部，避免超大 RPC 响应
                 result["output"] = (result.get("output") or "")[-2000:]
             return result
         finally:
             CliAgentHandler._cli_agent_lock.release()
-
-    def _verify_claims_batch(self, params):
-        """内置 LLM 批量核查命题真伪（不依赖外部 CLI agent），结果落库。"""
-        store = self._store()
-        if store is None or not store.path.exists():
-            return {"success": False, "message": "语义数据库不存在"}
-        claims = store.list_claims_for_verification(limit=5000)
-        if not claims:
-            return {"success": True, "total": 0, "stats": {}, "message": "暂无可核查命题"}
-        scope = str(params.get("scope", "") or "").strip().casefold()
-        if scope:
-            claims = [c for c in claims if scope in str(c.get("scope", "")).casefold()]
-        limit = int(params.get("limit") or 0)
-        if limit > 0:
-            claims = claims[:limit]
-        # 幂等：默认跳过已有验证结果的命题；force=true 可全量重验证
-        # （Rust 侧超时后重试不会重复跑已完成的 20 分钟全量任务）。
-        if params.get("force") is not True:
-            with store.connect() as conn:
-                verified = {row[0] for row in conn.execute("SELECT DISTINCT claim_id FROM claim_verifications")}
-            claims = [c for c in claims if c["id"] not in verified]
-        from sidecar.semantic.claim_verifier import verify_claims_batch
-
-        return verify_claims_batch(store, claims)
 
     def _get_note_semantic_context(self, params):
         path = str(params.get("path", "") or "").replace("\\", "/")
@@ -1030,8 +978,6 @@ class SemanticHandler(BaseHandler):
         router.register("get_semantic_compile_status", self._get_compile_status)
         router.register("get_semantic_changes", self._get_changes)
         router.register("get_topic_brief", self._get_topic_brief)
-        router.register("get_note_merge_suggestions", self._get_note_merge_suggestions)
-        router.register("merge_suggested_notes", self._merge_suggested_notes)
         router.register("generate_weekly_brief", self._generate_weekly_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
         router.register("review_semantic_conflict", self._review_conflict)
@@ -1047,7 +993,6 @@ class SemanticHandler(BaseHandler):
         router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
         router.register("verify_semantic_claim", self._verify_claim)
-        router.register("verify_claims_batch", self._verify_claims_batch)
         router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)

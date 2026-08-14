@@ -124,7 +124,7 @@ def test_rag_context_numbers_only_direct_evidence_and_returns_used_source(monkey
 
     def fake_stream(prompt, **kwargs):
         captured["prompt"] = prompt
-        return "答案由当前文件支持。[2]\n【存档建议】否"
+        return "答案由当前文件支持。[2]"
 
     monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
 
@@ -181,7 +181,7 @@ def test_empty_retrieval_switches_to_no_evidence_prompt(monkeypatch, tmp_path) -
 
     def fake_stream(prompt, **kwargs):
         captured["prompt"] = prompt
-        return "知识库中没有找到与该问题直接相关的资料。\n【存档建议】否"
+        return "知识库中没有找到与该问题直接相关的资料。"
 
     monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
 

@@ -100,7 +100,6 @@ window.AssistantModule = (function() {
 
     function init() {
         ensureAiBindings();
-        _ensureSavePreviewBindings();
     }
 
     function toggle() {
@@ -252,13 +251,10 @@ window.AssistantModule = (function() {
 
     var _currentStreamEl = null;
     var _streamRawText = '';
-    var _lastArchive = null;
     /** 本轮 rag_retrieval 元信息（先于回答流到达），用于检索过程面板 */
     var _pendingRetrieval = null;
     /** 检索面板是否已插入当前占位 bubble，避免重复挂载 */
     var _retrievalAttached = false;
-    var _savePreviewState = null;
-    var _savePreviewBindingsDone = false;
 
     function _renderMarkdownHtml(text) {
         if (!text) return '';
@@ -307,7 +303,6 @@ window.AssistantModule = (function() {
             };
         });
         _chatHistory.push({ role: 'user', content: question });
-        _lastArchive = { question: question, answer: '', citations: [], contextFile: '', rowEl: null };
 
         _isStreaming = true;
         _streamRawText = '';
@@ -317,7 +312,6 @@ window.AssistantModule = (function() {
         var topics = _extractTopics();
         var tags = _extractTags();
         var currentFile = _extractCurrentFile();
-        _lastArchive.contextFile = currentFile;
 
         options.history = requestHistory;
         window.api.ragChat(question, topics, tags, currentFile, options).then(function(result) {
@@ -478,16 +472,8 @@ window.AssistantModule = (function() {
                     _attachRetrievalPanel(_currentStreamEl, _pendingRetrieval);
                     _retrievalAttached = true;
                 }
-                /* P4：引用区之下渲染追问 chips（位于保存操作之前） */
+                /* P4：引用区之下渲染追问 chips */
                 _renderSuggestionChips(_currentStreamEl, eventData.suggestions);
-                if (_lastArchive) {
-                    _lastArchive.answer = answerText;
-                    _lastArchive.citations = eventData.citations || [];
-                    // Saving an answer is a user choice, not an LLM judgement.
-                    // Every completed grounded answer therefore exposes the same
-                    // explicit, non-destructive save action.
-                    _attachSaveNoteActions(_currentStreamEl, _lastArchive);
-                }
             }
             _streamRawText = '';
             _currentStreamEl = null;
@@ -669,142 +655,6 @@ window.AssistantModule = (function() {
             + '<div class="ai-retrieval-body">' + rows + '</div>';
         /* 顶部插入：回答流式渲染只重写 content 元素 innerHTML，面板位置保持稳定 */
         bubble.insertBefore(details, bubble.firstChild);
-    }
-
-    function _attachSaveNoteActions(contentEl, archive) {
-        if (!contentEl || !archive || !archive.answer) return;
-        var bubble = contentEl.closest('.ai-msg');
-        if (!bubble || bubble.querySelector('.ai-msg-actions')) return;
-
-        var actions = document.createElement('div');
-        actions.className = 'ai-msg-actions';
-
-        var hint = document.createElement('p');
-        hint.className = 'ai-save-note-hint';
-        hint.textContent = window.t('assistant.insightHint');
-        actions.appendChild(hint);
-
-        function addSaveButton(label, target) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'ai-save-note-btn';
-            btn.textContent = label;
-            btn.addEventListener('click', function() {
-                _openSavePreview(archive, target, btn, label, hint);
-            });
-            actions.appendChild(btn);
-        }
-        addSaveButton(window.t('assistant.saveAsNote'), 'note');
-        addSaveButton(window.t('assistant.saveAsTask'), 'task');
-        bubble.appendChild(actions);
-        archive.rowEl = bubble;
-    }
-
-    function _archivePayload(archive, target, previewOnly) {
-        return {
-            question: archive.question,
-            answer: archive.answer,
-            target: target,
-            context_file: archive.contextFile || '',
-            citations: archive.citations || [],
-            preview_only: previewOnly === true
-        };
-    }
-
-    function _ensureSavePreviewBindings() {
-        if (_savePreviewBindingsDone) return;
-        var modal = document.getElementById('assistant-save-modal');
-        var close = document.getElementById('assistant-save-close');
-        var cancel = document.getElementById('assistant-save-cancel');
-        var confirm = document.getElementById('assistant-save-confirm');
-        if (!modal || !close || !cancel || !confirm) return;
-        close.addEventListener('click', _closeSavePreview);
-        cancel.addEventListener('click', _closeSavePreview);
-        modal.addEventListener('click', function(event) {
-            if (event.target === modal) _closeSavePreview();
-        });
-        confirm.addEventListener('click', _confirmSavePreview);
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape' && modal.style.display !== 'none') {
-                _closeSavePreview();
-            }
-        });
-        _savePreviewBindingsDone = true;
-    }
-
-    function _openSavePreview(archive, target, sourceButton, sourceLabel, hint) {
-        if (!window.api || !window.api.archiveChatAnswer) return;
-        _ensureSavePreviewBindings();
-        sourceButton.disabled = true;
-        sourceButton.textContent = window.t('assistant.loadingPreview');
-        var payload = _archivePayload(archive, target, true);
-        window.api.archiveChatAnswer(payload).then(function(res) {
-            if (!res || !res.success) {
-                throw new Error((res && res.message) || window.t('common.unknownError'));
-            }
-            var modal = document.getElementById('assistant-save-modal');
-            var path = document.getElementById('assistant-save-path');
-            var content = document.getElementById('assistant-save-content');
-            var confirm = document.getElementById('assistant-save-confirm');
-            if (!modal || !path || !content || !confirm) {
-                throw new Error(window.t('assistant.previewUnavailable'));
-            }
-            path.textContent = res.path || '';
-            content.textContent = res.content || '';
-            confirm.disabled = false;
-            confirm.textContent = window.t('assistant.confirmSave');
-            modal.style.display = 'flex';
-            _savePreviewState = {
-                payload: _archivePayload(archive, target, false),
-                sourceButton: sourceButton,
-                sourceLabel: sourceLabel,
-                hint: hint
-            };
-            window.requestAnimationFrame(function() { confirm.focus(); });
-        }).catch(function(err) {
-            sourceButton.disabled = false;
-            sourceButton.textContent = sourceLabel;
-            addSystemMessage(window.t('assistant.previewFailed', { message: err.message || String(err) }));
-        });
-    }
-
-    function _closeSavePreview() {
-        var modal = document.getElementById('assistant-save-modal');
-        if (modal) modal.style.display = 'none';
-        if (_savePreviewState && _savePreviewState.sourceButton) {
-            _savePreviewState.sourceButton.disabled = false;
-            _savePreviewState.sourceButton.textContent = _savePreviewState.sourceLabel;
-        }
-        _savePreviewState = null;
-    }
-
-    function _confirmSavePreview() {
-        if (!_savePreviewState || !window.api || !window.api.archiveChatAnswer) return;
-        var state = _savePreviewState;
-        var confirm = document.getElementById('assistant-save-confirm');
-        if (confirm) {
-            confirm.disabled = true;
-            confirm.textContent = window.t('assistant.saving');
-        }
-        window.api.archiveChatAnswer(state.payload).then(function(res) {
-            if (!res || !res.success) {
-                throw new Error((res && res.message) || window.t('common.unknownError'));
-            }
-            var modal = document.getElementById('assistant-save-modal');
-            if (modal) modal.style.display = 'none';
-            state.sourceButton.textContent = window.t('common.saved');
-            state.hint.textContent = window.t('assistant.savedToPath', { path: res.path || '' });
-            _savePreviewState = null;
-            if (typeof window.refreshWorkspaceViewsAfterChange === 'function') {
-                window.refreshWorkspaceViewsAfterChange();
-            }
-        }).catch(function(err) {
-            if (confirm) {
-                confirm.disabled = false;
-                confirm.textContent = window.t('assistant.confirmSave');
-            }
-            addSystemMessage(window.t('assistant.saveFailed', { message: err.message || String(err) }));
-        });
     }
 
     function _openNoteFromPath(filePath, displayName, sectionTitle) {

@@ -50,3 +50,22 @@ def test_stop_active_kills_process() -> None:
         assert handle.stop_event.is_set()
     finally:
         clear(handle)
+
+
+def test_hard_timeout_kills_process() -> None:
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    handle = register(proc, "test", "Test Agent")
+    watcher = TimeoutWatcher(handle, idle_timeout_s=999, total_timeout_s=999, emit=None, hard_timeout_s=0.3)
+    watcher.start()
+    try:
+        proc.wait(timeout=5)
+        assert watcher.kill_reason is not None
+        assert "已自动终止" in watcher.kill_reason
+        assert proc.poll() is not None
+    finally:
+        clear(handle)

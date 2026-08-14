@@ -15,24 +15,44 @@ import re
 from pathlib import Path
 from typing import Any
 
-from prompts import RSS_DISCOVERY_PROMPT, DEEPSEEK_WEB_DISCOVERY_PROMPT
+from prompts import DEEPSEEK_WEB_DISCOVERY_PROMPT, RSS_DISCOVERY_PROMPT
 from sidecar.multi_source import _fetch_rss, _rss_title, load_subscriptions
 
 # 内置 AI 主题候选源（name | url | topics 标签）
 _BUILTIN_FEEDS: list[dict] = [
     {"name": "OpenAI Blog", "url": "https://openai.com/blog/rss.xml", "topics": ["llm", "model", "industry"]},
     {"name": "Anthropic News", "url": "https://www.anthropic.com/rss.xml", "topics": ["llm", "agent", "industry"]},
-    {"name": "Hugging Face Blog", "url": "https://huggingface.co/blog/feed.xml", "topics": ["llm", "open-source", "ml"]},
+    {
+        "name": "Hugging Face Blog",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "topics": ["llm", "open-source", "ml"],
+    },
     {"name": "arXiv cs.AI", "url": "https://rss.arxiv.org/rss/cs.AI", "topics": ["paper", "research", "ml"]},
     {"name": "arXiv cs.CL", "url": "https://rss.arxiv.org/rss/cs.CL", "topics": ["paper", "nlp", "llm"]},
     {"name": "arXiv cs.LG", "url": "https://rss.arxiv.org/rss/cs.LG", "topics": ["paper", "ml", "research"]},
     {"name": "Google DeepMind", "url": "https://deepmind.google/blog/rss.xml", "topics": ["research", "ml", "agent"]},
-    {"name": "Google AI Blog", "url": "https://blog.google/technology/ai/rss/", "topics": ["llm", "product", "research"]},
-    {"name": "Lilian Weng (Lil'Log)", "url": "https://lilianweng.github.io/posts.rss", "topics": ["llm", "agent", "tutorial"]},
-    {"name": "Simon Willison's Weblog", "url": "https://simonwillison.net/atom/everything/", "topics": ["llm", "tools", "industry"]},
+    {
+        "name": "Google AI Blog",
+        "url": "https://blog.google/technology/ai/rss/",
+        "topics": ["llm", "product", "research"],
+    },
+    {
+        "name": "Lilian Weng (Lil'Log)",
+        "url": "https://lilianweng.github.io/posts.rss",
+        "topics": ["llm", "agent", "tutorial"],
+    },
+    {
+        "name": "Simon Willison's Weblog",
+        "url": "https://simonwillison.net/atom/everything/",
+        "topics": ["llm", "tools", "industry"],
+    },
     {"name": "The Gradient", "url": "https://thegradient.pub/feed/", "topics": ["research", "llm", "analysis"]},
     {"name": "BAIR Blog", "url": "https://bair.berkeley.edu/blog/feed.xml", "topics": ["research", "ml", "paper"]},
-    {"name": "MIT Tech Review AI", "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed", "topics": ["industry", "product", "analysis"]},
+    {
+        "name": "MIT Tech Review AI",
+        "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+        "topics": ["industry", "product", "analysis"],
+    },
     {"name": "机器之心", "url": "https://www.jiqizhixin.com/rss", "topics": ["industry", "llm", "news"]},
     {"name": "量子位", "url": "https://www.qbitai.com/feed", "topics": ["industry", "llm", "news"]},
     {"name": "InfoQ 中文", "url": "https://www.infoq.cn/feed", "topics": ["industry", "engineering", "news"]},
@@ -80,7 +100,7 @@ def _parse_llm_plan(raw: str) -> tuple[list[str], list[str]]:
             return [], []
     queries = [str(q).strip() for q in (data.get("queries") or []) if str(q).strip()]
     urls = [str(u).strip() for u in (data.get("builtin_urls") or []) if str(u).strip()]
-    return queries[: _MAX_SEARCH_QUERIES], urls
+    return queries[:_MAX_SEARCH_QUERIES], urls
 
 
 def _search_web(query: str) -> list[dict]:
@@ -98,7 +118,7 @@ def _search_web(query: str) -> list[dict]:
         if not url or not url.startswith("http"):
             continue
         candidates.append({"url": url, "title": title})
-    return candidates[: _MAX_SEARCH_RESULTS]
+    return candidates[:_MAX_SEARCH_RESULTS]
 
 
 def _find_feed_url(candidate: dict) -> str:
@@ -163,6 +183,7 @@ def _deepseek_web_discovery(topics: list[str]) -> list[dict]:
     if "deepseek.com" not in (config.api_base or ""):
         return []
     import json as _json
+
     import requests as _requests
 
     payload = {
@@ -239,9 +260,7 @@ def discover_rss_sources(workspace: str, llm_call=None) -> dict[str, Any]:
     if not topics:
         return {"success": False, "message": "未找到知识库主题", "recommendations": []}
 
-    builtin_lines = "\n".join(
-        f"- {f['name']} | {f['url']} | {','.join(f['topics'])}" for f in _BUILTIN_FEEDS
-    )
+    builtin_lines = "\n".join(f"- {f['name']} | {f['url']} | {','.join(f['topics'])}" for f in _BUILTIN_FEEDS)
     prompt = RSS_DISCOVERY_PROMPT.format(topics="、".join(topics), builtin_feeds=builtin_lines)
     try:
         raw = llm_call(prompt)

@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sidecar.chunk_similarity import build_chunk_similarity_graph, load_chunk_similarity_graph, resolve_merge_rules
+from sidecar.chunk_similarity import (
+    _load_semantic_shares,
+    build_chunk_similarity_graph,
+    load_chunk_similarity_graph,
+    resolve_merge_rules,
+)
 
 
 def _write(root: Path, topic: str, name: str, body: str) -> None:
@@ -92,3 +97,34 @@ def test_merge_overrides_override_preset_thresholds(tmp_path: Path, monkeypatch)
     assert graph["rules"]["coverage"] == 0.50
     # 未覆盖的阈值仍保持预设值
     assert graph["rules"]["title"] == 0.82
+
+
+def test_candidates_carry_semantic_share_signal(tmp_path: Path, monkeypatch) -> None:
+    """候选 pair 应携带语义共享计数（来自 semantic.db），作为同源双稿证据。"""
+    root = tmp_path / "ws"
+    _write(root, "人工智能", "甲笔记", "深度学习与神经网络的核心概念。")
+    _write(root, "人工智能", "乙笔记", "机器学习与模型训练的基础方法。")
+
+    def fake_encode(texts):
+        return [{"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}} for _ in texts]
+
+    def fake_semantic_shares(r: Path) -> dict:
+        a = "Notes/人工智能/甲笔记.md"
+        b = "Notes/人工智能/乙笔记.md"
+        return {(a, b): 12}
+
+    monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
+    monkeypatch.setattr("sidecar.chunk_similarity._load_semantic_shares", fake_semantic_shares)
+    build_chunk_similarity_graph(root, top_k=6, threshold=0.68)
+    graph = load_chunk_similarity_graph(root)
+    pairs = [p for c in graph.get("candidates") or [] for p in c.get("pairs", [])]
+    assert pairs, "应至少有一个候选 pair"
+    assert max(p.get("shared_objects", 0) for p in pairs) == 12
+
+
+def test_semantic_shares_degrade_gracefully(tmp_path: Path) -> None:
+    """语义库缺失时应降级为空 dict，不影响候选构建。"""
+    root = tmp_path / "ws"
+    (root / "Notes" / "AI").mkdir(parents=True)
+    (root / "Notes" / "AI" / "a.md").write_text("# a\n正文\n", encoding="utf-8")
+    assert _load_semantic_shares(root) == {}

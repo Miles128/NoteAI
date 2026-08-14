@@ -113,7 +113,49 @@ def _load_previous(root: Path) -> tuple[dict, dict[str, np.ndarray]]:
     return graph, vectors
 
 
-def _candidate_groups(chunks: list[dict], edges: list[dict], rules: dict[str, float]) -> list[dict]:
+def _load_semantic_shares(root: Path) -> dict[tuple[str, str], int]:
+    """从语义库读取文档对的实体/概念共享计数。
+
+    返回 {(rel_a, rel_b): shared_count}，只包含共享 >= 1 的对。
+    语义库不存在或不可用时返回空 dict（降级为纯 chunk 相似度）。
+    """
+    store_path = root / WORKSPACE_APP_FOLDER / "compiler" / "semantic.db"
+    if not store_path.exists():
+        return {}
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(store_path, timeout=5)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                """SELECT d1.path AS a, d2.path AS b, count(DISTINCT m1.object_id) AS shared
+                   FROM semantic_mentions m1
+                   JOIN blocks b1 ON b1.id = m1.block_id
+                   JOIN documents d1 ON d1.id = b1.document_id
+                   JOIN semantic_mentions m2 ON m2.object_id = m1.object_id
+                   JOIN blocks b2 ON b2.id = m2.block_id
+                   JOIN documents d2 ON d2.id = b2.document_id
+                   WHERE d1.path < d2.path
+                     AND m1.object_kind = m2.object_kind
+                   GROUP BY d1.path, d2.path"""
+            ).fetchall()
+        finally:
+            conn.close()
+        return {(str(row["a"]), str(row["b"])): int(row["shared"]) for row in rows}
+    except Exception as e:
+        from utils.logger import logger
+
+        logger.warning(f"[chunk_similarity] 读取语义共享失败: {e}")
+        return {}
+
+
+def _candidate_groups(
+    chunks: list[dict],
+    edges: list[dict],
+    rules: dict[str, float],
+    semantic_shares: dict[tuple[str, str], int] | None = None,
+) -> list[dict]:
     by_id = {item["id"]: item for item in chunks}
     file_chunks: dict[str, set[str]] = defaultdict(set)
     for item in chunks:
@@ -151,7 +193,18 @@ def _candidate_groups(chunks: list[dict], edges: list[dict], rules: dict[str, fl
             if left_topic == right_topic and left_topic
             else SequenceMatcher(None, left_topic.casefold(), right_topic.casefold()).ratio()
         )
+        # 语义共享信号：两篇笔记共享的实体/概念数（来自 semantic.db）。
+        # 同源双稿（综述 vs 展开稿）即使文本不完全重叠，也共享大量实体/概念，
+        # 这是 chunk 级相似度之外的互补证据。
+        shared_objects = 0
+        if semantic_shares:
+            shared_objects = semantic_shares.get(
+                (left_path, right_path), semantic_shares.get((right_path, left_path), 0)
+            )
         score = 0.5 * content_score + 0.25 * title_score + 0.15 * topic_score + 0.1 * shorter_coverage
+        # 语义共享加分：共享 >= 3 个实体/概念时逐档加分（0.02/级，上限 0.08）
+        semantic_bonus = min(0.08, max(0, (shared_objects - 2) * 0.02))
+        score += semantic_bonus
         overlap_rule = bool(strong) and shorter_coverage >= rules["coverage"]
         semantic_rule = (
             title_score >= rules["title"]
@@ -169,6 +222,7 @@ def _candidate_groups(chunks: list[dict], edges: list[dict], rules: dict[str, fl
                 "title_score": round(title_score, 4),
                 "topic_score": round(topic_score, 4),
                 "coverage": round(shorter_coverage, 4),
+                "shared_objects": shared_objects,
                 "reason": "chunk_overlap" if overlap_rule else "semantic",
                 "matches": sorted(rows, key=lambda row: row["similarity"], reverse=True)[:5],
             }
@@ -324,7 +378,8 @@ def build_chunk_similarity_graph(
         "chunks": stored_chunks,
         "edges": edges,
     }
-    graph["candidates"] = _candidate_groups(stored_chunks, edges, effective_rules)
+    semantic_shares = _load_semantic_shares(root)
+    graph["candidates"] = _candidate_groups(stored_chunks, edges, effective_rules, semantic_shares)
     graph["topic_candidates"] = _topic_candidates(stored_chunks, edges, matrix, effective_rules) if len(matrix) else []
     graph_path, vector_path = _paths(root)
     _atomic_json(graph_path, graph)

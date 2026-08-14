@@ -1,13 +1,18 @@
+"""网页下载与内容提取。"""
+
+from __future__ import annotations
+
 import re
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import requests
-from bs4 import BeautifulSoup
-from markdownify import markdownify as md
-from readability import Document
+
+if TYPE_CHECKING:
+    from bs4 import BeautifulSoup
 
 from config import config
 from utils.helpers import (
@@ -100,6 +105,8 @@ class WebDownloader:
         使用多种策略确保能获取到有效的标题
         针对微信公众号、小红书、知乎等平台优化
         """
+        from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(html_content, "html.parser")
 
         meta_selectors = [
@@ -273,6 +280,8 @@ class WebDownloader:
         Returns:
             处理后的HTML内容，所有img标签都有正确的src属性
         """
+        from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(html_content, "html.parser")
 
         lazy_load_attributes = [
@@ -438,6 +447,8 @@ class WebDownloader:
                 logger.info("正在预处理HTML中的图片标签...")
                 html_content = self._normalize_img_tags_in_html(html_content, url)
 
+            from readability import Document
+
             doc = Document(html_content)
             doc_title = doc.title() or ""
             summary_html = doc.summary()
@@ -482,6 +493,8 @@ class WebDownloader:
 
     def _convert_standard(self, html_content: str, title: str) -> str:
         """标准模式：使用 markdownify 转换网页为 Markdown"""
+        from markdownify import markdownify as md
+
         markdown = md(html_content, heading_style="ATX")
         markdown = clean_text(markdown)
         has_title = False
@@ -618,4 +631,6 @@ class WebDownloader:
 
     def _convert_with_markdownify(self, html_content: str) -> str:
         """使用markdownify转换HTML到Markdown"""
+        from markdownify import markdownify as md
+
         return md(html_content, heading_style="ATX")

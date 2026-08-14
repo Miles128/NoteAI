@@ -27,17 +27,21 @@ def test_opencode_build_args_wraps_prompt() -> None:
     assert "工作区安全边界" in args[4]
 
 
-def test_opencode_saved_auth_grants_api_key(monkeypatch) -> None:
-    """无环境变量时，已保存的 auth.json 即可满足凭据要求。"""
+def test_opencode_saved_auth_grants_api_key(monkeypatch, tmp_path) -> None:
+    """无环境变量时，已保存的 auth.json 即可满足凭据要求。
+
+    使用 pytest tmp_path 而非固定 /tmp 路径，避免测试自污染
+    （旧实现写 /tmp/fake-opencode-home/auth.json 从不清理，
+    第二次运行首个断言即失败）。
+    """
     agent = OpenCodeAgent()
     monkeypatch.setattr(agent, "check_api_keys", lambda: [])
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    fake_home = Path("/tmp/fake-opencode-home")
-    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
     assert agent._saved_auth_exists() is False
     assert agent.has_api_key() is False
 
-    auth = fake_home / ".local" / "share" / "opencode" / "auth.json"
+    auth = tmp_path / ".local" / "share" / "opencode" / "auth.json"
     auth.parent.mkdir(parents=True, exist_ok=True)
     auth.write_text("{}")
     assert agent._saved_auth_exists() is True

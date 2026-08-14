@@ -26,8 +26,6 @@ async function loadModules() {
     await import('./G3.js');
 
     await import('./toast.js');
-    const { ToastModule } = window;
-    window.ToastModule = ToastModule;
 
     // settings 子模块须先于薄主入口 settings.js 加载（主入口组装 window.SettingsModule）
     await import('./settings-general.js');

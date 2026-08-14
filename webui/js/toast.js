@@ -51,5 +51,29 @@
 
     window.updateStatus = updateStatus;
     window.updateProgress = updateProgress;
+
+    // ToastModule：cli-agent.js 等模块依赖的轻量 toast 通知（index.html 已含 #toast-container）。
+    function showToast(message, type) {
+        const container = document.getElementById('toast-container');
+        if (!container) {
+            window.updateStatus(message);
+            return;
+        }
+        const el = document.createElement('div');
+        el.className = 'toast' + (type ? ' toast-' + type : '');
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(function() {
+            el.classList.add('hiding');
+            setTimeout(function() { el.remove(); }, 350);
+        }, 3500);
+    }
+
+    window.ToastModule = {
+        show: showToast,
+        error: function(message) { showToast(message, 'error'); },
+        info: function(message) { showToast(message, 'info'); },
+        success: function(message) { showToast(message, 'success'); }
+    };
 })();
 

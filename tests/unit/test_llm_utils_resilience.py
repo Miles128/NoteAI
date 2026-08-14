@@ -5,11 +5,13 @@
 超时与信号量路径（全部使用 mock，不产生真实网络调用）。
 """
 
+import threading
 from concurrent.futures import TimeoutError as FutureTimeout
 
 import pytest
 
 from utils.llm_utils import (
+    StreamTimeoutError,
     _is_retryable_error,
     _retry_with_backoff,
     _run_llm_with_timeout,
@@ -258,3 +260,66 @@ def test_run_stream_releases_semaphore_after_error():
     # 异常路径也必须释放信号量
     assert _LLM_SEMAPHORE.acquire(timeout=0.5) is True
     _LLM_SEMAPHORE.release()
+
+
+def test_run_stream_stops_emitting_after_timeout():
+    """超时后旧线程不得继续向 chunk_callback 推送 token（防止新旧流交错）。"""
+    import time
+
+    received: list[str] = []
+    emitted = threading.Event()
+
+    def stream_fn():
+        yield _Chunk("first")
+        emitted.set()
+        time.sleep(3)  # 模拟挂死
+        yield _Chunk("late")
+
+    with pytest.raises(StreamTimeoutError, match="流式调用超时"):
+        _run_stream_with_timeout(stream_fn, chunk_callback=received.append, join_timeout=0.2)
+
+    emitted.wait(timeout=2)
+    time.sleep(0.3)  # 给旧线程一点时间（若未停止会推送 late）
+    assert received == ["first"]
+
+
+def test_run_stream_partial_timeout_is_no_retry():
+    """已输出部分 token 的超时不得重试（重复计费）。"""
+    import time
+
+    def stream_fn():
+        yield _Chunk("partial ")
+        time.sleep(5)
+
+    with pytest.raises(StreamTimeoutError) as exc_info:
+        _run_stream_with_timeout(stream_fn, join_timeout=0.2)
+    assert exc_info.value.partial is True
+    assert exc_info.value.no_retry is True
+
+
+def test_run_stream_clean_timeout_is_retryable():
+    """未输出任何 token 的超时仍可重试（网络层问题）。"""
+    import time
+
+    def stream_fn():
+        time.sleep(5)
+        yield _Chunk("never")
+
+    with pytest.raises(StreamTimeoutError) as exc_info:
+        _run_stream_with_timeout(stream_fn, join_timeout=0.2)
+    assert exc_info.value.partial is False
+    assert exc_info.value.no_retry is False
+
+
+def test_retry_skips_no_retry_errors(mock_sleep):
+    """no_retry 异常（partial 流式超时）不得触发重试。"""
+    calls = []
+
+    def fn():
+        calls.append(1)
+        raise StreamTimeoutError("LLM 流式调用超时（120秒）", partial=True)
+
+    with pytest.raises(StreamTimeoutError):
+        _retry_with_backoff(fn, max_retries=3)
+    assert calls == [1]
+    assert mock_sleep == []

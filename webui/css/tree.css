@@ -304,6 +304,21 @@
     animation: toastOut 0.3s ease forwards;
 }
 
+.toast-error {
+    border-color: var(--danger, #e5484d);
+    color: var(--danger, #e5484d);
+}
+
+.toast-warning {
+    border-color: var(--warning, #f5a623);
+    color: var(--warning, #b7791f);
+}
+
+.toast-success {
+    border-color: var(--success, #30a46c);
+    color: var(--success, #2d7a4f);
+}
+
 @keyframes toastIn {
     from { opacity: 0; transform: translateX(20px); }
     to { opacity: 1; transform: translateX(0); }

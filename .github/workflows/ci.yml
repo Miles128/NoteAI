@@ -96,6 +96,7 @@ jobs:
           for f in webui/js/*.js; do
             node --check "$f" || exit 1
           done
+          node --check webui/js/main.mjs || exit 1
 
       - name: Test mcp-server
         working-directory: mcp-server

@@ -39,6 +39,20 @@ class _StreamResult(TypedDict):
     text: str
     error: Exception | None
     done: bool
+    started: bool
+
+
+class StreamTimeoutError(RuntimeError):
+    """LLM 流式调用超时。
+
+    partial=True 表示已向客户端输出部分 token：此时若重试整条流，
+    旧线程与新流 token 交错且重复计费，故标记 no_retry。
+    """
+
+    def __init__(self, message: str, *, partial: bool = False):
+        super().__init__(message)
+        self.partial = partial
+        self.no_retry = partial
 
 
 _EXECUTOR_LOCK = threading.Lock()
@@ -72,7 +86,7 @@ def _retry_with_backoff(
                 _LLM_SEMAPHORE.release()
         except Exception as e:
             last_error = e
-            if not _is_retryable_error(e) or attempt >= max_retries:
+            if getattr(e, "no_retry", False) or not _is_retryable_error(e) or attempt >= max_retries:
                 break
             delay = min(base_delay * (2**attempt), max_delay)
             logger.warning(f"LLM 调用失败 (尝试 {attempt + 1}/{max_retries + 1})，{delay:.1f}s 后重试: {e}")
@@ -289,19 +303,27 @@ def _run_stream_with_timeout(
     chunk_callback=None,
     join_timeout: int = 120,
 ) -> str:
-    """流式执行通用包装：信号量限流 + 后台线程执行 + join 超时保护（_do_stream 同款结构）"""
+    """流式执行通用包装：信号量限流 + 后台线程执行 + join 超时保护（_do_stream 同款结构）
+
+    超时后置 stop 事件：旧线程停止继续迭代与推送 token；
+    已输出部分内容时抛 StreamTimeoutError(partial=True)，上层不重试，避免重复计费。
+    """
     acquired = _LLM_SEMAPHORE.acquire(timeout=60)
     if not acquired:
         raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
 
-    result: _StreamResult = {"text": "", "error": None, "done": False}
+    result: _StreamResult = {"text": "", "error": None, "done": False, "started": False}
+    stop = threading.Event()
 
     def _run():
         try:
             full_text = ""
             for chunk in stream_fn():
+                if stop.is_set():
+                    break
                 token = chunk.content if hasattr(chunk, "content") else str(chunk)
                 full_text += token
+                result["started"] = True
                 if chunk_callback:
                     chunk_callback(token)
             result["text"] = full_text.strip()
@@ -317,8 +339,9 @@ def _run_stream_with_timeout(
     t.join(timeout=join_timeout)
 
     if not result["done"]:
-        logger.warning(f"[llm_utils] stream timeout after {join_timeout}s")
-        raise RuntimeError(f"LLM 流式调用超时（{join_timeout}秒）")
+        stop.set()
+        logger.warning(f"[llm_utils] stream timeout after {join_timeout}s (partial={result['started']})")
+        raise StreamTimeoutError(f"LLM 流式调用超时（{join_timeout}秒）", partial=result["started"])
 
     stream_error = result["error"]
     if stream_error is not None:

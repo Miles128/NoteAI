@@ -154,6 +154,3 @@ def test_semantic_workbench_reuses_native_three_columns() -> None:
     assert 'id="semantic-list-pane"' in note_panel
     assert 'id="semantic-workbench-detail"' in content_panel
     assert "semantic-category-pane" not in html
-
-
-

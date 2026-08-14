@@ -1,4 +1,5 @@
 """Knowledge base utilities: lint, cascade queue."""
+
 from sidecar.cascade_runner import (
     clear_cascade_failure,
     load_cascade_failures,

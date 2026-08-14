@@ -485,9 +485,7 @@ class SemanticHandler(BaseHandler):
         try:
             from sidecar.semantic.claim_verifier import verify_claim_via_cli
 
-            result = verify_claim_via_cli(
-                store, claim, agent_id=agent_id, send_event=self._send_response
-            )
+            result = verify_claim_via_cli(store, claim, agent_id=agent_id, send_event=self._send_response)
             if result.get("success"):
                 # 只保留原始输出尾部，避免超大 RPC 响应
                 result["output"] = (result.get("output") or "")[-2000:]

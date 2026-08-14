@@ -364,6 +364,7 @@ class TestVerifyClaimViaLlm:
             )
         )
         config.workspace_path = previous
+
     def test_routes_to_llm_method(self, handler, monkeypatch: pytest.MonkeyPatch) -> None:
         """method='llm' 必须走 verify_claim_via_llm 而非 CLI 通道。"""
         calls: list[dict] = []
@@ -397,9 +398,14 @@ class TestVerifyClaimViaLlm:
 
         def fake_stream(prompt, temperature=0.7, max_tokens=None, chunk_callback=None, disable_thinking=None):
             assert disable_thinking is False  # 命题核查必须走 reasoning
-            for piece in ('{"results": [{"claim_id": 1, "verdict": "refuted", "confid', 'ence": 0.9, "reason": "存在反例"}]}'):
+            for piece in (
+                '{"results": [{"claim_id": 1, "verdict": "refuted", "confid',
+                'ence": 0.9, "reason": "存在反例"}]}',
+            ):
                 chunk_callback(piece)
-            return json.dumps({"results": [{"claim_id": 1, "verdict": "refuted", "confidence": 0.9, "reason": "存在反例"}]})
+            return json.dumps(
+                {"results": [{"claim_id": 1, "verdict": "refuted", "confidence": 0.9, "reason": "存在反例"}]}
+            )
 
         monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
         claim = _claim(store, "claim-1")

@@ -50,9 +50,7 @@ def _scope_filter(scope: str, filter_path: str) -> tuple[str, list[Any]]:
     return "1=1", []
 
 
-def _load_top_objects(
-    conn, scope: str, filter_path: str, limit: int
-) -> tuple[list[dict[str, Any]], dict[str, str]]:
+def _load_top_objects(conn, scope: str, filter_path: str, limit: int) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """按 scope 取 Top N 对象（mentions 计数），返回 (对象列表, kind 映射)。"""
     scope_sql, scope_args = _scope_filter(scope, filter_path)
     rows = conn.execute(
@@ -256,7 +254,9 @@ def get_semantic_graph_data(
             if include_docs:
                 doc_nodes = _load_doc_nodes(conn, objects, scope, filter_path, max_docs)
                 objects.extend(doc_nodes)
-                edges += _load_document_edges(conn, objects[: len(objects) - len(doc_nodes)], scope, filter_path, max_docs)
+                edges += _load_document_edges(
+                    conn, objects[: len(objects) - len(doc_nodes)], scope, filter_path, max_docs
+                )
     except Exception:
         raise
 

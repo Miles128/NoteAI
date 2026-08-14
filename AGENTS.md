@@ -82,7 +82,7 @@ Tauri v2 shell (src-tauri/)
 
 **通信流程**：前端 JS → `window.api`（Tauri invoke）→ Rust → 拉起 Python sidecar → stdin/stdout JSON-RPC → `server.py:main()` 逐行读取，通过 `RpcRouter` 分发。
 
-**Python sidecar**（`python/sidecar/server.py`）：`SidecarServer` 实例化 17 个 handler（cli_agent、component、config、files、ingest、intel、job、kb、links、mcp_config、rag、reliability、semantic、tags、topics、transfer、workspace），每个都是 `BaseHandler` 的子类。`BaseHandler` 通过显式 `@property` 访问器代理 server 属性（如 `config`、`_send_response`、`_resolve_path`、`_link_discovery_lock`）——handler 需要访问新的 server 属性时，在 `base.py` 中添加 property。每个 handler 通过 `RpcRouter` 注册路由。
+**Python sidecar**（`python/sidecar/server.py`）：`SidecarServer` 实例化 16 个 handler（cli_agent、component、config、files、ingest、intel、job、kb、links、rag、reliability、semantic、tags、topics、transfer、workspace），每个都是 `BaseHandler` 的子类。`BaseHandler` 通过显式 `@property` 访问器代理 server 属性（如 `config`、`_send_response`、`_resolve_path`、`_link_discovery_lock`）——handler 需要访问新的 server 属性时，在 `base.py` 中添加 property。每个 handler 通过 `RpcRouter` 注册路由。
 
 **请求分流**（`python/sidecar/intent_router.py`）：RAG 对话先经意图路由分类（问答/整理/闲聊等），再分发给对应链路；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
@@ -112,7 +112,7 @@ Tauri v2 shell (src-tauri/)
 - **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层解析/CRUD 辅助函数在 `utils/wiki_manager.py`、`utils/wiki_crud.py`、`utils/wiki_sync.py`。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
 - **命题验证**（`python/sidecar/semantic/claim_verifier.py`）：基于同主题活跃证据交叉验证命题，结果写入 `claim_verifications` 表，语义工作台展示验证结论；抽取提示词见 `prompts/yaml/claim_verify.yaml`。
-- **笔记合并建议**（`utils/note_merge_analyzer.py`，RPC `get_note_merge_suggestions`）：利用 RAG 索引（zvec 向量相似度）与语义库（实体/概念共享计数）分析笔记合并候选，分级 A（≥0.96 同源）/B（≥0.92 深度重叠）/C（≥0.85 主题关联）。只读分析；索引被占用或未建立时优雅降级；stale 过滤（索引中已删除/移动的文件剔除）。执行合并走 `merge_suggested_notes` RPC，复用 `sidecar/duplicate_review.py` 的 `merge_note_group`（LLM 整合 + send2trash 删除 + .links.json 链接重定向）。注意：`chunk_similarity.py` 是另一条既有向量相似度路径（`scan_merge_candidates`，chunk 级图），与文档级建议互补不重复。
+- **归档目录**（`docs/archive/`）：一次性迁移脚本（`docs/archive/scripts/`）与过期的分析文档统一归档于此，ruff/mypy 已排除该目录。
 - **RAG 端点**除 LLM 信号量外无额外速率限制。
 
 ## 6. 项目记忆

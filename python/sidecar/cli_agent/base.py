@@ -117,8 +117,10 @@ class BaseCliAgent(ABC):
         skip_permissions: bool = True,
         *,
         continue_session: bool = False,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> list[str]:
-        """构建传给 CLI 的参数列表（不含命令本身）。"""
+        """构建传给 CLI 的参数列表（不含命令本身）。model/variant 仅部分 agent 支持。"""
 
     def build_env(self) -> dict[str, str]:
         """构建子进程环境变量。"""
@@ -174,8 +176,18 @@ class BaseCliAgent(ABC):
         skip_permissions: bool = True,
         *,
         new_session: bool = False,
+        timeout: float | None = None,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> AgentResult:
-        """统一执行入口：解析命令、校验、启动子进程、流式输出、超时控制。"""
+        """统一执行入口：解析命令、校验、启动子进程、流式输出、超时控制。
+
+        timeout：None=仅警告不杀进程（CLI 对话长任务默认）；传秒数则硬超时强杀，
+        用于 RPC 有超时窗口的短任务（如命题真伪核查，须在 Rust 侧超时前返回）。
+        model：固定 CLI agent 模型（仅支持 -m 的 agent 生效），
+        用于规避默认路由随机选到不可用/极慢模型的场景。
+        variant：推理强度（如 high/max/minimal），仅支持 --variant 的 agent 生效。
+        """
         from sidecar.cli_agent.session_store import (
             clear_session,
             has_session,
@@ -220,6 +232,8 @@ class BaseCliAgent(ABC):
                 ws_path,
                 skip_permissions,
                 continue_session=continue_session,
+                model=model,
+                variant=variant,
             )
         except ValueError as e:
             return AgentResult(False, f"参数构建失败: {e}")
@@ -256,7 +270,7 @@ class BaseCliAgent(ABC):
 
             handle = register(proc, self.agent_id, self.display_name)
             try:
-                killed = self._stream_output(proc, send_event, handle)
+                killed = self._stream_output(proc, send_event, handle, timeout=timeout)
             finally:
                 clear(handle)
             output = killed.get("output", "")
@@ -329,6 +343,8 @@ class BaseCliAgent(ABC):
         proc: subprocess.Popen[str],
         send_event: EventEmitter | None,
         handle: CliProcessHandle,
+        *,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         """读取子进程输出并发送事件，返回 {reason, output}。"""
         killed: dict[str, Any] = {"reason": None, "output": ""}
@@ -339,6 +355,7 @@ class BaseCliAgent(ABC):
             self.idle_timeout_s,
             self.total_timeout_s,
             lambda event: self._emit(event, send_event),
+            hard_timeout_s=timeout,
         )
         watcher.start()
 

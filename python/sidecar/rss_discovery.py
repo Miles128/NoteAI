@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from prompts import RSS_DISCOVERY_PROMPT, DEEPSEEK_WEB_DISCOVERY_PROMPT
+from prompts import DEEPSEEK_WEB_DISCOVERY_PROMPT, RSS_DISCOVERY_PROMPT
 from sidecar.multi_source import _fetch_rss, _rss_title, load_subscriptions
 
 # 内置 AI 主题候选源（name | url | topics 标签）
@@ -163,6 +163,7 @@ def _deepseek_web_discovery(topics: list[str]) -> list[dict]:
     if "deepseek.com" not in (config.api_base or ""):
         return []
     import json as _json
+
     import requests as _requests
 
     payload = {

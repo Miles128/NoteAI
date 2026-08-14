@@ -170,7 +170,7 @@ class TestVerifyClaimViaCli:
         )
         monkeypatch.setattr(
             "sidecar.cli_agent.registry.run_cli_agent",
-            lambda agent_id, prompt, send_event=None: {
+            lambda agent_id, prompt, send_event=None, timeout=None, model=None, variant=None: {
                 "success": True,
                 "message": "",
                 "output": (
@@ -195,7 +195,7 @@ class TestVerifyClaimViaCli:
         )
         monkeypatch.setattr(
             "sidecar.cli_agent.registry.run_cli_agent",
-            lambda agent_id, prompt, send_event=None: {
+            lambda agent_id, prompt, send_event=None, timeout=None, model=None, variant=None: {
                 "success": False,
                 "message": "claude 未安装",
                 "output": "",
@@ -212,7 +212,7 @@ class TestVerifyClaimViaCli:
         )
         monkeypatch.setattr(
             "sidecar.cli_agent.registry.run_cli_agent",
-            lambda agent_id, prompt, send_event=None: {
+            lambda agent_id, prompt, send_event=None, timeout=None, model=None, variant=None: {
                 "success": True,
                 "message": "",
                 "output": "研究完毕，无结构化输出",
@@ -251,7 +251,12 @@ class TestHandlerAttachesVerification:
     def handler(self, store: SemanticStore):
         previous = config.workspace_path
         config.workspace_path = str(store.workspace)
-        yield SemanticHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+        yield SemanticHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _send_response=lambda *args: None,
+            )
+        )
         config.workspace_path = previous
 
     def test_claim_list_and_detail_carry_verification(self, handler: SemanticHandler) -> None:
@@ -287,7 +292,12 @@ class TestVerifyClaimRpc:
     def handler(self, store: SemanticStore):
         previous = config.workspace_path
         config.workspace_path = str(store.workspace)
-        yield SemanticHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
+        yield SemanticHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _send_response=lambda *args: None,
+            )
+        )
         config.workspace_path = previous
 
     def test_requires_id_and_agent(self, handler: SemanticHandler) -> None:
@@ -340,3 +350,64 @@ class TestVerifyClaimRpc:
         result = handler._verify_claim({"id": "claim-1", "agent": "claude"})
         assert result["success"] is False
         assert "未安装" in result["message"]
+
+
+class TestVerifyClaimViaLlm:
+    @pytest.fixture
+    def handler(self, store: SemanticStore):
+        previous = config.workspace_path
+        config.workspace_path = str(store.workspace)
+        yield SemanticHandler(
+            SimpleNamespace(
+                _ctx=SimpleNamespace(config=config, logger=None),
+                _send_response=lambda *args: None,
+            )
+        )
+        config.workspace_path = previous
+    def test_routes_to_llm_method(self, handler, monkeypatch: pytest.MonkeyPatch) -> None:
+        """method='llm' 必须走 verify_claim_via_llm 而非 CLI 通道。"""
+        calls: list[dict] = []
+
+        def fake_llm(store, claim, *, send_event=None):
+            calls.append({"claim_id": claim["id"], "send_event": send_event})
+            verification = store.save_claim_verification(
+                claim_id=claim["id"],
+                verdict="unclear",
+                confidence=0.6,
+                summary="证据不足",
+                method="llm",
+                agent="api",
+            )
+            return {"success": True, "verification": verification}
+
+        monkeypatch.setattr(
+            "sidecar.semantic.claim_verifier.verify_claim_via_llm",
+            fake_llm,
+        )
+        result = handler._verify_claim({"id": "claim-1", "agent": "api", "method": "llm"})
+        assert result["success"] is True
+        assert calls == [{"claim_id": "claim-1", "send_event": handler._send_response}]
+        assert handler._store().latest_claim_verification("claim-1")["method"] == "llm"
+
+    def test_stream_events_and_save(self, store: SemanticStore, monkeypatch: pytest.MonkeyPatch) -> None:
+        """verify_claim_via_llm 流式推送 verify_llm_* 事件并落库 method='llm'。"""
+        from sidecar.semantic import claim_verifier
+
+        events: list[dict] = []
+
+        def fake_stream(prompt, temperature=0.7, max_tokens=None, chunk_callback=None, disable_thinking=None):
+            assert disable_thinking is False  # 命题核查必须走 reasoning
+            for piece in ('{"results": [{"claim_id": 1, "verdict": "refuted", "confid', 'ence": 0.9, "reason": "存在反例"}]}'):
+                chunk_callback(piece)
+            return json.dumps({"results": [{"claim_id": 1, "verdict": "refuted", "confidence": 0.9, "reason": "存在反例"}]})
+
+        monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
+        claim = _claim(store, "claim-1")
+        result = claim_verifier.verify_claim_via_llm(store, claim, send_event=events.append)
+        assert result["success"] is True
+        assert store.latest_claim_verification("claim-1")["verdict"] == "refuted"
+        assert store.latest_claim_verification("claim-1")["agent"] == "api"
+        types = [e["type"] for e in events]
+        assert "verify_llm_start" in types
+        assert "verify_llm_output" in types
+        assert "verify_llm_done" in types

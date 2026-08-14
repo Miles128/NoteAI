@@ -228,8 +228,14 @@ def call_llm_raw(
     prompt_text: str,
     temperature: float = 0.7,
     max_tokens: int | None = None,
+    disable_thinking: bool | None = None,
 ) -> str:
-    """统一 LLM 调用入口（原始文本模式），带指数退避重试。"""
+    """统一 LLM 调用入口（原始文本模式），带指数退避重试。
+
+    disable_thinking：None=跟随全局 config.disable_thinking；
+    True/False=强制禁用/启用推理模式（仅对 deepseek.com 生效）。
+    判断类任务（命题真伪核查等）应显式传 False 走 reasoning。
+    """
     if not prompt_text:
         return ""
 
@@ -239,7 +245,7 @@ def call_llm_raw(
     prompt_text = _clamp_prompt_text(prompt_text, budget, config.model_name)
 
     def _invoke():
-        llm = _create_llm(temperature, max_tokens)
+        llm = _create_llm(temperature, max_tokens, disable_thinking=disable_thinking)
         return llm.invoke(prompt_text)
 
     response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
@@ -253,8 +259,13 @@ def call_llm_raw_stream(
     temperature: float = 0.7,
     max_tokens: int | None = None,
     chunk_callback=None,
+    disable_thinking: bool | None = None,
 ) -> str:
-    """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。带重试。"""
+    """流式原始文本 LLM 调用，通过 chunk_callback(token) 推送每个 token。带重试。
+
+    disable_thinking：None=跟随全局 config.disable_thinking；
+    判断类任务（命题真伪核查等）应显式传 False 走 reasoning。
+    """
     is_valid, error_msg = check_api_config()
     if not is_valid:
         raise RuntimeError(error_msg)
@@ -268,7 +279,7 @@ def call_llm_raw_stream(
     prompt_text = _clamp_prompt_text(prompt_text, budget, config.model_name)
 
     def _invoke():
-        return _do_stream(prompt_text, temperature, max_tokens, chunk_callback)
+        return _do_stream(prompt_text, temperature, max_tokens, chunk_callback, disable_thinking)
 
     return _retry_with_backoff(_invoke)
 
@@ -316,10 +327,10 @@ def _run_stream_with_timeout(
     return result["text"]
 
 
-def _do_stream(prompt_text, temperature, max_tokens, chunk_callback):
+def _do_stream(prompt_text, temperature, max_tokens, chunk_callback, disable_thinking=None):
     def _stream():
         logger.info(f"LLM stream starting, prompt length: {len(prompt_text)}")
-        llm = _create_llm(temperature, max_tokens)
+        llm = _create_llm(temperature, max_tokens, disable_thinking=disable_thinking)
         return llm.stream(prompt_text)
 
     text = _run_stream_with_timeout(_stream, chunk_callback)

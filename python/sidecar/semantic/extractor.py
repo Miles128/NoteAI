@@ -21,7 +21,7 @@ from sidecar.semantic.english_common_words import _COMMON_ENGLISH_WORDS
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 8
+PROMPT_VERSION = 9
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
 # variant-spelling dedup rules are spelled out so the model never emits them
 # in the first place. validate_extraction below remains the hard fallback.
@@ -73,6 +73,24 @@ _SUBJECTIVE_COMPARATIVE_RE = re.compile(
     r"(?:the\s+)?best(?:est)?\b|strongest|easiest|most\s+popular|most\s+friendly|highly\s+recommended)",
     re.IGNORECASE,
 )
+
+# 格言/口号式短句（过度简单命题）：全中文、无英文/数字/引号，长度 ≤ 16，
+# 只含抽象概念的“X 比 Y 更重要/更强”“X 远高于 Y”式判断（选择比努力更重要、
+# 压缩比扩展更重要、少而精比多而杂强、分步构建比一步到位更好、切换成本远高于模型差价）。
+# 这类陈述没有适用对象与场景，既不可证实也不可证伪，是结论标记词表过宽的漏网之鱼。
+# 技术名（GPT-4o、RAG、通义千问）含英文/数字/标点，不会命中。
+_TRIVIAL_APHORISM_RE = re.compile(
+    r"^[\u4e00-\u9fff，,]{2,16}"
+    r"(?:比[\u4e00-\u9fff]{1,8}(?:更|较)?(?:重要|好|强|优|差|有效|值得|实在|划算|便宜|高效|清晰)|"
+    r"(?:远)?高于[\u4e00-\u9fff]{1,8})[。！!]?$"
+)
+
+# 产品功能/系统行为描述（忠实度下降自动告警、负载过高自动降级）：只是复述
+# 系统动作，不构成评价/因果/趋势结论；“自动 X”模式是提示词漏拦的伪命题来源。
+_TRIVIAL_BEHAVIOR_RE = re.compile(
+    r"^[\u4e00-\u9fffA-Za-z0-9]{2,16}自动(?:告警|报警|触发|执行|识别|检测|生成|保存|记录|上报|恢复|降级|切换|汇总|同步|重试)[。！!]?$"
+)
+
 
 # 噪声对象名确定性过滤：拦截把文件名、章节标题、纯符号/数字等抽成实体/概念。
 _FILE_SUFFIX_RE = re.compile(
@@ -426,6 +444,10 @@ def _claim_has_required_judgment(statement: str, claim_type: str) -> bool:
         return False
     if _SUBJECTIVE_COMPARATIVE_RE.search(statement):
         return False  # 主观评价/价值判断（最强大、更好用、优先级 P1）非事实结论
+    if _TRIVIAL_APHORISM_RE.match(statement):
+        return False  # 格言/口号式短句（选择比努力更重要）过度简单，无对象与场景
+    if _TRIVIAL_BEHAVIOR_RE.match(statement):
+        return False  # 产品功能/系统行为描述（XX 自动告警）不是结论
     if claim_type == "hypothesis":
         return _HYPOTHESIS_MARKERS.search(statement) is not None
     return _CONCLUSION_MARKERS.search(statement) is not None
@@ -526,7 +548,11 @@ def validate_extraction(
                 rejections["claims_no_type"] = rejections.get("claims_no_type", 0) + 1
             continue
         if not _claim_has_required_judgment(statement, claim_type):
-            if rejections is not None:
+            if _TRIVIAL_APHORISM_RE.match(statement):
+                rejections["claims_trivial_aphorism"] = rejections.get("claims_trivial_aphorism", 0) + 1
+            elif _TRIVIAL_BEHAVIOR_RE.match(statement):
+                rejections["claims_trivial_behavior"] = rejections.get("claims_trivial_behavior", 0) + 1
+            elif rejections is not None:
                 rejections["claims_no_judgment"] = rejections.get("claims_no_judgment", 0) + 1
             continue
         if not quote:
@@ -813,6 +839,8 @@ def extract_document_semantics(
             f"(no_statement={rejections.get('claims_no_statement', 0)}, "
             f"no_type={rejections.get('claims_no_type', 0)}, "
             f"no_judgment={rejections.get('claims_no_judgment', 0)}, "
+            f"trivial_aphorism={rejections.get('claims_trivial_aphorism', 0)}, "
+            f"trivial_behavior={rejections.get('claims_trivial_behavior', 0)}, "
             f"no_quote={rejections.get('claims_no_quote', 0)}, "
             f"quote_mismatch={rejections.get('claims_quote_mismatch', 0)}, "
             f"bad_confidence={rejections.get('claims_bad_confidence', 0)})"

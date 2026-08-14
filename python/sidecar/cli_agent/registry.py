@@ -63,6 +63,9 @@ class AgentRegistry:
         skip_permissions: bool = True,
         *,
         new_session: bool = False,
+        timeout: float | None = None,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> dict[str, Any]:
         """执行指定 agent。"""
         agent = self._get(agent_id)
@@ -77,6 +80,9 @@ class AgentRegistry:
             send_event=send_event,
             skip_permissions=skip_permissions,
             new_session=new_session,
+            timeout=timeout,
+            model=model,
+            variant=variant,
         )
         return result.to_dict()
 
@@ -106,6 +112,9 @@ def run_cli_agent(
     skip_permissions: bool = True,
     *,
     new_session: bool = False,
+    timeout: float | None = None,
+    model: str | None = None,
+    variant: str | None = None,
 ) -> dict[str, Any]:
     """启动 CLI agent 处理用户请求。"""
     return get_registry().run(
@@ -115,4 +124,7 @@ def run_cli_agent(
         send_event=send_event,
         skip_permissions=skip_permissions,
         new_session=new_session,
+        timeout=timeout,
+        model=model,
+        variant=variant,
     )

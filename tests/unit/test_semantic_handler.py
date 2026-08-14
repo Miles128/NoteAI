@@ -243,52 +243,6 @@ def test_cross_kind_duplicate_rule_preview_and_batch_enqueue(semantic_handler: S
     assert preview["impact"]["concept-2"]["mentions"] == 1
 
 
-def test_claims_batch_verify_writes_verifications(semantic_handler: SemanticHandler) -> None:
-    """内置 LLM 批量核查：verdict 写入 claim_verifications（method='llm'）。"""
-    from sidecar.semantic.claim_verifier import parse_batch_verification_json, verify_claims_batch
-
-    parsed = parse_batch_verification_json(
-        '```json\n{"results": [{"claim_id": 1, "verdict": "supported", "confidence": 0.9}, '
-        '{"claim_id": 2, "verdict": "refuted", "confidence": 0.7, "reason": "有反例"}]}\n```'
-    )
-    assert parsed[1]["verdict"] == "supported"
-    assert parsed[2]["verdict"] == "refuted" and parsed[2]["reason"] == "有反例"
-    # 非法 verdict 被丢弃
-    assert 3 not in parse_batch_verification_json('{"results": [{"claim_id": 3, "verdict": "nope"}]}')
-
-    store = SemanticStore(semantic_handler.config.workspace_path)
-
-    def fake_llm(_prompt: str) -> str:
-        return '{"results": [{"claim_id": 1, "verdict": "refuted", "confidence": 0.8, "reason": "反例"}]}'
-
-    claims = [{"id": "claim-1", "statement": "混合检索结合向量与关键词。", "scope": "RAG"}]
-    result = verify_claims_batch(store, claims, llm_call=fake_llm)
-    assert result["success"] is True
-    assert result["stats"]["refuted"] == 1
-    with store.connect() as conn:
-        row = conn.execute(
-            "SELECT verdict, confidence, method, agent, summary FROM claim_verifications WHERE claim_id = 'claim-1'"
-        ).fetchone()
-        assert row is not None
-        assert row["verdict"] == "refuted"
-        assert row["method"] == "llm"
-        assert row["agent"] == "builtin"
-        assert row["summary"] == "反例"
-
-
-def test_claims_batch_verify_rpc_filters_by_scope(semantic_handler: SemanticHandler) -> None:
-    """RPC 入口：scope 过滤 + limit，返回统计。"""
-    from unittest.mock import patch
-
-    with patch("sidecar.semantic.claim_verifier.verify_claims_batch") as mock_verify:
-        mock_verify.return_value = {"success": True, "total": 1, "outcomes": [], "stats": {"supported": 1}}
-        result = semantic_handler._verify_claims_batch({"scope": "RAG", "limit": 5})
-        assert result["success"] is True
-        called_claims = mock_verify.call_args[0][1]
-        assert len(called_claims) <= 5
-        assert all("rag" in str(c.get("scope", "")).casefold() for c in called_claims)
-
-
 def test_quality_flags_lowercase_english_word_entities(semantic_handler: SemanticHandler) -> None:
     """type=other 的全小写普通英文词实体被标记为疑似分类错误。"""
     store = SemanticStore(semantic_handler.config.workspace_path)

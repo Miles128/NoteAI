@@ -13,7 +13,7 @@ from config import config
 
 
 def test_strip_sentinel_parses_suggestions():
-    answer = '这是回答正文。\n【存档建议】否\nSUGGESTIONS_JSON:["再讲讲细节", "有例子吗"]'
+    answer = '这是回答正文。\nSUGGESTIONS_JSON:["再讲讲细节", "有例子吗"]'
     body, suggestions = RagHandler._strip_suggestions_sentinel(answer)
     assert "这是回答正文" in body
     assert "SUGGESTIONS_JSON" not in body

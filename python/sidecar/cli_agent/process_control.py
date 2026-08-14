@@ -63,7 +63,7 @@ def stop_active() -> dict[str, Any]:
 
 
 class TimeoutWatcher:
-    """Monitor runtime; warn on thresholds but do not kill unless user stops."""
+    """Monitor runtime; warn on thresholds; kill only when hard_timeout_s set."""
 
     def __init__(
         self,
@@ -71,11 +71,14 @@ class TimeoutWatcher:
         idle_timeout_s: float,
         total_timeout_s: float,
         emit: EmitFn | None,
+        *,
+        hard_timeout_s: float | None = None,
     ) -> None:
         self.handle = handle
         self.idle_timeout_s = idle_timeout_s
         self.total_timeout_s = total_timeout_s
         self.emit = emit
+        self.hard_timeout_s = hard_timeout_s
         self.last_output_time = time.time()
         self.start_time = self.last_output_time
         self.kill_reason: str | None = None
@@ -105,6 +108,13 @@ class TimeoutWatcher:
             if now - self.start_time > self.total_timeout_s and not self.handle.total_warned:
                 self.handle.total_warned = True
                 self._emit_warning("total", int(self.total_timeout_s))
+            if self.hard_timeout_s is not None and now - self.start_time > self.hard_timeout_s:
+                self.kill_reason = f"运行超过 {int(self.hard_timeout_s)} 秒，已自动终止"
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                return
             time.sleep(1.0)
 
     def _emit_warning(self, kind: str, seconds: int) -> None:

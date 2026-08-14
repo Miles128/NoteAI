@@ -156,15 +156,4 @@ def test_semantic_workbench_reuses_native_three_columns() -> None:
     assert "semantic-category-pane" not in html
 
 
-def test_assistant_save_flow_previews_destination_and_preserves_citations() -> None:
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    assistant_js = (WEBUI / "js" / "assistant.js").read_text(encoding="utf-8")
 
-    assert 'id="assistant-save-modal"' in html
-    assert 'id="assistant-save-path"' in html
-    assert 'id="assistant-save-content"' in html
-    assert 'id="assistant-save-confirm"' in html
-    assert "_lastArchive.citations = eventData.citations || []" in assistant_js
-    assert "citations: archive.citations || []" in assistant_js
-    assert "preview_only: previewOnly === true" in assistant_js
-    assert "_openSavePreview(archive, target" in assistant_js

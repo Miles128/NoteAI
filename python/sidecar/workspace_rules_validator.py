@@ -69,16 +69,6 @@ def check_wiki_writable(action: str = "") -> tuple[bool, str]:
     return True, ""
 
 
-def check_notes_writable(action: str = "") -> tuple[bool, str]:
-    ok, msg = check_rules_ready()
-    if not ok:
-        return False, msg
-    if not load_workspace_rules().get("ai_may_edit_notes"):
-        hint = f"：{action}" if action else ""
-        return False, f"工作区规则禁止 AI 修改 Notes 正文{hint}"
-    return True, ""
-
-
 def require_topic(topic: str) -> tuple[bool, str]:
     ok, msg = check_rules_ready()
     if not ok:

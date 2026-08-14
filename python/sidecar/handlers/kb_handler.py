@@ -1,6 +1,4 @@
-"""Knowledge base utilities: lint, chat archive, cascade queue."""
-
-from sidecar.archive_wiki import archive_chat_answer
+"""Knowledge base utilities: lint, cascade queue."""
 from sidecar.cascade_runner import (
     clear_cascade_failure,
     load_cascade_failures,
@@ -20,7 +18,6 @@ class KbHandler(BaseHandler):
         router.register("merge_duplicate_notes", self._merge_duplicate_notes)
         router.register("merge_note_group", self._merge_note_group)
         router.register("scan_merge_candidates", self._scan_merge_candidates)
-        router.register("archive_chat_answer", self._archive_chat_answer)
         router.register("retry_cascade_topic", self._retry_cascade_topic)
         router.register("retry_all_cascade_failures", self._retry_all_cascade_failures)
         router.register("dismiss_cascade_failure", self._dismiss_cascade_failure)
@@ -94,18 +91,6 @@ class KbHandler(BaseHandler):
             workspace,
             preset=str(params.get("preset") or "balanced"),
             rules=overrides or None,
-        )
-
-    def _archive_chat_answer(self, params):
-        return archive_chat_answer(
-            question=params.get("question", ""),
-            answer=params.get("answer", ""),
-            topic=params.get("topic", ""),
-            title=params.get("title", ""),
-            target=params.get("target", "note"),
-            context_file=params.get("context_file", ""),
-            citations=params.get("citations") or [],
-            preview_only=params.get("preview_only") is True,
         )
 
     def _retry_cascade_topic(self, params):

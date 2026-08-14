@@ -324,7 +324,9 @@ function renderList() {
         var title = item.canonical_name || item.statement || item.reason || linkTitle(item);
         var description = item.description || item.scope || conflictSummary(item) || item.reason || '';
         var meta = listMeta(item);
-        return '<button type="button" class="semantic-list-item' + (index === _selectedIndex ? ' active' : '') + '" data-semantic-index="' + index + '"><strong>' + esc(title) + '</strong>' + (description ? '<p>' + esc(description) + '</p>' : '') + '<span class="semantic-list-item-meta">' + meta + '</span></button>';
+        var cls = 'semantic-list-item' + (index === _selectedIndex ? ' active' : '');
+        if (_category === 'claims' && needsResearch(item)) cls += ' needs-verify';
+        return '<button type="button" class="' + cls + '" data-semantic-index="' + index + '"><strong>' + esc(title) + '</strong>' + (description ? '<p>' + esc(description) + '</p>' : '') + '<span class="semantic-list-item-meta">' + meta + '</span></button>';
     }).join('');
     list.innerHTML = html;
     if (_degradedHidden > 0 && _category === 'objects') {
@@ -343,6 +345,12 @@ function linkTitle(item) { return shortPath(item.from) + ' → ' + shortPath(ite
 function shortPath(path) { var parts = String(path || '').split('/'); return parts[parts.length - 1] || path || ''; }
 function conflictSummary(item) { var p = item.payload || {}; return p.claim_a || p.left_statement || p.statement_a || ''; }
 
+function needsResearch(item) {
+    if (!item.verification) return true;
+    if (item.verification.verdict === 'unclear') return true;
+    return false;
+}
+
 function selectItem(index) {
     if (!_items[index]) return;
     _selectedIndex = index;
@@ -351,6 +359,23 @@ function selectItem(index) {
     if (_category === 'objects' || _category === 'claims') loadDetail(item);
     else if (_category === 'quality') renderQualityDetail(item);
     else renderLocalDetail(item);
+    if (_category === 'claims' && needsResearch(item) && !_verifiedInSession[item.id]) {
+        if (_autoVerifyTimer) {
+            clearTimeout(_autoVerifyTimer);
+            _autoVerifyTimer = null;
+        }
+        _autoVerifyClaimId = item.id;
+        _autoVerifyTimer = setTimeout(function() {
+            _autoVerifyTimer = null;
+            if (_autoVerifyClaimId !== item.id) return;
+            _autoVerifyClaimId = null;
+            if (!_activeDetail || _activeDetail.id !== item.id || _verifyRunning) return;
+            _verifiedInSession[item.id] = true;
+            verifyClaim(null, '__llm__');
+        }, 350);
+    } else if (!_verifyRunning) {
+        resetVerifyStream();
+    }
 }
 
 function loadDetail(item) {
@@ -401,6 +426,7 @@ function renderObjectDetail(kind, item) {
     var relatedSection = (kind === 'entity' || kind === 'concept') ? '<section class="semantic-detail-section"><h3>' + esc(t('semantic.related')) + '</h3>' + (related || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' : '';
     var verificationSection = kind === 'claim' ? renderVerifications(item) : '';
     detail.innerHTML = '<div class="semantic-detail-inner"><p class="semantic-detail-kicker">' + esc(kicker) + '</p><h2>' + esc(title) + '</h2>' + (description ? '<p class="semantic-detail-description">' + esc(description) + '</p>' : '') + '<div class="semantic-detail-meta">' + status + '<span>' + esc(typeLabel) + '</span><span>' + Math.round((item.confidence || 0) * 100) + '%</span><span>' + esc(t('semantic.sources', { count: sources.length })) + '</span></div>' + controls + verificationSection + relatedSection + '<section class="semantic-detail-section"><h3>' + esc(t(kind === 'claim' ? 'semantic.evidenceTitle' : 'semantic.sourceLocations')) + '</h3>' + (sourceHtml || '<div class="semantic-empty">' + esc(t('semantic.empty')) + '</div>') + '</section>' + audit + '</div>';
+    if (kind === 'claim' && _verifyStreamText) ensureVerifyStream();
 }
 
 function renderClaimControls(item) {
@@ -410,8 +436,8 @@ function renderClaimControls(item) {
         : '<button class="danger" data-claim-status="deleted">' + esc(t('semantic.deleteClaim')) + '</button>';
     var topic = ((item.sources || [])[0] || {}).topic || '';
     var pageActions = topic ? '<button data-preview-topic-page="' + esc(topic) + '">' + esc(t('semantic.previewTopicPage')) + '</button><button data-publish-topic-page="' + esc(topic) + '">' + esc(t('semantic.publishTopicPage')) + '</button>' : '';
-    var verifyControl = !deleted && _verifyAgents.length
-        ? '<select data-verify-agent>' + _verifyAgents.map(function(agent) { return '<option value="' + esc(agent.id) + '">' + esc(agent.name || agent.id) + '</option>'; }).join('') + '</select><button data-verify-claim>' + esc(t('semantic.verifyClaim')) + '</button>'
+    var verifyControl = !deleted
+        ? '<select data-verify-agent><option value="__llm__">' + esc(t('semantic.verifyViaLlm')) + '</option>' + _verifyAgents.map(function(agent) { return '<option value="' + esc(agent.id) + '">' + esc(agent.name || agent.id) + '</option>'; }).join('') + '</select><button data-verify-claim>' + esc(t('semantic.verifyClaim')) + '</button>'
         : '';
     return '<div class="semantic-actions">' + verifyControl + '<button data-edit-claim>' + esc(t('semantic.editClaim')) + '</button>' + statusButton + pageActions + '</div>' +
         '<form class="semantic-claim-editor" hidden><label>' + esc(t('semantic.claimStatement')) + '<textarea name="statement" required>' + esc(item.statement || '') + '</textarea></label><label>' + esc(t('semantic.claimScope')) + '<input name="scope" value="' + esc(item.scope || '') + '"></label><label>' + esc(t('semantic.claimType')) + '<select name="claim_type"><option value="conclusion"' + (item.claim_type === 'conclusion' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.conclusion')) + '</option><option value="hypothesis"' + (item.claim_type === 'hypothesis' ? ' selected' : '') + '>' + esc(t('semantic.claimTypes.hypothesis')) + '</option></select></label><div class="semantic-actions"><button type="submit" class="primary">' + esc(t('common.save')) + '</button><button type="button" data-cancel-claim-edit>' + esc(t('common.cancel')) + '</button></div></form>';
@@ -426,28 +452,104 @@ function loadVerifyAgents() {
     }).catch(function() {});
 }
 
-function verifyClaim(button) {
-    if (!_activeDetail || !window.api.verifySemanticClaim) return;
-    var actions = button.closest('.semantic-actions');
-    var select = actions ? actions.querySelector('[data-verify-agent]') : null;
-    var agentId = select ? select.value : '';
-    if (!agentId) {
-        if (window.ToastModule) window.ToastModule.error(t('semantic.verifyNoAgent'));
-        return;
+var _verifyStreamUnlisten = null;
+var _verifyStreamEl = null;
+var _verifyStreamText = '';
+var _verifyRunning = false;
+var _verifiedInSession = {};
+var _autoVerifyClaimId = null;
+var _autoVerifyTimer = null;
+
+function ensureVerifyStream() {
+    var detail = document.getElementById('semantic-workbench-detail');
+    if (!detail) return null;
+    var panel = detail.querySelector('.semantic-verify-stream');
+    if (!panel) {
+        panel = document.createElement('section');
+        panel.className = 'semantic-verify-stream';
+        panel.innerHTML = '<h3>' + esc(t('semantic.verifyStreamTitle')) + '</h3><div class="semantic-verify-stream-body" aria-live="polite"></div>';
+        detail.appendChild(panel);
     }
-    var originalLabel = button.textContent;
-    button.disabled = true;
-    button.textContent = t('semantic.verifyRunning');
-    window.api.verifySemanticClaim(_activeDetail.id, agentId).then(function(result) {
+    _verifyStreamEl = panel;
+    var body = panel.querySelector('.semantic-verify-stream-body');
+    if (body) body.textContent = _verifyStreamText;
+    panel.classList.add('active');
+    panel.scrollTop = panel.scrollHeight;
+    return panel;
+}
+
+function appendVerifyStream(text) {
+    _verifyStreamText += text;
+    if (_verifyStreamEl) {
+        var body = _verifyStreamEl.querySelector('.semantic-verify-stream-body');
+        if (body) body.textContent = _verifyStreamText;
+        _verifyStreamEl.scrollTop = _verifyStreamEl.scrollHeight;
+    }
+}
+
+function resetVerifyStream() {
+    _verifyStreamText = '';
+    _verifyStreamEl = null;
+    var detail = document.getElementById('semantic-workbench-detail');
+    var panel = detail ? detail.querySelector('.semantic-verify-stream') : null;
+    if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+}
+
+function initVerifyStreamListener() {
+    if (_verifyStreamUnlisten) return;
+    var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
+    if (!eventAPI || typeof eventAPI.listen !== 'function') return;
+    eventAPI.listen('python-event', function(event) {
+        var data = event.payload;
+        if (!data || !data.type) return;
+        if (data.type === 'cli_agent_output' && _verifyStreamEl) {
+            appendVerifyStream(data.content || '');
+        } else if (data.type === 'verify_llm_output' && _verifyStreamEl) {
+            appendVerifyStream(data.content || '');
+        }
+    }).then(function(unlisten) { _verifyStreamUnlisten = unlisten; });
+}
+
+function verifyClaim(button, forceAgent) {
+    if (!_activeDetail || !window.api.verifySemanticClaim) return;
+    if (_verifyRunning) return;
+    var claimId = _activeDetail.id;
+    var actions = button ? button.closest('.semantic-actions') : null;
+    var select = actions ? actions.querySelector('[data-verify-agent]') : null;
+    var agentId = forceAgent || (select ? select.value : '') || '__llm__';
+    var method = 'cli';
+    if (agentId === '__llm__') {
+        agentId = 'api';
+        method = 'llm';
+    }
+    var originalLabel = button ? button.textContent : '';
+    var streamTitle = method === 'llm' ? t('semantic.verifyViaLlm') : agentId;
+    _verifyRunning = true;
+    if (button) {
+        button.disabled = true;
+        button.textContent = t('semantic.verifyRunning');
+    }
+    if (select) select.disabled = true;
+    ensureVerifyStream();
+    var statement = (_activeDetail.statement || '').replace(/\s+/g, ' ').slice(0, 48);
+    appendVerifyStream('\n>>> ' + streamTitle + ' ' + t('semantic.verifyStart') + ' · ' + (statement || claimId) + '\n');
+    window.api.verifySemanticClaim(claimId, agentId, method).then(function(result) {
         if (!result || !result.success) throw new Error(result && result.message ? result.message : t('common.unknownError'));
+        appendVerifyStream('\n>>> ' + t('semantic.verifyDone') + '\n');
         if (window.ToastModule) window.ToastModule.success(t('semantic.verifyDone'));
         loadList();
-        loadDetail(_activeDetail);
+        if (_activeDetail && _activeDetail.id === claimId) loadDetail(_activeDetail);
     }).catch(function(error) {
+        appendVerifyStream('\n>>> ' + t('semantic.verifyFailed') + ': ' + String(error.message || error) + '\n');
         if (window.ToastModule) window.ToastModule.error(String(error.message || error));
     }).finally(function() {
-        button.disabled = false;
-        button.textContent = originalLabel;
+        _verifyRunning = false;
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
+        if (select) select.disabled = false;
+        if (_verifyStreamText) ensureVerifyStream();
     });
 }
 
@@ -1024,6 +1126,7 @@ function init() {
     loadOverview();
     applyVisibilityConfig();
     loadVerifyAgents();
+    initVerifyStreamListener();
 }
 
 window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };

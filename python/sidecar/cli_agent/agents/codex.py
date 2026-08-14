@@ -24,6 +24,8 @@ class CodexAgent(BaseCliAgent):
         skip_permissions: bool = True,
         *,
         continue_session: bool = False,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> list[str]:
         scoped_prompt = append_workspace_boundary(
             prompt,

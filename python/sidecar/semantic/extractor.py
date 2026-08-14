@@ -549,9 +549,11 @@ def validate_extraction(
             continue
         if not _claim_has_required_judgment(statement, claim_type):
             if _TRIVIAL_APHORISM_RE.match(statement):
-                rejections["claims_trivial_aphorism"] = rejections.get("claims_trivial_aphorism", 0) + 1
+                if rejections is not None:
+                    rejections["claims_trivial_aphorism"] = rejections.get("claims_trivial_aphorism", 0) + 1
             elif _TRIVIAL_BEHAVIOR_RE.match(statement):
-                rejections["claims_trivial_behavior"] = rejections.get("claims_trivial_behavior", 0) + 1
+                if rejections is not None:
+                    rejections["claims_trivial_behavior"] = rejections.get("claims_trivial_behavior", 0) + 1
             elif rejections is not None:
                 rejections["claims_no_judgment"] = rejections.get("claims_no_judgment", 0) + 1
             continue

@@ -46,6 +46,8 @@ class ClaudeMcpAgent(BaseCliAgent):
         skip_permissions: bool = True,
         *,
         continue_session: bool = False,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> list[str]:
         # 由 run() 直接构造完整命令，这里只返回最简参数
         return ["-p", prompt]
@@ -65,6 +67,9 @@ class ClaudeMcpAgent(BaseCliAgent):
         skip_permissions: bool = True,
         *,
         new_session: bool = False,
+        timeout: float | None = None,
+        model: str | None = None,
+        variant: str | None = None,
     ) -> AgentResult:
         from sidecar.cli_agent.session_store import (
             clear_session,

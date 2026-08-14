@@ -1,10 +1,16 @@
 """Tauri Python sidecar: JSON-RPC over stdin/stdout with workspace file watcher."""
 
+from __future__ import annotations
+
 import json
 import shutil
 import sys
 import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from modules.web_downloader import WebDownloader
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -54,9 +60,10 @@ WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", 
 
 class SidecarServer(PathHelpersMixin):
     _watchdog_missing_logged = False
+    _web_downloader: WebDownloader | None = None
 
     @property
-    def web_downloader(self):
+    def web_downloader(self) -> WebDownloader:
         """延迟实例化：网页下载器依赖 requests/bs4，启动不需要时避免加载。"""
         if self._web_downloader is None:
             from modules.web_downloader import WebDownloader

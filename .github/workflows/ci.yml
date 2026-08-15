@@ -96,8 +96,8 @@ jobs:
 
       - name: Verify committed webui dist is current
         run: |
-          git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js
-          test -z "$(git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js)"
+          git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js webui/js/storage.bundle.js
+          test -z "$(git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js webui/js/storage.bundle.js)"
 
       - name: Syntax check webui/js
         run: |

@@ -1,12 +1,16 @@
 // ================================================================
-// Storage - 统一的 localStorage 抽象层
+// Storage - 统一的 localStorage 抽象层（从 storage.js 渐进迁移到 TS）
 // 提供类型安全、错误处理完善的存储 API
 // ================================================================
 
 (function() {
     'use strict';
 
-    var Storage = {
+    interface StorageOpts {
+        silent?: boolean;
+    }
+
+    var StorageImpl = {
         // 存储键名常量，集中管理避免冲突
         KEYS: {
             GRAPH_LAYOUT: 'noteai.graphLayout.v2',
@@ -19,7 +23,7 @@
             TREE_SHOW_FILE_COUNT: 'noteai.treeShowFileCount',
             SIDEBAR_WIDTH: 'sidebar-width',
             FONT_SIZE: 'noteai_font_size'
-        },
+        } as StorageKeys,
 
         /**
          * 保存值到 localStorage（JSON 序列化）
@@ -29,7 +33,7 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {boolean} 是否保存成功
          */
-        setItem: function(key, value, options) {
+        setItem: function(key: string, value: unknown, options?: StorageOpts): boolean {
             options = options || {};
             try {
                 var serialized = JSON.stringify(value);
@@ -51,19 +55,19 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {*} 存储的值或默认值
          */
-        getItem: function(key, defaultValue, options) {
+        getItem: function<T>(key: string, defaultValue?: T, options?: StorageOpts): T {
             options = options || {};
             try {
                 var raw = localStorage.getItem(key);
                 if (raw === null) {
-                    return defaultValue;
+                    return defaultValue as T;
                 }
-                return JSON.parse(raw);
+                return JSON.parse(raw) as T;
             } catch (e) {
                 if (!options.silent) {
                     console.warn('[Storage] Failed to load item:', key, e);
                 }
-                return defaultValue;
+                return defaultValue as T;
             }
         },
 
@@ -76,10 +80,10 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {boolean} 是否保存成功
          */
-        setRaw: function(key, value, options) {
+        setRaw: function(key: string, value: unknown, options?: StorageOpts): boolean {
             options = options || {};
             try {
-                localStorage.setItem(key, value);
+                localStorage.setItem(key, value as string);
                 return true;
             } catch (e) {
                 if (!options.silent) {
@@ -97,7 +101,7 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {string} 存储的原始字符串或默认值
          */
-        getRaw: function(key, defaultValue, options) {
+        getRaw: function(key: string, defaultValue?: unknown, options?: StorageOpts): unknown {
             options = options || {};
             try {
                 var raw = localStorage.getItem(key);
@@ -120,7 +124,7 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {boolean} 是否删除成功
          */
-        removeItem: function(key, options) {
+        removeItem: function(key: string, options?: StorageOpts): boolean {
             options = options || {};
             try {
                 localStorage.removeItem(key);
@@ -139,12 +143,12 @@
          * @param {boolean} [options.silent=false] - 是否静默失败
          * @returns {boolean} 是否全部清空成功
          */
-        clearAppStorage: function(options) {
+        clearAppStorage: function(options?: StorageOpts): boolean {
             options = options || {};
             var success = true;
-            var self = this;
+            var self: StorageModule = this;
             Object.keys(this.KEYS).forEach(function(k) {
-                if (!self.removeItem(self.KEYS[k], { silent: true })) {
+                if (!self.removeItem(self.KEYS[k as keyof StorageKeys], { silent: true })) {
                     success = false;
                 }
             });
@@ -155,5 +159,5 @@
         }
     };
 
-    window.Storage = Storage;
+    window.Storage = StorageImpl as any;
 })();

@@ -211,6 +211,7 @@ declare global {
         setRaw(key: string, value: unknown, opts?: Record<string, any>): boolean;
         getRaw(key: string, fallback?: unknown, opts?: Record<string, any>): unknown;
         removeItem(key: string, opts?: Record<string, any>): boolean;
+        clearAppStorage(opts?: Record<string, any>): boolean;
     }
 
     interface TypographyRow {

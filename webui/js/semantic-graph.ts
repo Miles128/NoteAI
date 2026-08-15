@@ -292,7 +292,8 @@ function _showEmpty(message?: any) {
     container.innerHTML = '<div class="graph-empty" style="display:block;">' + (message || t('graph.semantic.empty')) + '</div>';
 }
 
-function load() {
+async function load() {
+    await window.loadLazyScript('d3.min.js').catch(function() { return false; });
     const container = _container();
     if (!container) return;
     _state.error = null;

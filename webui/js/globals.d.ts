@@ -310,6 +310,9 @@ declare global {
         b64ToUint8(b64: string): Uint8Array;
         b64DecodeUtf8(b64: string): string;
         loadLazyScript(src: string): Promise<boolean>;
+        loadLazyCss(href: string): Promise<boolean>;
+        ensureLib(name: string, src: string, css?: string): Promise<boolean>;
+        ensureMarkedConfigured(): Promise<boolean>;
         toggleSidebar(): void;
         toggleFileListSidebar(): void;
         toggleNoteList(): void;
@@ -490,10 +493,12 @@ declare global {
             getDownloadState(): any;
         } | undefined;
         closeDownloadModal(): void;
+        openDownloadModal(): void;
         startDownloadFromModal(): Promise<any>;
         App: {
             init(): Promise<void>;
             initMarked?(): void;
+            ensureMarkedConfigured?(): Promise<boolean>;
             initSystemThemeListener?(): void;
             applyTheme?(theme: string): void;
             setTheme?(theme: string): void;

@@ -3,7 +3,8 @@
 // 应用初始化入口：由 main.mjs 在全部模块加载完成后显式调用 window.App.init()，
 // 不再依赖重放 DOMContentLoaded 事件。
 async function initApp() {
-    initMarked();
+    // marked/highlight/purify 改为按需懒加载：initMarked 由 ensureMarkedConfigured
+    // 在首次打开预览/编辑时统一触发，首屏不再同步解析这三个库。
 
     // 主题已由 main.mjs 中 applyThemeBootstrap（服务端偏好 + localStorage）应用，此处不再覆盖
 
@@ -160,6 +161,22 @@ function initMarked() {
     if (window.EditorModule && window.EditorModule.initMarked) {
         window.EditorModule.initMarked();
     }
+}
+
+var _markedConfigured = false;
+async function ensureMarkedConfigured(): Promise<boolean> {
+    if (_markedConfigured) return true;
+    await window.ensureLib('marked', 'marked.min.js');
+    await window.ensureLib('highlight', 'highlight.min.js');
+    await window.ensureLib('purify', 'purify.min.js');
+    if (window.EditorModule && window.EditorModule.initMarked) {
+        window.EditorModule.initMarked();
+    }
+    if (window.EditorModule && window.EditorModule.updateHljsTheme) {
+        window.EditorModule.updateHljsTheme();
+    }
+    _markedConfigured = true;
+    return true;
 }
 
 function initSystemThemeListener() {
@@ -355,6 +372,7 @@ window.importFiles = importFiles;
 window.App = {
     init: initApp,
     initMarked,
+    ensureMarkedConfigured,
     initSystemThemeListener,
     applyTheme,
     setTheme,
@@ -369,5 +387,7 @@ window.App = {
         }
     }
 };
+
+window.ensureMarkedConfigured = ensureMarkedConfigured;
 
 })();

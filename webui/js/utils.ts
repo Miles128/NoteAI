@@ -112,6 +112,35 @@ window.b64ToUint8 = b64ToUint8;
 window.b64DecodeUtf8 = b64DecodeUtf8;
 window.loadLazyScript = loadLazyScript;
 
+/** 幂等懒加载 CSS（不重复注入同一 href）。用于 hljs 等按需样式。 */
+var _lazyCss: Record<string, boolean> = {};
+function loadLazyCss(href: string): Promise<boolean> {
+    if (_lazyCss[href]) return Promise.resolve(true);
+    _lazyCss[href] = true;
+    return new Promise<boolean>(function(resolve) {
+        var existing = document.querySelector('link[data-lazy-href="' + href + '"]');
+        if (existing) { resolve(true); return; }
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.dataset.lazyHref = href;
+        link.onload = function() { resolve(true); };
+        link.onerror = function() { _lazyCss[href] = false; resolve(false); };
+        document.head.appendChild(link);
+    });
+}
+
+/** 确保经典库已加载（脚本 + 可选 CSS），幂等；返回是否成功。 */
+function ensureLib(name: string, src: string, css?: string): Promise<boolean> {
+    return loadLazyScript(src).then(function(ok) {
+        if (!ok || !css) return ok;
+        return loadLazyCss(css);
+    });
+}
+
+window.loadLazyCss = loadLazyCss;
+window.ensureLib = ensureLib;
+
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
 function _noop(): void {}
 

@@ -192,6 +192,10 @@ function maybeLoadSemanticPageMeta(path: string, content: string, requestId: num
 }
 
 async function loadFilePreview(path: string, fileName: string): Promise<void> {
+    // marked/highlight/purify 按需懒加载 + 配置（幂等，仅首次真正加载）
+    if (window.ensureMarkedConfigured) {
+        await window.ensureMarkedConfigured();
+    }
     const requestId = generateLoadRequestId();
     
     const previewPanel = document.getElementById('preview-panel');

@@ -30,7 +30,7 @@ REQUIRED_STATIC_ASSETS = (
     "js/main.mjs",
     "js/api.ts",
     "js/preview.ts",
-    "js/tiptap-editor.js",
+    "js/tiptap-editor.ts",
     "lib/tiptap-bundle.js",
     "d3.min.js",
     "marked.min.js",

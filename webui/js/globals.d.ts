@@ -362,6 +362,16 @@ declare global {
         StatusbarModule: {
             setRewriting?(active: boolean, message?: string): void;
             onFileSelected?(path: string): void;
+            setMetadataToggleVisible?(visible: boolean): void;
+            updateCursor?(line: number, col: number): void;
+            updateFromContent?(path: string, content: string): void;
+            updateSaveStatus?(status: string, message?: string): void;
+        } | undefined;
+        NoteDraftModule: {
+            clearActiveDraft?(): void;
+            refreshDraftChrome?(): void;
+            setActiveDraft?(draft: any): void;
+            updateDraft?(draft: any): void;
         } | undefined;
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
@@ -414,8 +424,11 @@ declare global {
         mdEditor: { isActive?: boolean } | undefined;
         TiptapEditorModule: {
             hideEditorUI?(): Promise<any> | void;
-            openMarkdownInEditor?(content: string, path: string): Promise<boolean>;
+            openMarkdownInEditor?(content: string, path: string, draftMeta?: any): Promise<boolean>;
+            preloadModules?(): Promise<any>;
+            flushSave?(): Promise<any>;
         } | undefined;
+        TiptapModules: any;
         TiptapEditor: {
             whenModulesReady?(timeoutMs?: number): Promise<boolean>;
             isActive?: boolean;

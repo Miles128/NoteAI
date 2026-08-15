@@ -14,7 +14,7 @@
     var VIRT_SCROLL_CHARS = 9000;
     var VIRT_SCROLL_LINES = 160;
 
-    function updateSaveStatus(status, text) {
+    function updateSaveStatus(status: any, text: any) {
         if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
             window.StatusbarModule.updateSaveStatus(status, text);
             return;
@@ -29,13 +29,13 @@
         return TiptapEditor.filePath || null;
     }
 
-    function refreshPreviewState(content) {
+    function refreshPreviewState(content: any) {
         if (window.PreviewModule && window.PreviewModule.currentPreviewData) {
             window.PreviewModule.currentPreviewData.content = content;
         }
     }
 
-    function splitFrontmatter(content) {
+    function splitFrontmatter(content: any) {
         var text = String(content || '');
         var match = text.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/);
         if (!match) {
@@ -47,7 +47,7 @@
         };
     }
 
-    function composeMarkdown(yaml, body) {
+    function composeMarkdown(yaml: any, body: any) {
         var cleanYaml = String(yaml || '').trim();
         if (!cleanYaml) {
             return body || '';
@@ -56,21 +56,21 @@
     }
 
     var TiptapEditor = {
-        editor: null,
-        instance: null,
-        filePath: null,
-        draftId: null,
+        editor: null as any,
+        instance: null as any,
+        filePath: null as any,
+        draftId: null as any,
         draftTitle: '',
         draftTopic: '',
         originalContent: '',
-        saveTimer: null,
-        savePromise: null,
-        fallbackTextarea: null,
+        saveTimer: null as any,
+        savePromise: null as any,
+        fallbackTextarea: null as any,
         isActive: false,
         userEdited: false,
         frontmatterText: '',
-        _heavyIdleHandle: null,
-        _heavyIdleKind: null,
+        _heavyIdleHandle: null as any,
+        _heavyIdleKind: null as any,
         _heavyInitGen: 0,
 
         // 工具栏操作映射配置：action -> { method, hasParams, paramKey, defaultParam }
@@ -99,7 +99,7 @@
             this._heavyIdleKind = null;
         },
 
-        _scheduleHeavyIdle: function(onIdle) {
+        _scheduleHeavyIdle: function(onIdle: any) {
             var self = this;
             requestAnimationFrame(function() {
                 requestAnimationFrame(function() {
@@ -134,7 +134,7 @@
         },
 
         /** Wait until tiptap-bundle.js has registered window.TiptapModules. */
-        whenModulesReady: function(timeoutMs) {
+        whenModulesReady: function(timeoutMs: any) {
             // tiptap-bundle 不再随首屏加载：首次等待时按需注入（幂等）
             if (!window.TiptapModules && typeof window.loadLazyScript === 'function') {
                 window.loadLazyScript('lib/tiptap-bundle.js').catch(function() {});
@@ -160,7 +160,7 @@
             });
         },
 
-        init: function(editorEl, content, filePath, callback, draftMeta) {
+        init: function(editorEl: any, content: any, filePath: any, callback: any, draftMeta: any) {
             var self = this;
             if (!editorEl) {
                 console.error('[Tiptap] No editor element provided');
@@ -196,7 +196,7 @@
             editorEl.classList.remove('tiptap-fallback-mode');
             this.renderFrontmatterPanel();
 
-            var modules = this.getModules();
+            var modules = this.getModules()!;
             if (!modules) {
                 console.error('[Tiptap] Failed to load modules: TiptapModules not found');
                 this._createTextareaFallback(editorEl, parts.body);
@@ -209,7 +209,7 @@
             var virtLarge = bodyStr.length >= VIRT_SCROLL_CHARS || bodyLines >= VIRT_SCROLL_LINES;
             var proseClass = virtLarge ? 'tiptap-prose tiptap-prose-large' : 'tiptap-prose';
 
-            function mountEditor(syncParse) {
+            function mountEditor(syncParse: any) {
                 if (gen !== self._heavyInitGen || !editorEl.isConnected) return;
 
                 editorEl.innerHTML = '';
@@ -240,13 +240,13 @@
                                 cut: function() { self.userEdited = true; return false; },
                             },
                         },
-                        onUpdate: function(_ref) {
+                        onUpdate: function(_ref: any) {
                             var md = self.getContent();
                             if (self.userEdited && !window._rewritingFilePath) {
                                 self.scheduleAutoSave(md || '');
                             }
                             if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
-                                window.StatusbarModule.updateFromContent(
+                                (window.StatusbarModule as any).updateFromContent(
                                     self.getFullContent(md || ''),
                                     self.filePath,
                                     null
@@ -287,7 +287,7 @@
                         }
                     }
                 } catch (e) {
-                    console.error('[Tiptap] Init error:', e.message || e);
+                    console.error('[Tiptap] Init error:', (e as Error).message || e);
                     self._createTextareaFallback(editorEl, parts.body);
                     return;
                 }
@@ -332,7 +332,7 @@
             return null;
         },
 
-        setContent: function(content) {
+        setContent: function(content: any) {
             if (this.editor) {
                 try {
                     this.editor.commands.setContent(content);
@@ -344,7 +344,7 @@
             }
         },
 
-        setEditable: function(editable) {
+        setEditable: function(editable: any) {
             if (this.editor) {
                 this.editor.setEditable(editable);
             } else if (this.fallbackTextarea) {
@@ -389,7 +389,7 @@
             }
         },
 
-        getFullContent: function(body) {
+        getFullContent: function(body: any) {
             return composeMarkdown(this.frontmatterText, body || '');
         },
 
@@ -410,16 +410,16 @@
                 window.StatusbarModule.setMetadataToggleVisible(true);
             }
             panel.innerHTML = '<textarea class="frontmatter-textarea" spellcheck="false"></textarea>';
-            var textarea = panel.querySelector('.frontmatter-textarea');
+            var textarea = panel.querySelector('.frontmatter-textarea') as HTMLTextAreaElement | null;
             if (!textarea) return;
             var self = this;
             textarea.value = this.frontmatterText;
             textarea.addEventListener('input', function() {
-                self.frontmatterText = textarea.value;
+                self.frontmatterText = textarea!.value;
                 self.userEdited = true;
                 self.scheduleAutoSave(self.getContent() || '');
                 if (window.StatusbarModule && window.StatusbarModule.updateFromContent) {
-                    window.StatusbarModule.updateFromContent(
+                    (window.StatusbarModule as any).updateFromContent(
                         self.getFullContent(self.getContent() || ''),
                         self.filePath,
                         null
@@ -440,7 +440,7 @@
             }
         },
 
-        _createTextareaFallback: function(editorEl, content) {
+        _createTextareaFallback: function(editorEl: any, content: any) {
             var self = this;
             var ta = document.createElement('textarea');
             ta.className = 'tiptap-fallback';
@@ -458,17 +458,17 @@
             updateSaveStatus('error', '编辑器未加载，请重启应用');
         },
 
-        persistDraft: function(content) {
+        persistDraft: function(content: any) {
             if (!this.draftId || !window.NoteDraftModule || !window.NoteDraftModule.updateDraft) return;
             var fullContent = this.getFullContent(content || '');
-            window.NoteDraftModule.updateDraft(this.draftId, { content: fullContent });
+            (window.NoteDraftModule as any).updateDraft(this.draftId, { content: fullContent });
             if (window.NoteDraftModule.refreshDraftChrome) {
-                window.NoteDraftModule.refreshDraftChrome(fullContent);
+                (window.NoteDraftModule as any).refreshDraftChrome(fullContent);
             }
             updateSaveStatus('saved', window.t ? window.t('editor.draftAutoSaved') : '草稿已自动保存');
         },
 
-        scheduleAutoSave: function(content) {
+        scheduleAutoSave: function(content: any) {
             var self = this;
             if (this.saveTimer) {
                 clearTimeout(this.saveTimer);
@@ -517,7 +517,7 @@
             }
         },
 
-        performSave: async function(content) {
+        performSave: async function(content: any) {
             if (this.draftId) {
                 this.persistDraft(content);
                 return;
@@ -558,18 +558,18 @@
             if (!toolbar || toolbar.dataset.bound === 'true') return;
             toolbar.dataset.bound = 'true';
             toolbar.addEventListener('click', function(event) {
-                var btn = event.target.closest('.tiptap-btn[data-action]');
+                var btn = (event.target as Element).closest('.tiptap-btn[data-action]') as HTMLButtonElement | null;
                 if (!btn || btn.disabled) return;
                 event.preventDefault();
                 self.runToolbarAction(btn);
             });
         },
 
-        runToolbarAction: function(btn) {
+        runToolbarAction: function(btn: any) {
             if (!this.editor) return;
             this.userEdited = true;
             var action = btn.dataset.action;
-            var cfg = this.toolbarActions[action];
+            var cfg: any = (this.toolbarActions as any)[action as string];
             if (!cfg) {
                 console.warn('[Tiptap] Unknown toolbar action:', action);
                 this.updateToolbarState();
@@ -595,11 +595,11 @@
         updateToolbarState: function() {
             if (!this.editor) return;
             var self = this;
-            var unsupported = { taskList: true, link: true, image: true };
-            document.querySelectorAll('#tiptap-toolbar .tiptap-btn[data-action]').forEach(function(btn) {
+            var unsupported: { [key: string]: boolean } = { taskList: true, link: true, image: true };
+            document.querySelectorAll('#tiptap-toolbar .tiptap-btn[data-action]').forEach(function(btn: any) {
                 var action = btn.dataset.action;
                 var level = parseInt(btn.dataset.level || '0', 10);
-                btn.disabled = !!unsupported[action];
+                btn.disabled = !!unsupported[action as string];
                 btn.classList.remove('active');
                 if (action === 'bold' && self.editor.isActive('bold')) btn.classList.add('active');
                 if (action === 'italic' && self.editor.isActive('italic')) btn.classList.add('active');
@@ -615,7 +615,7 @@
     };
 
     var TiptapEditorModule = {
-        openMarkdownInEditor: async function(content, path, draftMeta) {
+        openMarkdownInEditor: async function(content: any, path: any, draftMeta: any) {
             var tiptapContainer = document.getElementById('tiptap-editor-container');
             var toolbar = document.getElementById('tiptap-toolbar');
             var previewContent = document.getElementById('preview-content');
@@ -668,6 +668,6 @@
         },
     };
 
-    window.TiptapEditor = TiptapEditor;
-    window.TiptapEditorModule = TiptapEditorModule;
+    window.TiptapEditor = TiptapEditor as any;
+    window.TiptapEditorModule = TiptapEditorModule as any;
 })();

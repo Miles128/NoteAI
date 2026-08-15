@@ -10,6 +10,7 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 from config import config
 from config.settings import NOTES_FOLDER, RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.rag.rag_config import (
+    RERANK_MODEL_NAME,
     hyde_enabled,
     hyde_threshold,
     rerank_enabled,
@@ -47,6 +48,49 @@ def _reranker_enabled() -> bool:
     return rerank_enabled()
 
 
+def _patch_prepare_for_model(tokenizer: Any) -> None:
+    """兼容 transformers 5.x：fast tokenizer 移除了 prepare_for_model。
+
+    FlagReranker 内部对每个 pair 调用 tokenizer.prepare_for_model(q, p,
+    truncation='only_second', max_length=..., padding=False)。transformers 5.x
+    的 fast tokenizer 只有 build_inputs_with_special_tokens（无该方法），
+    导致 compute_score 报 AttributeError、rerank 静默降级。这里补一个等价的
+    实现：XLM-R special tokens 固定开销 3（1 CLS + 2 SEP），only_second 从
+    passage 尾部截断。
+    """
+    if hasattr(tokenizer, "prepare_for_model"):
+        return
+
+    def prepare_for_model(
+        self,
+        ids,
+        second_ids=None,
+        truncation: str | None = None,
+        max_length: int | None = None,
+        padding=None,
+        **kwargs,
+    ):
+        token_ids_0 = list(ids)
+        token_ids_1 = list(second_ids) if second_ids is not None else None
+        # XLM-R special tokens 固定开销 3（1 CLS + 2 SEP）
+        if (
+            token_ids_1 is not None
+            and truncation == "only_second"
+            and max_length is not None
+            and len(token_ids_0) + len(token_ids_1) + 3 > max_length
+        ):
+            excess = len(token_ids_0) + len(token_ids_1) + 3 - max_length
+            token_ids_1 = token_ids_1[: max(0, len(token_ids_1) - excess)]
+        cls_id = getattr(self, "cls_token_id", 0)
+        sep_id = getattr(self, "sep_token_id", 2)
+        input_ids = [cls_id] + token_ids_0 + [sep_id]
+        if token_ids_1 is not None:
+            input_ids += token_ids_1 + [sep_id]
+        return {"input_ids": input_ids}
+
+    tokenizer.prepare_for_model = prepare_for_model.__get__(tokenizer)  # type: ignore[attr-defined]
+
+
 def _get_reranker():
     global _RERANKER, _RERANKER_DISABLED_UNTIL
 
@@ -71,11 +115,12 @@ def _get_reranker():
             _hf_cache = SYSTEM_APP_DATA_DIR / "hf_hub"
             _hf_cache.mkdir(parents=True, exist_ok=True)
             _RERANKER = FlagReranker(
-                "BAAI/bge-reranker-v2-m3",
+                RERANK_MODEL_NAME,
                 use_fp16=True,
                 cache_dir=str(_hf_cache),
                 batch_size=64,
             )
+            _patch_prepare_for_model(_RERANKER.tokenizer)
             return _RERANKER
         except Exception as e:
             _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS

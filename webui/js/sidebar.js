@@ -172,6 +172,12 @@ function switchSidebarView(view) {
     if (view === 'tree') {
         if (sidebar) sidebar.classList.remove('sidebar-narrow');
         if (resizer) resizer.style.display = '';
+        // 文件变化时树视图不可见被标记 dirty，切回时补一次强制刷新
+        if (window.EventListeners && window.EventListeners.consumeSidebarTreeDirty && window.EventListeners.consumeSidebarTreeDirty()) {
+            if (window.TreeModule && window.TreeModule.loadFileTree) {
+                window.TreeModule.loadFileTree(true);
+            }
+        }
     } else if (view === 'tags') {
         if (sidebar) sidebar.classList.add('sidebar-narrow');
         if (resizer) resizer.style.display = 'none';

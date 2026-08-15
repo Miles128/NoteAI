@@ -48,10 +48,31 @@ function markInitialIngestDone() {
     _hasRunInitialIngest = true;
 }
 
+var _treeRefreshDirty = false;
+
+function markSidebarTreeDirty() {
+    _treeRefreshDirty = true;
+}
+
+function consumeSidebarTreeDirty() {
+    var dirty = _treeRefreshDirty;
+    _treeRefreshDirty = false;
+    return dirty;
+}
+
+function getActiveSidebarView() {
+    var activeView = document.querySelector('.sidebar-view-btn.active');
+    return activeView ? activeView.getAttribute('data-sidebar') : null;
+}
+
 function refreshWorkspaceViewsAfterChange() {
     var treeLoad = null;
-    if (window.TreeModule && window.TreeModule.loadFileTree) {
-        treeLoad = window.TreeModule.loadFileTree(true);
+    if (getActiveSidebarView() === 'tree') {
+        treeLoad = window.TreeModule && window.TreeModule.loadFileTree ? window.TreeModule.loadFileTree(true) : null;
+    } else {
+        // 树视图不可见：标记 dirty，切回 tree 视图时由 switchSidebarView 补刷，
+        // 避免每次文件变化都在隐藏容器上全量重建
+        markSidebarTreeDirty();
     }
 
     if (typeof window.loadTopicTree === 'function') {
@@ -60,10 +81,14 @@ function refreshWorkspaceViewsAfterChange() {
     refreshCurrentSidebarView(true);
     refreshKnowledgeGraph();
 
-    if (treeLoad && typeof window.updateHomeStats === 'function') {
-        Promise.resolve(treeLoad)
-            .then(function() { window.updateHomeStats(); })
-            .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+    if (typeof window.updateHomeStats === 'function') {
+        if (treeLoad) {
+            Promise.resolve(treeLoad)
+                .then(function() { window.updateHomeStats(); })
+                .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+        } else {
+            window.updateHomeStats();
+        }
     }
 }
 
@@ -99,9 +124,6 @@ function refreshCurrentSidebarView(forceRefresh) {
 function refreshKnowledgeGraph() {
     if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
         window.Graph3Tier.load(null, false);
-    }
-    if (typeof window.updateHomeStats === 'function') {
-        window.updateHomeStats();
     }
 }
 
@@ -227,7 +249,9 @@ return {
     refreshWorkspaceViewsAfterChange: refreshWorkspaceViewsAfterChange,
     refreshCurrentSidebarView: refreshCurrentSidebarView,
     refreshKnowledgeGraph: refreshKnowledgeGraph,
-    markInitialIngestDone: markInitialIngestDone
+    markInitialIngestDone: markInitialIngestDone,
+    markSidebarTreeDirty: markSidebarTreeDirty,
+    consumeSidebarTreeDirty: consumeSidebarTreeDirty
 };
 
 })();

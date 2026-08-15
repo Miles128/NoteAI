@@ -267,24 +267,64 @@ function _graphChargeStrength(d) {
     return c.chargeFile;
 }
 
-/** 不同一级主题簇之间：仅近距离互斥，避免整图被撑开 */
+/** 图谱数据内容指纹：节点/边数量相同但内容变化（重命名、标签、层级等）
+ *  时也能识别，避免 _doLoad 错误跳过刷新。O(n log n)，仅几百节点。 */
+function _graphDataFingerprint(data) {
+    if (!data || !Array.isArray(data.nodes)) return '';
+    var nodes = data.nodes.map(function(n) {
+        return (n.id || '') + '|' + (n.type || '') + '|' + (n.name || n.label || '') + '|' + (n.level || 0);
+    }).sort().join('~');
+    var edges = (data.edges || []).map(function(e) {
+        var s = typeof e.source === 'string' ? e.source : (e.source && e.source.id) || e.source;
+        var t = typeof e.target === 'string' ? e.target : (e.target && e.target.id) || e.target;
+        return s + '>' + t;
+    }).sort().join('~');
+    return data.nodes.length + ':' + data.edges.length + ':' + nodes + '|' + edges;
+}
+
+/** 不同一级主题簇之间：仅近距离互斥，避免整图被撑开。
+ *  空间哈希分桶（按 clusterRepelDist 网格）：只比较同桶/邻桶节点对，
+ *  每 tick 从 O(n²) 全对计算降为 O(n·k)（k 为桶内平均节点数）。
+ *  原实现 500 节点 = 12.5 万对/tick × ~300 tick 的纯距离计算。 */
 function _graphClusterRepelForce(nodes) {
     const c = _graphCfg();
     return function(alpha) {
-        for (let i = 0; i < nodes.length; i++) {
-            for (let j = i + 1; j < nodes.length; j++) {
-                const a = nodes[i];
-                const b = nodes[j];
-                if (a._l1Group === b._l1Group) continue;
-                let dx = a.x - b.x;
-                let dy = a.y - b.y;
-                const dist = Math.hypot(dx, dy) || 1;
-                if (dist > c.clusterRepelDist) continue;
-                const force = c.clusterRepelForce * alpha / (dist * dist);
-                a.vx += (dx / dist) * force;
-                a.vy += (dy / dist) * force;
-                b.vx -= (dx / dist) * force;
-                b.vy -= (dy / dist) * force;
+        const cell = Math.max(1, c.clusterRepelDist || 60);
+        const buckets = new Map();
+        for (const node of nodes) {
+            const key = Math.floor(node.x / cell) + ',' + Math.floor(node.y / cell);
+            let list = buckets.get(key);
+            if (!list) { list = []; buckets.set(key, list); }
+            list.push(node);
+        }
+        const force = c.clusterRepelForce * alpha;
+        const visited = new Set();
+        for (const node of nodes) {
+            const bx = Math.floor(node.x / cell);
+            const by = Math.floor(node.y / cell);
+            for (let ox = -1; ox <= 1; ox++) {
+                for (let oy = -1; oy <= 1; oy++) {
+                    const list = buckets.get((bx + ox) + ',' + (by + oy));
+                    if (!list) continue;
+                    for (const other of list) {
+                        if (other === node) continue;
+                        const idA = node.index < other.index ? node.index : other.index;
+                        const idB = node.index < other.index ? other.index : node.index;
+                        const pairKey = idA + ':' + idB;
+                        if (visited.has(pairKey)) continue;
+                        visited.add(pairKey);
+                        if (node._l1Group === other._l1Group) continue;
+                        let dx = node.x - other.x;
+                        let dy = node.y - other.y;
+                        const dist = Math.hypot(dx, dy) || 1;
+                        if (dist > c.clusterRepelDist) continue;
+                        const f = force / (dist * dist);
+                        node.vx += (dx / dist) * f;
+                        node.vy += (dy / dist) * f;
+                        other.vx -= (dx / dist) * f;
+                        other.vy -= (dy / dist) * f;
+                    }
+                }
             }
         }
     };
@@ -770,7 +810,7 @@ const Graph3Tier = {
                 console.error('图谱数据格式异常:', this.data);
                 this.data = { nodes: [], edges: [] };
             }
-            var hash = this.data.nodes.length + ':' + this.data.edges.length;
+            var hash = _graphDataFingerprint(this.data);
             if (hash === this._lastDataHash && this.svg) return;
             this._lastDataHash = hash;
             this._updateFilterBtns();

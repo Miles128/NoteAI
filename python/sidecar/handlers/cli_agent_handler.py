@@ -37,6 +37,7 @@ class CliAgentHandler(BaseHandler):
         prompt = (params.get("prompt") or "").strip()
         workspace_path = params.get("workspace_path") or ""
         new_session = bool(params.get("new_session"))
+        model = (params.get("model") or "").strip() or None
 
         if not agent_id:
             return {"success": False, "message": "必须指定 agent_id"}
@@ -91,6 +92,7 @@ class CliAgentHandler(BaseHandler):
                     workspace_path=workspace_path or None,
                     send_event=send_event,
                     new_session=new_session,
+                    model=model,
                 )
 
                 if not result.get("success"):

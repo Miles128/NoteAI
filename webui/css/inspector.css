@@ -501,6 +501,24 @@
     border-color: var(--primary);
 }
 
+.cli-model-input {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--btn-radius);
+    color: var(--text);
+    outline: none;
+    margin-left: 6px;
+    max-width: 120px;
+    min-width: 70px;
+    flex-shrink: 1;
+}
+
+.cli-model-input:focus {
+    border-color: var(--primary);
+}
+
 .cli-agent-generate-btn {
     display: inline-flex;
     align-items: center;

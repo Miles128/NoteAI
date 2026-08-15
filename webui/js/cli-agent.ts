@@ -803,6 +803,17 @@
 
         header.appendChild(selector);
 
+        // 模型输入（可选）：透传给支持 -m 的 agent（opencode/codex 等），留空用默认
+        var existingModelInput = document.getElementById('cli-model-input');
+        if (existingModelInput) existingModelInput.remove();
+        var modelInput = document.createElement('input');
+        modelInput.id = 'cli-model-input';
+        modelInput.type = 'text';
+        modelInput.className = 'cli-model-input';
+        modelInput.placeholder = window.t ? window.t('cliAgent.modelPlaceholder') : '模型(可空)';
+        modelInput.title = window.t ? window.t('cliAgent.modelTitle') : '指定模型，留空用默认';
+        header.appendChild(modelInput);
+
         var existingSessionBadge = document.getElementById('cli-session-badge');
         if (existingSessionBadge) existingSessionBadge.remove();
         var sessionBadge = document.createElement('span');
@@ -978,8 +989,12 @@
         _resetStreamPre();
         _appendCliMessage('user', prompt);
 
+        var modelInput = document.getElementById('cli-model-input') as HTMLInputElement | null;
+        var model = (modelInput && modelInput.value.trim()) || '';
+
         return window.api.runCliAgent(_selectedAgent, prompt, '', {
-            newSession: !!opts.newSession
+            newSession: !!opts.newSession,
+            model: model || undefined
         }).then(function(result) {
             if (result && result.success && result.started) {
                 return { success: true };

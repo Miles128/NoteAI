@@ -1,12 +1,12 @@
 async function loadModules() {
     await Promise.all([
-        import('./utils.js'),
+        import('./utils.ts'),
         import('./api.js'),
         import('./state.ts'),
     ]);
 
-    await import('./i18n.js');
-    await import('./theme.js');
+    await import('./i18n.ts');
+    await import('./theme.ts');
     // 启动 RPC 并行化：i18n（含 uiConfig）与主题（含 themePreference）互不依赖，
     // 与 state 门面预热共享同一 in-flight promise（各只发一次 RPC）
     await Promise.all([

@@ -1,27 +1,31 @@
+/**
+ * utils.ts —— 通用工具函数（从 utils.js 渐进迁移到 TS）。
+ * 运行时语义与迁移前一致；含幂等懒加载脚本 loadLazyScript。
+ */
 (function() { 'use strict';
 
-function escapeHtml(text) {
+function escapeHtml(text: unknown): string {
     return String(text == null ? '' : text)
         .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function escapeAttr(str) {
+function escapeAttr(str: unknown): string {
     if (!str) return '';
     return String(str).replace(/&/g, '&amp;').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function formatFileSize(bytes) {
+function formatFileSize(bytes: number | null | undefined): string {
     if (bytes == null) return '';
     if (bytes < 1024) return bytes + ' Byte';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' K';
     return (bytes / (1024 * 1024)).toFixed(1) + ' M';
 }
 
-function formatModifiedTime(timestamp) {
+function formatModifiedTime(timestamp: number | null | undefined): string {
     if (timestamp == null) return '';
     var d = new Date(timestamp * 1000);
-    var pad = function(n) { return String(n).padStart(2, '0'); };
+    var pad = function(n: number) { return String(n).padStart(2, '0'); };
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
@@ -29,7 +33,7 @@ function formatModifiedTime(timestamp) {
  * URL 协议白名单校验：仅允许 http/https/锚点/相对路径，
  * 拒绝 javascript:、data:、vbscript: 等危险协议。不合法时返回 '#'。
  */
-function safeUrl(url) {
+function safeUrl(url: string): string {
     // 先剔除控制字符再判断协议，堵住 "java\tscript:" 类绕过
     var str = String(url == null ? '' : url).replace(/[\t\n\r]/g, '').trim();
     if (!str) return '#';
@@ -42,7 +46,7 @@ function safeUrl(url) {
     return str;
 }
 
-function Path_stem(p) {
+function Path_stem(p: string): string {
     if (!p) return p;
     var parts = p.split('/');
     var name = parts[parts.length - 1];
@@ -51,7 +55,7 @@ function Path_stem(p) {
 }
 
 /** Base64 → Uint8Array；非 Tauri/畸形输入返回空数组。 */
-function b64ToUint8(b64) {
+function b64ToUint8(b64: string): Uint8Array {
     if (!b64) return new Uint8Array(0);
     var bin = typeof atob === 'function' ? atob(b64) : '';
     var out = new Uint8Array(bin.length);
@@ -63,20 +67,20 @@ function b64ToUint8(b64) {
 }
 
 /** Base64 → UTF-8 字符串（用于后端 base64 编码的文本流）。 */
-function b64DecodeUtf8(b64) {
+function b64DecodeUtf8(b64: string): string {
     if (!b64) return '';
     return new TextDecoder('utf-8').decode(b64ToUint8(b64));
 }
 
 /** 幂等懒加载经典脚本（不重复注入同一 src）。用于 pdfjs/tiptap 等按需库。 */
-var _lazyScripts = {};
-function loadLazyScript(src) {
+var _lazyScripts: Record<string, any> = {};
+function loadLazyScript(src: string): Promise<boolean> {
     if (_lazyScripts[src] === true) return Promise.resolve(true);
-    if (_lazyScripts[src]) return _lazyScripts[src];
-    _lazyScripts[src] = new Promise(function(resolve, reject) {
+    if (_lazyScripts[src]) return _lazyScripts[src] as Promise<boolean>;
+    _lazyScripts[src] = new Promise<boolean>(function(resolve, reject) {
         var existing = document.querySelector('script[data-lazy-src="' + src + '"]');
         if (existing) {
-            if (existing.dataset.loaded === '1') { resolve(true); return; }
+            if ((existing as HTMLScriptElement).dataset.loaded === '1') { resolve(true); return; }
             existing.addEventListener('load', function() { resolve(true); });
             existing.addEventListener('error', function() { reject(new Error('加载失败: ' + src)); });
             return;
@@ -95,7 +99,7 @@ function loadLazyScript(src) {
         };
         document.head.appendChild(s);
     });
-    return _lazyScripts[src];
+    return _lazyScripts[src] as Promise<boolean>;
 }
 
 window.escapeHtml = escapeHtml;
@@ -109,7 +113,7 @@ window.b64DecodeUtf8 = b64DecodeUtf8;
 window.loadLazyScript = loadLazyScript;
 
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
-function _noop() {}
+function _noop(): void {}
 
 var _earlyGlobals = [
     'toggleSidebar',
@@ -129,8 +133,8 @@ var _earlyGlobals = [
     'saveApiConfig',
 ];
 _earlyGlobals.forEach(function(name) {
-    if (typeof window[name] !== 'function') {
-        window[name] = _noop;
+    if (typeof (window as any)[name] !== 'function') {
+        (window as any)[name] = _noop;
     }
 });
 

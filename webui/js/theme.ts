@@ -1,3 +1,7 @@
+/**
+ * theme.ts —— 主题/排版（从 theme.js 渐进迁移到 TS）。
+ * 运行时语义与迁移前一致。
+ */
 (function() { 'use strict';
 
 var THEME_STORAGE_KEY = window.Storage.KEYS.THEME;
@@ -5,7 +9,7 @@ var ACCENT_STORAGE_KEY = window.Storage.KEYS.ACCENT_COLOR;
 var TYPOGRAPHY_STORAGE_KEY = 'noteai_typography_settings';
 var ACCENT_VALUES = new Set(['theme', 'blue', 'rust', 'teal', 'plum']);
 var currentAccentColor = 'theme';
-var FONT_FAMILIES = {
+var FONT_FAMILIES: Record<string, string> = {
     system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif',
     sans: '"Inter", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif',
     serif: '"Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
@@ -13,7 +17,7 @@ var FONT_FAMILIES = {
 };
 var FONT_STYLE_VALUES = new Set(['normal', 'bold', 'italic', 'bold-italic']);
 var TYPOGRAPHY_ROLES = ['h1', 'h2', 'h3', 'body', 'quote'];
-var DEFAULT_TYPOGRAPHY = {
+var DEFAULT_TYPOGRAPHY: Record<string, TypographyRow> = {
     h1: { family: 'serif', style: 'bold' },
     h2: { family: 'sans', style: 'bold' },
     h3: { family: 'sans', style: 'bold' },
@@ -21,31 +25,31 @@ var DEFAULT_TYPOGRAPHY = {
     quote: { family: 'serif', style: 'italic' }
 };
 
-function persistThemeLocal(theme) {
+function persistThemeLocal(theme: string): void {
     window.Storage.setRaw(THEME_STORAGE_KEY, theme, { silent: true });
 }
 
-function syncThemeRadioInputs(theme) {
-    document.querySelectorAll('input[name="theme"], input[name="theme-popup"]').forEach(function(radio) {
+function syncThemeRadioInputs(theme: string): void {
+    document.querySelectorAll<HTMLInputElement>('input[name="theme"], input[name="theme-popup"]').forEach(function(radio) {
         radio.checked = radio.value === theme;
         var option = radio.closest('.theme-option');
         if (option) option.classList.toggle('active', radio.checked);
     });
 }
 
-function normalizeAccentColor(accent) {
+function normalizeAccentColor(accent: string): string {
     return ACCENT_VALUES.has(accent) ? accent : 'theme';
 }
 
-function syncAccentInputs(accent) {
-    document.querySelectorAll('input[name="accent-color"]').forEach(function(radio) {
+function syncAccentInputs(accent: string): void {
+    document.querySelectorAll<HTMLInputElement>('input[name="accent-color"]').forEach(function(radio) {
         radio.checked = radio.value === accent;
         var option = radio.closest('.accent-option');
         if (option) option.classList.toggle('active', radio.checked);
     });
 }
 
-function applyAccentColor(accent) {
+function applyAccentColor(accent: string): void {
     accent = normalizeAccentColor(accent);
     currentAccentColor = accent;
     const html = document.documentElement;
@@ -57,36 +61,36 @@ function applyAccentColor(accent) {
     syncAccentInputs(accent);
 }
 
-function setAccentColor(accent) {
+function setAccentColor(accent: string): void {
     accent = normalizeAccentColor(accent);
     applyAccentColor(accent);
     window.Storage.setRaw(ACCENT_STORAGE_KEY, accent, { silent: true });
 }
 
-function applyAccentBootstrap() {
-    var accent = window.Storage.getRaw(ACCENT_STORAGE_KEY, 'theme', { silent: true });
+function applyAccentBootstrap(): void {
+    var accent = window.Storage.getRaw(ACCENT_STORAGE_KEY, 'theme', { silent: true }) as string;
     applyAccentColor(accent);
 }
 
-function normalizeFontFamily(value) {
+function normalizeFontFamily(value: string): string {
     return Object.prototype.hasOwnProperty.call(FONT_FAMILIES, value) ? value : 'system';
 }
 
-function normalizeFontStyle(value) {
+function normalizeFontStyle(value: string): string {
     return FONT_STYLE_VALUES.has(value) ? value : 'normal';
 }
 
-function fontWeightForStyle(style) {
+function fontWeightForStyle(style: string): string {
     return style === 'bold' || style === 'bold-italic' ? '700' : '400';
 }
 
-function fontStyleForStyle(style) {
+function fontStyleForStyle(style: string): string {
     return style === 'italic' || style === 'bold-italic' ? 'italic' : 'normal';
 }
 
-function normalizeTypography(input) {
+function normalizeTypography(input: any): Record<string, TypographyRow> {
     var source = input && typeof input === 'object' ? input : {};
-    var out = {};
+    var out: Record<string, TypographyRow> = {};
     TYPOGRAPHY_ROLES.forEach(function(role) {
         var defaults = DEFAULT_TYPOGRAPHY[role];
         var row = source[role] && typeof source[role] === 'object' ? source[role] : {};
@@ -98,7 +102,7 @@ function normalizeTypography(input) {
     return out;
 }
 
-function applyContentFonts(sidebarFont, previewFont) {
+function applyContentFonts(sidebarFont: string, previewFont: string): void {
     var root = document.documentElement;
     var sidebar = normalizeFontFamily(sidebarFont);
     var preview = normalizeFontFamily(previewFont);
@@ -106,7 +110,7 @@ function applyContentFonts(sidebarFont, previewFont) {
     root.style.setProperty('--preview-font-family', FONT_FAMILIES[preview]);
 }
 
-function applyTypography(settings) {
+function applyTypography(settings: any): Record<string, TypographyRow> {
     var typography = normalizeTypography(settings);
     var root = document.documentElement;
     TYPOGRAPHY_ROLES.forEach(function(role) {
@@ -119,25 +123,25 @@ function applyTypography(settings) {
     return typography;
 }
 
-function restoreTypography() {
+function restoreTypography(): Record<string, TypographyRow> {
     var saved = window.Storage.getItem(TYPOGRAPHY_STORAGE_KEY, DEFAULT_TYPOGRAPHY, { silent: true });
     return applyTypography(saved);
 }
 
-function toggleTheme() {
+function toggleTheme(): void {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
-    const lightIcon = document.getElementById('theme-icon-light');
-    const darkIcon = document.getElementById('theme-icon-dark');
+    const lightIcon = document.getElementById('theme-icon-light') as HTMLElement | null;
+    const darkIcon = document.getElementById('theme-icon-dark') as HTMLElement | null;
 
     if (currentTheme === 'light') {
         html.setAttribute('data-theme', 'dark');
-        lightIcon.style.display = 'none';
-        darkIcon.style.display = 'block';
+        if (lightIcon) lightIcon.style.display = 'none';
+        if (darkIcon) darkIcon.style.display = 'block';
     } else {
         html.setAttribute('data-theme', 'light');
-        lightIcon.style.display = 'block';
-        darkIcon.style.display = 'none';
+        if (lightIcon) lightIcon.style.display = 'block';
+        if (darkIcon) darkIcon.style.display = 'none';
     }
 
     var next = html.getAttribute('data-theme') || 'dark';
@@ -150,7 +154,7 @@ function toggleTheme() {
     }
 }
 
-function setTheme(theme) {
+function setTheme(theme: string): void {
     const html = document.documentElement;
 
     if (theme === 'system') {
@@ -174,7 +178,7 @@ function setTheme(theme) {
     }
 }
 
-function applySystemTheme() {
+function applySystemTheme(): void {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const html = document.documentElement;
 
@@ -189,17 +193,17 @@ function applySystemTheme() {
     }
 }
 
-function initSystemThemeListener() {
+function initSystemThemeListener(): void {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        var currentTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true });
+        var currentTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true }) as string;
         if (currentTheme === 'system') {
             applySystemTheme();
         }
     });
 }
 
-async function applyThemeBootstrap() {
-    var pref = null;
+async function applyThemeBootstrap(): Promise<void> {
+    var pref: string | null = null;
     try {
         // 优先复用 state 门面（与启动期 loadThemePreference 共享同一 RPC）
         if (window.state && typeof window.state.loadThemePreference === 'function') {
@@ -211,7 +215,7 @@ async function applyThemeBootstrap() {
         console.warn('[Theme] getThemePreference failed:', e);
     }
     if (pref === null || pref === undefined || String(pref).trim() === '') {
-        pref = window.Storage.getRaw(THEME_STORAGE_KEY, null, { silent: true });
+        pref = window.Storage.getRaw(THEME_STORAGE_KEY, null, { silent: true }) as string | null;
     }
     pref = pref || 'system';
 
@@ -231,10 +235,10 @@ async function applyThemeBootstrap() {
     }
 }
 
-function applyTheme(theme) {
+function applyTheme(theme: string): void {
     const html = document.documentElement;
-    const lightIcon = document.getElementById('theme-icon-light');
-    const darkIcon = document.getElementById('theme-icon-dark');
+    const lightIcon = document.getElementById('theme-icon-light') as HTMLElement | null;
+    const darkIcon = document.getElementById('theme-icon-dark') as HTMLElement | null;
 
     if (theme === 'system') {
         html.removeAttribute('data-theme');
@@ -266,10 +270,10 @@ function applyTheme(theme) {
     }
 }
 
-function restoreSidebarWidth() {
-    const sidebar = document.querySelector('.sidebar');
+function restoreSidebarWidth(): void {
+    const sidebar = document.querySelector('.sidebar') as HTMLElement | null;
     if (!sidebar) return;
-    const savedWidth = window.Storage.getRaw(window.Storage.KEYS.SIDEBAR_WIDTH, null, { silent: true });
+    const savedWidth = window.Storage.getRaw(window.Storage.KEYS.SIDEBAR_WIDTH, null, { silent: true }) as string | null;
     if (savedWidth) {
         const w = parseInt(savedWidth, 10);
         if (w >= 180 && w <= 600) {
@@ -278,9 +282,9 @@ function restoreSidebarWidth() {
     }
 }
 
-function initResizer() {
-    const resizer = document.getElementById('sidebar-resizer');
-    const sidebar = document.querySelector('.sidebar');
+function initResizer(): void {
+    const resizer = document.getElementById('sidebar-resizer') as HTMLElement | null;
+    const sidebar = document.querySelector('.sidebar') as HTMLElement | null;
     if (!resizer || !sidebar) return;
     let isResizing = false;
     let startX = 0;
@@ -296,7 +300,7 @@ function initResizer() {
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
-        if (window.Graph3Tier) window.Graph3Tier.pauseResize();
+        if (window.Graph3Tier && window.Graph3Tier.pauseResize) window.Graph3Tier.pauseResize();
         e.preventDefault();
         e.stopPropagation();
     });
@@ -320,13 +324,13 @@ function initResizer() {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         window.Storage.setRaw(window.Storage.KEYS.SIDEBAR_WIDTH, String(sidebar.offsetWidth));
-        if (window.Graph3Tier) window.Graph3Tier.resumeResize();
+        if (window.Graph3Tier && window.Graph3Tier.resumeResize) window.Graph3Tier.resumeResize();
     });
 }
 
-function initPreviewResizer() {
-    const resizer = document.getElementById('preview-resizer');
-    const previewPanel = document.getElementById('preview-panel');
+function initPreviewResizer(): void {
+    const resizer = document.getElementById('preview-resizer') as HTMLElement | null;
+    const previewPanel = document.getElementById('preview-panel') as HTMLElement | null;
     if (!resizer || !previewPanel) {
         return;
     }
@@ -359,7 +363,7 @@ function initPreviewResizer() {
     });
 }
 
-function showAboutPanel() {
+function showAboutPanel(): void {
     const aboutContent = `
         <h2>NoteAI</h2>
         <p class="about-version">${window.t('about.version')}</p>
@@ -391,12 +395,12 @@ function showAboutPanel() {
         <p class="about-tech" style="margin-top: 4px;">${window.t('about.opensource')}</p>
     `;
 
-    document.getElementById('about-panel-content').innerHTML = aboutContent;
-    document.getElementById('about-panel').classList.add('active');
+    document.getElementById('about-panel-content')!.innerHTML = aboutContent;
+    document.getElementById('about-panel')!.classList.add('active');
 }
 
-function hideAboutPanel() {
-    document.getElementById('about-panel').classList.remove('active');
+function hideAboutPanel(): void {
+    document.getElementById('about-panel')!.classList.remove('active');
 }
 
 window.setTheme = setTheme;
@@ -405,22 +409,22 @@ window.setFontSize = applyFontSize;
 
 // 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接同步（不再依赖 DOMContentLoaded 重放）
 (function() {
-    var savedTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true });
+    var savedTheme = window.Storage.getRaw(THEME_STORAGE_KEY, 'system', { silent: true }) as string;
     syncThemeRadioInputs(savedTheme);
     syncAccentInputs(currentAccentColor);
 })();
 
-var FONT_SCALE_MAP = { small: 1, medium: 1.15, large: 1.3 };
+var FONT_SCALE_MAP: Record<string, number> = { small: 1, medium: 1.15, large: 1.3 };
 
-function setFontSize(size) {
+function setFontSize(size: string): void {
     var scale = FONT_SCALE_MAP[size] || 1;
-    document.documentElement.style.setProperty('--font-scale', scale);
-    document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
+    document.documentElement.style.setProperty('--font-scale', String(scale));
+    document.querySelectorAll<HTMLInputElement>('input[name="font-size"]').forEach(function(radio) {
         radio.checked = radio.value === size;
     });
 }
 
-function applyFontSize(size) {
+function applyFontSize(size: string): void {
     setFontSize(size);
     window.Storage.setRaw(window.Storage.KEYS.FONT_SIZE, size);
     if (window.SettingsModule && window.SettingsModule.saveFontSize) {
@@ -428,8 +432,8 @@ function applyFontSize(size) {
     }
 }
 
-function restoreFontSize() {
-    var saved = window.Storage.getRaw(window.Storage.KEYS.FONT_SIZE, 'small', { silent: true });
+function restoreFontSize(): void {
+    var saved = window.Storage.getRaw(window.Storage.KEYS.FONT_SIZE, 'small', { silent: true }) as string;
     setFontSize(saved);
 }
 

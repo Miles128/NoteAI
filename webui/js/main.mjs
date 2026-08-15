@@ -155,7 +155,7 @@ async function loadModules() {
     await import('./search.js');
     window.SearchModule = window.SearchModule || {};
 
-    await import('./pending.js');
+    await import('./pending.ts');
     const {
         togglePendingView, refreshPendingBtnState, loadPendingItems,
     } = window;

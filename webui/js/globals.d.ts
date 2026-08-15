@@ -366,6 +366,25 @@ declare global {
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
         loadPendingItems(): void;
+        __componentInstallBound?: boolean;
+        __ragIndexProgressBound?: boolean;
+        SettingsComponents: {
+            initRagSettings(): void;
+            initIngestAutoSettings(): void;
+            initAssistantSettings(): void;
+            initTopicAutoThresholdSettings(): void;
+            initMergePresetSettings(): void;
+            initMergeAdvancedSettings(): void;
+            applyMergeAdvancedToForm(overrides: any): void;
+            initCliSettings(): void;
+            applyRagSettingsToForm(uiConfig: any): void;
+            applyAssistantSettingsToForm(uiConfig: any): void;
+            applyCliSettingsToForm(uiConfig: any): void;
+            refreshCliAgentsSettings(): Promise<any>;
+            persistCliAgentId(agentId: string): void;
+            syncCliAgentSelectors(agentId: any): void;
+            saveAssistantUiConfig(partial: any): Promise<any>;
+        } | undefined;
         DownloaderModule: {
             startWebDownload(): Promise<any>;
             updateWebImageStatus(): void;

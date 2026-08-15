@@ -32,16 +32,18 @@ impl AppState {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct PyRequest {
-    pub id: String,
-    pub method: String,
-    pub params: serde_json::Value,
+#[derive(Debug, Serialize)]
+pub struct PyRequestRef<'a> {
+    pub id: &'a str,
+    pub method: &'a str,
+    pub params: &'a serde_json::Value,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PyResponse {
     pub id: String,
     pub result: Option<serde_json::Value>,
-    pub error: Option<String>,
+    /// Python 侧错误为 `{"code", "message", "details"}` dict；
+    /// 反序列化时保留完整载荷，由调用方提取 message。
+    pub error: Option<serde_json::Value>,
 }

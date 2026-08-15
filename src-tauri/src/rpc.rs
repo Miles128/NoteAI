@@ -1,5 +1,8 @@
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
 use crate::sidecar;
-use crate::state::{AppState, PyRequest};
+use crate::state::{AppState, PyRequestRef};
 
 pub(crate) fn fail_pending_requests(state: &AppState, message: &str) {
     let mut pending = state
@@ -164,15 +167,22 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
 fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
-        "rag_chat" => 60,
         // CLI 联网深度研究需多轮检索+打开网页核对，实测约 5-6 分钟；
         // Python 侧硬超时 840s，此处留 60s 余量。
         "verify_semantic_claim" => 900,
         "resolve_cross_kind_merges" => 1800,
-        "start_ingest" | "ensure_ingest" | "retry_ingest" | "init_rag_index"
-        | "rag_rebuild_index" | "cancel_ingest" => 120,
+        "start_ingest" | "ensure_ingest" | "retry_ingest" | "rag_rebuild_index"
+        | "cancel_ingest" => 120,
         _ => 60,
     }
+}
+
+static ALLOWED_METHODS_SET: OnceLock<HashSet<&'static str>> = OnceLock::new();
+
+fn is_allowed_method(method: &str) -> bool {
+    ALLOWED_METHODS_SET
+        .get_or_init(|| ALLOWED_PYTHON_METHODS.iter().copied().collect())
+        .contains(method)
 }
 
 fn is_pipe_broken(err: &str) -> bool {
@@ -183,29 +193,36 @@ async fn ensure_sidecar(state: &AppState) -> Result<(), String> {
     if sidecar::is_sidecar_alive(state).await {
         return Ok(());
     }
+    // 首次启动（setup 后台 spawn）尚未完成：等待而不是重启，
+    // 避免 kill 正在启动的进程造成竞态
+    if sidecar::sidecar_is_starting() {
+        if sidecar::wait_for_sidecar(state, 15_000).await {
+            return Ok(());
+        }
+        return Err("Python 后端正在启动，请稍候".into());
+    }
     let app = state
         .app_handle()
         .ok_or_else(|| "Python 后端未运行".to_string())?;
     sidecar::restart_python_sidecar(&app).await?;
-    for _ in 0..50 {
-        if sidecar::is_sidecar_alive(state).await {
-            return Ok(());
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    if sidecar::wait_for_sidecar(state, 10_000).await {
+        Ok(())
+    } else {
+        Err("Python 后端重启失败".into())
     }
-    Err("Python 后端重启失败".into())
 }
 
 async fn call_python_once(
     state: &AppState,
     method: &str,
-    params: serde_json::Value,
+    params: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let id = uuid::Uuid::new_v4().to_string();
 
-    let request = PyRequest {
-        id: id.clone(),
-        method: method.to_string(),
+    // 借用式序列化：大 payload（整篇笔记/文件列表）不再整份深拷贝
+    let request = PyRequestRef {
+        id: &id,
+        method,
         params,
     };
     let mut json_line = serde_json::to_string(&request).map_err(|e| e.to_string())?;
@@ -268,18 +285,15 @@ pub async fn call_python(
 ) -> Result<serde_json::Value, String> {
     ensure_sidecar(state.inner()).await?;
 
-    match call_python_once(state.inner(), method, params.clone()).await {
+    match call_python_once(state.inner(), method, &params).await {
         Ok(v) => Ok(v),
         Err(e) if is_pipe_broken(&e) || e.contains("not running") => {
             let app = state.inner().app_handle().ok_or_else(|| e.clone())?;
             sidecar::restart_python_sidecar(&app).await?;
-            for _ in 0..50 {
-                if sidecar::is_sidecar_alive(state.inner()).await {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            if !sidecar::wait_for_sidecar(state.inner(), 10_000).await {
+                return Err("Python 后端重启失败".into());
             }
-            call_python_once(state.inner(), method, params)
+            call_python_once(state.inner(), method, &params)
                 .await
                 .map_err(|e2| format!("Python 后端已重启，请再试一次。详情: {}", e2))
         }
@@ -293,7 +307,7 @@ pub async fn py_call(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    if !ALLOWED_PYTHON_METHODS.contains(&method.as_str()) {
+    if !is_allowed_method(&method) {
         return Err(format!("Method not allowed: {}", method));
     }
     call_python(&state, &method, params).await
@@ -319,5 +333,17 @@ mod tests {
         assert_eq!(response["success"], false);
         assert_eq!(response["message"], "sidecar stopped");
         assert!(state.pending_requests.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn py_response_error_dict_parses() {
+        use crate::state::PyResponse;
+        let line = r#"{"id":"abc","error":{"code":"NOT_FOUND","message":"文件不存在","details":{"path":"x"}}}"#;
+        let resp: PyResponse = serde_json::from_str(line).expect("error dict must deserialize");
+        assert_eq!(resp.id, "abc");
+        assert!(resp.result.is_none());
+        let err = resp.error.expect("error payload present");
+        assert_eq!(err["message"], "文件不存在");
+        assert_eq!(err["code"], "NOT_FOUND");
     }
 }

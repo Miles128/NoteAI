@@ -9,6 +9,11 @@ use crate::state::{AppState, PyResponse};
 
 static SIDECAR_GEN: AtomicU64 = AtomicU64::new(0);
 static SIDECAR_RESTARTING: AtomicBool = AtomicBool::new(false);
+pub static SIDECAR_STARTING: AtomicBool = AtomicBool::new(false);
+
+pub fn sidecar_is_starting() -> bool {
+    SIDECAR_STARTING.load(Ordering::SeqCst)
+}
 
 fn hf_cache_dir() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
@@ -24,19 +29,16 @@ fn hf_cache_dir() -> PathBuf {
 }
 
 pub async fn is_sidecar_alive(state: &AppState) -> bool {
-    if SIDECAR_RESTARTING.load(Ordering::SeqCst) {
+    if SIDECAR_RESTARTING.load(Ordering::SeqCst) || SIDECAR_STARTING.load(Ordering::SeqCst) {
         return false;
     }
     state.python_stdin.lock().await.is_some()
 }
 
-async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
+pub async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
     let steps = max_ms / 100;
     for _ in 0..steps {
         if is_sidecar_alive(state).await {
-            return true;
-        }
-        if !SIDECAR_RESTARTING.load(Ordering::SeqCst) && state.python_stdin.lock().await.is_some() {
             return true;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -44,12 +46,29 @@ async fn wait_for_sidecar(state: &AppState, max_ms: u64) -> bool {
     is_sidecar_alive(state).await
 }
 
+/// 连进程组一起杀（process_group(0) 使 sidecar 为组组长），
+/// 避免 CLI Agent 等孙进程成为孤儿；随后 reap 防止僵尸累积。
+pub fn kill_process_group(child: &tokio::process::Child) {
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
+    }
+}
+
+async fn kill_and_reap(child: &mut tokio::process::Child) {
+    kill_process_group(child);
+    let _ = child.start_kill();
+    let _ = child.wait().await;
+}
+
 /// Kill child and clear handles without notifying the UI (planned restart).
 async fn stop_python_sidecar_quiet(state: &AppState) {
     crate::rpc::fail_pending_requests(state, "Python 后端正在重启，请重试");
     SIDECAR_GEN.fetch_add(1, Ordering::SeqCst);
     if let Some(mut child) = state.python_child.lock().await.take() {
-        let _ = child.kill().await;
+        kill_and_reap(&mut child).await;
     }
     *state.python_stdin.lock().await = None;
 }
@@ -67,11 +86,12 @@ async fn on_sidecar_process_exit(app: &AppHandle, reader_gen: u64) {
     crate::rpc::fail_pending_requests(&state, "Python 后端意外退出，请重试");
     *state.python_stdin.lock().await = None;
     if let Some(mut child) = state.python_child.lock().await.take() {
-        let _ = child.kill().await;
+        kill_and_reap(&mut child).await;
     }
 
     eprintln!("[Rust] Python sidecar exited unexpectedly");
-    let _ = app.emit(
+    let _ = app.emit_to(
+        "main",
         "python-event",
         serde_json::json!({
             "type": "sidecar_died",
@@ -81,12 +101,12 @@ async fn on_sidecar_process_exit(app: &AppHandle, reader_gen: u64) {
 }
 
 pub async fn restart_python_sidecar(app: &AppHandle) -> Result<(), String> {
-    if SIDECAR_RESTARTING.load(Ordering::SeqCst) {
+    if SIDECAR_RESTARTING.load(Ordering::SeqCst) || SIDECAR_STARTING.load(Ordering::SeqCst) {
         let state = app.state::<AppState>();
         if wait_for_sidecar(&state, 15_000).await {
             return Ok(());
         }
-        return Err("Python 后端正在重启，请稍候".into());
+        return Err("Python 后端正在启动/重启，请稍候".into());
     }
 
     SIDECAR_RESTARTING.store(true, Ordering::SeqCst);
@@ -97,7 +117,8 @@ pub async fn restart_python_sidecar(app: &AppHandle) -> Result<(), String> {
     let result = start_python_sidecar(app.clone()).await;
     SIDECAR_RESTARTING.store(false, Ordering::SeqCst);
     if result.is_ok() {
-        let _ = app.emit(
+        let _ = app.emit_to(
+            "main",
             "python-event",
             serde_json::json!({
                 "type": "sidecar_ready",
@@ -267,7 +288,9 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
             if let Ok(resp) = serde_json::from_str::<PyResponse>(&line) {
                 if resp.id == "event" {
                     if let Some(result) = resp.result {
-                        match app_clone.emit("python-event", &result) {
+                        // 事件只发主窗口：预览窗口仅渲染文件内容，不需要
+                        // workspace/rag/sidecar 事件（避免 N 个预览窗口 N+1 倍处理）
+                        match app_clone.emit_to("main", "python-event", &result) {
                             Ok(_) => {}
                             Err(e) => eprintln!("[Rust] Failed to emit event: {}", e),
                         }
@@ -279,7 +302,13 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
                         let value = if let Some(result) = resp.result {
                             result
                         } else if let Some(error) = resp.error {
-                            serde_json::json!({"success": false, "message": error})
+                            // error 为 {"code","message","details"} dict
+                            let message = error
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Python 后端错误")
+                                .to_string();
+                            serde_json::json!({"success": false, "message": message, "error": error})
                         } else {
                             serde_json::Value::Null
                         };
@@ -305,9 +334,6 @@ pub async fn start_python_sidecar(app: tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<AppState>();
     *state.python_stdin.lock().await = stdin;
     *state.python_child.lock().await = Some(child);
-    if let Ok(mut slot) = state.app_handle.lock() {
-        *slot = Some(app.clone());
-    }
 
     Ok(())
 }

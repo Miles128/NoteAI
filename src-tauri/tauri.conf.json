@@ -38,10 +38,5 @@
       "../python/**/*",
       "resources/mcp-runtime/**/*"
     ]
-  },
-  "plugins": {
-    "shell": {
-      "open": true
-    }
   }
 }

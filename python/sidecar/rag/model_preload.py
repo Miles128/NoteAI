@@ -13,8 +13,24 @@ class ModelWarmupManager:
     _lock = threading.Lock()
 
     @classmethod
-    def start_preload(cls):
+    def ensure_preload(cls):
+        """幂等：确保后台预热线程已启动（可被启动延迟/首次 RAG 查询触发）。"""
+        with cls._lock:
+            if cls._warmup_done:
+                return
+            cls._warmup_done = True
         t = threading.Thread(target=cls._preload_all, daemon=True, name="model-warmup")
+        t.start()
+
+    @classmethod
+    def start_preload(cls):
+        cls.ensure_preload()
+
+    @classmethod
+    def schedule_preload(cls, delay: float = 2.0):
+        """延迟启动预热：给启动窗口 RPC 让路，避免模型加载抢占 CPU/内存。"""
+        t = threading.Timer(delay, cls.ensure_preload)
+        t.daemon = True
         t.start()
 
     @classmethod

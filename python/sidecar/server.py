@@ -725,7 +725,9 @@ def main():
     server.start()
     logger.warning("[Python Sidecar] Ready")
 
-    ModelWarmupManager.start_preload()
+    # 模型预热延迟 2s：先响应启动 RPC，再在后台加载 embedding/reranker，
+    # 避免加载抢占启动窗口资源；首次 RAG 查询会 ensure_preload 兜底。
+    ModelWarmupManager.schedule_preload(delay=2.0)
 
     try:
         for raw_line in sys.stdin:

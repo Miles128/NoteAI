@@ -113,7 +113,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
     main_js = (WEBUI / "js" / "main.mjs").read_text(encoding="utf-8")
     api_js = (WEBUI / "js" / "api.ts").read_text(encoding="utf-8")
-    workbench_js = (WEBUI / "js" / "semantic-workbench.js").read_text(encoding="utf-8")
+    workbench_js = (WEBUI / "js" / "semantic-workbench.ts").read_text(encoding="utf-8")
 
     assert 'id="titlebar-semantic-btn"' not in html
     assert 'id="semantic-workbench"' not in html
@@ -127,7 +127,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'data-category="brief"' in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html
-    assert "import('./semantic-workbench.js')" in main_js
+    assert "import('./semantic-workbench.ts')" in main_js
     assert "get_semantic_workbench" in api_js
     assert "get_semantic_detail" in api_js
     assert "start_semantic_full_compile" in api_js

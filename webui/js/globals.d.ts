@@ -356,8 +356,26 @@ declare global {
             };
         } | undefined;
         SemanticWorkbenchModule: {
-            deactivate?(): void;
-            show?(view: string): void;
+            init(): void;
+            toggle(): void;
+            show(category?: string): void;
+            hide(): void;
+            deactivate(): void;
+            load(): void;
+            openObject(kind: 'entity' | 'concept', id: string): void;
+            isVisible(): boolean;
+            applyVisibilityConfig(): void;
+            isEnabled(): boolean;
+            enabledCategories(): string[];
+        } | undefined;
+        toggleSemanticWorkbench(): void;
+        TreeModule: {
+            selectFile(path: string, name?: string): void;
+        } | undefined;
+        ToastModule: {
+            error(message: string): void;
+            success(message: string): void;
+            show(message: string, type?: string): void;
         } | undefined;
         PreviewModule: PreviewModule;
         marked: any;

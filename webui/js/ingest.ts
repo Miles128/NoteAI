@@ -1,6 +1,6 @@
 (function() { 'use strict';
 
-var STAGE_LABELS = {
+var STAGE_LABELS: Record<string, string> = {
     rules: window.t('ingest.stage.rules'),
     schema: window.t('ingest.stage.rules'),
     convert: window.t('ingest.stage.convert'),
@@ -27,7 +27,7 @@ function hideBar() {
     if (appBar) appBar.classList.remove('ingest-active');
 }
 
-function updateBar(stage, progress, message) {
+function updateBar(stage: any, progress: any, message: any) {
     showBar();
     var fill = document.getElementById('ingest-pipeline-fill');
     var label = document.getElementById('ingest-pipeline-stage');
@@ -38,7 +38,7 @@ function updateBar(stage, progress, message) {
     window.updateStatus(message || window.t('ingest.pipelineRunning'));
 }
 
-function onIngestComplete(data) {
+function onIngestComplete(data: any) {
     hideBar();
     if (data.cancelled) {
         window.updateStatus(window.t('ingest.cancelled'));
@@ -64,7 +64,7 @@ function onIngestComplete(data) {
     }
 }
 
-function handleEvent(data) {
+function handleEvent(data: any) {
     if (!data) return;
     if (data.type === 'ingest_progress') {
         updateBar(data.stage, data.progress, data.message);
@@ -82,7 +82,7 @@ function handleEvent(data) {
     }
 }
 
-async function startIngest(mode, filePaths, options) {
+async function startIngest(mode: any, filePaths: any, options: any) {
     if (!window.api || !window.api.startIngest) return { success: false };
     var opts = options || {};
     showBar();
@@ -100,7 +100,7 @@ async function cancelIngest() {
     }
 }
 
-async function retryIngest(mode) {
+async function retryIngest(mode: any) {
     if (!window.api || !window.api.retryIngest) return { success: false };
     showBar();
     return window.api.retryIngest({ mode: mode || 'full' });

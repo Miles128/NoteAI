@@ -3,7 +3,7 @@
 
     // updateStatus / updateProgress 的全库唯一实现（workspace.js、app.js 的重复定义已移除）。
     // 由 main.mjs 在最早批次 import，保证所有使用点调用时已挂载 window。
-    function updateStatus(text) {
+    function updateStatus(text: any) {
         if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
             window.StatusbarModule.updateMessage(text || '');
             return;
@@ -14,7 +14,7 @@
         }
     }
 
-    function updateProgress(elementId, progress, text) {
+    function updateProgress(elementId: any, progress: any, text: any) {
         const fill = document.getElementById(elementId + '-fill');
         const statusEl = document.getElementById(elementId.replace('progress', 'status'));
 
@@ -53,7 +53,7 @@
     window.updateProgress = updateProgress;
 
     // ToastModule：cli-agent.js 等模块依赖的轻量 toast 通知（index.html 已含 #toast-container）。
-    function showToast(message, type) {
+    function showToast(message: any, type: any) {
         const container = document.getElementById('toast-container');
         if (!container) {
             window.updateStatus(message);
@@ -71,9 +71,9 @@
 
     window.ToastModule = {
         show: showToast,
-        error: function(message) { showToast(message, 'error'); },
-        info: function(message) { showToast(message, 'info'); },
-        success: function(message) { showToast(message, 'success'); }
+        error: function(message: any) { showToast(message, 'error'); },
+        info: function(message: any) { showToast(message, 'info'); },
+        success: function(message: any) { showToast(message, 'success'); }
     };
 })();
 

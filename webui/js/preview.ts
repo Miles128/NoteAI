@@ -132,23 +132,23 @@ function formatRelativeTime(value: number | string): string {
 
 function buildSemanticMetaBarHtml(meta: any): string {
     var sourceCount = Number(meta.source_count) || 0;
-    var parts = [escapeHtml(window.t('preview.semanticSources', { count: sourceCount }))];
+    var parts = [window.escapeHtml(window.t('preview.semanticSources', { count: sourceCount }))];
     var compiledLabel = meta.compiled_at ? formatRelativeTime(meta.compiled_at) : '';
     if (compiledLabel) {
-        parts.push(escapeHtml(window.t('preview.semanticCompiled', { time: compiledLabel })));
+        parts.push(window.escapeHtml(window.t('preview.semanticCompiled', { time: compiledLabel })));
     }
     var html = '<div class="semantic-page-meta-text">' + parts.join(' · ') + '</div>';
     html += '<div class="semantic-page-meta-badges">';
     if (meta.is_stale) {
         html += '<span class="semantic-page-meta-badge semantic-page-meta-badge-stale" title="'
-            + escapeAttr(window.t('preview.semanticStaleTitle')) + '">'
-            + escapeHtml(window.t('preview.semanticStale')) + '</span>';
+            + window.escapeAttr(window.t('preview.semanticStaleTitle')) + '">'
+            + window.escapeHtml(window.t('preview.semanticStale')) + '</span>';
     }
     var conflictCount = Number(meta.conflict_pending_count) || 0;
     if (conflictCount > 0) {
         html += '<button type="button" class="semantic-page-meta-badge semantic-page-meta-badge-conflict" data-meta-action="conflicts" title="'
-            + escapeAttr(window.t('preview.semanticConflictsTitle')) + '">'
-            + escapeHtml(window.t('preview.semanticConflicts', { count: conflictCount })) + '</button>';
+            + window.escapeAttr(window.t('preview.semanticConflictsTitle')) + '">'
+            + window.escapeHtml(window.t('preview.semanticConflicts', { count: conflictCount })) + '</button>';
     }
     html += '</div>';
     return html;
@@ -350,7 +350,7 @@ async function loadPdfViewer(path: string, fileName: string, requestId: number):
         <div class="pdf-viewer-container">
             <div class="pdf-toolbar">
                 <div class="pdf-toolbar-left">
-                    <span class="pdf-file-name">${escapeHtml(fileName)}</span>
+                    <span class="pdf-file-name">${window.escapeHtml(fileName)}</span>
                 </div>
                 <div class="pdf-toolbar-center">
                     <button class="pdf-nav-btn" id="pdf-prev-btn" title="${window.t('preview.prevPage')}">
@@ -550,7 +550,7 @@ function renderPreviewContent(previewData: any) {
             <div class="preview-file-info">
                 <div class="preview-file-info-row">
                     <span class="preview-file-info-label">${window.t('preview.typeLabel')}</span>
-                    <span class="preview-file-info-value">${escapeHtml(metadata.type || window.t('preview.unknownType'))}</span>
+                    <span class="preview-file-info-value">${window.escapeHtml(metadata.type || window.t('preview.unknownType'))}</span>
                 </div>
                 ${metadata.size ? `
                     <div class="preview-file-info-row">
@@ -572,7 +572,7 @@ function renderPreviewContent(previewData: any) {
         if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
             previewHtml += `<div class="preview-content">${window.EditorModule.renderMarkdownPreview(content)}</div>`;
         } else {
-            previewHtml += `<div class="preview-content"><pre>${escapeHtml(content)}</pre></div>`;
+            previewHtml += `<div class="preview-content"><pre>${window.escapeHtml(content)}</pre></div>`;
         }
     } else if (type === 'docx' || type === 'word') {
         previewHtml += renderDocxPreviewHtml(content, previewData.contentKind);
@@ -587,9 +587,9 @@ function renderPreviewContent(previewData: any) {
             </div>
         `;
     } else if (type === 'code' || type === 'json' || type === 'xml' || type === 'html') {
-        previewHtml += `<div class="preview-content"><pre><code class="language-${type}">${escapeHtml(content)}</code></pre></div>`;
+        previewHtml += `<div class="preview-content"><pre><code class="language-${type}">${window.escapeHtml(content)}</code></pre></div>`;
     } else {
-        previewHtml += `<div class="preview-content"><pre>${escapeHtml(content)}</pre></div>`;
+        previewHtml += `<div class="preview-content"><pre>${window.escapeHtml(content)}</pre></div>`;
     }
 
     previewContent.innerHTML = previewHtml;
@@ -609,13 +609,13 @@ function renderDocxPreviewHtml(content: string, contentKind: string): string {
     if (contentKind === 'html') {
         const safe = typeof DOMPurify !== 'undefined'
             ? DOMPurify.sanitize(body, { USE_PROFILES: { html: true } })
-            : escapeHtml(body);
+            : window.escapeHtml(body);
         return `<article class="preview-content docx-preview">${safe}</article>`;
     }
     if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
         return `<div class="preview-content docx-preview">${window.EditorModule.renderMarkdownPreview(body)}</div>`;
     }
-    return `<div class="preview-content docx-preview"><pre>${escapeHtml(body)}</pre></div>`;
+    return `<div class="preview-content docx-preview"><pre>${window.escapeHtml(body)}</pre></div>`;
 }
 
 function showPreviewError(title: string, message: string) {
@@ -625,8 +625,8 @@ function showPreviewError(title: string, message: string) {
     previewContent.innerHTML = `
         <div class="preview-error">
             ${window.Icons && window.Icons.get('close', 48)}
-            <div class="preview-error-title">${escapeHtml(title)}</div>
-            <div class="preview-error-message">${escapeHtml(message)}</div>
+            <div class="preview-error-title">${window.escapeHtml(title)}</div>
+            <div class="preview-error-message">${window.escapeHtml(message)}</div>
         </div>
     `;
 }

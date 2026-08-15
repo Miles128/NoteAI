@@ -10,36 +10,36 @@
 
 var _SEMANTIC_TAB_VALUES = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
 
-function applySemanticSettingsToForm(uiConfig) {
+function applySemanticSettingsToForm(uiConfig: any) {
     if (!uiConfig) return;
-    var enabledEl = document.getElementById('settings-semantic-workbench-enabled');
+    var enabledEl = document.getElementById('settings-semantic-workbench-enabled') as HTMLInputElement | null;
     if (enabledEl) {
         enabledEl.checked = uiConfig.semantic_workbench_enabled !== false;
     }
     var savedTabs = Array.isArray(uiConfig.semantic_workbench_tabs)
         ? uiConfig.semantic_workbench_tabs
         : _SEMANTIC_TAB_VALUES;
-    document.querySelectorAll('.settings-semantic-tab').forEach(function(input) {
+    document.querySelectorAll('.settings-semantic-tab').forEach(function(input: any) {
         input.checked = savedTabs.indexOf(input.value) !== -1;
     });
     var intensity = ['light', 'standard', 'deep'].indexOf(uiConfig.semantic_workbench_intensity) !== -1
         ? uiConfig.semantic_workbench_intensity
         : 'standard';
-    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio) {
+    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio: any) {
         radio.checked = radio.value === intensity;
     });
     updateSemanticSettingsDisabledState();
 }
 
 function updateSemanticSettingsDisabledState() {
-    var enabledEl = document.getElementById('settings-semantic-workbench-enabled');
+    var enabledEl = document.getElementById('settings-semantic-workbench-enabled') as HTMLInputElement | null;
     var enabled = !enabledEl || enabledEl.checked;
     var tabsCard = document.getElementById('settings-semantic-tabs-card');
     var intensityCard = document.getElementById('settings-semantic-intensity-card');
-    [tabsCard, intensityCard].forEach(function(card) {
+    [tabsCard, intensityCard].forEach(function(card: any) {
         if (!card) return;
         card.style.opacity = enabled ? '' : '0.5';
-        card.querySelectorAll('input, label').forEach(function(el) {
+        card.querySelectorAll('input, label').forEach(function(el: any) {
             if (el.classList.contains('switch-container')) return;
             el.disabled = !enabled;
         });
@@ -48,14 +48,14 @@ function updateSemanticSettingsDisabledState() {
 
 function readSemanticWorkbenchConfig() {
     var enabled = true;
-    var enabledEl = document.getElementById('settings-semantic-workbench-enabled');
+    var enabledEl = document.getElementById('settings-semantic-workbench-enabled') as HTMLInputElement | null;
     if (enabledEl) enabled = enabledEl.checked;
-    var tabs = _SEMANTIC_TAB_VALUES.filter(function(value) {
-        var input = document.querySelector('.settings-semantic-tab[value="' + value + '"]');
+    var tabs = _SEMANTIC_TAB_VALUES.filter(function(value: any) {
+        var input = document.querySelector('.settings-semantic-tab[value="' + value + '"]') as HTMLInputElement | null;
         return input ? input.checked : true;
     });
     var intensity = 'standard';
-    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio) {
+    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio: any) {
         if (radio.checked) intensity = radio.value;
     });
     return {
@@ -67,7 +67,9 @@ function readSemanticWorkbenchConfig() {
 
 function saveSemanticWorkbenchConfig() {
     var config = readSemanticWorkbenchConfig();
-    return window.SettingsComponents.saveAssistantUiConfig(config).then(function(result) {
+    var saver = window.SettingsComponents && window.SettingsComponents.saveAssistantUiConfig;
+    if (!saver) return Promise.resolve(config);
+    return saver(config).then(function(result: any) {
         if (result && result.success && window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.applyVisibilityConfig) {
             window.SemanticWorkbenchModule.applyVisibilityConfig();
         }
@@ -76,7 +78,7 @@ function saveSemanticWorkbenchConfig() {
 }
 
 function initSemanticWorkbenchSettings() {
-    var enabledEl = document.getElementById('settings-semantic-workbench-enabled');
+    var enabledEl = document.getElementById('settings-semantic-workbench-enabled') as HTMLInputElement | null;
     if (enabledEl && !enabledEl.dataset.bound) {
         enabledEl.dataset.bound = '1';
         enabledEl.addEventListener('change', function() {
@@ -84,7 +86,7 @@ function initSemanticWorkbenchSettings() {
             saveSemanticWorkbenchConfig();
         });
     }
-    document.querySelectorAll('.settings-semantic-tab').forEach(function(input) {
+    document.querySelectorAll('.settings-semantic-tab').forEach(function(input: any) {
         if (input.dataset.bound) return;
         input.dataset.bound = '1';
         input.addEventListener('change', function() {
@@ -97,7 +99,7 @@ function initSemanticWorkbenchSettings() {
             saveSemanticWorkbenchConfig();
         });
     });
-    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio) {
+    document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio: any) {
         if (radio.dataset.bound) return;
         radio.dataset.bound = '1';
         radio.addEventListener('change', function() {

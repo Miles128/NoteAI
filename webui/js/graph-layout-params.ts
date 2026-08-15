@@ -121,12 +121,12 @@ const GRAPH_LAYOUT_SCHEMA = [
 ];
 
 function _graphLayoutSchemaByKey() {
-    const map = {};
+    const map: Record<string, any> = {};
     GRAPH_LAYOUT_SCHEMA.forEach(function(p) { map[p.key] = p; });
     return map;
 }
 
-function _formatGraphLayoutValue(v, step) {
+function _formatGraphLayoutValue(v: any, step: any) {
     const n = Number(v);
     if (!Number.isFinite(n)) return '';
     if (step >= 1) return String(Math.round(n));
@@ -134,7 +134,7 @@ function _formatGraphLayoutValue(v, step) {
     return n.toFixed(2);
 }
 
-function _snapGraphLayoutValue(v, param) {
+function _snapGraphLayoutValue(v: any, param: any) {
     const n = Number(v);
     if (!Number.isFinite(n)) return param.min;
     const steps = Math.round((n - param.min) / param.step);
@@ -143,11 +143,11 @@ function _snapGraphLayoutValue(v, param) {
 }
 
 function loadGraphLayoutConfig() {
-    const cfg = Object.assign({}, GRAPH_LAYOUT_DEFAULTS);
-    const saved = window.Storage.getItem(GRAPH_LAYOUT_STORAGE_KEY, null, { silent: true });
+    const cfg: Record<string, any> = Object.assign({}, GRAPH_LAYOUT_DEFAULTS);
+    const saved: any = window.Storage.getItem(GRAPH_LAYOUT_STORAGE_KEY, null, { silent: true });
     if (saved) {
         const schema = _graphLayoutSchemaByKey();
-        Object.keys(saved).forEach(function(key) {
+        Object.keys(saved).forEach(function(key: any) {
             if (!schema[key]) return;
             const v = Number(saved[key]);
             if (!Number.isFinite(v)) return;
@@ -158,7 +158,7 @@ function loadGraphLayoutConfig() {
     return cfg;
 }
 
-function saveGraphLayoutConfig(cfg) {
+function saveGraphLayoutConfig(cfg: any) {
     window.Storage.setItem(GRAPH_LAYOUT_STORAGE_KEY, cfg);
 }
 
@@ -167,7 +167,7 @@ function resetGraphLayoutConfigStorage() {
 }
 
 function loadGraphLayoutMode() {
-    const saved = window.Storage.getItem(
+    const saved: any = window.Storage.getItem(
         GRAPH_LAYOUT_MODE_STORAGE_KEY,
         GRAPH_LAYOUT_MODE_DEFAULT,
         { silent: true }
@@ -175,21 +175,21 @@ function loadGraphLayoutMode() {
     return saved === 'constellation' || saved === 'tree' ? saved : GRAPH_LAYOUT_MODE_DEFAULT;
 }
 
-function saveGraphLayoutMode(mode) {
+function saveGraphLayoutMode(mode: any) {
     window.Storage.setItem(GRAPH_LAYOUT_MODE_STORAGE_KEY, mode, { silent: true });
 }
 
 function _graph() {
-    return window.Graph3Tier;
+    return window.Graph3Tier as any;
 }
 
 // ---------------------------------------------------------------------------
 // 面板 UI
 // ---------------------------------------------------------------------------
 
-let _layoutApplyTimer = null;
+let _layoutApplyTimer: any = null;
 
-function buildForm(cfg) {
+function buildForm(cfg: any) {
     const form = document.getElementById('graph-settings-form');
     if (!form) return;
     form.innerHTML = '';
@@ -286,9 +286,9 @@ function close() {
 
 function readForm() {
     const g = _graph();
-    const cfg = Object.assign({}, g ? g.layoutConfig : GRAPH_LAYOUT_DEFAULTS);
+    const cfg: Record<string, any> = Object.assign({}, g ? g.layoutConfig : GRAPH_LAYOUT_DEFAULTS);
     const schema = _graphLayoutSchemaByKey();
-    document.querySelectorAll('#graph-settings-form .graph-settings-range').forEach(function(input) {
+    document.querySelectorAll('#graph-settings-form .graph-settings-range').forEach(function(input: any) {
         const key = input.dataset.key;
         if (!key || !schema[key]) return;
         const p = schema[key];
@@ -332,12 +332,12 @@ window.GraphLayoutParams = {
 };
 
 // index.html onclick 使用的全局函数（行为与拆分前一致）
-window.graphOpenLayoutSettings = function graphOpenLayoutSettings() { window.GraphLayoutParams.open(); };
-window.graphCloseLayoutSettings = function graphCloseLayoutSettings() { window.GraphLayoutParams.close(); };
+window.graphOpenLayoutSettings = function graphOpenLayoutSettings() { window.GraphLayoutParams!.open!(); };
+window.graphCloseLayoutSettings = function graphCloseLayoutSettings() { window.GraphLayoutParams!.close!(); };
 window.graphApplyLayoutSettings = function graphApplyLayoutSettings() {
     const g = _graph();
-    if (g) g.applyLayoutSettings(window.GraphLayoutParams.readForm());
+    if (g) g.applyLayoutSettings(window.GraphLayoutParams!.readForm!());
 };
-window.graphResetLayoutSettings = function graphResetLayoutSettings() { window.GraphLayoutParams.reset(); };
+window.graphResetLayoutSettings = function graphResetLayoutSettings() { window.GraphLayoutParams!.reset!(); };
 
 })();

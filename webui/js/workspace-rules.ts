@@ -1,19 +1,19 @@
 (function() { 'use strict';
 
-var _resolveOpen = null;
+var _resolveOpen: any = null;
 
-function $(id) {
+function $(id: any) {
     return document.getElementById(id);
 }
 
 const escapeHtml = window.escapeHtml;
 
-function readOptionsFromDom(prefix) {
-    var depthEl = document.querySelector('input[name="' + prefix + '-depth"]:checked');
-    var surveyLevelEl = document.querySelector('input[name="' + prefix + '-survey-level"]:checked');
-    var autoSurveyEl = prefix === 'organize-rules-modal'
+function readOptionsFromDom(prefix: any) {
+    var depthEl = document.querySelector('input[name="' + prefix + '-depth"]:checked') as HTMLInputElement | null;
+    var surveyLevelEl = document.querySelector('input[name="' + prefix + '-survey-level"]:checked') as HTMLInputElement | null;
+    var autoSurveyEl = (prefix === 'organize-rules-modal'
         ? $('organize-rules-modal-auto-survey')
-        : $('settings-organize-rules-auto-survey');
+        : $('settings-organize-rules-auto-survey')) as HTMLInputElement | null;
     return {
         max_topic_depth: depthEl ? parseInt(depthEl.value, 10) : 3,
         auto_update_survey: autoSurveyEl ? autoSurveyEl.checked : true,
@@ -21,49 +21,49 @@ function readOptionsFromDom(prefix) {
     };
 }
 
-function applyOptionsToForm(data, prefix) {
+function applyOptionsToForm(data: any, prefix: any) {
     var depth = String(data.max_topic_depth || 3);
-    document.querySelectorAll('input[name="' + prefix + '-depth"]').forEach(function(el) {
+    document.querySelectorAll('input[name="' + prefix + '-depth"]').forEach(function(el: any) {
         el.checked = el.value === depth;
         var card = el.closest('.schema-option-card');
         if (card) card.classList.toggle('selected', el.checked);
     });
     var surveyLevel = String(data.survey_at_level || 2);
-    document.querySelectorAll('input[name="' + prefix + '-survey-level"]').forEach(function(el) {
+    document.querySelectorAll('input[name="' + prefix + '-survey-level"]').forEach(function(el: any) {
         el.checked = el.value === surveyLevel;
         var card = el.closest('.schema-option-card');
         if (card) card.classList.toggle('selected', el.checked);
     });
-    var autoSurveyEl = prefix === 'organize-rules-modal'
+    var autoSurveyEl = (prefix === 'organize-rules-modal'
         ? $('organize-rules-modal-auto-survey')
-        : $('settings-organize-rules-auto-survey');
+        : $('settings-organize-rules-auto-survey')) as HTMLInputElement | null;
     if (autoSurveyEl) autoSurveyEl.checked = data.auto_update_survey !== false;
 }
 
-function renderTopics(topics, containerId) {
+function renderTopics(topics: any, containerId: any) {
     var el = $(containerId);
     if (!el) return;
     if (!topics || !topics.length) {
         el.textContent = window.t('settings.organizeRulesTopicsEmpty');
         return;
     }
-    el.innerHTML = topics.map(function(name) {
-        return '<span class="schema-l1-tag">' + escapeHtml(name) + '</span>';
+    el.innerHTML = topics.map(function(name: any) {
+        return '<span class="schema-l1-tag">' + window.escapeHtml(name) + '</span>';
     }).join('');
 }
 
-function bindOptionCards(root) {
+function bindOptionCards(root: any) {
     var scope = root || document;
-    scope.querySelectorAll('.schema-option-card').forEach(function(card) {
+    scope.querySelectorAll('.schema-option-card').forEach(function(card: any) {
         if (card.dataset.bound) return;
         card.dataset.bound = '1';
-        card.addEventListener('click', function(e) {
+        card.addEventListener('click', function(e: any) {
             if (e.target.tagName === 'INPUT') return;
             var input = card.querySelector('input');
             if (!input) return;
             if (input.type === 'radio') {
                 input.checked = true;
-                card.parentElement.querySelectorAll('.schema-option-card').forEach(function(c) {
+                card.parentElement.querySelectorAll('.schema-option-card').forEach(function(c: any) {
                     var inp = c.querySelector('input');
                     c.classList.toggle('selected', inp && inp.checked);
                 });
@@ -75,8 +75,8 @@ function bindOptionCards(root) {
     });
 }
 
-function showStatus(msg, isError) {
-    var el = $('settings-organize-rules-status');
+function showStatus(msg: any, isError?: any) {
+    const el = $('settings-organize-rules-status');
     if (!el) return;
     el.textContent = msg;
     el.style.display = 'block';
@@ -99,7 +99,7 @@ async function loadOrganizeRules() {
         renderTopics(result.l1_topics, 'settings-organize-rules-topics');
         if (window.api && window.api.getProjectRules) {
             var rulesResult = await window.api.getProjectRules();
-            var input = $('settings-project-rules-input');
+            var input = $('settings-project-rules-input') as HTMLTextAreaElement | null;
             if (input && rulesResult && rulesResult.success) {
                 input.value = rulesResult.rules || '';
             }
@@ -110,7 +110,7 @@ async function loadOrganizeRules() {
 }
 
 async function saveProjectRulesFromSettings() {
-    var input = $('settings-project-rules-input');
+    var input = $('settings-project-rules-input') as HTMLTextAreaElement | null;
     if (!input || !window.api || !window.api.saveProjectRules) {
         throw new Error(window.t('organizeRules.saveUnavailable'));
     }
@@ -121,7 +121,7 @@ async function saveProjectRulesFromSettings() {
     return result;
 }
 
-async function saveOrganizeRules(fromModal) {
+async function saveOrganizeRules(fromModal: any) {
     var opts = readOptionsFromDom(fromModal ? 'organize-rules-modal' : 'organize-rules');
     if (!window.api || !window.api.saveWorkspaceRules) {
         throw new Error(window.t('organizeRules.saveUnavailable'));
@@ -148,7 +148,7 @@ async function finishModal() {
         if (_resolveOpen) _resolveOpen(true);
     } catch (e) {
         console.error('[OrganizeRules] save failed:', e);
-        window.updateStatus(window.t('organizeRules.saveFailed', { message: e.message }));
+        window.updateStatus(window.t('organizeRules.saveFailed', { message: (e as Error).message }));
     }
 }
 
@@ -168,13 +168,13 @@ function hideModal() {
 }
 
 function openSetupModal() {
-    return new Promise(function(resolve) {
+    return new Promise<boolean>(function(resolve) {
         _resolveOpen = resolve;
         showModal();
     });
 }
 
-async function maybePromptSetup(flag) {
+async function maybePromptSetup(flag: any) {
     if (!flag && window.api && window.api.needsWorkspaceRulesSetup) {
         try {
             var st = await window.api.needsWorkspaceRulesSetup();
@@ -246,7 +246,7 @@ function initOrganizeRules() {
                 showStatus(window.t('settings.organizeRulesSaved'));
                 window.updateStatus(window.t('settings.organizeRulesSaved'));
             } catch (e) {
-                showStatus(e.message, true);
+                showStatus((e as Error).message, true);
             }
         });
     }
@@ -255,7 +255,7 @@ function initOrganizeRules() {
     if (rulesSaveBtn && !rulesSaveBtn.dataset.bound) {
         rulesSaveBtn.dataset.bound = '1';
         rulesSaveBtn.addEventListener('click', async function() {
-            var statusEl = $('settings-project-rules-status');
+            const statusEl = $('settings-project-rules-status');
             try {
                 await saveProjectRulesFromSettings();
                 if (statusEl) {
@@ -267,7 +267,7 @@ function initOrganizeRules() {
                 window.updateStatus(window.t('settings.projectRulesSaved'));
             } catch (e) {
                 if (statusEl) {
-                    statusEl.textContent = e.message || String(e);
+                    statusEl.textContent = (e as Error).message || String(e);
                     statusEl.style.display = 'block';
                     statusEl.style.color = '#e53e3e';
                 }

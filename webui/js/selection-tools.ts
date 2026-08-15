@@ -2,27 +2,27 @@
     'use strict';
 
     var MAX_SELECTION_CHARS = 800;
-    var _bar = null;
+    var _bar: any = null;
     var _selectedText = '';
-    var _lastRangeRect = null;
+    var _lastRangeRect: any = null;
 
-    function _t(key, fallback, vars) {
+    function _t(key: any, fallback: any, vars?: any) {
         return window.t ? window.t(key, vars || {}) : fallback;
     }
 
-    function _selectionScope(node) {
+    function _selectionScope(node: any) {
         if (!node) return null;
         var el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
         if (!el) return null;
         return el.closest('.preview-content, .tiptap-prose, .tiptap-editor-content');
     }
 
-    function _isIgnoredTarget(target) {
+    function _isIgnoredTarget(target: any) {
         if (!target || !target.closest) return false;
         return !!target.closest('input, textarea, select, button, .selection-tools-popover, .settings-layout, .graph-panel');
     }
 
-    function _normalizeSelectionText(text) {
+    function _normalizeSelectionText(text: any) {
         return String(text || '').replace(/\s+/g, ' ').trim();
     }
 
@@ -55,11 +55,11 @@
             '<button type="button" data-action="copy"></button>'
         ].join('');
         document.body.appendChild(_bar);
-        _bar.addEventListener('mousedown', function(e) {
+        _bar.addEventListener('mousedown', function(e: MouseEvent) {
             e.preventDefault();
         });
-        _bar.addEventListener('click', function(e) {
-            var btn = e.target.closest('button[data-action]');
+        _bar.addEventListener('click', function(e: MouseEvent) {
+            var btn = (e.target as Element).closest('button[data-action]');
             if (!btn) return;
             var action = btn.getAttribute('data-action');
             if (action === 'rag') {
@@ -88,7 +88,7 @@
         if (copy) copy.textContent = _t('selectionTools.copy', '复制');
     }
 
-    function _positionBar(rect) {
+    function _positionBar(rect: any) {
         var bar = _ensureBar();
         var top = Math.max(8, rect.top + window.scrollY - bar.offsetHeight - 10);
         var left = rect.left + window.scrollX + rect.width / 2 - bar.offsetWidth / 2;
@@ -97,7 +97,7 @@
         bar.style.top = top + 'px';
     }
 
-    function show(info) {
+    function show(info: any) {
         _selectedText = info.text;
         _lastRangeRect = info.rect;
         var bar = _ensureBar();
@@ -117,7 +117,7 @@
         _bar.classList.remove('is-visible');
     }
 
-    function refreshFromSelection(target) {
+    function refreshFromSelection(target: any) {
         if (_isIgnoredTarget(target)) {
             hide();
             return;
@@ -134,13 +134,13 @@
         var sel = window.getSelection ? window.getSelection() : null;
         var anchor = sel && sel.anchorNode;
         var anchorEl = anchor && (anchor.nodeType === Node.ELEMENT_NODE ? anchor : anchor.parentElement);
-        var paragraph = anchorEl && anchorEl.closest('p, li, blockquote, h1, h2, h3, h4, h5, h6');
-        if (paragraph) return String(paragraph.innerText || '').slice(0, 2000);
+        var paragraph = anchorEl && (anchorEl as Element).closest('p, li, blockquote, h1, h2, h3, h4, h5, h6');
+        if (paragraph) return String((paragraph as HTMLElement).innerText || '').slice(0, 2000);
         var scope = document.querySelector('.tiptap-prose, .tiptap-editor-content, .preview-content');
-        return scope ? String(scope.innerText || '').slice(0, 2000) : '';
+        return scope ? String((scope as HTMLElement).innerText || '').slice(0, 2000) : '';
     }
 
-    function askKnowledge(text, route) {
+    function askKnowledge(text: any, route: any) {
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
         if (window.AssistantModule && window.AssistantModule.askSelection) {
@@ -148,11 +148,11 @@
         }
     }
 
-    function webSearch(text) {
+    function webSearch(text: any) {
         askKnowledge(text, 'web');
     }
 
-    function searchNotes(text) {
+    function searchNotes(text: any) {
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
         if (typeof window.openSearchModal === 'function') {
@@ -162,7 +162,7 @@
         }
     }
 
-    function copySelection(text) {
+    function copySelection(text: any) {
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
         if (navigator.clipboard && navigator.clipboard.writeText) {

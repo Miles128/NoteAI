@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    function switchTab(tabIndex) {
+    function switchTab(tabIndex: any) {
         document.querySelectorAll('.tab-content').forEach((content, i) => {
             content.classList.toggle('active', i === tabIndex);
         });

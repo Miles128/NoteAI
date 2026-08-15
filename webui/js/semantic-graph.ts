@@ -20,15 +20,15 @@ var _state = {
     data: null
 };
 
-var _data = null;
-var _svg = null;
-var _simulation = null;
-var _zoom = null;
-var _rootG = null;
-var _nodesG = null;
-var _edgesG = null;
+var _data: any = null;
+var _svg: any = null;
+var _simulation: any = null;
+var _zoom: any = null;
+var _rootG: any = null;
+var _nodesG: any = null;
+var _edgesG: any = null;
 
-var _ENTITY_COLORS = {
+var _ENTITY_COLORS: Record<string, any> = {
     product: '#5B7DB1',
     artifact: '#8fa9d0',
     model: '#4a90d9',
@@ -42,7 +42,7 @@ var _DOC_COLOR = '#9aa0a6';
 var _EDGE_COLOR = 'rgba(120,140,170,0.35)';
 var _HIGHLIGHT_EDGE_COLOR = 'rgba(90,120,200,0.7)';
 
-function t(key) {
+function t(key: any) {
     return (window.t && window.t(key)) || key;
 }
 
@@ -68,7 +68,7 @@ function _currentFilePath() {
 
 function _buildRequest() {
     var scope = _resolveScope();
-    var req = {
+    var req: any = {
         scope: scope,
         limit: _state.limit,
         min_share: _state.minShare,
@@ -80,28 +80,28 @@ function _buildRequest() {
     return req;
 }
 
-function _nodeColor(d) {
+function _nodeColor(d: any) {
     if (d.kind === 'concept') return _CONCEPT_COLOR;
     if (d.kind === 'doc') return _DOC_COLOR;
     return _ENTITY_COLORS[d.entity_type] || _ENTITY_COLORS.other;
 }
 
-function _nodeRadius(d) {
+function _nodeRadius(d: any) {
     if (d.kind === 'doc') return Math.max(3, Math.min(8, 2 + Math.sqrt(d.count || 1) * 0.6));
     return Math.max(5, Math.min(22, 3 + Math.sqrt(d.count || 1) * 1.8));
 }
 
-function _nodeFontSize(d) {
+function _nodeFontSize(d: any) {
     var r = _nodeRadius(d);
     return (d.kind === 'doc') ? '7px' : (r > 14 ? '9px' : '8px');
 }
 
-function _displayName(d) {
+function _displayName(d: any) {
     var name = d.name || d.id;
     return name.length > 14 ? name.slice(0, 13) + '…' : name;
 }
 
-function _nodeTooltip(d) {
+function _nodeTooltip(d: any) {
     var lines = [];
     if (d.kind === 'entity') {
         lines.push(t('graph.semantic.entity') + ': ' + d.name);
@@ -130,7 +130,7 @@ function _clearSvg() {
     _zoom = null;
 }
 
-function _render(data) {
+function _render(data: any) {
     var body = _graphBody();
     var container = _container();
     if (!container || !body) return;
@@ -141,7 +141,7 @@ function _render(data) {
     var width = container.clientWidth || body.clientWidth || 800;
     var height = container.clientHeight || body.clientHeight || 560;
 
-    _svg = d3.select(container)
+    _svg = window.d3.select(container)
         .append('svg')
         .attr('width', width)
         .attr('height', height)
@@ -149,9 +149,9 @@ function _render(data) {
         .style('width', '100%')
         .style('height', '100%');
 
-    _zoom = d3.zoom()
+    _zoom = window.d3.zoom()
         .scaleExtent([0.25, 6])
-        .on('zoom', function(evt) {
+        .on('zoom', function(evt: any) {
             if (_rootG) _rootG.attr('transform', evt.transform);
             var pct = document.getElementById('semantic-graph-zoom-percent');
             if (pct) pct.textContent = Math.round(evt.transform.k * 100) + '%';
@@ -162,62 +162,62 @@ function _render(data) {
     _edgesG = _rootG.append('g');
     _nodesG = _rootG.append('g');
 
-    var links = (data.edges || []).map(function(e) {
+    var links = (data.edges || []).map(function(e: any) {
         return { source: e.source, target: e.target, weight: e.weight || 1, relation_type: e.relation_type };
     });
-    var nodes = (data.nodes || []).map(function(n) {
+    var nodes = (data.nodes || []).map(function(n: any) {
         return Object.assign({}, n, { weight: n.count || 1 });
     });
-    var idIndex = {};
-    nodes.forEach(function(n) { idIndex[n.id] = n; });
-    links = links.filter(function(l) { return idIndex[l.source] && idIndex[l.target]; });
+    var idIndex: Record<string, any> = {};
+    nodes.forEach(function(n: any) { idIndex[n.id] = n; });
+    links = links.filter(function(l: any) { return idIndex[l.source] && idIndex[l.target]; });
 
     var linkEls = _edgesG.selectAll('line').data(links).enter().append('line')
         .attr('stroke', _EDGE_COLOR)
-        .attr('stroke-width', function(d) { return Math.max(0.5, Math.min(3.5, Math.sqrt(d.weight) * 0.8)); })
+        .attr('stroke-width', function(d: any) { return Math.max(0.5, Math.min(3.5, Math.sqrt(d.weight) * 0.8)); })
         .style('opacity', 0.55);
 
     var nodeEls = _nodesG.selectAll('g').data(nodes).enter().append('g')
-        .attr('class', function(d) { return 'semantic-graph-node semantic-graph-node-' + (d.kind || 'object'); })
+        .attr('class', function(d: any) { return 'semantic-graph-node semantic-graph-node-' + (d.kind || 'object'); })
         .style('cursor', 'pointer');
 
     nodeEls.append('circle')
-        .attr('r', function(d) { return _nodeRadius(d); })
-        .attr('fill', function(d) { return _nodeColor(d); })
+        .attr('r', function(d: any) { return _nodeRadius(d); })
+        .attr('fill', function(d: any) { return _nodeColor(d); })
         .attr('stroke', 'rgba(255,255,255,0.85)')
         .attr('stroke-width', 1);
 
     nodeEls.append('text')
-        .attr('dy', function(d) { return _nodeRadius(d) + 11; })
+        .attr('dy', function(d: any) { return _nodeRadius(d) + 11; })
         .attr('text-anchor', 'middle')
-        .attr('font-size', function(d) { return _nodeFontSize(d); })
-        .attr('fill', function(d) {
+        .attr('font-size', function(d: any) { return _nodeFontSize(d); })
+        .attr('fill', function(d: any) {
             return d.kind === 'concept' ? 'var(--color-tag, #6a3de8)' : 'var(--text-muted, #777)';
         })
         .style('pointer-events', 'none')
-        .text(function(d) { return _displayName(d); });
+        .text(function(d: any) { return _displayName(d); });
 
-    nodeEls.append('title').text(function(d) { return _nodeTooltip(d); });
+    nodeEls.append('title').text(function(d: any) { return _nodeTooltip(d); });
 
-    nodeEls.on('click', function(evt, d) {
+    nodeEls.on('click', function(evt: any, d: any) {
         evt.stopPropagation();
         _onNodeClick(d);
     });
 
-    _simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(function(d) { return d.id; })
-            .distance(function(l) { return Math.max(40, 110 - (l.weight || 1) * 4); })
+    _simulation = window.d3.forceSimulation(nodes)
+        .force('link', window.d3.forceLink(links).id(function(d: any) { return d.id; })
+            .distance(function(l: any) { return Math.max(40, 110 - (l.weight || 1) * 4); })
             .strength(0.35))
-        .force('charge', d3.forceManyBody().strength(-160))
-        .force('collide', d3.forceCollide().radius(function(d) { return _nodeRadius(d) + 14; }))
-        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('charge', window.d3.forceManyBody().strength(-160))
+        .force('collide', window.d3.forceCollide().radius(function(d: any) { return _nodeRadius(d) + 14; }))
+        .force('center', window.d3.forceCenter(width / 2, height / 2))
         .on('tick', function() {
             linkEls
-                .attr('x1', function(d) { return d.source.x; })
-                .attr('y1', function(d) { return d.source.y; })
-                .attr('x2', function(d) { return d.target.x; })
-                .attr('y2', function(d) { return d.target.y; });
-            nodeEls.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+                .attr('x1', function(d: any) { return d.source.x; })
+                .attr('y1', function(d: any) { return d.source.y; })
+                .attr('x2', function(d: any) { return d.target.x; })
+                .attr('y2', function(d: any) { return d.target.y; });
+            nodeEls.attr('transform', function(d: any) { return 'translate(' + d.x + ',' + d.y + ')'; });
         });
 
     // 点击空白取消高亮
@@ -226,24 +226,24 @@ function _render(data) {
     });
 }
 
-function _highlight(activeNode) {
+function _highlight(activeNode: any) {
     if (!_svg || !_data) return;
-    _nodesG.selectAll('g').each(function(d) {
-        d3.select(this).select('circle').attr('stroke',
+    _nodesG.selectAll('g').each(function(this: any, d: any) {
+        window.d3.select(this).select('circle').attr('stroke',
             activeNode && d.id === activeNode.id ? '#e85d3a' : 'rgba(255,255,255,0.85)');
     });
     _edgesG.selectAll('line')
-        .attr('stroke', function(l) {
+        .attr('stroke', function(l: any) {
             if (!activeNode) return _EDGE_COLOR;
             return (l.source.id === activeNode.id || l.target.id === activeNode.id) ? _HIGHLIGHT_EDGE_COLOR : _EDGE_COLOR;
         })
-        .style('opacity', function(l) {
+        .style('opacity', function(l: any) {
             if (!activeNode) return 0.55;
             return (l.source.id === activeNode.id || l.target.id === activeNode.id) ? 0.95 : 0.15;
         });
 }
 
-function _onNodeClick(d) {
+function _onNodeClick(d: any) {
     if (d.kind === 'entity' || d.kind === 'concept') {
         if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.openObject) {
             window.SemanticWorkbenchModule.openObject(d.kind, d.object_id);
@@ -258,23 +258,23 @@ function _onNodeClick(d) {
     }
 }
 
-function _updateStats(data) {
+function _updateStats(data: any) {
     var notesEl = document.getElementById('graph-stat-notes');
     var topicsEl = document.getElementById('graph-stat-topics');
     if (!notesEl || !topicsEl) return;
     notesEl.textContent = (data.nodes || []).length;
     topicsEl.textContent = (data.edges || []).length;
-    document.querySelectorAll('.graph-stats-bar [data-i18n]').forEach(function(el) { el.style.display = 'none'; });
+    document.querySelectorAll('.graph-stats-bar [data-i18n]').forEach(function(el) { (el as HTMLElement).style.display = 'none'; });
     notesEl.title = t('graph.semantic.objectSuffix');
     topicsEl.title = t('graph.semantic.edgeSuffix');
 }
 
-function _renderLegend(data) {
+function _renderLegend(data: any) {
     var legend = document.getElementById('graph-legend');
     if (!legend) return;
-    var hasEntities = (data.nodes || []).some(function(n) { return n.kind === 'entity'; });
-    var hasConcepts = (data.nodes || []).some(function(n) { return n.kind === 'concept'; });
-    var hasDocs = (data.nodes || []).some(function(n) { return n.kind === 'doc'; });
+    var hasEntities = (data.nodes || []).some(function(n: any) { return n.kind === 'entity'; });
+    var hasConcepts = (data.nodes || []).some(function(n: any) { return n.kind === 'concept'; });
+    var hasDocs = (data.nodes || []).some(function(n: any) { return n.kind === 'doc'; });
     var html = '';
     if (hasEntities) html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:#5B7DB1"></span>' + t('graph.semantic.entity') + '</span>';
     if (hasConcepts) html += '<span class="graph-legend-item"><span class="graph-legend-dot" style="background:' + _CONCEPT_COLOR + '"></span>' + t('graph.semantic.concept') + '</span>';
@@ -284,7 +284,7 @@ function _renderLegend(data) {
     legend.style.display = html ? '' : 'none';
 }
 
-function _showEmpty(message) {
+function _showEmpty(message?: any) {
     _clearSvg();
     var container = _container();
     if (!container) return;
@@ -293,7 +293,7 @@ function _showEmpty(message) {
 }
 
 function load() {
-    var container = _container();
+    const container = _container();
     if (!container) return;
     _state.error = null;
     _state.loading = true;
@@ -331,21 +331,21 @@ function load() {
     });
 }
 
-function zoomBy(factor) {
+function zoomBy(factor: any) {
     if (!_svg || !_zoom) return;
     _svg.transition().duration(150).call(_zoom.scaleBy, factor);
 }
 
 function zoomReset() {
     if (!_svg || !_zoom) return;
-    _svg.transition().duration(150).call(_zoom.transform, d3.zoomIdentity);
+    _svg.transition().duration(150).call(_zoom.transform, window.d3.zoomIdentity);
 }
 
 function refresh() {
-    var limitEl = document.getElementById('semantic-graph-limit');
-    var scopeEl = document.getElementById('semantic-graph-scope');
-    var docsEl = document.getElementById('semantic-graph-docs');
-    var shareEl = document.getElementById('semantic-graph-min-share');
+    var limitEl = document.getElementById('semantic-graph-limit') as HTMLInputElement | null;
+    var scopeEl = document.getElementById('semantic-graph-scope') as HTMLSelectElement | null;
+    var docsEl = document.getElementById('semantic-graph-docs') as HTMLInputElement | null;
+    var shareEl = document.getElementById('semantic-graph-min-share') as HTMLInputElement | null;
     if (limitEl) _state.limit = parseInt(limitEl.value, 10) || 80;
     if (scopeEl) _state.scope = scopeEl.value || 'auto';
     if (docsEl) _state.includeDocs = !!docsEl.checked;
@@ -353,7 +353,7 @@ function refresh() {
     load();
 }
 
-function setModeActive(active) {
+function setModeActive(active: any) {
     var container = _container();
     var controls = document.getElementById('graph-semantic-controls');
     if (container) container.style.display = active ? 'block' : 'none';
@@ -363,7 +363,7 @@ function setModeActive(active) {
     } else {
         _clearSvg();
         var body = _graphBody();
-        if (body) body.querySelectorAll('#semantic-graph-container').forEach(function(el) { el.style.display = 'none'; });
+        if (body) body.querySelectorAll('#semantic-graph-container').forEach(function(el) { (el as HTMLElement).style.display = 'none'; });
     }
 }
 

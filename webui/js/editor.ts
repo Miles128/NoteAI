@@ -12,20 +12,20 @@ window.mdEditor = {
 };
 
 function initMarked() {
-    if (typeof marked !== 'undefined') {
-        var renderer = new marked.Renderer();
-        renderer.html = function(html) {
+    if (typeof window.marked !== 'undefined') {
+        var renderer = new window.marked.Renderer();
+        renderer.html = function(html: any) {
             if (typeof DOMPurify !== 'undefined') {
                 return DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'code', 'br', 'span', 'sub', 'sup', 'mark', 'abbr', 'kbd'] });
             }
             // fallback: strip all tags except safe inline ones
             return html.replace(/<(?!\/?(?:b|i|em|strong|code|br|span|sub|sup|mark|abbr|kbd)\b)[^>]*>/gi, '');
         };
-        marked.setOptions({
+        window.marked.setOptions({
             gfm: true,
             breaks: true,
             renderer: renderer,
-            highlight: function(code, lang) {
+            highlight: function(code: any, lang: any) {
                 if (typeof hljs !== 'undefined') {
                     try {
                         if (lang && hljs.getLanguage(lang)) {
@@ -53,13 +53,13 @@ function getEffectiveTheme() {
 
 function updateHljsTheme() {
     const isDark = getEffectiveTheme() === 'dark';
-    const lightLink = document.getElementById('hljs-light');
-    const darkLink = document.getElementById('hljs-dark');
+    const lightLink = document.getElementById('hljs-light') as HTMLLinkElement | null;
+    const darkLink = document.getElementById('hljs-dark') as HTMLLinkElement | null;
     if (lightLink) lightLink.disabled = isDark;
     if (darkLink) darkLink.disabled = !isDark;
 }
 
-function updateSaveStatus(status, text) {
+function updateSaveStatus(status: any, text: any) {
     if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
         window.StatusbarModule.updateSaveStatus(status, text);
         return;
@@ -70,22 +70,22 @@ function updateSaveStatus(status, text) {
     statusEl.textContent = text || '';
 }
 
-function initCodeMirrorEditor(content, filePath) {
+function initCodeMirrorEditor(content: any, filePath: any) {
     const container = document.getElementById('cm-editor-container');
     if (!container) return;
 
     container.innerHTML = '';
 
-    window.mdEditor.originalContent = content;
-    window.mdEditor.filePath = filePath;
-    window.mdEditor.isActive = true;
+    window.mdEditor!.originalContent = content;
+    window.mdEditor!.filePath = filePath;
+    window.mdEditor!.isActive = true;
 
     updateSaveStatus('saved', window.t('editor.saveLoading'));
     createTextareaFallback(content, filePath, container);
 }
 
-function createTextareaFallback(content, filePath, container) {
-    window.mdEditor.usingFallback = true;
+function createTextareaFallback(content: any, filePath: any, container: any) {
+    window.mdEditor!.usingFallback = true;
     const textarea = document.createElement('textarea');
     textarea.value = content;
     textarea.style.cssText = 'width:100%;height:100%;border:none;outline:none;padding:12px;font-family:monospace;font-size: 14px;line-height:1.6;resize:none;background:var(--surface);color:var(--text);';
@@ -99,33 +99,33 @@ function createTextareaFallback(content, filePath, container) {
     updateSaveStatus('saved', window.t('editor.saveSavedSimple'));
     initPreviewScrollListener();
 
-    window.mdEditor.getFallbackContent = () => textarea.value;
+    window.mdEditor!.getFallbackContent = () => textarea.value;
     console.log('[Editor] Textarea fallback for:', filePath, 'content length:', content.length);
 }
 
 function destroyCodeMirrorEditor() {
-    if (window.mdEditor.saveTimer) {
-        clearTimeout(window.mdEditor.saveTimer);
-        window.mdEditor.saveTimer = null;
+    if (window.mdEditor!.saveTimer) {
+        clearTimeout(window.mdEditor!.saveTimer);
+        window.mdEditor!.saveTimer = null;
     }
-    if (window.mdEditor.usingFallback) {
+    if (window.mdEditor!.usingFallback) {
         performImmediateSave();
-        window.mdEditor.usingFallback = false;
-        window.mdEditor.getFallbackContent = null;
+        window.mdEditor!.usingFallback = false;
+        window.mdEditor!.getFallbackContent = null;
     }
-    window.mdEditor.filePath = null;
-    window.mdEditor.originalContent = null;
-    window.mdEditor.isActive = false;
-    window.mdEditor.isScrollSyncing = false;
+    window.mdEditor!.filePath = null;
+    window.mdEditor!.originalContent = null;
+    window.mdEditor!.isActive = false;
+    window.mdEditor!.isScrollSyncing = false;
 }
 
-function updateMarkdownPreview(content) {
+function updateMarkdownPreview(content: any) {
     const previewEl = document.getElementById('editor-preview-scroll');
     if (!previewEl) return;
 
-    if (typeof marked !== 'undefined') {
+    if (typeof window.marked !== 'undefined') {
         try {
-            var rawHtml = marked.parse(content);
+            var rawHtml = window.marked.parse(content);
             previewEl.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
@@ -136,11 +136,11 @@ function updateMarkdownPreview(content) {
     }
 }
 
-function renderMarkdownPreview(content) {
-    if (typeof marked !== 'undefined') {
+function renderMarkdownPreview(content: any) {
+    if (typeof window.marked !== 'undefined') {
         try {
             var processedContent = processAbstractLinks(content);
-            var rawHtml = marked.parse(processedContent);
+            var rawHtml = window.marked.parse(processedContent);
             return typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(rawHtml) : window.escapeHtml(content);
         } catch (e) {
             console.error('[Marked] Parse error:', e);
@@ -150,20 +150,20 @@ function renderMarkdownPreview(content) {
     return '<pre>' + window.escapeHtml(content) + '</pre>';
 }
 
-function processAbstractLinks(content) {
+function processAbstractLinks(content: any) {
     if (!content) return content;
 
     var result = content;
 
     // 处理 {{abstract:主题名}} 嵌入语法
-    result = result.replace(/\{\{abstract:([^}]+)\}\}/g, function(match, topicName) {
+    result = result.replace(/\{\{abstract:([^}]+)\}\}/g, function(match: any, topicName: any) {
         var trimmed = topicName.trim();
         var absPath = buildAbstractPath(trimmed);
-        return `<span class="abstract-embed" data-topic="${escapeHtml(trimmed)}" data-path="${escapeHtml(absPath)}">${window.t('editor.surveyEmbed', { topic: trimmed })}</span>`;
+        return `<span class="abstract-embed" data-topic="${window.escapeHtml(trimmed)}" data-path="${window.escapeHtml(absPath)}">${window.t('editor.surveyEmbed', { topic: trimmed })}</span>`;
     });
 
     // 处理 [[主题名|显示文本]] 带显示文本的链接
-    result = result.replace(/\[\[([^\|]+)\|([^\]]+)\]\]/g, function(match, topicName, displayText) {
+    result = result.replace(/\[\[([^\|]+)\|([^\]]+)\]\]/g, function(match: any, topicName: any, displayText: any) {
         var trimmedTopic = topicName.trim();
         var display = displayText.trim();
         var absPath = buildAbstractPath(trimmedTopic);
@@ -171,7 +171,7 @@ function processAbstractLinks(content) {
     });
 
     // 处理 [[主题名]] 简单链接
-    result = result.replace(/\[\[([^\]]+)\]\]/g, function(match, topicName) {
+    result = result.replace(/\[\[([^\]]+)\]\]/g, function(match: any, topicName: any) {
         var trimmed = topicName.trim();
         var absPath = buildAbstractPath(trimmed);
         return `[${trimmed}](notes://${encodeURIComponent(absPath)})`;
@@ -180,7 +180,7 @@ function processAbstractLinks(content) {
     return result;
 }
 
-function buildAbstractPath(topicName) {
+function buildAbstractPath(topicName: any) {
     if (topicName.includes(' > ')) {
         var parts = topicName.split(' > ');
         return `wiki/${parts[0]}/${parts[parts.length - 1]}.md`;
@@ -188,37 +188,37 @@ function buildAbstractPath(topicName) {
     return `wiki/${topicName}.md`;
 }
 
-function scheduleAutoSave(content) {
-    if (window.mdEditor.saveTimer) {
-        clearTimeout(window.mdEditor.saveTimer);
+function scheduleAutoSave(content: any) {
+    if (window.mdEditor!.saveTimer) {
+        clearTimeout(window.mdEditor!.saveTimer);
     }
 
-    window.mdEditor.saveTimer = setTimeout(() => {
+    window.mdEditor!.saveTimer = setTimeout(() => {
         performSave(content);
     }, 1000);
 }
 
 function performImmediateSave() {
     let content;
-    if (window.mdEditor.usingFallback && window.mdEditor.getFallbackContent) {
-        content = window.mdEditor.getFallbackContent();
-    } else if (window.mdEditor.view) {
-        content = window.mdEditor.view.state.doc.toString();
+    if (window.mdEditor!.usingFallback && window.mdEditor!.getFallbackContent) {
+        content = window.mdEditor!.getFallbackContent();
+    } else if (window.mdEditor!.view) {
+        content = window.mdEditor!.view.state.doc.toString();
     } else {
         return;
     }
 
-    if (window.mdEditor.saveTimer) {
-        clearTimeout(window.mdEditor.saveTimer);
-        window.mdEditor.saveTimer = null;
+    if (window.mdEditor!.saveTimer) {
+        clearTimeout(window.mdEditor!.saveTimer);
+        window.mdEditor!.saveTimer = null;
     }
     performSave(content);
 }
 
-var _savePromise = null;
+var _savePromise: any = null;
 
-async function performSave(content) {
-    if (!window.mdEditor.filePath) return;
+async function performSave(content: any) {
+    if (!window.mdEditor!.filePath) return;
 
     while (_savePromise) {
         await _savePromise;
@@ -228,10 +228,10 @@ async function performSave(content) {
         updateSaveStatus('saving', window.t('editor.saving'));
 
         try {
-            const result = await window.api.saveFileContent(window.mdEditor.filePath, content);
+            const result = await window.api.saveFileContent(window.mdEditor!.filePath, content);
 
             if (result && result.success) {
-                window.mdEditor.originalContent = content;
+                window.mdEditor!.originalContent = content;
                 updateSaveStatus('saved', window.t('editor.saveSaved'));
             } else {
                 updateSaveStatus('error', window.t('editor.saveFailed'));
@@ -254,16 +254,16 @@ function initPreviewScrollListener() {
     _previewScrollBound = true;
 
     previewScroll.addEventListener('scroll', () => {
-        if (window.mdEditor.isScrollSyncing) return;
+        if (window.mdEditor!.isScrollSyncing) return;
         syncScrollFromPreview(previewScroll);
     });
 }
 
-function syncScrollFromEditor(view) {
+function syncScrollFromEditor(view: any) {
     const previewScroll = document.getElementById('editor-preview-scroll');
     if (!previewScroll) return;
 
-    window.mdEditor.isScrollSyncing = true;
+    window.mdEditor!.isScrollSyncing = true;
 
     const editorScrollTop = view.scrollDOM.scrollTop;
     const editorScrollHeight = view.scrollDOM.scrollHeight;
@@ -279,20 +279,20 @@ function syncScrollFromEditor(view) {
     previewScroll.scrollTop = previewScrollTop;
 
     setTimeout(() => {
-        window.mdEditor.isScrollSyncing = false;
+        window.mdEditor!.isScrollSyncing = false;
     }, 50);
 }
 
-function syncScrollFromPreview(previewScroll) {
-    if (!window.mdEditor.view) return;
+function syncScrollFromPreview(previewScroll: any) {
+    if (!window.mdEditor!.view) return;
 
-    window.mdEditor.isScrollSyncing = true;
+    window.mdEditor!.isScrollSyncing = true;
 
     const previewScrollTop = previewScroll.scrollTop;
     const previewScrollHeight = previewScroll.scrollHeight;
     const previewClientHeight = previewScroll.clientHeight;
 
-    const editorScrollDOM = window.mdEditor.view.scrollDOM;
+    const editorScrollDOM = window.mdEditor!.view.scrollDOM;
     const editorScrollHeight = editorScrollDOM.scrollHeight;
     const editorClientHeight = editorScrollDOM.clientHeight;
 
@@ -303,7 +303,7 @@ function syncScrollFromPreview(previewScroll) {
     editorScrollDOM.scrollTop = editorScrollTop;
 
     setTimeout(() => {
-        window.mdEditor.isScrollSyncing = false;
+        window.mdEditor!.isScrollSyncing = false;
     }, 50);
 }
 

@@ -12,15 +12,15 @@
 
     // 原始文件内容共享缓存（TTL 10s）：statusbar 字数统计与 inspector
     // 属性面板不再各自 readFileRaw 读全文
-    var _rawCache = {};
+    var _rawCache: Record<string, any> = {};
     var _RAW_CACHE_TTL_MS = 10000;
 
-    function cachedReadFileRaw(filePath) {
+    function cachedReadFileRaw(filePath: any) {
         var hit = _rawCache[filePath];
         if (hit && Date.now() - hit.ts < _RAW_CACHE_TTL_MS) {
             return Promise.resolve(hit.result);
         }
-        return window.api.readFileRaw(filePath).then(function(result) {
+        return window.api.readFileRaw(filePath).then(function(result: any) {
             if (result && result.success) {
                 _rawCache[filePath] = { ts: Date.now(), result: result };
             }
@@ -29,8 +29,8 @@
     }
     window.cachedReadFileRaw = cachedReadFileRaw;
 
-    function _parseFrontmatter(text) {
-        var meta = {};
+    function _parseFrontmatter(text: any) {
+        var meta: Record<string, any> = {};
         var body = String(text || '');
         var match = body.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
         if (!match) return { meta: meta, body: body };
@@ -38,17 +38,17 @@
         var yaml = match[1];
         body = body.substring(match[0].length);
 
-        yaml.split(/\r?\n/).forEach(function(line) {
+        yaml.split(/\r?\n/).forEach(function(line: any) {
             var m = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$/);
             if (!m) return;
             var key = m[1];
-            var val = m[2].trim();
+            var val: any = m[2].trim();
             if ((val.startsWith('"') && val.endsWith('"')) ||
                 (val.startsWith("'") && val.endsWith("'"))) {
                 val = val.slice(1, -1);
             }
             if (val.startsWith('[') && val.endsWith(']')) {
-                val = val.slice(1, -1).split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                val = val.slice(1, -1).split(',').map(function(s: any) { return s.trim(); }).filter(Boolean);
             }
             meta[key] = val;
         });
@@ -56,40 +56,40 @@
         return { meta: meta, body: body };
     }
 
-    function _setText(id, html) {
+    function _setText(id: any, html: any) {
         var el = document.getElementById(id);
         if (!el) return;
         el.innerHTML = html;
     }
 
-    function _setPlain(id, text) {
+    function _setPlain(id: any, text: any) {
         var el = document.getElementById(id);
         if (!el) return;
         el.textContent = text;
     }
 
-    function _renderTopic(topicVal) {
+    function _renderTopic(topicVal: any) {
         if (!topicVal) return '';
-        var parts = String(topicVal).split('>').map(function(s) { return s.trim(); }).filter(Boolean);
-        return parts.map(function(p) {
+        var parts = String(topicVal).split('>').map(function(s: any) { return s.trim(); }).filter(Boolean);
+        return parts.map(function(p: any) {
             return '<span class="statusbar-topic-chip">' + _escapeHtml(p) + '</span>';
         }).join('');
     }
 
-    function _renderTags(tagsVal) {
+    function _renderTags(tagsVal: any) {
         if (!tagsVal) return '';
-        var tags = [];
+        var tags: any[] = [];
         if (Array.isArray(tagsVal)) {
             tags = tagsVal;
         } else {
-            tags = String(tagsVal).split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            tags = String(tagsVal).split(',').map(function(s: any) { return s.trim(); }).filter(Boolean);
         }
-        return tags.map(function(t) {
+        return tags.map(function(t: any) {
             return '<span class="statusbar-tag-chip">#' + _escapeHtml(t) + '</span>';
         }).join('');
     }
 
-    function updateFromContent(text, filePath, fileName) {
+    function updateFromContent(text: any, filePath?: any, fileName?: any) {
         var parsed = _parseFrontmatter(text);
         var body = parsed.body;
         var meta = parsed.meta;
@@ -100,7 +100,7 @@
         var lineCount = body.split(/\r?\n/).length;
 
         _setPlain('statusbar-filename', fileName || (filePath && filePath.split('/').pop()) || '—');
-        document.getElementById('statusbar-filename').title = filePath || '';
+        document.getElementById('statusbar-filename')!.title = filePath || '';
         _setText('statusbar-topic', _renderTopic(meta.topic));
         _setText('statusbar-tags', _renderTags(meta.tags));
         _setPlain('statusbar-chars', charCount + ' 字符');
@@ -110,7 +110,7 @@
 
     function clearStats() {
         _setPlain('statusbar-filename', '—');
-        document.getElementById('statusbar-filename').title = '';
+        document.getElementById('statusbar-filename')!.title = '';
         _setText('statusbar-topic', '');
         _setText('statusbar-tags', '');
         _setPlain('statusbar-chars', '0 字符');
@@ -123,28 +123,28 @@
         setMetadataToggleVisible(false);
     }
 
-    function updateSaveStatus(status, text) {
+    function updateSaveStatus(status: any, text: any) {
         var el = document.getElementById('statusbar-save-status');
         if (!el) return;
         el.className = 'statusbar-item statusbar-save-status' + (status ? ' ' + status : '');
         el.textContent = text || '';
     }
 
-    function setSaveButtonVisible(visible) {
+    function setSaveButtonVisible(visible: any) {
         var btn = document.getElementById('statusbar-save-btn');
         if (!btn) return;
         btn.hidden = !visible;
         btn.style.display = visible ? '' : 'none';
     }
 
-    function setDiscardButtonVisible(visible) {
+    function setDiscardButtonVisible(visible: any) {
         var btn = document.getElementById('statusbar-discard-btn');
         if (!btn) return;
         btn.hidden = !visible;
         btn.style.display = visible ? '' : 'none';
     }
 
-    function setDraftActionsVisible(visible) {
+    function setDraftActionsVisible(visible: any) {
         setSaveButtonVisible(visible);
         setDiscardButtonVisible(visible);
     }
@@ -174,10 +174,10 @@
     bindSaveButton();
     bindDiscardButton();
 
-    var _messageTimer = null;
+    var _messageTimer: any = null;
 
-    function updateMessage(text, options) {
-        var el = document.getElementById('statusbar-message');
+    function updateMessage(text: any, options?: any) {
+        const el = document.getElementById('statusbar-message');
         if (!el) return;
         options = options || {};
         if (_messageTimer) {
@@ -195,7 +195,7 @@
         }
     }
 
-    function setRewriting(isRewriting, text) {
+    function setRewriting(isRewriting: any, text: any) {
         var appBar = document.getElementById('app-statusbar');
         var container = document.getElementById('tiptap-editor-container');
         if (isRewriting) {
@@ -209,7 +209,7 @@
         }
     }
 
-    function setMetadataToggleVisible(visible) {
+    function setMetadataToggleVisible(visible: any) {
         var toggle = document.getElementById('statusbar-metadata-toggle');
         if (!toggle) return;
         toggle.style.display = visible ? '' : 'none';
@@ -225,8 +225,8 @@
     }
 
     function bindMetadataToggle() {
-        var toggle = document.getElementById('statusbar-metadata-toggle');
-        var panel = document.getElementById('frontmatter-panel');
+        const toggle = document.getElementById('statusbar-metadata-toggle');
+        const panel = document.getElementById('frontmatter-panel');
         if (!toggle || !panel || toggle.dataset.bound === 'true') return;
         toggle.dataset.bound = 'true';
         toggle.addEventListener('click', function() {
@@ -240,11 +240,11 @@
 
     bindMetadataToggle();
 
-    function updateCursor(line, col) {
+    function updateCursor(line: any, col: any) {
         _setPlain('statusbar-cursor', 'Ln ' + (line || 1) + ', Col ' + (col || 1));
     }
 
-    function onFileSelected(filePath) {
+    function onFileSelected(filePath: any) {
         _currentFilePath = filePath;
         if (!filePath) {
             clearStats();

@@ -21,7 +21,7 @@ function toggleSidebar() {
 
 function _deactivatePendingBtn() {
     if (typeof window._pendingViewVisible !== 'undefined') {
-        _pendingViewVisible = false;
+        window._pendingViewVisible = false;
     }
     var btn = document.getElementById('titlebar-pending-btn');
     if (btn) btn.classList.remove('active');
@@ -58,8 +58,8 @@ function updateHomeStats() {
     var el1 = document.getElementById('home-stat-notes');
     var el2 = document.getElementById('home-stat-topics');
     var el3 = document.getElementById('home-stat-links');
-    if (el1) el1.textContent = fileCount;
-    if (el2) el2.textContent = topicCount;
+    if (el1) el1.textContent = String(fileCount);
+    if (el2) el2.textContent = String(topicCount);
     if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
         window.HomeDashboardModule.refresh();
     }
@@ -68,8 +68,8 @@ function updateHomeStats() {
     var gs1 = document.getElementById('graph-stat-notes');
     var gs2 = document.getElementById('graph-stat-topics');
     var gs3 = document.getElementById('graph-stat-links');
-    if (gs1) gs1.textContent = fileCount;
-    if (gs2) gs2.textContent = topicCount;
+    if (gs1) gs1.textContent = String(fileCount);
+    if (gs2) gs2.textContent = String(topicCount);
 
     if (window.api && window.api.getLinkStats) {
         window.api.getLinkStats().then(function(result) {
@@ -82,7 +82,7 @@ function updateHomeStats() {
     }
 }
 
-function _countFiles(nodes) {
+function _countFiles(nodes: any) {
     if (!nodes) return 0;
     var count = 0;
     for (var i = 0; i < nodes.length; i++) {
@@ -92,7 +92,7 @@ function _countFiles(nodes) {
     return count;
 }
 
-function _countTopicFolders(nodes) {
+function _countTopicFolders(nodes: any) {
     if (!nodes) return 0;
     var count = 0;
     for (var i = 0; i < nodes.length; i++) {
@@ -125,10 +125,10 @@ function updateSidebarStats() {
 }
 
 document.addEventListener('localechange', function() {
-    updateSidebarStats();
+    window.updateSidebarStats();
 });
 
-function setSidebarStatus(view, text, isActive) {
+function setSidebarStatus(view: any, text: any, isActive: any) {
     if (view === 'topic') view = 'tree';
     var el = document.getElementById('sidebar-status-' + view);
     if (el) {
@@ -141,18 +141,18 @@ function setSidebarStatus(view, text, isActive) {
     }
 }
 
-function switchSidebarView(view) {
+function switchSidebarView(view: any) {
     window.AppState.currentSidebarView = view;
 
     var sidebar = document.querySelector('.sidebar-left');
     var resizer = document.getElementById('sidebar-resizer');
     var tagInput = document.getElementById('sidebar-tag-input');
 
-    document.querySelectorAll('.sidebar-pane').forEach(function(pane) {
+    document.querySelectorAll('.sidebar-pane').forEach(function(pane: any) {
         pane.classList.remove('is-active');
         pane.hidden = true;
     });
-    document.querySelectorAll('.sidebar-dock-panel').forEach(function(dock) {
+    document.querySelectorAll('.sidebar-dock-panel').forEach(function(dock: any) {
         dock.classList.remove('is-active');
         dock.hidden = true;
     });
@@ -163,7 +163,7 @@ function switchSidebarView(view) {
         activePane.classList.add('is-active');
         activePane.hidden = false;
     }
-    var activeDock = document.querySelector('.sidebar-dock-panel[data-sidebar-dock="' + view + '"]');
+    var activeDock = document.querySelector('.sidebar-dock-panel[data-sidebar-dock="' + view + '"]') as HTMLElement | null;
     if (activeDock) {
         activeDock.classList.add('is-active');
         activeDock.hidden = false;
@@ -212,7 +212,7 @@ function switchSidebarView(view) {
         }
     }
 
-    if (view === 'tags') loadTagsView().then(function() { updateSidebarStats(); }).catch(function() {});
+    if (view === 'tags') (window.loadTagsView() as any).then(function() { window.updateSidebarStats(); }).catch(function() {});
 
     // 联动知识图谱过滤
     if (window.Graph3Tier && window.Graph3Tier.load) {
@@ -224,7 +224,7 @@ function switchSidebarView(view) {
             window.Graph3Tier.load('topic');
         }
     }
-    updateSidebarStats();
+    window.updateSidebarStats();
 }
 
 window.switchSidebarView = switchSidebarView;

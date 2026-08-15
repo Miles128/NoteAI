@@ -12,14 +12,14 @@
     'use strict';
 
     var _currentTab = 'ai';
-    var _currentFilePath = null;
+    var _currentFilePath: any = null;
 
     const _escapeHtml = window.escapeHtml;
 
     /**
      * 切换 Tab
      */
-    function switchTab(tabName) {
+    function switchTab(tabName: any) {
         _currentTab = tabName;
 
         var tabs = document.querySelectorAll('.inspector-tab');
@@ -49,10 +49,11 @@
         } else if (tabName === 'semantic' && _currentFilePath) {
             loadSemantic(_currentFilePath);
         } else if (tabName === 'cli') {
-            if (window.CliAgentModule && window.CliAgentModule.loadAgents) {
-                window.CliAgentModule.loadAgents().then(function() {
-                    if (window.CliAgentModule.renderAgentSelector) {
-                        window.CliAgentModule.renderAgentSelector();
+            const cliAgentModule = window.CliAgentModule;
+            if (cliAgentModule && cliAgentModule.loadAgents) {
+                cliAgentModule.loadAgents().then(function() {
+                    if (cliAgentModule && cliAgentModule.renderAgentSelector) {
+                        cliAgentModule.renderAgentSelector();
                     }
                 });
             }
@@ -62,8 +63,8 @@
     /**
      * 解析 frontmatter
      */
-    function _parseFrontmatter(text) {
-        var meta = {};
+    function _parseFrontmatter(text: any) {
+        var meta: Record<string, any> = {};
         var body = String(text || '');
         var match = body.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
         if (!match) return { meta: meta, body: body };
@@ -71,11 +72,11 @@
         var yaml = match[1];
         body = body.substring(match[0].length);
 
-        yaml.split(/\r?\n/).forEach(function(line) {
+        yaml.split(/\r?\n/).forEach(function(line: any) {
             var m = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$/);
             if (!m) return;
             var key = m[1];
-            var val = m[2].trim();
+            var val: any = m[2].trim();
             // 去掉引号
             if ((val.startsWith('"') && val.endsWith('"')) ||
                 (val.startsWith("'") && val.endsWith("'"))) {
@@ -83,7 +84,7 @@
             }
             // 数组格式 [a, b, c]
             if (val.startsWith('[') && val.endsWith(']')) {
-                val = val.slice(1, -1).split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                val = val.slice(1, -1).split(',').map(function(s: any) { return s.trim(); }).filter(Boolean);
             }
             meta[key] = val;
         });
@@ -94,8 +95,8 @@
     /**
      * 加载属性 Tab
      */
-    function loadProperties(filePath) {
-        var body = document.getElementById('inspector-properties-body');
+    function loadProperties(filePath: any) {
+        const body = document.getElementById('inspector-properties-body');
         if (!body) return;
 
         if (!filePath) {
@@ -171,14 +172,14 @@
         });
     }
 
-    function _renderPropRow(key, valueHtml) {
+    function _renderPropRow(key: any, valueHtml: any) {
         return '<div class="inspector-prop-row">' +
             '<span class="inspector-prop-key">' + key + '</span>' +
             '<span class="inspector-prop-value">' + valueHtml + '</span>' +
             '</div>';
     }
 
-    function _formatPropValue(key, val) {
+    function _formatPropValue(key: any, val: any) {
         if (Array.isArray(val)) {
             return val.map(function(v) {
                 return '<span class="inspector-prop-chip">' + _escapeHtml(v) + '</span>';
@@ -216,8 +217,8 @@
     /**
      * 加载 Semantic Tab：当前笔记的语义参数（实体/概念/命题与证据/相关）
      */
-    function loadSemantic(filePath) {
-        var body = document.getElementById('inspector-semantic-body');
+    function loadSemantic(filePath: any) {
+        const body = document.getElementById('inspector-semantic-body');
         if (!body) return;
 
         if (!filePath || !/\.md$/i.test(filePath || '')) {
@@ -241,15 +242,15 @@
                 return;
             }
 
-            var group = function(title, items, kind) {
+            var group = function(title: any, items: any, kind: any) {
                 if (!items || !items.length) return '';
-                return '<div class="inspector-semantic-group"><div class="inspector-semantic-title">' + _escapeHtml(title) + '</div><div class="inspector-semantic-items">' + items.map(function(item) {
+                return '<div class="inspector-semantic-group"><div class="inspector-semantic-title">' + _escapeHtml(title) + '</div><div class="inspector-semantic-items">' + items.map(function(item: any) {
                     var label = item.canonical_name || item.statement || '';
                     return '<button class="inspector-semantic-chip" data-semantic-kind="' + kind + '" data-semantic-id="' + _escapeHtml(item.id) + '">' + _escapeHtml(label) + '</button>';
                 }).join('') + '</div></div>';
             };
 
-            var relations = (data.relations || []).map(function(relation) {
+            var relations = (data.relations || []).map(function(relation: any) {
                 return '<span class="inspector-semantic-relation"><button class="inspector-semantic-chip" data-semantic-kind="entity" data-semantic-id="' + _escapeHtml(relation.source_id) + '">' + _escapeHtml(relation.source_name) + '</button><em>' + _escapeHtml(relation.relation_type) + '</em><button class="inspector-semantic-chip" data-semantic-kind="concept" data-semantic-id="' + _escapeHtml(relation.target_id) + '">' + _escapeHtml(relation.target_name) + '</button></span>';
             }).join('');
 
@@ -261,11 +262,11 @@
             body.innerHTML = html || '<div class="inspector-empty">' +
                 (window.t ? window.t('inspector.semanticEmpty') : '选择一篇笔记查看语义参数') + '</div>';
 
-            body.onclick = function(event) {
-                var button = event.target.closest('[data-semantic-kind][data-semantic-id]');
+            body.onclick = function(event: MouseEvent) {
+                var button = (event.target as Element).closest('[data-semantic-kind][data-semantic-id]') as HTMLElement | null;
                 if (!button || !window.SemanticWorkbenchModule || !window.SemanticWorkbenchModule.openObject) return;
                 var kind = button.dataset.semanticKind;
-                if (kind === 'entity' || kind === 'concept') window.SemanticWorkbenchModule.openObject(kind, button.dataset.semanticId);
+                if (kind === 'entity' || kind === 'concept') window.SemanticWorkbenchModule.openObject(kind, button.dataset.semanticId as string);
             };
         }).catch(function() {
             body.innerHTML = '<div class="inspector-empty">' +
@@ -276,8 +277,8 @@
     /**
      * 加载 Backlinks Tab
      */
-    function loadBacklinks(filePath) {
-        var body = document.getElementById('inspector-backlinks-body');
+    function loadBacklinks(filePath: any) {
+        const body = document.getElementById('inspector-backlinks-body');
         if (!body) return;
 
         if (!filePath) {
@@ -323,10 +324,10 @@
             body.innerHTML = html;
 
             var items = body.querySelectorAll('.backlink-item');
-            items.forEach(function(item) {
+            items.forEach(function(item: any) {
                 item.addEventListener('click', function() {
-                    var path = this.getAttribute('data-path');
-                    var name = this.getAttribute('data-name');
+                    var path = item.getAttribute('data-path');
+                    var name = item.getAttribute('data-name');
                     if (path && window.TreeModule && window.TreeModule.selectFile) {
                         window.TreeModule.selectFile(path, name);
                     }
@@ -341,7 +342,7 @@
     /**
      * 当选中文件变化时调用
      */
-    function onFileSelected(filePath) {
+    function onFileSelected(filePath: any) {
         _currentFilePath = filePath;
         if (_currentTab === 'properties' && filePath) {
             loadProperties(filePath);
@@ -354,9 +355,9 @@
 
     function init() {
         var tabs = document.querySelectorAll('.inspector-tab');
-        tabs.forEach(function(tab) {
+        tabs.forEach(function(tab: any) {
             tab.addEventListener('click', function() {
-                var tabName = this.getAttribute('data-inspector-tab');
+                var tabName = tab.getAttribute('data-inspector-tab');
                 if (tabName) switchTab(tabName);
             });
         });

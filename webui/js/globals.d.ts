@@ -350,12 +350,52 @@ declare global {
         TiptapEditor: {
             whenModulesReady?(timeoutMs?: number): Promise<boolean>;
             isActive?: boolean;
+            instance?: {
+                commands: { setContent(html: string, emitUpdate?: boolean): void };
+                setEditable(editable: boolean): void;
+            };
         } | undefined;
         SemanticWorkbenchModule: {
             deactivate?(): void;
             show?(view: string): void;
         } | undefined;
         PreviewModule: PreviewModule;
+        marked: any;
+        setSidebarStatus(status: string, message: string, spinner?: boolean): void;
+        updateSidebarStats(): void;
+        updateStatus(message: string): void;
+        _customConfirm(message: string): Promise<boolean>;
+        hideTreeContextMenu(): void;
+        revealInFinder(path: string): void;
+        _surveyOverviewMap?: Record<string, any>;
+        _topicStaleMap?: Record<string, boolean>;
+        _surveyStreamText: string;
+        _surveyBuffer: string;
+        _surveyDisplayText: string;
+        _surveyFlushTimer: number | null;
+        _surveyStreamUnlisten: (() => void) | null;
+        loadTopicTree(silent?: boolean, forceRefresh?: boolean): Promise<void>;
+        loadTopicView(): Promise<void>;
+        loadTopicPendingPanel(pending: any[], topicNames?: string[]): void;
+        onBatchAutoAssignTopics(): Promise<void>;
+        onAITopicAnalyze(): Promise<void>;
+        onAITopicSurvey(prefillTopic?: string): Promise<void>;
+        topicRowClick(rowEl: HTMLElement): void;
+        previewTopicSurvey(topic: string): void;
+        previewSemanticWikiPage(topic: string): void;
+        toggleTopicSurvey(topic: string): Promise<void>;
+        updateTopicSurvey(topic: string): void;
+        onShowTopicInput(): void;
+        onHideTopicInput(): void;
+        onTopicInputChange(): void;
+        onConfirmTopic(): Promise<void>;
+        closeAISuggestionPanel(): void;
+        onCandidateClick(btnEl: HTMLElement): void;
+        onInputChange(inputEl: HTMLInputElement): void;
+        onTopicSelectChange(selectEl: HTMLSelectElement): void;
+        onInputEnter(inputEl: HTMLInputElement): void;
+        onConfirmBtnClick(btnEl: HTMLButtonElement): void;
+        hasTopicPending(): boolean;
     }
 
     interface PreviewModule {

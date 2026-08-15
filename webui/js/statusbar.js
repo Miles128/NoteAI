@@ -10,6 +10,25 @@
 
     const _escapeHtml = window.escapeHtml;
 
+    // 原始文件内容共享缓存（TTL 10s）：statusbar 字数统计与 inspector
+    // 属性面板不再各自 readFileRaw 读全文
+    var _rawCache = {};
+    var _RAW_CACHE_TTL_MS = 10000;
+
+    function cachedReadFileRaw(filePath) {
+        var hit = _rawCache[filePath];
+        if (hit && Date.now() - hit.ts < _RAW_CACHE_TTL_MS) {
+            return Promise.resolve(hit.result);
+        }
+        return window.api.readFileRaw(filePath).then(function(result) {
+            if (result && result.success) {
+                _rawCache[filePath] = { ts: Date.now(), result: result };
+            }
+            return result;
+        });
+    }
+    window.cachedReadFileRaw = cachedReadFileRaw;
+
     function _parseFrontmatter(text) {
         var meta = {};
         var body = String(text || '');
@@ -237,7 +256,7 @@
             return;
         }
 
-        window.api.readFileRaw(filePath).then(function(result) {
+window.cachedReadFileRaw(filePath).then(function(result) {
             if (!result || !result.success) {
                 clearStats();
                 return;

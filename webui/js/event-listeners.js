@@ -75,9 +75,6 @@ function refreshWorkspaceViewsAfterChange() {
         markSidebarTreeDirty();
     }
 
-    if (typeof window.loadTopicTree === 'function') {
-        window.loadTopicTree(true, true);
-    }
     refreshCurrentSidebarView(true);
     refreshKnowledgeGraph();
 

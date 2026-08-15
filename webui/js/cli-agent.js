@@ -1076,12 +1076,8 @@
     function init() {
         _ensureBindings();
         _updateModeBadge();
-        _loadSavedCliAgentId().then(function(savedId) {
-            _savedCliAgentId = savedId || '';
-            if (_savedCliAgentId) {
-                _dismissEmptyHint();
-            }
-        });
+        // 延迟合并的单次加载：agents 列表 + 保存的 agent id（uiConfig 已由
+        // state 门面预热，_loadSavedCliAgentId 走缓存路径不再发 RPC）
         setTimeout(function() {
             Promise.all([loadAgents(), _loadSavedCliAgentId()]).then(function(results) {
                 _savedCliAgentId = results[1] || '';

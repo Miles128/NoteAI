@@ -91,7 +91,7 @@ async function loadModules() {
 
     await import('./tags.js');
 
-    await import('./tiptap-editor.js');
+    await import('./tiptap-editor.ts');
     const { TiptapEditorModule, TiptapEditor } = window;
     window.TiptapEditorModule = TiptapEditorModule;
     window.TiptapEditor = TiptapEditor;

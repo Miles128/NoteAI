@@ -107,6 +107,9 @@ jobs:
           node --check webui/js/main.mjs || exit 1
           node --check webui/js/highlight-bundle-entry.mjs || exit 1
 
+      - name: Typecheck webui TS (progressive migration)
+        run: npx tsc --noEmit -p webui/js/tsconfig.json
+
       - name: Test mcp-server
         working-directory: mcp-server
         run: |

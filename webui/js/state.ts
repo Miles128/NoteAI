@@ -1,13 +1,19 @@
+/**
+ * state.ts —— 状态双轨门面（从 state.js 渐进迁移到 TS）。
+ * 运行时语义与迁移前完全一致：
+ * - window.state：配置持久化门面（apiConfig / uiConfig / themePreference / workspacePath），
+ *   读写均伴随后端持久化与订阅通知。
+ * - window.AppState：UI 运行时状态（Proxy 代理同一 _ui 对象），可任意增删键，
+ *   写入即 notify；仅用于会话内 UI 状态，不做持久化。
+ */
 (function() {
     'use strict';
 
-    // 状态双轨分工（约定）：
-    // - window.state：配置持久化门面（apiConfig / uiConfig / themePreference / workspacePath），
-    //   读写均伴随后端持久化与订阅通知。
-    // - window.AppState：UI 运行时状态（Proxy 代理同一 _ui 对象），可任意增删键，
-    //   写入即 notify；仅用于会话内 UI 状态，不做持久化。
+    interface StateData extends PersistedState {
+        _subscribers: StateSubscriber[];
+    }
 
-    var _state = {
+    var _state: StateData = {
         apiConfig: null,
         uiConfig: null,
         themePreference: null,
@@ -15,7 +21,7 @@
         _subscribers: []
     };
 
-    var _ui = {
+    var _ui: Record<string, any> = {
         selectedFilePath: null,
         selectedFileName: null,
         activeTreeItem: null,
@@ -28,7 +34,7 @@
         lastTopicData: null
     };
 
-    function subscribe(callback) {
+    function subscribe(callback: StateSubscriber): () => void {
         if (typeof callback === 'function') {
             _state._subscribers.push(callback);
         }
@@ -37,7 +43,7 @@
         };
     }
 
-    function notify() {
+    function notify(): void {
         _state._subscribers.forEach(function(fn) {
             try {
                 fn(_state);
@@ -47,8 +53,8 @@
         });
     }
 
-    function getState() {
-        var snapshot = {
+    function getState(): PersistedState {
+        var snapshot: PersistedState = {
             apiConfig: _state.apiConfig,
             uiConfig: _state.uiConfig,
             themePreference: _state.themePreference,
@@ -57,21 +63,21 @@
         return JSON.parse(JSON.stringify(snapshot));
     }
 
-    function getUi(key) {
+    function getUi(key?: string): any {
         if (key === undefined) return Object.assign({}, _ui);
         return _ui[key];
     }
 
-    function setUi(key, value) {
+    function setUi(key: string, value: any): void {
         // 新键不再静默丢弃：正常写入并通知（与 AppState Proxy 行为对齐）
         _ui[key] = value;
         notify();
     }
 
-    var _uiConfigPromise = null;
-    var _themePreferencePromise = null;
+    var _uiConfigPromise: Promise<UiConfig | null> | null = null;
+    var _themePreferencePromise: Promise<string | null> | null = null;
 
-    async function loadApiConfig() {
+    async function loadApiConfig(): Promise<ApiConfig | null> {
         try {
             _state.apiConfig = await window.api.getApiConfig();
             notify();
@@ -82,7 +88,7 @@
         }
     }
 
-    async function loadUiConfig(force) {
+    async function loadUiConfig(force?: boolean): Promise<UiConfig | null> {
         // in-flight 合并：启动期多路消费（i18n/语义工作台/cli-agent/settings）
         // 共享同一次 RPC，避免 getUiConfig 被重复拉取
         if (!force && _state.uiConfig) return _state.uiConfig;
@@ -102,7 +108,7 @@
         return _uiConfigPromise;
     }
 
-    async function loadThemePreference(force) {
+    async function loadThemePreference(force?: boolean): Promise<string | null> {
         if (!force && _state.themePreference) return _state.themePreference;
         if (!force && _themePreferencePromise) return _themePreferencePromise;
         _themePreferencePromise = (async function() {
@@ -120,7 +126,7 @@
         return _themePreferencePromise;
     }
 
-    async function loadAllConfig() {
+    async function loadAllConfig(): Promise<PersistedState> {
         var results = await Promise.allSettled([
             loadApiConfig(),
             loadUiConfig(),
@@ -129,11 +135,12 @@
         return {
             apiConfig: results[0].status === 'fulfilled' ? results[0].value : null,
             uiConfig: results[1].status === 'fulfilled' ? results[1].value : null,
-            themePreference: results[2].status === 'fulfilled' ? results[2].value : null
+            themePreference: results[2].status === 'fulfilled' ? results[2].value : null,
+            workspacePath: _state.workspacePath
         };
     }
 
-    async function saveApiConfig(config) {
+    async function saveApiConfig(config: Partial<ApiConfig>): Promise<any> {
         try {
             var result = await window.api.saveApiConfig(config);
             _state.apiConfig = Object.assign({}, _state.apiConfig, config);
@@ -145,7 +152,7 @@
         }
     }
 
-    async function saveUiConfig(config) {
+    async function saveUiConfig(config: Partial<UiConfig>): Promise<any> {
         try {
             var result = await window.api.saveUiConfig(config);
             _state.uiConfig = Object.assign({}, _state.uiConfig, config);
@@ -157,7 +164,7 @@
         }
     }
 
-    async function saveThemePreference(theme) {
+    async function saveThemePreference(theme: string): Promise<void> {
         try {
             await window.api.saveThemePreference(theme);
             _state.themePreference = theme;
@@ -171,7 +178,7 @@
         }
     }
 
-    function setWorkspacePath(path) {
+    function setWorkspacePath(path: string): void {
         _state.workspacePath = path;
         notify();
     }
@@ -210,7 +217,7 @@
     });
 
     window.AppState = new Proxy(_ui, {
-        set: function(target, property, value) {
+        set: function(target: Record<string, any>, property: string, value: any): boolean {
             target[property] = value;
             notify();
             return true;

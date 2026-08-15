@@ -266,7 +266,10 @@ def get_survey_overview(workspace_str: str | Path | None = None) -> dict[str, di
 
     - enabled: WIKI.md 综述开关（默认开）
     - has_survey: wiki/{末级}_综述.md 是否存在
-    - stale: 主题下笔记最新修改晚于综述文件（仅 has_survey 时计算，轻量扫描）
+    - stale: 主题下笔记最新修改晚于综述文件（仅 has_survey 时计算）
+
+    单次全库遍历：一次 rglob + 逐文件头部 frontmatter 解析，按候选主题
+    聚合最新 mtime（原实现逐主题调用 collect_topic_notes → O(主题数×文件数)）。
     """
     if workspace_str is None:
         workspace_str = config.workspace_path or ""
@@ -277,29 +280,98 @@ def get_survey_overview(workspace_str: str | Path | None = None) -> dict[str, di
     enabled_map = get_survey_status(workspace_str)
     headings = _parse_wiki_headings_full()
 
-    from sidecar.cascade import collect_topic_notes, get_survey_path
-
     overview: dict[str, dict] = {}
+    if not headings:
+        return overview
+
+    from config.settings import NOTES_FOLDER
+    from sidecar.cascade import get_survey_path
+    from utils.text_utils import parse_frontmatter
+
+    # 候选主题分组：topic_parts（'a::b' 前缀匹配用）
+    candidate_parts: dict[str, list[str]] = {}
     for heading in headings:
         topic = heading["name"]
-        survey_path = get_survey_path(topic)
-        has_survey = bool(survey_path and survey_path.exists())
-        stale = False
-        if has_survey and survey_path is not None:
-            try:
-                survey_mtime = survey_path.stat().st_mtime
-                note_mtimes = []
-                for note in collect_topic_notes(topic, include_content=False):
-                    note_path = ws / note["file_path"]
-                    if note_path.exists():
-                        note_mtimes.append(note_path.stat().st_mtime)
-                stale = bool(note_mtimes) and max(note_mtimes) > survey_mtime
-            except Exception:
-                stale = False
+        parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+        candidate_parts[topic] = parts
         overview[topic] = {
             "enabled": enabled_map.get(topic, True),
-            "has_survey": has_survey,
-            "stale": stale,
-            "survey_path": str(survey_path.relative_to(ws)) if has_survey and survey_path else "",
+            "has_survey": False,
+            "stale": False,
+            "survey_path": "",
         }
+
+    # 单次遍历聚合每主题最新笔记 mtime（判定与 cascade.collect_topic_notes 一致：
+    # frontmatter topic/topics + Notes 目录路径前缀）
+    notes_dir = ws / NOTES_FOLDER
+    notes_dir_exists = notes_dir.exists()
+    latest_mtime: dict[str, float] = {}
+    for md_file in ws.rglob("*.md"):
+        if md_file.name.startswith("."):
+            continue
+        if "wiki" in md_file.parts:
+            continue
+        if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
+            continue
+        try:
+            with md_file.open("r", encoding="utf-8") as fh:
+                text = fh.read(8192)
+            fm, _body = parse_frontmatter(text)
+        except Exception:
+            continue
+        file_topic = ""
+        file_topics: list = []
+        if fm:
+            ft = fm.get("topic", "")
+            if isinstance(ft, str):
+                file_topic = ft.strip() or ""
+            fts = fm.get("topics", [])
+            if isinstance(fts, list):
+                file_topics = fts
+        rel_parts: tuple = ()
+        if notes_dir_exists:
+            try:
+                rel_parts = md_file.relative_to(notes_dir).parts
+            except ValueError:
+                rel_parts = ()
+        try:
+            mtime = md_file.stat().st_mtime
+        except OSError:
+            continue
+
+        for topic, parts in candidate_parts.items():
+            if not parts:
+                continue
+            matched = bool(
+                file_topic
+                and (
+                    file_topic == topic
+                    or file_topic.startswith(topic + TOPIC_SEP)
+                    or len(parts) == 1
+                    and (file_topic == parts[0] or file_topic.startswith(parts[0] + TOPIC_SEP))
+                )
+            )
+            if not matched and topic in file_topics:
+                matched = True
+            if not matched and rel_parts and rel_parts[0] == parts[0]:
+                if len(parts) == 1:
+                    matched = True
+                elif len(rel_parts) >= 2 and rel_parts[1] == parts[1]:
+                    if len(parts) == 2 or len(rel_parts) >= 3 and rel_parts[2] == parts[2]:
+                        matched = True
+            if matched and mtime > latest_mtime.get(topic, float("-inf")):
+                latest_mtime[topic] = mtime
+
+    # 计算 stale 并补齐 survey_path
+    for topic, entry in overview.items():
+        survey_path = get_survey_path(topic)
+        has_survey = bool(survey_path and survey_path.exists())
+        entry["has_survey"] = has_survey
+        if has_survey and survey_path is not None:
+            try:
+                stale = latest_mtime.get(topic, 0.0) > survey_path.stat().st_mtime
+            except Exception:
+                stale = False
+            entry["stale"] = stale
+            entry["survey_path"] = str(survey_path.relative_to(ws))
     return overview

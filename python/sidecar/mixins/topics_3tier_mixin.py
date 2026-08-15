@@ -1,6 +1,8 @@
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
+from threading import Lock
+from time import monotonic
 from typing import Any, Protocol
 
 from config import config
@@ -8,6 +10,31 @@ from utils.text_utils import parse_frontmatter
 from utils.topic_assigner import sync_wiki_with_files
 from utils.topic_manager import TopicManager
 from utils.topic_pending import load_pending
+
+_WIKI_SYNC_MIN_INTERVAL_SECS = 15.0
+_wiki_sync_last: float = 0.0
+_wiki_sync_lock = Lock()
+
+
+def _maybe_sync_wiki() -> None:
+    """主题树打开路径的全量 wiki 同步节流：15s 窗口内只同步一次。
+
+    watcher 变更路径（_emit_workspace_change）不走此处，仍即时同步；
+    此包装只避免「每次打开主题树都全量扫描 + 每文件读 2 次」。
+    """
+    global _wiki_sync_last
+    now = monotonic()
+    with _wiki_sync_lock:
+        if now - _wiki_sync_last < _WIKI_SYNC_MIN_INTERVAL_SECS:
+            return
+        _wiki_sync_last = now
+    try:
+        sync_wiki_with_files()
+    except Exception:
+        # 失败时重置时间戳，允许下一次重试
+        with _wiki_sync_lock:
+            _wiki_sync_last = 0.0
+        raise
 
 
 class _TopicsHost(Protocol):
@@ -55,7 +82,7 @@ class Topics3TierMixin:
             return {"success": True, "topics": [], "pending": []}
 
         with suppress(Exception):
-            sync_wiki_with_files()
+            _maybe_sync_wiki()
 
         tree = TopicManager.build_tree_from_filesystem(workspace)
 

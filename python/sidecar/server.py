@@ -394,6 +394,9 @@ class SidecarServer(PathHelpersMixin):
         from sidecar.rag.retriever import _query_cache
 
         _query_cache.clear()
+        from sidecar.dashboard_status import invalidate_dashboard_cache
+
+        invalidate_dashboard_cache()
 
     def _cached_or_compute(self, key, compute_fn):
         """通用缓存包装器：按工作区路径失效，带 TTL"""
@@ -515,7 +518,17 @@ class SidecarServer(PathHelpersMixin):
             with self._watcher_debounce_lock:
                 self._watcher_needs_wiki_sync = True
 
-        auto_process_md_file(file_path, send_event=_send_event, mark_wiki_sync=_mark_wiki_sync)
+        # watchdog 事件线程内同步执行会阻塞后续文件事件（auto_assign 可能
+        # 触发 LLM 调用，最长数十秒）；投后台线程执行。返回线程句柄供
+        # 测试 join，生产调用方忽略。
+        worker = threading.Thread(
+            target=auto_process_md_file,
+            args=(file_path,),
+            kwargs={"send_event": _send_event, "mark_wiki_sync": _mark_wiki_sync},
+            daemon=True,
+        )
+        worker.start()
+        return worker
 
     def _auto_convert_new_file(self, file_path):
         """Auto-convert newly added non-markdown files to Markdown."""

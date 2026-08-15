@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Lock
+from time import monotonic
 
 from config import config
 from config.constants import NOTES_FOLDER
@@ -11,6 +13,10 @@ from sidecar.cascade_runner import load_cascade_failures
 from sidecar.ingest_pipeline import load_ingest_state, prepare_auto_ingest
 from sidecar.kb_lint import load_lint_report
 from sidecar.pending_items import collect_pending_items
+
+_DASHBOARD_TTL_SECS = 15.0
+_dashboard_cache: dict[str, tuple[float, dict]] = {}
+_dashboard_cache_lock = Lock()
 
 
 def _is_readme_note(path: Path) -> bool:
@@ -110,6 +116,26 @@ def ingest_status() -> dict:
 
 
 def get_dashboard_status(workspace: str) -> dict:
+    """带 TTL 缓存：dashboard 打开即多路全库扫描（rglob × 3 + lint + semantic 查询），
+    15s 窗口内直接命中；文件变更经 server._invalidate_cache 调用
+    invalidate_dashboard_cache() 即时失效。"""
+    now = monotonic()
+    with _dashboard_cache_lock:
+        cached = _dashboard_cache.get(workspace)
+        if cached is not None and now - cached[0] < _DASHBOARD_TTL_SECS:
+            return cached[1]
+    data = _compute_dashboard_status(workspace)
+    with _dashboard_cache_lock:
+        _dashboard_cache[workspace] = (monotonic(), data)
+    return data
+
+
+def invalidate_dashboard_cache() -> None:
+    with _dashboard_cache_lock:
+        _dashboard_cache.clear()
+
+
+def _compute_dashboard_status(workspace: str) -> dict:
     pending = {"items": collect_pending_items(workspace)}
     return {
         "success": True,

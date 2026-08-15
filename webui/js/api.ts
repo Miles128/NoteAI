@@ -482,7 +482,7 @@ var API_DEFS: ApiDef[] = [
 
     // ---- CLI Agent 桥接（claude/opencode/codex/gemini）----
     { name: 'listCliAgents', method: 'list_cli_agents', params: function() { return {}; } },
-    { name: 'runCliAgent', method: 'run_cli_agent', params: function(agentId, prompt, workspacePath, options) { var opts = options || {}; return { agent_id: agentId, prompt: prompt, workspace_path: workspacePath || '', new_session: !!opts.newSession }; }, write: true },
+    { name: 'runCliAgent', method: 'run_cli_agent', params: function(agentId, prompt, workspacePath, options) { var opts = options || {}; return { agent_id: agentId, prompt: prompt, workspace_path: workspacePath || '', new_session: !!opts.newSession, model: opts.model || '' }; }, write: true },
     { name: 'stopCliAgent', method: 'stop_cli_agent', params: function() { return {}; }, write: true },
     { name: 'clearCliAgentSession', method: 'clear_cli_agent_session', params: function(agentId, workspacePath) { return { agent_id: agentId || '', workspace_path: workspacePath || '' }; }, write: true },
     { name: 'generateVaultAgentsMd', method: 'generate_vault_agents_md', params: function() { return {}; }, write: true },

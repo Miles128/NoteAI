@@ -558,7 +558,32 @@
         var contentEl = _ensureStreamContent();
         if (!contentEl) return;
         _streamRawText += _stripAnsi(filtered);
-        _setCliMarkdown(contentEl, _streamRawText);
+        _scheduleCliRender(contentEl);
+    }
+
+    /* CLI 输出逐行全量重渲染是 O(n²)：200ms 节流 + 结束 flush */
+    var _cliRenderTimer = null;
+    var _cliRenderPending = false;
+
+    function _scheduleCliRender(contentEl) {
+        if (_cliRenderPending) return;
+        _cliRenderPending = true;
+        _cliRenderTimer = setTimeout(function() {
+            _cliRenderPending = false;
+            _cliRenderTimer = null;
+            _setCliMarkdown(contentEl, _streamRawText);
+        }, 200);
+    }
+
+    function _flushCliRender(contentEl) {
+        if (_cliRenderTimer) {
+            clearTimeout(_cliRenderTimer);
+            _cliRenderTimer = null;
+        }
+        _cliRenderPending = false;
+        if (contentEl) {
+            _setCliMarkdown(contentEl, _streamRawText);
+        }
     }
 
     function _appendAssistantOutput(content) {
@@ -991,6 +1016,7 @@
             _showTimeoutNotice(payload);
         } else if (type === 'cli_agent_done') {
             _flushOutputBuffer();
+            _flushCliRender(_streamContentEl);
             _finalizeWorkflow();
             _finalizeReasoning();
             _hideTimeoutNotice();
@@ -1000,6 +1026,7 @@
             _resetStreamPre();
         } else if (type === 'cli_agent_error') {
             _flushOutputBuffer();
+            _flushCliRender(_streamContentEl);
             _finalizeWorkflow();
             _finalizeReasoning();
             _hideTimeoutNotice();

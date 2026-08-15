@@ -243,7 +243,8 @@ def retrieve_claim_context(
         query_tokens = _tokens(question)
         if not query_tokens:
             return []
-        verification_by_id = {claim["id"]: store.latest_claim_verification(claim["id"]) for claim in claims}
+        # 单条聚合查询取所有 claim 的最新验证（原实现逐 claim 开连接，N+1）
+        verification_by_id = store.claims.latest_verifications_for_claims([claim["id"] for claim in claims])
         conflict_by_id = _conflict_map(store)
         scored: list[tuple[float, dict]] = []
         for claim in claims:

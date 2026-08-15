@@ -478,14 +478,15 @@ def _purge_deleted_index_files(workspace: str) -> list[str]:
     if not config.rag_enabled:
         return []
 
-    from sidecar.rag.index import delete_by_file
+    from sidecar.rag.index import delete_files_batched
     from sidecar.rag.index_state import load_state, remove_indexed
 
     ws = Path(workspace)
     stale_paths = [rel for rel in load_state(workspace) if not (ws / rel).is_file()]
-    for rel in stale_paths:
-        delete_by_file(workspace, rel)
-    remove_indexed(stale_paths, workspace)
+    if stale_paths:
+        # 批量删除：单次 writer lock + 末尾一次 BM25 重建（原实现逐文件全量重建）
+        delete_files_batched(workspace, stale_paths)
+        remove_indexed(stale_paths, workspace)
     return stale_paths
 
 

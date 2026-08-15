@@ -440,6 +440,45 @@ window.AssistantModule = (function() {
         if (sc) sc.scrollTop = sc.scrollHeight;
     }
 
+    function _scrollToBottomIfNearBottom() {
+        /* 用户上翻阅读时不要打断滚动；仅接近底部才跟随 */
+        var sc = document.querySelector('#inspector-content-ai .ai-panel-body')
+            || document.querySelector('#ai-panel .ai-panel-body');
+        if (!sc) return;
+        var nearBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 120;
+        if (nearBottom) sc.scrollTop = sc.scrollHeight;
+    }
+
+    /* 流式渲染节流：逐 token 全量 parse+innerHTML 是 O(n²)，改为 200ms 节流
+       重渲染 + 结束强制 flush（长回答渲染次数从 token 数降到秒级） */
+    var _streamRenderTimer = null;
+    var _streamRenderPending = false;
+
+    function _scheduleStreamRender() {
+        if (_streamRenderPending) return;
+        _streamRenderPending = true;
+        _streamRenderTimer = setTimeout(function() {
+            _streamRenderPending = false;
+            _streamRenderTimer = null;
+            if (_currentStreamEl) {
+                _setAssistantMarkdown(_currentStreamEl, _streamRawText);
+                _scrollToBottomIfNearBottom();
+            }
+        }, 200);
+    }
+
+    function _flushStreamRender() {
+        if (_streamRenderTimer) {
+            clearTimeout(_streamRenderTimer);
+            _streamRenderTimer = null;
+        }
+        _streamRenderPending = false;
+        if (_currentStreamEl) {
+            _setAssistantMarkdown(_currentStreamEl, _streamRawText);
+            _scrollToBottom();
+        }
+    }
+
     function handleEvent(eventData) {
         if (!eventData) return;
 
@@ -453,15 +492,16 @@ window.AssistantModule = (function() {
         } else if (eventData.type === 'rag_chat_chunk') {
             if (_currentStreamEl) {
                 _streamRawText += eventData.token || '';
-                _setAssistantMarkdown(_currentStreamEl, _streamRawText);
-                _scrollToBottom();
+                _scheduleStreamRender();
             }
         } else if (eventData.type === 'rag_chat_done') {
             _isStreaming = false;
             if (_currentStreamEl) {
                 _currentStreamEl.classList.remove('ai-typing');
                 var answerText = eventData.answer || _streamRawText || '';
-                _setAssistantMarkdown(_currentStreamEl, answerText);
+                _flushStreamRender();
+                /* 用最终 answerText 覆盖节流渲染结果（可能比 _streamRawText 更完整） */
+                _currentStreamEl.innerHTML = _renderMarkdownHtml(answerText);
                 _chatHistory.push({ role: 'assistant', content: answerText });
                 if (eventData.citations && eventData.citations.length > 0) {
                     _linkifyCitationRefs(_currentStreamEl, eventData.citations);

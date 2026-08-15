@@ -470,8 +470,7 @@ class SemanticHandler(BaseHandler):
         store = self._store()
         if store is None or not store.path.exists():
             return {"success": False, "message": "语义数据库不存在"}
-        claims = store.list_claims_for_verification(limit=5000)
-        claim = next((item for item in claims if item["id"] == claim_id), None)
+        claim = store.claims.get_verifiable_claim(claim_id)
         if claim is None:
             return {"success": False, "message": "命题不存在或不可核查（仅支持 active 且有证据的命题）"}
         if method == "llm":

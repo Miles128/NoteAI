@@ -8,6 +8,7 @@ Schema:
 
 from __future__ import annotations
 
+import copy
 import gc
 import json
 import shutil
@@ -104,16 +105,40 @@ def _manifest_path(workspace: str) -> Path:
 
 _INDEX_VERSION = 2
 
+# manifest/metadata 的内存缓存：(stat_key, data)。读侧按 stat 键失效，
+# 写侧（_write_manifest/_save_metadata）显式清除——避免每轮 RAG 查询
+# 重复读盘解析大 JSON（万级 chunk 时数百 KB~MB）。
+_MANIFEST_CACHE: dict[str, tuple[tuple[float, int] | None, dict]] = {}
+_MANIFEST_CACHE_LOCK = threading.Lock()
+_METADATA_CACHE: dict[str, tuple[tuple[float, int] | None, dict[str, Any]]] = {}
+_METADATA_CACHE_LOCK = threading.Lock()
+
+
+def _stat_key(path: Path) -> tuple[float, int] | None:
+    try:
+        st = path.stat()
+        return (st.st_mtime, st.st_size)
+    except OSError:
+        return None
+
 
 def _read_manifest(workspace: str) -> dict:
     """Read the index manifest, returning a default if missing or invalid."""
     path = _manifest_path(workspace)
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    stat_key = _stat_key(path)
+    with _MANIFEST_CACHE_LOCK:
+        cached = _MANIFEST_CACHE.get(workspace)
+        if cached is not None and cached[0] == stat_key:
+            return cached[1]
+    data: dict = {}
+    if stat_key is not None:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {}
+    with _MANIFEST_CACHE_LOCK:
+        _MANIFEST_CACHE[workspace] = (stat_key, data)
+    return data
 
 
 def _write_manifest(workspace: str, data: dict) -> None:
@@ -125,6 +150,8 @@ def _write_manifest(workspace: str, data: dict) -> None:
     try:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
+        with _MANIFEST_CACHE_LOCK:
+            _MANIFEST_CACHE.pop(workspace, None)
     except OSError as e:
         log_exception("[rag/index] failed to write manifest", e, level="warning", logger=logger)
 
@@ -385,19 +412,27 @@ def _empty_metadata() -> dict[str, Any]:
 
 def _load_metadata(workspace: str) -> dict[str, Any]:
     path = _metadata_path(workspace)
-    if not path.exists():
-        return _empty_metadata()
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                data.setdefault("topics", {})
-                data.setdefault("tags", {})
-                data.setdefault("files", {})
-                return data
-    except Exception as e:
-        log_exception("[rag/index] failed to load metadata", e, level="warning", logger=logger)
-    return _empty_metadata()
+    stat_key = _stat_key(path)
+    with _METADATA_CACHE_LOCK:
+        cached = _METADATA_CACHE.get(workspace)
+        if cached is not None and cached[0] == stat_key:
+            # deepcopy 保护：读侧可能后续 mutate（写路径），缓存本体须保持干净
+            return copy.deepcopy(cached[1])
+    data = _empty_metadata()
+    if stat_key is not None:
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    loaded.setdefault("topics", {})
+                    loaded.setdefault("tags", {})
+                    loaded.setdefault("files", {})
+                    data = loaded
+        except Exception as e:
+            log_exception("[rag/index] failed to load metadata", e, level="warning", logger=logger)
+    with _METADATA_CACHE_LOCK:
+        _METADATA_CACHE[workspace] = (stat_key, copy.deepcopy(data))
+    return data
 
 
 def _save_metadata(workspace: str, metadata: dict[str, Any]) -> None:
@@ -407,6 +442,8 @@ def _save_metadata(workspace: str, metadata: dict[str, Any]) -> None:
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False)
     tmp.replace(path)
+    with _METADATA_CACHE_LOCK:
+        _METADATA_CACHE.pop(workspace, None)
 
 
 def _update_metadata_index(metadata: dict[str, Any], chunk: dict, mode: str = "add") -> None:
@@ -726,34 +763,9 @@ def delete_by_file(
             collection = _get_collection(workspace)
         metadata = _load_metadata(workspace)
 
-        removed: list[dict] = []
-        try:
-            filter_expr = f"file_path = {_escape_filter_value(file_path)}"
-            docs = collection.query(
-                filter=filter_expr,
-                topk=10000,
-                output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
-            )
-            for doc in docs:
-                fields = doc.fields or {}
-                chunk = {
-                    "id": doc.id,
-                    "content": fields.get("content", ""),
-                    "file_path": fields.get("file_path", ""),
-                    "topic": fields.get("topic", ""),
-                    "tags": _tags_from_fields(fields),
-                    "section_title": fields.get("section_title", ""),
-                }
-                removed.append(chunk)
-                _update_metadata_index(metadata, chunk, mode="remove")
-        except Exception as e:
-            logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
-            # Collection object may be in an inconsistent state; drop it from cache.
-            clear_collection_cache(workspace)
-            raise
+        removed = _delete_file_chunks(collection, metadata, file_path, workspace)
 
         if removed:
-            _delete_ids_batched(collection, [c["id"] for c in removed])
             collection.flush()
 
         _save_metadata(workspace, metadata)
@@ -778,6 +790,85 @@ def delete_by_file(
         logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
 
     return removed
+
+
+def _delete_file_chunks(
+    collection: zvec.Collection,
+    metadata: dict[str, Any],
+    file_path: str,
+    workspace: str,
+) -> list[dict]:
+    """Query and delete all chunks of one file from a zvec collection.
+
+    Mutates ``metadata`` inverted indices in place; caller persists afterwards.
+    """
+    removed: list[dict] = []
+    try:
+        filter_expr = f"file_path = {_escape_filter_value(file_path)}"
+        docs = collection.query(
+            filter=filter_expr,
+            topk=10000,
+            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+        )
+        for doc in docs:
+            fields = doc.fields or {}
+            chunk = {
+                "id": doc.id,
+                "content": fields.get("content", ""),
+                "file_path": fields.get("file_path", ""),
+                "topic": fields.get("topic", ""),
+                "tags": _tags_from_fields(fields),
+                "section_title": fields.get("section_title", ""),
+            }
+            removed.append(chunk)
+            _update_metadata_index(metadata, chunk, mode="remove")
+    except Exception as e:
+        logger.warning(f"[rag/index] zvec delete query failed: {e}\n")
+        # Collection object may be in an inconsistent state; drop it from cache.
+        clear_collection_cache(workspace)
+        raise
+
+    if removed:
+        _delete_ids_batched(collection, [c["id"] for c in removed])
+    return removed
+
+
+def delete_files_batched(workspace: str, file_paths: list[str]) -> list[dict]:
+    """Delete chunks of multiple files under one writer lock.
+
+    BM25 is rebuilt exactly once at the end instead of once per file —
+    deleting K files previously triggered K full corpus rebuilds.
+    """
+    if not file_paths:
+        return []
+    removed_all: list[dict] = []
+    with _COLLECTION_IO_LOCK:
+        collection = _get_collection(workspace)
+        metadata = _load_metadata(workspace)
+        for file_path in file_paths:
+            removed_all.extend(_delete_file_chunks(collection, metadata, file_path, workspace))
+        if removed_all:
+            collection.flush()
+        _save_metadata(workspace, metadata)
+
+    if removed_all:
+        try:
+            bm25_dir = _bm25s_dir(workspace)
+            if bm25_dir.exists() and any(bm25_dir.iterdir()):
+                retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
+                old_corpus = _bm25_corpus_from_retriever(retriever)
+                removed_ids = {c["id"] for c in removed_all}
+                new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
+                _build_and_save_bm25(new_corpus, bm25_dir, workspace)
+            manifest = load_manifest(workspace)
+            files_manifest = manifest.setdefault("files", {})
+            for file_path in file_paths:
+                files_manifest.pop(file_path, None)
+            save_manifest(workspace, manifest)
+        except Exception as e:
+            logger.warning(f"[rag/index] BM25s rebuild after batch delete failed: {e}\n")
+
+    return removed_all
 
 
 def _chunk_ids_from_metadata(workspace: str) -> list[str]:

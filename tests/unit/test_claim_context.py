@@ -131,3 +131,30 @@ def test_limit_respected(workspace: Path) -> None:
 
 def test_irrelevant_question_returns_empty(workspace: Path) -> None:
     assert retrieve_claim_context(workspace, "今天天气怎么样") == []
+
+
+def test_latest_verifications_for_claims_batches_single_query(workspace: Path) -> None:
+    """批量验证查询：多 claim 一次取最新验证（N+1 → 1）。"""
+    store = SemanticStore(workspace)
+    store.save_claim_verification(
+        "claim-2",
+        verdict="refuted",
+        confidence=0.9,
+        summary="后续评测推翻该结论",
+        method="cli",
+        agent="claude",
+        sources=[],
+    )
+    # claim-2 的第二次验证应覆盖首次（若存在），claim-3 无验证
+    out = store.claims.latest_verifications_for_claims(["claim-1", "claim-2", "claim-3"])
+    assert set(out) == {"claim-1", "claim-2"}
+    assert out["claim-1"]["verdict"] == "supported"
+    assert out["claim-1"]["confidence"] == 0.85
+    assert out["claim-2"]["verdict"] == "refuted"
+    assert out["claim-2"]["summary"] == "后续评测推翻该结论"
+    assert out["claim-2"]["sources"] == []
+
+
+def test_latest_verifications_for_claims_empty_input(workspace: Path) -> None:
+    store = SemanticStore(workspace)
+    assert store.claims.latest_verifications_for_claims([]) == {}

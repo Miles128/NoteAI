@@ -1,5 +1,6 @@
-"""单元测试：rag_handler 的 P4/P9 增强（哨兵剥离、主题锚定、模板追问）。"""
+"""单元测试：rag_handler 的 P4/P9 增强（哨兵剥离、主题锚定、模板追问、流式攒批）。"""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -161,3 +162,134 @@ def test_template_suggestions_dedup_and_cap():
     citations = [{"topic": "AI > RAG"} for _ in range(10)]
     suggestions = RagHandler._template_suggestions(citations)
     assert suggestions == ["「AI > RAG」还有哪些相关笔记？"]
+
+
+# ---------------------------------------------------------------------------
+# RagChatChunkBatcher：流式 token 攒批
+
+
+def _batcher_capture():
+    """返回 (batcher 发送捕获器, sent)。捕获器模拟真实 _send_response（json.dumps 后写 stdout）。"""
+    import json
+
+    sent: list[str] = []
+
+    def send(payload):
+        sent.append(json.dumps(payload, ensure_ascii=False))
+
+    return send, sent
+
+
+def test_batcher_flushes_batched_payload():
+    from sidecar.handlers.rag_handler import RagChatChunkBatcher
+
+    send, sent = _batcher_capture()
+    batcher = RagChatChunkBatcher(send, flush_interval=0.01, max_chars=50)
+
+    batcher.append("hello ")
+    batcher.append("world")
+    batcher.flush()
+
+    assert len(sent) == 1
+    payload = json.loads(sent[0])
+    assert payload["id"] == "event"
+    assert payload["result"] == {"type": "rag_chat_chunk", "token": "hello world"}
+
+
+def test_batcher_flushes_on_size_threshold():
+    from sidecar.handlers.rag_handler import RagChatChunkBatcher
+
+    send, sent = _batcher_capture()
+    batcher = RagChatChunkBatcher(send, flush_interval=60, max_chars=10)
+
+    for token in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+        batcher.append(token)
+    batcher.flush()
+
+    # 满 10 字符阈值触发一次 flush，其余空 buffer 不再发送
+    assert len(sent) == 1
+
+
+def test_batcher_ignores_empty_tokens_and_after_close():
+    from sidecar.handlers.rag_handler import RagChatChunkBatcher
+
+    send, sent = _batcher_capture()
+    batcher = RagChatChunkBatcher(send, flush_interval=60, max_chars=200)
+    batcher.append("")
+    batcher.append("x")
+    batcher.flush()
+    assert len(sent) == 1
+    assert json.loads(sent[0])["result"]["token"] == "x"
+
+    batcher.append("after-close")
+    batcher.flush()
+    assert len(sent) == 1
+
+
+def test_batcher_timer_flushes_without_flush_call():
+    import time
+
+    from sidecar.handlers.rag_handler import RagChatChunkBatcher
+
+    send, sent = _batcher_capture()
+    batcher = RagChatChunkBatcher(send, flush_interval=0.02, max_chars=1000)
+    batcher.append("streaming ")
+    batcher.append("token")
+    time.sleep(0.08)
+    batcher.flush()
+    assert len(sent) >= 1
+    assert json.loads(sent[-1])["result"]["token"] == "streaming token"
+
+
+# ---------------------------------------------------------------------------
+# 按 session 的对话门禁：同会话串行 / 不同会话并行
+# ---------------------------------------------------------------------------
+
+
+def test_chat_gate_serializes_same_session():
+    from sidecar.handlers.rag_handler import RagHandler
+
+    handler = RagHandler.__new__(RagHandler)
+    gate = handler._acquire_chat_gate("session-a")
+    assert gate is not None
+    # 同 session 第二个请求被拒绝
+    assert handler._acquire_chat_gate("session-a") is None
+    handler._release_chat_gate(gate, "session-a")
+    # 释放后可再次进入
+    gate2 = handler._acquire_chat_gate("session-a")
+    assert gate2 is not None
+    handler._release_chat_gate(gate2, "session-a")
+
+
+def test_chat_gate_allows_parallel_sessions():
+    from sidecar.handlers.rag_handler import RagHandler
+
+    handler = RagHandler.__new__(RagHandler)
+    gate_a = handler._acquire_chat_gate("session-a")
+    gate_b = handler._acquire_chat_gate("session-b")
+    assert gate_a is not None and gate_b is not None
+    handler._release_chat_gate(gate_a, "session-a")
+    handler._release_chat_gate(gate_b, "session-b")
+
+
+def test_chat_gate_global_fallback_serializes():
+    from sidecar.handlers.rag_handler import RagHandler
+
+    handler = RagHandler.__new__(RagHandler)
+    gate = handler._acquire_chat_gate("_global")
+    assert gate is not None
+    assert handler._acquire_chat_gate("_global") is None
+    handler._release_chat_gate(gate, "_global")
+
+
+def test_chat_gate_cleans_up_idle_entries():
+    from sidecar.handlers.rag_handler import RagHandler
+
+    handler = RagHandler.__new__(RagHandler)
+    gate = handler._acquire_chat_gate("session-tmp")
+    handler._release_chat_gate(gate, "session-tmp")
+    # 空闲锁已从字典移除，不泄漏
+    with RagHandler._session_gates_guard:
+        assert "session-tmp" not in RagHandler._session_gates
+    with RagHandler._session_gates_guard:
+        RagHandler._session_gates.clear()

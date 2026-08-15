@@ -254,8 +254,8 @@ def test_deleted_note_is_purged_from_chunks_before_state(workspace: Path) -> Non
     with (
         patch("sidecar.rag.index_state.load_state", return_value={"Notes/deleted.md": 123.0}),
         patch(
-            "sidecar.rag.index.delete_by_file",
-            side_effect=lambda ws, rel: calls.append(("delete", (ws, rel))),
+            "sidecar.rag.index.delete_files_batched",
+            side_effect=lambda ws, rels: calls.append(("delete", (ws, rels))),
         ),
         patch(
             "sidecar.rag.index_state.remove_indexed",
@@ -266,9 +266,24 @@ def test_deleted_note_is_purged_from_chunks_before_state(workspace: Path) -> Non
 
     assert purged == ["Notes/deleted.md"]
     assert calls == [
-        ("delete", (str(workspace), "Notes/deleted.md")),
+        ("delete", (str(workspace), ["Notes/deleted.md"])),
         ("state", (["Notes/deleted.md"], str(workspace))),
     ]
+
+
+def test_purge_skips_batched_delete_when_no_stale_paths(workspace: Path) -> None:
+    from sidecar.ingest_pipeline import _purge_deleted_index_files
+
+    with (
+        patch("sidecar.rag.index_state.load_state", return_value={}),
+        patch("sidecar.rag.index.delete_files_batched") as batch_delete,
+        patch("sidecar.rag.index_state.remove_indexed") as remove_indexed,
+    ):
+        purged = _purge_deleted_index_files(str(workspace))
+
+    assert purged == []
+    batch_delete.assert_not_called()
+    remove_indexed.assert_not_called()
 
 
 def test_resume_restores_crossref_paths_and_affected_topics(workspace: Path) -> None:

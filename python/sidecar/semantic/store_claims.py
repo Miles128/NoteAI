@@ -283,6 +283,66 @@ class ClaimsStore(SemanticStoreBase):
         items = self.claim_verifications(claim_id, limit=1)
         return items[0] if items else None
 
+    def get_verifiable_claim(self, claim_id: str) -> dict | None:
+        """Return an active evidenced claim by id (single query).
+
+        Returns None when the claim is missing, not active, or has no
+        active evidence — the verification entry previously scanned the
+        whole claims table (limit 5000) to find one row.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT c.id, c.statement, c.scope, c.claim_type, c.confidence, c.status
+                   FROM claims c
+                   WHERE c.id = ? AND c.status = 'active'
+                     AND EXISTS (
+                         SELECT 1 FROM evidence e
+                         WHERE e.claim_id = c.id AND e.status = 'active'
+                     )""",
+                (claim_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def latest_verifications_for_claims(self, claim_ids: list[str]) -> dict[str, dict]:
+        """Return the latest verification per claim id with a single query.
+
+        Equivalent to latest_claim_verification() per id but opens one
+        connection instead of one per claim — the RAG claim context hot path
+        previously issued N queries for N claims.
+        """
+        if not claim_ids:
+            return {}
+        placeholders = ",".join("?" for _ in claim_ids)
+        sql = f"""
+            SELECT v.id, v.claim_id, v.verdict, v.confidence, v.summary, v.method,
+                   v.agent, v.sources_json, v.created_at
+            FROM claim_verifications v
+            WHERE v.claim_id IN ({placeholders})
+              AND v.rowid = (
+                  SELECT v2.rowid FROM claim_verifications v2
+                  WHERE v2.claim_id = v.claim_id
+                  ORDER BY v2.created_at DESC, v2.rowid DESC LIMIT 1
+              )
+        """
+        with self.connect() as conn:
+            rows = conn.execute(sql, claim_ids).fetchall()
+        out: dict[str, dict] = {}
+        for row in rows:
+            out[row["claim_id"]] = {
+                "id": row["id"],
+                "claim_id": row["claim_id"],
+                "verdict": row["verdict"],
+                "confidence": row["confidence"],
+                "summary": row["summary"],
+                "method": row["method"],
+                "agent": row["agent"],
+                "sources": json.loads(row["sources_json"] or "[]"),
+                "created_at": row["created_at"],
+            }
+        return out
+
     def list_claims_for_verification(
         self,
         *,

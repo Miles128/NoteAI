@@ -21,8 +21,86 @@ def _jieba_analyse_available():
         return False
 
 
+class RagChatChunkBatcher:
+    """流式回答 token 攒批：合并成整段 JSON 单次写 stdout。
+
+    逐 token 发送时 2000 token 的回答 = 2000 次 write+flush+JSON 解析+前端事件；
+    攒批后按定时器（50ms）或字符阈值（200）合并发送，网络与解析开销降一个量级。
+    发送在锁外执行（锁内取数据），避免与 stdout 锁形成反向等待。
+    """
+
+    def __init__(self, send_response, *, flush_interval: float = 0.05, max_chars: int = 200):
+        self._send_response = send_response
+        self._interval = flush_interval
+        self._max_chars = max_chars
+        self._buffer: list[str] = []
+        self._lock = threading.Lock()
+        self._timer: threading.Timer | None = None
+        self._closed = False
+
+    def append(self, token: str) -> None:
+        if not token:
+            return
+        with self._lock:
+            if self._closed:
+                return
+            self._buffer.append(token)
+            if sum(len(t) for t in self._buffer) >= self._max_chars:
+                self._send_locked()
+                return
+            if self._timer is None:
+                self._timer = threading.Timer(self._interval, self._flush_from_timer)
+                self._timer.daemon = True
+                self._timer.start()
+
+    def _flush_from_timer(self) -> None:
+        payload = self._take_payload()
+        if payload:
+            self._emit(payload)
+
+    def _send_locked(self) -> None:
+        payload = "".join(self._buffer)
+        self._buffer.clear()
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+        self._emit(payload)
+
+    def _take_payload(self) -> str:
+        with self._lock:
+            self._timer = None
+            if not self._buffer:
+                return ""
+            payload = "".join(self._buffer)
+            self._buffer.clear()
+            return payload
+
+    def _emit(self, payload: str) -> None:
+        self._send_response({"id": "event", "result": {"type": "rag_chat_chunk", "token": payload}})
+
+    def flush(self) -> None:
+        """流结束强制发送剩余 token 并停表。"""
+        payload = self._take_payload()
+        with self._lock:
+            self._closed = True
+        if payload:
+            self._emit(payload)
+
+
+class _SessionGate:
+    """按 session 的对话门禁：同会话串行、不同会话可并行。
+
+    引用计数保证锁空闲即从字典移除，避免 session 锁无限累积。
+    """
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.users = 0
+
+
 class RagHandler(BaseHandler):
-    _rag_chat_lock = threading.Lock()
+    _session_gates: dict[str, _SessionGate] = {}
+    _session_gates_guard = threading.Lock()
     _rag_build_lock = threading.Lock()
 
     _SUGGESTIONS_SENTINEL_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\]]*\])")
@@ -240,8 +318,10 @@ class RagHandler(BaseHandler):
         if not question:
             return {"success": False, "message": "问题不能为空"}
 
-        if not self._rag_chat_lock.acquire(blocking=False):
-            return {"success": False, "message": "已有对话正在进行，请稍候"}
+        session_id = str(params.get("session_id") or "") or "_global"
+        gate = self._acquire_chat_gate(session_id)
+        if gate is None:
+            return {"success": False, "message": "该对话正在进行中，请稍候"}
 
         use_vector_rag = config.rag_enabled
 
@@ -255,10 +335,29 @@ class RagHandler(BaseHandler):
                 RagHandler._record_error(str(e))
                 self._emit_rag_error(str(e))
             finally:
-                self._rag_chat_lock.release()
+                self._release_chat_gate(gate, session_id)
 
         threading.Thread(target=_worker, daemon=True).start()
         return {"success": True, "started": True}
+
+    def _acquire_chat_gate(self, session_id: str):
+        with RagHandler._session_gates_guard:
+            gate = RagHandler._session_gates.setdefault(session_id, _SessionGate())
+            gate.users += 1
+        if gate.lock.acquire(blocking=False):
+            return gate
+        with RagHandler._session_gates_guard:
+            gate.users -= 1
+            if gate.users <= 0:
+                RagHandler._session_gates.pop(session_id, None)
+        return None
+
+    def _release_chat_gate(self, gate: _SessionGate, session_id: str) -> None:
+        gate.lock.release()
+        with RagHandler._session_gates_guard:
+            gate.users -= 1
+            if gate.users <= 0:
+                RagHandler._session_gates.pop(session_id, None)
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
         from utils.llm_utils import APIConfigError, check_api_config
@@ -340,7 +439,11 @@ class RagHandler(BaseHandler):
             f"选中文本：{selection}\n当前文件：{current_file or '未知'}\n上下文：{context or '未提供'}"
         )
         try:
-            quick_answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+            batcher = RagChatChunkBatcher(self._send_response)
+            try:
+                quick_answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=batcher.append)
+            finally:
+                batcher.flush()
         except (APIConfigError, Exception) as e:
             return self._fail_rag(str(e))
 
@@ -453,7 +556,11 @@ class RagHandler(BaseHandler):
             )
 
         try:
-            answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+            batcher = RagChatChunkBatcher(self._send_response)
+            try:
+                answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=batcher.append)
+            finally:
+                batcher.flush()
         except APIConfigError as e:
             RagHandler._record_error(f"LLM调用失败: {e}")
             return self._fail_rag(str(e))
@@ -648,7 +755,11 @@ class RagHandler(BaseHandler):
             )
 
         try:
-            answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=self._send_chat_chunk)
+            batcher = RagChatChunkBatcher(self._send_response)
+            try:
+                answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=batcher.append)
+            finally:
+                batcher.flush()
         except APIConfigError as e:
             RagHandler._record_error(f"LLM调用失败: {e}")
             return self._fail_rag(str(e))

@@ -122,6 +122,9 @@ class ObjectsStore(SemanticStoreBase):
             # origin lets a later extraction replace exactly its own edges.
             conn.execute("ALTER TABLE relations ADD COLUMN block_id TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_relations_block ON relations(block_id)")
+        # 按文档读取 mentions 的热路径（JOIN blocks b ON b.id = m.block_id
+        # WHERE b.document_id = ?）需要 block_id 单列索引，否则全表扫描。
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mentions_block ON semantic_mentions(block_id)")
         # Extraction-time duplicate detection: a name fingerprint column
         # lets variant spellings (parenthetical annotations, whitespace,
         # case) merge into the existing row the moment a block is saved.

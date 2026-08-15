@@ -9,16 +9,17 @@ class ModelWarmupManager:
     """Downloads / loads heavy models in a background thread so the first
     RAG query does not block the user for seconds."""
 
-    _warmup_done = False
+    _preload_started = False
+    _preload_done = False
     _lock = threading.Lock()
 
     @classmethod
     def ensure_preload(cls):
         """幂等：确保后台预热线程已启动（可被启动延迟/首次 RAG 查询触发）。"""
         with cls._lock:
-            if cls._warmup_done:
+            if cls._preload_started:
                 return
-            cls._warmup_done = True
+            cls._preload_started = True
         t = threading.Thread(target=cls._preload_all, daemon=True, name="model-warmup")
         t.start()
 
@@ -35,11 +36,6 @@ class ModelWarmupManager:
 
     @classmethod
     def _preload_all(cls):
-        with cls._lock:
-            if cls._warmup_done:
-                return
-            cls._warmup_done = True
-
         logger.warning("[preload] Starting model warmup (embedding + reranker)…")
 
         # Load embedder first (critical path), then reranker in background.
@@ -48,6 +44,8 @@ class ModelWarmupManager:
         reranker_thread.start()
         reranker_thread.join()
 
+        with cls._lock:
+            cls._preload_done = True
         logger.warning("[preload] Model warmup complete")
 
     @classmethod
@@ -71,4 +69,4 @@ class ModelWarmupManager:
     @classmethod
     def is_ready(cls) -> bool:
         with cls._lock:
-            return cls._warmup_done
+            return cls._preload_done

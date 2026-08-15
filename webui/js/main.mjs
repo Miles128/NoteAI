@@ -214,7 +214,7 @@ async function loadModules() {
     window.App = App;
     window.importFiles = importFiles;
 
-    await import('./onboarding.js');
+    await import('./onboarding.ts');
 
     // 显式调用应用初始化，取代旧的“重放 DOMContentLoaded”做法：
     // app.js 已改为导出 init()；其余模块的初始化均已改为 import 时直接执行

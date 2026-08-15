@@ -10,20 +10,28 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(AppState::default())
         .setup(|app| {
-            let app_handle = app.handle().clone();
-            let app_handle2 = app.handle().clone();
+            // S1: app_handle 无条件注入——初始启动失败后前端 RPC 仍可
+            // 触发 restart_python_sidecar，形成自动恢复闭环
+            {
+                let state = app.state::<AppState>();
+                *state.app_handle.lock().unwrap() = Some(app.handle().clone());
+            }
 
-            tauri::async_runtime::block_on(async {
-                match sidecar::start_python_sidecar(app_handle).await {
+            // P3: 后台启动 sidecar，不阻塞主线程（find_python 会对多个
+            // 候选串行探测 Python 版本）；完成后经 python-event 通知 UI
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                crate::sidecar::SIDECAR_STARTING.store(true, std::sync::atomic::Ordering::SeqCst);
+                match crate::sidecar::start_python_sidecar(handle.clone()).await {
                     Ok(()) => {
                         println!("[INFO] Python sidecar started");
                     }
                     Err(e) => {
                         eprintln!("[ERROR] Failed to start Python sidecar: {}", e);
-                        let _ = app_handle2.emit(
+                        let _ = handle.emit_to(
+                            "main",
                             "python-event",
                             serde_json::json!({
                                 "type": "sidecar_error",
@@ -32,6 +40,7 @@ pub fn run() {
                         );
                     }
                 }
+                crate::sidecar::SIDECAR_STARTING.store(false, std::sync::atomic::Ordering::SeqCst);
             });
 
             Ok(())
@@ -67,7 +76,9 @@ pub fn run() {
                 std::thread::spawn(move || {
                     tauri::async_runtime::block_on(async {
                         if let Some(mut child) = child_arc_clone.lock().await.take() {
-                            let _ = child.kill().await;
+                            crate::sidecar::kill_process_group(&child);
+                            let _ = child.start_kill();
+                            let _ = child.wait().await;
                         }
                         *stdin_arc_clone.lock().await = None;
                     });

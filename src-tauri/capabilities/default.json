@@ -16,11 +16,8 @@
     "core:window:allow-is-maximized",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save",
     "dialog:allow-message",
     "dialog:allow-ask",
-    "dialog:allow-confirm",
-    "shell:default",
-    "shell:allow-open"
+    "dialog:allow-confirm"
   ]
 }

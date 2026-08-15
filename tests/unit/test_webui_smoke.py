@@ -28,7 +28,7 @@ REQUIRED_STATIC_ASSETS = (
     "css/variables.css",
     "css/layout.css",
     "js/main.mjs",
-    "js/api.js",
+    "js/api.ts",
     "js/preview.js",
     "js/tiptap-editor.js",
     "lib/tiptap-bundle.js",

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PYTHON_SIDECAR = ROOT / "python" / "sidecar"
 RUST_RPC = ROOT / "src-tauri" / "src" / "rpc.rs"
 WEBUI_JS = ROOT / "webui" / "js"
-API_JS = WEBUI_JS / "api.js"
+API_JS = WEBUI_JS / "api.ts"
 
 REGISTER_RE = re.compile(r"""router\.register\(\s*["'](\w+)["']""")
 
@@ -18,7 +18,7 @@ RUST_ARRAY_RE = re.compile(
 )
 RUST_METHOD_RE = re.compile(r'"(\w+)"')
 
-# api.js 中的配置化定义：{ name: 'xxx', method: 'yyy', ... }
+# api.ts 中的配置化定义：{ name: 'xxx', method: 'yyy', ... }
 API_DEF_RE = re.compile(r"name:\s*'(\w+)'\s*,\s*method:\s*'(\w+)'")
 # api.js 特殊函数中的直调 pyCall（多步逻辑 / 原生对话框 / 分页预览，无法配置化）
 PYCALL_DIRECT_RE = re.compile(r"pyCall\('(\w+)'")
@@ -70,7 +70,7 @@ def format_rust_array(methods_sorted):
 
 
 def check_frontend_consistency(rust_names, py_names):
-    """交叉校验 webui/js/api.js 与 Rust 白名单（只读，返回是否有漂移）。"""
+    """交叉校验 webui/js/api.ts 与 Rust 白名单（只读，返回是否有漂移）。"""
     api_text = API_JS.read_text(encoding="utf-8")
 
     api_defs = dict(API_DEF_RE.findall(api_text))  # name -> method
@@ -90,7 +90,7 @@ def check_frontend_consistency(rust_names, py_names):
     api_only = sorted(frontend_methods - rust_names)
     if api_only:
         ok = False
-        print("=== api.js methods MISSING from Rust whitelist (would be BLOCKED) ===")
+        print("=== api.ts methods MISSING from Rust whitelist (would be BLOCKED) ===")
         for name in api_only:
             print(f"  + {name}")
         print()
@@ -98,7 +98,7 @@ def check_frontend_consistency(rust_names, py_names):
     rust_only = sorted(rust_names - frontend_methods - KNOWN_BACKEND_ONLY_METHODS)
     if rust_only:
         ok = False
-        print("=== Rust whitelist methods NOT exposed in api.js (DRIFT) ===")
+        print("=== Rust whitelist methods NOT exposed in api.ts (DRIFT) ===")
         for name in rust_only:
             registered = name in py_names
             hint = "" if registered else "  (also NOT registered in Python)"
@@ -122,7 +122,7 @@ def check_frontend_consistency(rust_names, py_names):
 
     if ok:
         print(
-            f"OK: api.js is consistent with Rust whitelist "
+            f"OK: api.ts is consistent with Rust whitelist "
             f"({len(frontend_methods)} frontend methods, "
             f"{len(KNOWN_BACKEND_ONLY_METHODS)} known backend-only)."
         )
@@ -168,7 +168,7 @@ def main():
         new_text = rust_text[:arr_start] + new_body + rust_text[arr_end:]
         RUST_RPC.write_text(new_text, encoding="utf-8")
         print(f"FIXED: Updated Rust whitelist ({len(merged)} methods).")
-        # --fix 只同步 Python↔Rust；前端漂移需要手工修复 api.js
+        # --fix 只同步 Python↔Rust；前端漂移需要手工修复 api.ts
         return 0 if frontend_ok else 1
 
     print("Run with --fix to auto-update the Rust whitelist.")

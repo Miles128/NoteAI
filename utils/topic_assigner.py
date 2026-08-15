@@ -27,7 +27,6 @@ from utils.topic_pending import (
 from utils.wiki_crud import add_file_to_wiki_topic
 from utils.wiki_sync import (
     _write_file_topic_from_folder,
-    sync_wiki_with_files,
     topic_from_notes_path,
 )
 
@@ -368,7 +367,8 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
         try:
             result = auto_assign_topic_for_file(file_path)
             if result and result.get("status") == "auto_assigned" and result.get("topic"):
-                sync_wiki_with_files()
+                if mark_wiki_sync:
+                    mark_wiki_sync()
                 if send_event:
                     send_event(
                         {
@@ -406,7 +406,8 @@ def auto_process_md_file(file_path, send_event=None, mark_wiki_sync=None):  # no
         move_result = move_file_to_notes_topic_folder(file_path, file_topic)
         if move_result.get("success"):
             new_path = move_result.get("new_path", "")
-            sync_wiki_with_files()
+            if mark_wiki_sync:
+                mark_wiki_sync()
             if send_event:
                 send_event(
                     {

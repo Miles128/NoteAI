@@ -9,6 +9,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from time import monotonic
 from typing import Any
 
 from config import config, is_ignored_dir
@@ -37,6 +38,9 @@ _cancel_event = threading.Event()
 _cancel_lock = threading.Lock()
 _cancel_generation = 0
 _state_lock = threading.Lock()
+
+# ingest 进度写盘节流间隔（秒）：避免千级文件全量导入时每次 mkstemp+fsync
+_PROG_SAVE_INTERVAL_SECS = 0.5
 
 
 def _state_path() -> Path | None:
@@ -516,6 +520,9 @@ def run_ingest(
     def cancelled() -> bool:
         return cancel_generation() > cancel_after_generation
 
+    # 进度写盘节流状态（见 prog()）
+    _last_prog_save: float = 0.0
+
     # Previous completion metadata is also required by the non-resume
     # incremental fast path. Resume only controls whether partial stage state
     # and statistics are restored below.
@@ -601,10 +608,16 @@ def run_ingest(
         save_ingest_state(state)
 
     def prog(stage: str, p: float, msg: str, **extra) -> None:
+        nonlocal _last_prog_save
         state["stage"] = stage
         state["progress"] = p
         state["message"] = msg
-        save_ingest_state(state)
+        # 进度写盘节流：全量导入千级文件时避免每次 mkstemp+fsync
+        # （结束帧 p>=1.0 强制落盘，保证最终状态可恢复）
+        now = monotonic()
+        if p >= 1.0 or now - _last_prog_save >= _PROG_SAVE_INTERVAL_SECS:
+            _last_prog_save = now
+            save_ingest_state(state)
         if send_progress:
             send_progress(stage, p, msg, extra)
 

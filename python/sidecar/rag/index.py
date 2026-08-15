@@ -504,6 +504,10 @@ def _tags_from_fields(fields: dict) -> list[str]:
 
 def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
     fields = doc.fields or {}
+    dense_vec = None
+    vectors = getattr(doc, "vectors", None)
+    if isinstance(vectors, dict) and isinstance(vectors.get("dense"), list):
+        dense_vec = vectors["dense"]
     return {
         "id": doc.id,
         "content": fields.get("content", ""),
@@ -511,7 +515,7 @@ def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
         "topic": fields.get("topic", ""),
         "tags": _tags_from_fields(fields),
         "section_title": fields.get("section_title", ""),
-        "dense_vec": None,
+        "dense_vec": dense_vec,
         "dense_score": score if score is not None else 0.0,
         "sparse_score": 0.0,
         "score": score if score is not None else 0.0,
@@ -976,6 +980,7 @@ def _dense_search(
         query,
         topk=search_topk,
         output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+        include_vector=True,
     )
 
     results = []
@@ -1109,7 +1114,7 @@ def hybrid_search(
                 fetched = collection.fetch(
                     sparse_ids,
                     output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
-                    include_vector=False,
+                    include_vector=True,
                 )
                 for cid, doc in fetched.items():
                     if cid not in sparse_scores:

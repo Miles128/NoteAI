@@ -153,7 +153,9 @@ class TestWorkspaceTree:
         note = new_dir / "笔记.md"
         note.write_text(f"---\ntopic: AI{TOPIC_SEP}旧主题\n---\n正文\n", encoding="utf-8")
 
-        server._auto_process_md_file(str(note))
+        worker = server._auto_process_md_file(str(note))
+        if worker is not None:
+            worker.join(timeout=15)
 
         assert note.exists()
         text = note.read_text(encoding="utf-8")

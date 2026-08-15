@@ -74,13 +74,24 @@ def build_object_detail(store: SemanticStore, kind: str, object_id: str) -> dict
                 (object_id, object_id),
             ).fetchall()
             related = []
+            other_ids = [
+                relation["target_id"] if relation["source_id"] == object_id else relation["source_id"]
+                for relation in related_rows
+            ]
+            name_map: dict[str, dict] = {}
+            if other_ids:
+                placeholders = ",".join("?" * len(other_ids))
+                for other in conn.execute(
+                    f"SELECT id, canonical_name, 'entity' AS kind FROM entities "
+                    f"WHERE id IN ({placeholders}) AND status = 'active' "
+                    f"UNION ALL SELECT id, canonical_name, 'concept' AS kind FROM concepts "
+                    f"WHERE id IN ({placeholders}) AND status = 'active'",
+                    (*other_ids, *other_ids),
+                ):
+                    name_map[other["id"]] = other
             for relation in related_rows:
                 other_id = relation["target_id"] if relation["source_id"] == object_id else relation["source_id"]
-                other = conn.execute(
-                    "SELECT canonical_name, 'entity' AS kind FROM entities WHERE id = ? AND status = 'active' "
-                    "UNION ALL SELECT canonical_name, 'concept' AS kind FROM concepts WHERE id = ? AND status = 'active'",
-                    (other_id, other_id),
-                ).fetchone()
+                other = name_map.get(other_id)
                 if other:
                     related.append(
                         {
@@ -162,6 +173,19 @@ def list_semantic_objects(
                 (*args, limit, offset),
             ).fetchall()
             items = []
+            claim_ids = [row["id"] for row in rows]
+            evidence_by_claim: dict[str, list] = {}
+            if claim_ids:
+                placeholders = ",".join("?" * len(claim_ids))
+                for ev in conn.execute(
+                    f"""SELECT e.claim_id, e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
+                              b.heading_path_json, b.content, b.start_line, b.end_line
+                       FROM evidence e JOIN blocks b ON b.id = e.block_id
+                       JOIN documents d ON d.id = b.document_id
+                       WHERE e.claim_id IN ({placeholders}) ORDER BY d.path, b.ordinal""",
+                    claim_ids,
+                ):
+                    evidence_by_claim.setdefault(ev["claim_id"], []).append(evidence_row(ev))
             for row in rows:
                 item = dict(row)
                 verdict = item.pop("verification_verdict", None)
@@ -179,15 +203,7 @@ def list_semantic_objects(
                     item.pop("verification_agent", None)
                     item.pop("verified_at", None)
                     item["verification"] = None
-                evidence = conn.execute(
-                    """SELECT e.id, e.status, d.path, d.title, d.topic, b.id AS block_id,
-                              b.heading_path_json, b.content, b.start_line, b.end_line
-                       FROM evidence e JOIN blocks b ON b.id = e.block_id
-                       JOIN documents d ON d.id = b.document_id
-                       WHERE e.claim_id = ? ORDER BY d.path, b.ordinal""",
-                    (row["id"],),
-                ).fetchall()
-                item["evidence"] = [evidence_row(value) for value in evidence]
+                item["evidence"] = evidence_by_claim.get(row["id"], [])
                 items.append(item)
         else:
             table = tab

@@ -26,9 +26,11 @@ from utils.topic_pending import (
 )
 from utils.wiki_crud import add_file_to_wiki_topic
 from utils.wiki_sync import (
-    sync_wiki_with_files as sync_wiki_with_files,  # noqa: F401  re-export（handler/测试沿用）
     _write_file_topic_from_folder,
     topic_from_notes_path,
+)
+from utils.wiki_sync import (
+    sync_wiki_with_files as sync_wiki_with_files,  # noqa: F401  re-export（handler/测试沿用）
 )
 
 

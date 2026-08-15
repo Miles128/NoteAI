@@ -1,12 +1,21 @@
 (function() { 'use strict';
 
-var _lastTopicData = null;
-var _aiSuggestions = [];
-var _existingTopics = [];
-var _pendingDragData = { filePath: null, cardEl: null };
+var _lastTopicData: string | null = null;
+var _aiSuggestions: any[] = [];
+var _existingTopics: string[] = [];
+var _pendingDragData: { filePath: string | null; cardEl: Element | null } = { filePath: null, cardEl: null };
 
-function _buildTopicTree(topics) {
-    var root = { children: {}, files: [], name: '', label: '' };
+var Icons = window.Icons as { get(name: string, size?: number): string };
+
+interface TopicTreeNode {
+    children: Record<string, TopicTreeNode>;
+    files: any[];
+    name: string;
+    label: string;
+}
+
+function _buildTopicTree(topics: any[]): TopicTreeNode {
+    var root: TopicTreeNode = { children: {}, files: [], name: '', label: '' };
     topics.forEach(function(topic) {
         var parts = topic.name.split(' > ');
         var node = root;
@@ -24,7 +33,7 @@ function _buildTopicTree(topics) {
     return root;
 }
 
-function _renderTopicTree(node, expandedTopics, depth) {
+function _renderTopicTree(node: TopicTreeNode, expandedTopics: Record<string, boolean>, depth?: number): string {
     depth = depth || 0;
     var html = '';
     var keys = Object.keys(node.children).sort(function(a, b) {
@@ -38,14 +47,14 @@ function _renderTopicTree(node, expandedTopics, depth) {
         var indent = depth * 16;
         var totalFiles = _countAllFiles(child);
 
-        html += '<div class="sidebar-tag-group' + isExpanded + '" data-topic-name="' + escapeAttr(child.name) + '">';
-        html += '<div class="sidebar-tag-row" onclick="window.topicRowClick(this)" data-topic-name="' + escapeAttr(child.name) + '" style="padding-left:' + (8 + indent) + 'px">';
+        html += '<div class="sidebar-tag-group' + isExpanded + '" data-topic-name="' + window.escapeAttr(child.name) + '">';
+        html += '<div class="sidebar-tag-row" onclick="window.topicRowClick(this)" data-topic-name="' + window.escapeAttr(child.name) + '" style="padding-left:' + (8 + indent) + 'px">';
         if (hasChildren || hasFiles) {
-            html += '<span class="sidebar-tag-toggle" onclick="event.stopPropagation(); this.parentElement.classList.toggle(\'expanded\')">' + window.Icons.get('chevronDown') + '</span>';
+            html += '<span class="sidebar-tag-toggle" onclick="event.stopPropagation(); this.parentElement.classList.toggle(\'expanded\')">' + Icons.get('chevronDown') + '</span>';
         } else {
-            html += '<span class="sidebar-tag-toggle" style="visibility:hidden">' + window.Icons.get('chevronDown') + '</span>';
+            html += '<span class="sidebar-tag-toggle" style="visibility:hidden">' + Icons.get('chevronDown') + '</span>';
         }
-        html += '<span class="sidebar-tag-name" data-topic-name="' + escapeAttr(child.name) + '">' + escapeHtml(child.label) + '</span>';
+        html += '<span class="sidebar-tag-name" data-topic-name="' + window.escapeAttr(child.name) + '">' + window.escapeHtml(child.label) + '</span>';
         if (totalFiles > 0) {
             html += '<span class="sidebar-tag-count">' + totalFiles + '</span>';
         }
@@ -55,22 +64,22 @@ function _renderTopicTree(node, expandedTopics, depth) {
             var ov = (window._surveyOverviewMap || {})[child.name] || {};
             var enabled = ov.enabled !== false;
             if (!enabled) {
-                html += '<span class="sidebar-tag-survey sidebar-tag-survey-off" title="' + escapeAttr(window.t('topic.surveyOffTitle')) + '">' + escapeHtml(window.t('topic.surveyOff')) + '</span>';
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-off" title="' + window.escapeAttr(window.t('topic.surveyOffTitle')) + '">' + window.escapeHtml(window.t('topic.surveyOff')) + '</span>';
             } else if (!ov.has_survey) {
-                html += '<span class="sidebar-tag-survey sidebar-tag-survey-missing" title="' + escapeAttr(window.t('topic.noSurveyTitle')) + '">' + escapeHtml(window.t('topic.noSurvey')) + '</span>';
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-missing" title="' + window.escapeAttr(window.t('topic.noSurveyTitle')) + '">' + window.escapeHtml(window.t('topic.noSurvey')) + '</span>';
             } else {
-                html += '<span class="sidebar-tag-survey sidebar-tag-survey-ok" onclick="event.stopPropagation(); window.previewTopicSurvey(\'' + escapeAttr(child.name) + '\')">' + escapeHtml(window.t('topic.surveyDoc')) + '</span>';
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-ok" onclick="event.stopPropagation(); window.previewTopicSurvey(\'' + window.escapeAttr(child.name) + '\')">' + window.escapeHtml(window.t('topic.surveyDoc')) + '</span>';
                 if (ov.stale) {
                     surveyStaleShown = true;
-                    html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.updateTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyUpdateTitle')) + '">' + escapeHtml(window.t('topic.surveyStale')) + '</span>';
+                    html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.updateTopicSurvey(\'' + window.escapeAttr(child.name) + '\')" title="' + window.escapeAttr(window.t('topic.surveyUpdateTitle')) + '">' + window.escapeHtml(window.t('topic.surveyStale')) + '</span>';
                 }
             }
             // P5：语义知识页（wiki/semantic/*_语义.md）可更新提示，来自 get_topic_tree 的 stale_topics；
             // 综述 stale 徽标已展示同一级主题时不重复展示
             if ((window._topicStaleMap || {})[child.name] && !surveyStaleShown) {
-                html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.previewSemanticWikiPage(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.wikiStaleTitle')) + '">' + escapeHtml(window.t('topic.wikiStale')) + '</span>';
+                html += '<span class="sidebar-tag-survey sidebar-tag-survey-stale" onclick="event.stopPropagation(); window.previewSemanticWikiPage(\'' + window.escapeAttr(child.name) + '\')" title="' + window.escapeAttr(window.t('topic.wikiStaleTitle')) + '">' + window.escapeHtml(window.t('topic.wikiStale')) + '</span>';
             }
-            html += '<span class="sidebar-tag-survey-toggle' + (enabled ? ' on' : '') + '" onclick="event.stopPropagation(); window.toggleTopicSurvey(\'' + escapeAttr(child.name) + '\')" title="' + escapeAttr(window.t('topic.surveyToggleTitle')) + '"></span>';
+            html += '<span class="sidebar-tag-survey-toggle' + (enabled ? ' on' : '') + '" onclick="event.stopPropagation(); window.toggleTopicSurvey(\'' + window.escapeAttr(child.name) + '\')" title="' + window.escapeAttr(window.t('topic.surveyToggleTitle')) + '"></span>';
         }
         html += '</div>';
 
@@ -86,11 +95,11 @@ function _renderTopicTree(node, expandedTopics, depth) {
                 var display = f.title || window.t('download.unnamed');
                 var path = f.path || '';
                 if (path) {
-                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + escapeAttr(path) + '" onclick="window.TreeModule.selectFile(\'' + escapeAttr(path) + '\', \'' + escapeAttr(display) + '\')" style="padding-left:' + (24 + indent) + 'px">';
+                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + window.escapeAttr(path) + '" onclick="window.TreeModule.selectFile(\'' + window.escapeAttr(path) + '\', \'' + window.escapeAttr(display) + '\')" style="padding-left:' + (24 + indent) + 'px">';
                 } else {
                     html += '<div class="sidebar-tag-file tree-item" style="padding-left:' + (24 + indent) + 'px">';
                 }
-                html += '<span class="tree-name">' + escapeHtml(display) + '</span>';
+                html += '<span class="tree-name">' + window.escapeHtml(display) + '</span>';
                 html += '</div>';
             });
             html += '</div>';
@@ -101,7 +110,7 @@ function _renderTopicTree(node, expandedTopics, depth) {
     return html;
 }
 
-function _countAllFiles(node) {
+function _countAllFiles(node: TopicTreeNode): number {
     var count = node.files.length;
     var keys = Object.keys(node.children);
     for (var i = 0; i < keys.length; i++) {
@@ -110,44 +119,44 @@ function _countAllFiles(node) {
     return count;
 }
 
-function _surveyState(topic) {
+function _surveyState(topic: string): any {
     return (window._surveyOverviewMap || {})[topic] || { enabled: true, has_survey: false, stale: false, survey_path: '' };
 }
 
-function _openSurveyPreview(topic) {
+function _openSurveyPreview(topic: string): boolean {
     var ov = _surveyState(topic);
-    if (ov.has_survey && ov.survey_path && typeof showPreview === 'function') {
-        showPreview({ path: ov.survey_path, name: topic + ' ' + window.t('topic.surveyDoc') });
+    if (ov.has_survey && ov.survey_path && typeof window.showPreview === 'function') {
+        window.showPreview({ path: ov.survey_path, name: topic + ' ' + window.t('topic.surveyDoc') });
         return true;
     }
     return false;
 }
 
-function topicRowClick(rowEl) {
+function topicRowClick(rowEl: HTMLElement) {
     var topic = rowEl.getAttribute('data-topic-name') || '';
     // 有综述的主题：点行直接打开综述预览；否则展开/收起
     if (_openSurveyPreview(topic)) return;
-    rowEl.parentElement.classList.toggle('expanded');
+    rowEl.parentElement!.classList.toggle('expanded');
 }
 
-function previewTopicSurvey(topic) {
+function previewTopicSurvey(topic: string) {
     _openSurveyPreview(topic);
 }
 
 // P5：语义知识页路径与后端 wiki._target_path 对齐（wiki/semantic/{安全段}_语义.md）
-function _semanticWikiPagePath(topic) {
+function _semanticWikiPagePath(topic: string): string {
     var safe = String(topic == null ? '' : topic).trim().replace(/[\\/:*?"<>|]/g, '_').replace(/^[. ]+|[. ]+$/g, '');
     if (!safe) return '';
     return 'wiki/semantic/' + safe + '_语义.md';
 }
 
-function previewSemanticWikiPage(topic) {
+function previewSemanticWikiPage(topic: string) {
     var path = _semanticWikiPagePath(topic);
     if (!path || typeof window.showPreview !== 'function') return;
     window.showPreview({ path: path, name: topic + ' · 语义知识' });
 }
 
-async function toggleTopicSurvey(topic) {
+async function toggleTopicSurvey(topic: string): Promise<void> {
     var ov = _surveyState(topic);
     var enable = ov.enabled !== false;
     var actionText = enable ? window.t('topic.surveyTurnOff') : window.t('topic.surveyTurnOn');
@@ -171,15 +180,15 @@ async function toggleTopicSurvey(topic) {
         await loadTopicTree(true, true);
     } catch (e) {
         console.error('[Topic] toggleSurvey error:', e);
-        alert(e.message || window.t('common.unknownError'));
+        alert((e as Error).message || window.t('common.unknownError'));
     }
 }
 
-function updateTopicSurvey(topic) {
+function updateTopicSurvey(topic: string) {
     onAITopicSurvey(topic);
 }
 
-async function loadTopicTree(silent, forceRefresh) {
+async function loadTopicTree(silent?: boolean, forceRefresh?: boolean): Promise<void> {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
     if (!silent) {
@@ -190,7 +199,7 @@ async function loadTopicTree(silent, forceRefresh) {
         var result = await window.api.getTopicTree();
 
         // 并行拉取综述状态总览（开关 / 是否有综述 / 可更新）
-        var overview = {};
+        var overview: Record<string, any> = {};
         try {
             var ovResult = await window.api.getSurveyOverview();
             if (ovResult && typeof ovResult === 'object' && ovResult.overview) {
@@ -212,13 +221,13 @@ async function loadTopicTree(silent, forceRefresh) {
         window.AppState.lastTopicData = dataStr;
 
         if (result.success === false) {
-            container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(result.message || window.t('common.backendError')) + '</span></div>';
+            container.innerHTML = '<div class="sidebar-view-empty"><span>' + window.escapeHtml(result.message || window.t('common.backendError')) + '</span></div>';
             return;
         }
 
         // P5：语义知识页可更新主题集（仅 wiki 已有该主题段时纳入），供一级主题行渲染徽标
-        var staleMap = {};
-        (result.stale_topics || []).forEach(function(name) {
+        var staleMap: Record<string, boolean> = {};
+        (result.stale_topics || []).forEach(function(name: string) {
             staleMap[name] = true;
         });
         window._topicStaleMap = staleMap;
@@ -231,7 +240,7 @@ async function loadTopicTree(silent, forceRefresh) {
             return;
         }
 
-        var expandedTopics = {};
+        var expandedTopics: Record<string, boolean> = {};
         container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el) {
             var name = el.getAttribute('data-topic-name');
             if (name) expandedTopics[name] = true;
@@ -254,18 +263,18 @@ async function loadTopicTree(silent, forceRefresh) {
         window.updateSidebarStats();
     } catch (e) {
         console.error('[Topic] loadTopicTree error:', e);
-                container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(e.message || window.t('common.unknownError')) + '</span></div>';
+                container.innerHTML = '<div class="sidebar-view-empty"><span>' + window.escapeHtml((e as Error).message || window.t('common.unknownError')) + '</span></div>';
     }
 }
 
-function setupTopicDragDrop(container) {
-    if (container._topicDragDropReady) return;
-    container._topicDragDropReady = true;
+function setupTopicDragDrop(container: HTMLElement) {
+    if ((container as any)._topicDragDropReady) return;
+    (container as any)._topicDragDropReady = true;
 
-    var dragData = { filePath: null, fileName: null, srcTopic: null };
+    var dragData: { filePath: string | null; fileName: string | null; srcTopic: string | null } = { filePath: null, fileName: null, srcTopic: null };
 
-    container.addEventListener('dragstart', function(e) {
-        var fileEl = e.target.closest('.sidebar-tag-file');
+    container.addEventListener('dragstart', function(e: DragEvent) {
+        var fileEl = (e.target as Element).closest('.sidebar-tag-file');
         if (!fileEl) return;
 
         var filePath = fileEl.getAttribute('data-file-path');
@@ -279,9 +288,9 @@ function setupTopicDragDrop(container) {
         dragData.srcTopic = srcTopic;
         fileEl.classList.add('dragging');
 
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', filePath);
-        e.dataTransfer.setData('application/x-topic-src', srcTopic || '');
+        e.dataTransfer!.effectAllowed = 'move';
+        e.dataTransfer!.setData('text/plain', filePath);
+        e.dataTransfer!.setData('application/x-topic-src', srcTopic || '');
     });
 
     container.addEventListener('dragend', function(e) {
@@ -296,20 +305,20 @@ function setupTopicDragDrop(container) {
         dragData.srcTopic = null;
     });
 
-    container.addEventListener('dragover', function(e) {
+    container.addEventListener('dragover', function(e: DragEvent) {
         var pendingCard = document.querySelector('.topic-pending-card.dragging');
         if (!dragData.filePath && !pendingCard) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.dataTransfer!.dropEffect = 'move';
 
-        var rowEl = e.target.closest('.sidebar-tag-row');
-        var groupEl = e.target.closest('.sidebar-tag-group');
+        var rowEl = (e.target as Element).closest('.sidebar-tag-row');
+        var groupEl = (e.target as Element).closest('.sidebar-tag-group');
 
         container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
 
-        var targetTopic = null;
+        var targetTopic: string | null = null;
         if (rowEl) {
             targetTopic = rowEl.getAttribute('data-topic-name');
         } else if (groupEl) {
@@ -338,19 +347,19 @@ function setupTopicDragDrop(container) {
         }
     });
 
-    container.addEventListener('dragleave', function(e) {
-        var rowEl = e.target.closest('.sidebar-tag-row');
+    container.addEventListener('dragleave', function(e: DragEvent) {
+        var rowEl = (e.target as Element).closest('.sidebar-tag-row');
         if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
     });
 
-    container.addEventListener('drop', async function(e) {
+    container.addEventListener('drop', async function(e: DragEvent) {
         e.preventDefault();
         e.stopPropagation();
 
         var pendingCard = document.querySelector('.topic-pending-card.dragging');
         if (pendingCard) {
             var pendingFile = pendingCard.getAttribute('data-file');
-            var targetEl = e.target.closest('.sidebar-tag-row') || e.target.closest('.sidebar-tag-group');
+            var targetEl = (e.target as Element).closest('.sidebar-tag-row') || (e.target as Element).closest('.sidebar-tag-group');
             var targetTopic = targetEl ? targetEl.getAttribute('data-topic-name') : null;
 
             if (!targetTopic || !pendingFile) {
@@ -362,13 +371,13 @@ function setupTopicDragDrop(container) {
                 var result = await window.api.resolveTopic(pendingFile, targetTopic);
                 if (result && result.success) {
                     pendingCard.classList.add('resolved');
-                    animateCardOut(pendingCard);
+                    animateCardOut(pendingCard as HTMLElement);
                 } else {
                     alert(window.t('topic.confirmTopicFailed') + (result ? result.message : window.t('common.unknownError')));
                 }
             } catch (err) {
                 console.error('[Topic] resolve via drag error:', err);
-                alert(window.t('topic.confirmTopicFailed') + (err.message || window.t('common.errorOccurred')));
+                alert(window.t('topic.confirmTopicFailed') + ((err as Error).message || window.t('common.errorOccurred')));
             }
 
             cleanupDragState(container);
@@ -381,7 +390,7 @@ function setupTopicDragDrop(container) {
             return;
         }
 
-        var targetEl2 = e.target.closest('.sidebar-tag-row') || e.target.closest('.sidebar-tag-group');
+        var targetEl2 = (e.target as Element).closest('.sidebar-tag-row') || (e.target as Element).closest('.sidebar-tag-group');
         var targetTopic2 = targetEl2 ? targetEl2.getAttribute('data-topic-name') : null;
 
         if (!targetTopic2) {
@@ -406,40 +415,40 @@ function setupTopicDragDrop(container) {
             }
         } catch (err) {
             console.error('[Topic] move error:', err);
-            alert(window.t('topic.moveFailed') + (err.message || window.t('common.errorOccurred')));
+            alert(window.t('topic.moveFailed') + ((err as Error).message || window.t('common.errorOccurred')));
         }
 
         cleanupDragState(container);
     });
 
-    function cleanupDragState(cont) {
+    function cleanupDragState(cont: HTMLElement) {
         cont.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
     }
 }
 
-function setupTopicContextMenu(container) {
-    container.addEventListener('contextmenu', function(e) {
-        var fileEl = e.target.closest('.sidebar-tag-file');
-        var rowEl = e.target.closest('.sidebar-tag-row');
+function setupTopicContextMenu(container: HTMLElement) {
+    container.addEventListener('contextmenu', function(e: MouseEvent) {
+        var fileEl = (e.target as Element).closest('.sidebar-tag-file');
+        var rowEl = (e.target as Element).closest('.sidebar-tag-row');
 
         if (fileEl) {
             e.preventDefault();
             e.stopPropagation();
-            showTopicFileContextMenu(e, fileEl);
+            showTopicFileContextMenu(e, fileEl as HTMLElement);
         } else if (rowEl) {
             e.preventDefault();
             e.stopPropagation();
-            showTopicContextMenu(e, rowEl);
+            showTopicContextMenu(e, rowEl as HTMLElement);
         }
     });
 }
 
-function showTopicContextMenu(e, rowEl) {
-    hideTreeContextMenu();
+function showTopicContextMenu(e: MouseEvent, rowEl: HTMLElement) {
+    window.hideTreeContextMenu();
 
-    var topicName = rowEl.getAttribute('data-topic-name');
+    const topicName = rowEl.getAttribute('data-topic-name');
     var tagNameEl = rowEl.querySelector('.sidebar-tag-name');
     if (!topicName) return;
 
@@ -447,21 +456,21 @@ function showTopicContextMenu(e, rowEl) {
     menu.className = 'tree-context-menu';
     menu.id = 'tree-ctx-menu';
 
-    var items = [];
+    var items: { label: string; icon: string; action: () => void }[] = [];
 
     items.push({
         label: window.t('topic.changeName'),
-        icon: window.Icons.get('fileEdit'),
+        icon: Icons.get('fileEdit'),
         action: function() {
             if (tagNameEl) {
-                startTopicRename(tagNameEl, topicName);
+                startTopicRename(tagNameEl as HTMLElement, topicName);
             }
         }
     });
 
     items.push({
         label: window.t('topic.addSubTopic'),
-        icon: window.Icons.get('plus'),
+        icon: Icons.get('plus'),
         action: function() {
             onAddSubTopic(topicName);
         }
@@ -469,7 +478,7 @@ function showTopicContextMenu(e, rowEl) {
 
     items.push({
         label: window.t('tree.deleteTopic'),
-        icon: window.Icons.get('trash'),
+        icon: Icons.get('trash'),
         action: function() {
             onDeleteTopic(topicName);
         }
@@ -480,7 +489,7 @@ function showTopicContextMenu(e, rowEl) {
         el.className = 'ctx-menu-item';
         el.innerHTML = item.icon + '<span>' + item.label + '</span>';
         el.addEventListener('click', function() {
-            hideTreeContextMenu();
+            window.hideTreeContextMenu();
             item.action();
         });
         menu.appendChild(el);
@@ -500,29 +509,29 @@ function showTopicContextMenu(e, rowEl) {
     menu.style.top = y + 'px';
 }
 
-function showTopicFileContextMenu(e, fileEl) {
-    hideTreeContextMenu();
+function showTopicFileContextMenu(e: MouseEvent, fileEl: HTMLElement) {
+    window.hideTreeContextMenu();
 
-    var path = fileEl.getAttribute('data-file-path');
+    const path = fileEl.getAttribute('data-file-path');
     var name = fileEl.querySelector('.tree-name')?.textContent || window.t('common.file');
 
     var menu = document.createElement('div');
     menu.className = 'tree-context-menu';
     menu.id = 'tree-ctx-menu';
 
-    var items = [];
+    var items: { label: string; icon: string; action: () => void }[] = [];
 
     items.push({
         label: window.t('tree.revealInFinder'),
-        icon: window.Icons.get('folder'),
-        action: function() { revealInFinder(path); }
+        icon: Icons.get('folder'),
+        action: function() { if (path) window.revealInFinder(path); }
     });
 
     items.push({
         label: window.t('tree.openInNewWindow'),
-        icon: window.Icons.get('folderOpen'),
+        icon: Icons.get('folderOpen'),
         action: function() {
-            if (window.api && window.api.openFileInNewWindow) {
+            if (path && window.api && window.api.openFileInNewWindow) {
                 window.api.openFileInNewWindow(path, name);
             }
         }
@@ -533,7 +542,7 @@ function showTopicFileContextMenu(e, fileEl) {
         el.className = 'ctx-menu-item';
         el.innerHTML = item.icon + '<span>' + item.label + '</span>';
         el.addEventListener('click', function() {
-            hideTreeContextMenu();
+            window.hideTreeContextMenu();
             item.action();
         });
         menu.appendChild(el);
@@ -553,8 +562,8 @@ function showTopicFileContextMenu(e, fileEl) {
     menu.style.top = y + 'px';
 }
 
-function startTopicRename(tagNameEl, oldTopicName) {
-    var parentRow = tagNameEl.closest('.sidebar-tag-row');
+function startTopicRename(tagNameEl: HTMLElement, oldTopicName: string) {
+    const parentRow = tagNameEl.closest('.sidebar-tag-row');
     if (!parentRow) return;
 
     var originalDisplay = tagNameEl.style.display;
@@ -571,11 +580,11 @@ function startTopicRename(tagNameEl, oldTopicName) {
     input.select();
 
     var finished = false;
-    function finishRename(cancel) {
+    function finishRename(cancel: boolean) {
         if (finished) return;
         finished = true;
 
-        if (input._renameCleanup) input._renameCleanup();
+        if ((input as any)._renameCleanup) (input as any)._renameCleanup();
 
         var newName = input.value.trim();
         input.remove();
@@ -617,18 +626,18 @@ function startTopicRename(tagNameEl, oldTopicName) {
         e.stopPropagation();
     });
 
-    var rowClickHandler = function(e) {
-        if (e.target === input || e.target.closest('.topic-rename-input')) {
+    var rowClickHandler = function(e: Event) {
+        if (e.target === input || (e.target as Element).closest('.topic-rename-input')) {
             e.stopPropagation();
         }
     };
     parentRow.addEventListener('click', rowClickHandler);
-    input._renameCleanup = function() {
+    (input as any)._renameCleanup = function() {
         parentRow.removeEventListener('click', rowClickHandler);
     };
 }
 
-function onAddSubTopic(parentTopic) {
+function onAddSubTopic(parentTopic: string) {
     var subName = prompt(window.t('topic.enterSubTopicName', { parent: parentTopic }));
     if (!subName || !subName.trim()) return;
     subName = subName.trim();
@@ -647,7 +656,7 @@ function onAddSubTopic(parentTopic) {
     });
 }
 
-async function onDeleteTopic(topicName) {
+async function onDeleteTopic(topicName: string): Promise<void> {
     var confirmed = await window._customConfirm(window.t('topic.confirmDeleteTopic', { name: topicName }));
     if (!confirmed) return;
 
@@ -671,8 +680,8 @@ async function onDeleteTopic(topicName) {
     });
 }
 
-async function onBatchAutoAssignTopics() {
-    var btn = document.getElementById('btn-auto-topic');
+async function onBatchAutoAssignTopics(): Promise<void> {
+    var btn = document.getElementById('btn-auto-topic') as HTMLButtonElement | null;
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
@@ -701,7 +710,7 @@ async function onBatchAutoAssignTopics() {
             await loadTopicTree();
 
             if (result.pending && result.pending.length > 0) {
-                var topicNames = [];
+                var topicNames: string[] = [];
                 document.querySelectorAll('#sidebar-topic .sidebar-tag-group').forEach(function(el) {
                     var n = el.getAttribute('data-topic-name');
                     if (n) topicNames.push(n);
@@ -744,14 +753,14 @@ function showAISuggestionPanel() {
     header.className = 'ai-suggestion-header';
     header.innerHTML = '<span class="ai-suggestion-title">' + window.t('topic.aiSuggestionTitle') + '</span>' +
         '<button class="ai-suggestion-close" onclick="closeAISuggestionPanel()" title="' + window.t('common.close') + '">' +
-        window.Icons.get('close', 14) + '</button>';
+        Icons.get('close', 14) + '</button>';
     panel.appendChild(header);
 
     var list = document.createElement('div');
     list.className = 'ai-suggestion-list';
     list.id = 'ai-suggestion-list';
 
-    var existingSet = {};
+    var existingSet: Record<string, boolean> = {};
     for (var ei = 0; ei < _existingTopics.length; ei++) {
         existingSet[_existingTopics[ei].toLowerCase()] = true;
     }
@@ -760,14 +769,14 @@ function showAISuggestionPanel() {
         var s = _aiSuggestions[i];
         var card = document.createElement('div');
         card.className = 'ai-suggestion-card';
-        card.dataset.index = i;
+        card.dataset.index = String(i);
 
-        var typeLabel = {
+        var typeLabel: string = {
             'new_topic': window.t('topic.typeNewTopic'),
             'assign_topic': window.t('topic.typeAssignTopic'),
             'merge_topic': window.t('topic.typeMergeTopic'),
             'change_topic': window.t('topic.typeChangeTopic')
-        }[s.type] || escapeHtml(s.type || '');
+        }[s.type as string] || window.escapeHtml(s.type || '');
 
         var body = '';
         if (s.type === 'change_topic') {
@@ -779,11 +788,11 @@ function showAISuggestionPanel() {
                 : '<span class="ai-sg-topic-tag new">' + window.t('topic.newTopicTag') + '</span>';
 
             body = '<div class="ai-sg-change-detail">' +
-                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelFile') + '</span><span class="ai-sg-change-value">' + escapeHtml(s.file || '') + '</span></div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelFile') + '</span><span class="ai-sg-change-value">' + window.escapeHtml(s.file || '') + '</span></div>' +
                 '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelOriginalTopic') + '</span>' +
-                (currentTopic ? '<span class="ai-sg-change-value">' + escapeHtml(currentTopic) + '</span>' : '<span class="ai-sg-change-value empty">' + window.t('topic.noCurrentTopic') + '</span>') +
+                (currentTopic ? '<span class="ai-sg-change-value">' + window.escapeHtml(currentTopic) + '</span>' : '<span class="ai-sg-change-value empty">' + window.t('topic.noCurrentTopic') + '</span>') +
                 '</div>' +
-                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelSuggestedTopic') + '</span><span class="ai-sg-change-value">' + escapeHtml(suggestedTopic) + topicTag + '</span></div>' +
+                '<div class="ai-sg-change-row"><span class="ai-sg-change-label">' + window.t('topic.labelSuggestedTopic') + '</span><span class="ai-sg-change-value">' + window.escapeHtml(suggestedTopic) + topicTag + '</span></div>' +
                 '</div>' +
                 '<div class="ai-sg-topic-select-area">' +
                 '<select class="ai-sg-topic-select" data-card-index="' + i + '">' +
@@ -792,7 +801,7 @@ function showAISuggestionPanel() {
             for (var ti = 0; ti < _existingTopics.length; ti++) {
                 var tname = _existingTopics[ti];
                 var selected = (tname === suggestedTopic) ? ' selected' : '';
-                body += '<option value="' + escapeAttr(tname) + '"' + selected + '>' + escapeHtml(tname) + '</option>';
+                body += '<option value="' + window.escapeAttr(tname) + '"' + selected + '>' + window.escapeHtml(tname) + '</option>';
             }
 
             body += '</select>' +
@@ -800,47 +809,47 @@ function showAISuggestionPanel() {
                 '</div>';
         } else if (s.type === 'new_topic') {
             body = '<div class="ai-sg-body">' + window.t('topic.createTopicBody', {
-                topic: '<b>' + escapeHtml(s.topic) + '</b>',
+                topic: '<b>' + window.escapeHtml(s.topic) + '</b>',
                 files: (s.files && s.files.length > 0)
-                    ? window.t('topic.includesFiles', { files: s.files.map(function(f) { return escapeHtml(f); }).join('、') })
+                    ? window.t('topic.includesFiles', { files: s.files.map(function(f: string) { return window.escapeHtml(f); }).join('、') })
                     : ''
             }) + '</div>';
         } else if (s.type === 'assign_topic') {
             body = '<div class="ai-sg-body">' + window.t('topic.assignFileBody', {
-                file: '<b>' + escapeHtml(s.file) + '</b>',
-                topic: '<b>' + escapeHtml(s.topic) + '</b>'
+                file: '<b>' + window.escapeHtml(s.file) + '</b>',
+                topic: '<b>' + window.escapeHtml(s.topic) + '</b>'
             }) + '</div>';
         } else if (s.type === 'merge_topic') {
             body = '<div class="ai-sg-body">' + window.t('topic.mergeTopicBody', {
-                source: '<b>' + escapeHtml(s.source_topic) + '</b>',
-                target: '<b>' + escapeHtml(s.target_topic) + '</b>'
+                source: '<b>' + window.escapeHtml(s.source_topic) + '</b>',
+                target: '<b>' + window.escapeHtml(s.target_topic) + '</b>'
             }) + '</div>';
         }
 
         card.innerHTML = '<div class="ai-sg-header">' +
-            '<span class="ai-sg-type ai-sg-type-' + escapeAttr(s.type || '') + '">' + typeLabel + '</span>' +
+            '<span class="ai-sg-type ai-sg-type-' + window.escapeAttr(s.type || '') + '">' + typeLabel + '</span>' +
             '<div class="ai-sg-actions">' +
-            '<button class="ai-sg-yes" data-action="accept" title="' + window.t('topic.acceptSuggestion') + '">' + window.Icons.get('check', 14) + '</button>' +
-            '<button class="ai-sg-no" data-action="reject" title="' + window.t('topic.rejectSuggestion') + '">' + window.Icons.get('close', 14) + '</button>' +
+            '<button class="ai-sg-yes" data-action="accept" title="' + window.t('topic.acceptSuggestion') + '">' + Icons.get('check', 14) + '</button>' +
+            '<button class="ai-sg-no" data-action="reject" title="' + window.t('topic.rejectSuggestion') + '">' + Icons.get('close', 14) + '</button>' +
             '</div></div>' +
             body +
-            (s.reason ? '<div class="ai-sg-reason">' + escapeHtml(s.reason) + '</div>' : '');
+            (s.reason ? '<div class="ai-sg-reason">' + window.escapeHtml(s.reason) + '</div>' : '');
 
         list.appendChild(card);
     }
 
     panel.appendChild(list);
 
-    list.addEventListener('click', function(e) {
-        var btn = e.target.closest('button');
+    list.addEventListener('click', function(e: MouseEvent) {
+        var btn = (e.target as Element).closest('button');
         if (!btn) return;
-        var card = btn.closest('.ai-suggestion-card');
+        var card = btn.closest('.ai-suggestion-card') as HTMLElement | null;
         if (!card) return;
-        var idx = parseInt(card.dataset.index);
+        var idx = parseInt(card.dataset.index || '');
         var action = btn.dataset.action;
 
         if (action === 'accept') {
-            applyAISuggestion(idx, card);
+            applyAISuggestion(idx, card as HTMLElement);
         } else if (action === 'reject') {
             card.style.opacity = '0.3';
             card.style.pointerEvents = 'none';
@@ -850,13 +859,13 @@ function showAISuggestionPanel() {
     });
 }
 
-async function applyAISuggestion(idx, cardEl) {
+async function applyAISuggestion(idx: number, cardEl: HTMLElement): Promise<void> {
     var suggestion = _aiSuggestions[idx];
     if (!suggestion) return;
 
     if (suggestion.type === 'change_topic') {
-        var inputEl = cardEl.querySelector('.ai-sg-topic-input');
-        var selectEl = cardEl.querySelector('.ai-sg-topic-select');
+        var inputEl = cardEl.querySelector('.ai-sg-topic-input') as HTMLInputElement | null;
+        var selectEl = cardEl.querySelector('.ai-sg-topic-select') as HTMLSelectElement | null;
         var customTopic = inputEl ? inputEl.value.trim() : '';
         var selectedTopic = selectEl ? selectEl.value : '';
         var finalTopic = customTopic || selectedTopic || suggestion.suggested_topic;
@@ -881,7 +890,7 @@ async function applyAISuggestion(idx, cardEl) {
             cardEl.style.opacity = '1';
         }
     } catch (e) {
-        alert(window.t('topic.applyError') + (e.message || e));
+        alert(window.t('topic.applyError') + ((e as Error).message || e));
         cardEl.style.opacity = '1';
     }
 }
@@ -890,7 +899,7 @@ function checkAllSuggestionsDone() {
     var remaining = _aiSuggestions.filter(function(s) { return s !== null; });
     if (remaining.length === 0) {
         closeAISuggestionPanel();
-        updateStatus(window.t('topic.allSuggestionsProcessed'));
+        window.updateStatus(window.t('topic.allSuggestionsProcessed'));
     }
 }
 
@@ -899,17 +908,17 @@ function closeAISuggestionPanel() {
     if (panel) panel.style.display = 'none';
 }
 
-async function onAITopicAnalyze() {
-    var btn = document.getElementById('btn-ai-analyze');
+async function onAITopicAnalyze(): Promise<void> {
+    var btn = document.getElementById('btn-ai-analyze') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
     window.setSidebarStatus('topic', window.t('integrator.scanningFiles'), true);
-    updateStatus(window.t('topic.aiScanning'));
+    window.updateStatus(window.t('topic.aiScanning'));
 
     try {
         try {
             var treeResult = await window.api.getTopicTree();
             if (treeResult && treeResult.topics) {
-                _existingTopics = treeResult.topics.map(function(t) { return t.name; });
+                _existingTopics = treeResult.topics.map(function(t: any) { return t.name; });
             }
         } catch (e) {
             _existingTopics = [];
@@ -921,19 +930,19 @@ async function onAITopicAnalyze() {
             _aiSuggestions = result.suggestions;
             showAISuggestionPanel();
             window.setSidebarStatus('topic', window.t('topic.suggestionsCount', { count: result.suggestions.length }));
-            updateStatus(window.t('topic.aiAnalysisDone', { count: result.suggestions.length }));
+            window.updateStatus(window.t('topic.aiAnalysisDone', { count: result.suggestions.length }));
         } else if (result && result.success) {
             window.setSidebarStatus('topic', window.t('topic.topicsOk'));
-            updateStatus(window.t('topic.aiAnalysisAllOk'));
+            window.updateStatus(window.t('topic.aiAnalysisAllOk'));
             _aiSuggestions = [];
         } else {
             window.setSidebarStatus('topic', result && result.message ? result.message : window.t('topic.analysisFailed'));
-            updateStatus(result && result.message ? result.message : window.t('topic.aiNoResult'));
+            window.updateStatus(result && result.message ? result.message : window.t('topic.aiNoResult'));
             _aiSuggestions = [];
         }
     } catch (e) {
         window.setSidebarStatus('topic', window.t('topic.analysisError'));
-        updateStatus(window.t('topic.aiAnalysisError') + (e.message || e));
+        window.updateStatus(window.t('topic.aiAnalysisError') + ((e as Error).message || e));
     } finally {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         setTimeout(window.updateSidebarStats, 2000);
@@ -973,12 +982,12 @@ function _flushSurveyBuffer() {
     }
 }
 
-async function onAITopicSurvey(prefillTopic) {
-    var headings = [];
+async function onAITopicSurvey(prefillTopic?: string): Promise<void> {
+    var headings: string[] = [];
     try {
         var treeResult = await window.api.getTopicTree();
         if (treeResult && treeResult.topics) {
-            headings = treeResult.topics.map(function(t) { return t.name; });
+            headings = treeResult.topics.map(function(t: any) { return t.name; });
         }
     } catch (e) {
         console.error('[Survey] get topics failed:', e);
@@ -990,15 +999,15 @@ async function onAITopicSurvey(prefillTopic) {
 
     var topic = (prefillTopic || '').trim();
     if (!topic) {
-        topic = prompt(window.t('topic.enterSurveyTopic', { topics: headings.join('、') }));
+        topic = prompt(window.t('topic.enterSurveyTopic', { topics: headings.join('、') })) || '';
         if (!topic || !topic.trim()) return;
         topic = topic.trim();
     }
 
-    var btn = document.getElementById('btn-ai-survey');
+    var btn = document.getElementById('btn-ai-survey') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
     window.setSidebarStatus('topic', window.t('topic.connectingLlm'), true);
-    updateStatus(window.t('topic.aiWritingSurvey', { topic: topic }));
+    window.updateStatus(window.t('topic.aiWritingSurvey', { topic: topic }));
 
     window._surveyStreamText = '';
     window._surveyBuffer = '';
@@ -1016,14 +1025,14 @@ async function onAITopicSurvey(prefillTopic) {
 
     var eventAPI = window.getTauriEventAPI ? window.getTauriEventAPI() : null;
     if (eventAPI) {
-        window._surveyStreamUnlisten = await eventAPI.listen('python-event', function(event) {
+        window._surveyStreamUnlisten = await eventAPI.listen('python-event', function(event: any) {
             var data = event.payload;
             if (!data) return;
             if (data.type === 'survey_chunk' && data.topic === topic) {
                 window._surveyStreamText += (data.token || '');
                 window._surveyBuffer += (data.token || '');
                 if (!window._surveyFlushTimer) {
-                    window._surveyFlushTimer = setInterval(_flushSurveyBuffer, 40);
+                    window._surveyFlushTimer = setInterval(_flushSurveyBuffer, 40) as unknown as number;
                 }
             } else if (data.type === 'survey_done' && data.topic === topic) {
                 if (window._surveyFlushTimer) {
@@ -1041,11 +1050,11 @@ async function onAITopicSurvey(prefillTopic) {
                     window._surveyStreamUnlisten = null;
                 }
                 if (data.success) {
-                    updateStatus(window.t('topic.surveyDone', { path: data.file_path }));
+                    window.updateStatus(window.t('topic.surveyDone', { path: data.file_path }));
                     window.setSidebarStatus('topic', window.t('topic.surveySaved'));
                 } else {
                     alert(window.t('topic.writeFailed') + (data.message || window.t('common.unknownError')));
-                    updateStatus(window.t('topic.surveyWriteFailed'));
+                    window.updateStatus(window.t('topic.surveyWriteFailed'));
                     window.setSidebarStatus('topic', window.t('topic.writeFailedShort'));
                 }
                 if (window.TiptapEditor && window.TiptapEditor.instance) {
@@ -1059,8 +1068,8 @@ async function onAITopicSurvey(prefillTopic) {
     try {
         await window.api.aiTopicSurvey(topic);
     } catch (e) {
-        alert(window.t('topic.writeError') + (e.message || e));
-        updateStatus(window.t('topic.surveyWriteError'));
+        alert(window.t('topic.writeError') + ((e as Error).message || e));
+        window.updateStatus(window.t('topic.surveyWriteError'));
     } finally {
         if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
         if (window._surveyFlushTimer) {
@@ -1079,8 +1088,8 @@ async function onAITopicSurvey(prefillTopic) {
 
 function onShowTopicInput() {
     var inputPanel = document.getElementById('sidebar-topic-input');
-    var inputField = document.getElementById('topic-input-field');
-    var confirmBtn = document.getElementById('topic-input-confirm');
+    var inputField = document.getElementById('topic-input-field') as HTMLInputElement | null;
+    var confirmBtn = document.getElementById('topic-input-confirm') as HTMLButtonElement | null;
 
     if (!inputPanel || !inputField) return;
 
@@ -1096,7 +1105,7 @@ function onShowTopicInput() {
 
 function onHideTopicInput() {
     var inputPanel = document.getElementById('sidebar-topic-input');
-    var inputField = document.getElementById('topic-input-field');
+    var inputField = document.getElementById('topic-input-field') as HTMLInputElement | null;
 
     if (inputPanel) {
         inputPanel.style.display = 'none';
@@ -1107,8 +1116,8 @@ function onHideTopicInput() {
 }
 
 function onTopicInputChange() {
-    var inputField = document.getElementById('topic-input-field');
-    var confirmBtn = document.getElementById('topic-input-confirm');
+    var inputField = document.getElementById('topic-input-field') as HTMLInputElement | null;
+    var confirmBtn = document.getElementById('topic-input-confirm') as HTMLButtonElement | null;
 
     if (!inputField || !confirmBtn) return;
 
@@ -1123,10 +1132,10 @@ function onTopicInputChange() {
     }
 }
 
-async function onConfirmTopic() {
-    var inputField = document.getElementById('topic-input-field');
-    var confirmBtn = document.getElementById('topic-input-confirm');
-    var addBtn = document.getElementById('btn-add-topic');
+async function onConfirmTopic(): Promise<void> {
+    var inputField = document.getElementById('topic-input-field') as HTMLInputElement | null;
+    var confirmBtn = document.getElementById('topic-input-confirm') as HTMLButtonElement | null;
+    var addBtn = document.getElementById('btn-add-topic') as HTMLButtonElement | null;
 
     var topicName = inputField ? inputField.value.trim() : '';
     if (!topicName) {
@@ -1159,7 +1168,7 @@ async function onConfirmTopic() {
         var batchResult = await window.api.batchAutoAssignTopics();
         if (batchResult && batchResult.success) {
             if (batchResult.pending && batchResult.pending.length > 0) {
-                var topicNames2 = [];
+                var topicNames2: string[] = [];
                 document.querySelectorAll('#sidebar-topic .sidebar-tag-group').forEach(function(el) {
                     var n = el.getAttribute('data-topic-name');
                     if (n) topicNames2.push(n);
@@ -1192,9 +1201,9 @@ async function onConfirmTopic() {
 }
 
 function setupTopicInputEvents() {
-    var inputField = document.getElementById('topic-input-field');
-    var cancelBtn = document.getElementById('topic-input-cancel');
-    var confirmBtn = document.getElementById('topic-input-confirm');
+    var inputField = document.getElementById('topic-input-field') as HTMLInputElement | null;
+    var cancelBtn = document.getElementById('topic-input-cancel') as HTMLButtonElement | null;
+    var confirmBtn = document.getElementById('topic-input-confirm') as HTMLButtonElement | null;
 
     if (inputField) {
         inputField.addEventListener('input', onTopicInputChange);
@@ -1226,7 +1235,7 @@ function setupTopicInputEvents() {
     }
 }
 
-async function loadTopicView() {
+async function loadTopicView(): Promise<void> {
     var container = document.getElementById('sidebar-topic');
     if (!container) return;
 
@@ -1236,19 +1245,19 @@ async function loadTopicView() {
         console.log('[Topic] API result:', result);
     } catch (e) {
         console.error('[Topic] loadTopicView error:', e);
-                container.innerHTML = '<div class="sidebar-view-empty"><span>' + escapeHtml(e.message || window.t('common.unknownError')) + '</span></div>';
+                container.innerHTML = '<div class="sidebar-view-empty"><span>' + window.escapeHtml((e as Error).message || window.t('common.unknownError')) + '</span></div>';
         return;
     }
 
     await loadTopicTree();
 
     if (result && result.pending) {
-        var topicNames = (result.topics || []).map(function(t) { return t.name; });
+        var topicNames = (result.topics || []).map(function(t: any) { return t.name; });
         loadTopicPendingPanel(result.pending, topicNames);
     }
 }
 
-function loadTopicPendingPanel(pending, topicNames) {
+function loadTopicPendingPanel(pending: any[], topicNames?: string[]) {
     topicNames = topicNames || [];
     var panel = document.getElementById('topic-pending-panel');
     if (!panel) return;
@@ -1263,11 +1272,11 @@ function loadTopicPendingPanel(pending, topicNames) {
     html += '<div class="topic-pending-list">';
 
     pending.forEach(function(p, i) {
-        html += '<div class="topic-pending-card" draggable="true" data-file="' + escapeAttr(p.file) + '" data-index="' + i + '">';
-        html += '<div class="topic-pending-filename">' + escapeHtml(p.title || p.file) + '</div>';
+        html += '<div class="topic-pending-card" draggable="true" data-file="' + window.escapeAttr(p.file) + '" data-index="' + i + '">';
+        html += '<div class="topic-pending-filename">' + window.escapeHtml(p.title || p.file) + '</div>';
         html += '<div class="topic-pending-candidates">';
-        (p.candidates || []).forEach(function(c) {
-            html += '<button class="topic-candidate-btn" data-topic="' + escapeAttr(c) + '" data-file="' + escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + escapeHtml(c) + '</button>';
+        (p.candidates || []).forEach(function(c: string) {
+            html += '<button class="topic-candidate-btn" data-topic="' + window.escapeAttr(c) + '" data-file="' + window.escapeAttr(p.file) + '" onclick="onCandidateClick(this)">' + window.escapeHtml(c) + '</button>';
         });
         html += '</div>';
         html += '</div>';
@@ -1277,22 +1286,23 @@ function loadTopicPendingPanel(pending, topicNames) {
     panel.innerHTML = html;
 
     panel.querySelectorAll('.topic-custom-input').forEach(function(input) {
-        input.addEventListener('keydown', function(e) {
+        var inputEl = input as HTMLInputElement;
+        inputEl.addEventListener('keydown', function(e: KeyboardEvent) {
             if (e.key === 'Enter') {
-                onInputEnter(this);
+                onInputEnter(inputEl);
             }
         });
-        input.addEventListener('input', function() {
-            onInputChange(this);
+        inputEl.addEventListener('input', function() {
+            onInputChange(inputEl);
         });
     });
 
     setupPendingCardDragDrop(panel);
 }
 
-function setupPendingCardDragDrop(panel) {
-    panel.addEventListener('dragstart', function(e) {
-        var card = e.target.closest('.topic-pending-card');
+function setupPendingCardDragDrop(panel: HTMLElement) {
+    panel.addEventListener('dragstart', function(e: DragEvent) {
+        var card = (e.target as Element).closest('.topic-pending-card');
         if (!card) return;
         if (card.classList.contains('resolving') || card.classList.contains('resolved')) return;
 
@@ -1303,20 +1313,20 @@ function setupPendingCardDragDrop(panel) {
         _pendingDragData.cardEl = card;
         card.classList.add('dragging');
 
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', filePath);
+        e.dataTransfer!.effectAllowed = 'move';
+        e.dataTransfer!.setData('text/plain', filePath);
     });
 
-    panel.addEventListener('dragend', function(e) {
-        var card = e.target.closest('.topic-pending-card');
+    panel.addEventListener('dragend', function(e: DragEvent) {
+        var card = (e.target as Element).closest('.topic-pending-card');
         if (card) card.classList.remove('dragging');
         _pendingDragData.filePath = null;
         _pendingDragData.cardEl = null;
     });
 }
 
-function onCandidateClick(btnEl) {
-    var card = btnEl.closest('.topic-pending-card');
+function onCandidateClick(btnEl: HTMLElement) {
+    var card = btnEl.closest('.topic-pending-card') as HTMLElement | null;
     if (!card) return;
 
     var btns = card.querySelectorAll('.topic-candidate-btn');
@@ -1328,21 +1338,21 @@ function onCandidateClick(btnEl) {
     doConfirmTopic(card);
 }
 
-function onInputChange(inputEl) {
+function onInputChange(inputEl: HTMLInputElement) {
     var card = inputEl.closest('.topic-pending-card');
     if (!card) return;
     var btns = card.querySelectorAll('.topic-candidate-btn.topic-candidate-selected');
     btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
 }
 
-function onTopicSelectChange(selectEl) {
+function onTopicSelectChange(selectEl: HTMLSelectElement) {
     var topicName = selectEl.value;
     if (!topicName) return;
 
     var card = selectEl.closest('.topic-pending-card');
     if (!card) return;
 
-    var customInput = card.querySelector('.topic-custom-input');
+    var customInput = card.querySelector('.topic-custom-input') as HTMLInputElement | null;
     if (customInput) {
         customInput.value = topicName;
         customInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1352,29 +1362,29 @@ function onTopicSelectChange(selectEl) {
     btns.forEach(function(b) { b.classList.remove('topic-candidate-selected'); });
 }
 
-function onInputEnter(inputEl) {
-    var card = inputEl.closest('.topic-pending-card');
+function onInputEnter(inputEl: HTMLInputElement) {
+    var card = inputEl.closest('.topic-pending-card') as HTMLElement | null;
     if (!card) return;
     doConfirmTopic(card);
 }
 
-function onConfirmBtnClick(btnEl) {
-    var card = btnEl.closest('.topic-pending-card');
+function onConfirmBtnClick(btnEl: HTMLButtonElement) {
+    var card = btnEl.closest('.topic-pending-card') as HTMLElement | null;
     if (!card) return;
     doConfirmTopic(card);
 }
 
-function doConfirmTopic(cardEl) {
+function doConfirmTopic(cardEl: HTMLElement) {
     if (cardEl.classList.contains('resolving')) return;
 
     var file = cardEl.getAttribute('data-file');
     if (!file) return;
 
-    var input = cardEl.querySelector('.topic-custom-input');
+    var input = cardEl.querySelector('.topic-custom-input') as HTMLInputElement | null;
     var custom = (input && input.value) ? input.value.trim() : '';
 
     // Also read from the <select> dropdown
-    var selectEl = cardEl.querySelector('.topic-select');
+    var selectEl = cardEl.querySelector('.topic-select') as HTMLSelectElement | null;
     var selectVal = (selectEl && selectEl.value) ? selectEl.value : '';
 
     var selectedBtn = cardEl.querySelector('.topic-candidate-btn.topic-candidate-selected');
@@ -1384,7 +1394,7 @@ function doConfirmTopic(cardEl) {
     if (!topic) return;
 
     var btns = cardEl.querySelectorAll('.topic-candidate-btn');
-    var customBtn = cardEl.querySelector('.topic-custom-btn');
+    var customBtn = cardEl.querySelector('.topic-custom-btn') as HTMLButtonElement | null;
 
     btns.forEach(function(b) {
         if (b.getAttribute('data-topic') === topic) {
@@ -1418,11 +1428,11 @@ function doConfirmTopic(cardEl) {
         if (input) input.disabled = false;
         if (selectEl) selectEl.disabled = false;
         if (customBtn) customBtn.disabled = false;
-        alert(window.t('topic.confirmTopicFailed') + (e.message || window.t('common.errorOccurred')));
+        alert(window.t('topic.confirmTopicFailed') + ((e as Error).message || window.t('common.errorOccurred')));
     });
 }
 
-function animateCardOut(cardEl) {
+function animateCardOut(cardEl: HTMLElement) {
     cardEl.style.transition = 'opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease, padding 0.3s ease, min-height 0.3s ease';
     cardEl.style.opacity = '0';
     cardEl.style.transform = 'translateY(-20px) scale(0.96)';
@@ -1439,7 +1449,7 @@ function animateCardOut(cardEl) {
             cardEl.remove();
             var remaining = list.querySelectorAll('.topic-pending-card:not(.resolved)').length;
             var countEl = list.parentElement && list.parentElement.querySelector('.topic-pending-count');
-            if (countEl) countEl.textContent = remaining;
+            if (countEl) countEl.textContent = String(remaining);
             if (remaining === 0) {
                 var pendingPanel = document.getElementById('topic-pending-panel');
                 if (pendingPanel) pendingPanel.style.display = 'none';
@@ -1451,7 +1461,7 @@ function animateCardOut(cardEl) {
     }, 350);
 }
 
-function hasTopicPending() {
+function hasTopicPending(): boolean {
     var panel = document.getElementById('topic-pending-panel');
     if (!panel) return false;
     var cards = panel.querySelectorAll('.topic-pending-card:not(.resolved)');

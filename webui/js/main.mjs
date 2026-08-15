@@ -126,7 +126,7 @@ async function loadModules() {
     const { IntegratorModule } = window;
     window.IntegratorModule = IntegratorModule;
 
-    await import('./topic.js');
+    await import('./topic.ts');
     const {
         loadTopicTree, loadTopicView, loadTopicPendingPanel,
         onBatchAutoAssignTopics, onAITopicAnalyze, onAITopicSurvey,

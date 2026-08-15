@@ -373,6 +373,14 @@ declare global {
             setActiveDraft?(draft: any): void;
             updateDraft?(draft: any): void;
         } | undefined;
+        OnboardingModule: {
+            maybeStart(): Promise<void>;
+            open(): void;
+            skip(): void;
+        } | undefined;
+        WorkspaceModule: {
+            checkWorkspaceStatus(): Promise<any>;
+        } | undefined;
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
         loadPendingItems(): void;

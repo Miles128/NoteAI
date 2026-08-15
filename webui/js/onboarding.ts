@@ -44,7 +44,7 @@ var PROVIDER_PRESETS = [
     }
 ];
 
-var state = {
+var state: any = {
     open: false,
     step: 0,
     sampleMode: false,       // Step 0 是否走了示例库路径
@@ -66,14 +66,14 @@ var state = {
 // DOM 工具
 // ---------------------------------------------------------------------------
 
-function el(tag, className, text) {
+function el(tag: any, className: any, text?: any) {
     var node = document.createElement(tag);
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
 }
 
-function btn(className, text, onClick, disabled) {
+function btn(className: any, text: any, onClick?: any, disabled?: any) {
     var b = el('button', className, text);
     b.type = 'button';
     if (onClick) b.addEventListener('click', onClick);
@@ -81,7 +81,7 @@ function btn(className, text, onClick, disabled) {
     return b;
 }
 
-function sleep(ms) {
+function sleep(ms: any) {
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
@@ -180,7 +180,7 @@ function _renderDots() {
     });
 }
 
-function _footer(hint, primaryLabel, onPrimary, primaryDisabled, showBack) {
+function _footer(hint: any, primaryLabel: any, onPrimary: any, primaryDisabled: any, showBack: any) {
     var footer = el('div', 'onb-footer');
     footer.appendChild(el('span', 'onb-hint', hint || ''));
     var right = el('div', 'onb-actions-row');
@@ -198,7 +198,7 @@ function _footer(hint, primaryLabel, onPrimary, primaryDisabled, showBack) {
 // 步骤状态机
 // ---------------------------------------------------------------------------
 
-function goStep(n) {
+function goStep(n: any) {
     if (!state.open) return;
     if (n < 0) n = 0;
     state.step = n;
@@ -218,7 +218,7 @@ function renderStep() {
 
 // ---- Step 0：欢迎 + 工作区 -------------------------------------------------
 
-function renderStep0(container) {
+function renderStep0(container: any) {
     container.appendChild(el('div', 'onb-desc',
         'NoteAI 会把你的笔记变成可检索、可对话的知识库。先选择一个工作区开始：'));
 
@@ -246,13 +246,13 @@ function renderStep0(container) {
     state._step0Btns = [chooseBtn, sampleBtn];
 }
 
-function _step0Busy(busy, message) {
+function _step0Busy(busy: any, message: any) {
     state.busy = busy;
     if (state._step0Status) {
         state._step0Status.className = 'onb-status info';
         state._step0Status.textContent = message || '';
     }
-    (state._step0Btns || []).forEach(function(b) { b.disabled = busy; });
+    (state._step0Btns || []).forEach(function(b: any) { (b as HTMLButtonElement).disabled = busy; });
 }
 
 async function _chooseWorkspace() {
@@ -267,7 +267,7 @@ async function _chooseWorkspace() {
         }
         _step0Busy(false, (result && result.message) || '未选择文件夹');
     } catch (e) {
-        _step0Busy(false, '设置工作区失败：' + (e && e.message || e));
+        _step0Busy(false, '设置工作区失败：' + ((e as Error) && (e as Error).message || e));
     }
 }
 
@@ -300,13 +300,13 @@ async function _chooseSample() {
         state.workspacePath = result.workspace_path || '';
         goStep(1);
     } catch (e) {
-        _step0Busy(false, '创建示例库失败：' + (e && e.message || e));
+        _step0Busy(false, '创建示例库失败：' + ((e as Error) && (e as Error).message || e));
     }
 }
 
 // ---- Step 1：API Key -------------------------------------------------------
 
-function renderStep1(container) {
+function renderStep1(container: any) {
     container.appendChild(el('div', 'onb-desc',
         '配置一个大模型 API Key（本地加密存储）。也可以先用 Ollama 本地模型，或稍后在设置中补充。'));
 
@@ -343,7 +343,7 @@ function renderStep1(container) {
     _prefillApiConfig(status, saveBtn);
 }
 
-function _field(label, inputId, type, placeholder) {
+function _field(label: any, inputId: any, type: any, placeholder: any) {
     var wrap = el('div', 'onb-field');
     var lab = el('label', null, label);
     lab.setAttribute('for', inputId);
@@ -357,15 +357,15 @@ function _field(label, inputId, type, placeholder) {
     return wrap;
 }
 
-function _applyPreset(preset, presetsEl) {
-    var keyInput = document.getElementById('onb-api-key');
-    var baseInput = document.getElementById('onb-api-base');
-    var modelInput = document.getElementById('onb-model-name');
+function _applyPreset(preset: any, presetsEl: any) {
+    var keyInput = document.getElementById('onb-api-key') as HTMLInputElement | null;
+    var baseInput = document.getElementById('onb-api-base') as HTMLInputElement | null;
+    var modelInput = document.getElementById('onb-model-name') as HTMLInputElement | null;
     if (baseInput) baseInput.value = preset.apiBase;
     if (modelInput) modelInput.value = preset.modelName;
     if (keyInput) keyInput.placeholder = preset.keyPlaceholder || 'sk-...';
     if (presetsEl) {
-        Array.prototype.forEach.call(presetsEl.children, function(b) {
+        Array.prototype.forEach.call(presetsEl.children, function(b: any) {
             b.classList.toggle('active', b.getAttribute('data-preset') === preset.id);
         });
     }
@@ -380,8 +380,8 @@ function _applyPreset(preset, presetsEl) {
 }
 
 function _readApiForm() {
-    var v = function(id) {
-        var node = document.getElementById(id);
+    var v = function(id: any) {
+        var node = document.getElementById(id) as HTMLInputElement | null;
         return node ? node.value.trim() : '';
     };
     return {
@@ -391,7 +391,7 @@ function _readApiForm() {
     };
 }
 
-async function _testApi(statusEl, testBtn) {
+async function _testApi(statusEl: any, testBtn: any) {
     var cfg = _readApiForm();
     if (!cfg.api_key) {
         statusEl.className = 'onb-status err';
@@ -415,13 +415,13 @@ async function _testApi(statusEl, testBtn) {
         }
     } catch (e) {
         statusEl.className = 'onb-status err';
-        statusEl.textContent = '连接测试异常：' + (e && e.message || e);
+        statusEl.textContent = '连接测试异常：' + ((e as Error) && (e as Error).message || e);
     } finally {
         testBtn.disabled = false;
     }
 }
 
-async function _saveApi(statusEl, saveBtn) {
+async function _saveApi(statusEl: any, saveBtn: any) {
     var cfg = _readApiForm();
     if (!cfg.api_key) {
         statusEl.className = 'onb-status err';
@@ -450,17 +450,17 @@ async function _saveApi(statusEl, saveBtn) {
         }
     } catch (e) {
         statusEl.className = 'onb-status err';
-        statusEl.textContent = '保存失败：' + (e && e.message || e);
+        statusEl.textContent = '保存失败：' + ((e as Error) && (e as Error).message || e);
         saveBtn.disabled = !state.apiTested;
     }
 }
 
-async function _prefillApiConfig(statusEl, saveBtn) {
+async function _prefillApiConfig(statusEl: any, saveBtn: any) {
     try {
         var cfg = await window.api.getApiConfig();
         if (cfg && cfg.api_key_configured) {
-            var baseInput = document.getElementById('onb-api-base');
-            var modelInput = document.getElementById('onb-model-name');
+            var baseInput = document.getElementById('onb-api-base') as HTMLInputElement | null;
+            var modelInput = document.getElementById('onb-model-name') as HTMLInputElement | null;
             if (baseInput && cfg.api_base) baseInput.value = cfg.api_base;
             if (modelInput && cfg.model_name) modelInput.value = cfg.model_name;
             statusEl.className = 'onb-status ok';
@@ -472,7 +472,7 @@ async function _prefillApiConfig(statusEl, saveBtn) {
 
 // ---- Step 2：模型与索引准备（阶段态轮询 + rag_index_built 事件） ------------
 
-function renderStep2(container) {
+function renderStep2(container: any) {
     container.appendChild(el('div', 'onb-desc',
         'NoteAI 正在后台预热检索模型并构建知识库索引，完成后 AI 问答效果最佳。你可以等待就绪，也可以直接进入下一步（后台会继续）。'));
 
@@ -495,7 +495,7 @@ function renderStep2(container) {
     if (state.workspacePath) _startIndexPolling(indexState);
 }
 
-function _startModelPolling(stateEl) {
+function _startModelPolling(stateEl: any) {
     async function poll() {
         try {
             var st = await window.api.getOnboardingStatus();
@@ -520,7 +520,7 @@ function _stopModelPolling() {
     if (state.modelTimer) { clearInterval(state.modelTimer); state.modelTimer = null; }
 }
 
-function _startIndexPolling(stateEl) {
+function _startIndexPolling(stateEl: any) {
     async function poll() {
         try {
             var st = await window.api.ragIndexStatus();
@@ -547,7 +547,7 @@ function _stopPolling() {
     _stopIndexPolling();
 }
 
-function _markIndexReady(chunkCount, stateEl) {
+function _markIndexReady(chunkCount: any, stateEl: any) {
     state.indexReady = true;
     state.indexChunkCount = chunkCount || 0;
     var target = stateEl || (state.bodyEl ? state.bodyEl.querySelector('.onb-row:nth-child(3) .onb-row-state') : null);
@@ -562,7 +562,7 @@ function _listenRagEvents() {
     var eventAPI = window.getTauriEventAPI();
     if (!eventAPI || typeof eventAPI.listen !== 'function') return;
     try {
-        eventAPI.listen('python-event', function(event) {
+        eventAPI.listen('python-event', function(event: any) {
             var data = event && event.payload;
             if (!data || data.type !== 'rag_index_built') return;
             var payload = data.data || data;
@@ -570,7 +570,7 @@ function _listenRagEvents() {
                 _markIndexReady(payload.chunk_count || 0, null);
                 _stopIndexPolling();
             }
-        }).then(function(unlisten) {
+        }).then(function(unlisten: any) {
             state.unlistenRag = unlisten;
         }).catch(function() { /* ignore */ });
     } catch (e) { /* ignore */ }
@@ -587,7 +587,7 @@ function _onStep2Next() {
 
 // ---- Step 3：示范提问 -------------------------------------------------------
 
-function renderStep3(container) {
+function renderStep3(container: any) {
     container.appendChild(el('div', 'onb-desc',
         '示例库已就绪。试试向 AI 提一个关于示例笔记的问题，体验基于你自己知识库的问答：'));
 
@@ -604,7 +604,7 @@ function skip() {
     finish(false);
 }
 
-async function finish(askSample) {
+async function finish(askSample: any) {
     if (!state.open) return;
     _stopPolling();
     markDoneLocal();
@@ -624,8 +624,9 @@ async function finish(askSample) {
         }
     } catch (e) { /* ignore */ }
     if (askSample && window.AssistantModule && window.AssistantModule.ask) {
+        var askFn = window.AssistantModule.ask;
         setTimeout(function() {
-            try { window.AssistantModule.ask(SAMPLE_QUESTION); } catch (e) { console.warn('[Onboarding] sample ask failed:', e); }
+            try { askFn(SAMPLE_QUESTION); } catch (e) { console.warn('[Onboarding] sample ask failed:', e); }
         }, 400);
     }
 }

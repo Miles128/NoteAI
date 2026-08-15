@@ -7,37 +7,37 @@
 (function() {
     'use strict';
 
-    var _availableAgents = [];
-    var _selectedAgent = null;
+    var _availableAgents: any[] = [];
+    var _selectedAgent: any = null;
     var _savedCliAgentId = '';
     var _isRunning = false;
     var _bindingsDone = false;
-    var _streamContentEl = null;
+    var _streamContentEl: any = null;
     var _streamRawText = '';
-    var _streamMsg = null;
+    var _streamMsg: any = null;
     var _lineBuffer = '';
-    var _toolCards = {};
-    var _toolCtx = {};
-    var _workflowDetails = null;
+    var _toolCards: any = {};
+    var _toolCtx: any = {};
+    var _workflowDetails: any = null;
     var _workflowCount = 0;
     var _workflowLatestText = '';
-    var _reasoningDetails = null;
+    var _reasoningDetails: any = null;
     var _reasoningCount = 0;
-    var _finalDetails = null;
-    var _toolsDetails = null;
+    var _finalDetails: any = null;
+    var _toolsDetails: any = null;
     var _toolCount = 0;
-    var _timeoutNoticeEl = null;
+    var _timeoutNoticeEl: any = null;
     var _sessionActive = false;
     var _sendBtnDefaultHtml = '';
 
     var _SEND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
     var _STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>';
 
-    function _summary() {
+    function _summary(): any {
         return window.CliToolSummary || {};
     }
 
-    function _stripAnsi(text) {
+    function _stripAnsi(text: any) {
         if (!text) return '';
         return String(text)
             .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
@@ -45,7 +45,7 @@
             .replace(/\[(?:\d{1,3}(?:;\d{1,3})*)?m/g, '');
     }
 
-    function _isOpenCodeWorkflowLine(trimmed) {
+    function _isOpenCodeWorkflowLine(trimmed: any) {
         if (!trimmed || _selectedAgent !== 'opencode') return false;
         if (/^>\s/.test(trimmed)) return true;
         if (/^[⚙✱✗→•✓]/.test(trimmed)) return true;
@@ -87,7 +87,7 @@
         });
     }
 
-    function _truncateText(text, maxLen) {
+    function _truncateText(text: any, maxLen: any) {
         var s = String(text || '').trim();
         if (s.length <= maxLen) return s;
         return s.slice(0, maxLen - 1) + '…';
@@ -111,7 +111,7 @@
         }
     }
 
-    function _buildAnswerFirstGroup(title, open, className) {
+    function _buildAnswerFirstGroup(title: any, open: any, className: any) {
         var details = document.createElement('details');
         details.className = 'cli-answer-first-card ' + className;
         details.open = !!open;
@@ -168,7 +168,7 @@
         _updateWorkflowSummary();
     }
 
-    function _appendWorkflowStep(text) {
+    function _appendWorkflowStep(text: any) {
         var details = _ensureWorkflowDetails();
         if (!details) return;
 
@@ -201,7 +201,7 @@
         _updateWorkflowSummary();
     }
 
-    function _appendReasoningStep(text) {
+    function _appendReasoningStep(text: any) {
         var container = _ensureAnswerFirstShell();
         if (!container) return;
         var reasoningSteps = _reasoningDetails.querySelector('.cli-process-steps');
@@ -239,7 +239,7 @@
         return _timeoutNoticeEl;
     }
 
-    function _showTimeoutNotice(payload) {
+    function _showTimeoutNotice(payload: any) {
         var notice = _ensureTimeoutNotice();
         if (!notice) return;
         var seconds = payload.seconds || 0;
@@ -258,7 +258,7 @@
         }
     }
 
-    function _filterCliOutput(content) {
+    function _filterCliOutput(content: any) {
         if (!content) return '';
         var trimmed = content.trim();
         if (!trimmed) return '';
@@ -286,7 +286,7 @@
         return content;
     }
 
-    function _tryParseToolLine(line) {
+    function _tryParseToolLine(line: any) {
         var trimmed = (line || '').trim();
         if (!trimmed || trimmed.charAt(0) !== '{') return null;
         var obj;
@@ -340,11 +340,11 @@
         return null;
     }
 
-    function _toolCardKey(payload) {
+    function _toolCardKey(payload: any) {
         return payload.tool_id || ((payload.tool || 'tool') + ':' + (payload.phase || 'start'));
     }
 
-    function _buildToolCard(payload) {
+    function _buildToolCard(payload: any) {
         var sum = _summary();
         var toolName = payload.tool || 'tool';
         var isDone = payload.phase === 'done';
@@ -372,7 +372,7 @@
         return details;
     }
 
-    function _updateToolCard(card, payload) {
+    function _updateToolCard(card: any, payload: any) {
         var sum = _summary();
         var toolName = payload.tool || card.dataset.tool || 'tool';
         var summaryEl = card.querySelector('.cli-tool-summary');
@@ -393,7 +393,7 @@
         }
     }
 
-    function _upsertToolCard(payload) {
+    function _upsertToolCard(payload: any) {
         if (!payload || !payload.phase) return;
         var container = _ensureAnswerFirstShell();
         if (!container) return;
@@ -462,7 +462,7 @@
         }
     }
 
-    function _renderMarkdownHtml(text) {
+    function _renderMarkdownHtml(text: any) {
         if (!text) return '';
         if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
             return window.EditorModule.renderMarkdownPreview(text);
@@ -470,7 +470,7 @@
         return '<pre>' + _escapeHtml(text) + '</pre>';
     }
 
-    function _setCliMarkdown(contentEl, text) {
+    function _setCliMarkdown(contentEl: any, text: any) {
         if (!contentEl) return;
         contentEl.classList.add('ai-msg-content', 'ai-msg-md', 'preview-content');
         contentEl.innerHTML = _renderMarkdownHtml(text);
@@ -535,7 +535,7 @@
         return _streamContentEl;
     }
 
-    function _processOutputLine(line) {
+    function _processOutputLine(line: any) {
         line = _stripAnsi(line || '');
         var trimmed = line.trim();
         if (!trimmed) return;
@@ -562,10 +562,10 @@
     }
 
     /* CLI 输出逐行全量重渲染是 O(n²)：200ms 节流 + 结束 flush */
-    var _cliRenderTimer = null;
+    var _cliRenderTimer: any = null;
     var _cliRenderPending = false;
 
-    function _scheduleCliRender(contentEl) {
+    function _scheduleCliRender(contentEl: any) {
         if (_cliRenderPending) return;
         _cliRenderPending = true;
         _cliRenderTimer = setTimeout(function() {
@@ -575,7 +575,7 @@
         }, 200);
     }
 
-    function _flushCliRender(contentEl) {
+    function _flushCliRender(contentEl: any) {
         if (_cliRenderTimer) {
             clearTimeout(_cliRenderTimer);
             _cliRenderTimer = null;
@@ -586,7 +586,7 @@
         }
     }
 
-    function _appendAssistantOutput(content) {
+    function _appendAssistantOutput(content: any) {
         if (!content) return;
         _lineBuffer += content;
         var parts = _lineBuffer.split('\n');
@@ -603,7 +603,7 @@
         _processOutputLine(rest);
     }
 
-    function _setRunningState(running) {
+    function _setRunningState(running: any) {
         _isRunning = running;
         var btn = document.getElementById('cli-send-btn');
         var badge = document.getElementById('cli-mode-badge');
@@ -613,7 +613,7 @@
             if (!_sendBtnDefaultHtml) {
                 _sendBtnDefaultHtml = btn.innerHTML;
             }
-            btn.disabled = false;
+            (btn as HTMLButtonElement).disabled = false;
             btn.classList.toggle('cli-stop-btn', !!running);
             btn.innerHTML = running ? _STOP_ICON : (_sendBtnDefaultHtml || _SEND_ICON);
             btn.title = running
@@ -622,7 +622,7 @@
             btn.setAttribute('aria-label', btn.title);
         }
         if (input) {
-            input.disabled = !!running;
+            (input as HTMLInputElement).disabled = !!running;
         }
 
         if (!badge || !_selectedAgent) return;
@@ -679,7 +679,7 @@
         });
     }
 
-    function _persistCliAgentSelection(agentId) {
+    function _persistCliAgentSelection(agentId: any) {
         var nextId = agentId || '';
         _savedCliAgentId = nextId;
         if (nextId) {
@@ -698,7 +698,7 @@
         });
     }
 
-    function applySavedAgentId(agentId) {
+    function applySavedAgentId(agentId: any) {
         var nextId = agentId || '';
         _savedCliAgentId = nextId;
         if (nextId) {
@@ -717,12 +717,12 @@
         return match ? match.id : null;
     }
 
-    function _applyCliAgentSelection(agentId) {
+    function _applyCliAgentSelection(agentId: any) {
         _selectedAgent = agentId || null;
         _sessionActive = false;
         var selector = document.getElementById('cli-agent-selector');
         if (selector) {
-            selector.value = _selectedAgent || '';
+            (selector as HTMLSelectElement).value = _selectedAgent || '';
         }
         _updateModeBadge();
         _updateSessionBadge();
@@ -866,12 +866,13 @@
     function _updateInputPlaceholder() {
         var input = document.getElementById('cli-input');
         if (!input) return;
+        var inputEl = input as HTMLInputElement;
         if (_selectedAgent) {
             var agent = _availableAgents.find(function(a) { return a.id === _selectedAgent; });
             var name = agent ? agent.name : _selectedAgent;
-            input.placeholder = window.t ? window.t('assistant.cli.placeholder', { agent: name }) : ('发送给 ' + name + '...');
+            inputEl.placeholder = window.t ? window.t('assistant.cli.placeholder', { agent: name }) : ('发送给 ' + name + '...');
         } else {
-            input.placeholder = window.t ? window.t('cli.inputPlaceholder') : '输入指令...';
+            inputEl.placeholder = window.t ? window.t('cli.inputPlaceholder') : '输入指令...';
         }
     }
 
@@ -910,12 +911,12 @@
         });
     }
 
-    function _getAgentName(agentId) {
+    function _getAgentName(agentId: any) {
         var agent = _availableAgents.find(function(a) { return a.id === agentId; });
         return agent ? agent.name : agentId;
     }
 
-    function _cliSpeakerLabel(role) {
+    function _cliSpeakerLabel(role: any) {
         if (role === 'user') {
             return (window.t && window.t('assistant.userLabel')) || '你';
         }
@@ -925,7 +926,7 @@
         return _getAgentName(_selectedAgent) || 'CLI';
     }
 
-    function _appendCliMessage(role, content) {
+    function _appendCliMessage(role: any, content: any) {
         var messagesEl = document.getElementById('cli-panel-messages');
         if (!messagesEl) return;
 
@@ -942,11 +943,11 @@
             msg.appendChild(speaker);
             msg.appendChild(body);
         } else {
-            var body = document.createElement('div');
-            body.className = 'cli-agent-output cli-agent-output-inline';
-            _setCliMarkdown(body, content);
+            var bodyDiv = document.createElement('div');
+            bodyDiv.className = 'cli-agent-output cli-agent-output-inline';
+            _setCliMarkdown(bodyDiv, content);
             msg.appendChild(speaker);
-            msg.appendChild(body);
+            msg.appendChild(bodyDiv);
         }
         messagesEl.appendChild(msg);
         _scrollCliMessages();
@@ -955,7 +956,7 @@
     /**
      * 发送消息（CLI Tab 专用）
      */
-    function sendCliMessage(prompt, options) {
+    function sendCliMessage(prompt: any, options?: any) {
         if (_isRunning) {
             if (window.ToastModule && window.ToastModule.show) {
                 window.ToastModule.show(window.t ? window.t('cliAgent.starting') : '上一个任务还在运行', 'warning');
@@ -996,7 +997,7 @@
     /**
      * 处理 CLI agent 事件
      */
-    function handleEvent(payload) {
+    function handleEvent(payload: any) {
         if (!payload || typeof payload !== 'object') return;
 
         var type = payload.type;
@@ -1045,11 +1046,11 @@
     function _ensureBindings() {
         if (_bindingsDone) return;
 
-        var input = document.getElementById('cli-input');
-        var sendBtn = document.getElementById('cli-send-btn');
+        const input = document.getElementById('cli-input') as HTMLInputElement | null;
+        const sendBtn = document.getElementById('cli-send-btn');
         if (!input || !sendBtn) return;
 
-        input.addEventListener('keydown', function(e) {
+        input.addEventListener('keydown', function(e: KeyboardEvent) {
             if (e.key !== 'Enter') return;
             if (e.shiftKey) return;
             e.preventDefault();

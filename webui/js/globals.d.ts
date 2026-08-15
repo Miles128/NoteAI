@@ -266,6 +266,7 @@ declare global {
 
     interface StateModule {
         get(): PersistedState;
+        getState?(): PersistedState;
         subscribe(cb: StateSubscriber): () => void;
         loadAllConfig(): Promise<PersistedState>;
         loadApiConfig(): Promise<ApiConfig | null>;
@@ -332,7 +333,7 @@ declare global {
             exitEditMode?(): void;
         } | undefined;
         Graph3Tier: { pauseResize?(): void; resumeResize?(): void } | undefined;
-        SettingsModule: { saveFontSize?(size: string): void } | undefined;
+        SettingsModule: { saveFontSize?(size: string): void; persistCliAgentId?(id: string): void } | undefined;
         Icons: { get(name: string, size?: number): string } | undefined;
         _deactivatePendingBtn?: (() => void) | undefined;
         updateHomeStats?: (() => void) | undefined;
@@ -376,6 +377,26 @@ declare global {
             error(message: string): void;
             success(message: string): void;
             show(message: string, type?: string): void;
+        } | undefined;
+        CliToolSummary: {
+            clip(text: string, max?: number): string;
+            normalizeToolName(name: string): string;
+            describeCall(toolName: string, input: any): string;
+            describeResult(toolName: string, input: any, result: any, success?: boolean): string;
+            describeRunning(toolName: string, input: any): string;
+        } | undefined;
+        CliAgentModule: {
+            init(): void;
+            loadAgents(): Promise<any>;
+            renderAgentSelector(): void;
+            sendMessage(prompt: string, options?: any): Promise<any>;
+            stopMessage(): void;
+            startNewSession(): Promise<any>;
+            handleEvent(evt: any): void;
+            applySavedAgentId?(agentId: string): void;
+            getSelectedAgent(): any;
+            isRunning(): boolean;
+            isCliAgentMode(): boolean;
         } | undefined;
         PreviewModule: PreviewModule;
         marked: any;

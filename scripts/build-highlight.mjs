@@ -30,7 +30,6 @@ await esbuild.build({
     entryPoints: [entryPoint],
     bundle: true,
     format: 'iife',
-    globalName: 'hljs',
     outfile: outFile,
     minify: true,
     sourcemap: false,

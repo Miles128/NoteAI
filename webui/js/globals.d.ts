@@ -365,6 +365,7 @@ declare global {
         } | undefined;
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
+        loadPendingItems(): void;
         DownloaderModule: {
             startWebDownload(): Promise<any>;
             updateWebImageStatus(): void;
@@ -444,7 +445,7 @@ declare global {
         refreshPendingBtnState(): void;
         semanticGraphRefresh(): void;
         showTreeContextMenu(e: MouseEvent, itemEl: HTMLElement): void;
-        togglePendingLinksPanel(): void;
+        togglePendingLinksPanel(force?: boolean): void;
         switchGraphMode(mode: string): void;
         ToastModule: {
             error(message: string): void;

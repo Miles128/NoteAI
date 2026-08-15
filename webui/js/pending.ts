@@ -2,7 +2,7 @@
 
 var _pendingViewVisible = false;
 var _pendingData = null;
-var _allTopics = [];
+var _allTopics: any[] = [];
 var _pendingLoadSeq = 0;
 
 function togglePendingView() {
@@ -56,7 +56,7 @@ function hidePendingView() {
         if (contentPanel) contentPanel.style.display = 'flex';
         if (graphPanel) graphPanel.style.display = 'none';
         if (home) home.style.display = '';
-        window.updateHomeStats();
+        window.updateHomeStats!();
         if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
             window.HomeDashboardModule.refresh();
         }
@@ -70,8 +70,8 @@ function _loadAllTopics() {
     return window.api.getTopicTree().then(function(result) {
         var topics = (result && result.topics) ? result.topics : [];
         _allTopics = [];
-        function walk(nodes, prefix) {
-            (nodes || []).forEach(function(node) {
+        function walk(nodes: any, prefix: any) {
+            (nodes || []).forEach(function(node: any) {
                 if (!node.name) return;
                 var name = prefix ? prefix + ' > ' + node.name : node.name;
                 _allTopics.push(name);
@@ -90,7 +90,7 @@ function _loadAllTopics() {
 
 function loadPendingItems() {
     var seq = ++_pendingLoadSeq;
-    var listEl = document.getElementById('pending-view-list');
+    const listEl = document.getElementById('pending-view-list');
     var countEl = document.getElementById('pending-view-count');
     if (!listEl) return;
 
@@ -121,7 +121,7 @@ function loadPendingItems() {
 
         renderPendingList(items, listEl);
 
-        if (!topicOpts.length && items.some(function(item) {
+        if (!topicOpts.length && items.some(function(item: any) {
             return item.type === 'topic' || item.action === 'assign_topic';
         })) {
             _loadAllTopics().then(function() {
@@ -136,14 +136,14 @@ function loadPendingItems() {
     });
 }
 
-function renderPendingList(items, listEl) {
+function renderPendingList(items: any, listEl: any) {
     if (!items || items.length === 0) {
         listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
         return;
     }
 
     var html = '';
-    items.forEach(function(item, idx) {
+    items.forEach(function(item: any, idx: any) {
         if (item.type === 'topic') {
             html += renderPendingTopicItem(item, idx);
         } else if (item.type === 'link_batch') {
@@ -169,7 +169,7 @@ function renderPendingList(items, listEl) {
     listEl.innerHTML = html || '<div class="pending-view-empty">' + window.t('pending.allDone') + '</div>';
 }
 
-function renderPendingSummary(summary) {
+function renderPendingSummary(summary: any) {
     var el = document.getElementById('pending-summary');
     if (!el) return;
     var rows = [
@@ -185,7 +185,7 @@ function renderPendingSummary(summary) {
     }).join('');
 }
 
-function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
+function renderPendingActivityLog(seq: any, logResult: any, countEl: any, pendingCount: any) {
     var logEl = document.getElementById('pending-view-log');
     if (!logEl) return;
     if (seq !== _pendingLoadSeq) return;
@@ -212,7 +212,7 @@ function renderPendingActivityLog(seq, logResult, countEl, pendingCount) {
     logEl.innerHTML = logHtml;
 }
 
-function renderPendingTopicItem(item, idx) {
+function renderPendingTopicItem(item: any, idx: any) {
     var title = window.escapeHtml(item.title || window.Path_stem(item.file));
 
     var html = '<div class="pending-item" data-pending-idx="' + idx + '" data-file="' + encodeURIComponent(item.file || '') + '">';
@@ -235,7 +235,7 @@ function renderPendingTopicItem(item, idx) {
     return html;
 }
 
-function renderPendingLinkBatchItem(item, idx) {
+function renderPendingLinkBatchItem(item: any, idx: any) {
     var count = item.count || 0;
     var message = item.message || window.t('pending.linkBatchSummary', { count: count });
     var html = '<div class="pending-item pending-item-info" data-pending-idx="' + idx + '">';
@@ -249,7 +249,7 @@ function renderPendingLinkBatchItem(item, idx) {
     return html;
 }
 
-function renderPendingLinkItem(item, idx) {
+function renderPendingLinkItem(item: any, idx: any) {
     var source = window.escapeHtml(item.source || '');
     var target = window.escapeHtml(item.target || '');
     var context = window.escapeHtml(item.context || '');
@@ -268,12 +268,12 @@ function renderPendingLinkItem(item, idx) {
     return html;
 }
 
-function renderPendingInfoItem(item, idx, kind) {
+function renderPendingInfoItem(item: any, idx: any, kind: any) {
     var labelKey = kind === 'lint' ? 'pending.typeLint' : (kind === 'cascade' ? 'pending.typeCascade' : (kind === 'ingest' ? 'pending.typeIngest' : (kind === 'merge_candidate' ? 'pending.typeMergeCandidate' : (kind === 'topic_merge_candidate' ? 'pending.typeTopicMergeCandidate' : (kind === 'entity_quality' ? 'pending.typeEntityQuality' : 'pending.typeConvert')))));
     var title = item.message || item.topic || item.file || item.file_path || item.error || '';
     var detail = item.file_path || item.file || item.topic || item.error || '';
     if (kind === 'merge_candidate') {
-        title = (item.files || []).map(function(path) { return window.Path_stem(path); }).join(' · ');
+        title = (item.files || []).map(function(path: any) { return window.Path_stem(path); }).join(' · ');
         var reasonLabel = item.reason === 'chunk_overlap' ? window.t('pending.mergeReasonOverlap') : window.t('pending.mergeReasonSemantic');
         detail = window.t('pending.mergeCandidateScore', { score: Math.round((item.score || 0) * 100) }) + ' · ' + reasonLabel + ' · ' + window.t('pending.mergeCoverage', { coverage: Math.round((item.coverage || 0) * 100) });
     }
@@ -295,7 +295,7 @@ function renderPendingInfoItem(item, idx, kind) {
         }
         if (item.matches && item.matches.length) {
             html += '<div class="pending-item-matches">';
-            (item.matches || []).slice(0, 3).forEach(function(m) {
+            (item.matches || []).slice(0, 3).forEach(function(m: any) {
                 var snippet = (m.left || '').replace(/\s+/g, ' ').trim().slice(0, 40);
                 html += '<div class="pending-item-match">' + window.escapeHtml(snippet) + ' … <strong>' + Math.round((m.similarity || 0) * 100) + '%</strong></div>';
             });
@@ -332,7 +332,7 @@ function renderPendingInfoItem(item, idx, kind) {
     return html;
 }
 
-function _findPendingItem(el) {
+function _findPendingItem(el: any) {
     var item = el.closest('.pending-item');
     if (!item) return null;
     return {
@@ -350,7 +350,7 @@ function _findPendingItem(el) {
     };
 }
 
-function _handlePendingClick(e) {
+function _handlePendingClick(e: any) {
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
     var action = btn.getAttribute('data-action');
@@ -406,18 +406,18 @@ function _handlePendingClick(e) {
     }
 }
 
-function reviewMergeGroup(info) {
+function reviewMergeGroup(info: any) {
     if (!window.api || !window.api.mergeNoteGroup || !info.files || info.files.length < 2) return;
-    var list = info.files.map(function(path, index) { return (index + 1) + '. ' + path; }).join('\n');
+    var list = info.files.map(function(path: any, index: any) { return (index + 1) + '. ' + path; }).join('\n');
     if (!window.confirm(window.t('pending.mergeGroupConfirm', { count: info.files.length }) + '\n\n' + list)) return;
     var excludeAnswer = window.prompt(window.t('pending.mergeExcludePrompt'));
     if (excludeAnswer === null) return;
     var selected = info.files.slice();
     var exclude = String(excludeAnswer).split(/[,\s，、]+/).map(Number).filter(function(n) { return !isNaN(n) && n >= 1 && n <= info.files.length; });
     if (exclude.length) {
-        var excludeSet = {};
-        exclude.forEach(function(n) { excludeSet[n - 1] = true; });
-        selected = info.files.filter(function(_path, index) { return !excludeSet[index]; });
+        var excludeSet: Record<number, boolean> = {};
+        exclude.forEach(function(n: any) { excludeSet[n - 1] = true; });
+        selected = info.files.filter(function(_path: any, index: any) { return !excludeSet[index]; });
     }
     if (selected.length < 2) {
         window.updateStatus(window.t('pending.mergeExcludeTooFew'));
@@ -439,25 +439,25 @@ function reviewMergeGroup(info) {
     });
 }
 
-function reviewTopicMerge(info) {
+function reviewTopicMerge(info: any) {
     if (!window.api || !window.api.suggestTopicMergeNames || !info.topics || info.topics.length !== 2) return;
     window.updateStatus(window.t('pending.namingTopic'));
     window.api.suggestTopicMergeNames(info.topics).then(function(result) {
         if (!result || !result.success || !result.names || !result.names.length) throw new Error((result && result.message) || window.t('pending.operationFailed'));
-        var choices = result.names.map(function(item, index) { return (index + 1) + '. ' + item.name + ' — ' + item.reason; }).join('\n');
-        var newTopic = window.prompt(window.t('pending.chooseMergedTopic') + '\n\n' + choices, result.names[0].name);
+        var choices = result.names.map(function(item: any, index: any) { return (index + 1) + '. ' + item.name + ' — ' + item.reason; }).join('\n');
+        const newTopic = window.prompt(window.t('pending.chooseMergedTopic') + '\n\n' + choices, result.names[0].name);
         if (!newTopic) return null;
         if (!window.api.previewTopicMerge) return window.api.mergeSimilarTopics(info.topics, newTopic);
-        return window.api.previewTopicMerge(info.topics, newTopic).then(function(preview) {
+        return window.api.previewTopicMerge(info.topics, newTopic).then(function(preview: any) {
             if (!preview || !preview.success) throw new Error((preview && preview.message) || window.t('pending.operationFailed'));
             var lines = [window.t('pending.previewTopicMergeSummary', { count: preview.note_count || 0 })];
             if (preview.conflicts && preview.conflicts.length) {
                 lines.push(window.t('pending.previewTopicMergeConflicts', { count: preview.conflicts.length }));
-                preview.conflicts.slice(0, 5).forEach(function(c) { lines.push('  · ' + c.name); });
+                preview.conflicts.slice(0, 5).forEach(function(c: any) { lines.push('  · ' + c.name); });
             }
             if (preview.surveys && preview.surveys.length) {
                 lines.push(window.t('pending.previewTopicMergeSurveys', { count: preview.surveys.length }));
-                preview.surveys.slice(0, 5).forEach(function(s) { lines.push('  · ' + s); });
+                preview.surveys.slice(0, 5).forEach(function(s: any) { lines.push('  · ' + s); });
             }
             if (!window.confirm(lines.join('\n') + '\n\n' + window.t('pending.confirmTopicMerge', { old: info.topics.join('、'), name: newTopic }))) return null;
             return window.api.mergeSimilarTopics(info.topics, newTopic);
@@ -476,7 +476,7 @@ function reviewTopicMerge(info) {
     });
 }
 
-function keepPendingTopicItem(info) {
+function keepPendingTopicItem(info: any) {
     if (!window.api || !window.api.keepNoteInTopic) return;
     window.api.keepNoteInTopic(info.filePath, info.currentTopic, info.topic).then(function(result) {
         if (result && result.success) {
@@ -491,7 +491,7 @@ function keepPendingTopicItem(info) {
     });
 }
 
-function reviewDuplicateItem(info) {
+function reviewDuplicateItem(info: any) {
     if (!window.api || !window.api.getDuplicateReview || !info.filePath || !info.relatedFile) return;
     window.api.getDuplicateReview(info.filePath, info.relatedFile).then(function(review) {
         if (!review || !review.success) throw new Error((review && review.message) || '无法读取重复笔记');
@@ -518,7 +518,7 @@ function reviewDuplicateItem(info) {
     });
 }
 
-function retryPendingItem(info) {
+function retryPendingItem(info: any) {
     var request;
     if (info.actionKind === 'retry_cascade' || info.actionKind === 'refresh_survey') request = window.api.retryCascadeTopic(info.topic);
     else if (info.actionKind === 'retry_convert') request = window.api.retryConvertFile(info.filePath);
@@ -537,7 +537,7 @@ function retryPendingItem(info) {
     });
 }
 
-function dismissPendingItem(info) {
+function dismissPendingItem(info: any) {
     var request;
     if (info.actionKind === 'retry_cascade') request = window.api.dismissCascadeFailure(info.topic);
     else if (info.actionKind === 'retry_convert') request = window.api.dismissConvertFailure(info.filePath);
@@ -545,7 +545,7 @@ function dismissPendingItem(info) {
     request.then(function() { loadPendingItems(); refreshPendingBtnState(); }).catch(function() { loadPendingItems(); });
 }
 
-function resolvePendingTopicItem(filePath, topic, idx) {
+function resolvePendingTopicItem(filePath: any, topic: any, idx: any) {
     if (!window.api || !window.api.resolveTopic) return;
     window.api.resolveTopic(filePath, topic).then(function(result) {
         if (result && result.success) {
@@ -561,7 +561,7 @@ function resolvePendingTopicItem(filePath, topic, idx) {
     });
 }
 
-function confirmPendingLink(fromPath, toPath, idx) {
+function confirmPendingLink(fromPath: any, toPath: any, idx: any) {
     if (!window.api || !window.api.confirmLink) return;
     window.api.confirmLink(fromPath, toPath).then(function(result) {
         if (result && result.success) {
@@ -577,7 +577,7 @@ function confirmPendingLink(fromPath, toPath, idx) {
     });
 }
 
-function confirmAllPendingLinks(idx) {
+function confirmAllPendingLinks(idx: any) {
     if (!window.api || !window.api.confirmAllLinks) return;
     window.api.confirmAllLinks().then(function(result) {
         if (result && result.success) {
@@ -592,7 +592,7 @@ function confirmAllPendingLinks(idx) {
     });
 }
 
-function rejectPendingLink(fromPath, toPath, idx) {
+function rejectPendingLink(fromPath: any, toPath: any, idx: any) {
     if (!window.api || !window.api.rejectLink) return;
     window.api.rejectLink(fromPath, toPath).then(function(result) {
         if (result && result.success) {
@@ -606,8 +606,8 @@ function rejectPendingLink(fromPath, toPath, idx) {
     });
 }
 
-function removePendingItem(idx) {
-    var itemEl = document.querySelector('.pending-item[data-pending-idx="' + idx + '"]');
+function removePendingItem(idx: any) {
+    const itemEl = document.querySelector('.pending-item[data-pending-idx="' + idx + '"]') as HTMLElement | null;
     if (itemEl) {
         itemEl.style.transition = 'opacity 0.3s, transform 0.3s';
         itemEl.style.opacity = '0';
@@ -645,12 +645,12 @@ function refreshPendingBtnState() {
                 btn.title = window.t('pending.todoBadge', { count: count });
                 if (badge) {
                     badge.textContent = count > 99 ? '99+' : count;
-                    badge.style.display = '';
+                    (badge as HTMLElement).style.display = '';
                 }
             } else {
                 btn.classList.remove('has-pending');
                 btn.title = window.t('pending.todoBadgeEmpty');
-                if (badge) badge.style.display = 'none';
+                if (badge) (badge as HTMLElement).style.display = 'none';
             }
             var inboxCount = document.getElementById('vault-inbox-count');
             if (inboxCount) inboxCount.textContent = count > 99 ? '99+' : String(count);
@@ -658,7 +658,7 @@ function refreshPendingBtnState() {
     }).catch(function() {});
 }
 
-function _setButtonBusy(btn, busy, labelKey) {
+function _setButtonBusy(btn: any, busy: any, labelKey: any) {
     if (!btn) return;
     btn.disabled = !!busy;
     if (labelKey) btn.textContent = window.t(labelKey);

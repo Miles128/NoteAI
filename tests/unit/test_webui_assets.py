@@ -78,7 +78,7 @@ def test_rpc_contract_is_consistent_across_frontend_python_and_tauri() -> None:
 
 
 def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
-    pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
+    pending_js = (WEBUI / "js" / "pending.ts").read_text(encoding="utf-8")
 
     assign_branch = pending_js.split("} else if (item.action === 'assign_topic')", 1)[1].split("html += '</div>';", 1)[
         0
@@ -90,7 +90,7 @@ def test_misplaced_note_uses_direct_move_or_keep_actions() -> None:
 
 def test_pending_view_restores_hidden_content_panel() -> None:
     """Regression: opening Inbox from note preview must reveal its parent panel."""
-    pending_js = (WEBUI / "js" / "pending.js").read_text(encoding="utf-8")
+    pending_js = (WEBUI / "js" / "pending.ts").read_text(encoding="utf-8")
     show_branch = pending_js.split("function showPendingViewContent()", 1)[1].split("function hidePendingView()", 1)[0]
 
     restore_parent = "contentPanel.style.display = 'flex'"

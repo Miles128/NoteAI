@@ -68,6 +68,9 @@
         notify();
     }
 
+    var _uiConfigPromise = null;
+    var _themePreferencePromise = null;
+
     async function loadApiConfig() {
         try {
             _state.apiConfig = await window.api.getApiConfig();
@@ -79,26 +82,42 @@
         }
     }
 
-    async function loadUiConfig() {
-        try {
-            _state.uiConfig = await window.api.getUiConfig();
-            notify();
-            return _state.uiConfig;
-        } catch (e) {
-            console.error('加载 UI 配置失败:', e);
-            return null;
-        }
+    async function loadUiConfig(force) {
+        // in-flight 合并：启动期多路消费（i18n/语义工作台/cli-agent/settings）
+        // 共享同一次 RPC，避免 getUiConfig 被重复拉取
+        if (!force && _state.uiConfig) return _state.uiConfig;
+        if (!force && _uiConfigPromise) return _uiConfigPromise;
+        _uiConfigPromise = (async function() {
+            try {
+                _state.uiConfig = await window.api.getUiConfig();
+                notify();
+                return _state.uiConfig;
+            } catch (e) {
+                console.error('加载 UI 配置失败:', e);
+                return null;
+            } finally {
+                _uiConfigPromise = null;
+            }
+        })();
+        return _uiConfigPromise;
     }
 
-    async function loadThemePreference() {
-        try {
-            _state.themePreference = await window.api.getThemePreference();
-            notify();
-            return _state.themePreference;
-        } catch (e) {
-            console.error('加载主题偏好失败:', e);
-            return null;
-        }
+    async function loadThemePreference(force) {
+        if (!force && _state.themePreference) return _state.themePreference;
+        if (!force && _themePreferencePromise) return _themePreferencePromise;
+        _themePreferencePromise = (async function() {
+            try {
+                _state.themePreference = await window.api.getThemePreference();
+                notify();
+                return _state.themePreference;
+            } catch (e) {
+                console.error('加载主题偏好失败:', e);
+                return null;
+            } finally {
+                _themePreferencePromise = null;
+            }
+        })();
+        return _themePreferencePromise;
     }
 
     async function loadAllConfig() {

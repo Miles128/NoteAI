@@ -85,7 +85,11 @@ async function initI18n() {
     _readyPromise = (async function() {
         var locale = 'zh-CN';
         try {
-            if (window.api && window.api.getUiConfig) {
+            // 优先复用 state 门面的 uiConfig（启动期已预热，避免重复 RPC）
+            if (window.state && window.state.loadUiConfig) {
+                var cfg = await window.state.loadUiConfig();
+                if (cfg && cfg.locale) locale = cfg.locale;
+            } else if (window.api && window.api.getUiConfig) {
                 var cfg = await window.api.getUiConfig();
                 if (cfg && cfg.locale) locale = cfg.locale;
             }

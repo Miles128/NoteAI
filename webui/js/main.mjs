@@ -6,14 +6,20 @@ async function loadModules() {
     ]);
 
     await import('./i18n.js');
-    await window.I18nModule.initI18n();
+    await import('./theme.js');
+    // 启动 RPC 并行化：i18n（含 uiConfig）与主题（含 themePreference）互不依赖，
+    // 与 state 门面预热共享同一 in-flight promise（各只发一次 RPC）
+    await Promise.all([
+        window.I18nModule.initI18n(),
+        (async function() {
+            window.ThemeModule.initSystemThemeListener();
+            await window.ThemeModule.applyThemeBootstrap();
+        })(),
+        window.state.loadUiConfig().catch(function() {}),
+        window.state.loadThemePreference().catch(function() {}),
+    ]);
 
     await import('./assistant.js');
-
-    await import('./theme.js');
-    const ThemeModule = window.ThemeModule;
-    ThemeModule.initSystemThemeListener();
-    await ThemeModule.applyThemeBootstrap();
 
     await import('./icons.js');
     const { IconsModule } = window;

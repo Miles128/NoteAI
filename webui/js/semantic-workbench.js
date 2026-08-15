@@ -69,6 +69,7 @@ function show(category) {
     if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
     configureStatusFilter();
     loadOverview();
+    loadVerifyAgents();
     loadList();
 }
 
@@ -1123,9 +1124,7 @@ function init() {
     var scan = document.getElementById('semantic-scan-conflicts');
     if (scan) scan.addEventListener('click', function() { scanConflicts(scan); });
     configureStatusFilter();
-    loadOverview();
     applyVisibilityConfig();
-    loadVerifyAgents();
     initVerifyStreamListener();
 }
 

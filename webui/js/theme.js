@@ -201,7 +201,10 @@ function initSystemThemeListener() {
 async function applyThemeBootstrap() {
     var pref = null;
     try {
-        if (window.api && typeof window.api.getThemePreference === 'function') {
+        // 优先复用 state 门面（与启动期 loadThemePreference 共享同一 RPC）
+        if (window.state && typeof window.state.loadThemePreference === 'function') {
+            pref = await window.state.loadThemePreference();
+        } else if (window.api && typeof window.api.getThemePreference === 'function') {
             pref = await window.api.getThemePreference();
         }
     } catch (e) {

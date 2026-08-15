@@ -112,7 +112,7 @@
             return;
         }
 
-        window.api.readFileRaw(filePath).then(function(result) {
+        (window.cachedReadFileRaw || window.api.readFileRaw)(filePath).then(function(result) {
             if (!result || !result.success) {
                 throw new Error((result && result.message) || '读取失败');
             }

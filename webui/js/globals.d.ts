@@ -332,7 +332,29 @@ declare global {
             isActive?: boolean;
             exitEditMode?(): void;
         } | undefined;
-        Graph3Tier: { pauseResize?(): void; resumeResize?(): void } | undefined;
+        Graph3Tier: { pauseResize?(): void; resumeResize?(): void; load?(data?: any): void; stopSimulation?(): void; zoomIn?(): void; zoomOut?(): void; zoomReset?(): void } | undefined;
+        Graph: { refresh?(): void; applyLayout?(): void; setSelected?(): void } | undefined;
+        HomeDashboardModule: { refresh?(): void } | undefined;
+        InspectorModule: { onFileSelected?(path: string): void } | undefined;
+        NoteListModule: {
+            showTopicNotes?(path: string, name?: string): void;
+            showAllNotes?(): void;
+            setActiveFile?(path: string): void;
+            refresh?(): void;
+            getCurrentTopic?(): any;
+        } | undefined;
+        SemanticGraphModule: {
+            setModeActive?(active: boolean): void;
+            refresh?(): void;
+            zoomIn?(): void;
+            zoomOut?(): void;
+            zoomReset?(): void;
+        } | undefined;
+        StatusbarModule: {
+            setRewriting?(active: boolean, message?: string): void;
+            onFileSelected?(path: string): void;
+        } | undefined;
+        _rewritingFilePath: string | null;
         SettingsModule: { saveFontSize?(size: string): void; persistCliAgentId?(id: string): void } | undefined;
         Icons: { get(name: string, size?: number): string } | undefined;
         _deactivatePendingBtn?: (() => void) | undefined;
@@ -371,8 +393,33 @@ declare global {
         } | undefined;
         toggleSemanticWorkbench(): void;
         TreeModule: {
-            selectFile(path: string, name?: string): void;
+            loadTreeState(): void;
+            saveTreeState(): void;
+            toggleTreeFolder(element: HTMLElement): void;
+            renderFileTree(treeData: any, container: HTMLElement): void;
+            loadFileTree(force?: boolean): Promise<void>;
+            selectFile(path: string, fileName?: string): void;
+            setSelectedFile(path: string, name?: string): void;
+            isTreeFileCountEnabled(): boolean;
+            setTreeFileCountEnabled(enabled: boolean): void;
+            refreshTreeDisplay(): void;
+            initTreeFileCountSetting(): void;
+            hasTopicPending(): boolean;
+            updateWebAIStatus?: () => void;
+            updateConvAIStatus?: () => void;
         } | undefined;
+        graphZoomIn(): void;
+        graphZoomOut(): void;
+        graphZoomReset(): void;
+        loadRelationGraphData(): void;
+        onAddTopicFromFileTree(): void;
+        onConfirmLink(f: string, t: string): void;
+        onRejectLink(f: string, t: string): void;
+        refreshPendingBtnState(): void;
+        semanticGraphRefresh(): void;
+        showTreeContextMenu(e: MouseEvent, itemEl: HTMLElement): void;
+        togglePendingLinksPanel(): void;
+        switchGraphMode(mode: string): void;
         ToastModule: {
             error(message: string): void;
             success(message: string): void;

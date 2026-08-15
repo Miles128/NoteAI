@@ -1,11 +1,13 @@
 (function() { 'use strict';
 
 var treeExpandedState = window.AppState.treeExpandedState;
-var selectedFilePath = null;
-var selectedFileName = null;
-var _activeTreeItem = null;
+var selectedFilePath: any = null;
+var selectedFileName: any = null;
+var _activeTreeItem: any = null;
 
-function setSelectedFile(path, name) {
+var Icons = window.Icons as { get(name: string, size?: number): string };
+
+function setSelectedFile(path: any, name: any) {
     selectedFilePath = path;
     selectedFileName = name;
     window.AppState.selectedFilePath = path;
@@ -33,7 +35,7 @@ function isTreeFileCountEnabled() {
     return !!window.Storage.getItem(window.Storage.KEYS.TREE_SHOW_FILE_COUNT, false, { silent: true });
 }
 
-function setTreeFileCountEnabled(enabled) {
+function setTreeFileCountEnabled(enabled: any) {
     window.Storage.setItem(window.Storage.KEYS.TREE_SHOW_FILE_COUNT, !!enabled);
     refreshTreeDisplay();
 }
@@ -46,14 +48,14 @@ function refreshTreeDisplay() {
     renderVirtualTree(container);
 }
 
-function _treeFileCountForNode(node) {
+function _treeFileCountForNode(node: any) {
     if (node.file_count != null && Number.isFinite(Number(node.file_count))) {
         return Number(node.file_count);
     }
     return _countFilesInTreeNode(node);
 }
 
-function _countFilesInTreeNode(node) {
+function _countFilesInTreeNode(node: any) {
     if (!node || node.type !== 'folder') return 0;
     var count = 0;
     if (node.children) {
@@ -66,9 +68,9 @@ function _countFilesInTreeNode(node) {
     return count;
 }
 
-function _buildTreeFileCountMap(treeData) {
-    var map = {};
-    function walk(nodes) {
+function _buildTreeFileCountMap(treeData: any) {
+    var map: Record<string, number> = {};
+    function walk(nodes: any) {
         if (!nodes) return;
         for (var i = 0; i < nodes.length; i++) {
             var node = nodes[i];
@@ -81,7 +83,7 @@ function _buildTreeFileCountMap(treeData) {
     return map;
 }
 
-function _treeFileCountBadge(count) {
+function _treeFileCountBadge(count: any) {
     if (!isTreeFileCountEnabled()) return '';
     var n = Number(count);
     if (!Number.isFinite(n) || n < 0) n = 0;
@@ -90,7 +92,7 @@ function _treeFileCountBadge(count) {
 }
 
 function initTreeFileCountSetting() {
-    var el = document.getElementById('settings-tree-file-count');
+    const el = document.getElementById('settings-tree-file-count') as HTMLInputElement | null;
     if (!el || el.dataset.bound) return;
     el.dataset.bound = '1';
     el.checked = isTreeFileCountEnabled();
@@ -99,7 +101,7 @@ function initTreeFileCountSetting() {
     });
 }
 
-function toggleTreeFolder(element) {
+function toggleTreeFolder(element: any) {
     var children = element.nextElementSibling;
     if (!children || !children.classList.contains('tree-children')) return;
 
@@ -111,8 +113,8 @@ function toggleTreeFolder(element) {
     var folderIcon = element.querySelector('.tree-folder-icon');
     if (folderIcon) {
         folderIcon.innerHTML = children.classList.contains('hidden')
-            ? window.Icons.get('folderFilled')
-            : window.Icons.get('folderOpen');
+            ? Icons.get('folderFilled')
+            : Icons.get('folderOpen');
     }
 
     var path = element.getAttribute('data-path');
@@ -122,18 +124,18 @@ function toggleTreeFolder(element) {
     }
 }
 
-function setActiveTreeItem(itemEl) {
+function setActiveTreeItem(itemEl: any) {
     if (_activeTreeItem) _activeTreeItem.classList.remove('is-active');
     _activeTreeItem = itemEl;
     if (itemEl) itemEl.classList.add('is-active');
 }
 
-function formatModifiedTime(modified) {
+function formatModifiedTime(modified: any) {
     if (!modified) return '';
     var d = new Date(modified * 1000);
     if (isNaN(d.getTime())) return '';
     var now = new Date();
-    var diff = now - d;
+    var diff = now.getTime() - d.getTime();
     if (diff < 60000) return window.t('common.timeJustNow');
     if (diff < 3600000) return window.t('common.timeMinutesAgo', { count: Math.floor(diff / 60000) });
     if (diff < 86400000) return window.t('common.timeHoursAgo', { count: Math.floor(diff / 3600000) });
@@ -146,7 +148,7 @@ function formatModifiedTime(modified) {
     return d.getFullYear() + '/' + m + '/' + day;
 }
 
-function renderFileTree(treeData, container) {
+function renderFileTree(treeData: any, container: any) {
     if (!treeData || treeData.length === 0) {
         container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
@@ -154,8 +156,8 @@ function renderFileTree(treeData, container) {
 
     loadTreeState();
 
-    function buildTreeHTML(nodes, indentLevel) {
-        return nodes.map(function(node) {
+    function buildTreeHTML(nodes: any, indentLevel: any) {
+        return nodes.map(function(node: any) {
             var isFolder = node.type === 'folder';
             var hasChildren = node.children && node.children.length > 0;
 
@@ -171,7 +173,7 @@ function renderFileTree(treeData, container) {
             var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
             var levelClass = 'tree-level-' + Math.min(indentLevel, 3);
-            var folderIcon = expanded ? window.Icons.get('folderOpen') : window.Icons.get('folderFilled');
+            var folderIcon = expanded ? Icons.get('folderOpen') : Icons.get('folderFilled');
 
             var html = '<div class="tree-item folder ' + levelClass + '" draggable="true" data-path="' + ep + '" data-name="' + en + '">';
 
@@ -179,7 +181,7 @@ function renderFileTree(treeData, container) {
                 html += '<span class="tree-indent-unit"></span>';
             }
 
-            html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '" onclick="event.stopPropagation(); TreeModule.toggleTreeFolder(this.parentElement);">' + window.Icons.get('chevron') + '</span>';
+            html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '" onclick="event.stopPropagation(); TreeModule.toggleTreeFolder(this.parentElement);">' + Icons.get('chevron') + '</span>';
             html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
             html += '<span class="tree-name">' + en + '</span>';
             html += _treeFileCountBadge(_treeFileCountForNode(node));
@@ -195,30 +197,30 @@ function renderFileTree(treeData, container) {
 
     container.innerHTML = buildTreeHTML(treeData, 0);
 
-    container.querySelectorAll('.tree-item').forEach(function(item) {
-        item.addEventListener('click', function(e) {
-            var path = this.getAttribute('data-path');
-            var name = this.getAttribute('data-name');
-            if (this.classList.contains('folder')) {
+    container.querySelectorAll('.tree-item').forEach(function(item: any) {
+        item.addEventListener('click', function(e: Event) {
+            var path = item.getAttribute('data-path');
+            var name = item.getAttribute('data-name');
+            if (item.classList.contains('folder')) {
                 if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.isVisible && window.SemanticWorkbenchModule.isVisible()) {
                     window.SemanticWorkbenchModule.hide();
                 }
-                setActiveTreeItem(this);
-                window.TreeModule.toggleTreeFolder(this);
+                setActiveTreeItem(item);
+                toggleTreeFolder(item);
                 // 触发 Note List 显示该主题下的笔记
                 if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
                     window.NoteListModule.showTopicNotes(path, name);
                 }
             } else {
-                setActiveTreeItem(this);
-                window.TreeModule.selectFile(path, name);
+                setActiveTreeItem(item);
+                selectFile(path, name);
             }
         });
 
-        item.addEventListener('contextmenu', function(e) {
+        item.addEventListener('contextmenu', function(e: MouseEvent) {
             e.preventDefault();
             e.stopPropagation();
-            showTreeContextMenu(e, this);
+            showTreeContextMenu(e, item);
         });
     });
 
@@ -230,7 +232,7 @@ function renderFileTree(treeData, container) {
     }
 }
 
-function showTreeContextMenu(e, itemEl) {
+function showTreeContextMenu(e: any, itemEl: any) {
     hideTreeContextMenu();
 
     var isFolder = itemEl.classList.contains('folder');
@@ -245,14 +247,14 @@ function showTreeContextMenu(e, itemEl) {
 
     items.push({
         label: window.t('tree.revealInFinder'),
-        icon: window.Icons.get('folder'),
+        icon: Icons.get('folder'),
         action: function() { revealInFinder(path); }
     });
 
     if (!isFolder) {
         items.push({
             label: window.t('tree.openInNewWindow'),
-            icon: window.Icons.get('folderOpen'),
+            icon: Icons.get('folderOpen'),
             action: function() {
                 if (window.api && window.api.openFileInNewWindow) {
                     window.api.openFileInNewWindow(path, name);
@@ -264,18 +266,18 @@ function showTreeContextMenu(e, itemEl) {
     if (isFolder) {
         items.push({
             label: window.t('tree.deleteTopicFolder'),
-            icon: window.Icons.get('trash'),
+            icon: Icons.get('trash'),
             action: function() { showDeleteTopicFolderConfirm(path, name); }
         });
     } else {
         items.push({
             label: window.t('tree.delete'),
-            icon: window.Icons.get('trash'),
+            icon: Icons.get('trash'),
             action: function() { showDeleteConfirm(itemEl, path, name); }
         });
     }
 
-    items.forEach(function(item) {
+    items.forEach(function(item: any) {
         var el = document.createElement('div');
         el.className = 'ctx-menu-item';
         el.innerHTML = item.icon + '<span>' + item.label + '</span>';
@@ -300,10 +302,10 @@ function showTreeContextMenu(e, itemEl) {
     menu.style.top = y + 'px';
 }
 
-async function showDeleteTopicFolderConfirm(path, name) {
+async function showDeleteTopicFolderConfirm(path: any, name: any) {
     var topicName = name;
-    var message = window.t('tree.deleteTopicFolderConfirm', { name: escapeHtml(name) }) + '\n\n' +
-        window.t('tree.deleteTopicFolderDetail', { path: escapeHtml(path) }) + '\n' +
+    var message = window.t('tree.deleteTopicFolderConfirm', { name: window.escapeHtml(name) }) + '\n\n' +
+        window.t('tree.deleteTopicFolderDetail', { path: window.escapeHtml(path) }) + '\n' +
         window.t('tree.deleteTopicFolderWarning');
 
     var confirmed = await window._customConfirm(message);
@@ -318,12 +320,12 @@ async function showDeleteTopicFolderConfirm(path, name) {
 
         var fileResult = await window.api.deleteFile(path);
         if (fileResult && fileResult.success) {
-            window.TreeModule.loadFileTree();
+            loadFileTree();
         } else {
             alert(window.t('tree.deleteFolderFailed') + (fileResult ? fileResult.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert(window.t('tree.deleteTopicFolderError') + (e.message || e));
+        alert(window.t('tree.deleteTopicFolderError') + ((e as Error).message || e));
     }
 }
 
@@ -335,12 +337,12 @@ function onAddTopicFromFileTree() {
     if (window.api && window.api.createTopic) {
         window.api.createTopic(topicName).then(function(result) {
             if (result && result.success) {
-                window.TreeModule.loadFileTree();
+                loadFileTree();
                 if (window.api && window.api.batchAutoAssignTopics) {
                     window.api.batchAutoAssignTopics().then(function(r) {
                         if (r && r.success && r.need_confirm > 0) {
                             if (typeof window.loadTopicPendingPanel === 'function') {
-                                var topicNames = [];
+                                var topicNames: any[] = [];
                                 window.loadTopicPendingPanel(r.pending, topicNames);
                                 var panel = document.getElementById('topic-pending-panel');
                                 if (panel) panel.style.display = '';
@@ -352,7 +354,7 @@ function onAddTopicFromFileTree() {
                 alert(window.t('tree.createTopicFailed') + (result ? result.message : window.t('common.unknownError')));
             }
         }).catch(function(e) {
-            alert(window.t('tree.createTopicError') + (e.message || e));
+            alert(window.t('tree.createTopicError') + ((e as Error).message || e));
         });
     }
 }
@@ -362,31 +364,31 @@ function hideTreeContextMenu() {
     if (existing) existing.remove();
 }
 
-function showDeleteConfirm(itemEl, path, name) {
+function showDeleteConfirm(itemEl: any, path: any, name: any) {
     var existingConfirm = itemEl.querySelector('.delete-confirm-bar');
     if (existingConfirm) return;
 
     var bar = document.createElement('div');
     bar.className = 'delete-confirm-bar';
-    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteConfirm', { name: escapeHtml(name) }) + '</span>' +
-        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDelete') + '">' + window.Icons.get('check', 16) + '</button>' +
-        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + window.Icons.get('close', 16) + '</button>';
+    bar.innerHTML = '<span class="delete-confirm-text">' + window.t('tree.deleteConfirm', { name: window.escapeHtml(name) }) + '</span>' +
+        '<button class="delete-confirm-yes" title="' + window.t('common.confirmDelete') + '">' + Icons.get('check', 16) + '</button>' +
+        '<button class="delete-confirm-no" title="' + window.t('common.cancel') + '">' + Icons.get('close', 16) + '</button>';
 
     itemEl.style.position = 'relative';
     itemEl.appendChild(bar);
 
-    bar.querySelector('.delete-confirm-yes').addEventListener('click', function(e) {
+    bar.querySelector('.delete-confirm-yes')!.addEventListener('click', function(e: Event) {
         e.stopPropagation();
         doDeleteFile(path, name, bar);
     });
 
-    bar.querySelector('.delete-confirm-no').addEventListener('click', function(e) {
+    bar.querySelector('.delete-confirm-no')!.addEventListener('click', function(e: Event) {
         e.stopPropagation();
         bar.remove();
     });
 
-    var outsideClick = function(e) {
-        if (!bar.contains(e.target) && e.target !== itemEl) {
+    var outsideClick = function(e: MouseEvent) {
+        if (!bar.contains(e.target as Node) && e.target !== itemEl) {
             bar.remove();
             document.removeEventListener('click', outsideClick);
         }
@@ -394,7 +396,7 @@ function showDeleteConfirm(itemEl, path, name) {
     setTimeout(function() { document.addEventListener('click', outsideClick); }, 10);
 }
 
-async function doDeleteFile(path, name, confirmBar) {
+async function doDeleteFile(path: any, name: any, confirmBar: any) {
     if (confirmBar) confirmBar.remove();
     try {
         var result = await window.api.deleteFile(path);
@@ -402,27 +404,27 @@ async function doDeleteFile(path, name, confirmBar) {
             if (selectedFilePath === path) {
                 setSelectedFile(null, null);
             }
-            window.TreeModule.loadFileTree();
+            loadFileTree();
         } else {
             alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert(window.t('tree.deleteError') + (e.message || e));
+        alert(window.t('tree.deleteError') + ((e as Error).message || e));
     }
 }
 
-function revealInFinder(path) {
+function revealInFinder(path: any) {
     if (window.api && window.api.revealInFinder) {
         window.api.revealInFinder(path);
     }
 }
 
-async function deleteFile(path, name) {
+async function deleteFile(path: any, name: any) {
     if (!(await window._customConfirm(window.t('tree.confirmDeleteItem', { name: name })))) return;
     if (window.api && window.api.deleteFile) {
         window.api.deleteFile(path).then(function(result) {
             if (result && result.success) {
-                window.TreeModule.loadFileTree();
+                loadFileTree();
             } else {
                 alert(window.t('tree.deleteFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
             }
@@ -430,16 +432,16 @@ async function deleteFile(path, name) {
     }
 }
 
-var _fileTreeDragData = { filePath: null, fileName: null, isFolder: false };
+var _fileTreeDragData: any = { filePath: null, fileName: null, isFolder: false };
 
 var _dragDropInitialized = false;
 
-function setupFileTreeDragDrop(container) {
+function setupFileTreeDragDrop(container: any) {
     if (_dragDropInitialized) return;
     _dragDropInitialized = true;
 
-    container.addEventListener('dragstart', function(e) {
-        var itemEl = e.target.closest('.tree-item');
+    container.addEventListener('dragstart', function(e: DragEvent) {
+        var itemEl = (e.target as Element).closest('.tree-item');
         if (!itemEl) return;
 
         var filePath = itemEl.getAttribute('data-path');
@@ -450,16 +452,16 @@ function setupFileTreeDragDrop(container) {
         _fileTreeDragData.isFolder = itemEl.classList.contains('folder');
         itemEl.classList.add('dragging');
 
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', filePath);
-        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(_fileTreeDragData.fileName) + '</span>');
+        e.dataTransfer!.effectAllowed = 'move';
+        e.dataTransfer!.setData('text/plain', filePath);
+        e.dataTransfer!.setData('text/html', '<span>' + window.escapeHtml(_fileTreeDragData.fileName) + '</span>');
     });
 
-    container.addEventListener('dragend', function(e) {
-        var itemEl = e.target.closest('.tree-item');
+    container.addEventListener('dragend', function(e: DragEvent) {
+        var itemEl = (e.target as Element).closest('.tree-item');
         if (itemEl) itemEl.classList.remove('dragging');
 
-        container.querySelectorAll('.tree-item').forEach(function(item) {
+        container.querySelectorAll('.tree-item').forEach(function(item: any) {
             item.classList.remove('drag-over', 'drag-over-top');
         });
 
@@ -468,15 +470,15 @@ function setupFileTreeDragDrop(container) {
         _fileTreeDragData.isFolder = false;
     });
 
-    container.addEventListener('dragover', function(e) {
-        var dragFilePath = _fileTreeDragData.filePath || e.dataTransfer.getData('text/plain');
+    container.addEventListener('dragover', function(e: DragEvent) {
+        var dragFilePath = _fileTreeDragData.filePath || e.dataTransfer!.getData('text/plain');
         if (!dragFilePath) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.dataTransfer!.dropEffect = 'move';
 
-        var itemEl = e.target.closest('.tree-item');
+        var itemEl = (e.target as Element).closest('.tree-item');
 
-        container.querySelectorAll('.tree-item').forEach(function(item) {
+        container.querySelectorAll('.tree-item').forEach(function(item: any) {
             item.classList.remove('drag-over', 'drag-over-top');
         });
 
@@ -488,40 +490,40 @@ function setupFileTreeDragDrop(container) {
         }
     });
 
-    container.addEventListener('dragleave', function(e) {
-        var itemEl = e.target.closest('.tree-item');
+    container.addEventListener('dragleave', function(e: DragEvent) {
+        var itemEl = (e.target as Element).closest('.tree-item');
         if (itemEl) itemEl.classList.remove('drag-over', 'drag-over-top');
     });
 
-    container.addEventListener('drop', async function(e) {
+    container.addEventListener('drop', async function(e: DragEvent) {
         e.preventDefault();
 
-        var srcPath = _fileTreeDragData.filePath || e.dataTransfer.getData('text/plain');
+        var srcPath = _fileTreeDragData.filePath || e.dataTransfer!.getData('text/plain');
         if (!srcPath) return;
 
-        var itemEl = e.target.closest('.tree-item');
+        var itemEl = (e.target as Element).closest('.tree-item');
 
         if (itemEl && itemEl.classList.contains('folder')) {
             var targetPath = itemEl.getAttribute('data-path');
 
             if (targetPath === srcPath) return;
 
-            if (_fileTreeDragData.isFolder && targetPath.startsWith(srcPath + '/')) return;
+            if (_fileTreeDragData.isFolder && targetPath && targetPath.startsWith(srcPath + '/')) return;
 
             try {
-                var result = await window.api.moveFile(srcPath, targetPath);
+                var result = await window.api.moveFile(srcPath, targetPath!);
                 if (result && result.success) {
-                    await window.TreeModule.loadFileTree();
+                    await loadFileTree();
                 } else {
                     alert(window.t('topic.moveFailed') + (result ? result.message : window.t('common.unknownError')));
                 }
             } catch (err) {
                 console.error('[FileTree] move error:', err);
-                alert(window.t('topic.moveFailed') + (err.message || window.t('common.errorOccurred')));
+                alert(window.t('topic.moveFailed') + ((err as Error).message || window.t('common.errorOccurred')));
             }
         }
 
-        container.querySelectorAll('.tree-item').forEach(function(item) {
+        container.querySelectorAll('.tree-item').forEach(function(item: any) {
             item.classList.remove('drag-over', 'drag-over-top');
         });
     });
@@ -529,10 +531,10 @@ function setupFileTreeDragDrop(container) {
 
 document.addEventListener('click', function() { hideTreeContextMenu(); });
 document.addEventListener('contextmenu', function(e) {
-    if (!e.target.closest('.tree-item') && !e.target.closest('.sidebar-tag-row') && !e.target.closest('.sidebar-tag-file')) hideTreeContextMenu();
+    if (!(e.target as Element).closest('.tree-item') && !(e.target as Element).closest('.sidebar-tag-row') && !(e.target as Element).closest('.sidebar-tag-file')) hideTreeContextMenu();
 });
 
-var _virtualScrollRAF = null;
+var _virtualScrollRAF: any = null;
 // 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接初始化（不再依赖 DOMContentLoaded 重放）
 (function() {
     initTreeFileCountSetting();
@@ -551,15 +553,15 @@ var _virtualScrollRAF = null;
 })();
 
 var _lastFileTreeData = null;
-var _flatVisibleNodes = null;
+var _flatVisibleNodes: any = null;
 var _virtualScrollItemHeight = 28;
 var _virtualScrollVisibleCount = 0;
 var _virtualScrollStartIdx = 0;
 
-function flattenVisibleNodes(treeData) {
+function flattenVisibleNodes(treeData: any) {
     var countMap = _buildTreeFileCountMap(treeData);
-    var result = [];
-    function walk(nodes, depth) {
+    var result: any[] = [];
+    function walk(nodes: any, depth: any) {
         if (!nodes) return;
         for (var i = 0; i < nodes.length; i++) {
             var node = nodes[i];
@@ -586,7 +588,7 @@ function flattenVisibleNodes(treeData) {
     return result;
 }
 
-function renderVirtualTree(container) {
+function renderVirtualTree(container: any) {
     if (!_flatVisibleNodes || _flatVisibleNodes.length === 0) {
         container.innerHTML = '<div class="tree-empty">' + window.t('common.noWorkspace') + '</div>';
         return;
@@ -607,7 +609,7 @@ function renderVirtualTree(container) {
         var node = _flatVisibleNodes[i];
         var expanded = node.expanded;
         var levelClass = 'tree-level-' + Math.min(node.depth, 3);
-        var folderIcon = expanded ? window.Icons.get('folderOpen') : window.Icons.get('folderFilled');
+        var folderIcon = expanded ? Icons.get('folderOpen') : Icons.get('folderFilled');
         var ep = node.path.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         var en = node.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -615,7 +617,7 @@ function renderVirtualTree(container) {
         for (var d = 0; d < node.depth; d++) {
             html += '<span class="tree-indent-unit"></span>';
         }
-        html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '">' + window.Icons.get('chevron') + '</span>';
+        html += '<span class="tree-toggle ' + (expanded ? '' : 'collapsed') + '">' + Icons.get('chevron') + '</span>';
         html += '<span class="tree-folder-icon">' + folderIcon + '</span>';
         html += '<span class="tree-name">' + en + '</span>';
         html += _treeFileCountBadge(node.fileCount);
@@ -627,11 +629,12 @@ function renderVirtualTree(container) {
     container.innerHTML = html;
 
     if (!container._treeDelegated) {
-        container.addEventListener('click', function(e) {
-            var item = e.target.closest('.tree-item');
+        container.addEventListener('click', function(e: MouseEvent) {
+            var item = (e.target as Element).closest('.tree-item');
             if (!item) return;
             var path = item.getAttribute('data-path');
             var name = item.getAttribute('data-name');
+            if (!path) return;
             var currentExpanded = treeExpandedState.hasOwnProperty(path) ? treeExpandedState[path] : true;
             treeExpandedState[path] = !currentExpanded;
             saveTreeState();
@@ -640,12 +643,12 @@ function renderVirtualTree(container) {
             var refreshedItem = container.querySelector('.tree-item[data-path="' + path.replace(/"/g, '&quot;') + '"]');
             if (refreshedItem) setActiveTreeItem(refreshedItem);
             if (window.NoteListModule && window.NoteListModule.showTopicNotes) {
-                window.NoteListModule.showTopicNotes(path, name);
+                window.NoteListModule.showTopicNotes(path, name || undefined);
             }
         });
 
-        container.addEventListener('contextmenu', function(e) {
-            var item = e.target.closest('.tree-item');
+        container.addEventListener('contextmenu', function(e: MouseEvent) {
+            var item = (e.target as Element).closest('.tree-item');
             if (item) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -663,11 +666,11 @@ function renderVirtualTree(container) {
     }
 }
 
-var _lastTreeData = null;
+var _lastTreeData: any = null;
 
-function extractFileSet(treeData) {
-    var files = {};
-    function walk(nodes) {
+function extractFileSet(treeData: any) {
+    var files: Record<string, string> = {};
+    function walk(nodes: any) {
         if (!nodes) return;
         for (var i = 0; i < nodes.length; i++) {
             var n = nodes[i];
@@ -679,27 +682,27 @@ function extractFileSet(treeData) {
     return files;
 }
 
-function _findFirstFolderWithFiles(nodes) {
+function _findFirstFolderWithFiles(nodes: any): any {
     if (!nodes) return null;
     for (var i = 0; i < nodes.length; i++) {
         var node = nodes[i];
         if (node.type === 'folder') {
-            var hasFileChild = node.children && node.children.some(function(child) {
+            var hasFileChild = node.children && node.children.some(function(child: any) {
                 return child.type === 'file' && child.name && child.name.toLowerCase().endsWith('.md');
             });
             if (hasFileChild) return node;
-            var found = _findFirstFolderWithFiles(node.children);
+            var found: any = _findFirstFolderWithFiles(node.children);
             if (found) return found;
         }
     }
     return null;
 }
 
-var _lastFileSet = null;
+var _lastFileSet: any = null;
 var FILE_TREE_LOAD_TIMEOUT_MS = 15000;
-var _loadFileTreeInFlight = null;
+var _loadFileTreeInFlight: any = null;
 
-function _describeTreeLoadError(error) {
+function _describeTreeLoadError(error: any) {
     if (!error) return window.t('common.unknownError');
     if (typeof error === 'string') return error;
     if (error.message) return error.message;
@@ -710,7 +713,7 @@ function _describeTreeLoadError(error) {
     }
 }
 
-async function loadFileTree(force) {
+async function loadFileTree(force?: any) {
     if (_loadFileTreeInFlight) {
         return _loadFileTreeInFlight;
     }
@@ -722,7 +725,7 @@ async function loadFileTree(force) {
     }
 }
 
-async function _loadFileTreeOnce(force) {
+async function _loadFileTreeOnce(force: any) {
     var container = document.getElementById('file-tree');
     if (!container) return;
 
@@ -769,7 +772,7 @@ async function _loadFileTreeOnce(force) {
         console.warn('[Tree] updateSidebarStats failed:', _describeTreeLoadError(e), e);
     }
     try {
-        if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+        if (typeof window.refreshPendingBtnState === 'function') window.refreshPendingBtnState();
     } catch (e) {
         console.warn('[Tree] refreshPendingBtnState failed:', _describeTreeLoadError(e), e);
     }
@@ -777,7 +780,7 @@ async function _loadFileTreeOnce(force) {
         if (window.NoteListModule) {
             var currentTopic = window.NoteListModule.getCurrentTopic && window.NoteListModule.getCurrentTopic();
             if (currentTopic) {
-                window.NoteListModule.refresh();
+                window.NoteListModule.refresh!();
             } else {
                 var defaultFolder = _findFirstFolderWithFiles(treeData);
                 if (!defaultFolder && _flatVisibleNodes && _flatVisibleNodes.length) {
@@ -786,7 +789,7 @@ async function _loadFileTreeOnce(force) {
                 if (defaultFolder) {
                     var item = container.querySelector('.tree-item[data-path="' + defaultFolder.path.replace(/"/g, '&quot;') + '"]');
                     if (item) setActiveTreeItem(item);
-                    window.NoteListModule.showTopicNotes(defaultFolder.path, defaultFolder.name);
+                    window.NoteListModule.showTopicNotes!(defaultFolder.path, defaultFolder.name);
                 } else if (window.NoteListModule.showAllNotes) {
                     window.NoteListModule.showAllNotes();
                 }
@@ -797,7 +800,7 @@ async function _loadFileTreeOnce(force) {
     }
 }
 
-function selectFile(path, fileName) {
+function selectFile(path: any, fileName: any) {
     if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
     setSelectedFile(path, fileName);
 
@@ -848,7 +851,7 @@ function selectFile(path, fileName) {
     }
 
     var selectGraphPanel = document.getElementById('graph-panel');
-    if (selectGraphPanel && selectGraphPanel.style.display !== 'none') {
+    if (graphPanel && graphPanel.style.display !== 'none') {
         graphPanel.style.display = 'none';
         var graphBtn = document.getElementById('titlebar-graph-btn');
         if (graphBtn) graphBtn.classList.remove('active');
@@ -916,7 +919,7 @@ window.switchGraphMode = function(mode) {
         if (window.Graph3Tier && window.Graph3Tier.resumeResize) window.Graph3Tier.resumeResize();
         // 恢复笔记图 stats/legend 显示
         var statsSuffixes = document.querySelectorAll('.graph-stats-bar [data-i18n]');
-        statsSuffixes.forEach(function(el) { el.style.display = ''; });
+        statsSuffixes.forEach(function(el) { (el as HTMLElement).style.display = ''; });
         var legend = document.getElementById('graph-legend');
         if (legend) legend.style.display = '';
         if (window.Graph3Tier && window.Graph3Tier.load) {

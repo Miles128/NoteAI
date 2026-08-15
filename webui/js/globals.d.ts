@@ -324,8 +324,55 @@ declare global {
         toggleAIPanel(): void;
         closeSettingsPanel(): void;
         saveApiConfig(config?: Partial<ApiConfig>): void;
-        EditorModule: { updateEditorTheme?(): void } | undefined;
+        EditorModule: {
+            updateEditorTheme?(): void;
+            renderMarkdownPreview?(content: string): string;
+            destroyCodeMirrorEditor?(): void;
+            isActive?: boolean;
+            exitEditMode?(): void;
+        } | undefined;
         Graph3Tier: { pauseResize?(): void; resumeResize?(): void } | undefined;
         SettingsModule: { saveFontSize?(size: string): void } | undefined;
+        Icons: { get(name: string, size?: number): string } | undefined;
+        _deactivatePendingBtn?: (() => void) | undefined;
+        updateHomeStats?: (() => void) | undefined;
+        _pdfKeyHandler: ((e: KeyboardEvent) => void) | null;
+        switchSidebarView(view: string): void;
+        showTagsView(): void;
+        closePreview(): void;
+        backToContent(): void;
+        showPreview(options: { path: string; name?: string }): void;
+        mdEditor: { isActive?: boolean } | undefined;
+        TiptapEditorModule: {
+            hideEditorUI?(): Promise<any> | void;
+            openMarkdownInEditor?(content: string, path: string): Promise<boolean>;
+        } | undefined;
+        TiptapEditor: {
+            whenModulesReady?(timeoutMs?: number): Promise<boolean>;
+            isActive?: boolean;
+        } | undefined;
+        SemanticWorkbenchModule: {
+            deactivate?(): void;
+            show?(view: string): void;
+        } | undefined;
+        PreviewModule: PreviewModule;
     }
+
+    interface PreviewModule {
+        readonly currentPreviewData: any;
+        readonly isPreviewActive: boolean;
+        showContentView(): void;
+        showPreviewView(): void;
+        loadFilePreview(path: string, fileName: string): Promise<void>;
+        renderPreviewContent(previewData: any): void;
+        showPreviewError(title: string, message: string): void;
+        closePreview(): void;
+        backToContent(): void;
+        updateTitlebarFileName(fileName: string, isMarkdown: boolean): void;
+        showEditButton(show: boolean): void;
+    }
+
+    declare var pdfjsLib: any;
+    declare var hljs: any;
+    declare var DOMPurify: any;
 }

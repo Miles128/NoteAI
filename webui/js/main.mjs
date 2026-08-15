@@ -96,7 +96,7 @@ async function loadModules() {
     window.TiptapEditorModule = TiptapEditorModule;
     window.TiptapEditor = TiptapEditor;
 
-    await import('./preview.js');
+    await import('./preview.ts');
     const { PreviewModule, closePreview, closePreviewPanel, backToContent } = window;
     window.PreviewModule = PreviewModule;
     window.closePreview = closePreview;

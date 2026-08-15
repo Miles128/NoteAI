@@ -1,9 +1,14 @@
 (function() { 'use strict';
 
-let currentPreviewData = null;
+var escapeHtml = window.escapeHtml;
+var escapeAttr = window.escapeAttr;
+var formatFileSize = window.formatFileSize;
+var formatModifiedTime = window.formatModifiedTime;
+
+let currentPreviewData: any = null;
 let isPreviewActive = false;
 let currentLoadRequestId = 0;
-var pdfViewerState = null;
+var pdfViewerState: { pdfDoc: any; pageNum: number; pageCount: number; scale: number } | null = null;
 
 function generateLoadRequestId() {
     currentLoadRequestId += 1;
@@ -57,7 +62,7 @@ function showPreviewView() {
     if (typeof window._deactivatePendingBtn === 'function') window._deactivatePendingBtn();
 }
 
-function updateTitlebarFileName(fileName, isMarkdown) {
+function updateTitlebarFileName(fileName: string, isMarkdown: boolean) {
     const titlebarFileName = document.getElementById('titlebar-file-name');
     const titlebarCloseBtn = document.getElementById('titlebar-close-preview-btn');
     
@@ -76,7 +81,7 @@ function updateTitlebarFileName(fileName, isMarkdown) {
     }
 }
 
-function showEditButton(show) {
+function showEditButton(show: boolean) {
     const splitBtn = document.getElementById('titlebar-split-btn');
     if (splitBtn) {
         splitBtn.style.display = show ? 'flex' : 'none';
@@ -87,14 +92,14 @@ function showEditButton(show) {
 // P5：语义页可信度元信息条
 // 识别 wiki 语义页（frontmatter semantic_page: true 或 wiki/semantic/*_语义.md），
 // 异步拉取 topic_meta 后在正文上方注入元信息条；不阻塞正文渲染。
-// 所有动态文本一律经 window.escapeHtml 转义（XSS 加固要求）。
+// 所有动态文本一律经 escapeHtml 转义（XSS 加固要求）。
 // ============================================================================
 
-function parseMarkdownFrontmatter(content) {
+function parseMarkdownFrontmatter(content: string): Record<string, string> | null {
     if (typeof content !== 'string') return null;
     var m = content.slice(0, 2000).match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---/);
     if (!m) return null;
-    var fm = {};
+    var fm: Record<string, string> = {};
     m[1].split(/\r?\n/).forEach(function(line) {
         var kv = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
         if (kv) fm[kv[1]] = kv[2].trim();
@@ -102,7 +107,7 @@ function parseMarkdownFrontmatter(content) {
     return fm;
 }
 
-function isSemanticWikiPath(path) {
+function isSemanticWikiPath(path: string): boolean {
     if (!path) return false;
     return /(^|[/\\])wiki[/\\]semantic[/\\][^/\\]*_语义\.md$/i.test(String(path));
 }
@@ -113,7 +118,7 @@ function removeSemanticMetaBar() {
     });
 }
 
-function formatRelativeTime(value) {
+function formatRelativeTime(value: number | string): string {
     var d = new Date(typeof value === 'number' ? value * 1000 : value);
     if (isNaN(d.getTime())) return '';
     var diff = Date.now() - d.getTime();
@@ -122,10 +127,10 @@ function formatRelativeTime(value) {
     if (diff < 3600000) return window.t('preview.minutesAgo', { count: Math.floor(diff / 60000) });
     if (diff < 86400000) return window.t('preview.hoursAgo', { count: Math.floor(diff / 3600000) });
     if (diff < 604800000) return window.t('preview.daysAgo', { count: Math.floor(diff / 86400000) });
-    return window.formatModifiedTime(d.getTime() / 1000);
+    return formatModifiedTime(d.getTime() / 1000);
 }
 
-function buildSemanticMetaBarHtml(meta) {
+function buildSemanticMetaBarHtml(meta: any): string {
     var sourceCount = Number(meta.source_count) || 0;
     var parts = [escapeHtml(window.t('preview.semanticSources', { count: sourceCount }))];
     var compiledLabel = meta.compiled_at ? formatRelativeTime(meta.compiled_at) : '';
@@ -149,7 +154,7 @@ function buildSemanticMetaBarHtml(meta) {
     return html;
 }
 
-function insertSemanticMetaBar(html) {
+function insertSemanticMetaBar(html: string) {
     var wrapper = document.querySelector('#preview-panel .preview-content-wrapper');
     if (!wrapper) return;
     var bar = document.createElement('div');
@@ -167,7 +172,7 @@ function insertSemanticMetaBar(html) {
     wrapper.insertBefore(bar, wrapper.firstChild);
 }
 
-function maybeLoadSemanticPageMeta(path, content, requestId) {
+function maybeLoadSemanticPageMeta(path: string, content: string, requestId: number) {
     removeSemanticMetaBar();
     if (!isPreviewActive || requestId !== currentLoadRequestId) return;
     var fm = parseMarkdownFrontmatter(content);
@@ -186,7 +191,7 @@ function maybeLoadSemanticPageMeta(path, content, requestId) {
     });
 }
 
-async function loadFilePreview(path, fileName) {
+async function loadFilePreview(path: string, fileName: string): Promise<void> {
     const requestId = generateLoadRequestId();
     
     const previewPanel = document.getElementById('preview-panel');
@@ -332,12 +337,12 @@ async function loadFilePreview(path, fileName) {
     } catch (e) {
         console.error('[Preview] Load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPreviewError(window.t('preview.loadFailed'), e.message);
+            showPreviewError(window.t('preview.loadFailed'), (e as Error).message);
         }
     }
 }
 
-async function loadPdfViewer(path, fileName, requestId) {
+async function loadPdfViewer(path: string, fileName: string, requestId: number): Promise<void> {
     var previewContent = document.getElementById('preview-content');
     if (!previewContent) return;
 
@@ -349,11 +354,11 @@ async function loadPdfViewer(path, fileName, requestId) {
                 </div>
                 <div class="pdf-toolbar-center">
                     <button class="pdf-nav-btn" id="pdf-prev-btn" title="${window.t('preview.prevPage')}">
-                        ${window.Icons.get('chevronLeft', 16)}
+                        ${window.Icons && window.Icons.get('chevronLeft', 16)}
                     </button>
                     <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
                     <button class="pdf-nav-btn" id="pdf-next-btn" title="${window.t('preview.nextPage')}">
-                        ${window.Icons.get('chevronRight', 16)}
+                        ${window.Icons && window.Icons.get('chevronRight', 16)}
                     </button>
                 </div>
                 <div class="pdf-toolbar-right">
@@ -415,38 +420,41 @@ async function loadPdfViewer(path, fileName, requestId) {
             scale: 1.0
         };
 
-        document.getElementById('pdf-page-count').textContent = pdfDoc.numPages;
-        document.getElementById('pdf-page-num').textContent = '1';
-        document.getElementById('pdf-zoom-level').textContent = '100%';
+        document.getElementById('pdf-page-count')!.textContent = String(pdfDoc.numPages);
+        document.getElementById('pdf-page-num')!.textContent = '1';
+        document.getElementById('pdf-zoom-level')!.textContent = '100%';
 
         renderPdfPage(pdfViewerState.pageNum);
 
-        document.getElementById('pdf-prev-btn').addEventListener('click', function() {
-            if (pdfViewerState.pageNum <= 1) return;
+        document.getElementById('pdf-prev-btn')!.addEventListener('click', function() {
+            if (!pdfViewerState || pdfViewerState.pageNum <= 1) return;
             pdfViewerState.pageNum--;
             renderPdfPage(pdfViewerState.pageNum);
         });
 
-        document.getElementById('pdf-next-btn').addEventListener('click', function() {
-            if (pdfViewerState.pageNum >= pdfViewerState.pageCount) return;
+        document.getElementById('pdf-next-btn')!.addEventListener('click', function() {
+            if (!pdfViewerState || pdfViewerState.pageNum >= pdfViewerState.pageCount) return;
             pdfViewerState.pageNum++;
             renderPdfPage(pdfViewerState.pageNum);
         });
 
-        document.getElementById('pdf-zoom-in-btn').addEventListener('click', function() {
+        document.getElementById('pdf-zoom-in-btn')!.addEventListener('click', function() {
+            if (!pdfViewerState) return;
             pdfViewerState.scale = Math.min(pdfViewerState.scale + 0.25, 3.0);
-            document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+            document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
             renderPdfPage(pdfViewerState.pageNum);
         });
 
-        document.getElementById('pdf-zoom-out-btn').addEventListener('click', function() {
+        document.getElementById('pdf-zoom-out-btn')!.addEventListener('click', function() {
+            if (!pdfViewerState) return;
             pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.25, 0.5);
-            document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+            document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
             renderPdfPage(pdfViewerState.pageNum);
         });
 
-        var canvasWrapper = document.getElementById('pdf-canvas-wrapper');
+        var canvasWrapper = document.getElementById('pdf-canvas-wrapper')!;
         canvasWrapper.addEventListener('wheel', function(e) {
+            if (!pdfViewerState) return;
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 if (e.deltaY < 0) {
@@ -454,7 +462,7 @@ async function loadPdfViewer(path, fileName, requestId) {
                 } else {
                     pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.1, 0.5);
                 }
-                document.getElementById('pdf-zoom-level').textContent = Math.round(pdfViewerState.scale * 100) + '%';
+                document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
                 renderPdfPage(pdfViewerState.pageNum);
             }
         }, { passive: false });
@@ -463,9 +471,9 @@ async function loadPdfViewer(path, fileName, requestId) {
             document.removeEventListener('keydown', window._pdfKeyHandler);
             window._pdfKeyHandler = null;
         }
-        window._pdfKeyHandler = function pdfKeyHandler(e) {
+        window._pdfKeyHandler = function pdfKeyHandler(e: KeyboardEvent) {
             if (!pdfViewerState) {
-                document.removeEventListener('keydown', window._pdfKeyHandler);
+                document.removeEventListener('keydown', window._pdfKeyHandler as EventListener);
                 window._pdfKeyHandler = null;
                 return;
             }
@@ -486,18 +494,18 @@ async function loadPdfViewer(path, fileName, requestId) {
     } catch (e) {
         console.error('[Preview] PDF load error:', e);
         if (requestId === currentLoadRequestId) {
-            showPdfError(window.t('preview.pdfLoadFailed'), e.message || window.t('common.unknownError'));
+            showPdfError(window.t('preview.pdfLoadFailed'), (e as Error).message || window.t('common.unknownError'));
         }
     }
 }
 
-async function renderPdfPage(pageNum) {
+async function renderPdfPage(pageNum: number): Promise<void> {
     if (!pdfViewerState || !pdfViewerState.pdfDoc) return;
 
-    var canvas = document.getElementById('pdf-render-canvas');
+    var canvas = document.getElementById('pdf-render-canvas') as HTMLCanvasElement | null;
     if (!canvas) return;
 
-    document.getElementById('pdf-page-num').textContent = pageNum;
+    document.getElementById('pdf-page-num')!.textContent = String(pageNum);
 
     try {
         var page = await pdfViewerState.pdfDoc.getPage(pageNum);
@@ -521,7 +529,7 @@ async function renderPdfPage(pageNum) {
     }
 }
 
-function showPdfError(title, message) {
+function showPdfError(title: string, message: string) {
     var previewContent = document.getElementById('preview-content');
     if (!previewContent) return;
     previewContent.style.display = '';
@@ -529,7 +537,7 @@ function showPdfError(title, message) {
     showPreviewError(title, message);
 }
 
-function renderPreviewContent(previewData) {
+function renderPreviewContent(previewData: any) {
     const previewContent = document.getElementById('preview-content');
     if (!previewContent) return;
 
@@ -593,7 +601,7 @@ function renderPreviewContent(previewData) {
     }
 }
 
-function renderDocxPreviewHtml(content, contentKind) {
+function renderDocxPreviewHtml(content: string, contentKind: string): string {
     const body = content || '';
     if (!body.trim()) {
         return '<div class="preview-content docx-preview"><p class="docx-preview-empty">' + window.t('preview.docxEmpty') + '</p></div>';
@@ -610,13 +618,13 @@ function renderDocxPreviewHtml(content, contentKind) {
     return `<div class="preview-content docx-preview"><pre>${escapeHtml(body)}</pre></div>`;
 }
 
-function showPreviewError(title, message) {
+function showPreviewError(title: string, message: string) {
     const previewContent = document.getElementById('preview-content');
     if (!previewContent) return;
 
     previewContent.innerHTML = `
         <div class="preview-error">
-            ${window.Icons.get('close', 48)}
+            ${window.Icons && window.Icons.get('close', 48)}
             <div class="preview-error-title">${escapeHtml(title)}</div>
             <div class="preview-error-message">${escapeHtml(message)}</div>
         </div>
@@ -665,7 +673,7 @@ function closePreview() {
     if (previewContent) {
         previewContent.innerHTML = `
             <div class="preview-empty">
-                ${window.Icons.get('fileDoc', 48)}
+                ${window.Icons && window.Icons.get('fileDoc', 48)}
                 <div>${window.t('preview.selectFile')}</div>
             </div>
         `;
@@ -685,7 +693,7 @@ function closePreviewPanel() {
 }
 
 function backToContent() {
-    if (window.EditorModule && window.EditorModule.isActive) {
+    if (window.EditorModule && window.EditorModule.isActive && window.EditorModule.exitEditMode) {
         window.EditorModule.exitEditMode();
     }
     showContentView();
@@ -711,7 +719,7 @@ window.closePreview = closePreview;
 window.closePreviewPanel = closePreviewPanel;
 window.backToContent = backToContent;
 
-window.showPreview = function(options) {
+window.showPreview = function(options: { path: string; name?: string }) {
     if (!options || !options.path) {
         console.error('[showPreview] Missing path parameter');
         return;

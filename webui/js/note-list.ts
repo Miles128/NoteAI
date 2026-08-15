@@ -7,19 +7,19 @@
 (function() {
     'use strict';
 
-    var _currentTopicPath = null;
+    var _currentTopicPath: any = null;
     var _currentTopicName = '';
-    var _currentNotes = [];
-    var _activeFilePath = null;
+    var _currentNotes: any[] = [];
+    var _activeFilePath: any = null;
 
     const _escapeHtml = window.escapeHtml;
 
-    function _formatDate(ts) {
+    function _formatDate(ts: any) {
         if (!ts) return '';
         var d = new Date(ts);
         if (isNaN(d.getTime())) return '';
         var now = new Date();
-        var diff = now - d;
+        var diff = (now as any) - (d as any);
         if (diff < 60000) return '刚刚';
         if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
         if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
@@ -32,8 +32,8 @@
     /**
      * 从树节点中提取直接子文件（不递归子文件夹）
      */
-    function _extractFilesFromNode(node, topicPath) {
-        var files = [];
+    function _extractFilesFromNode(node: any, topicPath: any) {
+        var files: any[] = [];
         if (!node) return files;
 
         if (node.children && node.children.length > 0) {
@@ -56,8 +56,8 @@
     /**
      * 从整棵树提取所有文件（递归），保留所属主题名
      */
-    function _extractAllFiles(nodes, parentTopic) {
-        var files = [];
+    function _extractAllFiles(nodes: any, parentTopic: any): any[] {
+        var files: any[] = [];
         if (!nodes) return files;
         for (var i = 0; i < nodes.length; i++) {
             var node = nodes[i];
@@ -82,19 +82,19 @@
     /**
      * 从 AppState.lastFileTreeData 中找到指定路径的节点
      */
-    function _findNodeByPath(nodes, path) {
+    function _findNodeByPath(nodes: any, path: any): any {
         if (!nodes || !path) return null;
         for (var i = 0; i < nodes.length; i++) {
             if (nodes[i].path === path) return nodes[i];
             if (nodes[i].children && nodes[i].children.length > 0) {
-                var found = _findNodeByPath(nodes[i].children, path);
+                var found: any = _findNodeByPath(nodes[i].children, path);
                 if (found) return found;
             }
         }
         return null;
     }
 
-    function _pathToTopic(folderPath) {
+    function _pathToTopic(folderPath: any) {
         if (!folderPath) return '';
         var norm = String(folderPath).replace(/\\/g, '/');
         if (norm.indexOf('Notes/') !== 0) return '';
@@ -106,7 +106,7 @@
     /**
      * 当点击树中的文件夹时调用
      */
-    function showTopicNotes(folderPath, folderName) {
+    function showTopicNotes(folderPath: any, folderName: any) {
         _currentTopicPath = folderPath;
         _currentTopicName = folderName || '';
 
@@ -206,10 +206,10 @@
         body.innerHTML = html;
 
         var items = body.querySelectorAll('.note-list-item');
-        items.forEach(function(item) {
+        items.forEach(function(item: any) {
             item.addEventListener('click', function() {
-                var path = this.getAttribute('data-path');
-                var name = this.getAttribute('data-name');
+                var path = item.getAttribute('data-path');
+                var name = item.getAttribute('data-name');
                 if (path && window.TreeModule && window.TreeModule.selectFile) {
                     window.TreeModule.selectFile(path, name);
                 }
@@ -217,7 +217,7 @@
         });
     }
 
-    function setActiveFile(filePath) {
+    function setActiveFile(filePath: any) {
         _activeFilePath = filePath;
         var items = document.querySelectorAll('.note-list-item');
         items.forEach(function(item) {
@@ -278,8 +278,8 @@
     }
 
     function _initResizer() {
-        var resizer = document.getElementById('note-list-resizer');
-        var panel = document.getElementById('note-list-panel');
+        const resizer = document.getElementById('note-list-resizer');
+        const panel = document.getElementById('note-list-panel');
         if (!resizer || !panel) return;
 
         var isResizing = false;

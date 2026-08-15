@@ -1,19 +1,19 @@
 (function() { 'use strict';
 
-var _lastPending = null;
-var _refreshTimer = null;
-var _weeklyBriefTimer = null;
+var _lastPending: any = null;
+var _refreshTimer: any = null;
+var _weeklyBriefTimer: any = null;
 
-function esc(text) {
+function esc(text: any) {
     return window.escapeHtml ? window.escapeHtml(String(text || '')) : String(text || '');
 }
 
-function setText(id, text) {
+function setText(id: any, text: any) {
     var el = document.getElementById(id);
     if (el) el.textContent = text;
 }
 
-function setFlow(stage, state, text) {
+function setFlow(stage: any, state: any, text: any) {
     var node = document.querySelector('[data-home-stage="' + stage + '"]');
     var label = document.getElementById('home-flow-' + stage);
     if (node) {
@@ -23,52 +23,52 @@ function setFlow(stage, state, text) {
     if (label) label.textContent = text;
 }
 
-function hasRunningJob(jobs, predicate) {
-    return (jobs || []).some(function(job) {
+function hasRunningJob(jobs: any, predicate: any) {
+    return (jobs || []).some(function(job: any) {
         return job.status === 'running' && predicate(job);
     });
 }
 
-function hasFailedJob(jobs, predicate) {
-    return (jobs || []).some(function(job) {
+function hasFailedJob(jobs: any, predicate: any) {
+    return (jobs || []).some(function(job: any) {
         return job.status === 'failed' && predicate(job);
     });
 }
 
-function countFiles(nodes) {
+function countFiles(nodes: any) {
     var count = 0;
-    (nodes || []).forEach(function(node) {
+    (nodes || []).forEach(function(node: any) {
         if (node.type === 'file' && node.name && node.name.toLowerCase().endsWith('.md')) count++;
         if (node.children) count += countFiles(node.children);
     });
     return count;
 }
 
-function countTopics(nodes) {
+function countTopics(nodes: any) {
     var count = 0;
-    (nodes || []).forEach(function(node) {
+    (nodes || []).forEach(function(node: any) {
         if (node.type === 'folder' && node.path && node.path.indexOf('Notes/') === 0) count++;
         if (node.children) count += countTopics(node.children);
     });
     return count;
 }
 
-function summarizePending(result) {
+function summarizePending(result: any) {
     var items = (result && Array.isArray(result.items)) ? result.items : [];
     var cascade = (result && Array.isArray(result.cascade_failures)) ? result.cascade_failures : [];
     var convert = (result && Array.isArray(result.convert_failures)) ? result.convert_failures : [];
     var lintTotal = result && result.lint && result.lint.summary ? (result.lint.summary.total || 0) : 0;
     return {
         count: items.length + cascade.length + convert.length + lintTotal,
-        topics: items.filter(function(x) { return x.kind === 'topic' || x.type === 'topic'; }).length,
-        links: items.filter(function(x) { return x.kind === 'link' || x.type === 'link'; }).length,
+        topics: items.filter(function(x: any) { return x.kind === 'topic' || x.type === 'topic'; }).length,
+        links: items.filter(function(x: any) { return x.kind === 'link' || x.type === 'link'; }).length,
         cascade: cascade.length,
         convert: convert.length,
         lint: lintTotal
     };
 }
 
-function renderPending(summary) {
+function renderPending(summary: any) {
     var el = document.getElementById('home-pending-body');
     if (!el) return;
     if (!summary || summary.count < 1) {
@@ -81,16 +81,16 @@ function renderPending(summary) {
     if (summary.cascade) rows.push([window.t('pending.typeCascade'), summary.cascade]);
     if (summary.convert) rows.push([window.t('pending.typeConvert'), summary.convert]);
     if (summary.lint) rows.push([window.t('pending.typeLint'), summary.lint]);
-    el.innerHTML = rows.map(function(row) {
+    el.innerHTML = rows.map(function(row: any) {
         return '<div class="home-status-row"><span>' + esc(row[0]) + '</span><strong>' + row[1] + '</strong></div>';
     }).join('');
 }
 
-function jobLabel(job) {
+function jobLabel(job: any) {
     return job.label || job.id || window.t('home.jobUnknown');
 }
 
-function statusLabel(status) {
+function statusLabel(status: any) {
     if (status === 'running') return window.t('home.statusRunning');
     if (status === 'complete') return window.t('home.statusComplete');
     if (status === 'failed') return window.t('home.statusFailed');
@@ -98,14 +98,14 @@ function statusLabel(status) {
     return status || '-';
 }
 
-function renderJobs(targetId, jobs, emptyText) {
+function renderJobs(targetId: any, jobs: any, emptyText: any) {
     var el = document.getElementById(targetId);
     if (!el) return;
     if (!jobs || !jobs.length) {
         el.innerHTML = '<div class="home-empty">' + esc(emptyText) + '</div>';
         return;
     }
-    el.innerHTML = jobs.slice(0, 4).map(function(job) {
+    el.innerHTML = jobs.slice(0, 4).map(function(job: any) {
         var progress = Math.round((job.progress || 0) * 100);
         var cls = 'home-job-status is-' + esc(job.status || 'idle');
         return '<div class="home-job-row">' +
@@ -119,8 +119,8 @@ function renderJobs(targetId, jobs, emptyText) {
     }).join('');
 }
 
-function renderOrganize(status, jobs) {
-    var running = (jobs || []).filter(function(job) {
+function renderOrganize(status: any, jobs: any) {
+    var running = (jobs || []).filter(function(job: any) {
         return job.status === 'running' && (job.kind === 'ingest' || job.kind === 'conversion');
     });
     var body = document.getElementById('home-organize-body');
@@ -141,22 +141,22 @@ function renderOrganize(status, jobs) {
         esc((status && status.status) ? statusLabel(status.status) : window.t('home.flow.ready')) + '</strong></div>';
 }
 
-function renderCompile(jobs) {
-    var compileJobs = (jobs || []).filter(function(job) {
+function renderCompile(jobs: any) {
+    var compileJobs = (jobs || []).filter(function(job: any) {
         return job.kind === 'survey' || job.kind === 'rag_index' ||
             job.id === 'ingest_cascade_surveys' || job.id === 'rag-index-progress';
     });
     renderJobs('home-compile-body', compileJobs, window.t('home.compileIdle'));
 }
 
-function renderFlow(summary, ingestStatus, jobs, indexStatus) {
-    var ingestRunning = hasRunningJob(jobs, function(job) { return job.kind === 'ingest'; }) || (ingestStatus && ingestStatus.running);
-    var conversionRunning = hasRunningJob(jobs, function(job) { return job.kind === 'conversion'; });
-    var surveyRunning = hasRunningJob(jobs, function(job) { return job.kind === 'survey' || job.id === 'ingest_cascade_surveys'; });
-    var indexRunning = hasRunningJob(jobs, function(job) { return job.kind === 'rag_index' || job.id === 'rag-index-progress'; });
-    var ingestFailed = hasFailedJob(jobs, function(job) { return job.kind === 'ingest' || job.kind === 'conversion'; });
-    var surveyFailed = hasFailedJob(jobs, function(job) { return job.kind === 'survey' || job.id === 'ingest_cascade_surveys'; }) || summary.cascade > 0;
-    var indexFailed = hasFailedJob(jobs, function(job) { return job.kind === 'rag_index' || job.id === 'rag-index-progress'; });
+function renderFlow(summary: any, ingestStatus: any, jobs: any, indexStatus: any) {
+    var ingestRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'ingest'; }) || (ingestStatus && ingestStatus.running);
+    var conversionRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'conversion'; });
+    var surveyRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'survey' || job.id === 'ingest_cascade_surveys'; });
+    var indexRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'rag_index' || job.id === 'rag-index-progress'; });
+    var ingestFailed = hasFailedJob(jobs, function(job: any) { return job.kind === 'ingest' || job.kind === 'conversion'; });
+    var surveyFailed = hasFailedJob(jobs, function(job: any) { return job.kind === 'survey' || job.id === 'ingest_cascade_surveys'; }) || summary.cascade > 0;
+    var indexFailed = hasFailedJob(jobs, function(job: any) { return job.kind === 'rag_index' || job.id === 'rag-index-progress'; });
 
     setFlow('ingest', ingestFailed ? 'failed' : (ingestRunning || conversionRunning ? 'running' : 'ok'),
         ingestFailed ? window.t('home.flow.failed') : (ingestRunning || conversionRunning ? window.t('home.flow.running') : window.t('home.flow.ready')));
@@ -169,18 +169,18 @@ function renderFlow(summary, ingestStatus, jobs, indexStatus) {
         indexFailed ? window.t('home.flow.failed') : (indexRunning ? window.t('home.flow.running') : (indexNeedsRepair ? window.t('home.flow.needsRebuild') : window.t('home.flow.ready'))));
 }
 
-function setCommand(command) {
+function setCommand(command: any) {
     var cmd = command || {};
     setText('home-command-title', window.t(cmd.titleKey || 'home.commandTitle'));
     setText('home-command-desc', window.t(cmd.descKey || 'home.commandDesc', cmd.params || {}));
-    var btn = document.getElementById('home-command-action-btn');
+    var btn = document.getElementById('home-command-action-btn') as HTMLButtonElement | null;
     if (!btn) return;
     btn.dataset.homeAction = cmd.action || 'refresh';
     btn.textContent = window.t(cmd.actionTextKey || 'home.actionRefresh');
     btn.disabled = cmd.action === 'running';
 }
 
-function command(titleKey, descKey, params, action, actionTextKey) {
+function command(titleKey: any, descKey: any, params?: any, action?: any, actionTextKey?: any) {
     return {
         titleKey: titleKey,
         descKey: descKey,
@@ -190,8 +190,8 @@ function command(titleKey, descKey, params, action, actionTextKey) {
     };
 }
 
-function deriveRecommendation(summary, ingestStatus, jobs, updatePlan, indexStatus) {
-    var running = (jobs || []).filter(function(job) { return job.status === 'running'; });
+function deriveRecommendation(summary: any, ingestStatus: any, jobs: any, updatePlan: any, indexStatus: any) {
+    var running = (jobs || []).filter(function(job: any) { return job.status === 'running'; });
     if (running.length) {
         return command('home.commandTitleRunning', 'home.commandDescRunning', { count: running.length }, 'running', 'home.actionRunning');
     }
@@ -237,14 +237,14 @@ function runRecommendedAction() {
     refresh();
 }
 
-function renderActivityItems(result) {
+function renderActivityItems(result: any) {
     var body = document.getElementById('home-activity-body');
     if (!body) return;
     if (!result || !result.success || !result.items || !result.items.length) {
         body.innerHTML = '<div class="home-empty">' + esc(window.t('home.activityEmpty')) + '</div>';
         return;
     }
-    var rows = result.items.slice(0, 5).map(function(item) {
+    var rows = result.items.slice(0, 5).map(function(item: any) {
         var label = esc(item.label || item.object_id || '');
         var source = item.source_path ? '<span class="home-activity-source">' + esc(item.source_path) + '</span>' : '';
         var kindKey = item.change_kind === 'added' ? 'home.activity.gained' :
@@ -269,11 +269,11 @@ function loadActivity() {
     }).catch(function() {});
 }
 
-function renderDashboardStatus(status) {
+function renderDashboardStatus(status: any) {
     var summary = status.pending_summary || summarizePending(status.pending || {});
     var jobs = status.jobs || [];
     var ingestStatus = status.ingest || {};
-    var running = jobs.filter(function(job) { return job.status === 'running'; });
+    var running = jobs.filter(function(job: any) { return job.status === 'running'; });
     var stats = status.stats || {};
     _lastPending = status.pending || _lastPending || {};
     if (window.JobCenterModule && window.JobCenterModule.replaceJobs) {
@@ -285,10 +285,10 @@ function renderDashboardStatus(status) {
     setText('home-stat-pending', summary.count || 0);
     setText('home-stat-running', running.length);
     setText('home-vital-pending', summary.count || 0);
-    setText('home-vital-organize', running.some(function(job) { return job.kind === 'ingest' || job.kind === 'conversion'; })
+    setText('home-vital-organize', running.some(function(job: any) { return job.kind === 'ingest' || job.kind === 'conversion'; })
         ? window.t('home.statusRunning')
         : window.t('home.statusComplete'));
-    setText('home-vital-compile', running.some(function(job) { return job.kind === 'survey' || job.kind === 'rag_index'; })
+    setText('home-vital-compile', running.some(function(job: any) { return job.kind === 'survey' || job.kind === 'rag_index'; })
         ? window.t('home.statusRunning')
         : window.t('home.statusComplete'));
     setCommand(deriveRecommendation(summary, ingestStatus, jobs, status.update_plan, status.index));
@@ -307,7 +307,7 @@ function refreshFallback() {
     var pendingP = (window.api && window.api.getAllPending) ? window.api.getAllPending() : Promise.resolve(_lastPending || {});
     var ingestP = (window.api && window.api.getIngestStatus) ? window.api.getIngestStatus() : Promise.resolve({});
     var jobsP = window.JobCenterModule && window.JobCenterModule.refresh
-        ? window.JobCenterModule.refresh({ include_finished: true, limit: 50 })
+        ? (window.JobCenterModule.refresh as any)({ include_finished: true, limit: 50 })
         : Promise.resolve([]);
     var updatePlanP = (window.api && window.api.checkIngestUpdates)
         ? window.api.checkIngestUpdates().catch(function() { return null; })
@@ -329,7 +329,7 @@ function refreshFallback() {
     });
 }
 
-var _refreshPromise = null;
+var _refreshPromise: any = null;
 
 function _refreshOnce() {
     if (!window.api || !window.api.getDashboardStatus) {
@@ -355,7 +355,7 @@ function refresh() {
 }
 
 async function checkUpdates() {
-    var startBtn = document.getElementById('home-start-ingest-btn');
+    var startBtn = document.getElementById('home-start-ingest-btn') as HTMLButtonElement | null;
     if (startBtn) {
         startBtn.disabled = true;
         startBtn.textContent = window.t('home.checkingUpdates');
@@ -366,7 +366,7 @@ async function checkUpdates() {
             ? await window.api.checkIngestUpdates()
             : { success: true, action: 'start', mode: 'incremental', file_paths: [] };
         if (!plan || !plan.success) {
-            setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: (plan && plan.message) || window.t('common.unknownError') }));
+            setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: (plan && (plan as any).message) || window.t('common.unknownError') }));
             return plan;
         }
         if (plan.action !== 'start') {
@@ -376,7 +376,7 @@ async function checkUpdates() {
         }
         setCommand(command('home.commandTitleUpdateFound', 'home.commandDescUpdateFound', {}, 'running', 'home.actionRunning'));
         if (window.IngestModule && window.IngestModule.startIngest) {
-            await window.IngestModule.startIngest(plan.mode || 'incremental', plan.file_paths || [], { resume: !!plan.resume });
+            await (window.IngestModule.startIngest as any)(plan.mode || 'incremental', plan.file_paths || [], { resume: !!plan.resume });
         } else if (window.api && window.api.startIngest) {
             await window.api.startIngest({
                 mode: plan.mode || 'incremental',
@@ -387,8 +387,8 @@ async function checkUpdates() {
         await refresh();
         return plan;
     } catch (err) {
-        setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: err && err.message ? err.message : String(err) }));
-        return { success: false, message: err && err.message ? err.message : String(err) };
+        setCommand(command('home.commandTitleCheckFailed', 'home.commandDescCheckFailed', { message: err && (err as Error).message ? (err as Error).message : String(err) }));
+        return { success: false, message: err && (err as Error).message ? (err as Error).message : String(err) };
     } finally {
         if (startBtn) {
             startBtn.disabled = false;
@@ -427,16 +427,16 @@ function openSemanticChanges() {
     }
 }
 
-function renderMarkdown(md) {
+function renderMarkdown(md: any) {
     if (!md) return '';
     var rendered = md;
     if (window.marked) {
         try { rendered = window.marked.parse(md); } catch (e) { /* fallback */ }
     } else {
-        rendered = md.split('\n').map(function(line) {
+        rendered = md.split('\n').map(function(line: any) {
             var t = String(line).trim();
             if (/^#{1,6}\s/.test(t)) {
-                var level = t.match(/^#{1,6}/)[0].length;
+                var level = t.match(/^#{1,6}/)![0].length;
                 return '<h' + level + '>' + esc(t.replace(/^#{1,6}\s*/, '')) + '</h' + level + '>';
             }
             return '<p>' + esc(t) + '</p>';
@@ -457,17 +457,17 @@ function closeWeeklyBriefModal() {
     if (modal) modal.style.display = 'none';
 }
 
-function setWeeklyBriefBusy(busy) {
-    var genBtn = document.getElementById('weekly-brief-regenerate-btn');
-    var saveBtn = document.getElementById('weekly-brief-save-btn');
+function setWeeklyBriefBusy(busy: any) {
+    var genBtn = document.getElementById('weekly-brief-regenerate-btn') as HTMLButtonElement | null;
+    var saveBtn = document.getElementById('weekly-brief-save-btn') as HTMLButtonElement | null;
     if (genBtn) genBtn.disabled = busy;
     if (saveBtn) saveBtn.disabled = busy;
 }
 
 function generateWeeklyBrief() {
-    var status = document.getElementById('weekly-brief-status');
-    var content = document.getElementById('weekly-brief-content');
-    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    const status = document.getElementById('weekly-brief-status');
+    const content = document.getElementById('weekly-brief-content');
+    const saveBtn = document.getElementById('weekly-brief-save-btn');
     if (!status || !content) return;
     status.hidden = false;
     content.hidden = true;
@@ -502,9 +502,9 @@ function generateWeeklyBrief() {
 }
 
 function saveWeeklyBriefAsNote() {
-    var content = document.getElementById('weekly-brief-content');
-    var status = document.getElementById('weekly-brief-status');
-    var saveBtn = document.getElementById('weekly-brief-save-btn');
+    const content = document.getElementById('weekly-brief-content');
+    const status = document.getElementById('weekly-brief-status');
+    const saveBtn = document.getElementById('weekly-brief-save-btn') as HTMLButtonElement | null;
     if (!content || !saveBtn || saveBtn.dataset.saving) return;
     var brief = (content.dataset && content.dataset.markdown) || '';
     if (!brief.trim()) return;

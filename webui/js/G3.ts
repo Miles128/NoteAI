@@ -3,14 +3,14 @@
 // ================================================================
 
 /** 图谱拖动：收集某主题节点下所有子节点 id */
-function _collectDescendantIds(rootId, childMap) {
+function _collectDescendantIds(rootId: any, childMap: any) {
     const seen = new Set();
     const stack = (childMap[rootId] || []).slice();
     while (stack.length) {
         const id = stack.pop();
         if (seen.has(id)) continue;
         seen.add(id);
-        (childMap[id] || []).forEach(function(cid) { stack.push(cid); });
+        (childMap[id] || []).forEach(function(cid: any) { stack.push(cid); });
     }
     return seen;
 }
@@ -19,22 +19,23 @@ const _GRAPH_TAU = Math.PI * 2;
 const _GRAPH_GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 // 布局参数默认值 / Schema / Storage 读写与面板 UI 已拆至 graph-layout-params.js
 // （window.GraphLayoutParams，见 main.mjs 加载顺序：本文件之前加载）。
-const GRAPH_LAYOUT_DEFAULTS = window.GraphLayoutParams.defaults;
-const loadGraphLayoutConfig = window.GraphLayoutParams.load;
-const saveGraphLayoutConfig = window.GraphLayoutParams.save;
-const resetGraphLayoutConfigStorage = window.GraphLayoutParams.resetStorage;
-const loadGraphLayoutMode = window.GraphLayoutParams.loadMode;
-const saveGraphLayoutMode = window.GraphLayoutParams.saveMode;
+const GRAPH_LAYOUT_DEFAULTS: any = window.GraphLayoutParams!.defaults;
+const loadGraphLayoutConfig: any = window.GraphLayoutParams!.load;
+const saveGraphLayoutConfig: any = window.GraphLayoutParams!.save;
+const resetGraphLayoutConfigStorage: any = window.GraphLayoutParams!.resetStorage;
+const loadGraphLayoutMode: any = window.GraphLayoutParams!.loadMode;
+const saveGraphLayoutMode: any = window.GraphLayoutParams!.saveMode;
+var showPreview: any;
 /** 节点圆半径显示缩放（相对布局配置值） */
 const _GRAPH_RADIUS_DISPLAY_SCALE = 0.75;
 
 /** 图谱节点实际渲染半径（配置值 × 显示缩放） */
-function _graphNodeRadius(d, lc) {
+function _graphNodeRadius(d: any, lc: any) {
     const base = (d.type === 'topic' && d.level === 1) ? lc.radiusL1 : lc.radiusOther;
     return base * _GRAPH_RADIUS_DISPLAY_SCALE;
 }
 
-function _graphNodeColor(d) {
+function _graphNodeColor(d: any) {
     if (d.type === 'topic') {
         if (d.level === 1) return '#e85d3a';
         if (d.level === 2) return '#ea8600';
@@ -44,43 +45,43 @@ function _graphNodeColor(d) {
     return '#81c784';
 }
 
-function _graphNodeStroke(d) {
+function _graphNodeStroke(d: any) {
     if (d.has_abstract) return '#e6c200';
     if (d.type === 'tag') return 'rgba(124,77,255,0.4)';
     return d.type === 'topic' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.25)';
 }
 
-function _graphNodeStrokeWidth(d) {
+function _graphNodeStrokeWidth(d: any) {
     return d.has_abstract ? 3 : 0.8;
 }
 
-function _graphNodeFontSize(d) {
+function _graphNodeFontSize(d: any) {
     if (d.type === 'topic' && d.level === 1) return '10px';
     if (d.type === 'topic' && d.level === 2) return '9px';
     if (d.type === 'tag') return '9px';
     return '8px';
 }
 
-function _graphNodeTextFill(d) {
+function _graphNodeTextFill(d: any) {
     if (d.type === 'topic') return 'var(--text-muted, #555)';
     if (d.type === 'tag') return 'var(--color-tag, #6a3de8)';
     return 'var(--text-muted, #777)';
 }
 
-function _graphNodeTextDisplay(d, showFilenames) {
+function _graphNodeTextDisplay(d: any, showFilenames: any) {
     if (d.type === 'topic') return '';
     if (d.type === 'tag') return '';
     return showFilenames ? '' : 'none';
 }
 
-function _graphNodeClass(d) {
+function _graphNodeClass(d: any) {
     var parts = ['graph-node', 'graph-node-' + (d.type || 'unknown')];
     if (d.type === 'topic') parts.push('graph-node-level-' + (d.level || 0));
     if (d.has_abstract) parts.push('has-survey');
     return parts.join(' ');
 }
 
-function _graphNodeSubtitle(d) {
+function _graphNodeSubtitle(d: any) {
     if (d.type === 'topic') {
         var count = Number(d.file_count || 0);
         var text = count + ((window.t && window.t('graph.tree.noteCountSuffix')) || ' notes');
@@ -96,8 +97,8 @@ function _graphNodeSubtitle(d) {
     return (window.t && window.t('graph.tree.noteType')) || 'Note';
 }
 
-function _treeDepthLabel(depth, rows) {
-    const types = new Set((rows || []).map(function(d) { return d.data && d.data.type; }));
+function _treeDepthLabel(depth: any, rows: any) {
+    const types = new Set((rows || []).map(function(d: any) { return d.data && d.data.type; }));
     if (types.size === 1 && types.has('tag')) return (window.t && window.t('graph.tree.depthTags')) || 'Tags';
     if (types.size === 1 && types.has('file')) return (window.t && window.t('graph.tree.depthNotes')) || 'Notes';
     if (depth === 1) return (window.t && window.t('graph.tree.depthL1')) || 'L1';
@@ -106,51 +107,51 @@ function _treeDepthLabel(depth, rows) {
     return (window.t && window.t('graph.tree.depthNotes')) || 'Notes';
 }
 
-function _mindMapTextWidth(text) {
+function _mindMapTextWidth(text: any) {
     return Array.from(String(text || '')).reduce(function(width, char) {
         return width + (/[^\u0000-\u00ff]/.test(char) ? 13 : 7.2);
     }, 0);
 }
 
-function _mindMapNodeWidth(d) {
+function _mindMapNodeWidth(d: any) {
     const padding = d.type === 'file' ? 18 : 28;
     const minWidth = d.type === 'file' ? 58 : 82;
     const maxWidth = d.type === 'file' ? 172 : 196;
     return Math.max(minWidth, Math.min(maxWidth, _mindMapTextWidth(d.name) + padding));
 }
 
-function _mindMapNodeHeight(d) {
+function _mindMapNodeHeight(d: any) {
     if (d.type === 'file') return 25;
     if (d.type === 'topic' && Number(d.level || 0) === 1) return 42;
     return 36;
 }
 
-function _mindMapLabel(text, maxLength) {
+function _mindMapLabel(text: any, maxLength: any) {
     const chars = Array.from(String(text || ''));
     return chars.length > maxLength ? chars.slice(0, maxLength - 1).join('') + '…' : chars.join('');
 }
 
-function _createGraphNode(nodeSelection, getRadius, showFilenames) {
+function _createGraphNode(nodeSelection: any, getRadius: any, showFilenames: any) {
     nodeSelection.attr('class', _graphNodeClass);
 
     nodeSelection.append('circle')
-        .attr('r', d => getRadius(d))
+        .attr('r', (d: any) => getRadius(d))
         .attr('fill', _graphNodeColor)
         .attr('stroke', _graphNodeStroke)
         .attr('stroke-width', _graphNodeStrokeWidth);
 
     nodeSelection.append('text')
-        .text(d => d.name || '')
+        .text((d: any) => d.name || '')
         .attr('text-anchor', 'middle')
-        .attr('dy', d => -(getRadius(d) + 4))
+        .attr('dy', (d: any) => -(getRadius(d) + 4))
         .style('font-size', _graphNodeFontSize)
-        .style('font-weight', d => d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal')
+        .style('font-weight', (d: any) => d.type === 'topic' && d.level <= 2 ? 'bold' : 'normal')
         .style('fill', _graphNodeTextFill)
         .style('pointer-events', 'none')
-        .style('display', d => _graphNodeTextDisplay(d, showFilenames));
+        .style('display', (d: any) => _graphNodeTextDisplay(d, showFilenames));
 
     nodeSelection.append('title')
-        .text(function(d) {
+        .text(function(d: any) {
             return (d.name || '') + '\n' + _graphNodeSubtitle(d);
         });
 }
@@ -159,13 +160,13 @@ function _graphCfg() {
     return (Graph3Tier && Graph3Tier.layoutConfig) ? Graph3Tier.layoutConfig : GRAPH_LAYOUT_DEFAULTS;
 }
 
-function _noteDiskRadius(noteCount) {
+function _noteDiskRadius(noteCount: any) {
     const c = _graphCfg();
     const n = Math.max(1, noteCount);
     return Math.min(c.noteDiskMax, Math.max(c.noteDiskMin, c.noteDiskBase + c.noteDiskSqrtCoef * Math.sqrt(n)));
 }
 
-function _l2RingRadius(l2Count, maxNotesPerL2) {
+function _l2RingRadius(l2Count: any, maxNotesPerL2: any) {
     const c = _graphCfg();
     const n2 = Math.max(1, l2Count);
     const nf = Math.max(1, maxNotesPerL2);
@@ -173,21 +174,21 @@ function _l2RingRadius(l2Count, maxNotesPerL2) {
         c.l2RingBase + c.l2RingSqrtL2 * Math.sqrt(n2) + c.l2RingSqrtNotes * Math.sqrt(nf)));
 }
 
-function _l3TopicDiskRadius(l3Count) {
+function _l3TopicDiskRadius(l3Count: any) {
     const c = _graphCfg();
     const n = Math.max(1, l3Count);
     return Math.min(c.l3RingMax, Math.max(c.l3RingMin, c.l3RingBase + c.l3RingSqrtL3 * Math.sqrt(n)));
 }
 
 /** 在圆盘内均匀散布（非圆周）；itemIds 为节点 id 列表 */
-function _scatterInDisk(ox, oy, itemIds, nodeMap, maxRadius, coordKey, clusterId, depthVal) {
+function _scatterInDisk(ox: any, oy: any, itemIds: any, nodeMap: any, maxRadius: any, coordKey: any, clusterId: any, depthVal: any) {
     const xk = coordKey;
     const yk = coordKey === '_tx' ? '_ty' : 'ty';
     const n = itemIds.length;
     if (!n) return;
     const c = _graphCfg();
     const R = Math.max(c.noteDiskMin, maxRadius);
-    itemIds.forEach(function(id, i) {
+    itemIds.forEach(function(id: any, i: any) {
         const node = nodeMap[id];
         if (!node) return;
         const t = (i + 0.5) / n;
@@ -201,7 +202,7 @@ function _scatterInDisk(ox, oy, itemIds, nodeMap, maxRadius, coordKey, clusterId
 }
 
 /** 主题节点在环形区域内散布（内圈留给一级直属笔记） */
-function _scatterTopicsInAnnulus(ox, oy, topicIds, nodeMap, rInner, rOuter, coordKey, depthBase, onPlaced) {
+function _scatterTopicsInAnnulus(ox: any, oy: any, topicIds: any, nodeMap: any, rInner: any, rOuter: any, coordKey: any, depthBase: any, onPlaced: any) {
     const xk = coordKey;
     const yk = coordKey === '_tx' ? '_ty' : 'ty';
     const n = topicIds.length;
@@ -212,7 +213,7 @@ function _scatterTopicsInAnnulus(ox, oy, topicIds, nodeMap, rInner, rOuter, coor
     const ri2 = ri * ri;
     const ro2 = ro * ro;
     const angle0 = c.annulusAngleOffset;
-    topicIds.forEach(function(tid, i) {
+    topicIds.forEach(function(tid: any, i: any) {
         const node = nodeMap[tid];
         if (!node) return;
         const t = (i + 0.5) / n;
@@ -225,8 +226,8 @@ function _scatterTopicsInAnnulus(ox, oy, topicIds, nodeMap, rInner, rOuter, coor
     });
 }
 
-function _seedGraphPositions(nodes) {
-    nodes.forEach(function(n) {
+function _seedGraphPositions(nodes: any) {
+    nodes.forEach(function(n: any) {
         if (n.tx == null || n.ty == null) return;
         n.x = n.tx;
         n.y = n.ty;
@@ -237,8 +238,8 @@ function _seedGraphPositions(nodes) {
     });
 }
 
-function _pinGraphNodes(nodes) {
-    nodes.forEach(function(n) {
+function _pinGraphNodes(nodes: any) {
+    nodes.forEach(function(n: any) {
         if (n.tx == null || n.ty == null) return;
         n.tx = n.x;
         n.ty = n.y;
@@ -247,20 +248,20 @@ function _pinGraphNodes(nodes) {
     });
 }
 
-function _graphCollideRadius(d, getRadius) {
+function _graphCollideRadius(d: any, getRadius: any) {
     const c = _graphCfg();
     if (d.type === 'file') return getRadius(d) + c.fileCollidePad;
     return getRadius(d) + c.topicCollidePad;
 }
 
-function _graphTargetStrength(d) {
+function _graphTargetStrength(d: any) {
     const c = _graphCfg();
     if (d._dragging) return 0;
     if (d.type === 'topic') return c.targetStrengthTopic;
     return c.targetStrengthFile;
 }
 
-function _graphChargeStrength(d) {
+function _graphChargeStrength(d: any) {
     const c = _graphCfg();
     if (d.type === 'topic' && d.level === 1) return c.chargeL1;
     if (d.type === 'topic') return c.chargeTopic;
@@ -269,12 +270,12 @@ function _graphChargeStrength(d) {
 
 /** 图谱数据内容指纹：节点/边数量相同但内容变化（重命名、标签、层级等）
  *  时也能识别，避免 _doLoad 错误跳过刷新。O(n log n)，仅几百节点。 */
-function _graphDataFingerprint(data) {
+function _graphDataFingerprint(data: any) {
     if (!data || !Array.isArray(data.nodes)) return '';
-    var nodes = data.nodes.map(function(n) {
+    var nodes = data.nodes.map(function(n: any) {
         return (n.id || '') + '|' + (n.type || '') + '|' + (n.name || n.label || '') + '|' + (n.level || 0);
     }).sort().join('~');
-    var edges = (data.edges || []).map(function(e) {
+    var edges = (data.edges || []).map(function(e: any) {
         var s = typeof e.source === 'string' ? e.source : (e.source && e.source.id) || e.source;
         var t = typeof e.target === 'string' ? e.target : (e.target && e.target.id) || e.target;
         return s + '>' + t;
@@ -286,9 +287,9 @@ function _graphDataFingerprint(data) {
  *  空间哈希分桶（按 clusterRepelDist 网格）：只比较同桶/邻桶节点对，
  *  每 tick 从 O(n²) 全对计算降为 O(n·k)（k 为桶内平均节点数）。
  *  原实现 500 节点 = 12.5 万对/tick × ~300 tick 的纯距离计算。 */
-function _graphClusterRepelForce(nodes) {
+function _graphClusterRepelForce(nodes: any) {
     const c = _graphCfg();
-    return function(alpha) {
+    return function(alpha: any) {
         const cell = Math.max(1, c.clusterRepelDist || 60);
         const buckets = new Map();
         for (const node of nodes) {
@@ -330,13 +331,13 @@ function _graphClusterRepelForce(nodes) {
     };
 }
 
-function _startGraphRelaxation(nodes, edges, getRadius, onTick, onEnd) {
+function _startGraphRelaxation(nodes: any, edges: any, getRadius: any, onTick: any, onEnd: any) {
     const c = _graphCfg();
-    const sim = d3.forceSimulation(nodes)
-        .force('x', d3.forceX(function(d) { return d.tx; }).strength(_graphTargetStrength))
-        .force('y', d3.forceY(function(d) { return d.ty; }).strength(_graphTargetStrength))
-        .force('charge', d3.forceManyBody().strength(_graphChargeStrength))
-        .force('collide', d3.forceCollide(function(d) { return _graphCollideRadius(d, getRadius); })
+    const sim = window.d3.forceSimulation(nodes)
+        .force('x', window.d3.forceX(function(d: any) { return d.tx; }).strength(_graphTargetStrength))
+        .force('y', window.d3.forceY(function(d: any) { return d.ty; }).strength(_graphTargetStrength))
+        .force('charge', window.d3.forceManyBody().strength(_graphChargeStrength))
+        .force('collide', window.d3.forceCollide(function(d: any) { return _graphCollideRadius(d, getRadius); })
             .iterations(Math.round(c.collideIterations)))
         .force('clusterRepel', _graphClusterRepelForce(nodes))
         .alpha(c.simAlpha)
@@ -351,11 +352,11 @@ function _startGraphRelaxation(nodes, edges, getRadius, onTick, onEnd) {
     return sim;
 }
 
-function _layoutTopicFilesAndChildren(topicId, ox, oy, childMap, nodeMap, parentMap, coordKey, depthBase) {
-    const subTopics = (childMap[topicId] || []).filter(function(cid) {
+function _layoutTopicFilesAndChildren(topicId: any, ox: any, oy: any, childMap: any, nodeMap: any, parentMap: any, coordKey: any, depthBase: any) {
+    const subTopics = (childMap[topicId] || []).filter(function(cid: any) {
         return nodeMap[cid] && nodeMap[cid].type === 'topic' && parentMap[cid] === topicId;
     });
-    const fileIds = (childMap[topicId] || []).filter(function(cid) {
+    const fileIds = (childMap[topicId] || []).filter(function(cid: any) {
         return nodeMap[cid] && nodeMap[cid].type === 'file';
     });
 
@@ -363,7 +364,7 @@ function _layoutTopicFilesAndChildren(topicId, ox, oy, childMap, nodeMap, parent
         const r3 = _l3TopicDiskRadius(subTopics.length);
         const c = _graphCfg();
         const r3Inner = Math.min(r3 * c.l3InnerRatio, r3 - c.l3InnerMinGap);
-        _scatterTopicsInAnnulus(ox, oy, subTopics, nodeMap, r3Inner, r3, coordKey, depthBase, function(subId, sx, sy) {
+        _scatterTopicsInAnnulus(ox, oy, subTopics, nodeMap, r3Inner, r3, coordKey, depthBase, function(subId: any, sx: any, sy: any) {
             const sub = nodeMap[subId];
             if (sub) sub._l2Cluster = topicId;
             _layoutTopicFilesAndChildren(subId, sx, sy, childMap, nodeMap, parentMap, coordKey, depthBase + 1);
@@ -375,7 +376,7 @@ function _layoutTopicFilesAndChildren(topicId, ox, oy, childMap, nodeMap, parent
     }
 }
 
-function _layoutL1TopicCluster(l1Id, originX, originY, childMap, nodeMap, parentMap, coordKey, depthBase) {
+function _layoutL1TopicCluster(l1Id: any, originX: any, originY: any, childMap: any, nodeMap: any, parentMap: any, coordKey: any, depthBase: any) {
     const xk = coordKey;
     const yk = coordKey === '_tx' ? '_ty' : 'ty';
     const l1 = nodeMap[l1Id];
@@ -386,16 +387,16 @@ function _layoutL1TopicCluster(l1Id, originX, originY, childMap, nodeMap, parent
     l1._l1Group = l1Id;
     if (depthBase != null) l1._depth = depthBase;
 
-    const l2Ids = (childMap[l1Id] || []).filter(function(cid) {
+    const l2Ids = (childMap[l1Id] || []).filter(function(cid: any) {
         return parentMap[cid] === l1Id && nodeMap[cid] && nodeMap[cid].type === 'topic';
     });
-    const directFiles = (childMap[l1Id] || []).filter(function(cid) {
+    const directFiles = (childMap[l1Id] || []).filter(function(cid: any) {
         return nodeMap[cid] && nodeMap[cid].type === 'file';
     });
 
     let maxFiles = 0;
-    l2Ids.forEach(function(l2id) {
-        const fc = (childMap[l2id] || []).filter(function(c) {
+    l2Ids.forEach(function(l2id: any) {
+        const fc = (childMap[l2id] || []).filter(function(c: any) {
             return nodeMap[c] && nodeMap[c].type === 'file';
         }).length;
         if (fc > maxFiles) maxFiles = fc;
@@ -418,7 +419,7 @@ function _layoutL1TopicCluster(l1Id, originX, originY, childMap, nodeMap, parent
 
     const cL2 = _graphCfg();
     const l2Inner = l1NoteDiskR > 0 ? l1NoteDiskR + cL2.l2AnnulusGap : ringR * cL2.l2InnerFallbackRatio;
-    _scatterTopicsInAnnulus(originX, originY, l2Ids, nodeMap, l2Inner, ringR * cL2.l2OuterRingRatio, coordKey, depthBase, function(l2id, lx, ly) {
+    _scatterTopicsInAnnulus(originX, originY, l2Ids, nodeMap, l2Inner, ringR * cL2.l2OuterRingRatio, coordKey, depthBase, function(l2id: any, lx: any, ly: any) {
         const l2 = nodeMap[l2id];
         if (!l2) return;
         l2._l1Group = l1Id;
@@ -426,22 +427,22 @@ function _layoutL1TopicCluster(l1Id, originX, originY, childMap, nodeMap, parent
     });
 }
 
-function _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, coordKey) {
+function _applyTopicHierarchyLayout(nodes: any, childMap: any, nodeMap: any, parentMap: any, cx: any, cy: any, svgW: any, svgH: any, coordKey: any) {
     const xk = coordKey || 'tx';
     const yk = coordKey === '_tx' ? '_ty' : 'ty';
 
-    nodes.forEach(function(n) {
+    nodes.forEach(function(n: any) {
         n[xk] = undefined;
         n[yk] = undefined;
         n._l2Cluster = null;
         n._l1Group = null;
     });
 
-    const l1Nodes = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
+    const l1Nodes = nodes.filter(function(n: any) { return n.type === 'topic' && n.level === 1; });
     const l1Count = l1Nodes.length;
     const packR = Math.min(svgW, svgH) * _graphCfg().l1PackRatio;
 
-    l1Nodes.forEach(function(l1, i) {
+    l1Nodes.forEach(function(l1: any, i: any) {
         let ox = cx;
         let oy = cy;
         if (l1Count > 1) {
@@ -452,17 +453,17 @@ function _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy,
         _layoutL1TopicCluster(l1.id, ox, oy, childMap, nodeMap, parentMap, coordKey, coordKey === '_tx' ? 0 : null);
     });
 
-    const orphans = nodes.filter(function(n) { return n[xk] === undefined; });
+    const orphans = nodes.filter(function(n: any) { return n[xk] === undefined; });
     const orphanCount = orphans.length;
     const orphanR = Math.min(svgW, svgH) * _graphCfg().orphanRadiusRatio;
-    orphans.forEach(function(n, i) {
+    orphans.forEach(function(n: any, i: any) {
         const angle = orphanCount > 1 ? _GRAPH_TAU * (i + 0.5) / orphanCount : 0;
         n[xk] = cx + Math.cos(angle) * orphanR;
         n[yk] = cy + Math.sin(angle) * orphanR;
         n._l1Group = '__orphan__';
     });
 
-    nodes.forEach(function(n) {
+    nodes.forEach(function(n: any) {
         if (n._l1Group) return;
         let cur = n.id;
         const seen = new Set();
@@ -481,7 +482,7 @@ function _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy,
     });
 }
 
-function _resolveL1ClusterId(d, nodeMap, parentMap) {
+function _resolveL1ClusterId(d: any, nodeMap: any, parentMap: any) {
     if (d._l1Group && d._l1Group !== '__orphan__') return d._l1Group;
     if (d.type === 'topic' && d.level === 1) return d.id;
     let cur = d.id;
@@ -495,35 +496,35 @@ function _resolveL1ClusterId(d, nodeMap, parentMap) {
     return null;
 }
 
-function _dragGroupForNode(d, childMap, nodeMap, parentMap, nodes) {
+function _dragGroupForNode(d: any, childMap: any, nodeMap: any, parentMap: any, nodes: any) {
     const l1Id = _resolveL1ClusterId(d, nodeMap, parentMap);
     if (l1Id) {
         const desc = _collectDescendantIds(l1Id, childMap);
-        return nodes.filter(function(n) { return n.id === l1Id || desc.has(n.id); });
+        return nodes.filter(function(n: any) { return n.id === l1Id || desc.has(n.id); });
     }
     if (d.type === 'topic') {
         const desc = _collectDescendantIds(d.id, childMap);
-        return nodes.filter(function(n) { return n.id === d.id || desc.has(n.id); });
+        return nodes.filter(function(n: any) { return n.id === d.id || desc.has(n.id); });
     }
     return [d];
 }
 
-function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simulation, self) {
-    return d3.drag()
-        .on('start', function(e, d) {
+function _makeGraphDragHandlers(childMap: any, nodeMap: any, parentMap: any, nodes: any, edges: any, simulation: any, self: any) {
+    return window.d3.drag()
+        .on('start', function(e: any, d: any) {
             if (simulation && !e.active) simulation.alphaTarget(0.3).restart();
             const group = _dragGroupForNode(d, childMap, nodeMap, parentMap, nodes);
             d._dragGroup = group;
             d._dragAnchorX = d.x;
             d._dragAnchorY = d.y;
-            group.forEach(function(n) {
+            group.forEach(function(n: any) {
                 n._dragging = true;
                 n._dragStartX = n.x;
                 n._dragStartY = n.y;
                 n._dragStartTx = n.tx;
                 n._dragStartTy = n.ty;
             });
-            nodes.forEach(function(n) {
+            nodes.forEach(function(n: any) {
                 if (!n._dragging) {
                     n._dragStartTx = n.tx;
                     n._dragStartTy = n.ty;
@@ -532,7 +533,7 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simu
             d.fx = d.x;
             d.fy = d.y;
         })
-        .on('drag', function(e, d) {
+        .on('drag', function(e: any, d: any) {
             const dx = e.x - d._dragAnchorX;
             const dy = e.y - d._dragAnchorY;
             d.fx = d._dragStartX + dx;
@@ -541,7 +542,7 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simu
             d.y = d.fy;
             d.tx = d.x;
             d.ty = d.y;
-            (d._dragGroup || [d]).forEach(function(n) {
+            (d._dragGroup || [d]).forEach(function(n: any) {
                 if (n === d) return;
                 n.fx = n._dragStartX + dx;
                 n.fy = n._dragStartY + dy;
@@ -552,8 +553,8 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simu
                     n.ty = n._dragStartTy + dy;
                 }
             });
-            var draggedIds = new Set((d._dragGroup || [d]).map(function(n) { return n.id; }));
-            nodes.forEach(function(n) {
+            var draggedIds = new Set((d._dragGroup || [d]).map(function(n: any) { return n.id; }));
+            nodes.forEach(function(n: any) {
                 if (n._dragging || draggedIds.has(n.id)) return;
                 var parentId = parentMap[n.id];
                 if (parentId && draggedIds.has(parentId)) {
@@ -566,21 +567,21 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simu
             if (simulation) {
                 simulation.alpha(Math.max(simulation.alpha(), 0.15)).restart();
             } else if (self.g) {
-                self.g.selectAll('.graph-nodes g').attr('transform', function(nd) {
+                self.g.selectAll('.graph-nodes g').attr('transform', function(nd: any) {
                     return 'translate(' + nd.x + ',' + nd.y + ')';
                 });
             }
         })
-        .on('end', function(e, d) {
+        .on('end', function(e: any, d: any) {
             if (simulation && !e.active) simulation.alphaTarget(0);
-            (d._dragGroup || [d]).forEach(function(n) {
+            (d._dragGroup || [d]).forEach(function(n: any) {
                 n._dragging = false;
                 n.tx = n.x;
                 n.ty = n.y;
                 n.fx = n.x;
                 n.fy = n.y;
             });
-            nodes.forEach(function(n) {
+            nodes.forEach(function(n: any) {
                 if (!d._dragGroup || !d._dragGroup.includes(n)) {
                     if (!n._dragging) {
                         n.tx = n.x;
@@ -593,12 +594,12 @@ function _makeGraphDragHandlers(childMap, nodeMap, parentMap, nodes, edges, simu
 }
 
 const Graph3Tier = {
-    data: null,
-    svg: null,
-    g: null,
-    zoom: null,
+    data: null as any,
+    svg: null as any,
+    g: null as any,
+    zoom: null as any,
     showFilenames: false,
-    simulation: null,
+    simulation: null as any,
     filter: 'topic',
     // The balanced mind map is easier to scan, so it is the first-run default.
     // Keep constellation available for relationship exploration and remember
@@ -607,7 +608,7 @@ const Graph3Tier = {
     treeCollapsedIds: new Set(),
     treeInitialCollapseApplied: false,
     layoutConfig: loadGraphLayoutConfig(),
-    _graphBodyResizeObserver: null,
+    _graphBodyResizeObserver: null as any,
     _resizePaused: false,
     _resizePending: false,
 
@@ -622,23 +623,23 @@ const Graph3Tier = {
     // 布局参数面板 UI 已拆至 graph-layout-params.js，此处保留同名方法作为委托，
     // 以维持 window.Graph3Tier 的公开接口不变。
     _buildLayoutSettingsForm() {
-        window.GraphLayoutParams.buildForm(this.layoutConfig);
+        window.GraphLayoutParams!.buildForm!(this.layoutConfig);
     },
 
     openLayoutSettings() {
-        window.GraphLayoutParams.open();
+        window.GraphLayoutParams!.open!();
     },
 
     closeLayoutSettings() {
-        window.GraphLayoutParams.close();
+        window.GraphLayoutParams!.close!();
     },
 
     readLayoutSettingsFromForm() {
-        return window.GraphLayoutParams.readForm();
+        return window.GraphLayoutParams!.readForm!();
     },
 
     _scheduleLayoutApply() {
-        window.GraphLayoutParams.scheduleApply();
+        window.GraphLayoutParams!.scheduleApply!();
     },
 
     reloadGraphLayout() {
@@ -663,7 +664,7 @@ const Graph3Tier = {
         requestAnimationFrame(function() { requestAnimationFrame(run); });
     },
 
-    applyLayoutSettings(cfg, options) {
+    applyLayoutSettings(cfg: any, options: any) {
         const opts = options || {};
         this.layoutConfig = Object.assign({}, GRAPH_LAYOUT_DEFAULTS, cfg);
         saveGraphLayoutConfig(this.layoutConfig);
@@ -672,7 +673,7 @@ const Graph3Tier = {
     },
 
     resetLayoutSettings() {
-        window.GraphLayoutParams.reset();
+        window.GraphLayoutParams!.reset!();
     },
 
     pauseResize() {
@@ -701,7 +702,7 @@ const Graph3Tier = {
         }
     },
 
-    _observeGraphPanelBodyResize(container) {
+    _observeGraphPanelBodyResize(container: any) {
         this._disconnectGraphPanelBodyResize();
         if (!container || typeof ResizeObserver === 'undefined') return;
         const self = this;
@@ -717,10 +718,10 @@ const Graph3Tier = {
         this._graphBodyResizeObserver.observe(container);
     },
 
-    _clampNodesToView(nodes, w, h, getRadius) {
+    _clampNodesToView(nodes: any, w: any, h: any, getRadius: any) {
         if (!w || !h || !nodes || !nodes.length) return;
         const sidePad = Math.min(108, Math.max(36, w * this.layoutConfig.clampSideRatio));
-        nodes.forEach(d => {
+        nodes.forEach((d: any) => {
             const r = getRadius(d) + 6;
             const topPad = r + 20;
             const botPad = r + 14;
@@ -730,13 +731,13 @@ const Graph3Tier = {
     },
 
     /** Bounds for zoom-to-fit: account for circles + labels (above nodes). */
-    _boundsFromNodes(nodes, w, h, getRadius) {
+    _boundsFromNodes(nodes: any, w: any, h: any, getRadius: any) {
         let x1 = Infinity;
         let y1 = Infinity;
         let x2 = -Infinity;
         let y2 = -Infinity;
         const mx = this.layoutConfig.boundsMargin;
-        nodes.forEach(d => {
+        nodes.forEach((d: any) => {
             const r = getRadius(d) + 8;
             const padTop = r + 22;
             const padBot = r + 14;
@@ -749,7 +750,7 @@ const Graph3Tier = {
         return { x1, y1, x2, y2 };
     },
 
-    _fitGraphToBounds(nodes, svgW, svgH, getRadius, duration) {
+    _fitGraphToBounds(nodes: any, svgW: any, svgH: any, getRadius: any, duration: any) {
         if (!this.svg || !this.zoom || !nodes.length) return;
         const bounds = this._boundsFromNodes(nodes, svgW, svgH, getRadius);
         const bw = bounds.x2 - bounds.x1 || 100;
@@ -759,7 +760,7 @@ const Graph3Tier = {
         const midX = (bounds.x1 + bounds.x2) / 2;
         const midY = (bounds.y1 + bounds.y2) / 2;
         const dur = duration == null ? 800 : duration;
-        const tr = d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY);
+        const tr = window.d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY);
         if (dur > 0) {
             this.svg.transition().duration(dur).call(this.zoom.transform, tr);
         } else {
@@ -767,12 +768,12 @@ const Graph3Tier = {
         }
     },
 
-    _loadDebounceTimer: null,
-    _lastLoadFilter: null,
+    _loadDebounceTimer: null as any,
+    _lastLoadFilter: null as any,
     _lastLoadTime: 0,
-    _lastDataHash: null,
+    _lastDataHash: null as any,
 
-    async load(filter, force) {
+    async load(filter?: any, force?: any) {
         if (filter && filter !== this.filter) {
             this.filter = filter;
             this.treeCollapsedIds.clear();
@@ -821,23 +822,23 @@ const Graph3Tier = {
             this.render();
         } catch (e) {
             console.error('图谱加载失败:', e);
-            if (e && e.stack) console.error(e.stack);
+            if (e && (e as any).stack) console.error((e as any).stack);
         }
     },
 
     _updateFilterBtns() {
         document.querySelectorAll('#graph-filter-bar .graph-filter-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.filter === this.filter);
+            btn.classList.toggle('active', (btn as HTMLElement).dataset.filter === this.filter);
         });
     },
 
     _updateLayoutModeBtns() {
         document.querySelectorAll('#graph-layout-mode .graph-layout-mode-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.layoutMode === this.layoutMode);
+            btn.classList.toggle('active', (btn as HTMLElement).dataset.layoutMode === this.layoutMode);
         });
     },
 
-    setLayoutMode(mode) {
+    setLayoutMode(mode: any) {
         const nextMode = mode === 'tree' ? 'tree' : 'constellation';
         if (nextMode === this.layoutMode) return;
         this.layoutMode = nextMode;
@@ -850,7 +851,7 @@ const Graph3Tier = {
         }
     },
 
-    toggleTreeNodeCollapsed(nodeId) {
+    toggleTreeNodeCollapsed(nodeId: any) {
         if (!nodeId) return;
         if (this.treeCollapsedIds.has(nodeId)) {
             this.treeCollapsedIds.delete(nodeId);
@@ -862,7 +863,7 @@ const Graph3Tier = {
         }
     },
 
-    _legendItem(color, size, labelKey) {
+    _legendItem(color: any, size: any, labelKey: any) {
         var label = window.t(labelKey);
         var item = document.createElement('span');
         item.className = 'graph-legend-item';
@@ -904,9 +905,9 @@ const Graph3Tier = {
     },
 
     _updateStats() {
-        const topicNodes = (this.data.nodes || []).filter(n => n.type === 'topic').length;
-        const tagNodes = (this.data.nodes || []).filter(n => n.type === 'tag').length;
-        const fileNodes = (this.data.nodes || []).filter(n => n.type === 'file').length;
+        const topicNodes = (this.data.nodes || []).filter((n: any) => n.type === 'topic').length;
+        const tagNodes = (this.data.nodes || []).filter((n: any) => n.type === 'tag').length;
+        const fileNodes = (this.data.nodes || []).filter((n: any) => n.type === 'file').length;
         const gs1 = document.getElementById('graph-stat-notes');
         const gs2 = document.getElementById('graph-stat-topics');
         if (gs1) gs1.textContent = fileNodes;
@@ -926,7 +927,7 @@ const Graph3Tier = {
         const w = container.clientWidth || 800;
         const h = container.clientHeight || 600;
 
-        this.svg = d3.select(container)
+        this.svg = window.d3.select(container)
             .append('svg')
             .attr('id', 'graph-svg-3tier')
             .attr('width', w)
@@ -937,9 +938,9 @@ const Graph3Tier = {
 
         this.g = this.svg.append('g');
 
-        this.zoom = d3.zoom()
+        this.zoom = window.d3.zoom()
             .scaleExtent([0.06, 5])
-            .on('zoom', (e) => {
+            .on('zoom', (e: any) => {
                 this.g.attr('transform', e.transform);
                 this._updateZoomPercent(e.transform.k);
             });
@@ -977,19 +978,19 @@ const Graph3Tier = {
         const cy = svgH / 2;
         const self = this;
 
-        const nodes = this.data.nodes.map(n => Object.assign({}, n));
-        const edges = this.data.edges.map(e => ({
+        const nodes = this.data.nodes.map((n: any) => Object.assign({}, n));
+        const edges = this.data.edges.map((e: any) => ({
             source: e.source,
             target: e.target,
         }));
 
         const lc = this.layoutConfig;
-        const getRadius = d => _graphNodeRadius(d, lc);
+        const getRadius = (d: any) => _graphNodeRadius(d, lc);
 
         // ===== Constellation layout: L1 spread out, children cluster around L1 =====
-        const childMap = {};
-        const parentMap = {};
-        edges.forEach(e => {
+        const childMap: any = {};
+        const parentMap: any = {};
+        edges.forEach((e: any) => {
             const src = typeof e.source === 'string' ? e.source : e.source.id || e.source;
             const tgt = typeof e.target === 'string' ? e.target : e.target.id || e.target;
             if (!childMap[src]) childMap[src] = [];
@@ -997,11 +998,11 @@ const Graph3Tier = {
             parentMap[tgt] = src;
         });
 
-        const nodeMap = {};
-        nodes.forEach(n => { nodeMap[n.id] = n; });
+        const nodeMap: any = {};
+        nodes.forEach((n: any) => { nodeMap[n.id] = n; });
 
         _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, 'tx');
-        nodes.forEach(function(n) {
+        nodes.forEach(function(n: any) {
             if (n.tx == null || n.ty == null) {
                 n.tx = cx;
                 n.ty = cy;
@@ -1018,22 +1019,22 @@ const Graph3Tier = {
         _createGraphNode(node, getRadius, self.showFilenames);
 
         const updateNodePos = function() {
-            node.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+            node.attr('transform', function(d: any) { return 'translate(' + d.x + ',' + d.y + ')'; });
         };
 
         // Hover effects
-        node.on('mouseenter', function(e, d) {
-            d3.select(this).select('circle')
+        node.on('mouseenter', function(this: any, e: any, d: any) {
+            window.d3.select(this).select('circle')
                 .transition().duration(150)
                 .attr('r', getRadius(d) * 1.3);
-        }).on('mouseleave', function(e, d) {
-            d3.select(this).select('circle')
+        }).on('mouseleave', function(this: any, e: any, d: any) {
+            window.d3.select(this).select('circle')
                 .transition().duration(150)
                 .attr('r', getRadius(d));
         });
 
         // Double-click: open abstract for topics that have one
-        node.on('dblclick', (e, d) => {
+        node.on('dblclick', (e: any, d: any) => {
             e.stopPropagation();
             if (d.type === 'topic' && d.has_abstract && d.abstract_file && typeof showPreview === 'function') {
                 showPreview({ path: d.abstract_file, name: (d.name || d.id) + ' ' + window.t('graph.stats.survey') });
@@ -1041,7 +1042,7 @@ const Graph3Tier = {
         });
 
         // Click
-        node.on('click', (e, d) => {
+        node.on('click', (e: any, d: any) => {
             e.stopPropagation();
             if (d.type === 'file' && d.full_path && typeof showPreview === 'function') {
                 showPreview({ path: d.full_path, name: d.name });
@@ -1053,11 +1054,11 @@ const Graph3Tier = {
                     const node = self.svg.node();
                     const svgW = node ? node.clientWidth : 800;
                     const svgH = node ? node.clientHeight : 600;
-                    const currentTransform = d3.zoomTransform(node);
+                    const currentTransform = window.d3.zoomTransform(node);
                     const scale = Math.min(2, currentTransform.k * 1.5);
                     self.svg.transition().duration(500).call(
                         self.zoom.transform,
-                        d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(scale).translate(-d.x, -d.y)
+                        window.d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(scale).translate(-d.x, -d.y)
                     );
                 }
             }
@@ -1074,7 +1075,7 @@ const Graph3Tier = {
         this.svg.on('click', () => {});
     },
 
-    _graphNodeClick(e, d) {
+    _graphNodeClick(e: any, d: any) {
         e.stopPropagation();
         if (d.type === 'file' && d.full_path && typeof showPreview === 'function') {
             showPreview({ path: d.full_path, name: d.name });
@@ -1090,35 +1091,35 @@ const Graph3Tier = {
 
         const svgW = +this.svg.attr('width');
         const svgH = +this.svg.attr('height');
-        const nodes = (this.data.nodes || []).map(n => Object.assign({}, n));
-        const edges = (this.data.edges || []).map(e => ({
+        const nodes = (this.data.nodes || []).map((n: any) => Object.assign({}, n));
+        const edges = (this.data.edges || []).map((e: any) => ({
             source: typeof e.source === 'string' ? e.source : e.source.id || e.source,
             target: typeof e.target === 'string' ? e.target : e.target.id || e.target,
         }));
         if (!nodes.length) return;
 
-        const nodeMap = {};
-        nodes.forEach(n => { nodeMap[n.id] = n; });
-        const isVisibleType = n => this.showFilenames || n.type !== 'file';
-        const childrenByParent = {};
+        const nodeMap: any = {};
+        nodes.forEach((n: any) => { nodeMap[n.id] = n; });
+        const isVisibleType = (n: any) => this.showFilenames || n.type !== 'file';
+        const childrenByParent: any = {};
         const hasParent = new Set();
-        edges.forEach(e => {
+        edges.forEach((e: any) => {
             if (!nodeMap[e.source] || !nodeMap[e.target] || e.source === e.target) return;
             if (!childrenByParent[e.source]) childrenByParent[e.source] = [];
             childrenByParent[e.source].push(e.target);
             if (isVisibleType(nodeMap[e.target])) hasParent.add(e.target);
         });
 
-        const orderedNodes = nodes.filter(isVisibleType).sort((a, b) => {
+        const orderedNodes = nodes.filter(isVisibleType).sort((a: any, b: any) => {
             const la = a.type === 'topic' ? (a.level || 0) : 9;
             const lb = b.type === 'topic' ? (b.level || 0) : 9;
             return la - lb || String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN');
         });
-        const visibleChildIds = nodeId => (childrenByParent[nodeId] || [])
-            .filter(id => nodeMap[id] && isVisibleType(nodeMap[id]));
+        const visibleChildIds = (nodeId: any) => (childrenByParent[nodeId] || [])
+            .filter((id: any) => nodeMap[id] && isVisibleType(nodeMap[id]));
 
         if (!this.treeInitialCollapseApplied) {
-            orderedNodes.forEach(n => {
+            orderedNodes.forEach((n: any) => {
                 if (!visibleChildIds(n.id).length) return;
                 if ((n.type === 'topic' && Number(n.level || 0) >= 2) || n.type === 'tag') {
                     this.treeCollapsedIds.add(n.id);
@@ -1127,17 +1128,17 @@ const Graph3Tier = {
             this.treeInitialCollapseApplied = true;
         }
 
-        const rootNodes = orderedNodes.filter(n => !hasParent.has(n.id));
+        const rootNodes = orderedNodes.filter((n: any) => !hasParent.has(n.id));
         const visited = new Set();
         const collapsed = this.treeCollapsedIds;
-        const markDescendantsVisited = nodeId => {
-            visibleChildIds(nodeId).forEach(childId => {
+        const markDescendantsVisited = (nodeId: any) => {
+            visibleChildIds(nodeId).forEach((childId: any) => {
                 if (visited.has(childId)) return;
                 visited.add(childId);
                 markDescendantsVisited(childId);
             });
         };
-        const toTreeNode = n => {
+        const toTreeNode = (n: any) => {
             visited.add(n.id);
             const rawChildIds = visibleChildIds(n.id);
             const isCollapsed = collapsed.has(n.id) && rawChildIds.length > 0;
@@ -1151,9 +1152,9 @@ const Graph3Tier = {
                 });
             }
             const children = rawChildIds
-                .filter(id => !visited.has(id))
-                .map(id => nodeMap[id])
-                .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN'))
+                .filter((id: any) => !visited.has(id))
+                .map((id: any) => nodeMap[id])
+                .sort((a: any, b: any) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'zh-Hans-CN'))
                 .map(toTreeNode);
             return Object.assign({}, n, {
                 children,
@@ -1163,16 +1164,16 @@ const Graph3Tier = {
             });
         };
 
-        const roots = [];
+        const roots: any[] = [];
         const rootCandidates = rootNodes.length ? rootNodes : orderedNodes;
-        rootCandidates.forEach(n => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
-        orderedNodes.forEach(n => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
+        rootCandidates.forEach((n: any) => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
+        orderedNodes.forEach((n: any) => { if (!visited.has(n.id)) roots.push(toTreeNode(n)); });
         if (!roots.length) return;
 
-        const subtreeWeight = branch => 1 + (branch.children || []).reduce((sum, child) => sum + subtreeWeight(child), 0);
-        const sides = [[], []];
+        const subtreeWeight = (branch: any) => 1 + (branch.children || []).reduce((sum: any, child: any) => sum + subtreeWeight(child), 0);
+        const sides: any[][] = [[], []];
         const sideWeights = [0, 0];
-        roots.forEach((branch, index) => {
+        roots.forEach((branch: any, index: any) => {
             const sideIndex = sideWeights[0] === sideWeights[1] ? index % 2 : (sideWeights[0] < sideWeights[1] ? 0 : 1);
             sides[sideIndex].push(branch);
             sideWeights[sideIndex] += subtreeWeight(branch);
@@ -1188,18 +1189,18 @@ const Graph3Tier = {
         };
         const rowGap = this.showFilenames ? 42 : 52;
         const colGap = (this.showFilenames ? 178 : 204) * 1.75;
-        const visibleNodes = [];
-        const links = [];
+        const visibleNodes: any[] = [];
+        const links: any[] = [];
 
-        const layoutSide = (branches, direction) => {
+        const layoutSide = (branches: any, direction: any) => {
             if (!branches.length) return;
-            const sideRoot = d3.hierarchy({ id: '__side__', children: branches });
-            d3.tree().nodeSize([rowGap, colGap])(sideRoot);
-            const descendants = sideRoot.descendants().filter(d => d.data.id !== '__side__');
-            const minY = d3.min(descendants, d => d.x) || 0;
-            const maxY = d3.max(descendants, d => d.x) || 0;
+            const sideRoot = window.d3.hierarchy({ id: '__side__', children: branches });
+            window.d3.tree().nodeSize([rowGap, colGap])(sideRoot);
+            const descendants = sideRoot.descendants().filter((d: any) => d.data.id !== '__side__');
+            const minY = window.d3.min(descendants, (d: any) => d.x) || 0;
+            const maxY = window.d3.max(descendants, (d: any) => d.x) || 0;
             const offsetY = center.y - (minY + maxY) / 2;
-            descendants.forEach(d => {
+            descendants.forEach((d: any) => {
                 d.data.x = center.x + direction * d.depth * colGap;
                 d.data.y = d.x + offsetY;
                 d.data.treeDepth = d.depth;
@@ -1236,9 +1237,9 @@ const Graph3Tier = {
             .selectAll('path')
             .data(links)
             .join('path')
-            .attr('class', link => 'graph-tree-link graph-mindmap-link graph-mindmap-link-depth-' + link.target.treeDepth)
+            .attr('class', (link: any) => 'graph-tree-link graph-mindmap-link graph-mindmap-link-depth-' + link.target.treeDepth)
             .attr('fill', 'none')
-            .attr('d', link => {
+            .attr('d', (link: any) => {
                 const side = link.target._mindSide;
                 const sx = link.source.x + side * link.source._mindWidth / 2;
                 const sy = link.source.y;
@@ -1252,90 +1253,90 @@ const Graph3Tier = {
         const node = this.g.append('g')
             .attr('class', 'graph-nodes graph-tree-nodes graph-mindmap-nodes')
             .selectAll('g')
-            .data(visibleNodes.map(d => d.data))
+            .data(visibleNodes.map((d: any) => d.data))
             .join('g')
-            .attr('class', d => _graphNodeClass(d) + ' graph-mindmap-node mindmap-side-' + (d._mindSide < 0 ? 'left' : 'right'))
+            .attr('class', (d: any) => _graphNodeClass(d) + ' graph-mindmap-node mindmap-side-' + (d._mindSide < 0 ? 'left' : 'right'))
             .attr('cursor', 'pointer')
-            .attr('transform', d => 'translate(' + d.x + ',' + d.y + ')');
+            .attr('transform', (d: any) => 'translate(' + d.x + ',' + d.y + ')');
 
         node.append('rect')
             .attr('class', 'graph-mindmap-node-surface')
-            .attr('x', d => -d._mindWidth / 2)
-            .attr('y', d => -d._mindHeight / 2)
-            .attr('width', d => d._mindWidth)
-            .attr('height', d => d._mindHeight)
-            .attr('rx', d => d.type === 'file' ? 7 : 11);
+            .attr('x', (d: any) => -d._mindWidth / 2)
+            .attr('y', (d: any) => -d._mindHeight / 2)
+            .attr('width', (d: any) => d._mindWidth)
+            .attr('height', (d: any) => d._mindHeight)
+            .attr('rx', (d: any) => d.type === 'file' ? 7 : 11);
         node.append('text')
             .attr('class', 'graph-mindmap-label')
             .attr('text-anchor', 'middle')
-            .attr('y', d => d.type === 'file' ? 4 : -4)
-            .text(d => _mindMapLabel(d.name, d.type === 'file' ? 22 : 18));
-        node.filter(d => d.type !== 'file').append('text')
+            .attr('y', (d: any) => d.type === 'file' ? 4 : -4)
+            .text((d: any) => _mindMapLabel(d.name, d.type === 'file' ? 22 : 18));
+        node.filter((d: any) => d.type !== 'file').append('text')
             .attr('class', 'graph-tree-subtitle graph-mindmap-meta')
             .attr('text-anchor', 'middle')
             .attr('y', 11)
             .text(_graphNodeSubtitle);
-        node.append('title').text(d => (d.name || '') + '\n' + _graphNodeSubtitle(d));
+        node.append('title').text((d: any) => (d.name || '') + '\n' + _graphNodeSubtitle(d));
 
-        const toggles = node.filter(d => d._hasChildren)
+        const toggles = node.filter((d: any) => d._hasChildren)
             .append('g')
             .attr('class', 'graph-tree-toggle-node graph-mindmap-toggle')
-            .attr('transform', d => 'translate(' + (d._mindSide * (d._mindWidth / 2 + 11)) + ',0)')
+            .attr('transform', (d: any) => 'translate(' + (d._mindSide * (d._mindWidth / 2 + 11)) + ',0)')
             .attr('cursor', 'pointer');
         toggles.append('circle').attr('r', 7);
         toggles.append('path').attr('class', 'graph-tree-toggle-minus').attr('d', 'M-3,0H3');
         toggles.append('path')
             .attr('class', 'graph-tree-toggle-plus')
             .attr('d', 'M0,-3V3')
-            .style('display', d => d._collapsed ? '' : 'none');
-        toggles.on('click', function(e, d) {
+            .style('display', (d: any) => d._collapsed ? '' : 'none');
+        toggles.on('click', function(e: any, d: any) {
             e.stopPropagation();
             self.toggleTreeNodeCollapsed(d.id);
         });
 
-        const pathByNode = {};
-        visibleNodes.forEach(d => {
+        const pathByNode: any = {};
+        visibleNodes.forEach((d: any) => {
             const ids = new Set();
             let current = d;
             while (current && current.data && current.data.id !== '__side__') {
                 ids.add(current.data.id);
                 current = current.parent;
             }
-            d.descendants().forEach(child => {
+            d.descendants().forEach((child: any) => {
                 if (child.data && child.data.id !== '__side__') ids.add(child.data.id);
             });
             pathByNode[d.data.id] = ids;
         });
-        const setTreeFocus = targetId => {
+        const setTreeFocus = (targetId: any) => {
             const pathSet = pathByNode[targetId] || new Set();
-            node.classed('is-dimmed', d => !pathSet.has(d.id));
-            node.classed('is-path', d => pathSet.has(d.id));
-            node.classed('is-focus', d => d.id === targetId);
+            node.classed('is-dimmed', (d: any) => !pathSet.has(d.id));
+            node.classed('is-path', (d: any) => pathSet.has(d.id));
+            node.classed('is-focus', (d: any) => d.id === targetId);
             self.g.selectAll('.graph-tree-link')
-                .classed('is-dimmed', link => !pathSet.has(link.target.id))
-                .classed('is-path', link => pathSet.has(link.target.id));
+                .classed('is-dimmed', (link: any) => !pathSet.has(link.target.id))
+                .classed('is-path', (link: any) => pathSet.has(link.target.id));
         };
         const clearTreeFocus = () => {
             node.classed('is-dimmed', false).classed('is-path', false).classed('is-focus', false);
             self.g.selectAll('.graph-tree-link').classed('is-dimmed', false).classed('is-path', false);
         };
 
-        node.on('mouseenter', function(e, d) {
+        node.on('mouseenter', function(e: any, d: any) {
             setTreeFocus(d.id);
         }).on('mouseleave', clearTreeFocus);
-        node.on('click', (e, d) => self._graphNodeClick(e, d));
-        node.on('dblclick', function(e, d) {
+        node.on('click', (e: any, d: any) => self._graphNodeClick(e, d));
+        node.on('dblclick', function(e: any, d: any) {
             e.stopPropagation();
             if (d._hasChildren) self.toggleTreeNodeCollapsed(d.id);
             else self._graphNodeClick(e, d);
         });
 
-        const layoutNodes = visibleNodes.map(d => d.data).concat([center]);
+        const layoutNodes = visibleNodes.map((d: any) => d.data).concat([center]);
         const bounds = {
-            x1: d3.min(layoutNodes, d => d.x - d._mindWidth / 2 - 18) || 0,
-            y1: d3.min(layoutNodes, d => d.y - d._mindHeight / 2 - 12) || 0,
-            x2: d3.max(layoutNodes, d => d.x + d._mindWidth / 2 + 18) || svgW,
-            y2: d3.max(layoutNodes, d => d.y + d._mindHeight / 2 + 12) || svgH,
+            x1: window.d3.min(layoutNodes, (d: any) => d.x - d._mindWidth / 2 - 18) || 0,
+            y1: window.d3.min(layoutNodes, (d: any) => d.y - d._mindHeight / 2 - 12) || 0,
+            x2: window.d3.max(layoutNodes, (d: any) => d.x + d._mindWidth / 2 + 18) || svgW,
+            y2: window.d3.max(layoutNodes, (d: any) => d.y + d._mindHeight / 2 + 12) || svgH,
         };
         const bw = Math.max(180, bounds.x2 - bounds.x1);
         const bh = Math.max(160, bounds.y2 - bounds.y1);
@@ -1346,7 +1347,7 @@ const Graph3Tier = {
         const midY = (bounds.y1 + bounds.y2) / 2;
         this.svg.transition().duration(420).call(
             this.zoom.transform,
-            d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.28, scale)).translate(-midX, -midY)
+            window.d3.zoomIdentity.translate(svgW / 2, svgH / 2).scale(Math.max(0.28, scale)).translate(-midX, -midY)
         );
     },
 
@@ -1379,7 +1380,7 @@ const Graph3Tier = {
         var nodes = this.simulation.nodes();
         if (!nodes || !nodes.length) return;
 
-        function getRZ(d) {
+        function getRZ(d: any) {
             if (d.type === 'topic') {
                 if (d.level === 1) return 7;
                 if (d.level === 2) return 5;
@@ -1400,7 +1401,7 @@ const Graph3Tier = {
 
         self.svg.transition().duration(300).call(
             self.zoom.transform,
-            d3.zoomIdentity.translate(newW / 2, newH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
+            window.d3.zoomIdentity.translate(newW / 2, newH / 2).scale(Math.max(0.15, scale)).translate(-midX, -midY)
         );
     },
 
@@ -1415,7 +1416,7 @@ const Graph3Tier = {
         if (this.svg && this.zoom) this.svg.transition().duration(300).call(this.zoom.scaleTo, 1);
     },
 
-    _updateZoomPercent(scale) {
+    _updateZoomPercent(scale: any) {
         const percent = document.getElementById('graph-zoom-percent');
         if (percent) percent.textContent = Math.round((Number(scale) || 1) * 100) + '%';
     },
@@ -1430,8 +1431,8 @@ const Graph3Tier = {
         this.simulation = null;
 
         var self = this;
-        var nodes = this.data.nodes.map(function(n) { return Object.assign({}, n); });
-        var edges = this.data.edges.map(function(e) {
+        var nodes = this.data.nodes.map(function(n: any) { return Object.assign({}, n); });
+        var edges = this.data.edges.map(function(e: any) {
             return { source: typeof e.source === 'string' ? e.source : e.source.id || e.source,
                      target: typeof e.target === 'string' ? e.target : e.target.id || e.target };
         });
@@ -1441,20 +1442,20 @@ const Graph3Tier = {
         var cx = svgW / 2;
         var cy = svgH / 2;
 
-        var nodeMap = {};
-        nodes.forEach(function(n) { nodeMap[n.id] = n; });
+        var nodeMap: any = {};
+        nodes.forEach(function(n: any) { nodeMap[n.id] = n; });
 
         // ---- compute target positions (constellation layout) ----
-        var childMap = {};
-        var parentMap = {};
-        edges.forEach(function(e) {
+        var childMap: any = {};
+        var parentMap: any = {};
+        edges.forEach(function(e: any) {
             if (!childMap[e.source]) childMap[e.source] = [];
             childMap[e.source].push(e.target);
             parentMap[e.target] = e.source;
         });
 
         _applyTopicHierarchyLayout(nodes, childMap, nodeMap, parentMap, cx, cy, svgW, svgH, '_tx');
-        nodes.forEach(function(n) {
+        nodes.forEach(function(n: any) {
             if (n._tx == null || n._ty == null) {
                 n._tx = cx;
                 n._ty = cy;
@@ -1463,17 +1464,17 @@ const Graph3Tier = {
         _seedGraphPositions(nodes);
 
         var maxD = 0;
-        nodes.forEach(function(n) { if ((n._depth || 0) > maxD) maxD = n._depth || 0; });
-        nodes.forEach(function(n) {
+        nodes.forEach(function(n: any) { if ((n._depth || 0) > maxD) maxD = n._depth || 0; });
+        nodes.forEach(function(n: any) {
             if (n._depth == null) n._depth = maxD + 1;
         });
-        nodes.forEach(function(n) { if (n._depth > maxD) maxD = n._depth; });
+        nodes.forEach(function(n: any) { if (n._depth > maxD) maxD = n._depth; });
 
         // ---- build SVG elements ----
         this.g.selectAll('*').remove();
 
         var lc = self.layoutConfig;
-        var getRadius = function(d) { return _graphNodeRadius(d, lc); };
+        var getRadius = function(d: any) { return _graphNodeRadius(d, lc); };
 
         // Create all elements hidden initially
         var nodeGroup = self.g.append('g').attr('class', 'graph-nodes');
@@ -1481,27 +1482,27 @@ const Graph3Tier = {
         var nodeSel = nodeGroup.selectAll('g').data(nodes).join('g')
             .attr('cursor', 'pointer')
             .attr('opacity', 0)
-            .attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+            .attr('transform', function(d: any) { return 'translate(' + d.x + ',' + d.y + ')'; });
 
         _createGraphNode(nodeSel, getRadius, self.showFilenames);
 
         var rc = self.layoutConfig;
         var depthRevealInterval = Math.max(rc.replayRevealMinMs,
             Math.min(rc.replayRevealMaxMs, rc.replayRevealBudgetMs / (maxD + 1)));
-        var l1s = nodes.filter(function(n) { return n.type === 'topic' && n.level === 1; });
-        var l1Ids = new Set(l1s.map(function(n) { return n.id; }));
+        var l1s = nodes.filter(function(n: any) { return n.type === 'topic' && n.level === 1; });
+        var l1Ids = new Set(l1s.map(function(n: any) { return n.id; }));
         var revealed = new Set(l1Ids);
         var currentDepth = 1;
         var revealTimer = null;
 
         function syncReveal() {
-            nodeSel.attr('opacity', function(d) { return revealed.has(d.id) ? 1 : 0; });
+            nodeSel.attr('opacity', function(d: any) { return revealed.has(d.id) ? 1 : 0; });
         }
 
         syncReveal();
 
         function updateReplayPos() {
-            nodeSel.attr('transform', function(d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+            nodeSel.attr('transform', function(d: any) { return 'translate(' + d.x + ',' + d.y + ')'; });
         }
 
         self.simulation = _startGraphRelaxation(nodes, edges, getRadius, updateReplayPos, function() {
@@ -1513,8 +1514,8 @@ const Graph3Tier = {
                 self._fitGraphToBounds(nodes, svgW, svgH, getRadius, 600);
                 return;
             }
-            nodes.filter(function(n) { return (n._depth || 0) === currentDepth; })
-                .forEach(function(n) { revealed.add(n.id); });
+            nodes.filter(function(n: any) { return (n._depth || 0) === currentDepth; })
+                .forEach(function(n: any) { revealed.add(n.id); });
             syncReveal();
             currentDepth++;
             if (currentDepth <= maxD) {
@@ -1525,7 +1526,7 @@ const Graph3Tier = {
         }
 
         if (maxD === 0) {
-            nodes.forEach(function(n) { revealed.add(n.id); });
+            nodes.forEach(function(n: any) { revealed.add(n.id); });
             syncReveal();
             self._fitGraphToBounds(nodes, svgW, svgH, getRadius, 600);
         } else if (maxD >= 1) {
@@ -1541,7 +1542,7 @@ function graphZoomOut() { Graph3Tier.zoomOut(); }
 function graphZoomReset() { Graph3Tier.zoomReset(); }
 function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
-function graphSetLayoutMode(mode) { Graph3Tier.setLayoutMode(mode); }
+function graphSetLayoutMode(mode: any) { Graph3Tier.setLayoutMode(mode); }
 function graphToggleFilenames() {
     Graph3Tier.showFilenames = !Graph3Tier.showFilenames;
     Graph3Tier.treeInitialCollapseApplied = false;
@@ -1552,7 +1553,7 @@ function graphToggleFilenames() {
         return;
     }
     if (Graph3Tier.g) {
-        Graph3Tier.g.selectAll('.graph-nodes text').style('display', function(d) {
+        Graph3Tier.g.selectAll('.graph-nodes text').style('display', function(d: any) {
             if (d.type === 'topic') return '';
             if (d.type === 'tag') return '';
             return Graph3Tier.showFilenames ? '' : 'none';
@@ -1576,13 +1577,13 @@ window.graphToggleFilenames = graphToggleFilenames;
     var fnBtn = document.getElementById('graph-toggle-filenames');
     if (fnBtn) fnBtn.classList.toggle('active', Graph3Tier.showFilenames);
     document.querySelectorAll('#graph-filter-bar .graph-filter-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function (this: any) {
             const f = this.dataset.filter;
             Graph3Tier.load(f);
         });
     });
     document.querySelectorAll('#graph-layout-mode .graph-layout-mode-btn').forEach(btn => {
-        btn.addEventListener('click', function () {
+        btn.addEventListener('click', function (this: any) {
             Graph3Tier.setLayoutMode(this.dataset.layoutMode);
         });
     });

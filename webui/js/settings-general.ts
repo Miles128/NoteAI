@@ -10,12 +10,13 @@
 (function() { 'use strict';
 
 async function saveApiConfig() {
-    const apiKeyEl = document.getElementById('api-key');
-    const apiBaseEl = document.getElementById('api-base');
-    const modelNameEl = document.getElementById('model-name');
-    const temperatureEl = document.getElementById('temperature');
-    const maxTokensEl = document.getElementById('max-tokens');
-    const maxContextEl = document.getElementById('max-context');
+    const apiKeyEl = document.getElementById('api-key') as HTMLInputElement | null;
+    const apiBaseEl = document.getElementById('api-base') as HTMLInputElement | null;
+    const modelNameEl = document.getElementById('model-name') as HTMLInputElement | null;
+    const temperatureEl = document.getElementById('temperature') as HTMLInputElement | null;
+    const maxTokensEl = document.getElementById('max-tokens') as HTMLInputElement | null;
+    const maxContextEl = document.getElementById('max-context') as HTMLInputElement | null;
+    const disableThinkingEl = document.getElementById('disable-thinking') as HTMLInputElement | null;
 
     const config = {
         api_key: apiKeyEl ? apiKeyEl.value : '',
@@ -24,13 +25,13 @@ async function saveApiConfig() {
         temperature: temperatureEl ? parseFloat(temperatureEl.value) : 0.7,
         max_tokens: maxTokensEl ? parseInt(maxTokensEl.value) : 32000,
         max_context_tokens: maxContextEl ? parseInt(maxContextEl.value) : 128000,
-        disable_thinking: document.getElementById('disable-thinking') ? document.getElementById('disable-thinking').checked : true
+        disable_thinking: disableThinkingEl ? disableThinkingEl.checked : true
     };
 
     const statusEl = document.getElementById('api-config-status');
     const popupStatusEl = document.getElementById('api-config-status-popup');
 
-    const showStatus = (msg, isError = false) => {
+    const showStatus = (msg: any, isError = false) => {
         if (statusEl) {
             statusEl.textContent = msg;
             statusEl.style.color = isError ? '#e53e3e' : '#38a169';
@@ -58,7 +59,7 @@ async function saveApiConfig() {
             showStatus(result?.message || window.t('settings.saveFailed'), true);
         }
     } catch (e) {
-        showStatus(window.t('settings.saveFailed') + ': ' + e.message, true);
+        showStatus(window.t('settings.saveFailed') + ': ' + (e as Error).message, true);
     }
 }
 
@@ -66,12 +67,12 @@ async function loadApiConfigToForm() {
     try {
         const apiConfig = await window.api.getApiConfig();
         if (apiConfig) {
-            const apiKeyEl = document.getElementById('api-key');
-            const apiBaseEl = document.getElementById('api-base');
-            const modelNameEl = document.getElementById('model-name');
-            const tempEl = document.getElementById('temperature');
-            const maxTokensEl = document.getElementById('max-tokens');
-            const maxContextEl = document.getElementById('max-context');
+            const apiKeyEl = document.getElementById('api-key') as HTMLInputElement | null;
+            const apiBaseEl = document.getElementById('api-base') as HTMLInputElement | null;
+            const modelNameEl = document.getElementById('model-name') as HTMLInputElement | null;
+            const tempEl = document.getElementById('temperature') as HTMLInputElement | null;
+            const maxTokensEl = document.getElementById('max-tokens') as HTMLInputElement | null;
+            const maxContextEl = document.getElementById('max-context') as HTMLInputElement | null;
 
             if (apiKeyEl) apiKeyEl.value = apiConfig.api_key || '';
             if (apiBaseEl) apiBaseEl.value = apiConfig.api_base || 'https://api.openai.com/v1';
@@ -80,7 +81,7 @@ async function loadApiConfigToForm() {
             if (maxTokensEl) maxTokensEl.value = apiConfig.max_tokens || 32000;
             if (maxContextEl) maxContextEl.value = apiConfig.max_context_tokens || 128000;
 
-            var disableThinkingEl = document.getElementById('disable-thinking');
+            var disableThinkingEl = document.getElementById('disable-thinking') as HTMLInputElement | null;
             if (disableThinkingEl) {
                 disableThinkingEl.checked = apiConfig.disable_thinking !== false;
             }
@@ -118,11 +119,11 @@ function closeLogPanel() {
 async function autoSaveConfig() {
     try {
         const uiConfig = {
-            web_ai_assist: document.getElementById('web-ai-toggle')?.checked || false,
-            web_include_images: document.getElementById('web-include-images')?.checked || false,
-            conv_ai_assist: document.getElementById('conv-ai-toggle')?.checked || false,
+            web_ai_assist: (document.getElementById('web-ai-toggle') as HTMLInputElement | null)?.checked || false,
+            web_include_images: (document.getElementById('web-include-images') as HTMLInputElement | null)?.checked || false,
+            conv_ai_assist: (document.getElementById('conv-ai-toggle') as HTMLInputElement | null)?.checked || false,
             auto_topic: true,
-            topic_list: document.getElementById('topic-list')?.value || ''
+            topic_list: (document.getElementById('topic-list') as HTMLInputElement | null)?.value || ''
         };
 
         const result = await window.api.saveUiConfig(uiConfig);
@@ -137,20 +138,20 @@ async function autoSaveConfig() {
 }
 
 function resetApiConfig() {
-    const apiBaseEl = document.getElementById('api-base');
-    const modelNameEl = document.getElementById('model-name');
-    const tempEl = document.getElementById('temperature');
-    const maxTokensEl = document.getElementById('max-tokens');
-    const maxContextEl = document.getElementById('max-context');
+    const apiBaseEl = document.getElementById('api-base') as HTMLInputElement | null;
+    const modelNameEl = document.getElementById('model-name') as HTMLInputElement | null;
+    const tempEl = document.getElementById('temperature') as HTMLInputElement | null;
+    const maxTokensEl = document.getElementById('max-tokens') as HTMLInputElement | null;
+    const maxContextEl = document.getElementById('max-context') as HTMLInputElement | null;
 
     if (apiBaseEl) apiBaseEl.value = 'https://api.openai.com/v1';
     if (modelNameEl) modelNameEl.value = 'gpt-4';
-    if (tempEl) tempEl.value = 0.7;
-    if (maxTokensEl) maxTokensEl.value = 32000;
-    if (maxContextEl) maxContextEl.value = 128000;
+    if (tempEl) tempEl.value = String(0.7);
+    if (maxTokensEl) maxTokensEl.value = String(32000);
+    if (maxContextEl) maxContextEl.value = String(128000);
 }
 
-async function saveFontSize(size) {
+async function saveFontSize(size: any) {
     try {
         var result = await window.api.saveUiConfig({ font_size: size });
         if (!result || !result.success) {
@@ -161,9 +162,9 @@ async function saveFontSize(size) {
     }
 }
 
-async function saveFontFamily(key, value) {
+async function saveFontFamily(key: any, value: any) {
     try {
-        var payload = {};
+        var payload: Record<string, any> = {};
         payload[key] = value;
         var result = await window.api.saveUiConfig(payload);
         if (!result || !result.success) {
@@ -176,10 +177,10 @@ async function saveFontFamily(key, value) {
 
 function getTypographyFromForm() {
     var roles = ['h1', 'h2', 'h3', 'body', 'quote'];
-    var next = {};
-    roles.forEach(function(role) {
-        var familyEl = document.getElementById('typography-' + role + '-family');
-        var styleEl = document.getElementById('typography-' + role + '-style');
+    var next: Record<string, any> = {};
+    roles.forEach(function(role: any) {
+        var familyEl = document.getElementById('typography-' + role + '-family') as HTMLInputElement | null;
+        var styleEl = document.getElementById('typography-' + role + '-style') as HTMLInputElement | null;
         next[role] = {
             family: familyEl ? familyEl.value : 'system',
             style: styleEl ? styleEl.value : 'normal'
@@ -190,13 +191,13 @@ function getTypographyFromForm() {
         : next;
 }
 
-function applyTypographyToForm(typography) {
+function applyTypographyToForm(typography: any) {
     var normalized = window.ThemeModule && window.ThemeModule.normalizeTypography
         ? window.ThemeModule.normalizeTypography(typography)
         : (typography || {});
-    Object.keys(normalized).forEach(function(role) {
-        var familyEl = document.getElementById('typography-' + role + '-family');
-        var styleEl = document.getElementById('typography-' + role + '-style');
+    Object.keys(normalized).forEach(function(role: any) {
+        var familyEl = document.getElementById('typography-' + role + '-family') as HTMLInputElement | null;
+        var styleEl = document.getElementById('typography-' + role + '-style') as HTMLInputElement | null;
         if (familyEl) familyEl.value = normalized[role].family;
         if (styleEl) styleEl.value = normalized[role].style;
     });
@@ -217,7 +218,7 @@ async function saveTypographySettings() {
     }
 }
 
-async function setLocale(locale) {
+async function setLocale(locale: any) {
     if (!window.I18nModule || !window.I18nModule.setLocale) return;
     try {
         await window.I18nModule.setLocale(locale);
@@ -225,7 +226,7 @@ async function setLocale(locale) {
             window.updateSidebarStats();
         }
         if (window.I18nModule.applyDomI18n) {
-            window.I18nModule.applyDomI18n(document.getElementById('settings-panel'));
+            window.I18nModule.applyDomI18n(document.getElementById('settings-panel') as ParentNode | undefined);
         }
     } catch (e) {
         console.error('[Settings] setLocale error:', e);
@@ -237,11 +238,11 @@ async function loadUiConfigToForm() {
         var uiConfig = await window.api.getUiConfig();
         if (uiConfig) {
             var savedFontSize = uiConfig.font_size || 'small';
-            if (window.ThemeModule && window.ThemeModule.restoreFontSize) {
+            if (window.ThemeModule) {
                 window.ThemeModule.setFontSize(savedFontSize);
             }
             document.querySelectorAll('input[name="font-size"]').forEach(function(radio) {
-                radio.checked = radio.value === savedFontSize;
+                (radio as HTMLInputElement).checked = (radio as HTMLInputElement).value === savedFontSize;
             });
             var sidebarFont = uiConfig.sidebar_font_family || 'system';
             var previewFont = uiConfig.preview_font_family || 'system';
@@ -259,29 +260,27 @@ async function loadUiConfigToForm() {
             applyTypographyToForm(typography);
             var loc = uiConfig.locale === 'en' ? 'en' : 'zh-CN';
             document.querySelectorAll('input[name="ui-locale"]').forEach(function(radio) {
-                radio.checked = radio.value === loc;
+                (radio as HTMLInputElement).checked = (radio as HTMLInputElement).value === loc;
             });
-            var ingestAutoEl = document.getElementById('settings-ingest-auto-enabled');
+            var ingestAutoEl = document.getElementById('settings-ingest-auto-enabled') as HTMLInputElement | null;
             if (ingestAutoEl) {
                 ingestAutoEl.checked = uiConfig.ingest_auto_enabled !== false;
             }
-            var topicThresholdEl = document.getElementById('settings-topic-auto-threshold');
+            var topicThresholdEl = document.getElementById('settings-topic-auto-threshold') as HTMLInputElement | null;
             if (topicThresholdEl) {
                 topicThresholdEl.value = uiConfig.topic_auto_assign_threshold != null ? uiConfig.topic_auto_assign_threshold : 0.80;
             }
             var mergePresetEls = document.querySelectorAll('input[name="settings-merge-preset"]');
             if (mergePresetEls.length) {
                 var savedPreset = uiConfig.merge_preset || 'balanced';
-                mergePresetEls.forEach(function(radio) { radio.checked = radio.value === savedPreset; });
+                mergePresetEls.forEach(function(radio) { (radio as HTMLInputElement).checked = (radio as HTMLInputElement).value === savedPreset; });
             }
             if (window.SettingsComponents) {
                 window.SettingsComponents.applyMergeAdvancedToForm(uiConfig.merge_overrides || {});
                 window.SettingsComponents.applyRagSettingsToForm(uiConfig);
                 window.SettingsComponents.applyCliSettingsToForm(uiConfig);
             }
-            if (window.SettingsSemantic) {
-                window.SettingsSemantic.applySemanticSettingsToForm(uiConfig);
-            }
+            window.SettingsSemantic?.applySemanticSettingsToForm?.(uiConfig);
         }
     } catch (e) {
         console.error('[Settings] Load UI config error:', e);
@@ -292,7 +291,7 @@ async function loadUiConfigToForm() {
 // 备份与恢复 / 索引健康（本地可靠性）
 // ---------------------------------------------------------------------------
 
-function showReliabilityStatus(elId, msg, isError) {
+function showReliabilityStatus(elId: any, msg: any, isError: any) {
     const el = document.getElementById(elId);
     if (!el) return;
     el.textContent = msg;
@@ -300,12 +299,12 @@ function showReliabilityStatus(elId, msg, isError) {
     el.style.color = isError ? '#e53e3e' : '#38a169';
 }
 
-function hideReliabilityStatus(elId) {
+function hideReliabilityStatus(elId: any) {
     const el = document.getElementById(elId);
     if (el) el.style.display = 'none';
 }
 
-function formatBytes(bytes) {
+function formatBytes(bytes: any) {
     if (bytes == null || isNaN(bytes)) return '';
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
@@ -313,7 +312,7 @@ function formatBytes(bytes) {
 }
 
 async function backupWorkspaceNow() {
-    const btn = document.getElementById('settings-backup-btn');
+    const btn = document.getElementById('settings-backup-btn') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
     hideReliabilityStatus('settings-backup-status');
     try {
@@ -327,14 +326,14 @@ async function backupWorkspaceNow() {
         showReliabilityStatus('settings-backup-status', msg, false);
         if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityBackupSuccess'));
     } catch (e) {
-        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
 async function exportNotesNow() {
-    const btn = document.getElementById('settings-export-btn');
+    const btn = document.getElementById('settings-export-btn') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
     hideReliabilityStatus('settings-backup-status');
     try {
@@ -347,7 +346,7 @@ async function exportNotesNow() {
         }), false);
         if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityExportSuccess'));
     } catch (e) {
-        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus('settings-backup-status', window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -358,12 +357,12 @@ async function restoreBackupNow() {
     try {
         file = await window.api.openArchiveDialog();
     } catch (e) {
-        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
         return;
     }
     if (!file) return;
     if (!window.confirm(window.t('settings.reliabilityRestoreConfirm'))) return;
-    const btn = document.getElementById('settings-restore-btn');
+    const btn = document.getElementById('settings-restore-btn') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
     hideReliabilityStatus('settings-restore-status');
     try {
@@ -375,20 +374,20 @@ async function restoreBackupNow() {
         }), false);
         if (window.ToastModule) window.ToastModule.success(window.t('settings.reliabilityRestoreSuccess'));
     } catch (e) {
-        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus('settings-restore-status', window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
-function healthBadge(ok) {
+function healthBadge(ok: any) {
     return ok ? window.escapeHtml(window.t('settings.health.ok')) : window.escapeHtml(window.t('settings.health.bad'));
 }
 
-function renderHealthReport(report) {
+function renderHealthReport(report: any) {
     const el = document.getElementById('settings-health-report');
     if (!el) return;
-    const rows = ['rag', 'semantic', 'links', 'fulltext'].map(function(key) {
+    const rows = ['rag', 'semantic', 'links', 'fulltext'].map(function(key: any) {
         const item = report[key] || {};
         const cls = item.ok ? 'settings-health-ok' : 'settings-health-bad';
         return '<div class="settings-health-row"><span class="settings-health-name">' + window.escapeHtml(window.t('settings.health.' + key)) + '</span><span class="settings-health-badge ' + cls + '">' + healthBadge(item.ok) + '</span><span class="settings-health-detail">' + window.escapeHtml(item.detail || '') + '</span></div>';
@@ -404,7 +403,7 @@ function renderHealthReport(report) {
 }
 
 async function runHealthCheck() {
-    const btn = document.getElementById('settings-health-check-btn');
+    const btn = document.getElementById('settings-health-check-btn') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
     hideReliabilityStatus('settings-health-status');
     try {
@@ -414,13 +413,13 @@ async function runHealthCheck() {
     } catch (e) {
         const el = document.getElementById('settings-health-report');
         if (el) el.style.display = 'none';
-        showReliabilityStatus('settings-health-status', window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus('settings-health-status', window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
     } finally {
         if (btn) btn.disabled = false;
     }
 }
 
-async function runHealthRecovery(kind) {
+async function runHealthRecovery(kind: any) {
     const statusEl = 'settings-health-status';
     hideReliabilityStatus(statusEl);
     try {
@@ -436,7 +435,7 @@ async function runHealthRecovery(kind) {
         showReliabilityStatus(statusEl, window.t('settings.health.recoveryQueued'), false);
         if (window.ToastModule) window.ToastModule.success(window.t('settings.health.recoveryQueued'));
     } catch (e) {
-        showReliabilityStatus(statusEl, window.t('settings.reliabilityFailed', { message: e.message || String(e) }), true);
+        showReliabilityStatus(statusEl, window.t('settings.reliabilityFailed', { message: (e as Error).message || String(e) }), true);
     }
 }
 
@@ -493,7 +492,7 @@ window.SettingsGeneral = {
     loadUiConfigToForm,
     setLocale,
     initReliabilitySettings,
-};
+} as any;
 
 // 历史全局别名（保持对外行为不变）
 window.setLocale = setLocale;
@@ -502,6 +501,6 @@ window.saveApiConfig = saveApiConfig;
 window.refreshLog = refreshLog;
 window.closeSettingsPanel = closeSettingsPanel;
 window.closeLogPanel = closeLogPanel;
-window.resetApiConfig = resetApiConfig;
+window.resetApiConfig = resetApiConfig as any;
 
 })();

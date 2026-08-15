@@ -7,7 +7,7 @@ async function openWorkspace() {
     const result = await window.api.openWorkspace();
     if (result && result.success) {
         updateWorkspaceDisplay(result.workspace_path);
-        updateStatus(result.message);
+        window.updateStatus(result.message);
         if (window.TreeModule && window.TreeModule.loadFileTree) {
             await window.TreeModule.loadFileTree(true);
         }
@@ -25,13 +25,13 @@ async function openWorkspace() {
 }
 
 async function createSampleWorkspace() {
-    const t = window.t || function(k) { return k; };
-    updateStatus(t('workspace.sample.creating'));
+    const t = window.t || function(k: any) { return k; };
+    window.updateStatus(t('workspace.sample.creating'));
     try {
         const result = await window.api.createSampleWorkspace();
         if (result && result.success) {
             updateWorkspaceDisplay(result.workspace_path);
-            updateStatus(result.message || t('workspace.sample.ready'));
+            window.updateStatus(result.message || t('workspace.sample.ready'));
             if (window.TreeModule && window.TreeModule.loadFileTree) {
                 await window.TreeModule.loadFileTree(true);
             }
@@ -39,15 +39,15 @@ async function createSampleWorkspace() {
                 window.runPostWorkspaceSetup();
             }
         } else {
-            updateStatus((result && result.message) || t('workspace.sample.failed'));
+            window.updateStatus((result && result.message) || t('workspace.sample.failed'));
         }
     } catch (e) {
         console.error('[Workspace] createSampleWorkspace error:', e);
-        updateStatus((e && e.message) || t('workspace.sample.failed'));
+        window.updateStatus(((e as any) && (e as any).message) || t('workspace.sample.failed'));
     }
 }
 
-function updateWorkspaceDisplay(workspacePath) {
+function updateWorkspaceDisplay(workspacePath: any) {
     const container = document.getElementById('workspace-container');
     const nameDisplay = document.getElementById('workspace-name-display');
 
@@ -72,20 +72,20 @@ function updateWorkspaceDisplay(workspacePath) {
         if (workspacePath) {
             container.innerHTML = `
                 <div class="workspace-folder-display">
-                    ${window.Icons.get('folderFilled')}
-                    <span class="workspace-path">${escapeHtml(workspacePath)}</span>
+                    ${window.Icons!.get('folderFilled')}
+                    <span class="workspace-path">${window.escapeHtml(workspacePath)}</span>
                 </div>
             `;
         } else {
             const sampleLabel = window.t ? window.t('workspace.sample.button') : '试用示例库';
             container.innerHTML = `
                 <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="打开工作区">
-                    ${window.Icons.get('folderFilled')}
+                    ${window.Icons!.get('folderFilled')}
                     <span>打开工作区</span>
                 </button>
-                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${escapeHtml(sampleLabel)}">
-                    ${window.Icons.get('folderFilled')}
-                    <span>${escapeHtml(sampleLabel)}</span>
+                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${window.escapeHtml(sampleLabel)}">
+                    ${window.Icons!.get('folderFilled')}
+                    <span>${window.escapeHtml(sampleLabel)}</span>
                 </button>
             `;
         }
@@ -158,7 +158,7 @@ function closeProjectRulesModal() {
 }
 
 async function saveProjectRulesModal() {
-    var input = document.getElementById('project-rules-input');
+    var input = document.getElementById('project-rules-input') as HTMLTextAreaElement | null;
     var rules = input ? input.value : '';
     try {
         await window.api.saveProjectRules(rules);
@@ -207,8 +207,12 @@ async function showAbout() {
     const settingsPanel = document.getElementById('settings-panel');
     if (settingsPanel) {
         settingsPanel.classList.add('active');
-        window.SettingsModule.loadApiConfigToForm();
-        window.SettingsModule.switchSettingsTab('about');
+        if (window.SettingsModule && window.SettingsModule.loadApiConfigToForm) {
+            window.SettingsModule.loadApiConfigToForm();
+        }
+        if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
+            window.SettingsModule.switchSettingsTab('about');
+        }
     }
 }
 

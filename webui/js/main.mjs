@@ -21,23 +21,23 @@ async function loadModules() {
 
     await import('./assistant.ts');
 
-    await import('./icons.js');
+    await import('./icons.ts');
     const { IconsModule } = window;
     window.IconsModule = IconsModule;
 
     // 顺序契约：graph-layout-params.js 顶层读取 window.Storage.KEYS，依赖 index.html 末尾经典脚本
     // storage.js 先行——经典脚本在 HTML 解析期执行，必早于本模块脚本，顺序恒成立。
     // G3.js 顶层读取 window.GraphLayoutParams，须在其之前加载。
-    await import('./graph-layout-params.js');
-    await import('./G3.js');
+    await import('./graph-layout-params.ts');
+    await import('./G3.ts');
 
-    await import('./toast.js');
+    await import('./toast.ts');
 
     // settings 子模块须先于薄主入口 settings.js 加载（主入口组装 window.SettingsModule）
-    await import('./settings-general.js');
+    await import('./settings-general.ts');
     await import('./settings-components.ts');
-    await import('./settings-semantic.js');
-    await import('./settings.js');
+    await import('./settings-semantic.ts');
+    await import('./settings.ts');
     const {
         SettingsModule, saveApiConfig, refreshLog, closeSettingsPanel,
         closeLogPanel, resetApiConfig,
@@ -49,7 +49,7 @@ async function loadModules() {
     window.closeLogPanel = closeLogPanel;
     window.resetApiConfig = resetApiConfig;
 
-    await import('./workspace.js');
+    await import('./workspace.ts');
     const {
         WorkspaceModule, openWorkspace,
         showProjectRulesModal, closeProjectRulesModal, saveProjectRulesModal,
@@ -64,23 +64,23 @@ async function loadModules() {
     const { TreeModule } = window;
     window.TreeModule = TreeModule;
 
-    await import('./note-list.js');
+    await import('./note-list.ts');
     window.NoteListModule = window.NoteListModule || {};
     if (window.NoteListModule.init) window.NoteListModule.init();
 
-    await import('./inspector.js');
+    await import('./inspector.ts');
     window.InspectorModule = window.InspectorModule || {};
     if (window.InspectorModule.init) window.InspectorModule.init();
 
-    await import('./cli-tool-summary.js');
+    await import('./cli-tool-summary.ts');
     await import('./cli-agent.ts');
     window.CliAgentModule = window.CliAgentModule || {};
     if (window.CliAgentModule.init) window.CliAgentModule.init();
 
-    await import('./statusbar.js');
+    await import('./statusbar.ts');
     window.StatusbarModule = window.StatusbarModule || {};
 
-    await import('./sidebar.js');
+    await import('./sidebar.ts');
     window.switchSidebarView = window.switchSidebarView;
     window.updateSidebarStats = window.updateSidebarStats;
     window.setSidebarStatus = window.setSidebarStatus;
@@ -89,7 +89,7 @@ async function loadModules() {
     // toggleSidebar 的真实实现在 sidebar.js；模块加载前由 index.html 内联脚本与
     // utils.js 的 _earlyGlobals 提供 noop 占位，此处不再重复兜底。
 
-    await import('./tags.js');
+    await import('./tags.ts');
 
     await import('./tiptap-editor.ts');
     const { TiptapEditorModule, TiptapEditor } = window;
@@ -103,18 +103,18 @@ async function loadModules() {
     window.closePreviewPanel = closePreviewPanel;
     window.backToContent = backToContent;
 
-    await import('./selection-tools.js');
+    await import('./selection-tools.ts');
     window.SelectionToolsModule = window.SelectionToolsModule || {};
     if (window.SelectionToolsModule.init) window.SelectionToolsModule.init();
 
-    await import('./editor.js');
+    await import('./editor.ts');
 
-    await import('./rewrite.js');
+    await import('./rewrite.ts');
     if (window.RewriteManager) {
         window.onLLMRewrite = window.RewriteManager.onLLMRewrite;
     }
 
-    await import('./converter.js');
+    await import('./converter.ts');
     const { ConverterModule } = window;
     window.ConverterModule = ConverterModule;
 
@@ -122,7 +122,7 @@ async function loadModules() {
     const { DownloaderModule } = window;
     window.DownloaderModule = DownloaderModule;
 
-    await import('./integrator.js');
+    await import('./integrator.ts');
     const { IntegratorModule } = window;
     window.IntegratorModule = IntegratorModule;
 
@@ -152,7 +152,7 @@ async function loadModules() {
     window.onConfirmBtnClick = onConfirmBtnClick;
     window.hasTopicPending = hasTopicPending;
 
-    await import('./search.js');
+    await import('./search.ts');
     window.SearchModule = window.SearchModule || {};
 
     await import('./pending.ts');
@@ -168,24 +168,24 @@ async function loadModules() {
     window.toggleSemanticWorkbench = window.SemanticWorkbenchModule.toggle;
     if (window.SemanticWorkbenchModule.init) window.SemanticWorkbenchModule.init();
 
-    await import('./semantic-graph.js');
+    await import('./semantic-graph.ts');
     window.SemanticGraphModule = window.SemanticGraphModule || {};
 
-    await import('./tabs.js');
+    await import('./tabs.ts');
     const { TabsModule } = window;
     window.TabsModule = TabsModule;
 
-    await import('./workspace-rules.js');
+    await import('./workspace-rules.ts');
     if (window.OrganizeRulesModule && window.OrganizeRulesModule.init) {
         window.OrganizeRulesModule.init();
     }
 
-    await import('./ingest.js');
+    await import('./ingest.ts');
     const { IngestModule } = window;
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
-    await import('./job-center.js');
+    await import('./job-center.ts');
     window.JobCenterModule = window.JobCenterModule || {};
     if (window.JobCenterModule.refresh) {
         window.JobCenterModule.refresh({ include_finished: true, limit: 50 }).catch(function(err) {
@@ -193,23 +193,23 @@ async function loadModules() {
         });
     }
 
-    await import('./home.js');
+    await import('./home.ts');
     window.HomeDashboardModule = window.HomeDashboardModule || {};
     if (window.HomeDashboardModule.init) window.HomeDashboardModule.init();
 
-    await import('./note-draft.js');
+    await import('./note-draft.ts');
     window.NoteDraftModule = window.NoteDraftModule || {};
 
-    await import('./quick-create.js');
+    await import('./quick-create.ts');
     if (window.QuickCreateModule && window.QuickCreateModule.init) {
         window.QuickCreateModule.init();
     }
 
-    await import('./event-listeners.js');
+    await import('./event-listeners.ts');
     const { EventListeners } = window;
     window.EventListeners = EventListeners;
 
-    await import('./app.js');
+    await import('./app.ts');
     const { App, importFiles } = window;
     window.App = App;
     window.importFiles = importFiles;

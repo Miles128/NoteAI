@@ -1,7 +1,7 @@
 window.EventListeners = (function() { 'use strict';
 
-var _workspaceWatcherUnlisten = null;
-var _workspaceWatcherDebounce = null;
+var _workspaceWatcherUnlisten: any = null;
+var _workspaceWatcherDebounce: any = null;
 var _hasRunInitialIngest = false;
 
 function initWorkspaceFileWatcher() {
@@ -12,20 +12,20 @@ function initWorkspaceFileWatcher() {
         _workspaceWatcherUnlisten();
     }
 
-    eventAPI.listen('python-event', function(event) {
+    eventAPI.listen('python-event', function(event: any) {
         var data = event.payload;
         if (!data || !data.type) return;
 
         if (data.type === 'auto_topic_assigned') {
             window.updateStatus('✓ ' + (data.topic ? window.t('app.autoAssignedTo', { topic: data.topic }) : window.t('app.autoAssignedTopic')));
-            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
-            if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') loadPendingItems();
+            if (typeof window.refreshPendingBtnState === 'function') window.refreshPendingBtnState();
+            if (window._pendingViewVisible && typeof window.loadPendingItems === 'function') window.loadPendingItems();
             refreshWorkspaceViewsAfterChange();
             return;
         }
 
         if (data.type === 'auto_file_moved') {
-            if (typeof window.refreshPendingBtnState === 'function') refreshPendingBtnState();
+            if (typeof window.refreshPendingBtnState === 'function') window.refreshPendingBtnState();
             refreshWorkspaceViewsAfterChange();
             return;
         }
@@ -39,7 +39,7 @@ function initWorkspaceFileWatcher() {
             _workspaceWatcherDebounce = null;
             refreshWorkspaceViewsAfterChange();
         }, 3000);
-    }).then(function(unlisten) {
+    }).then(function(unlisten: any) {
         _workspaceWatcherUnlisten = unlisten;
     });
 }
@@ -81,15 +81,15 @@ function refreshWorkspaceViewsAfterChange() {
     if (typeof window.updateHomeStats === 'function') {
         if (treeLoad) {
             Promise.resolve(treeLoad)
-                .then(function() { window.updateHomeStats(); })
-                .catch(function(e) { console.warn('[App] file tree refresh after workspace change failed:', e); });
+                .then(function() { window.updateHomeStats!(); })
+                .catch(function(e: any) { console.warn('[App] file tree refresh after workspace change failed:', e); });
         } else {
             window.updateHomeStats();
         }
     }
 }
 
-function refreshCurrentSidebarView(forceRefresh) {
+function refreshCurrentSidebarView(forceRefresh: any) {
     var activeView = document.querySelector('.sidebar-view-btn.active');
     if (!activeView) {
         if (window.TreeModule && window.TreeModule.loadFileTree) {
@@ -105,7 +105,7 @@ function refreshCurrentSidebarView(forceRefresh) {
         }
     } else if (view === 'tags') {
         if (typeof window.loadTagsView === 'function') {
-            window.loadTagsView(true);
+            (window.loadTagsView as any)(true);
         }
     } else if (view === 'graph') {
         if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
@@ -128,7 +128,7 @@ function initSidecarErrorListener() {
     var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
     if (!eventAPI || typeof eventAPI.listen !== 'function') return;
 
-    eventAPI.listen('python-event', function(event) {
+    eventAPI.listen('python-event', function(event: any) {
         var data = event.payload;
         if (!data) return;
         if (data.type === 'sidecar_died') {
@@ -158,7 +158,7 @@ function initRagEventListener() {
     var eventAPI = typeof window.getTauriEventAPI === 'function' ? window.getTauriEventAPI() : null;
     if (!eventAPI || typeof eventAPI.listen !== 'function') return;
 
-    eventAPI.listen('python-event', function(event) {
+    eventAPI.listen('python-event', function(event: any) {
         var data = event.payload;
         if (!data) return;
         if (data.type === 'progress' && data.element_id === 'rag-index') {
@@ -214,7 +214,7 @@ function initRagEventListener() {
         } else if (data.type === 'cascade_done') {
             var d = data.data || {};
             if (d.success) {
-                var msg = d.is_new_topic ? window.t('app.surveyNewTopic') : window.t('app.surveyUpdated');
+                var msg: any = d.is_new_topic ? window.t('app.surveyNewTopic') : window.t('app.surveyUpdated');
                 window.updateStatus(msg + ': ' + (data.topic || ''));
             } else {
                 window.updateStatus(window.t('app.cascadeFailed', { topic: data.topic || '' }));

@@ -1,7 +1,7 @@
 (function() { 'use strict';
 
 var STORAGE_KEY = 'noteai.noteDrafts.v1';
-var _activeDraftId = null;
+var _activeDraftId: any = null;
 var _committing = false;
 
 function _loadAll() {
@@ -15,7 +15,7 @@ function _loadAll() {
     }
 }
 
-function _saveAll(map) {
+function _saveAll(map: any) {
     if (window.Storage && window.Storage.setItem) {
         window.Storage.setItem(STORAGE_KEY, map || {});
         return;
@@ -27,7 +27,7 @@ function _saveAll(map) {
     }
 }
 
-function pathToTopic(folderPath) {
+function pathToTopic(folderPath: any) {
     if (!folderPath) return '';
     var norm = String(folderPath).replace(/\\/g, '/');
     if (norm.indexOf('Notes/') !== 0) return '';
@@ -36,7 +36,7 @@ function pathToTopic(folderPath) {
     return rel.split('/').filter(Boolean).join(' > ');
 }
 
-function extractTitleFromMarkdown(content) {
+function extractTitleFromMarkdown(content: any) {
     var text = String(content || '');
     var body = text;
     var fm = text.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/);
@@ -54,13 +54,13 @@ function _untitledLabel() {
     return (window.t && window.t('noteDraft.untitled')) || '未命名';
 }
 
-function _draftLabel(title) {
+function _draftLabel(title: any) {
     var suffix = (window.t && window.t('noteDraft.labelSuffix')) || '(草稿)';
     var name = String(title || '').trim() || _untitledLabel();
     return name + ' ' + suffix;
 }
 
-function createDraft(topic, folderPath, template) {
+function createDraft(topic: any, folderPath: any, template: any) {
     var cleanTopic = String(topic || '').trim();
     var cleanFolder = String(folderPath || '').trim();
     var id = 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -69,7 +69,7 @@ function createDraft(topic, folderPath, template) {
         fmLines.push('topic: ' + cleanTopic);
     }
     fmLines.push('---');
-    var bodies = {
+    var bodies: Record<string, string> = {
         meeting: '# 会议记录\n\n## 目标\n\n## 讨论\n\n## 决策\n\n## 待办\n\n- [ ] ',
         research: '# 研究笔记\n\n## 问题\n\n## 资料与证据\n\n## 结论\n\n## 待验证\n\n',
         task: '# 待办\n\n- [ ] \n\n## 背景\n\n'
@@ -90,13 +90,13 @@ function createDraft(topic, folderPath, template) {
     return draft;
 }
 
-function getDraft(id) {
+function getDraft(id: any) {
     if (!id) return null;
     var all = _loadAll();
     return all[id] || null;
 }
 
-function updateDraft(id, patch) {
+function updateDraft(id: any, patch: any) {
     if (!id) return null;
     var all = _loadAll();
     var draft = all[id];
@@ -121,7 +121,7 @@ function updateDraft(id, patch) {
     return draft;
 }
 
-function removeDraft(id) {
+function removeDraft(id: any) {
     if (!id) return;
     var all = _loadAll();
     if (!all[id]) return;
@@ -132,7 +132,7 @@ function removeDraft(id) {
     }
 }
 
-function setActiveDraft(id) {
+function setActiveDraft(id: any) {
     _activeDraftId = id || null;
     if (window.StatusbarModule && window.StatusbarModule.setDraftActionsVisible) {
         window.StatusbarModule.setDraftActionsVisible(!!id);
@@ -146,10 +146,10 @@ function clearActiveDraft() {
 }
 
 function isDraftActive() {
-    return !!(_activeDraftId || (window.TiptapEditor && window.TiptapEditor.draftId));
+    return !!(_activeDraftId || ((window.TiptapEditor as any) && (window.TiptapEditor as any).draftId));
 }
 
-function refreshDraftChrome(content) {
+function refreshDraftChrome(content: any) {
     var label = _draftLabel(extractTitleFromMarkdown(content));
     if (window.PreviewModule && window.PreviewModule.updateTitlebarFileName) {
         window.PreviewModule.updateTitlebarFileName(label, true);
@@ -159,7 +159,7 @@ function refreshDraftChrome(content) {
     }
 }
 
-function isDraftEffectivelyEmpty(content) {
+function isDraftEffectivelyEmpty(content: any) {
     var text = String(content || '');
     var body = text;
     var fm = text.match(/^\s*---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n)?/);
@@ -170,7 +170,7 @@ function isDraftEffectivelyEmpty(content) {
     return body.trim() === '';
 }
 
-async function openDraft(draft) {
+async function openDraft(draft: any) {
     if (!draft || !draft.id) return false;
 
     setActiveDraft(draft.id);
@@ -192,15 +192,15 @@ async function openDraft(draft) {
         return false;
     }
 
-    var ok = await window.TiptapEditorModule.openMarkdownInEditor(draft.content, null, {
+    var ok = await window.TiptapEditorModule.openMarkdownInEditor(draft.content, null as any, {
         draftId: draft.id,
         draftTitle: draft.title || '',
         draftTopic: draft.topic || ''
     });
 
-    if (ok && window.TiptapEditor && window.TiptapEditor.focus) {
+    if (ok && (window.TiptapEditor as any) && (window.TiptapEditor as any).focus) {
         window.requestAnimationFrame(function() {
-            window.TiptapEditor.focus();
+            (window.TiptapEditor as any).focus();
         });
     }
 
@@ -210,7 +210,7 @@ async function openDraft(draft) {
     return !!ok;
 }
 
-async function createNoteInContext(template) {
+async function createNoteInContext(template: any) {
     var info = window.NoteListModule && window.NoteListModule.getCurrentTopicInfo
         ? window.NoteListModule.getCurrentTopicInfo()
         : null;
@@ -231,7 +231,7 @@ async function createNoteInContext(template) {
 async function commitCurrentDraft() {
     if (_committing) return { success: false, message: 'busy' };
 
-    var editor = window.TiptapEditor;
+    var editor: any = window.TiptapEditor;
     if (!editor || !editor.draftId) {
         return { success: false, message: (window.t && window.t('noteDraft.noActiveDraft')) || '没有可保存的草稿' };
     }
@@ -297,7 +297,7 @@ async function commitCurrentDraft() {
 
         return { success: true, path: createRes.path };
     } catch (err) {
-        var msg = (err && err.message) ? err.message : String(err || window.t('common.unknownError'));
+        var msg = ((err as any) && (err as any).message) ? (err as any).message : String(err || window.t('common.unknownError'));
         if (window.StatusbarModule && window.StatusbarModule.updateSaveStatus) {
             window.StatusbarModule.updateSaveStatus('error', window.t('editor.saveFailed'));
         }
@@ -309,7 +309,7 @@ async function commitCurrentDraft() {
 }
 
 async function discardCurrentDraft() {
-    var editor = window.TiptapEditor;
+    var editor: any = window.TiptapEditor;
     var draftId = _activeDraftId || (editor && editor.draftId);
     if (!draftId) {
         return { success: false, message: (window.t && window.t('noteDraft.noActiveDraft')) || '没有可保存的草稿' };
@@ -355,7 +355,7 @@ function bindShortcuts() {
 
     document.addEventListener('keydown', function(e) {
         if (!(e.metaKey || e.ctrlKey) || e.key !== 's') return;
-        if (!window.TiptapEditor || !window.TiptapEditor.draftId) return;
+        if (!(window.TiptapEditor as any) || !(window.TiptapEditor as any).draftId) return;
         e.preventDefault();
         commitCurrentDraft();
     });

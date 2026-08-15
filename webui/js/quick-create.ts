@@ -1,17 +1,17 @@
 (function() { 'use strict';
 
-var _topicOptions = [];
+var _topicOptions: any[] = [];
 
 function _overlay() {
     return document.getElementById('quick-create-overlay');
 }
 
 function _fillTopicSelects() {
-    var parentSel = document.getElementById('qc-topic-parent');
+    const parentSel = document.getElementById('qc-topic-parent') as HTMLSelectElement | null;
     if (!parentSel) return;
     var prev = parentSel.value;
     parentSel.innerHTML = '<option value="">' + window.t('quickCreate.uncategorized') + '</option>';
-    _topicOptions.forEach(function(t) {
+    _topicOptions.forEach(function(t: any) {
         var opt = document.createElement('option');
         opt.value = t;
         opt.textContent = t;
@@ -20,9 +20,9 @@ function _fillTopicSelects() {
     if (prev) parentSel.value = prev;
 }
 
-function _flattenTopics(nodes, prefix) {
-    var out = [];
-    (nodes || []).forEach(function(n) {
+function _flattenTopics(nodes: any, prefix: any) {
+    var out: any[] = [];
+    (nodes || []).forEach(function(n: any) {
         var name = n.name || n.label || '';
         if (!name) return;
         var label = prefix ? prefix + ' > ' + name : name;
@@ -61,18 +61,18 @@ function _open() {
     });
 }
 
-function _selectTab(tab) {
-    document.querySelectorAll('#quick-create-overlay [data-qc-tab]').forEach(function(button) {
+function _selectTab(tab: any) {
+    document.querySelectorAll('#quick-create-overlay [data-qc-tab]').forEach(function(button: any) {
         button.classList.toggle('active', button.dataset.qcTab === tab);
     });
-    document.querySelectorAll('#quick-create-overlay [data-qc-pane]').forEach(function(pane) {
+    document.querySelectorAll('#quick-create-overlay [data-qc-pane]').forEach(function(pane: any) {
         pane.hidden = pane.dataset.qcPane !== tab;
     });
 }
 
 function _submitTopic() {
-    var nameEl = document.getElementById('qc-topic-name');
-    var parentEl = document.getElementById('qc-topic-parent');
+    var nameEl = document.getElementById('qc-topic-name') as HTMLInputElement | null;
+    var parentEl = document.getElementById('qc-topic-parent') as HTMLSelectElement | null;
     var name = (nameEl && nameEl.value || '').trim();
     var parent = (parentEl && parentEl.value || '').trim();
     if (!name) {
@@ -80,9 +80,9 @@ function _submitTopic() {
         return;
     }
     if (!window.api || !window.api.createTopic) return;
-    var btn = document.getElementById('qc-topic-submit');
+    var btn = document.getElementById('qc-topic-submit') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;
-    window.api.createTopic(name, parent).then(function(res) {
+    window.api.createTopic(name, parent).then(function(res: any) {
         if (btn) btn.disabled = false;
         if (res && res.success) {
             _close();
@@ -121,13 +121,13 @@ function initQuickCreate() {
             if (e.key === 'Enter') { e.preventDefault(); _submitTopic(); }
         });
     }
-    overlay.addEventListener('click', function(e) {
+    overlay.addEventListener('click', function(e: any) {
         var tab = e.target.closest('[data-qc-tab]');
         if (tab) { _selectTab(tab.dataset.qcTab); return; }
         var template = e.target.closest('[data-note-template]');
         if (template && window.NoteDraftModule) {
             _close();
-            window.NoteDraftModule.createNoteInContext(template.dataset.noteTemplate);
+            window.NoteDraftModule.createNoteInContext!(template.dataset.noteTemplate);
         }
     });
 }
@@ -138,7 +138,7 @@ window.QuickCreateModule = {
     init: initQuickCreate
 };
 
-window.openQuickCreate = function(tab) {
+window.openQuickCreate = function(tab: any) {
     if (tab === 'note') {
         initQuickCreate();
         _selectTab('note');

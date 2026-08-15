@@ -30,21 +30,21 @@ async function initApp() {
         if(e.dataTransfer&&e.dataTransfer.files){
           for(var i=0;i<e.dataTransfer.files.length;i++){
             var f=e.dataTransfer.files[i];
-            var ext='.'+f.name.split('.').pop().toLowerCase();
-            if(EXT.indexOf(ext)!==-1) files.push(f.path||f.name);
+            var ext='.'+(f.name.split('.').pop()||'').toLowerCase();
+            if(EXT.indexOf(ext)!==-1) files.push((f as any).path||f.name);
           }
         }
         if(files.length===0) return;
         try{
-          updateStatus(window.t('app.importing',{count:files.length}));
+          window.updateStatus(window.t('app.importing',{count:files.length}));
           var r=await window.api.importFilesDirect(files);
           if(r&&r.success){
-            updateStatus(window.t('app.importDone',{imported:files.length}));
+            window.updateStatus(window.t('app.importDone',{imported:files.length}));
             if(window.TreeModule&&window.TreeModule.loadFileTree) window.TreeModule.loadFileTree();
           } else {
-            updateStatus(window.t('app.importFailed',{message:r&&r.message||''}));
+            window.updateStatus(window.t('app.importFailed',{message:r&&r.message||''}));
           }
-        }catch(err){ updateStatus(window.t('app.importFailed',{message:err.message})); }
+        }catch(err){ window.updateStatus(window.t('app.importFailed',{message:(err as Error).message})); }
       });
     })();
 
@@ -56,7 +56,7 @@ async function initApp() {
         await window.TiptapEditorModule.preloadModules();
     }
 
-    updateStatus(window.t('app.loading'));
+    window.updateStatus(window.t('app.loading'));
 
     try {
         await checkWorkspaceStatus();
@@ -77,7 +77,7 @@ async function initApp() {
         if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
             window.HomeDashboardModule.refresh();
         } else {
-            window.updateHomeStats();
+            window.updateHomeStats && window.updateHomeStats();
         }
 
         if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {
@@ -102,16 +102,16 @@ async function initApp() {
                 }
             }, 8000);
 
-        updateStatus(window.t('app.ready'));
+        window.updateStatus(window.t('app.ready'));
     } catch (e) {
         console.error('[App] Initialization error:', e);
-        updateStatus(window.t('app.initDone'));
+        window.updateStatus(window.t('app.initDone'));
     }
 
     if (window.EventListeners) {
-        window.EventListeners.initWorkspaceFileWatcher();
-        window.EventListeners.initSidecarErrorListener();
-        window.EventListeners.initRagEventListener();
+        window.EventListeners.initWorkspaceFileWatcher?.();
+        window.EventListeners.initSidecarErrorListener?.();
+        window.EventListeners.initRagEventListener?.();
     }
 
     if (window.AssistantModule && window.AssistantModule.init) {
@@ -121,7 +121,7 @@ async function initApp() {
     const tabInputs = document.querySelectorAll('input[name="theme"], input[name="theme-popup"]');
     tabInputs.forEach(radio => {
         radio.addEventListener('change', (e) => {
-            setTheme(e.target.value);
+            setTheme((radio as HTMLInputElement).value);
         });
     });
 
@@ -148,7 +148,7 @@ async function initApp() {
         topicList.addEventListener('input', () => {
             if (window.IntegratorModule) {
                 window.IntegratorModule.topicsReady = true;
-                window.IntegratorModule.updateIntegrateBtnState();
+                window.IntegratorModule.updateIntegrateBtnState?.();
             }
         });
     }
@@ -168,13 +168,13 @@ function initSystemThemeListener() {
     }
 }
 
-function applyTheme(theme) {
+function applyTheme(theme: any) {
     if (window.ThemeModule && window.ThemeModule.applyTheme) {
         window.ThemeModule.applyTheme(theme);
     }
 }
 
-function setTheme(theme) {
+function setTheme(theme: any) {
     if (window.ThemeModule && window.ThemeModule.setTheme) {
         window.ThemeModule.setTheme(theme);
     }
@@ -199,8 +199,8 @@ function initWindowDrag() {
 }
 
 function initTabSwitching() {
-    if (window.TabsModule && window.TabsModule.initTabs) {
-        window.TabsModule.initTabs();
+    if ((window.TabsModule as any) && (window.TabsModule as any).initTabs) {
+        (window.TabsModule as any).initTabs();
     }
 }
 
@@ -212,7 +212,7 @@ async function checkWorkspaceStatus() {
 
 // updateStatus 唯一实现在 toast.js（全局 window.updateStatus），本文件不再有局部重复定义。
 
-var _fileImportUnlisten = null;
+var _fileImportUnlisten: any = null;
 
 async function importFiles() {
     try {
@@ -220,24 +220,24 @@ async function importFiles() {
         if (!result || result.cancelled) return;
 
         if (result && result.success) {
-            updateStatus(window.t('app.importing', { count: result.file_count || 0 }));
+            window.updateStatus(window.t('app.importing', { count: result.file_count || 0 }));
 
             if (typeof window.getTauriEventAPI === 'function') {
-                var eventAPI = getTauriEventAPI();
+                var eventAPI = window.getTauriEventAPI();
                 if (eventAPI) {
                     if (_fileImportUnlisten) {
                         _fileImportUnlisten();
                     }
-                    _fileImportUnlisten = await eventAPI.listen('python-event', function(event) {
+                    _fileImportUnlisten = await eventAPI.listen('python-event', function(event: any) {
                         var data = event.payload;
                         if (!data) return;
 
                         if (data.type === 'progress' && data.element_id === 'import-progress') {
-                            updateStatus(data.message || window.t('app.importProgress'));
+                            window.updateStatus(data.message || window.t('app.importProgress'));
                         } else if (data.type === 'file_import_complete') {
                             var d = data.data || {};
                             var msg = d.failed > 0 ? window.t('app.importDoneWithFailed', { imported: d.imported || 0, failed: d.failed }) : window.t('app.importDone', { imported: d.imported || 0 })
-                            updateStatus(msg);
+                            window.updateStatus(msg);
                             if (window.TreeModule && window.TreeModule.loadFileTree) {
                                 window.TreeModule.loadFileTree();
                             }
@@ -246,7 +246,7 @@ async function importFiles() {
                                 _fileImportUnlisten = null;
                             }
                         } else if (data.type === 'file_import_error') {
-                            updateStatus(window.t('app.importFailed', { message: data.error || window.t('common.unknownError') }));
+                            window.updateStatus(window.t('app.importFailed', { message: data.error || window.t('common.unknownError') }));
                             if (_fileImportUnlisten) {
                                 _fileImportUnlisten();
                                 _fileImportUnlisten = null;
@@ -256,11 +256,11 @@ async function importFiles() {
                 }
             }
         } else {
-            updateStatus(window.t('app.importFailed', { message: result?.message || window.t('common.unknownError') }));
+            window.updateStatus(window.t('app.importFailed', { message: result?.message || window.t('common.unknownError') }));
         }
     } catch (e) {
         console.error('[App] Import error:', e);
-        updateStatus(window.t('app.importFailedGeneric'));
+        window.updateStatus(window.t('app.importFailedGeneric'));
     }
 }
 
@@ -305,14 +305,14 @@ async function runPostWorkspaceSetup() {
 
 window.runPostWorkspaceSetup = runPostWorkspaceSetup;
 
-var _tooltipTimer = null;
+var _tooltipTimer: any = null;
 
 function initCustomTooltip() {
-    var tip = document.getElementById('custom-tooltip');
+    const tip = document.getElementById('custom-tooltip');
     if (!tip) return;
 
-    document.addEventListener('mouseover', function(e) {
-        var el = e.target.closest('[title]');
+    document.addEventListener('mouseover', function(e: MouseEvent) {
+        const el = (e.target as Element).closest('[title]');
         if (!el) return;
         var title = el.getAttribute('title');
         if (!title) return;
@@ -337,8 +337,8 @@ function initCustomTooltip() {
         }, 400);
     });
 
-    document.addEventListener('mouseout', function(e) {
-        var el = e.target.closest('[title]');
+    document.addEventListener('mouseout', function(e: MouseEvent) {
+        var el = (e.target as Element).closest('[title]');
         if (!el) return;
         clearTimeout(_tooltipTimer);
         tip.classList.remove('visible');
@@ -365,7 +365,7 @@ window.App = {
     checkWorkspaceStatus,
     initWorkspaceFileWatcher: function() {
         if (window.EventListeners) {
-            window.EventListeners.initWorkspaceFileWatcher();
+            window.EventListeners.initWorkspaceFileWatcher?.();
         }
     }
 };

@@ -1,9 +1,9 @@
 (function() { 'use strict';
 
-var _lastTagsData = null;
+var _lastTagsData: any = null;
 var _tagsDragData = { filePath: null, fileName: null };
 
-async function loadTagsView(silent) {
+async function loadTagsView(silent: any) {
     var container = document.getElementById('sidebar-tags');
     if (!container) return;
     if (!silent) {
@@ -22,27 +22,27 @@ async function loadTagsView(silent) {
         if (!result || !result.tags || result.tags.length === 0) {
             container.innerHTML = window.t('tags.empty');
         } else {
-            var expandedTags = {};
-            container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el) {
+            var expandedTags: Record<string, boolean> = {};
+            container.querySelectorAll('.sidebar-tag-group.expanded').forEach(function(el: any) {
                 var name = el.getAttribute('data-tag-name');
                 if (name) expandedTags[name] = true;
             });
 
             var html = '<div class="sidebar-tags-list">';
-            result.tags.forEach(function(tag) {
+            result.tags.forEach(function(tag: any) {
                 var isExpanded = expandedTags[tag.name] ? ' expanded' : '';
-                html += '<div class="sidebar-tag-group' + isExpanded + '" data-tag-name="' + escapeAttr(tag.name) + '">';
-                html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-tag-name="' + escapeAttr(tag.name) + '">';
-                html += '<span class="sidebar-tag-toggle">' + window.Icons.get('chevronDown') + '</span>';
-                html += '<span class="sidebar-tag-name">' + escapeHtml(tag.name) + '</span>';
+                html += '<div class="sidebar-tag-group' + isExpanded + '" data-tag-name="' + window.escapeAttr(tag.name) + '">';
+                html += '<div class="sidebar-tag-row" onclick="this.parentElement.classList.toggle(\'expanded\')" data-tag-name="' + window.escapeAttr(tag.name) + '">';
+                html += '<span class="sidebar-tag-toggle">' + window.Icons!.get('chevronDown') + '</span>';
+                html += '<span class="sidebar-tag-name">' + window.escapeHtml(tag.name) + '</span>';
                 html += '<span class="sidebar-tag-count">' + tag.count + '</span>';
                 html += '</div>';
                 html += '<div class="sidebar-tag-files">';
-                (tag.files || []).forEach(function(file) {
+                (tag.files || []).forEach(function(file: any) {
                     var fileName = file.split('/').pop();
-                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + escapeAttr(file) + '" data-file-name="' + escapeAttr(fileName) + '" onclick="window.TreeModule.selectFile(\'' + escapeAttr(file) + '\', \'' + escapeAttr(fileName) + '\')">';
+                    html += '<div class="sidebar-tag-file tree-item" draggable="true" data-file-path="' + window.escapeAttr(file) + '" data-file-name="' + window.escapeAttr(fileName) + '" onclick="window.TreeModule.selectFile(\'' + window.escapeAttr(file) + '\', \'' + window.escapeAttr(fileName) + '\')">';
                     html += '<span class="tree-indent-unit"></span>';
-                    html += '<span class="tree-name">' + escapeHtml(fileName) + '</span>';
+                    html += '<span class="tree-name">' + window.escapeHtml(fileName) + '</span>';
                     html += '</div>';
                 });
                 html += '</div>';
@@ -53,18 +53,18 @@ async function loadTagsView(silent) {
 
             setupTagsDragDrop(container);
             setupTagsContextMenu(container);
-            updateSidebarStats();
+            window.updateSidebarStats();
         }
     } catch (e) {
         container.innerHTML = window.t('tags.loadError');
     }
 }
 
-function setupTagsDragDrop(container) {
+function setupTagsDragDrop(container: any) {
     if (container._tagsDragDropReady) return;
     container._tagsDragDropReady = true;
 
-    container.addEventListener('dragstart', function(e) {
+    container.addEventListener('dragstart', function(e: any) {
         var fileEl = e.target.closest('.sidebar-tag-file');
         if (!fileEl) return;
 
@@ -77,14 +77,14 @@ function setupTagsDragDrop(container) {
 
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', filePath);
-        e.dataTransfer.setData('text/html', '<span>' + escapeHtml(_tagsDragData.fileName) + '</span>');
+        e.dataTransfer.setData('text/html', '<span>' + window.escapeHtml(_tagsDragData.fileName) + '</span>');
     });
 
-    container.addEventListener('dragend', function(e) {
+    container.addEventListener('dragend', function(e: any) {
         var fileEl = e.target.closest('.sidebar-tag-file');
         if (fileEl) fileEl.classList.remove('dragging');
 
-        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row: any) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
 
@@ -92,7 +92,7 @@ function setupTagsDragDrop(container) {
         _tagsDragData.fileName = null;
     });
 
-    container.addEventListener('dragover', function(e) {
+    container.addEventListener('dragover', function(e: any) {
         if (!_tagsDragData.filePath) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
@@ -100,7 +100,7 @@ function setupTagsDragDrop(container) {
         var rowEl = e.target.closest('.sidebar-tag-row');
         var groupEl = e.target.closest('.sidebar-tag-group');
 
-        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row: any) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
 
@@ -115,12 +115,12 @@ function setupTagsDragDrop(container) {
         }
     });
 
-    container.addEventListener('dragleave', function(e) {
+    container.addEventListener('dragleave', function(e: any) {
         var rowEl = e.target.closest('.sidebar-tag-row');
         if (rowEl) rowEl.classList.remove('drag-over', 'drag-over-top');
     });
 
-    container.addEventListener('drop', async function(e) {
+    container.addEventListener('drop', async function(e: any) {
         e.preventDefault();
 
         if (!_tagsDragData.filePath) return;
@@ -136,7 +136,7 @@ function setupTagsDragDrop(container) {
         }
 
         if (!targetTag) {
-            container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+            container.querySelectorAll('.sidebar-tag-row').forEach(function(row: any) {
                 row.classList.remove('drag-over', 'drag-over-top');
             });
             return;
@@ -145,23 +145,23 @@ function setupTagsDragDrop(container) {
         try {
             var result = await window.api.addTagToFile(_tagsDragData.filePath, targetTag);
             if (result && result.success) {
-                await loadTagsView();
+                await window.loadTagsView();
             } else {
                 alert(window.t('tags.addFailed') + (result ? result.message : window.t('common.unknownError')));
             }
         } catch (err) {
             console.error('[Tags] add tag error:', err);
-            alert(window.t('tags.addFailed') + (err.message || window.t('common.errorOccurred')));
+            alert(window.t('tags.addFailed') + ((err as Error).message || window.t('common.errorOccurred')));
         }
 
-        container.querySelectorAll('.sidebar-tag-row').forEach(function(row) {
+        container.querySelectorAll('.sidebar-tag-row').forEach(function(row: any) {
             row.classList.remove('drag-over', 'drag-over-top');
         });
     });
 }
 
-function setupTagsContextMenu(container) {
-    container.addEventListener('contextmenu', function(e) {
+function setupTagsContextMenu(container: any) {
+    container.addEventListener('contextmenu', function(e: any) {
         var fileEl = e.target.closest('.sidebar-tag-file');
         var rowEl = e.target.closest('.sidebar-tag-row');
 
@@ -177,8 +177,8 @@ function setupTagsContextMenu(container) {
     });
 }
 
-function showTagRowContextMenu(e, rowEl) {
-    hideTreeContextMenu();
+function showTagRowContextMenu(e: any, rowEl: any) {
+    window.hideTreeContextMenu();
 
     var tagName = rowEl.getAttribute('data-tag-name');
     var tagNameEl = rowEl.querySelector('.sidebar-tag-name');
@@ -192,7 +192,7 @@ function showTagRowContextMenu(e, rowEl) {
 
     items.push({
         label: window.t('tags.changeName'),
-        icon: window.Icons.get('fileEdit'),
+        icon: window.Icons!.get('fileEdit'),
         action: function() {
             if (tagNameEl) {
                 startTagRename(tagNameEl, tagName);
@@ -202,18 +202,18 @@ function showTagRowContextMenu(e, rowEl) {
 
     items.push({
         label: window.t('tags.deleteTag'),
-        icon: window.Icons.get('trash'),
+        icon: window.Icons!.get('trash'),
         action: function() {
             onDeleteTag(tagName);
         }
     });
 
-    items.forEach(function(item) {
+    items.forEach(function(item: any) {
         var el = document.createElement('div');
         el.className = 'ctx-menu-item';
         el.innerHTML = item.icon + '<span>' + item.label + '</span>';
         el.addEventListener('click', function() {
-            hideTreeContextMenu();
+            window.hideTreeContextMenu();
             item.action();
         });
         menu.appendChild(el);
@@ -233,7 +233,7 @@ function showTagRowContextMenu(e, rowEl) {
     menu.style.top = y + 'px';
 }
 
-function startTagRename(tagNameEl, oldTagName) {
+function startTagRename(tagNameEl: any, oldTagName: any) {
     var parentRow = tagNameEl.closest('.sidebar-tag-row');
     if (!parentRow) return;
 
@@ -251,7 +251,7 @@ function startTagRename(tagNameEl, oldTagName) {
     input.select();
 
     var finished = false;
-    function finishRename(cancel) {
+    function finishRename(cancel: any) {
         if (finished) return;
         finished = true;
 
@@ -263,13 +263,13 @@ function startTagRename(tagNameEl, oldTagName) {
             return;
         }
 
-        window.api.renameTag(oldTagName, newName).then(function(result) {
+        window.api.renameTag(oldTagName, newName).then(function(result: any) {
             if (result && result.success) {
-                loadTagsView(true);
+                window.loadTagsView(true);
             } else {
                 alert(window.t('tags.renameFailed') + (result && result.message ? result.message : window.t('common.unknownError')));
             }
-        }).catch(function(e) {
+        }).catch(function(e: any) {
             console.error('[Tag] rename error:', e);
         });
     }
@@ -278,7 +278,7 @@ function startTagRename(tagNameEl, oldTagName) {
         finishRename(false);
     });
 
-    input.addEventListener('keydown', function(e) {
+    input.addEventListener('keydown', function(e: any) {
         if (e.key === 'Enter') {
             e.preventDefault();
             input.blur();
@@ -288,29 +288,29 @@ function startTagRename(tagNameEl, oldTagName) {
         }
     });
 
-    input.addEventListener('click', function(e) {
+    input.addEventListener('click', function(e: any) {
         e.stopPropagation();
     });
 }
 
-async function onDeleteTag(tagName) {
+async function onDeleteTag(tagName: any) {
     var confirmed = await window._customConfirm(window.t('tags.confirmDelete', { name: tagName }));
     if (!confirmed) return;
 
-    window.api.deleteTag(tagName).then(function(result) {
+    window.api.deleteTag(tagName).then(function(result: any) {
         if (result && result.success) {
-            loadTagsView(true);
+            window.loadTagsView(true);
         } else {
             alert(window.t('tags.deleteFailed') + (result && result.message ? result.message : window.t('common.unknownError')));
         }
-    }).catch(function(e) {
+    }).catch(function(e: any) {
         console.error('[Tag] delete error:', e);
         alert(window.t('tags.deleteError'));
     });
 }
 
-function showTagsContextMenu(e, fileEl) {
-    hideTreeContextMenu();
+function showTagsContextMenu(e: any, fileEl: any) {
+    window.hideTreeContextMenu();
 
     var path = fileEl.getAttribute('data-file-path');
     var name = fileEl.getAttribute('data-file-name');
@@ -323,13 +323,13 @@ function showTagsContextMenu(e, fileEl) {
 
     items.push({
         label: window.t('tree.revealInFinder'),
-        icon: window.Icons.get('folder'),
-        action: function() { revealInFinder(path); }
+        icon: window.Icons!.get('folder'),
+        action: function() { window.revealInFinder(path); }
     });
 
     items.push({
         label: window.t('tree.openInNewWindow'),
-        icon: window.Icons.get('folderOpen'),
+        icon: window.Icons!.get('folderOpen'),
         action: function() {
             if (window.api && window.api.openFileInNewWindow) {
                 window.api.openFileInNewWindow(path, name);
@@ -337,12 +337,12 @@ function showTagsContextMenu(e, fileEl) {
         }
     });
 
-    items.forEach(function(item) {
+    items.forEach(function(item: any) {
         var el = document.createElement('div');
         el.className = 'ctx-menu-item';
         el.innerHTML = item.icon + '<span>' + item.label + '</span>';
         el.addEventListener('click', function() {
-            hideTreeContextMenu();
+            window.hideTreeContextMenu();
             item.action();
         });
         menu.appendChild(el);
@@ -363,7 +363,7 @@ function showTagsContextMenu(e, fileEl) {
 }
 
 async function doAutoTag() {
-    var btn = document.getElementById('btn-auto-tag');
+    var btn = document.getElementById('btn-auto-tag') as HTMLButtonElement | null;
     if (btn) {
         btn.disabled = true;
         btn.style.opacity = '0.5';
@@ -371,7 +371,7 @@ async function doAutoTag() {
     try {
         var result = await window.api.autoTagFiles();
         if (result && result.success) {
-            setTimeout(function() { loadTagsView(); }, 1000);
+            setTimeout(function() { window.loadTagsView(); }, 1000);
         }
     } catch (e) {
         console.error('[Tags] auto tag error:', e);
@@ -387,7 +387,7 @@ function onShowAddTagInput() {
     var inputArea = document.getElementById('sidebar-tag-input');
     if (!inputArea) return;
     inputArea.style.display = 'flex';
-    var field = document.getElementById('tag-input-field');
+    var field = document.getElementById('tag-input-field') as HTMLInputElement | null;
     if (field) {
         field.value = '';
         field.focus();
@@ -398,19 +398,19 @@ function onHideTagInput() {
     var inputArea = document.getElementById('sidebar-tag-input');
     if (!inputArea) return;
     inputArea.style.display = 'none';
-    var field = document.getElementById('tag-input-field');
+    var field = document.getElementById('tag-input-field') as HTMLInputElement | null;
     if (field) field.value = '';
 }
 
 function onTagInputChange() {
-    var field = document.getElementById('tag-input-field');
-    var confirmBtn = document.getElementById('tag-input-confirm');
+    var field = document.getElementById('tag-input-field') as HTMLInputElement | null;
+    var confirmBtn = document.getElementById('tag-input-confirm') as HTMLButtonElement | null;
     if (!field || !confirmBtn) return;
     confirmBtn.disabled = !field.value.trim();
 }
 
 async function onConfirmTag() {
-    var field = document.getElementById('tag-input-field');
+    var field = document.getElementById('tag-input-field') as HTMLInputElement | null;
     if (!field) return;
     var tagName = field.value.trim();
     if (!tagName) return;
@@ -419,12 +419,12 @@ async function onConfirmTag() {
         var result = await window.api.createTag(tagName);
         if (result && result.success) {
             onHideTagInput();
-            loadTagsView();
+            window.loadTagsView();
         } else {
             alert(window.t('tags.createFailed') + (result ? result.message || window.t('common.unknownError') : window.t('common.unknownError')));
         }
     } catch (e) {
-        alert(window.t('tags.createError') + (e.message || e));
+        alert(window.t('tags.createError') + ((e as Error).message || e));
     }
 }
 

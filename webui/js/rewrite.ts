@@ -7,7 +7,7 @@ window._rewriteBuffer = '';
 window._rewriteDisplayText = '';
 window._rewriteFlushTimer = null;
 
-function setEditorRewriting(filePath, isRewriting) {
+function setEditorRewriting(filePath: any, isRewriting: any) {
     var container = document.getElementById('tiptap-editor-container');
     if (!container) return;
 
@@ -95,7 +95,7 @@ function _cleanupRewriteState() {
     if (previewPanel) previewPanel.style.display = '';
 }
 
-function _finishRewriteStream(data) {
+function _finishRewriteStream(data: any) {
     if (window._rewriteFinished) return;
     window._rewriteFinished = true;
     window._rewriteDisplayText = window._rewriteStreamText;
@@ -136,8 +136,8 @@ function _showRewriteDiffView() {
         if (mainContent) mainContent.appendChild(diffPanel);
     }
 
-    var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + escapeHtml(oldText) + '</pre>';
-    var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + escapeHtml(newText) + '</pre>';
+    var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + window.escapeHtml(oldText) + '</pre>';
+    var newHtml = window.marked ? window.marked.parse(newText) : '<pre>' + window.escapeHtml(newText) + '</pre>';
 
     if (typeof DOMPurify !== 'undefined') {
         oldHtml = DOMPurify.sanitize(oldHtml);
@@ -182,8 +182,8 @@ async function onRewriteConfirm() {
             window.updateStatus(window.t('app.rewriteFailedShort'));
         }
     } catch (e) {
-        alert(window.t('app.saveError', { message: e.message || e }));
-        window.updateStatus(window.t('app.saveError', { message: e.message || e }));
+        alert(window.t('app.saveError', { message: (e as Error).message || String(e) }));
+        window.updateStatus(window.t('app.saveError', { message: (e as Error).message || String(e) }));
     } finally {
         window._rewritePendingFilePath = null;
         window._rewritePendingText = null;
@@ -210,7 +210,7 @@ function onRewriteCancel() {
     }
 }
 
-function _updateRewriteStreamEditor(token) {
+function _updateRewriteStreamEditor(token: any) {
     window._rewriteStreamText += token;
     window._rewriteBuffer += token;
     if (!window._rewriteFlushTimer) {
@@ -225,7 +225,7 @@ async function onLLMRewrite() {
         return;
     }
 
-    var btn = document.getElementById('tiptap-rewrite-btn');
+    var btn = document.getElementById('tiptap-rewrite-btn') as HTMLButtonElement | null;
     if (!(await window._customConfirm(window.t('app.rewriteConfirm')))) return;
 
     var rewritePath = curPath;
@@ -252,7 +252,7 @@ async function onLLMRewrite() {
 
     var eventAPI = window.getTauriEventAPI ? window.getTauriEventAPI() : null;
     if (eventAPI) {
-        window._rewriteStreamUnlisten = await eventAPI.listen('python-event', function(event) {
+        window._rewriteStreamUnlisten = await eventAPI.listen('python-event', function(event: any) {
             var data = event.payload;
             if (!data) return;
             if (data.type === 'rewrite_chunk' && data.file_path === rewritePath) {
@@ -270,14 +270,14 @@ async function onLLMRewrite() {
     try {
         await window.api.llmRewriteStream(rewritePath);
     } catch (e) {
-        alert(window.t('app.rewriteError', { message: e.message || e }));
-        window.updateStatus(window.t('app.rewriteError', { message: e.message || e }));
+        alert(window.t('app.rewriteError', { message: (e as Error).message || String(e) }));
+        window.updateStatus(window.t('app.rewriteError', { message: (e as Error).message || String(e) }));
         if (window.StatusbarModule && window.StatusbarModule.setRewriting) {
             window.StatusbarModule.setRewriting(false);
         }
         if (window.StatusbarModule && window.StatusbarModule.updateMessage) {
             window.StatusbarModule.updateMessage(
-                window.t('app.rewriteError', { message: e.message || e }),
+                window.t('app.rewriteError', { message: (e as Error).message || String(e) }),
                 { duration: 3000 }
             );
         }

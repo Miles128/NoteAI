@@ -1,7 +1,7 @@
 (function() { 'use strict';
 
 var _searchVisible = false;
-var _searchDebounceTimer = null;
+var _searchDebounceTimer: any = null;
 
 function toggleSearchModal() {
     if (_searchVisible) {
@@ -11,16 +11,16 @@ function toggleSearchModal() {
     }
 }
 
-function openSearchModal(initialQuery) {
-    var overlay = document.getElementById('search-modal');
-    var input = document.getElementById('search-input');
+function openSearchModal(initialQuery?: any) {
+    const overlay = document.getElementById('search-modal') as HTMLElement | null;
+    const input = document.getElementById('search-input') as HTMLInputElement | null;
     if (!overlay || !input) return;
 
     overlay.style.display = 'flex';
     _searchVisible = true;
 
     input.value = initialQuery ? String(initialQuery) : '';
-    document.getElementById('search-results').innerHTML = '';
+    document.getElementById('search-results')!.innerHTML = '';
     if (input.value.trim()) {
         doSearch(input.value);
     }
@@ -41,8 +41,8 @@ function closeSearchModal() {
     }
 }
 
-function doSearch(query) {
-    var resultsEl = document.getElementById('search-results');
+function doSearch(query: any) {
+    const resultsEl = document.getElementById('search-results');
     if (!resultsEl) return;
 
     console.log('[Search] doSearch called, query:', query);
@@ -69,18 +69,18 @@ function doSearch(query) {
             } else {
                 resultsEl.innerHTML =
                     '<div class="search-empty">' +
-                    (result ? escapeHtml(result.message || window.t('search.failed')) : window.t('search.failed')) +
+                    (result ? window.escapeHtml(result.message || window.t('search.failed')) : window.t('search.failed')) +
                     '</div>';
             }
         })
         .catch(function (e) {
             console.error('[Search] error:', e);
             resultsEl.innerHTML =
-                '<div class="search-empty">' + window.t('search.error', { message: escapeHtml(e.message || e || window.t('common.unknownError')) }) + '</div>';
+                '<div class="search-empty">' + window.t('search.error', { message: window.escapeHtml(e.message || e || window.t('common.unknownError')) }) + '</div>';
         });
 }
 
-function renderSearchResults(result) {
+function renderSearchResults(result: any) {
     var resultsEl = document.getElementById('search-results');
     if (!resultsEl) return;
 
@@ -89,7 +89,7 @@ function renderSearchResults(result) {
 
     if (results.length === 0) {
         resultsEl.innerHTML =
-            '<div class="search-empty">' + window.t('search.noResults', { query: '<strong>' + escapeHtml(query) + '</strong>' }) + '</div>';
+            '<div class="search-empty">' + window.t('search.noResults', { query: '<strong>' + window.escapeHtml(query) + '</strong>' }) + '</div>';
         return;
     }
 
@@ -100,17 +100,17 @@ function renderSearchResults(result) {
 
     var html = '<div class="search-count">' + countText + '</div>';
 
-    results.forEach(function (r) {
+    results.forEach(function (r: any) {
         var highlightedSnippet = highlightMatch(r.snippet || '', query);
         html +=
             '<div class="search-result-item" data-path="' +
-            escapeAttr(r.path) +
+            window.escapeAttr(r.path) +
             '" onclick="onSearchResultClick(this)">' +
             '<div class="search-result-title">' +
-            escapeHtml(r.title || r.name) +
+            window.escapeHtml(r.title || r.name) +
             '</div>' +
             '<div class="search-result-path">' +
-            escapeHtml(r.path) +
+            window.escapeHtml(r.path) +
             '</div>' +
             '<div class="search-result-snippet">' +
             highlightedSnippet +
@@ -121,26 +121,26 @@ function renderSearchResults(result) {
     resultsEl.innerHTML = html;
 }
 
-function highlightMatch(text, query) {
-    if (!query) return escapeHtml(text);
+function highlightMatch(text: any, query: any) {
+    if (!query) return window.escapeHtml(text);
     var regex = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
     var parts = [];
     var lastIdx = 0;
     var m;
     while ((m = regex.exec(text)) !== null) {
         if (m.index > lastIdx) {
-            parts.push(escapeHtml(text.substring(lastIdx, m.index)));
+            parts.push(window.escapeHtml(text.substring(lastIdx, m.index)));
         }
-        parts.push('<mark class="search-highlight">' + escapeHtml(m[1]) + '</mark>');
+        parts.push('<mark class="search-highlight">' + window.escapeHtml(m[1]) + '</mark>');
         lastIdx = regex.lastIndex;
     }
     if (lastIdx < text.length) {
-        parts.push(escapeHtml(text.substring(lastIdx)));
+        parts.push(window.escapeHtml(text.substring(lastIdx)));
     }
     return parts.join('');
 }
 
-function onSearchResultClick(el) {
+function onSearchResultClick(el: any) {
     var path = el.getAttribute('data-path');
     var name = el.querySelector('.search-result-title')?.textContent || '';
     if (path) {
@@ -165,7 +165,7 @@ document.addEventListener('keydown', function (e) {
 
     // Escape → close
     if (e.key === 'Escape' && _searchVisible) {
-        var input = document.getElementById('search-input');
+        var input = document.getElementById('search-input') as HTMLInputElement | null;
         if (input && document.activeElement === input && input.value.length > 0) {
             // First Esc clears input, second closes
             input.value = '';
@@ -180,7 +180,7 @@ document.addEventListener('keydown', function (e) {
 
 // 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接绑定（不再依赖 DOMContentLoaded 重放）
 (function() {
-    var input = document.getElementById('search-input');
+    const input = document.getElementById('search-input') as HTMLInputElement | null;
     if (input) {
         input.addEventListener('input', function () {
             if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);

@@ -13,7 +13,7 @@
 // 共享保存通道（保存 UI 配置片段并反馈状态）
 // ---------------------------------------------------------------------------
 
-async function saveAssistantUiConfig(partial) {
+async function saveAssistantUiConfig(partial: any) {
     try {
         var result = await window.api.saveUiConfig(partial);
         if (result && result.success) {
@@ -34,39 +34,39 @@ async function saveAssistantUiConfig(partial) {
 // RAG 助手设置 / 组件管理
 // ---------------------------------------------------------------------------
 
-function applyRagSettingsToForm(uiConfig) {
-    var ragEl = document.getElementById('settings-assistant-rag-enabled');
+function applyRagSettingsToForm(uiConfig: any) {
+    var ragEl = document.getElementById('settings-assistant-rag-enabled') as HTMLInputElement | null;
     if (ragEl) {
         ragEl.checked = uiConfig.rag_enabled === true;
     }
     updateRagIndexCardVisibility(uiConfig.rag_enabled === true);
 
-    var hydeEl = document.getElementById('settings-rag-hyde-enabled');
+    var hydeEl = document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null;
     if (hydeEl) {
         hydeEl.checked = uiConfig.rag_hyde_enabled !== false;
     }
-    var hydeThresholdEl = document.getElementById('settings-rag-hyde-threshold');
+    var hydeThresholdEl = document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null;
     if (hydeThresholdEl) {
         hydeThresholdEl.value = uiConfig.rag_hyde_threshold != null ? uiConfig.rag_hyde_threshold : 0.33;
     }
-    var rerankEl = document.getElementById('settings-rag-rerank-enabled');
+    var rerankEl = document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null;
     if (rerankEl) {
         rerankEl.checked = uiConfig.rag_rerank_enabled !== false;
     }
-    var rerankSkipEl = document.getElementById('settings-rag-rerank-skip-score');
+    var rerankSkipEl = document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null;
     if (rerankSkipEl) {
         rerankSkipEl.value = uiConfig.rag_rerank_skip_score != null ? uiConfig.rag_rerank_skip_score : 0.75;
     }
-    var denseEl = document.getElementById('settings-rag-dense-weight');
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
     if (denseEl) {
         var denseWeight = uiConfig.rag_dense_weight != null ? uiConfig.rag_dense_weight : 0.7;
-        denseEl.value = Math.round(denseWeight * 100);
+        denseEl.value = String(Math.round(denseWeight * 100));
     }
-    var topKEl = document.getElementById('settings-rag-top-k');
+    var topKEl = document.getElementById('settings-rag-top-k') as HTMLInputElement | null;
     if (topKEl) {
         topKEl.value = uiConfig.rag_top_k != null ? uiConfig.rag_top_k : 5;
     }
-    var topKTagsEl = document.getElementById('settings-rag-top-k-tags');
+    var topKTagsEl = document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null;
     if (topKTagsEl) {
         topKTagsEl.value = uiConfig.rag_top_k_tags != null ? uiConfig.rag_top_k_tags : 7;
     }
@@ -83,7 +83,7 @@ function applyRagSettingsToForm(uiConfig) {
 }
 
 function _updateDenseWeightHint() {
-    var denseEl = document.getElementById('settings-rag-dense-weight');
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
     var hintEl = document.getElementById('settings-rag-dense-weight-hint');
     if (!denseEl || !hintEl) return;
     var densePct = parseInt(denseEl.value, 10);
@@ -97,19 +97,19 @@ function _updateDenseWeightHint() {
 }
 
 function _readRagAdvancedConfig() {
-    var denseEl = document.getElementById('settings-rag-dense-weight');
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
     var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
     if (isNaN(densePct)) densePct = 70;
     densePct = Math.max(0, Math.min(100, densePct));
 
     return {
-        rag_hyde_enabled: document.getElementById('settings-rag-hyde-enabled')?.checked !== false,
-        rag_hyde_threshold: parseFloat(document.getElementById('settings-rag-hyde-threshold')?.value) || 0.33,
-        rag_rerank_enabled: document.getElementById('settings-rag-rerank-enabled')?.checked !== false,
-        rag_rerank_skip_score: parseFloat(document.getElementById('settings-rag-rerank-skip-score')?.value) || 0.75,
+        rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
+        rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
         rag_dense_weight: densePct / 100,
-        rag_top_k: parseInt(document.getElementById('settings-rag-top-k')?.value, 10) || 5,
-        rag_top_k_tags: parseInt(document.getElementById('settings-rag-top-k-tags')?.value, 10) || 7,
+        rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
+        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
     };
 }
 
@@ -121,13 +121,13 @@ function saveRagAdvancedConfig() {
 async function refreshComponentsStatus() {
     if (!window.api || !window.api.getComponentsStatus) return;
     var statusEl = document.getElementById('settings-component-rag-status');
-    var installBtn = document.getElementById('settings-component-rag-install');
-    var removeBtn = document.getElementById('settings-component-rag-remove');
+    var installBtn = document.getElementById('settings-component-rag-install') as HTMLButtonElement | null;
+    var removeBtn = document.getElementById('settings-component-rag-remove') as HTMLButtonElement | null;
     if (!statusEl) return;
     try {
         var result = await window.api.getComponentsStatus();
         var components = (result && result.components) || [];
-        var rag = components.find(function(c) { return c.id === 'rag'; });
+        var rag = components.find(function(c: any) { return c.id === 'rag'; });
         if (!rag) {
             statusEl.textContent = window.t('common.unknownError');
             return;
@@ -145,11 +145,11 @@ async function refreshComponentsStatus() {
         if (installBtn) installBtn.disabled = !!rag.installed;
         if (removeBtn) removeBtn.disabled = !rag.installed;
     } catch (e) {
-        statusEl.textContent = e.message || String(e);
+        statusEl.textContent = (e as Error).message || String(e);
     }
 }
 
-function _showComponentMsg(text, isError) {
+function _showComponentMsg(text: any, isError: any) {
     var msgEl = document.getElementById('settings-component-rag-msg');
     if (!msgEl) return;
     msgEl.textContent = text;
@@ -159,13 +159,13 @@ function _showComponentMsg(text, isError) {
 
 async function installRagComponent() {
     if (!window.api || !window.api.installComponent) return;
-    var installBtn = document.getElementById('settings-component-rag-install');
+    var installBtn = document.getElementById('settings-component-rag-install') as HTMLButtonElement | null;
     if (installBtn) installBtn.disabled = true;
     _showComponentMsg(window.t('settings.componentInstalling'), false);
     try {
         await window.api.installComponent({ id: 'rag' });
     } catch (e) {
-        _showComponentMsg(window.t('settings.componentInstallFailed', { message: e.message }), true);
+        _showComponentMsg(window.t('settings.componentInstallFailed', { message: (e as Error).message }), true);
         if (installBtn) installBtn.disabled = false;
     }
 }
@@ -173,13 +173,13 @@ async function installRagComponent() {
 async function removeRagComponent() {
     if (!window.confirm(window.t('settings.componentRemoveConfirm'))) return;
     if (!window.api || !window.api.uninstallComponent) return;
-    var removeBtn = document.getElementById('settings-component-rag-remove');
+    var removeBtn = document.getElementById('settings-component-rag-remove') as HTMLButtonElement | null;
     if (removeBtn) removeBtn.disabled = true;
     try {
         var result = await window.api.uninstallComponent({ id: 'rag' });
         if (result && result.success) {
             _showComponentMsg(window.t('settings.componentRemoveDone'), false);
-            var ragEl = document.getElementById('settings-assistant-rag-enabled');
+            var ragEl = document.getElementById('settings-assistant-rag-enabled') as HTMLInputElement | null;
             if (ragEl) {
                 ragEl.checked = false;
                 updateRagIndexCardVisibility(false);
@@ -192,7 +192,7 @@ async function removeRagComponent() {
             if (removeBtn) removeBtn.disabled = false;
         }
     } catch (e) {
-        _showComponentMsg(window.t('settings.componentRemoveFailed', { message: e.message }), true);
+        _showComponentMsg(window.t('settings.componentRemoveFailed', { message: (e as Error).message }), true);
         if (removeBtn) removeBtn.disabled = false;
     }
 }
@@ -223,11 +223,11 @@ async function refreshRagIndexStatus() {
             when: when
         });
     } catch (e) {
-        if (statusEl) statusEl.textContent = window.t('assistant.indexStatusError', { message: e.message || String(e) });
+        if (statusEl) statusEl.textContent = window.t('assistant.indexStatusError', { message: (e as Error).message || String(e) });
     }
 }
 
-function updateRagIndexCardVisibility(ragEnabled) {
+function updateRagIndexCardVisibility(ragEnabled: any) {
     var card = document.getElementById('settings-assistant-rag-index-card');
     if (card) {
         card.style.display = ragEnabled ? '' : 'none';
@@ -271,7 +271,7 @@ function _bindRagAdvancedControls() {
 }
 
 function initRagSettings() {
-    var ragEl = document.getElementById('settings-assistant-rag-enabled');
+    const ragEl = document.getElementById('settings-assistant-rag-enabled') as HTMLInputElement | null;
     if (ragEl && !ragEl.dataset.bound) {
         ragEl.dataset.bound = '1';
         ragEl.addEventListener('change', function() {
@@ -289,7 +289,7 @@ function initRagSettings() {
 
     if (!window.__componentInstallBound) {
         window.__componentInstallBound = true;
-        document.addEventListener('component_installed', function(e) {
+        document.addEventListener('component_installed', function(e: any) {
             var data = e.detail || {};
             if (data.id !== 'rag') return;
             if (data.success) {
@@ -349,7 +349,7 @@ function initRagSettings() {
     // Listen for index progress events to update the settings UI bar
     if (!window.__ragIndexProgressBound) {
         window.__ragIndexProgressBound = true;
-        document.addEventListener('rag-index-progress', function(e) {
+        document.addEventListener('rag-index-progress', function(e: any) {
             var data = e.detail || {};
             var progressWrap = document.getElementById('settings-assistant-rebuild-progress');
             var progressFill = document.getElementById('settings-assistant-rebuild-progress-fill');
@@ -363,7 +363,7 @@ function initRagSettings() {
                 });
             }
         });
-        document.addEventListener('rag_index_built', function(e) {
+        document.addEventListener('rag_index_built', function(e: any) {
             var data = e.detail || {};
             var progressWrap = document.getElementById('settings-assistant-rebuild-progress');
             var statusEl = document.getElementById('settings-assistant-rebuild-status');
@@ -382,8 +382,8 @@ function initRagSettings() {
 // CLI Agent 设置
 // ---------------------------------------------------------------------------
 
-function applyCliSettingsToForm(uiConfig) {
-    var selectEl = document.getElementById('settings-cli-agent-select');
+function applyCliSettingsToForm(uiConfig: any) {
+    var selectEl = document.getElementById('settings-cli-agent-select') as HTMLSelectElement | null;
     if (selectEl && uiConfig && uiConfig.cli_agent_id) {
         if (selectEl.querySelector('option[value="' + uiConfig.cli_agent_id + '"]')) {
             selectEl.value = uiConfig.cli_agent_id;
@@ -391,7 +391,7 @@ function applyCliSettingsToForm(uiConfig) {
     }
 }
 
-function _showCliAgentSaveStatus(message, isError) {
+function _showCliAgentSaveStatus(message: any, isError: any) {
     var statusEl = document.getElementById('settings-cli-save-status');
     if (statusEl) {
         statusEl.style.display = 'block';
@@ -403,10 +403,10 @@ function _showCliAgentSaveStatus(message, isError) {
     }
 }
 
-function _syncCliAgentSelectors(agentId) {
+function _syncCliAgentSelectors(agentId: any) {
     var nextId = agentId || '';
-    var settingsSel = document.getElementById('settings-cli-agent-select');
-    var tabSel = document.getElementById('cli-agent-selector');
+    var settingsSel = document.getElementById('settings-cli-agent-select') as HTMLSelectElement | null;
+    var tabSel = document.getElementById('cli-agent-selector') as HTMLSelectElement | null;
     if (settingsSel) {
         if (nextId && settingsSel.querySelector('option[value="' + nextId + '"]')) {
             settingsSel.value = nextId;
@@ -426,7 +426,7 @@ function _syncCliAgentSelectors(agentId) {
     }
 }
 
-async function persistCliAgentId(agentId) {
+async function persistCliAgentId(agentId: any) {
     var nextId = String(agentId || '').trim();
     try {
         var saver = (window.state && window.state.saveUiConfig)
@@ -447,7 +447,7 @@ async function persistCliAgentId(agentId) {
         return result;
     } catch (e) {
         console.error('[Settings] persist cli_agent_id error:', e);
-        var errMsg = window.t('settings.autoSaveFailed', { message: e.message || String(e) });
+        var errMsg = window.t('settings.autoSaveFailed', { message: (e as Error).message || String(e) });
         _showCliAgentSaveStatus(errMsg, true);
         window.updateStatus(errMsg);
         return null;
@@ -457,8 +457,8 @@ async function persistCliAgentId(agentId) {
 var _cliAgentsRefreshGen = 0;
 
 async function refreshCliAgentsSettings() {
-    var listEl = document.getElementById('settings-cli-agents-list');
-    var selectEl = document.getElementById('settings-cli-agent-select');
+    const listEl = document.getElementById('settings-cli-agents-list');
+    const selectEl = document.getElementById('settings-cli-agent-select') as HTMLSelectElement | null;
     if (!listEl || !window.api || !window.api.listCliAgents) return;
 
     var refreshGen = ++_cliAgentsRefreshGen;
@@ -469,7 +469,7 @@ async function refreshCliAgentsSettings() {
         if (refreshGen !== _cliAgentsRefreshGen) return;
 
         var agents = (result && result.success && Array.isArray(result.agents)) ? result.agents : [];
-        var uiConfig = {};
+        var uiConfig: any = {};
         if (window.state && window.state.getState) {
             uiConfig = window.state.getState().uiConfig || {};
         }
@@ -487,7 +487,7 @@ async function refreshCliAgentsSettings() {
             placeholder.value = '';
             placeholder.textContent = window.t('settings.cliDefaultPlaceholder');
             selectEl.appendChild(placeholder);
-            agents.forEach(function(agent) {
+            agents.forEach(function(agent: any) {
                 var opt = document.createElement('option');
                 opt.value = agent.id;
                 opt.textContent = agent.name + (agent.installed ? '' : ' (' + window.t('settings.cliAgentNotInstalled') + ')');
@@ -497,7 +497,7 @@ async function refreshCliAgentsSettings() {
                 }
                 selectEl.appendChild(opt);
             });
-            if (savedId && agents.some(function(a) { return a.id === savedId && a.installed; })) {
+            if (savedId && agents.some(function(a: any) { return a.id === savedId && a.installed; })) {
                 selectEl.value = savedId;
             }
         }
@@ -508,7 +508,7 @@ async function refreshCliAgentsSettings() {
         }
 
         listEl.innerHTML = '';
-        agents.forEach(function(agent) {
+        agents.forEach(function(agent: any) {
             var row = document.createElement('div');
             row.className = 'settings-component-row settings-cli-agent-row';
 
@@ -544,12 +544,12 @@ async function refreshCliAgentsSettings() {
         });
     } catch (e) {
         listEl.innerHTML = '<p class="settings-hint" style="color:var(--danger,#c0392b)">' +
-            window.escapeHtml(window.t('settings.cliAgentsLoadFailed', { message: e.message || String(e) })) + '</p>';
+            window.escapeHtml(window.t('settings.cliAgentsLoadFailed', { message: (e as Error).message || String(e) })) + '</p>';
     }
 }
 
 function initCliSettings() {
-    var selectEl = document.getElementById('settings-cli-agent-select');
+    const selectEl = document.getElementById('settings-cli-agent-select') as HTMLSelectElement | null;
     if (selectEl && !selectEl.dataset.bound) {
         selectEl.dataset.bound = '1';
         selectEl.addEventListener('change', function() {
@@ -569,7 +569,7 @@ function initCliSettings() {
         refreshBtn.addEventListener('click', refreshCliAgentsSettings);
     }
 
-    var mdBtn = document.getElementById('settings-cli-generate-md-btn');
+    const mdBtn = document.getElementById('settings-cli-generate-md-btn') as HTMLButtonElement | null;
     if (mdBtn && !mdBtn.dataset.bound) {
         mdBtn.dataset.bound = '1';
         mdBtn.addEventListener('click', async function() {
@@ -591,7 +591,7 @@ function initCliSettings() {
                 }
             } catch (e) {
                 if (statusEl) {
-                    statusEl.textContent = window.t('settings.cliGenerateMdFailed', { message: e.message || String(e) });
+                    statusEl.textContent = window.t('settings.cliGenerateMdFailed', { message: (e as Error).message || String(e) });
                 }
             } finally {
                 mdBtn.disabled = false;
@@ -605,7 +605,7 @@ function initCliSettings() {
 // ---------------------------------------------------------------------------
 
 function initIngestAutoSettings() {
-    var el = document.getElementById('settings-ingest-auto-enabled');
+    const el = document.getElementById('settings-ingest-auto-enabled') as HTMLInputElement | null;
     if (!el || el.dataset.bound) return;
     el.dataset.bound = '1';
     el.addEventListener('change', function() {
@@ -614,7 +614,7 @@ function initIngestAutoSettings() {
 }
 
 function initMergePresetSettings() {
-    var els = document.querySelectorAll('input[name="settings-merge-preset"]');
+    var els = document.querySelectorAll('input[name="settings-merge-preset"]') as NodeListOf<HTMLInputElement>;
     if (!els.length || els[0].dataset.bound) return;
     els.forEach(function(el) { el.dataset.bound = '1'; });
     els.forEach(function(el) {
@@ -630,11 +630,11 @@ var _MERGE_THRESHOLD_FIELDS = [
     'overlap_sim', 'coverage', 'title', 'topic', 'content', 'score', 'topic_name', 'topic_content'
 ];
 
-function _mergeThresholdEl(key) {
-    return document.getElementById('settings-merge-threshold-' + key);
+function _mergeThresholdEl(key: any) {
+    return document.getElementById('settings-merge-threshold-' + key) as HTMLInputElement | null;
 }
 
-function applyMergeAdvancedToForm(overrides) {
+function applyMergeAdvancedToForm(overrides: any) {
     _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
         var el = _mergeThresholdEl(key);
         if (!el) return;
@@ -652,7 +652,7 @@ function clearMergeAdvancedForm() {
 }
 
 function _readMergeAdvancedConfig() {
-    var overrides = {};
+    var overrides: Record<string, any> = {};
     _MERGE_THRESHOLD_FIELDS.forEach(function(key) {
         var el = _mergeThresholdEl(key);
         if (!el) return;
@@ -670,8 +670,8 @@ function saveMergeAdvancedConfig() {
 }
 
 function initMergeAdvancedSettings() {
-    var toggle = document.getElementById('settings-merge-advanced-toggle');
-    var panel = document.getElementById('settings-merge-advanced');
+    const toggle = document.getElementById('settings-merge-advanced-toggle');
+    const panel = document.getElementById('settings-merge-advanced');
     if (toggle && panel && !toggle.dataset.bound) {
         toggle.dataset.bound = '1';
         toggle.addEventListener('click', function() {
@@ -691,7 +691,7 @@ function initMergeAdvancedSettings() {
 }
 
 function initTopicAutoThresholdSettings() {
-    var el = document.getElementById('settings-topic-auto-threshold');
+    const el = document.getElementById('settings-topic-auto-threshold') as HTMLInputElement | null;
     if (!el || el.dataset.bound) return;
     el.dataset.bound = '1';
     el.addEventListener('change', async function() {
@@ -710,7 +710,7 @@ function initTopicAutoThresholdSettings() {
                 window.updateStatus((result && result.message) || window.t('pending.operationFailed'));
             }
         } catch (e) {
-            window.updateStatus(e.message || window.t('pending.operationFailed'));
+            window.updateStatus((e as Error).message || window.t('pending.operationFailed'));
         }
     });
 }

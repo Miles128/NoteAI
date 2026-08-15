@@ -19,7 +19,7 @@ async function loadModules() {
         window.state.loadThemePreference().catch(function() {}),
     ]);
 
-    await import('./assistant.js');
+    await import('./assistant.ts');
 
     await import('./icons.js');
     const { IconsModule } = window;

@@ -11,8 +11,113 @@
     var _currentTopicName = '';
     var _currentNotes: any[] = [];
     var _activeFilePath: any = null;
+    var _virtualScrollBound = false;
+    var _virtualItemH = 52;
+    var _virtualBuffer = 6;
 
     const _escapeHtml = window.escapeHtml;
+
+    function _noteItemHtml(note: any, index: number): string {
+        var isActive = note.path === _activeFilePath;
+        var name = _escapeHtml(note.name || '');
+        var dateStr = _formatDate(note.modified);
+        var topicStr = _escapeHtml(note.topic || '');
+        var ext = '';
+        var dotIdx = name.lastIndexOf('.');
+        if (dotIdx > 0) ext = name.substring(0, dotIdx);
+        var displayName = ext || name;
+
+        return '<div class="note-list-item' + (isActive ? ' is-active' : '') + '" ' +
+            'data-index="' + index + '" data-path="' + _escapeHtml(note.path) + '" data-name="' + _escapeHtml(note.name) + '">' +
+            '<div class="note-list-item-title">' + _escapeHtml(displayName) + '</div>' +
+            '<div class="note-list-item-meta">' +
+            (topicStr ? '<span class="note-list-item-topic">' + topicStr + '</span>' : '') +
+            (dateStr ? '<span class="note-list-item-date">' + dateStr + '</span>' : '') +
+            '</div>' +
+            '</div>';
+    }
+
+    function _bindVirtualScroll(body: HTMLElement) {
+        if (_virtualScrollBound) return;
+        _virtualScrollBound = true;
+        body.addEventListener('scroll', function() {
+            _renderVirtual();
+        });
+        body.addEventListener('click', function(e) {
+            var item = (e.target as Element).closest('.note-list-item');
+            if (!item) return;
+            var path = item.getAttribute('data-path');
+            var name = item.getAttribute('data-name');
+            if (path && window.TreeModule && window.TreeModule.selectFile) {
+                window.TreeModule.selectFile(path, name || undefined);
+            }
+        });
+    }
+
+    function _renderVirtual() {
+        var body = document.getElementById('note-list-body');
+        if (!body || !_currentNotes.length) return;
+        var scrollTop = body.scrollTop || 0;
+        var viewH = body.clientHeight || 400;
+        var total = _currentNotes.length;
+        var startIdx = Math.max(0, Math.floor(scrollTop / _virtualItemH) - _virtualBuffer);
+        var endIdx = Math.min(total, Math.ceil((scrollTop + viewH) / _virtualItemH) + _virtualBuffer);
+
+        var html = '';
+        for (var i = startIdx; i < endIdx; i++) {
+            html += _noteItemHtml(_currentNotes[i], i);
+        }
+
+        body.innerHTML =
+            '<div class="note-list-spacer" data-spacer="top" style="height:' + (startIdx * _virtualItemH) + 'px"></div>' +
+            html +
+            '<div class="note-list-spacer" data-spacer="bottom" style="height:' + ((total - endIdx) * _virtualItemH) + 'px"></div>';
+
+        var activeIdx = -1;
+        for (var j = 0; j < total; j++) {
+            if (_currentNotes[j].path === _activeFilePath) { activeIdx = j; break; }
+        }
+        if (activeIdx >= 0 && (activeIdx < startIdx || activeIdx >= endIdx)) {
+            body.scrollTop = activeIdx * _virtualItemH;
+        }
+    }
+
+    function render() {
+        var body = document.getElementById('note-list-body');
+        var titleEl = document.getElementById('note-list-title');
+        var countEl = document.getElementById('note-list-count');
+        if (!body) return;
+
+        var filtered = _currentNotes;
+
+        if (titleEl) titleEl.textContent = _currentTopicName || (window.t ? window.t('noteList.title') : '笔记列表');
+        if (countEl) countEl.textContent = String(filtered.length);
+
+        if (filtered.length === 0) {
+            body.innerHTML = '<div class="note-list-empty">' +
+                (window.t ? window.t('noteList.emptyTopic') : '该主题下暂无笔记') +
+                '</div>';
+            return;
+        }
+
+        _bindVirtualScroll(body);
+        body.scrollTop = 0;
+        _renderVirtual();
+    }
+
+    function setActiveFile(filePath: any) {
+        _activeFilePath = filePath;
+        var body = document.getElementById('note-list-body');
+        if (!body) return;
+        var items = body.querySelectorAll('.note-list-item');
+        items.forEach(function(item: any) {
+            if (item.getAttribute('data-path') === filePath) {
+                item.classList.add('is-active');
+            } else {
+                item.classList.remove('is-active');
+            }
+        });
+    }
 
     function _formatDate(ts: any) {
         if (!ts) return '';
@@ -163,70 +268,6 @@
         if (body) body.innerHTML = '<div class="note-list-empty">' + (window.t ? window.t('noteList.empty') : '暂无笔记') + '</div>';
         if (titleEl) titleEl.textContent = _currentTopicName || (window.t ? window.t('noteList.title') : '笔记列表');
         if (countEl) countEl.textContent = '0';
-    }
-
-    function render() {
-        var body = document.getElementById('note-list-body');
-        var titleEl = document.getElementById('note-list-title');
-        var countEl = document.getElementById('note-list-count');
-        if (!body) return;
-
-        var filtered = _currentNotes;
-
-        if (titleEl) titleEl.textContent = _currentTopicName || (window.t ? window.t('noteList.title') : '笔记列表');
-        if (countEl) countEl.textContent = String(filtered.length);
-
-        if (filtered.length === 0) {
-            body.innerHTML = '<div class="note-list-empty">' +
-                (window.t ? window.t('noteList.emptyTopic') : '该主题下暂无笔记') +
-                '</div>';
-            return;
-        }
-
-        var html = filtered.map(function(note) {
-            var isActive = note.path === _activeFilePath;
-            var name = _escapeHtml(note.name || '');
-            var dateStr = _formatDate(note.modified);
-            var topicStr = _escapeHtml(note.topic || '');
-            var ext = '';
-            var dotIdx = name.lastIndexOf('.');
-            if (dotIdx > 0) ext = name.substring(0, dotIdx);
-            var displayName = ext || name;
-
-            return '<div class="note-list-item' + (isActive ? ' is-active' : '') + '" ' +
-                'data-path="' + _escapeHtml(note.path) + '" data-name="' + _escapeHtml(note.name) + '">' +
-                '<div class="note-list-item-title">' + _escapeHtml(displayName) + '</div>' +
-                '<div class="note-list-item-meta">' +
-                (topicStr ? '<span class="note-list-item-topic">' + topicStr + '</span>' : '') +
-                (dateStr ? '<span class="note-list-item-date">' + dateStr + '</span>' : '') +
-                '</div>' +
-                '</div>';
-        }).join('');
-
-        body.innerHTML = html;
-
-        var items = body.querySelectorAll('.note-list-item');
-        items.forEach(function(item: any) {
-            item.addEventListener('click', function() {
-                var path = item.getAttribute('data-path');
-                var name = item.getAttribute('data-name');
-                if (path && window.TreeModule && window.TreeModule.selectFile) {
-                    window.TreeModule.selectFile(path, name);
-                }
-            });
-        });
-    }
-
-    function setActiveFile(filePath: any) {
-        _activeFilePath = filePath;
-        var items = document.querySelectorAll('.note-list-item');
-        items.forEach(function(item) {
-            if (item.getAttribute('data-path') === filePath) {
-                item.classList.add('is-active');
-            } else {
-                item.classList.remove('is-active');
-            }
-        });
     }
 
     function clearSelection() {

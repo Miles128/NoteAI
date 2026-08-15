@@ -1,16 +1,20 @@
+/**
+ * api.ts —— 前端与 Python sidecar 的 RPC 门面（从 api.js 渐进迁移到 TS）。
+ * 运行时语义与迁移前一致：配置化注册 + 特殊 API（对话框/窗口/分页预览）。
+ */
 (function() { 'use strict';
 
-var _isTauri = null;
+var _isTauri: boolean | null = null;
 var _isTauriChecked = false;
 
-function checkIsTauri() {
+function checkIsTauri(): boolean | null {
     if (_isTauriChecked) return _isTauri;
     _isTauriChecked = true;
     _isTauri = typeof window !== 'undefined' && !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
     return _isTauri;
 }
 
-function getTauriInvoke() {
+function getTauriInvoke(): any {
     if (window.__TAURI__) {
         if (typeof window.__TAURI__.invoke === 'function') return window.__TAURI__.invoke;
         if (window.__TAURI__.core && typeof window.__TAURI__.core.invoke === 'function') return window.__TAURI__.core.invoke;
@@ -23,7 +27,7 @@ function getTauriInvoke() {
     return null;
 }
 
-function getTauriEventAPI() {
+function getTauriEventAPI(): any {
     if (window.__TAURI__ && window.__TAURI__.event) return window.__TAURI__.event;
     if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.event) return window.__TAURI_INTERNALS__.event;
     return null;
@@ -32,7 +36,7 @@ function getTauriEventAPI() {
 var _pyCallRetries = 2;
 var _pyCallRetryDelayMs = 300;
 
-function _isRetryableError(e) {
+function _isRetryableError(e: any): boolean {
     if (!e) return false;
     var msg = String(e.message || e).toLowerCase();
     // 仅限明确的传输层错误；宽泛关键字（如 invoke）会把业务错误也纳入重试，
@@ -46,7 +50,7 @@ function _isRetryableError(e) {
         msg.indexOf('sidecar') !== -1;
 }
 
-function _translateError(e) {
+function _translateError(e: any): Error {
     var msg = String(e && (e.message || e));
     var lower = msg.toLowerCase();
     if (msg.indexOf('Not running in Tauri') !== -1) {
@@ -64,7 +68,7 @@ function _translateError(e) {
     return e;
 }
 
-async function pyCall(method, params, options) {
+async function pyCall(method: string, params?: Record<string, any>, options?: { noRetry?: boolean }): Promise<any> {
     if (!checkIsTauri()) {
         throw _translateError(new Error('Not running in Tauri'));
     }
@@ -73,7 +77,7 @@ async function pyCall(method, params, options) {
 
     var opts = options || {};
     var retries = opts.noRetry ? 0 : _pyCallRetries;
-    var lastError = null;
+    var lastError: any = null;
     for (var attempt = 0; attempt <= retries; attempt++) {
         try {
             var result = await invoke('py_call', {
@@ -97,11 +101,11 @@ async function pyCall(method, params, options) {
 
 var PREVIEW_RAW_SLICE_CHUNK_BYTES = 384 * 1024;
 
-function b64Utf8Decode(b64) {
+function b64Utf8Decode(b64: string): string {
     return window.b64DecodeUtf8(b64);
 }
 
-function concatUint8(chunks) {
+function concatUint8(chunks: Uint8Array[]): Uint8Array {
     var len = 0;
     chunks.forEach(function(chunk) {
         len += chunk.length;
@@ -115,7 +119,7 @@ function concatUint8(chunks) {
     return out;
 }
 
-function hydrateSemanticPreviewRpc(result) {
+function hydrateSemanticPreviewRpc(result: any): any {
     if (!result || !result.success) return result;
     if (
         result.preview_delivery === 'semantic_b64'
@@ -127,10 +131,10 @@ function hydrateSemanticPreviewRpc(result) {
     return result;
 }
 
-async function assembleRawSlicesAsUtf8Preview(path, totalByteSize) {
+async function assembleRawSlicesAsUtf8Preview(path: string, totalByteSize?: number): Promise<string> {
     var total = typeof totalByteSize === 'number' ? totalByteSize : 0;
     if (total < 1) return '';
-    var parts = [];
+    var parts: Uint8Array[] = [];
     var off = 0;
     while (off < total) {
         var want = Math.min(PREVIEW_RAW_SLICE_CHUNK_BYTES, total - off);
@@ -151,7 +155,7 @@ async function assembleRawSlicesAsUtf8Preview(path, totalByteSize) {
     return new TextDecoder('utf-8').decode(merged);
 }
 
-function sliceChunkToUint8(b64) {
+function sliceChunkToUint8(b64: string): Uint8Array {
     return window.b64ToUint8(b64);
 }
 
@@ -159,7 +163,7 @@ function sliceChunkToUint8(b64) {
 // 特殊 API 函数：涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览，无法配置化生成
 // ---------------------------------------------------------------------------
 
-async function openWorkspace() {
+async function openWorkspace(): Promise<any> {
     if (!checkIsTauri()) {
         throw new Error('必须在 Tauri 环境中运行');
     }
@@ -175,7 +179,7 @@ async function openWorkspace() {
     return { success: false, message: '未选择文件夹' };
 }
 
-async function getWorkspaceStatus() {
+async function getWorkspaceStatus(): Promise<any> {
     var result = await pyCall('get_workspace_status');
     if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
@@ -185,7 +189,7 @@ async function getWorkspaceStatus() {
     return result;
 }
 
-async function createSampleWorkspace() {
+async function createSampleWorkspace(): Promise<any> {
     var pyResult = await pyCall('create_sample_workspace', {}, { noRetry: true });
     if (pyResult && pyResult.success && checkIsTauri()) {
         var invoke = getTauriInvoke();
@@ -194,7 +198,7 @@ async function createSampleWorkspace() {
     return pyResult || { success: false, message: '创建示例库失败' };
 }
 
-async function addFiles() {
+async function addFiles(): Promise<string[]> {
     if (!checkIsTauri()) {
         throw new Error('必须在 Tauri 环境中运行');
     }
@@ -203,7 +207,7 @@ async function addFiles() {
     return files || [];
 }
 
-async function importFilesToWorkspace() {
+async function importFilesToWorkspace(): Promise<any> {
     if (!checkIsTauri()) {
         throw new Error('必须在 Tauri 环境中运行');
     }
@@ -213,7 +217,7 @@ async function importFilesToWorkspace() {
     return pyCall('import_files', { files: files });
 }
 
-async function browseFolder() {
+async function browseFolder(): Promise<string> {
     if (!checkIsTauri()) {
         throw new Error('必须在 Tauri 环境中运行');
     }
@@ -222,7 +226,7 @@ async function browseFolder() {
     return folder || '';
 }
 
-async function openArchiveDialog() {
+async function openArchiveDialog(): Promise<any> {
     if (!checkIsTauri()) {
         throw new Error('必须在 Tauri 环境中运行');
     }
@@ -230,7 +234,7 @@ async function openArchiveDialog() {
     return await invoke('open_archive_dialog');
 }
 
-async function getFilePreview(path) {
+async function getFilePreview(path: string): Promise<any> {
     var raw = await pyCall('get_file_preview', { path: path });
     if (!raw || !raw.success) return raw;
 
@@ -260,7 +264,7 @@ async function getFilePreview(path) {
 // 窗口控制：直接调用 Tauri 窗口 API，不走 pyCall
 // ---------------------------------------------------------------------------
 
-function getTauriWindow() {
+function getTauriWindow(): any {
     if (window.__TAURI__ && window.__TAURI__.window) {
         if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
             return window.__TAURI__.window.getCurrentWindow();
@@ -280,7 +284,7 @@ function getTauriWindow() {
     return null;
 }
 
-function moveWindow(dx, dy) {
+function moveWindow(_dx?: number, _dy?: number): void {
     if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win && typeof win.startDragging === 'function') {
@@ -289,28 +293,28 @@ function moveWindow(dx, dy) {
     }
 }
 
-function minimizeWindow() {
+function minimizeWindow(): void {
     if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.minimize();
     }
 }
 
-function maximizeWindow() {
+function maximizeWindow(): void {
     if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.toggleMaximize();
     }
 }
 
-function closeWindow() {
+function closeWindow(): void {
     if (checkIsTauri()) {
         var win = getTauriWindow();
         if (win) win.close();
     }
 }
 
-async function openFileInNewWindow(path, name) {
+async function openFileInNewWindow(path: string, name?: string): Promise<any> {
     if (checkIsTauri()) {
         var invoke = getTauriInvoke();
         if (invoke) {
@@ -330,14 +334,21 @@ async function openFileInNewWindow(path, name) {
 //   params —— 可选，将函数入参映射为 pyCall 参数对象的函数；省略则传 {}
 // ---------------------------------------------------------------------------
 
-function createApiFunction(def) {
-    return async function() {
-        var params = def.params ? def.params.apply(null, arguments) : {};
+interface ApiDef {
+    name: string;
+    method: string;
+    params?: (...args: any[]) => any;
+    write?: boolean;
+}
+
+function createApiFunction(def: ApiDef): (...args: any[]) => Promise<any> {
+    return async function(this: any) {
+        var params = def.params ? def.params.apply(null, arguments as any) : {};
         return pyCall(def.method, params, { noRetry: !!def.write });
     };
 }
 
-var API_DEFS = [
+var API_DEFS: ApiDef[] = [
     // ---- 工作区 / 主题 / 标签 ----
     { name: 'getWorkspaceTree', method: 'get_workspace_tree' },
     { name: 'getTopicTree', method: 'get_topic_tree' },
@@ -500,12 +511,13 @@ var API_DEFS = [
     { name: 'revealInFinder', method: 'reveal_in_finder', params: function(path) { return { path: path }; } }
 ];
 
-var generatedApi = {};
+var generatedApi: Record<string, (...args: any[]) => Promise<any>> = {};
 API_DEFS.forEach(function(def) {
     generatedApi[def.name] = createApiFunction(def);
 });
 
-window.api = Object.assign({}, generatedApi, {
+var builtApi: Record<string, any> = {};
+Object.assign(builtApi, generatedApi, {
     invoke: pyCall,
 
     // 特殊 API（涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览）
@@ -525,6 +537,7 @@ window.api = Object.assign({}, generatedApi, {
     closeWindow: closeWindow,
     openFileInNewWindow: openFileInNewWindow
 });
+window.api = builtApi as WindowApi;
 
 window.getTauriEventAPI = getTauriEventAPI;
 window.checkIsTauri = checkIsTauri;

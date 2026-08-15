@@ -16,12 +16,179 @@ declare global {
     }
 
     interface WindowApi {
+        invoke(method: string, params?: Record<string, any>): Promise<any>;
         getApiConfig(): Promise<ApiConfig>;
         getUiConfig(): Promise<UiConfig>;
         getThemePreference(): Promise<string>;
         saveApiConfig(config: Partial<ApiConfig>): Promise<any>;
         saveUiConfig(config: Partial<UiConfig>): Promise<any>;
         saveThemePreference(theme: string): Promise<any>;
+
+        // 工作区 / 主题 / 标签
+        getWorkspaceTree(): Promise<any>;
+        getTopicTree(): Promise<any>;
+        topicMeta(topic: string): Promise<any>;
+        getSurveyOverview(): Promise<any>;
+        toggleSurvey(topic: string): Promise<any>;
+        getAllTags(): Promise<any>;
+        autoTagFiles(dryRun?: boolean): Promise<any>;
+        ensureTagsMd(): Promise<any>;
+        batchAutoAssignTopics(): Promise<any>;
+        createTopic(name: string, parent?: string): Promise<any>;
+        createNoteFromDraft(title: string, topic?: string, content?: string): Promise<any>;
+        createTag(name: string): Promise<any>;
+        getAllPending(): Promise<any>;
+        retryCascadeTopic(topic: string): Promise<any>;
+        retryAllCascadeFailures(): Promise<any>;
+        dismissCascadeFailure(topic: string): Promise<any>;
+        retryConvertFile(file: string): Promise<any>;
+        dismissConvertFailure(file: string): Promise<any>;
+        getDashboardStatus(): Promise<any>;
+        getActivityLog(limit?: number): Promise<any>;
+        resolveTopic(filePath: string, topic: string): Promise<any>;
+        keepNoteInTopic(filePath: string, currentTopic: string, suggestedTopic: string): Promise<any>;
+        applyTopicPlacementThreshold(): Promise<any>;
+        mergeDuplicateTopics(): Promise<any>;
+        renameTopic(oldTopic: string, newTopic: string): Promise<any>;
+        deleteTopic(topicName: string): Promise<any>;
+        renameTag(oldTag: string, newTag: string): Promise<any>;
+        deleteTag(tagName: string): Promise<any>;
+        moveFileToTopic(filePath: string, newTopic: string): Promise<any>;
+        moveFile(filePath: string, targetFolder: string): Promise<any>;
+        addTagToFile(filePath: string, tag: string): Promise<any>;
+
+        // 配置
+        testApiConfig(cfg?: Partial<ApiConfig>): Promise<any>;
+        getOnboardingStatus(): Promise<any>;
+        markOnboardingDone(): Promise<any>;
+        getComponentsStatus(): Promise<any>;
+        installComponent(p: any): Promise<any>;
+        uninstallComponent(p: any): Promise<any>;
+
+        // 下载 / 转换 / 整合
+        startWebDownload(urls: string[], aiAssist: boolean, includeImages: boolean): Promise<any>;
+        startFileConversion(aiAssist: boolean): Promise<any>;
+        autoConvertPending(): Promise<any>;
+        extractTopics(topicCount: number): Promise<any>;
+        startNoteIntegration(autoTopic: boolean, topics: string[]): Promise<any>;
+        refreshLog(): Promise<any>;
+        onFileSelected(path: string): Promise<any>;
+        saveFileContent(path: string, content: string): Promise<any>;
+        readFileRaw(path: string): Promise<any>;
+        importFilesDirect(files: string[]): Promise<any>;
+        importRssFeed(url: string, maxItems: number, fetchArticles: boolean): Promise<any>;
+        listRssSubscriptions(): Promise<any>;
+        saveRssSubscription(url: string, name?: string): Promise<any>;
+        removeRssSubscription(url: string): Promise<any>;
+        fetchAllRss(): Promise<any>;
+        discoverRssSources(): Promise<any>;
+        importTranscript(title: string, content: string, source: string): Promise<any>;
+        listWatchedFolders(): Promise<any>;
+        addWatchedFolder(path: string, recursive?: boolean): Promise<any>;
+        removeWatchedFolder(path: string): Promise<any>;
+        scanWatchedFolder(path: string, recursive?: boolean): Promise<any>;
+
+        // 知识图谱 / 链接 / 语义
+        getBacklinks(filePath: string): Promise<any>;
+        getLinkStats(): Promise<any>;
+        getGraphData(filter?: string): Promise<any>;
+        getSemanticGraphData(options?: any): Promise<any>;
+        confirmLink(fromPath: string, toPath: string): Promise<any>;
+        rejectLink(fromPath: string, toPath: string): Promise<any>;
+        getSemanticWorkbench(options?: any): Promise<any>;
+        getSemanticDetail(kind: string, id: string): Promise<any>;
+        getNoteSemanticContext(path: string): Promise<any>;
+        getSemanticObjectWikiPage(kind: string, id: string): Promise<any>;
+        publishSemanticObjectWikiPage(kind: string, id: string): Promise<any>;
+        getSemanticCompileStatus(): Promise<any>;
+        getSemanticChanges(options?: any): Promise<any>;
+        getTopicBrief(options?: any): Promise<any>;
+        generateWeeklyBrief(options?: any): Promise<any>;
+        getIndexHealth(): Promise<any>;
+        backupWorkspace(options?: any): Promise<any>;
+        exportNotes(options?: any): Promise<any>;
+        restoreWorkspaceBackup(options?: any): Promise<any>;
+        startSemanticFullCompile(): Promise<any>;
+        reviewSemanticConflict(id: string, status?: string): Promise<any>;
+        scanSemanticConflicts(): Promise<any>;
+        reviewSemanticEntityQuality(id: string, status?: string): Promise<any>;
+        enqueueSemanticEntityQuality(id: string): Promise<any>;
+        enqueueCrossKindSemanticMerges(): Promise<any>;
+        resolveCrossKindMerges(dryRun?: boolean): Promise<any>;
+        getSemanticEntityMergePreview(sourceId: string, targetId: string): Promise<any>;
+        mergeSemanticEntities(sourceId: string, targetId: string): Promise<any>;
+        updateSemanticClaim(id: string, statement: string, scope?: string, claimType?: string): Promise<any>;
+        verifySemanticClaim(id: string, agent: string, method?: string): Promise<any>;
+        setSemanticClaimStatus(id: string, status: string): Promise<any>;
+        setSemanticEvidenceStatus(id: string, status: string): Promise<any>;
+        getSemanticTopicWikiPage(topic: string): Promise<any>;
+        publishSemanticTopicWikiPage(topic: string): Promise<any>;
+        addSemanticEntityAlias(id: string, alias: string): Promise<any>;
+        confirmAllLinks(): Promise<any>;
+        syncWikiWithFiles(): Promise<any>;
+
+        // LLM 改写 / AI 主题
+        llmRewriteStream(filePath: string): Promise<any>;
+        llmRewriteApply(filePath: string, rewrittenText: string): Promise<any>;
+        aiTopicAnalyze(): Promise<any>;
+        aiTopicSurvey(topic: string): Promise<any>;
+        applyTopicSuggestion(suggestion: any): Promise<any>;
+
+        // RAG
+        ragChat(question: string, topics?: any, tags?: any, currentFile?: string, options?: any): Promise<any>;
+        ragRebuildIndex(): Promise<any>;
+        ragIndexStatus(): Promise<any>;
+        runKbLint(): Promise<any>;
+        getDuplicateReview(filePath: string, relatedFile?: string): Promise<any>;
+        mergeDuplicateNotes(filePath: string, relatedFile: string, title?: string): Promise<any>;
+        mergeNoteGroup(filePaths: string[], title?: string, deleteAuthorized?: boolean): Promise<any>;
+        scanMergeCandidates(preset?: string, overrides?: any): Promise<any>;
+        suggestTopicMergeNames(topics: string[]): Promise<any>;
+        previewTopicMerge(topics: string[], newTopic?: string): Promise<any>;
+        mergeSimilarTopics(topics: string[], newTopic?: string): Promise<any>;
+
+        // CLI Agent 桥接
+        listCliAgents(): Promise<any>;
+        runCliAgent(agentId: string, prompt: string, workspacePath?: string, options?: any): Promise<any>;
+        stopCliAgent(): Promise<any>;
+        clearCliAgentSession(agentId?: string, workspacePath?: string): Promise<any>;
+        generateVaultAgentsMd(): Promise<any>;
+
+        // 规则 / Ingest / 任务
+        getProjectRules(): Promise<any>;
+        saveProjectRules(rules: any): Promise<any>;
+        getWorkspaceRules(): Promise<any>;
+        saveWorkspaceRules(opts?: any): Promise<any>;
+        needsWorkspaceRulesSetup(): Promise<any>;
+        startIngest(options?: any): Promise<any>;
+        cancelIngest(): Promise<any>;
+        retryIngest(options?: any): Promise<any>;
+        getIngestStatus(): Promise<any>;
+        checkIngestUpdates(options?: any): Promise<any>;
+        ensureIngest(options?: any): Promise<any>;
+        getJobs(options?: any): Promise<any>;
+
+        // 搜索 / 文件操作
+        searchFiles(query: string): Promise<any>;
+        deleteFile(path: string): Promise<any>;
+        revealInFinder(path: string): Promise<any>;
+
+        // 特殊 API（对话框 / 多步逻辑 / 分页预览）
+        openWorkspace(): Promise<any>;
+        createSampleWorkspace(): Promise<any>;
+        getWorkspaceStatus(): Promise<any>;
+        addFiles(): Promise<string[]>;
+        importFilesToWorkspace(): Promise<any>;
+        browseFolder(): Promise<string>;
+        openArchiveDialog(): Promise<any>;
+        getFilePreview(path: string): Promise<any>;
+
+        // 窗口控制
+        moveWindow(dx?: number, dy?: number): void;
+        minimizeWindow(): void;
+        maximizeWindow(): void;
+        closeWindow(): void;
+        openFileInNewWindow(path: string, name?: string): Promise<any>;
     }
 
     interface StorageKeys {
@@ -113,6 +280,11 @@ declare global {
 
     interface Window {
         api: WindowApi;
+        __TAURI__: any;
+        __TAURI_INTERNALS__: any;
+        checkIsTauri: () => boolean | null;
+        getTauriInvoke: () => any;
+        getTauriEventAPI: () => any;
         Storage: StorageModule;
         state: StateModule;
         apiConfig: ApiConfig | null;

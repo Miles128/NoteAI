@@ -51,7 +51,24 @@ function getEffectiveTheme() {
     return prefersDark ? 'dark' : 'light';
 }
 
+var _hljsLinksEnsured = false;
+function _ensureHljsThemeLinks() {
+    if (_hljsLinksEnsured) return;
+    _hljsLinksEnsured = true;
+    function make(id: string, href: string) {
+        if (document.getElementById(id)) return;
+        var link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.id = id;
+        link.href = href;
+        document.head.appendChild(link);
+    }
+    make('hljs-light', 'hljs-github.css');
+    make('hljs-dark', 'hljs-github-dark.css');
+}
+
 function updateHljsTheme() {
+    _ensureHljsThemeLinks();
     const isDark = getEffectiveTheme() === 'dark';
     const lightLink = document.getElementById('hljs-light') as HTMLLinkElement | null;
     const darkLink = document.getElementById('hljs-dark') as HTMLLinkElement | null;
@@ -308,6 +325,8 @@ function syncScrollFromPreview(previewScroll: any) {
 }
 
 function enterEditMode() {
+    // 编辑渲染依赖 marked/highlight/purify；若尚未懒加载则后台预热（幂等）
+    if (window.ensureMarkedConfigured) window.ensureMarkedConfigured();
     const previewContent = document.getElementById('preview-content');
     const tiptapContainer = document.getElementById('tiptap-editor-container');
     const toolbar = document.getElementById('tiptap-toolbar');

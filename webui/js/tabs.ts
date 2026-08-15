@@ -8,8 +8,8 @@
 
         if (tabIndex === 0) {
             setTimeout(() => {
-                if (window.DownloaderModule && window.DownloaderModule.openDownloadModal) {
-                    window.DownloaderModule.openDownloadModal();
+                if (typeof window.openDownloadModal === 'function') {
+                    window.openDownloadModal();
                 }
             }, 50);
         }

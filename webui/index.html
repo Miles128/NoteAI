@@ -18,16 +18,8 @@
     <link rel="stylesheet" href="css/semantic-workbench.css">
     <link rel="stylesheet" href="css/assistant.css">
 
-    <script src="d3.min.js"></script>
-    <script src="marked.min.js"></script>
-    <script src="purify.min.js"></script>
-
-    <link rel="stylesheet" href="hljs-github.css" id="hljs-light">
-    <link rel="stylesheet" href="hljs-github-dark.css" id="hljs-dark" disabled>
-    <script src="highlight.min.js"></script>
-
-    <!-- pdfjs / tiptap-bundle 改为按需懒加载（webui/js/utils.js loadLazyScript）：
-         打开 PDF 时注入 pdfjs-legacy.min.js，首次进入编辑器时注入 lib/tiptap-bundle.js -->
+    <!-- d3/marked/purify/highlight 改为按需懒加载（webui/js/utils.ts loadLazyScript）：
+         图形/语义图打开时注入 d3.min.js；预览/编辑/渲染时注入 marked/purify/highlight -->
 
     <script type="module" src="dist/main.js"></script>
 </head>

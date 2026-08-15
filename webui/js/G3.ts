@@ -802,6 +802,7 @@ const Graph3Tier = {
     },
 
     async _doLoad() {
+        await window.loadLazyScript('d3.min.js').catch(function() { return false; });
         this._lastLoadFilter = this.filter;
         this._lastLoadTime = Date.now();
         this.initLayoutConfig();

@@ -66,6 +66,14 @@ function updateWorkspaceDisplay(workspacePath: any) {
 
     if (window.DownloaderModule && window.DownloaderModule.loadRssSubscriptions) {
         window.DownloaderModule.loadRssSubscriptions();
+    } else if (window.DownloaderModule === undefined) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore — downloader.ts 为 IIFE（无 export），esbuild 按 chunk 运行时加载
+        import('./downloader.ts').then(function() {
+            if (window.DownloaderModule && window.DownloaderModule.loadRssSubscriptions) {
+                window.DownloaderModule.loadRssSubscriptions();
+            }
+        }).catch(function(err) { console.warn('[Downloader] lazy load failed:', err); });
     }
 
     if (container) {

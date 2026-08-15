@@ -114,13 +114,28 @@ async function loadModules() {
         window.onLLMRewrite = window.RewriteManager.onLLMRewrite;
     }
 
-    await import('./converter.ts');
-    const { ConverterModule } = window;
-    window.ConverterModule = ConverterModule;
-
-    await import('./downloader.ts');
-    const { DownloaderModule } = window;
-    window.DownloaderModule = DownloaderModule;
+    // downloader/converter 按需加载（代码分割）：面板首次打开/操作时才 import 对应 chunk，
+    // 首屏不再解析这两个模块。
+    window.openDownloadModal = function() {
+        return import('./downloader.ts').then(function() {
+            if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) window.DownloaderModule.loadSavedConfig();
+            if (window.DownloaderModule && window.DownloaderModule.openDownloadModal) window.DownloaderModule.openDownloadModal();
+        }).catch(function(err) { console.warn('[Downloader] lazy load failed:', err); });
+    };
+    window.startDownloadFromModal = function() {
+        return import('./downloader.ts').then(function() {
+            if (window.DownloaderModule && window.DownloaderModule.startDownloadFromModal) window.DownloaderModule.startDownloadFromModal();
+        }).catch(function(err) { console.warn('[Downloader] lazy load failed:', err); });
+    };
+    window.closeDownloadModal = function() {
+        if (window.DownloaderModule && window.DownloaderModule.closeDownloadModal) window.DownloaderModule.closeDownloadModal();
+    };
+    window.startFileConversion = function() {
+        return import('./converter.ts').then(function() {
+            if (window.ConverterModule && window.ConverterModule.loadSavedConvConfig) window.ConverterModule.loadSavedConvConfig();
+            if (window.ConverterModule && window.ConverterModule.startFileConversion) window.ConverterModule.startFileConversion();
+        }).catch(function(err) { console.warn('[Converter] lazy load failed:', err); });
+    };
 
     await import('./integrator.ts');
     const { IntegratorModule } = window;
@@ -180,12 +195,19 @@ async function loadModules() {
         window.OrganizeRulesModule.init();
     }
 
-    await import('./ingest.ts');
+    // 以下模块顶层无跨模块依赖，并行加载缩短启动关键路径
+    await Promise.all([
+        import('./ingest.ts'),
+        import('./job-center.ts'),
+        import('./home.ts'),
+        import('./note-draft.ts'),
+        import('./quick-create.ts'),
+        import('./event-listeners.ts'),
+    ]);
     const { IngestModule } = window;
     window.IngestModule = IngestModule;
     if (IngestModule.initIngestUi) IngestModule.initIngestUi();
 
-    await import('./job-center.ts');
     window.JobCenterModule = window.JobCenterModule || {};
     if (window.JobCenterModule.refresh) {
         window.JobCenterModule.refresh({ include_finished: true, limit: 50 }).catch(function(err) {
@@ -193,19 +215,15 @@ async function loadModules() {
         });
     }
 
-    await import('./home.ts');
     window.HomeDashboardModule = window.HomeDashboardModule || {};
     if (window.HomeDashboardModule.init) window.HomeDashboardModule.init();
 
-    await import('./note-draft.ts');
     window.NoteDraftModule = window.NoteDraftModule || {};
 
-    await import('./quick-create.ts');
     if (window.QuickCreateModule && window.QuickCreateModule.init) {
         window.QuickCreateModule.init();
     }
 
-    await import('./event-listeners.ts');
     const { EventListeners } = window;
     window.EventListeners = EventListeners;
 

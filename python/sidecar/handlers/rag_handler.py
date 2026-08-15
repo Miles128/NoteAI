@@ -360,6 +360,11 @@ class RagHandler(BaseHandler):
                 RagHandler._session_gates.pop(session_id, None)
 
     def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
+        from sidecar.rag.model_preload import ModelWarmupManager
+
+        # 兜底触发模型预热：若启动延迟尚未开始（或用户立即提问），确保加载启动
+        ModelWarmupManager.ensure_preload()
+
         from utils.llm_utils import APIConfigError, check_api_config
 
         question = params.get("question", "").strip()

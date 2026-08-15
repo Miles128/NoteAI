@@ -10,6 +10,10 @@
   "scripts": {
     "build:tiptap": "node scripts/build-tiptap-bundle.mjs",
     "build:mcp": "node scripts/build-mcp-bundle.mjs",
+    "build:webui": "node scripts/build-webui.mjs",
+    "build:webui:min": "node scripts/build-webui.mjs --minify",
+    "build:highlight": "node scripts/build-highlight.mjs",
+    "dev:webui": "node scripts/build-webui.mjs --watch",
     "build:desktop": "npm run build:tiptap && node scripts/bundle-mcp-runtime.mjs",
     "test": "node --test mcp-server/test/*.test.js"
   },
@@ -24,6 +28,7 @@
     "tiptap-markdown": "^0.8.0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "highlight.js": "^11.12.0"
   }
 }

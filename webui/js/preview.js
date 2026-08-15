@@ -385,8 +385,17 @@ async function loadPdfViewer(path, fileName, requestId) {
         var bytes = window.b64ToUint8(rawResult.content);
 
         if (typeof pdfjsLib === 'undefined') {
-            showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
-            return;
+            // pdfjs 不再随首屏加载：打开 PDF 时按需注入（幂等）
+            try {
+                await window.loadLazyScript('pdfjs-legacy.min.js');
+            } catch (e) {
+                showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
+                return;
+            }
+            if (typeof pdfjsLib === 'undefined') {
+                showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
+                return;
+            }
         }
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-legacy.worker.min.js';

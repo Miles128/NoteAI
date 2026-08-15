@@ -86,6 +86,11 @@ codemirror-bundle.mjs
 webui/lib/*
 !webui/lib/tiptap-bundle.js
 
+# webui 构建产物（与 lib/tiptap-bundle.js 同模式提交，供 release 构建稳定）
+!webui/dist/
+webui/dist/*
+!webui/dist/main.js
+
 # Tauri
 src-tauri/target/
 

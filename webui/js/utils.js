@@ -68,6 +68,36 @@ function b64DecodeUtf8(b64) {
     return new TextDecoder('utf-8').decode(b64ToUint8(b64));
 }
 
+/** 幂等懒加载经典脚本（不重复注入同一 src）。用于 pdfjs/tiptap 等按需库。 */
+var _lazyScripts = {};
+function loadLazyScript(src) {
+    if (_lazyScripts[src] === true) return Promise.resolve(true);
+    if (_lazyScripts[src]) return _lazyScripts[src];
+    _lazyScripts[src] = new Promise(function(resolve, reject) {
+        var existing = document.querySelector('script[data-lazy-src="' + src + '"]');
+        if (existing) {
+            if (existing.dataset.loaded === '1') { resolve(true); return; }
+            existing.addEventListener('load', function() { resolve(true); });
+            existing.addEventListener('error', function() { reject(new Error('加载失败: ' + src)); });
+            return;
+        }
+        var s = document.createElement('script');
+        s.src = src;
+        s.dataset.lazySrc = src;
+        s.onload = function() {
+            s.dataset.loaded = '1';
+            _lazyScripts[src] = true;
+            resolve(true);
+        };
+        s.onerror = function() {
+            _lazyScripts[src] = null;
+            reject(new Error('加载失败: ' + src));
+        };
+        document.head.appendChild(s);
+    });
+    return _lazyScripts[src];
+}
+
 window.escapeHtml = escapeHtml;
 window.escapeAttr = escapeAttr;
 window.safeUrl = safeUrl;
@@ -76,6 +106,7 @@ window.formatModifiedTime = formatModifiedTime;
 window.Path_stem = Path_stem;
 window.b64ToUint8 = b64ToUint8;
 window.b64DecodeUtf8 = b64DecodeUtf8;
+window.loadLazyScript = loadLazyScript;
 
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */
 function _noop() {}

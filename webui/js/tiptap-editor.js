@@ -135,6 +135,10 @@
 
         /** Wait until tiptap-bundle.js has registered window.TiptapModules. */
         whenModulesReady: function(timeoutMs) {
+            // tiptap-bundle 不再随首屏加载：首次等待时按需注入（幂等）
+            if (!window.TiptapModules && typeof window.loadLazyScript === 'function') {
+                window.loadLazyScript('lib/tiptap-bundle.js').catch(function() {});
+            }
             var limit = typeof timeoutMs === 'number' ? timeoutMs : 10000;
             return new Promise(function(resolve) {
                 if (window.TiptapModules) {

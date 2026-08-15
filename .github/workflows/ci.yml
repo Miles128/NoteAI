@@ -91,12 +91,21 @@ jobs:
       - name: Build tiptap bundle
         run: npm run build:tiptap
 
+      - name: Build webui bundle + highlight
+        run: npm run build:webui:min && npm run build:highlight
+
+      - name: Verify committed webui dist is current
+        run: |
+          git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js
+          test -z "$(git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js)"
+
       - name: Syntax check webui/js
         run: |
           for f in webui/js/*.js; do
             node --check "$f" || exit 1
           done
           node --check webui/js/main.mjs || exit 1
+          node --check webui/js/highlight-bundle-entry.mjs || exit 1
 
       - name: Test mcp-server
         working-directory: mcp-server

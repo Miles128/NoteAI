@@ -26,11 +26,10 @@
     <link rel="stylesheet" href="hljs-github-dark.css" id="hljs-dark" disabled>
     <script src="highlight.min.js"></script>
 
-    <script src="pdfjs-legacy.min.js"></script>
-    <!-- 须在 main.mjs 之前加载，否则打开笔记时会落入纯文本/静态预览简易模式 -->
-    <script src="lib/tiptap-bundle.js"></script>
+    <!-- pdfjs / tiptap-bundle 改为按需懒加载（webui/js/utils.js loadLazyScript）：
+         打开 PDF 时注入 pdfjs-legacy.min.js，首次进入编辑器时注入 lib/tiptap-bundle.js -->
 
-    <script type="module" src="js/main.mjs"></script>
+    <script type="module" src="dist/main.js"></script>
 </head>
 <body>
     <!-- 早于模块脚本：避免首屏 HTML onclick 产生 ReferenceError（utils.js 会补充更多占位） -->

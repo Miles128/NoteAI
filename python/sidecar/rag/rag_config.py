@@ -11,7 +11,9 @@ DEFAULT_TOP_K_TAGS = 7
 DEFAULT_HYDE_THRESHOLD = 0.33
 DEFAULT_RERANK_SKIP_SCORE = 0.75
 DEFAULT_DENSE_WEIGHT = 0.7
-RERANK_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+# 更小的 reranker（XLM-RoBERTa-base，278M 参数）：磁盘 ~1.1G / 内存 fp16 ~557M，
+# 相比 bge-reranker-v2-m3（2.1G）省一半体积，中文检索质量仍好。
+RERANK_MODEL_NAME = "BAAI/bge-reranker-base"
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:

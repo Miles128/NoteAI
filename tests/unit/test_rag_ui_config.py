@@ -37,7 +37,7 @@ def test_get_ui_config_exposes_rag_advanced_fields(_restore_rag_settings) -> Non
     ui = handler._get_ui_config({})
     assert ui["rag_dense_weight"] == 0.6
     assert ui["rag_hyde_enabled"] is False
-    assert ui["rag_rerank_model"] == "BAAI/bge-reranker-v2-m3"
+    assert ui["rag_rerank_model"] == "BAAI/bge-reranker-base"
 
 
 def test_save_ui_config_clamps_rag_advanced_fields(monkeypatch: pytest.MonkeyPatch, _restore_rag_settings) -> None:

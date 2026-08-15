@@ -60,7 +60,7 @@ async function loadModules() {
     window.closeProjectRulesModal = closeProjectRulesModal;
     window.saveProjectRulesModal = saveProjectRulesModal;
 
-    await import('./tree.js');
+    await import('./tree.ts');
     const { TreeModule } = window;
     window.TreeModule = TreeModule;
 

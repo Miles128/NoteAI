@@ -1,20 +1,20 @@
 (function() { 'use strict';
 
 window.AssistantModule = (function() {
-    var _chatHistory = [];
+    var _chatHistory: any[] = [];
     var _isStreaming = false;
     var _indexBuilt = false;
     var _panelVisible = false;
     /** 打开 AI 侧栏收窄等 {@link _thawAILayout} */
-    var _aiLayoutSnap = null;
+    var _aiLayoutSnap: any = null;
     var _AI_PANEL_DEFAULT_W = 380;
 
     /**
      * 打开前：侧栏若为展开则缩至约 75%；AI 列宽约等于让出的宽幅。#content-panel 不再写死宽度，避免溢出被裁剪。
      */
-    function _freezeForAIPanel(panel) {
+    function _freezeForAIPanel(panel: any) {
         var sidebar = document.getElementById('sidebar');
-        var snap = {};
+        var snap: any = {};
 
         if (sidebar) snap.prevSidebarWidthStyle = sidebar.style.width || '';
 
@@ -45,7 +45,7 @@ window.AssistantModule = (function() {
     }
 
     /** 关闭时还原侧栏与 AI 列内联宽度 */
-    function _thawAILayout(panel) {
+    function _thawAILayout(panel: any) {
         var snap = _aiLayoutSnap;
         _aiLayoutSnap = null;
         var sidebar = document.getElementById('sidebar');
@@ -62,7 +62,7 @@ window.AssistantModule = (function() {
 
     }
 
-    function _setRightAreaAiOpen(open) {
+    function _setRightAreaAiOpen(open: any) {
         var ra = document.getElementById('right-area');
         if (!ra) return;
         if (open) ra.classList.add('ai-panel-open');
@@ -173,10 +173,10 @@ window.AssistantModule = (function() {
         _resizersInstalled = true;
     }
 
-    function _initResizer(resizerEl, panel, side) {
-        var startX, startWidth;
+    function _initResizer(resizerEl: any, panel: any, side: any) {
+        var startX: any, startWidth: any;
 
-        function onMouseDown(e) {
+        function onMouseDown(e: any) {
             e.preventDefault();
             startX = e.clientX;
             startWidth = panel.offsetWidth;
@@ -185,10 +185,10 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
-            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier!.pauseResize!();
         }
 
-        function onMouseMove(e) {
+        function onMouseMove(e: any) {
             var dx = e.clientX - startX;
             var newWidth;
             if (side === 'left') {
@@ -206,16 +206,16 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier!.resumeResize!();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
     }
 
-    function _initTopResizer(resizerEl, panel) {
-        var startY, startHeight;
+    function _initTopResizer(resizerEl: any, panel: any) {
+        var startY: any, startHeight: any;
 
-        function onMouseDown(e) {
+        function onMouseDown(e: any) {
             e.preventDefault();
             startY = e.clientY;
             startHeight = panel.offsetHeight;
@@ -224,10 +224,10 @@ window.AssistantModule = (function() {
             document.addEventListener('mouseup', onMouseUp);
             document.body.style.cursor = 'ns-resize';
             document.body.style.userSelect = 'none';
-            if (window.Graph3Tier) window.Graph3Tier.pauseResize();
+            if (window.Graph3Tier) window.Graph3Tier!.pauseResize!();
         }
 
-        function onMouseMove(e) {
+        function onMouseMove(e: any) {
             var dy = e.clientY - startY;
             var newHeight = startHeight - dy;
             var minH = 280;
@@ -243,20 +243,20 @@ window.AssistantModule = (function() {
             document.removeEventListener('mouseup', onMouseUp);
             document.body.style.cursor = '';
             document.body.style.userSelect = '';
-            if (window.Graph3Tier) window.Graph3Tier.resumeResize();
+            if (window.Graph3Tier) window.Graph3Tier!.resumeResize!();
         }
 
         resizerEl.addEventListener('mousedown', onMouseDown);
     }
 
-    var _currentStreamEl = null;
+    var _currentStreamEl: any = null;
     var _streamRawText = '';
     /** 本轮 rag_retrieval 元信息（先于回答流到达），用于检索过程面板 */
-    var _pendingRetrieval = null;
+    var _pendingRetrieval: any = null;
     /** 检索面板是否已插入当前占位 bubble，避免重复挂载 */
     var _retrievalAttached = false;
 
-    function _renderMarkdownHtml(text) {
+    function _renderMarkdownHtml(text: any) {
         if (!text) return '';
         if (window.EditorModule && window.EditorModule.renderMarkdownPreview) {
             return window.EditorModule.renderMarkdownPreview(text);
@@ -264,24 +264,24 @@ window.AssistantModule = (function() {
         return '<pre>' + window.escapeHtml(text) + '</pre>';
     }
 
-    function _setAssistantMarkdown(contentEl, text) {
+    function _setAssistantMarkdown(contentEl: any, text: any) {
         if (!contentEl) return;
         contentEl.classList.add('ai-msg-md', 'ai-chat-md');
         contentEl.classList.remove('preview-content');
         contentEl.innerHTML = _renderMarkdownHtml(text);
     }
 
-    function _setPlainText(contentEl, text) {
+    function _setPlainText(contentEl: any, text: any) {
         if (!contentEl) return;
         contentEl.classList.remove('ai-msg-md', 'ai-chat-md', 'preview-content');
         contentEl.textContent = text || '';
     }
 
-    function sendMessage(questionOverride, options) {
+    function sendMessage(questionOverride?: any, options?: any) {
         if (_isStreaming) return;
         options = options || {};
 
-        var input = document.getElementById('ai-input');
+        var input = document.getElementById('ai-input') as HTMLInputElement | null;
         if (!input) return;
         var question = String(questionOverride || input.value || '').trim();
         if (!question) return;
@@ -306,7 +306,7 @@ window.AssistantModule = (function() {
 
         _isStreaming = true;
         _streamRawText = '';
-        var assistantEl = addAssistantMessage();
+        const assistantEl = addAssistantMessage()!;
         _currentStreamEl = assistantEl;
 
         var topics = _extractTopics();
@@ -339,14 +339,14 @@ window.AssistantModule = (function() {
         });
     }
 
-    function ask(question) {
+    function ask(question: any) {
         ensureOpen();
-        var input = document.getElementById('ai-input');
+        var input = document.getElementById('ai-input') as HTMLInputElement | null;
         if (input) input.value = '';
         sendMessage(question);
     }
 
-    function askSelection(selection, options) {
+    function askSelection(selection: any, options: any) {
         ensureOpen();
         var selected = String(selection || '').trim();
         if (!selected) return;
@@ -364,7 +364,7 @@ window.AssistantModule = (function() {
             try { data = JSON.parse(data); } catch (_e) { return null; }
         }
         if (!data || !data.topics) return null;
-        return data.topics.map(function(t) { return t.name; });
+        return data.topics.map(function(t: any) { return t.name; });
     }
 
     function _extractTags() {
@@ -374,7 +374,7 @@ window.AssistantModule = (function() {
             try { data = JSON.parse(data); } catch (_e) { return null; }
         }
         if (!data || !data.tags) return null;
-        return data.tags.map(function(t) { return t.name; });
+        return data.tags.map(function(t: any) { return t.name; });
     }
 
     function _extractCurrentFile() {
@@ -382,7 +382,7 @@ window.AssistantModule = (function() {
         return window.AppState.selectedFilePath;
     }
 
-    function _speakerLabel(role) {
+    function _speakerLabel(role: any) {
         if (role === 'user') {
             return (window.t && window.t('assistant.userLabel')) || '你';
         }
@@ -392,7 +392,7 @@ window.AssistantModule = (function() {
         return (window.t && window.t('assistant.name')) || 'RAG助手';
     }
 
-    function addUserMessage(text) {
+    function addUserMessage(text: any) {
         var container = document.getElementById('ai-panel-messages');
         if (!container) return;
         var bubble = document.createElement('div');
@@ -420,7 +420,7 @@ window.AssistantModule = (function() {
         return content;
     }
 
-    function addSystemMessage(text) {
+    function addSystemMessage(text: any) {
         var container = document.getElementById('ai-panel-messages');
         if (!container) return;
         var div = document.createElement('div');
@@ -451,7 +451,7 @@ window.AssistantModule = (function() {
 
     /* 流式渲染节流：逐 token 全量 parse+innerHTML 是 O(n²)，改为 200ms 节流
        重渲染 + 结束强制 flush（长回答渲染次数从 token 数降到秒级） */
-    var _streamRenderTimer = null;
+    var _streamRenderTimer: any = null;
     var _streamRenderPending = false;
 
     function _scheduleStreamRender() {
@@ -479,7 +479,7 @@ window.AssistantModule = (function() {
         }
     }
 
-    function handleEvent(eventData) {
+    function handleEvent(eventData: any) {
         if (!eventData) return;
 
         if (eventData.type === 'rag_retrieval') {
@@ -566,12 +566,12 @@ window.AssistantModule = (function() {
     }
 
     /** window.t 对缺失 key 会返回 key 本身，这里提供中文兜底文案 */
-    function _tr(key, fallback) {
+    function _tr(key: any, fallback: any) {
         var v = window.t ? window.t(key) : '';
         return (v && v !== key) ? v : fallback;
     }
 
-    function _scoreText(value) {
+    function _scoreText(value: any) {
         var n = Number(value);
         return isFinite(n) ? n.toFixed(3) : '-';
     }
@@ -581,12 +581,12 @@ window.AssistantModule = (function() {
         if (!container) return;
         var rows = container.querySelectorAll('.ai-suggestion-chips');
         for (var i = 0; i < rows.length; i++) {
-            rows[i].parentNode.removeChild(rows[i]);
+            rows[i].parentNode!.removeChild(rows[i]);
         }
     }
 
     /** P4：在当前回答 bubble 的引用区下方渲染一行追问 chips，点击即以该文本发起新一轮提问 */
-    function _renderSuggestionChips(contentEl, suggestions) {
+    function _renderSuggestionChips(contentEl: any, suggestions: any) {
         if (!contentEl || !suggestions || !suggestions.length) return;
         var bubble = contentEl.closest('.ai-msg');
         if (!bubble || bubble.querySelector('.ai-suggestion-chips')) return;
@@ -616,7 +616,7 @@ window.AssistantModule = (function() {
     }
 
     /** P9：在回答 bubble 顶部（引用区之上）插入默认折叠的检索过程面板 */
-    function _attachRetrievalPanel(contentEl, data) {
+    function _attachRetrievalPanel(contentEl: any, data: any) {
         if (!contentEl || !data) return;
         var bubble = contentEl.closest('.ai-msg');
         if (!bubble || bubble.querySelector('.ai-retrieval-details')) return;
@@ -636,7 +636,7 @@ window.AssistantModule = (function() {
         }
 
         var rows = '';
-        function addRow(label, value) {
+        function addRow(label: any, value: any) {
             if (value === '' || value == null) return;
             rows += '<div class="ai-retrieval-row"><span class="ai-retrieval-label">' + esc(label) + '</span>'
                 + '<span class="ai-retrieval-value">' + esc(value) + '</span></div>';
@@ -660,7 +660,7 @@ window.AssistantModule = (function() {
 
         if (debug.anchor_terms && debug.anchor_terms.length) {
             var terms = '';
-            debug.anchor_terms.forEach(function(term) {
+            debug.anchor_terms.forEach(function(term: any) {
                 terms += '<span class="ai-retrieval-term">' + esc(String(term == null ? '' : term)) + '</span>';
             });
             rows += '<div class="ai-retrieval-row"><span class="ai-retrieval-label">'
@@ -671,7 +671,7 @@ window.AssistantModule = (function() {
         var sources = data.top_sources || [];
         if (sources.length) {
             var listHtml = '';
-            sources.forEach(function(src) {
+            sources.forEach(function(src: any) {
                 src = src || {};
                 var path = String(src.path || '');
                 var section = String(src.section_title || '');
@@ -697,7 +697,7 @@ window.AssistantModule = (function() {
         bubble.insertBefore(details, bubble.firstChild);
     }
 
-    function _openNoteFromPath(filePath, displayName, sectionTitle) {
+    function _openNoteFromPath(filePath: any, displayName: any, sectionTitle: any) {
         if (!filePath) return;
         var name = displayName || filePath.split('/').pop() || filePath;
         window._pendingSectionLocate = sectionTitle || '';
@@ -727,7 +727,7 @@ window.AssistantModule = (function() {
         }, 300);
     }
 
-    function _locateSectionInDocument(sectionTitle) {
+    function _locateSectionInDocument(sectionTitle: any) {
         var segments = String(sectionTitle).split('>').map(function(s) { return s.trim(); }).filter(Boolean);
         var wanted = segments[segments.length - 1];
         if (!wanted) return false;
@@ -757,11 +757,11 @@ window.AssistantModule = (function() {
         return false;
     }
 
-    function _linkifyCitationRefs(contentEl, citations) {
+    function _linkifyCitationRefs(contentEl: any, citations: any) {
         if (!contentEl || !citations || !citations.length) return;
 
-        var byIndex = {};
-        citations.forEach(function(cite) {
+        var byIndex: Record<number, any> = {};
+        citations.forEach(function(cite: any) {
             if (cite && cite.index != null && cite.file_path) {
                 byIndex[cite.index] = cite;
             }
@@ -814,11 +814,11 @@ window.AssistantModule = (function() {
             if (last < text.length) {
                 frag.appendChild(document.createTextNode(text.slice(last)));
             }
-            node.parentNode.replaceChild(frag, node);
+            node.parentNode!.replaceChild(frag, node);
         });
     }
 
-    function _citationQualityText(quality, citationCount) {
+    function _citationQualityText(quality: any, citationCount: any) {
         var q = quality || {};
         var level = q.level || (citationCount ? 'balanced' : 'none');
         var count = q.source_count || citationCount || 0;
@@ -826,7 +826,7 @@ window.AssistantModule = (function() {
         return window.t ? window.t(key, { count: count }) : '';
     }
 
-    function _renderCitations(contentEl, citations, quality) {
+    function _renderCitations(contentEl: any, citations: any, quality: any) {
         if (!contentEl || !citations || citations.length === 0) return;
         var bubble = contentEl.closest('.ai-msg');
         if (!bubble) return;
@@ -848,7 +848,7 @@ window.AssistantModule = (function() {
         var list = document.createElement('div');
         list.className = 'ai-citations-list';
 
-        citations.forEach(function(cite) {
+        citations.forEach(function(cite: any) {
             var item = document.createElement('div');
             item.className = 'ai-citation-item';
             item.setAttribute('data-file-path', cite.file_path || '');

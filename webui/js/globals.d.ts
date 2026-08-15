@@ -323,6 +323,15 @@ declare global {
         toggleGraphPanel(): void;
         toggleSearchModal(): void;
         toggleAIPanel(): void;
+        AssistantModule: {
+            init(): void;
+            handleEvent(evt: any): void;
+            rebuildIndex(): void;
+            toggle(): void;
+            ensureOpen(): void;
+            ask(question: any): void;
+            askSelection(selection: any, options?: any): void;
+        } | undefined;
         closeSettingsPanel(): void;
         saveApiConfig(config?: Partial<ApiConfig>): void;
         EditorModule: {
@@ -355,6 +364,7 @@ declare global {
             onFileSelected?(path: string): void;
         } | undefined;
         _rewritingFilePath: string | null;
+        _pendingSectionLocate: string;
         SettingsModule: { saveFontSize?(size: string): void; persistCliAgentId?(id: string): void } | undefined;
         Icons: { get(name: string, size?: number): string } | undefined;
         _deactivatePendingBtn?: (() => void) | undefined;

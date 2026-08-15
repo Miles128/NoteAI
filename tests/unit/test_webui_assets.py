@@ -49,7 +49,7 @@ def test_node_modules_is_not_tracked() -> None:
 
 
 def test_job_and_status_api_methods_are_allowed_by_tauri_rpc() -> None:
-    api_js = (WEBUI / "js" / "api.js").read_text(encoding="utf-8")
+    api_js = (WEBUI / "js" / "api.ts").read_text(encoding="utf-8")
     rpc_rs = (ROOT / "src-tauri" / "src" / "rpc.rs").read_text(encoding="utf-8")
     allowed_block = rpc_rs.split("static ALLOWED_PYTHON_METHODS", 1)[1].split("];", 1)[0]
     allowed = set(re.findall(r'"([a-zA-Z0-9_]+)"', allowed_block))
@@ -62,7 +62,7 @@ def test_job_and_status_api_methods_are_allowed_by_tauri_rpc() -> None:
 
 
 def test_rpc_contract_is_consistent_across_frontend_python_and_tauri() -> None:
-    api_js = (WEBUI / "js" / "api.js").read_text(encoding="utf-8")
+    api_js = (WEBUI / "js" / "api.ts").read_text(encoding="utf-8")
     declared = set(re.findall(r"""method:\s*['\"]([^'\"]+)['\"]""", api_js))
 
     registered = set()
@@ -112,7 +112,7 @@ def test_titlebar_pending_entry_remains_icon_only() -> None:
 def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
     main_js = (WEBUI / "js" / "main.mjs").read_text(encoding="utf-8")
-    api_js = (WEBUI / "js" / "api.js").read_text(encoding="utf-8")
+    api_js = (WEBUI / "js" / "api.ts").read_text(encoding="utf-8")
     workbench_js = (WEBUI / "js" / "semantic-workbench.js").read_text(encoding="utf-8")
 
     assert 'id="titlebar-semantic-btn"' not in html

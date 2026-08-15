@@ -365,6 +365,22 @@ declare global {
         } | undefined;
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
+        DownloaderModule: {
+            startWebDownload(): Promise<any>;
+            updateWebImageStatus(): void;
+            autoSaveConfig(): void;
+            loadSavedConfig(): void;
+            clearUrls(): void;
+            openDownloadModal(): void;
+            closeDownloadModal(): void;
+            autoSaveModalConfig(): void;
+            startDownloadFromModal(): Promise<any>;
+            loadRssSubscriptions(): Promise<any>;
+            loadWatchedFolders(): Promise<any>;
+            getDownloadState(): any;
+        } | undefined;
+        closeDownloadModal(): void;
+        startDownloadFromModal(): Promise<any>;
         SettingsModule: { saveFontSize?(size: string): void; persistCliAgentId?(id: string): void } | undefined;
         Icons: { get(name: string, size?: number): string } | undefined;
         _deactivatePendingBtn?: (() => void) | undefined;
@@ -460,6 +476,7 @@ declare global {
         setSidebarStatus(status: string, message: string, spinner?: boolean): void;
         updateSidebarStats(): void;
         updateStatus(message: string): void;
+        updateProgress(elementId: string, progress: number, message: string): void;
         _customConfirm(message: string): Promise<boolean>;
         hideTreeContextMenu(): void;
         revealInFinder(path: string): void;

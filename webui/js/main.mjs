@@ -118,7 +118,7 @@ async function loadModules() {
     const { ConverterModule } = window;
     window.ConverterModule = ConverterModule;
 
-    await import('./downloader.js');
+    await import('./downloader.ts');
     const { DownloaderModule } = window;
     window.DownloaderModule = DownloaderModule;
 

@@ -25,13 +25,13 @@ var _downloadEventMaxRetries = 20;
 function initDownloadEventListener() {
     console.log('[Downloader] Initializing event listener...');
     
-    var eventAPI = getTauriEventAPI();
+    var eventAPI = window.getTauriEventAPI();
     if (eventAPI) {
         _downloadEventRetries = 0;
-        eventAPI.listen('python-event', handleGlobalDownloadEvent).then(function(unlisten) {
+        eventAPI.listen('python-event', handleGlobalDownloadEvent).then(function(unlisten: any) {
             _webDownloadUnlisten = unlisten;
             console.log('[Downloader] Event listener initialized successfully');
-        }).catch(function(err) {
+        }).catch(function(err: any) {
             console.error('[Downloader] Failed to initialize event listener:', err);
         });
     } else if (_downloadEventRetries < _downloadEventMaxRetries) {
@@ -43,7 +43,7 @@ function initDownloadEventListener() {
     }
 }
 
-function handleGlobalDownloadEvent(event) {
+function handleGlobalDownloadEvent(event: any) {
     var data = event.payload;
     if (!data) return;
     
@@ -75,15 +75,15 @@ function handleGlobalDownloadEvent(event) {
     }
 }
 
-function handleProgressEvent(data) {
+function handleProgressEvent(data: any) {
     var progress = data.progress || 0;
     var message = data.message || '';
     
     _downloadState.currentProgress = progress;
     _downloadState.currentMessage = message;
     
-    updateProgress('web-progress', progress, message);
-    updateStatus(message);
+    window.updateProgress('web-progress', progress, message);
+    window.updateStatus(message);
     
     if (progress > 0 && _downloadState.totalUrls > 0) {
         var estimatedCurrent = Math.ceil(progress * _downloadState.totalUrls);
@@ -95,7 +95,7 @@ function handleProgressEvent(data) {
     updateModalProgressDisplay();
 }
 
-function handleDownloadCompleteEvent(data) {
+function handleDownloadCompleteEvent(data: any) {
     var successCount = data.success_count || 0;
     var total = data.total || 0;
     var results = data.data || [];
@@ -103,12 +103,12 @@ function handleDownloadCompleteEvent(data) {
     _downloadState.isDownloading = false;
     _downloadState.currentProgress = 1;
     _downloadState.currentMessage = window.t('download.done', { success: successCount, total: total });
-    _downloadState.completedUrls = results.filter(function(r) { return r.success; });
-    _downloadState.failedUrls = results.filter(function(r) { return !r.success; });
+    _downloadState.completedUrls = results.filter(function(r: any) { return r.success; });
+    _downloadState.failedUrls = results.filter(function(r: any) { return !r.success; });
     _downloadState.currentIndex = total;
     
-    updateProgress('web-progress', 1, window.t('download.done', { success: successCount, total: total }));
-    updateStatus(window.t('download.done', { success: successCount, total: total }));
+    window.updateProgress('web-progress', 1, window.t('download.done', { success: successCount, total: total }));
+    window.updateStatus(window.t('download.done', { success: successCount, total: total }));
     updateModalProgressDisplay();
     
     if (window.TreeModule && window.TreeModule.loadFileTree) {
@@ -119,13 +119,13 @@ function handleDownloadCompleteEvent(data) {
     showDownloadResultsModal(successCount, total, results);
 }
 
-function handleDownloadErrorEvent(data) {
+function handleDownloadErrorEvent(data: any) {
     var errorMsg = data.error || window.t('common.unknownError');
     
     _downloadState.isDownloading = false;
     
-    updateProgress('web-progress', 0, window.t('download.failed', { message: errorMsg }));
-    updateStatus(window.t('download.failed', { message: errorMsg }));
+    window.updateProgress('web-progress', 0, window.t('download.failed', { message: errorMsg }));
+    window.updateStatus(window.t('download.failed', { message: errorMsg }));
     
     resetDownloadButtonState();
     alert(window.t('download.failed', { message: errorMsg }));
@@ -145,7 +145,7 @@ function updateModalProgressDisplay() {
     }
 }
 
-function showDownloadResultsModal(successCount, total, results) {
+function showDownloadResultsModal(successCount: any, total: any, results: any) {
     var statusEl = document.getElementById('modal-web-status');
     var progressFill = document.getElementById('modal-web-progress-fill');
     
@@ -161,7 +161,7 @@ function showDownloadResultsModal(successCount, total, results) {
         statusEl.textContent = statusText;
     }
     
-    var urlInput = document.getElementById('modal-urls');
+    var urlInput = document.getElementById('modal-urls') as HTMLTextAreaElement | null;
     if (urlInput) {
         var summaryLines = [];
         summaryLines.push('=== Download results ===');
@@ -170,7 +170,7 @@ function showDownloadResultsModal(successCount, total, results) {
         if (_downloadState.completedUrls.length > 0) {
             summaryLines.push('');
             summaryLines.push('-- Saved --');
-            _downloadState.completedUrls.forEach(function(result, index) {
+            _downloadState.completedUrls.forEach(function(result: any, index: any) {
                 summaryLines.push((index + 1) + '. ' + (result.title || window.t('download.unnamed')));
                 if (result.file_path) {
                     summaryLines.push('   → ' + result.file_path);
@@ -181,7 +181,7 @@ function showDownloadResultsModal(successCount, total, results) {
         if (_downloadState.failedUrls.length > 0) {
             summaryLines.push('');
             summaryLines.push('-- Failed --');
-            _downloadState.failedUrls.forEach(function(result, index) {
+            _downloadState.failedUrls.forEach(function(result: any, index: any) {
                 summaryLines.push((index + 1) + '. ' + (result.url || ''));
                 summaryLines.push(window.t('download.reasonPrefix') + (result.error || window.t('common.unknownError')));
             });
@@ -192,9 +192,9 @@ function showDownloadResultsModal(successCount, total, results) {
 }
 
 function resetDownloadButtonState() {
-    var downloadBtn = document.getElementById('modal-download-btn');
-    var switchContainer = document.querySelector('.switch-container');
-    var switchLabel = document.querySelector('.switch-label');
+    var downloadBtn = document.getElementById('modal-download-btn') as HTMLButtonElement | null;
+    var switchContainer = document.querySelector('.switch-container') as HTMLElement | null;
+    var switchLabel = document.querySelector('.switch-label') as HTMLElement | null;
     
     if (downloadBtn) {
         downloadBtn.disabled = false;
@@ -214,32 +214,32 @@ function initModalDrag() {
     header.style.userSelect = 'none';
     header.style.webkitUserSelect = 'none';
     
-    function onMouseDown(e) {
+    function onMouseDown(e: any) {
         if (e.target.closest('.download-modal-close')) return;
         
         _modalDragState.isDragging = true;
         _modalDragState.startX = e.clientX;
         _modalDragState.startY = e.clientY;
-        _modalDragState.initialLeft = modal.offsetLeft;
-        _modalDragState.initialTop = modal.offsetTop;
+        _modalDragState.initialLeft = modal!.offsetLeft;
+        _modalDragState.initialTop = modal!.offsetTop;
         
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
         document.addEventListener('selectstart', onSelectStart);
     }
     
-    function onMouseMove(e) {
+    function onMouseMove(e: any) {
         if (!_modalDragState.isDragging) return;
         
         e.preventDefault();
         const deltaX = e.clientX - _modalDragState.startX;
         const deltaY = e.clientY - _modalDragState.startY;
         
-        modal.style.position = 'absolute';
-        modal.style.transform = 'none';
-        modal.style.margin = '0';
-        modal.style.left = (_modalDragState.initialLeft + deltaX) + 'px';
-        modal.style.top = (_modalDragState.initialTop + deltaY) + 'px';
+        modal!.style.position = 'absolute';
+        modal!.style.transform = 'none';
+        modal!.style.margin = '0';
+        modal!.style.left = (_modalDragState.initialLeft + deltaX) + 'px';
+        modal!.style.top = (_modalDragState.initialTop + deltaY) + 'px';
     }
     
     function onMouseUp() {
@@ -249,7 +249,7 @@ function initModalDrag() {
         document.removeEventListener('selectstart', onSelectStart);
     }
     
-    function onSelectStart(e) {
+    function onSelectStart(e: any) {
         e.preventDefault();
         return false;
     }
@@ -261,11 +261,11 @@ function openDownloadModal() {
     const modal = document.getElementById('download-modal');
     const modalContent = document.getElementById('download-modal-content');
     
-    modalContent.style.position = '';
-    modalContent.style.transform = '';
-    modalContent.style.margin = '';
-    modalContent.style.left = '';
-    modalContent.style.top = '';
+    modalContent!.style.position = '';
+    modalContent!.style.transform = '';
+    modalContent!.style.margin = '';
+    modalContent!.style.left = '';
+    modalContent!.style.top = '';
     
     const mainWidth = window.innerWidth;
     const mainHeight = window.innerHeight;
@@ -273,19 +273,19 @@ function openDownloadModal() {
     const currentWidth = Math.max(500, mainWidth / 2);
     const currentHeight = Math.max(400, mainHeight * 2 / 3);
     
-    modalContent.style.width = (currentWidth * 0.72) + 'px';
-    modalContent.style.height = (currentHeight * 0.75 * 1.1) + 'px';
+    modalContent!.style.width = (currentWidth * 0.72) + 'px';
+    modalContent!.style.height = (currentHeight * 0.75 * 1.1) + 'px';
     
-    const savedConfig = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null, { silent: true });
+    const savedConfig: any = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null, { silent: true });
     if (savedConfig) {
-        const modalIncludeImages = document.getElementById('modal-web-include-images');
+        const modalIncludeImages = document.getElementById('modal-web-include-images') as HTMLInputElement | null;
         
         if (modalIncludeImages && savedConfig.webIncludeImages !== undefined) {
             modalIncludeImages.checked = savedConfig.webIncludeImages;
         }
     }
     
-    modal.classList.add('active');
+    modal!.classList.add('active');
     
     initModalDrag();
     initMsTabs();
@@ -300,11 +300,11 @@ function openDownloadModal() {
 
 function closeDownloadModal() {
     const modal = document.getElementById('download-modal');
-    modal.classList.remove('active');
+    modal!.classList.remove('active');
 }
 
 function autoSaveModalConfig() {
-    const includeImages = document.getElementById('modal-web-include-images');
+    const includeImages = document.getElementById('modal-web-include-images') as HTMLInputElement | null;
     
     const config = {
         webAiAssist: false,
@@ -315,20 +315,20 @@ function autoSaveModalConfig() {
 }
 
 async function startDownloadFromModal() {
-    const urlsEl = document.getElementById('modal-urls');
-    const urls = urlsEl ? urlsEl.value.split('\n').map(u => u.trim()).filter(u => u) : [];
+    const urlsEl = document.getElementById('modal-urls') as HTMLTextAreaElement | null;
+    const urls = urlsEl ? urlsEl.value.split('\n').map((u: any) => u.trim()).filter(u => u) : [];
     
     if (urls.length === 0) {
         alert(window.t('download.enterUrl'));
         return;
     }
     
-    const includeImages = document.getElementById('modal-web-include-images');
+    const includeImages = document.getElementById('modal-web-include-images') as HTMLInputElement | null;
     const includeImagesVal = includeImages ? includeImages.checked : false;
     
-    const downloadBtn = document.getElementById('modal-download-btn');
-    const switchContainer = document.querySelector('.switch-container');
-    const switchLabel = document.querySelector('.switch-label');
+    const downloadBtn = document.getElementById('modal-download-btn') as HTMLButtonElement | null;
+    const switchContainer = document.querySelector('.switch-container') as HTMLElement | null;
+    const switchLabel = document.querySelector('.switch-label') as HTMLElement | null;
     
     if (_downloadState.isDownloading) {
         alert(window.t('download.taskRunning'));
@@ -355,7 +355,7 @@ async function startDownloadFromModal() {
     try {
         console.log('[Downloader] Starting download with', urls.length, 'URLs');
         
-        updateProgress('web-progress', 0, window.t('download.preparing'));
+        window.updateProgress('web-progress', 0, window.t('download.preparing'));
         
         try {
             console.log('[Downloader] Calling start_web_download with urls:', urls);
@@ -363,10 +363,10 @@ async function startDownloadFromModal() {
             console.log('[Downloader] API result:', result);
             
             if (result && result.success) {
-                updateProgress('web-progress', 0, window.t('download.progress', { current: 1, total: _downloadState.totalUrls }));
+                window.updateProgress('web-progress', 0, window.t('download.progress', { current: 1, total: _downloadState.totalUrls }));
             } else {
                 const errMsg = result?.message || window.t('common.unknownError');
-                updateProgress('web-progress', 0, window.t('download.failed', { message: errMsg }));
+                window.updateProgress('web-progress', 0, window.t('download.failed', { message: errMsg }));
                 resetDownloadButtonState();
                 _downloadState.isDownloading = false;
                 alert(window.t('download.failed', { message: '' }).replace(': ', '') + errMsg);
@@ -376,15 +376,15 @@ async function startDownloadFromModal() {
         }
     } catch (e) {
         console.error('[Downloader] Download error:', e);
-        updateProgress('web-progress', 0, window.t('download.failed', { message: e.message }));
+        window.updateProgress('web-progress', 0, window.t('download.failed', { message: (e as Error).message }));
         resetDownloadButtonState();
         _downloadState.isDownloading = false;
-        alert(window.t('download.error', { message: e.message }));
+        alert(window.t('download.error', { message: (e as Error).message }));
     }
 }
 
 async function startWebDownload() {
-    const btn = document.querySelector('#tab-0 .btn-primary');
+    const btn = document.querySelector('#tab-0 .btn-primary') as HTMLButtonElement | null;
     const originalText = btn ? btn.textContent : window.t('download.start');
     
     if (_downloadState.isDownloading) {
@@ -398,11 +398,11 @@ async function startWebDownload() {
     }
 
     try {
-        const urlsEl = document.getElementById('web-urls');
-        const aiToggleEl = document.getElementById('web-ai-toggle');
-        const includeImagesEl = document.getElementById('web-include-images');
+        const urlsEl = document.getElementById('web-urls') as HTMLTextAreaElement | null;
+        const aiToggleEl = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
+        const includeImagesEl = document.getElementById('web-include-images') as HTMLInputElement | null;
 
-        const urls = urlsEl ? urlsEl.value.split('\n').map(u => u.trim()).filter(u => u) : [];
+        const urls = urlsEl ? urlsEl.value.split('\n').map((u: any) => u.trim()).filter(u => u) : [];
         const aiAssist = aiToggleEl ? aiToggleEl.checked : false;
         const includeImages = includeImagesEl ? includeImagesEl.checked : false;
 
@@ -421,16 +421,16 @@ async function startWebDownload() {
         _downloadState.completedUrls = [];
         _downloadState.failedUrls = [];
 
-        updateStatus(window.t('download.downloading'));
-        updateProgress('web-progress', 0, window.t('download.preparing'));
+        window.updateStatus(window.t('download.downloading'));
+        window.updateProgress('web-progress', 0, window.t('download.preparing'));
 
         const result = await window.api.startWebDownload(urls, aiAssist, includeImages);
         
         if (result && result.success) {
-            updateStatus(window.t('download.waiting'));
+            window.updateStatus(window.t('download.waiting'));
         } else {
-            updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (result?.message || window.t('common.unknownError')));
-            updateProgress('web-progress', 0, window.t('download.failed', { message: result?.message || window.t('common.unknownError') }));
+            window.updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (result?.message || window.t('common.unknownError')));
+            window.updateProgress('web-progress', 0, window.t('download.failed', { message: result?.message || window.t('common.unknownError') }));
             _downloadState.isDownloading = false;
             if (btn) {
                 btn.disabled = false;
@@ -439,8 +439,8 @@ async function startWebDownload() {
         }
     } catch (e) {
         console.error('[Downloader] Download error:', e);
-        updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + e.message);
-        updateProgress('web-progress', 0, window.t('download.failed', { message: e.message }));
+        window.updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (e as Error).message);
+        window.updateProgress('web-progress', 0, window.t('download.failed', { message: (e as Error).message }));
         _downloadState.isDownloading = false;
         if (btn) {
             btn.disabled = false;
@@ -454,8 +454,8 @@ function updateWebImageStatus() {
 }
 
 function autoSaveConfig() {
-    const aiToggle = document.getElementById('web-ai-toggle');
-    const includeImages = document.getElementById('web-include-images');
+    const aiToggle = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
+    const includeImages = document.getElementById('web-include-images') as HTMLInputElement | null;
     
     const config = {
         webAiAssist: aiToggle ? aiToggle.checked : false,
@@ -466,10 +466,10 @@ function autoSaveConfig() {
 }
 
 function loadSavedConfig() {
-    const config = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null);
+    const config: any = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null);
     if (config) {
-        const aiToggle = document.getElementById('web-ai-toggle');
-        const includeImages = document.getElementById('web-include-images');
+        const aiToggle = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
+        const includeImages = document.getElementById('web-include-images') as HTMLInputElement | null;
         
         if (aiToggle && config.webAiAssist !== undefined) {
             aiToggle.checked = config.webAiAssist;
@@ -487,7 +487,7 @@ function loadSavedConfig() {
 }
 
 function clearUrls() {
-    const urlsEl = document.getElementById('web-urls');
+    const urlsEl = document.getElementById('web-urls') as HTMLTextAreaElement | null;
     if (urlsEl) {
         urlsEl.value = '';
     }
@@ -521,20 +521,20 @@ window.startDownloadFromModal = startDownloadFromModal;
 
 function initMsTabs() {
     var tabs = document.querySelectorAll('.multi-source-tab[data-ms-tab]');
-    if (!tabs.length || tabs[0]._msTabBound) return;
+    if (!tabs.length || (tabs[0] as any)._msTabBound) return;
     tabs.forEach(function(tab) {
         tab.addEventListener('click', function() {
-            var name = tab.dataset.msTab;
+            var name = (tab as HTMLElement).dataset.msTab;
             document.querySelectorAll('.multi-source-tab').forEach(function(t) {
                 t.classList.toggle('active', t === tab);
             });
             document.querySelectorAll('.multi-source-pane').forEach(function(pane) {
-                pane.hidden = pane.id !== 'ms-pane-' + name;
+                (pane as HTMLElement).hidden = pane.id !== 'ms-pane-' + name;
             });
             if (name === 'rss') loadRssSubscriptions();
             if (name === 'folder') loadWatchedFolders();
         });
-        tab._msTabBound = true;
+        (tab as any)._msTabBound = true;
     });
 }
 
@@ -542,22 +542,22 @@ function initMsTabs() {
 
 function initFolderTab() {
     var addBtn = document.getElementById('ms-folder-add-btn');
-    if (addBtn && !addBtn._fwBound) {
+    if (addBtn && !(addBtn as any)._fwBound) {
         addBtn.addEventListener('click', addWatchedFolder);
-        addBtn._fwBound = true;
+        (addBtn as any)._fwBound = true;
     }
     var scanAllBtn = document.getElementById('ms-folder-scan-all-btn');
-    if (scanAllBtn && !scanAllBtn._fwBound) {
+    if (scanAllBtn && !(scanAllBtn as any)._fwBound) {
         scanAllBtn.addEventListener('click', scanAllWatchedFolders);
-        scanAllBtn._fwBound = true;
+        (scanAllBtn as any)._fwBound = true;
     }
     loadWatchedFolders();
 }
 
 async function addWatchedFolder() {
     if (!window.api || !window.api.addWatchedFolder) return;
-    var pathEl = document.getElementById('ms-folder-path');
-    var recursiveEl = document.getElementById('ms-folder-recursive');
+    var pathEl = document.getElementById('ms-folder-path') as HTMLInputElement | null;
+    var recursiveEl = document.getElementById('ms-folder-recursive') as HTMLInputElement | null;
     var path = pathEl ? pathEl.value.trim() : '';
     if (!path) { alert(_rssT('download.folderPlaceholder')); return; }
     try {
@@ -569,21 +569,21 @@ async function addWatchedFolder() {
             alert('Folder: ' + (result && result.message || _rssT('download.folderAddFailed')));
         }
         await loadWatchedFolders();
-    } catch (e) { alert('Folder: ' + e.message); }
+    } catch (e) { alert('Folder: ' + (e as Error).message); }
 }
 
-async function removeWatchedFolder(path) {
+async function removeWatchedFolder(path: any) {
     if (!path || !window.api || !window.api.removeWatchedFolder) return;
     try {
         var result = await window.api.removeWatchedFolder(path);
         if (result && !result.success) alert('Folder: ' + (result.message || _rssT('common.unknownError')));
         await loadWatchedFolders();
-    } catch (e) { alert('Folder: ' + e.message); }
+    } catch (e) { alert('Folder: ' + (e as Error).message); }
 }
 
 async function scanAllWatchedFolders() {
     if (!window.api || !window.api.scanWatchedFolder) return;
-    var btn = document.getElementById('ms-folder-scan-all-btn');
+    var btn = document.getElementById('ms-folder-scan-all-btn') as HTMLButtonElement | null;
     if (btn) { btn.disabled = true; btn.textContent = _rssT('download.folderScanning'); }
     try {
         var result = await window.api.scanWatchedFolder('', true);
@@ -596,7 +596,7 @@ async function scanAllWatchedFolders() {
         } else {
             alert('Folder: ' + (result && result.message || _rssT('common.unknownError')));
         }
-    } catch (e) { alert('Folder: ' + e.message); }
+    } catch (e) { alert('Folder: ' + (e as Error).message); }
     finally {
         if (btn) { btn.disabled = false; btn.textContent = _rssT('download.folderScanAll'); }
     }
@@ -616,7 +616,7 @@ async function loadWatchedFolders() {
     }
 }
 
-function updateFolderList(folders) {
+function updateFolderList(folders: any) {
     var container = document.getElementById('ms-folder-list');
     if (!container) return;
     if (!folders || folders.length === 0) {
@@ -624,7 +624,7 @@ function updateFolderList(folders) {
         return;
     }
     var html = '';
-    folders.forEach(function(folder) {
+    folders.forEach(function(folder: any) {
         var path = (folder && folder.path) ? folder.path : '';
         if (!path) return;
         var label = path;
@@ -638,17 +638,17 @@ function updateFolderList(folders) {
     container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
         btn.addEventListener('click', function() {
             var row = btn.closest('.rss-sub-item');
-            if (row && row.dataset.path) removeWatchedFolder(decodeURIComponent(row.dataset.path));
+            if (row && (row as HTMLElement).dataset.path) removeWatchedFolder(decodeURIComponent((row as HTMLElement).dataset.path!));
         });
     });
 }
 
-window.removeWatchedFolder = removeWatchedFolder;
+(window as any).removeWatchedFolder = removeWatchedFolder;
 
 // ── RSS Tab ──
 var _RSS_LEGACY_KEY = 'noteai_rss_subscriptions';
 
-function _rssT(key, params) {
+function _rssT(key: any, params?: any) {
     return window.t ? window.t(key, params) : key;
 }
 
@@ -656,31 +656,31 @@ const _escapeHtml = window.escapeHtml;
 
 function initRssTab() {
   var rssImportBtn = document.getElementById('ms-rss-import-btn');
-  if (rssImportBtn && !rssImportBtn._rssBound) {
+  if (rssImportBtn && !(rssImportBtn as any)._rssBound) {
     rssImportBtn.addEventListener('click', startRssImport);
-    rssImportBtn._rssBound = true;
+    (rssImportBtn as any)._rssBound = true;
   }
   var fetchAllBtn = document.getElementById('ms-rss-fetch-all-btn');
-  if (fetchAllBtn && !fetchAllBtn._rssBound) {
+  if (fetchAllBtn && !(fetchAllBtn as any)._rssBound) {
     fetchAllBtn.addEventListener('click', fetchAllRssSubscriptions);
-    fetchAllBtn._rssBound = true;
+    (fetchAllBtn as any)._rssBound = true;
   }
   var discoverBtn = document.getElementById('ms-rss-discover-btn');
-  if (discoverBtn && !discoverBtn._rssBound) {
+  if (discoverBtn && !(discoverBtn as any)._rssBound) {
     discoverBtn.addEventListener('click', discoverRssSources);
-    discoverBtn._rssBound = true;
+    (discoverBtn as any)._rssBound = true;
   }
   var transcriptBtn = document.getElementById('ms-transcript-import-btn');
-  if (transcriptBtn && !transcriptBtn._trBound) {
+  if (transcriptBtn && !(transcriptBtn as any)._trBound) {
     transcriptBtn.addEventListener('click', startTranscriptImport);
-    transcriptBtn._trBound = true;
+    (transcriptBtn as any)._trBound = true;
   }
   loadRssSubscriptions();
 }
 
 async function discoverRssSources() {
   if (!window.api || !window.api.discoverRssSources) return;
-  var btn = document.getElementById('ms-rss-discover-btn');
+  var btn = document.getElementById('ms-rss-discover-btn') as HTMLButtonElement | null;
   var container = document.getElementById('ms-rss-recommend');
   if (!container) return;
   if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssDiscovering'); }
@@ -699,7 +699,7 @@ async function discoverRssSources() {
     }
     container.hidden = false;
     container.innerHTML = '<div class="rss-sub-header"><span class="rss-sub-title">' + _escapeHtml(_rssT('download.rssRecommendTitle')) + '</span><span class="rss-sub-title">' + _escapeHtml(result.message || '') + '</span></div>' +
-      '<div class="rss-rec-list">' + recs.map(function(rec) {
+      '<div class="rss-rec-list">' + recs.map(function(rec: any) {
         var topicTag = (rec.topics || []).length
           ? '<span class="rss-rec-tag">' + _escapeHtml((rec.topics || []).join(' · ')) + '</span>' : '';
         var sourceTag = '<span class="rss-rec-source rss-rec-source-' + _escapeHtml(rec.source || '') + '">' + _escapeHtml(_rssT(rec.source === 'search' ? 'download.rssSourceSearch' : 'download.rssSourceBuiltin')) + '</span>';
@@ -712,7 +712,7 @@ async function discoverRssSources() {
       }).join('') + '</div>';
     container.querySelectorAll('[data-rss-subscribe]').forEach(function(subBtn) {
       subBtn.addEventListener('click', async function() {
-        var url = decodeURIComponent(subBtn.dataset.rssSubscribe);
+        var url = decodeURIComponent((subBtn as HTMLElement).dataset.rssSubscribe!);
         try {
           var saved = await window.api.saveRssSubscription(url, '');
           if (saved && saved.success) {
@@ -721,26 +721,26 @@ async function discoverRssSources() {
           } else {
             alert('RSS: ' + ((saved && saved.message) || _rssT('common.unknownError')));
           }
-        } catch (e) { alert('RSS: ' + e.message); }
+        } catch (e) { alert('RSS: ' + (e as Error).message); }
       });
     });
   } catch (e) {
     container.hidden = false;
-    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml('RSS: ' + e.message) + '</div>';
+    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml('RSS: ' + (e as Error).message) + '</div>';
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssDiscover'); }
   }
 }
 
 async function startRssImport() {
-  var urlEl = document.getElementById('ms-rss-url');
-  var maxEl = document.getElementById('ms-rss-max');
-  var fetchEl = document.getElementById('ms-rss-fetch');
+  var urlEl = document.getElementById('ms-rss-url') as HTMLInputElement | null;
+  var maxEl = document.getElementById('ms-rss-max') as HTMLInputElement | null;
+  var fetchEl = document.getElementById('ms-rss-fetch') as HTMLInputElement | null;
   var url = urlEl ? urlEl.value.trim() : '';
   if (!url) { alert(_rssT('download.rssPlaceholder')); return; }
   var maxItems = maxEl ? parseInt(maxEl.value, 10) || 10 : 10;
   var fetchArticles = fetchEl ? fetchEl.checked : true;
-  var btn = document.getElementById('ms-rss-import-btn');
+  var btn = document.getElementById('ms-rss-import-btn') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssImporting'); }
   try {
     var result = await window.api.importRssFeed(url, maxItems, fetchArticles);
@@ -752,13 +752,13 @@ async function startRssImport() {
     } else {
       alert('RSS: ' + (result && result.message || _rssT('download.failed', { message: '' })));
     }
-  } catch(e) { alert('RSS: ' + e.message); }
+  } catch(e) { alert('RSS: ' + (e as Error).message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = _rssT('download.importRss'); } }
 }
 
 async function fetchAllRssSubscriptions() {
   if (!window.api || !window.api.fetchAllRss) return;
-  var btn = document.getElementById('ms-rss-fetch-all-btn');
+  var btn = document.getElementById('ms-rss-fetch-all-btn') as HTMLButtonElement | null;
   if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssUpdating'); }
   try {
     var result = await window.api.fetchAllRss();
@@ -767,7 +767,7 @@ async function fetchAllRssSubscriptions() {
       return;
     }
     var imported = 0;
-    (result.results || []).forEach(function(r) { imported += r.imported || 0; });
+    (result.results || []).forEach(function(r: any) { imported += r.imported || 0; });
     alert(imported > 0
       ? _rssT('download.rssFetchAllDone', { count: imported })
       : _rssT('download.rssFetchAllNone'));
@@ -776,16 +776,16 @@ async function fetchAllRssSubscriptions() {
     }
     await loadRssSubscriptions();
   } catch (e) {
-    alert('RSS: ' + e.message);
+    alert('RSS: ' + (e as Error).message);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssFetchAll'); }
   }
 }
 
 async function startTranscriptImport() {
-  var titleEl = document.getElementById('ms-transcript-title');
-  var sourceEl = document.getElementById('ms-transcript-source');
-  var contentEl = document.getElementById('ms-transcript-content');
+  var titleEl = document.getElementById('ms-transcript-title') as HTMLInputElement | null;
+  var sourceEl = document.getElementById('ms-transcript-source') as HTMLInputElement | null;
+  var contentEl = document.getElementById('ms-transcript-content') as HTMLTextAreaElement | null;
   var title = titleEl ? titleEl.value.trim() : '';
   var content = contentEl ? contentEl.value.trim() : '';
   if (!content) { alert('请输入转录内容'); return; }
@@ -797,14 +797,14 @@ async function startTranscriptImport() {
       if (sourceEl) sourceEl.value = '';
       if (contentEl) contentEl.value = '';
     } else { alert('保存失败: ' + (result && result.message || '未知错误')); }
-  } catch(e) { alert('保存失败: ' + e.message); }
+  } catch(e) { alert('保存失败: ' + (e as Error).message); }
 }
 
 function getRssStorageKey() { return _RSS_LEGACY_KEY; }
 
 async function _migrateLegacyRssSubscriptions() {
   if (!window.Storage || !window.api || !window.api.saveRssSubscription) return;
-  var legacy = window.Storage.getItem(_RSS_LEGACY_KEY, [], { silent: true });
+  var legacy: any = window.Storage.getItem(_RSS_LEGACY_KEY, [], { silent: true });
   if (!legacy || !legacy.length) return;
   for (var i = 0; i < legacy.length; i++) {
     var url = legacy[i];
@@ -830,7 +830,7 @@ async function loadRssSubscriptions() {
   }
 }
 
-async function saveRssSubscription(url) {
+async function saveRssSubscription(url: any) {
   if (!url || !window.api || !window.api.saveRssSubscription) return;
   try {
     await window.api.saveRssSubscription(url, '');
@@ -838,17 +838,17 @@ async function saveRssSubscription(url) {
   } catch (_e) {}
 }
 
-async function removeRssSubscription(url) {
+async function removeRssSubscription(url: any) {
   if (!url || !window.api || !window.api.removeRssSubscription) return;
   try {
     await window.api.removeRssSubscription(url);
     await loadRssSubscriptions();
   } catch (e) {
-    alert('RSS: ' + e.message);
+    alert('RSS: ' + (e as Error).message);
   }
 }
 
-function updateRssSubList(subs) {
+function updateRssSubList(subs: any) {
   var container = document.getElementById('ms-rss-sub-list');
   if (!container) return;
   if (!subs || subs.length === 0) {
@@ -856,7 +856,7 @@ function updateRssSubList(subs) {
     return;
   }
   var html = '';
-  subs.forEach(function(sub) {
+  subs.forEach(function(sub: any) {
     var url = (sub && sub.url) ? sub.url : String(sub || '');
     if (!url) return;
     var short = url.length > 50 ? url.substring(0, 50) + '...' : url;
@@ -869,12 +869,12 @@ function updateRssSubList(subs) {
   container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var row = btn.closest('.rss-sub-item');
-      if (row && row.dataset.url) removeRssSubscription(decodeURIComponent(row.dataset.url));
+      if (row && (row as HTMLElement).dataset.url) removeRssSubscription(decodeURIComponent((row as HTMLElement).dataset.url!));
     });
   });
 }
 
-window.removeRssSubscription = removeRssSubscription;
+(window as any).removeRssSubscription = removeRssSubscription;
 
 })();
 

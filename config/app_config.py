@@ -69,9 +69,7 @@ class AppConfig:
     # Semantic workbench UI: master switch, enabled categories, display intensity.
     # Tabs mirror the sidebar categories; intensity filters low-confidence items.
     semantic_workbench_enabled: bool = True
-    semantic_workbench_tabs: list[str] = field(
-        default_factory=lambda: ["objects", "quality", "links", "brief"]
-    )
+    semantic_workbench_tabs: list[str] = field(default_factory=lambda: ["objects", "quality", "links", "brief"])
     semantic_workbench_intensity: str = "standard"
     cli_agent_id: str = ""
     rag_enabled: bool = True

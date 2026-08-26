@@ -177,7 +177,6 @@ class SemanticStoreBase:
         return str(row["path"] or ""), str(row["topic"] or "")
 
     @staticmethod
-
     def _audit(
         conn: sqlite3.Connection,
         *,

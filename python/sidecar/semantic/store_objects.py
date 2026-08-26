@@ -796,4 +796,3 @@ class ObjectsStore(SemanticStoreBase):
                 (block_id, block_hash, prompt_version, extracted_at),
             )
             self._trim_change_log(conn)
-

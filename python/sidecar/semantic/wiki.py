@@ -194,9 +194,7 @@ def materialize_topic_wiki_page(store: SemanticStore, topic: str) -> Path:
         except OSError:
             pass
         raise
-    source_ids = {item["id"] for item in page["state"]["documents"]} | {
-        item["id"] for item in page["state"]["objects"]
-    }
+    source_ids = {item["id"] for item in page["state"]["documents"]} | {item["id"] for item in page["state"]["objects"]}
     store.replace_view_dependencies(
         view_id=stable_id("semantic_wiki", top.casefold()),
         view_kind="semantic_wiki",

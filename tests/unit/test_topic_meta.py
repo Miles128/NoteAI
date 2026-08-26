@@ -207,5 +207,3 @@ def test_topic_meta_route_registered(workspace: Path) -> None:
     _make_handler().register_routes(Router())
 
     assert "topic_meta" in registered
-
-

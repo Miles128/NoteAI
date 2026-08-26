@@ -753,4 +753,3 @@ def test_topic_state_records_dependencies_and_preserves_previous_file_on_publish
 
     assert target.read_text(encoding="utf-8") == original
     assert store.view_dependencies(state["topic_id"], "topic_state") == dependencies
-

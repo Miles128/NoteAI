@@ -127,7 +127,7 @@ def list_semantic_objects(
         type_select = ", o.entity_type" if tab == "entities" else ""
         description_column = "o.description"
         where = "WHERE o.status = 'active' AND (? = '' OR o.canonical_name LIKE ? OR o.description LIKE ?)"
-        args = (query, like, like)
+        args: tuple = (query, like, like)
         if min_confidence is not None:
             where += " AND o.confidence >= ?"
             args = (*args, min_confidence)

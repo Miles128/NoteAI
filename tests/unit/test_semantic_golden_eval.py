@@ -16,7 +16,6 @@ from sidecar.semantic.compiler import compile_note_semantics
 from sidecar.semantic.extractor import (
     _is_noise_object_name,
     extract_document_semantics,
-    validate_extraction,
 )
 from sidecar.semantic.store import SemanticStore
 

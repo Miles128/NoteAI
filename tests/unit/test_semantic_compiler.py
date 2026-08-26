@@ -6,7 +6,6 @@ from pathlib import Path
 
 from sidecar.semantic.compiler import compile_note_semantics, compile_semantic_batch
 from sidecar.semantic.extractor import (
-    ExtractionValidationError,
     build_batch_extraction_prompt,
     build_extraction_prompt,
     extract_document_semantics,
@@ -17,7 +16,6 @@ from sidecar.semantic.ids import stable_id
 from sidecar.semantic.parser import parse_semantic_blocks
 from sidecar.semantic.store import SemanticStore, name_fingerprint
 from sidecar.semantic.topic_state import build_topic_state, materialize_topic_state
-from sidecar.semantic.wiki import build_topic_wiki_page, materialize_topic_wiki_page
 
 
 def _note(workspace: Path, content: str) -> Path:
@@ -519,7 +517,7 @@ def test_initialize_adds_relation_block_column_before_creating_its_index(tmp_pat
     store.root.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(store.path) as conn:
         conn.executescript(
-            f"""
+            """
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE relations (
                 id TEXT PRIMARY KEY,

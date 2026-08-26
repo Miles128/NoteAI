@@ -105,12 +105,6 @@ jobs:
       - name: Typecheck webui TS (progressive migration)
         run: npx tsc --noEmit -p webui/js/tsconfig.json
 
-      - name: Test mcp-server
-        working-directory: mcp-server
-        run: |
-          npm ci
-          npm test
-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from sidecar.chunk_similarity import (
+from sidecar.duplicate_review import (
     _load_semantic_shares,
     build_chunk_similarity_graph,
     load_chunk_similarity_graph,
@@ -114,7 +114,7 @@ def test_candidates_carry_semantic_share_signal(tmp_path: Path, monkeypatch) -> 
         return {(a, b): 12}
 
     monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
-    monkeypatch.setattr("sidecar.chunk_similarity._load_semantic_shares", fake_semantic_shares)
+    monkeypatch.setattr("sidecar.duplicate_review._load_semantic_shares", fake_semantic_shares)
     build_chunk_similarity_graph(root, top_k=6, threshold=0.68)
     graph = load_chunk_similarity_graph(root)
     pairs = [p for c in graph.get("candidates") or [] for p in c.get("pairs", [])]

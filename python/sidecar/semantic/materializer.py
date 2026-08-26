@@ -35,7 +35,6 @@ def materialize_documents(
     *,
     previous_objects: list[dict] | None = None,
     affected_topics: set[str] | None = None,
-    include_objects: bool = True,
 ) -> dict:
     """Refresh only views touched by the supplied source documents.
 
@@ -85,10 +84,9 @@ def materialize_documents(
         try:
             topic_rows, object_rows = _retry_lock(load_inputs)
             topics.update(row["topic"] for row in topic_rows)
-            if include_objects:
-                for object_row in object_rows:
-                    if object_row["name"]:
-                        objects[(object_row["kind"], object_row["id"])] = dict(object_row)
+            for object_row in object_rows:
+                if object_row["name"]:
+                    objects[(object_row["kind"], object_row["id"])] = dict(object_row)
         except (OSError, ValueError, sqlite3.Error) as exc:
             return {
                 "entities": 0,
@@ -113,8 +111,6 @@ def materialize_documents(
             _retry_lock(partial(store.rebuild_document_relations, document_ids))
         except Exception as exc:  # 派生视图 best-effort：任何异常都不拖垮编译
             result["failures"].append({"kind": "relations", "id": "documents", "error": str(exc)})
-    if not include_objects:
-        objects.clear()
     dirty_kinds: set[str] = set()
     for object_data in objects.values():
         kind = object_data["kind"]

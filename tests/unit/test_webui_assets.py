@@ -7,6 +7,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WEBUI = ROOT / "webui"
 
+# 构建产物（npm run build:* 生成，不入库）：未构建的环境下跳过存在性校验
+GENERATED_ASSETS = frozenset(
+    {
+        "dist/main.js",
+        "highlight.min.js",
+        "js/storage.bundle.js",
+        "lib/tiptap-bundle.js",
+    }
+)
+
 
 def test_index_referenced_local_assets_exist() -> None:
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
@@ -16,24 +26,39 @@ def test_index_referenced_local_assets_exist() -> None:
     for ref in refs:
         if ref.startswith(("http://", "https://", "data:", "#")):
             continue
-        asset = WEBUI / ref.split("?", 1)[0]
-        if not asset.exists():
+        rel = ref.split("?", 1)[0]
+        asset = WEBUI / rel
+        if not asset.exists() and rel not in GENERATED_ASSETS:
             missing.append(ref)
 
     assert missing == []
 
 
-def test_required_generated_assets_are_not_gitignored() -> None:
-    required = ["webui/lib/tiptap-bundle.js"]
-    result = subprocess.run(
-        ["git", "check-ignore", *required],
+def test_generated_assets_are_gitignored_and_untracked() -> None:
+    """构建产物一律不入库：由 npm run build:* / tauri beforeDevCommand 重新生成。"""
+    generated = [
+        "webui/dist/main.js",
+        "webui/highlight.min.js",
+        "webui/js/storage.bundle.js",
+        "webui/lib/tiptap-bundle.js",
+    ]
+    ignored = subprocess.run(
+        ["git", "check-ignore", *generated],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
+    assert sorted(ignored.stdout.split()) == sorted(generated)
 
-    assert result.stdout.strip() == ""
+    tracked = subprocess.run(
+        ["git", "ls-files", *generated],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert tracked.stdout.strip() == ""
 
 
 def test_node_modules_is_not_tracked() -> None:
@@ -122,23 +147,24 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count("data-category=") == 6
+    assert html.count("data-category=") == 4
     assert 'data-category="quality"' in html
     assert 'data-category="brief"' in html
+    assert 'data-category="claims"' not in html
+    assert 'data-category="conflicts"' not in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html
     assert "import('./semantic-workbench.ts')" in main_js
     assert "get_semantic_workbench" in api_js
     assert "get_semantic_detail" in api_js
     assert "start_semantic_full_compile" in api_js
-    assert "review_semantic_conflict" in api_js
+    assert "review_semantic_conflict" not in api_js
     assert "review_semantic_entity_quality" in api_js
     assert "get_semantic_topic_wiki_page" in api_js
     assert "get_topic_brief" in api_js
     assert "publish_semantic_topic_wiki_page" in api_js
     assert "data-preview-topic-page" in workbench_js
     assert "data-open-path" in workbench_js
-    assert "semantic.claimTypes." in workbench_js
     assert ".catch(function(error)" in workbench_js
 
 

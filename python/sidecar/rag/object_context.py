@@ -11,8 +11,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sidecar.rag.claim_context import _overlap_score, _tokens
 from sidecar.semantic.store import SemanticStore
+
+try:
+    import jieba  # type: ignore[import-untyped]
+
+    _HAS_JIEBA = True
+except ImportError:  # pragma: no cover - jieba is a project dependency
+    _HAS_JIEBA = False
 
 _MAX_OBJECTS = 4
 _MIN_OVERLAP_RATIO = 0.25
@@ -21,6 +27,89 @@ _MAX_DESC_CHARS = 120
 # 与 semantic_handler._LOW_FREQ_DEGRADE 保持一致的降级门槛。
 _DEGRADE_MIN_MENTIONS = 2
 _DEGRADE_MIN_CONFIDENCE = 0.6
+
+_STOPWORDS = frozenset(
+    {
+        "的",
+        "了",
+        "吗",
+        "呢",
+        "啊",
+        "吧",
+        "是",
+        "在",
+        "与",
+        "和",
+        "或",
+        "也",
+        "都",
+        "更",
+        "最",
+        "比",
+        "对",
+        "用",
+        "中",
+        "下",
+        "上",
+        "里",
+        "如何",
+        "怎么",
+        "怎样",
+        "什么",
+        "为什么",
+        "为何",
+        "是否",
+        "哪些",
+        "哪个",
+        "谁",
+        "何时",
+        "哪里",
+        "请",
+        "帮我",
+        "我",
+        "你",
+        "他",
+        "她",
+        "它",
+        "这",
+        "那",
+        "有",
+        "没有",
+        "不",
+        "很",
+        "比较",
+        "一下",
+        "the",
+        "a",
+        "an",
+        "of",
+        "to",
+        "in",
+        "on",
+        "for",
+        "and",
+        "or",
+        "is",
+        "are",
+    }
+)
+
+
+def _tokens(text: str) -> set[str]:
+    if not text:
+        return set()
+    if _HAS_JIEBA:
+        raw = {token.strip().casefold() for token in jieba.cut_for_search(text)}
+    else:  # pragma: no cover - fallback without jieba
+        raw = {char for char in text if not char.isspace()}
+    return {token for token in raw if len(token) >= 2 and token not in _STOPWORDS}
+
+
+def _overlap_score(query_tokens: set[str], statement_tokens: set[str]) -> float:
+    if not query_tokens or not statement_tokens:
+        return 0.0
+    common = query_tokens & statement_tokens
+    return len(common) / len(query_tokens)
 
 
 def _object_rows(store: SemanticStore, topics: list | None) -> list[dict]:

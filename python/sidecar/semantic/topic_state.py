@@ -1,10 +1,9 @@
-"""Deterministic TopicState materialization from validated semantic facts."""
+"""Deterministic TopicState materialization from extracted semantic objects."""
 
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,87 +26,44 @@ def build_topic_state(store: SemanticStore, topic: str) -> dict:
                 (topic, topic_prefix),
             )
         )
-        claim_rows = list(
+        object_rows = list(
             conn.execute(
                 """
-                SELECT DISTINCT c.id, c.statement, c.scope, c.claim_type, c.confidence, d.topic
-                FROM claims c
-                JOIN evidence e ON e.claim_id = c.id
-                JOIN blocks b ON b.id = e.block_id
+                SELECT DISTINCT m.object_id AS id, m.object_kind AS kind, d.topic AS topic
+                FROM semantic_mentions m
+                JOIN blocks b ON b.id = m.block_id
                 JOIN documents d ON d.id = b.document_id
-                WHERE c.status = 'active' AND e.status = 'active'
-                  AND (d.topic = ? OR instr(d.topic, ?) = 1)
-                ORDER BY c.statement
+                WHERE d.topic = ? OR instr(d.topic, ?) = 1
+                ORDER BY m.object_kind, m.object_id
                 """,
                 (topic, topic_prefix),
             )
-        )
-        # A claim may be evidenced by documents from several topics; DISTINCT
-        # rows then repeat the claim id, so deduplicate while keeping order.
-        seen_claim_ids: set[str] = set()
-        claims: list[sqlite3.Row] = []
-        for row in claim_rows:
-            if row["id"] in seen_claim_ids:
-                continue
-            seen_claim_ids.add(row["id"])
-            claims.append(row)
-        evidence_rows = list(
-            conn.execute(
-                """
-                SELECT e.claim_id, e.quote_hash, b.id AS block_id,
-                       b.heading_path_json, b.start_line, b.end_line,
-                       d.path AS document_path
-                FROM evidence e
-                JOIN blocks b ON b.id = e.block_id
-                JOIN documents d ON d.id = b.document_id
-                WHERE e.status = 'active' AND (d.topic = ? OR instr(d.topic, ?) = 1)
-                ORDER BY d.path, b.ordinal
-                """,
-                (topic, topic_prefix),
-            )
-        )
-
-    evidence_by_claim: dict[str, list[dict]] = {}
-    for row in evidence_rows:
-        evidence_by_claim.setdefault(row["claim_id"], []).append(
-            {
-                "document_path": row["document_path"],
-                "block_id": row["block_id"],
-                "heading_path": json.loads(row["heading_path_json"]),
-                "start_line": row["start_line"],
-                "end_line": row["end_line"],
-                "quote_hash": row["quote_hash"],
-            }
         )
 
     document_payload = [dict(row) for row in documents]
-    claim_payload = [
-        {
-            **dict(row),
-            "evidence": evidence_by_claim.get(row["id"], []),
-        }
-        for row in claims
-        if evidence_by_claim.get(row["id"])
-    ]
+    object_payload = [dict(row) for row in object_rows]
     input_hash = content_hash(
         json.dumps(
             {
                 "documents": [(item["id"], item["content_hash"]) for item in document_payload],
-                "claims": [(item["id"], [e["quote_hash"] for e in item["evidence"]]) for item in claim_payload],
+                "objects": [(item["kind"], item["id"]) for item in object_payload],
             },
             ensure_ascii=False,
             sort_keys=True,
         )
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "topic_id": stable_id("top", topic.casefold()),
         "topic": topic,
         "input_hash": input_hash,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "documents": document_payload,
-        "claims": claim_payload,
-        "stats": {"documents": len(document_payload), "claims": len(claim_payload)},
+        "objects": object_payload,
+        "stats": {
+            "documents": len(document_payload),
+            "objects": len(object_payload),
+        },
     }
 
 
@@ -130,11 +86,7 @@ def materialize_topic_state(store: SemanticStore, topic: str) -> Path:
         except OSError:
             pass
         raise
-    source_ids = (
-        {item["id"] for item in state["documents"]}
-        | {item["id"] for item in state["claims"]}
-        | {evidence["block_id"] for claim in state["claims"] for evidence in claim["evidence"]}
-    )
+    source_ids = {item["id"] for item in state["documents"]} | {item["id"] for item in state["objects"]}
     store.replace_view_dependencies(
         view_id=state["topic_id"],
         view_kind="topic_state",

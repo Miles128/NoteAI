@@ -1,4 +1,4 @@
-"""Semantic workbench queries, explicit review actions and claim verification."""
+"""Semantic workbench queries and explicit review actions (实体/概念层）。"""
 
 from __future__ import annotations
 
@@ -8,15 +8,14 @@ from pathlib import Path
 
 from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
-from sidecar.handlers.cli_agent_handler import CliAgentHandler
 from sidecar.semantic.detail import list_semantic_objects
 from sidecar.semantic.store import SemanticStore
 
 
 class SemanticHandler(BaseHandler):
-    _TABS = {"overview", "claims", "concepts", "entities", "quality", "conflicts", "links"}
+    _TABS = {"overview", "concepts", "entities", "quality", "links"}
     _COMPILE_JOB_ID = "semantic-full-compile"
-    # Workbench display intensity → minimum confidence for claims/objects.
+    # Workbench display intensity → minimum confidence for semantic objects.
     # "deep" keeps every item (including legacy rows without confidence).
     _INTENSITY_MIN_CONFIDENCE = {"light": 0.8, "standard": 0.5, "deep": 0.0}
 
@@ -61,8 +60,6 @@ class SemanticHandler(BaseHandler):
             return self._overview(store)
         if tab == "links":
             return self._links(params)
-        if tab == "conflicts":
-            return self._conflicts(store, params)
         if tab == "quality":
             return self._quality(store, params)
         return self._semantic_list(store, tab, params, min_confidence=min_confidence)
@@ -74,11 +71,6 @@ class SemanticHandler(BaseHandler):
             "blocks": 0,
             "concepts": 0,
             "entities": 0,
-            "claims": 0,
-            "evidence": 0,
-            "deleted_claims": 0,
-            "excluded_evidence": 0,
-            "conflicts": 0,
             "updated_at": None,
             "source_documents": 0,
             "complete_documents": 0,
@@ -124,23 +116,9 @@ class SemanticHandler(BaseHandler):
                 "total": 0,
                 "prompt_version_status": self._prompt_version_status(store),
             }
-        tables = ("documents", "blocks", "concepts", "entities", "claims", "evidence")
+        tables = ("documents", "blocks", "concepts", "entities")
         with store.connect() as conn:
             overview = {table: conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in tables}
-            overview["claims"] = conn.execute(
-                """SELECT count(*) FROM claims c WHERE c.status = 'active'
-                   AND EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id AND e.status = 'active')"""
-            ).fetchone()[0]
-            overview["evidence"] = conn.execute("SELECT count(*) FROM evidence WHERE status = 'active'").fetchone()[0]
-            overview["deleted_claims"] = conn.execute(
-                "SELECT count(*) FROM claims WHERE status = 'deleted'"
-            ).fetchone()[0]
-            overview["excluded_evidence"] = conn.execute(
-                "SELECT count(*) FROM evidence WHERE status = 'excluded'"
-            ).fetchone()[0]
-            overview["conflicts"] = conn.execute(
-                "SELECT count(*) FROM review_queue WHERE item_kind = 'claim_conflict' AND status = 'pending'"
-            ).fetchone()[0]
             row = conn.execute("SELECT max(compiled_at) AS updated_at FROM documents").fetchone()
             overview["updated_at"] = row["updated_at"] if row else None
             statuses = {
@@ -172,7 +150,7 @@ class SemanticHandler(BaseHandler):
         except (TypeError, ValueError):
             days = 7
         object_kind = str(params.get("object_kind") or "").strip() or None
-        if object_kind not in {None, "claim", "entity", "concept", "document"}:
+        if object_kind not in {None, "entity", "concept", "document"}:
             return {"success": False, "message": "未知对象类型"}
         if not store.path.exists():
             return {"success": True, "days": days, "counts": [], "items": [], "total": 0}
@@ -230,6 +208,8 @@ class SemanticHandler(BaseHandler):
         by_kind: dict[str, int] = {}
         by_object: dict[str, int] = {}
         for c in counts:
+            if c["object_kind"] == "claim":
+                continue  # 命题层已下线；跳过历史 claim 变更行
             by_kind[c["change_kind"]] = by_kind.get(c["change_kind"], 0) + c["count"]
             by_object[c["object_kind"]] = by_object.get(c["object_kind"], 0) + c["count"]
         # 面向普通用户的口语化表述：不暴露内部英文键名。
@@ -240,7 +220,6 @@ class SemanticHandler(BaseHandler):
             "removed": "不再收录",
         }
         object_label = {
-            "claim": "知识点",
             "entity": "笔记中提到的人/事物",
             "concept": "概念",
             "document": "笔记",
@@ -261,6 +240,7 @@ class SemanticHandler(BaseHandler):
             f"（{object_label.get(c['object_kind'], c['object_kind'])}）: {c['label'] or c['object_id']}"
             + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
             for c in items
+            if c["object_kind"] != "claim"
         )
         brief, fallback = self._compose_weekly_brief(days, counts_summary, records, WEEKLY_BRIEF_PROMPT)
         return {"success": True, "days": days, "brief": brief, "fallback": fallback}
@@ -360,10 +340,9 @@ class SemanticHandler(BaseHandler):
         return sorted(iter_note_files(workspace), key=lambda p: str(p.relative_to(workspace)))
 
     def _start_full_compile(self, _params):
-        return self._start_semantic_compile(_params, claims_only=False)
+        return self._start_semantic_compile(_params)
 
     def _retry_failed_blocks(self, params):
-        claims_only = bool(params.get("claims_only", True))
         try:
             limit = max(1, min(int(params.get("limit", 100)), 500))
         except (TypeError, ValueError):
@@ -376,9 +355,9 @@ class SemanticHandler(BaseHandler):
             return {"success": False, "message": "语义库不存在"}
         from sidecar.semantic.compiler import retry_failed_blocks
 
-        return retry_failed_blocks(store, claims_only=claims_only, limit=limit)
+        return retry_failed_blocks(store, limit=limit)
 
-    def _start_semantic_compile(self, _params, *, claims_only: bool):
+    def _start_semantic_compile(self, _params):
         workspace, err = self._require_workspace()
         if err:
             return err
@@ -387,9 +366,8 @@ class SemanticHandler(BaseHandler):
             self._COMPILE_JOB_ID,
             self._run_full_compile,
             args=(workspace, paths),
-            kwargs={"claims_only": claims_only},
             kind="semantic_compile",
-            label="全库命题编译" if claims_only else "全库语义编译",
+            label="全库语义编译",
         )
         if not started:
             return {
@@ -405,7 +383,7 @@ class SemanticHandler(BaseHandler):
             "job": job_status.get_job(self._COMPILE_JOB_ID),
         }
 
-    def _run_full_compile(self, workspace: str, paths: list[Path], *, claims_only: bool = False) -> None:
+    def _run_full_compile(self, workspace: str, paths: list[Path]) -> None:
         from sidecar.semantic.compiler import run_full_compile
 
         def progress(progress_value: float, message: str, metadata: dict) -> None:
@@ -416,7 +394,7 @@ class SemanticHandler(BaseHandler):
                 self._COMPILE_JOB_ID, progress=1, status="complete", message=message, metadata=metadata
             )
 
-        run_full_compile(workspace, paths, claims_only=claims_only, progress_cb=progress, done_cb=done)
+        run_full_compile(workspace, paths, progress_cb=progress, done_cb=done)
 
     def _get_compile_status(self, _params):
         return {
@@ -442,7 +420,7 @@ class SemanticHandler(BaseHandler):
     def _get_detail(self, params):
         kind = str(params.get("kind", "") or "")
         object_id = str(params.get("id", "") or "")
-        if kind not in {"concept", "entity", "claim"} or not object_id:
+        if kind not in {"concept", "entity"} or not object_id:
             return {"success": False, "message": "参数不完整"}
         store = self._store()
         if store is None or not store.path.exists():
@@ -451,56 +429,15 @@ class SemanticHandler(BaseHandler):
 
         return build_object_detail(store, kind, object_id)
 
-    def _verify_claim(self, params):
-        """研究核查单个命题（CLI agent 深度研究 / 内置 API LLM reasoning），结果落库。
-
-        method='cli'（默认）：CLI 深度研究，可能耗时数分钟；与 CLI Agent 对话
-        共用同一执行通道，复用 CliAgentHandler 的全局锁避免并发执行。
-        method='llm'：内置 LLM（DeepSeek reasoning）流式核查，不占用 CLI 通道。
-        两种方式都经 send_event 推送研究过程事件（cli_agent_output /
-        verify_llm_output），供前端实时展示。
-        """
-        claim_id = str(params.get("id", "") or "")
-        agent_id = str(params.get("agent", "") or "")
-        method = str(params.get("method", "") or "").strip().lower()
-        if method not in ("cli", "llm"):
-            method = "cli"
-        if not claim_id or not agent_id:
-            return {"success": False, "message": "参数不完整"}
-        store = self._store()
-        if store is None or not store.path.exists():
-            return {"success": False, "message": "语义数据库不存在"}
-        claim = store.claims.get_verifiable_claim(claim_id)
-        if claim is None:
-            return {"success": False, "message": "命题不存在或不可核查（仅支持 active 且有证据的命题）"}
-        if method == "llm":
-            from sidecar.semantic.claim_verifier import verify_claim_via_llm
-
-            result = verify_claim_via_llm(store, claim, send_event=self._send_response)
-            result["output"] = (result.get("output") or "")[-2000:]
-            return result
-        if not CliAgentHandler._cli_agent_lock.acquire(blocking=False):
-            return {"success": False, "message": "CLI agent 正在运行其他任务，请稍后再试"}
-        try:
-            from sidecar.semantic.claim_verifier import verify_claim_via_cli
-
-            result = verify_claim_via_cli(store, claim, agent_id=agent_id, send_event=self._send_response)
-            if result.get("success"):
-                # 只保留原始输出尾部，避免超大 RPC 响应
-                result["output"] = (result.get("output") or "")[-2000:]
-            return result
-        finally:
-            CliAgentHandler._cli_agent_lock.release()
-
     def _get_note_semantic_context(self, params):
         path = str(params.get("path", "") or "").replace("\\", "/")
         store = self._store()
         if not path or store is None or not store.path.exists():
-            return {"success": True, "entities": [], "concepts": [], "claims": [], "relations": []}
+            return {"success": True, "entities": [], "concepts": [], "relations": []}
         with store.connect() as conn:
             doc = conn.execute("SELECT id FROM documents WHERE path = ?", (path,)).fetchone()
             if doc is None:
-                return {"success": True, "entities": [], "concepts": [], "claims": [], "relations": []}
+                return {"success": True, "entities": [], "concepts": [], "relations": []}
 
             def objects(table, kind):
                 return [
@@ -514,15 +451,6 @@ class SemanticHandler(BaseHandler):
                     )
                 ]
 
-            claims = [
-                dict(row)
-                for row in conn.execute(
-                    """SELECT DISTINCT c.id, c.statement, c.claim_type FROM claims c JOIN evidence e ON e.claim_id = c.id
-                   JOIN blocks b ON b.id = e.block_id WHERE b.document_id = ? AND c.status = 'active' AND e.status = 'active'
-                   ORDER BY c.statement""",
-                    (doc["id"],),
-                )
-            ]
             entities = objects("entities", "entity")
             concepts = objects("concepts", "concept")
             labels = {item["id"]: item["canonical_name"] for item in [*entities, *concepts]}
@@ -537,49 +465,7 @@ class SemanticHandler(BaseHandler):
                     relations.append(
                         {**dict(row), "source_name": labels[row["source_id"]], "target_name": labels[row["target_id"]]}
                     )
-        return {"success": True, "entities": entities, "concepts": concepts, "claims": claims, "relations": relations}
-
-    def _update_claim(self, params):
-        claim_id = str(params.get("id", "") or "")
-        if not claim_id:
-            return {"success": False, "message": "命题 ID 不能为空"}
-        store = self._store()
-        if store is None or not store.path.exists():
-            return {"success": False, "message": "语义数据库不存在"}
-        try:
-            item = store.update_claim(
-                claim_id,
-                statement=str(params.get("statement", "") or ""),
-                scope=str(params.get("scope", "") or ""),
-                claim_type=str(params.get("claim_type", "") or ""),
-            )
-        except ValueError as exc:
-            return {"success": False, "message": str(exc)}
-        return {"success": item is not None, "item": item, "message": "命题不存在" if item is None else ""}
-
-    def _set_claim_status(self, params):
-        claim_id = str(params.get("id", "") or "")
-        status = str(params.get("status", "") or "")
-        store = self._store()
-        if not claim_id or store is None or not store.path.exists():
-            return {"success": False, "message": "参数不完整或语义数据库不存在"}
-        try:
-            item = store.set_claim_status(claim_id, status)
-        except ValueError as exc:
-            return {"success": False, "message": str(exc)}
-        return {"success": item is not None, "item": item}
-
-    def _set_evidence_status(self, params):
-        evidence_id = str(params.get("id", "") or "")
-        status = str(params.get("status", "") or "")
-        store = self._store()
-        if not evidence_id or store is None or not store.path.exists():
-            return {"success": False, "message": "参数不完整或语义数据库不存在"}
-        try:
-            item = store.set_evidence_status(evidence_id, status)
-        except ValueError as exc:
-            return {"success": False, "message": str(exc)}
-        return {"success": item is not None, "item": item}
+        return {"success": True, "entities": entities, "concepts": concepts, "relations": relations}
 
     def _add_entity_alias(self, params):
         entity_id = str(params.get("id", "") or "")
@@ -605,7 +491,6 @@ class SemanticHandler(BaseHandler):
             "success": True,
             "topic": topic,
             "content": page["content"],
-            "blocked_claim_ids": page["blocked_claim_ids"],
             "target": str(page["target"].relative_to(store.workspace)),
         }
 
@@ -662,65 +547,6 @@ class SemanticHandler(BaseHandler):
             "path": str(target.relative_to(store.workspace)),
             "wiki_links": wiki_links,
         }
-
-    def _conflicts(self, store: SemanticStore, params: dict):
-        limit, offset = self._page(params)
-        status = str(params.get("status", "pending") or "pending")
-        if status not in {"pending", "reviewed", "all"}:
-            status = "pending"
-        where = "item_kind = 'claim_conflict'"
-        args: list[object] = []
-        if status != "all":
-            where += " AND status = ?"
-            args.append(status)
-        with store.connect() as conn:
-            total = conn.execute(f"SELECT count(*) FROM review_queue WHERE {where}", args).fetchone()[0]
-            rows = conn.execute(
-                f"""SELECT id, payload_json, reason, status, created_at FROM review_queue
-                    WHERE {where} ORDER BY created_at DESC LIMIT ? OFFSET ?""",
-                (*args, limit, offset),
-            ).fetchall()
-        items = []
-        for row in rows:
-            item = dict(row)
-            try:
-                item["payload"] = json.loads(item.pop("payload_json") or "{}")
-            except json.JSONDecodeError:
-                item["payload"] = {}
-            items.append(item)
-        return {
-            "success": True,
-            "tab": "conflicts",
-            "items": items,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "status": status,
-        }
-
-    def _review_conflict(self, params):
-        item_id = str(params.get("id", "") or "")
-        status = str(params.get("status", "reviewed") or "reviewed")
-        if not item_id or status not in {"pending", "reviewed"}:
-            return {"success": False, "message": "参数不完整"}
-        store = self._store()
-        if store is None or not store.path.exists():
-            return {"success": False, "message": "语义数据库不存在"}
-        with store.connect() as conn:
-            cursor = conn.execute(
-                "UPDATE review_queue SET status = ? WHERE id = ? AND item_kind = 'claim_conflict'",
-                (status, item_id),
-            )
-        return {"success": cursor.rowcount > 0, "id": item_id, "status": status}
-
-    def _scan_conflicts(self, params):
-        """手动触发结构化冲突检测：重扫 claims 快照并落库（幂等）。"""
-        store = self._store()
-        if store is None or not store.path.exists():
-            return {"success": False, "message": "语义数据库不存在"}
-        from sidecar.semantic.conflict_detector import scan_and_persist
-
-        return scan_and_persist(store)
 
     def _quality(self, store: SemanticStore, params: dict):
         from sidecar.semantic.quality import collect_quality_issues
@@ -979,19 +805,13 @@ class SemanticHandler(BaseHandler):
         router.register("get_topic_brief", self._get_topic_brief)
         router.register("generate_weekly_brief", self._generate_weekly_brief)
         router.register("start_semantic_full_compile", self._start_full_compile)
-        router.register("review_semantic_conflict", self._review_conflict)
-        router.register("scan_semantic_conflicts", self._scan_conflicts)
         router.register("review_semantic_entity_quality", self._review_entity_quality)
         router.register("enqueue_semantic_entity_quality", self._enqueue_entity_quality)
         router.register("enqueue_cross_kind_semantic_merges", self._enqueue_cross_kind_merges)
         router.register("resolve_cross_kind_merges", self._resolve_cross_kind_merges)
         router.register("get_semantic_entity_merge_preview", self._get_entity_merge_preview)
         router.register("merge_semantic_entities", self._merge_entities)
-        router.register("update_semantic_claim", self._update_claim)
-        router.register("set_semantic_claim_status", self._set_claim_status)
-        router.register("set_semantic_evidence_status", self._set_evidence_status)
         router.register("add_semantic_entity_alias", self._add_entity_alias)
-        router.register("verify_semantic_claim", self._verify_claim)
         router.register("get_semantic_topic_wiki_page", self._get_topic_wiki_page)
         router.register("get_semantic_object_wiki_page", self._get_object_wiki_page)
         router.register("publish_semantic_object_wiki_page", self._publish_object_wiki_page)

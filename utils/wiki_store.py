@@ -21,6 +21,7 @@ from utils.text_utils import parse_frontmatter
 # 路径解析与标题解析（原 wiki_manager）
 # ---------------------------------------------------------------------------
 
+
 class WikiTopic(TypedDict):
     name: str
     label: str
@@ -195,10 +196,10 @@ def _renumber_wiki_files(lines):
     lines[:] = result
 
 
-
 # ---------------------------------------------------------------------------
 # WIKI.md 去重（原 topic_dedup）
 # ---------------------------------------------------------------------------
+
 
 def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
     wiki_path = _get_wiki_path()
@@ -337,10 +338,10 @@ def _deduplicate_files_in_wiki():
     return removed
 
 
-
 # ---------------------------------------------------------------------------
 # WIKI.md CRUD（原 wiki_crud）
 # ---------------------------------------------------------------------------
+
 
 def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):  # noqa: PLR0912, PLR0915
     wiki_path = _get_wiki_path()
@@ -867,7 +868,6 @@ def rename_topic(old_topic, new_topic):  # noqa: PLR0911, PLR0912, PLR0915
         "updated": updated_count,
         "merged": False,
     }
-
 
 
 # ---------------------------------------------------------------------------

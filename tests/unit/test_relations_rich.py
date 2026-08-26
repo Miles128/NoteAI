@@ -174,18 +174,3 @@ def test_topic_page_empty_group_renders_object_summary(topic_store: SemanticStor
     assert "提及 3 次" in content
     # 低频低置信度对象被降级过滤。
     assert "冷门实体" not in content
-
-
-def test_topic_page_with_claims_skips_object_summary(topic_store: SemanticStore) -> None:
-    with topic_store.connect() as conn:
-        conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-1', '混合检索优于纯向量检索。', '', 'conclusion', 0.9, 'active')"""
-        )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-1', 'claim-1', 'block-1', 'q')"""
-        )
-    page = build_topic_wiki_page(topic_store, "AI")
-    assert "高频对象" not in page["content"]
-    assert "混合检索优于纯向量检索。" in page["content"]

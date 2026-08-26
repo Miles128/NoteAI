@@ -28,7 +28,7 @@ def brief_handler(tmp_path: Path):
             (
                 "log-1",
                 "added",
-                "claim",
+                "concept",
                 "c1",
                 "混合检索结合向量与关键词",
                 "{}",

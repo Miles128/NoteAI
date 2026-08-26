@@ -1,6 +1,5 @@
 import json
 import os
-import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -101,7 +100,6 @@ def test_topic_meta_reads_wiki_meta_and_state(workspace: Path) -> None:
 
     assert result["exists"] is True
     assert result["source_count"] == 2
-    assert result["conflict_pending_count"] == 1
     assert result["compiled_at"] == "2020-01-01T00:00:00+00:00"
     assert result["is_stale"] is False
 
@@ -209,40 +207,3 @@ def test_topic_meta_route_registered(workspace: Path) -> None:
     _make_handler().register_routes(Router())
 
     assert "topic_meta" in registered
-
-
-def test_topic_meta_conflict_count_from_review_queue(workspace: Path) -> None:
-    topic = "冲突主题"
-    db_path = workspace / WORKSPACE_APP_FOLDER / "compiler" / "semantic.db"
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    note = _make_note(workspace, topic)
-    conn = sqlite3.connect(db_path)
-    try:
-        conn.executescript(
-            """
-            CREATE TABLE documents(id TEXT PRIMARY KEY, topic TEXT);
-            CREATE TABLE blocks(id TEXT PRIMARY KEY, document_id TEXT);
-            CREATE TABLE evidence(id TEXT PRIMARY KEY, claim_id TEXT, block_id TEXT, status TEXT);
-            CREATE TABLE claims(id TEXT PRIMARY KEY);
-            CREATE TABLE review_queue(id TEXT PRIMARY KEY, item_kind TEXT, payload_json TEXT,
-                                      reason TEXT, status TEXT, created_at TEXT);
-            """
-        )
-        conn.execute("INSERT INTO documents(id, topic) VALUES('d1', ?)", (topic,))
-        conn.execute("INSERT INTO blocks(id, document_id) VALUES('b1', 'd1')")
-        conn.execute("INSERT INTO evidence(id, claim_id, block_id, status) VALUES('e1', 'ca', 'b1', 'active')")
-        conn.execute("INSERT INTO claims(id) VALUES('ca')")
-        conn.execute(
-            "INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at) "
-            "VALUES('rq1', 'claim_conflict', ?, 'r', 'pending', 'now')",
-            (json.dumps({"claim_a_id": "ca", "claim_b_id": "cb"}),),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    result = _make_handler()._topic_meta({"topic": topic})
-
-    assert result["exists"] is True
-    assert result["conflict_pending_count"] == 1
-    assert note.is_file()

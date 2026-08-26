@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS relations (
     relation_type TEXT NOT NULL,
     target_id TEXT NOT NULL,
     confidence REAL NOT NULL,
-    evidence_id TEXT REFERENCES evidence(id) ON DELETE SET NULL,
+    evidence_id TEXT,
     block_id TEXT REFERENCES blocks(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS semantic_mentions (
@@ -613,3 +613,186 @@ class ObjectsStore(SemanticStoreBase):
                     )
                     stats["entities" if kind == "entity" else "concepts"] += 1
         return stats
+
+    def save_block_extraction(
+        self,
+        *,
+        block_id: str,
+        block_hash: str,
+        prompt_version: int,
+        extracted_at: str,
+        concepts: list[dict],
+        entities: list[dict],
+    ) -> None:
+        """Replace one block's semantic output in a single transaction.
+
+        Extraction-time dedup: when a variant spelling (parenthetical
+        annotation, whitespace, case, punctuation) matches an existing
+        active object, reuse that id so mentions/relations merge instead
+        of duplicating. The upsert below then refreshes
+        description/confidence on the existing row while keeping its
+        canonical name. The differing spelling is preserved as an alias
+        (entity_aliases / concept_aliases) so the alternate name of the
+        same object survives.
+
+        Cross-kind dedup: a concept whose fingerprint matches an active
+        entity (or vice versa) is re-assigned to the pre-existing kind
+        and reuses its id — the earlier object wins, so the same name
+        never lives in both tables at once. The moved object keeps the
+        existing row's kind-specific fields (upsert never overwrites
+        canonical_name / entity_type) and its name is recorded as an
+        alias of the surviving row.
+        """
+        with self.connect() as conn:
+            source_path, source_topic = self._block_source(conn, block_id)
+            for obj, table, alias_table, alias_column in [
+                (c, "concepts", "concept_aliases", "concept_id") for c in concepts
+            ] + [(e, "entities", "entity_aliases", "entity_id") for e in entities]:
+                existing = conn.execute(
+                    f"SELECT id, canonical_name FROM {table} WHERE name_fingerprint = ? AND status = 'active' AND id != ? LIMIT 1",
+                    (name_fingerprint(obj["canonical_name"]), obj["id"]),
+                ).fetchone()
+                if existing is None:
+                    other_table = "entities" if table == "concepts" else "concepts"
+                    existing = conn.execute(
+                        f"SELECT id, canonical_name FROM {other_table} WHERE name_fingerprint = ? AND status = 'active' LIMIT 1",
+                        (name_fingerprint(obj["canonical_name"]),),
+                    ).fetchone()
+                    if existing is not None:
+                        if table == "concepts":
+                            concepts[:] = [c for c in concepts if c is not obj]
+                            entities.append(obj)
+                            obj["entity_type"] = obj.get("entity_type", "")
+                            alias_table, alias_column = "entity_aliases", "entity_id"
+                        else:
+                            entities[:] = [e for e in entities if e is not obj]
+                            concepts.append(obj)
+                            alias_table, alias_column = "concept_aliases", "concept_id"
+                if existing is not None:
+                    obj["id"] = existing["id"]
+                    if obj["canonical_name"].casefold() != existing["canonical_name"].casefold():
+                        conn.execute(
+                            f"INSERT OR IGNORE INTO {alias_table}(alias, {alias_column}, created_at) VALUES(?, ?, ?)",
+                            (obj["canonical_name"], existing["id"], self._now()),
+                        )
+            concept_ids = [concept["id"] for concept in concepts]
+            entity_ids = [entity["id"] for entity in entities]
+            existing_concepts = (
+                {
+                    row["id"]
+                    for row in conn.execute(
+                        f"SELECT id FROM concepts WHERE id IN ({','.join('?' * len(concept_ids))})", concept_ids
+                    )
+                }
+                if concept_ids
+                else set()
+            )
+            existing_entities = (
+                {
+                    row["id"]
+                    for row in conn.execute(
+                        f"SELECT id FROM entities WHERE id IN ({','.join('?' * len(entity_ids))})", entity_ids
+                    )
+                }
+                if entity_ids
+                else set()
+            )
+            conn.execute("DELETE FROM semantic_mentions WHERE block_id = ?", (block_id,))
+            conn.execute("DELETE FROM relations WHERE block_id = ?", (block_id,))
+
+            for concept in concepts:
+                conn.execute(
+                    """
+                    INSERT INTO concepts(
+                        id, canonical_name, description, confidence, status, name_fingerprint
+                    )
+                    VALUES(:id, :canonical_name, :description, :confidence, 'active', :name_fingerprint)
+                    ON CONFLICT(id) DO UPDATE SET
+                        description=CASE WHEN length(excluded.description) > length(description)
+                            THEN excluded.description ELSE description END,
+                        confidence=max(confidence, excluded.confidence), status='active'
+                    """,
+                    {**concept, "name_fingerprint": name_fingerprint(concept["canonical_name"])},
+                )
+                if concept["id"] not in existing_concepts:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="concept",
+                        object_id=concept["id"],
+                        label=concept["canonical_name"],
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
+                conn.execute(
+                    "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'concept', ?)",
+                    (concept["id"], block_id),
+                )
+
+            for entity in entities:
+                conn.execute(
+                    """
+                    INSERT INTO entities(
+                        id, canonical_name, entity_type, description, confidence, status, name_fingerprint
+                    )
+                    VALUES(
+                        :id, :canonical_name, :entity_type, :description, :confidence, 'active', :name_fingerprint
+                    )
+                    ON CONFLICT(id) DO UPDATE SET
+                        description=CASE WHEN length(excluded.description) > length(description)
+                            THEN excluded.description ELSE description END,
+                        confidence=max(confidence, excluded.confidence), status='active'
+                    """,
+                    {**entity, "name_fingerprint": name_fingerprint(entity["canonical_name"])},
+                )
+                if entity["id"] not in existing_entities:
+                    self._record_change(
+                        conn,
+                        change_kind="added",
+                        object_kind="entity",
+                        object_id=entity["id"],
+                        label=entity["canonical_name"],
+                        detail={"entity_type": entity.get("entity_type", "")},
+                        source_path=source_path,
+                        topic=source_topic,
+                    )
+                conn.execute(
+                    "INSERT OR IGNORE INTO semantic_mentions(object_id, object_kind, block_id) VALUES(?, 'entity', ?)",
+                    (entity["id"], block_id),
+                )
+
+            # An Entity and a Concept extracted from the same source block have
+            # a traceable, controlled association.  It is intentionally not a
+            # stronger semantic assertion than RELATED_TO; that requires an
+            # explicit relation extractor and evidence review.
+            for entity in entities:
+                for concept in concepts:
+                    conn.execute(
+                        """INSERT INTO relations(
+                               id, source_id, relation_type, target_id, confidence, evidence_id, block_id
+                           ) VALUES(?, ?, 'RELATED_TO', ?, ?, NULL, ?)
+                           ON CONFLICT(id) DO UPDATE SET confidence=excluded.confidence,
+                                                        block_id=excluded.block_id""",
+                        (
+                            stable_id("relation", block_id, entity["id"], "RELATED_TO", concept["id"]),
+                            entity["id"],
+                            concept["id"],
+                            min(float(entity.get("confidence") or 0), float(concept.get("confidence") or 0)),
+                            block_id,
+                        ),
+                    )
+
+            conn.execute(
+                """
+                INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                VALUES(?, ?, ?, 'complete', ?, NULL)
+                ON CONFLICT(block_id) DO UPDATE SET
+                    block_hash=excluded.block_hash,
+                    prompt_version=excluded.prompt_version,
+                    status='complete',
+                    extracted_at=excluded.extracted_at,
+                    error=NULL
+                """,
+                (block_id, block_hash, prompt_version, extracted_at),
+            )
+            self._trim_change_log(conn)

@@ -141,8 +141,7 @@ def collect_pending_items(workspace: str | None = None) -> list[dict]:
         )
 
     if root and root.exists():
-        from sidecar.chunk_similarity import load_chunk_similarity_graph
-        from sidecar.duplicate_review import is_merge_group_resolved
+        from sidecar.duplicate_review import is_merge_group_resolved, load_chunk_similarity_graph
 
         similarity_graph = load_chunk_similarity_graph(root)
         chunk_by_id = {chunk.get("id"): chunk for chunk in (similarity_graph.get("chunks") or [])}

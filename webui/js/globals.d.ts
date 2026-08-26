@@ -109,18 +109,12 @@ declare global {
         exportNotes(options?: any): Promise<any>;
         restoreWorkspaceBackup(options?: any): Promise<any>;
         startSemanticFullCompile(options?: any): Promise<any>;
-        reviewSemanticConflict(id: string, status?: string): Promise<any>;
-        scanSemanticConflicts(): Promise<any>;
         reviewSemanticEntityQuality(id: string, status?: string): Promise<any>;
         enqueueSemanticEntityQuality(id: string): Promise<any>;
         enqueueCrossKindSemanticMerges(): Promise<any>;
         resolveCrossKindMerges(dryRun?: boolean): Promise<any>;
         getSemanticEntityMergePreview(sourceId: string, targetId: string): Promise<any>;
         mergeSemanticEntities(sourceId: string, targetId: string): Promise<any>;
-        updateSemanticClaim(id: string, statement: string, scope?: string, claimType?: string): Promise<any>;
-        verifySemanticClaim(id: string, agent: string, method?: string): Promise<any>;
-        setSemanticClaimStatus(id: string, status: string): Promise<any>;
-        setSemanticEvidenceStatus(id: string, status: string): Promise<any>;
         getSemanticTopicWikiPage(topic: string): Promise<any>;
         publishSemanticTopicWikiPage(topic: string): Promise<any>;
         addSemanticEntityAlias(id: string, alias: string): Promise<any>;
@@ -285,9 +279,7 @@ declare global {
         getTauriEventAPI: () => any;
         Storage: StorageModule;
         state: StateModule;
-        apiConfig: ApiConfig | null;
         uiConfig: UiConfig | null;
-        themePreference: string | null;
         AppState: Record<string, any>;
         t: (key: string, params?: Record<string, string | number>) => string;
         I18nModule: I18nModule;
@@ -357,7 +349,6 @@ declare global {
             initWindowDrag?(): void;
         } | undefined;
         Graph3Tier: { pauseResize?(): void; resumeResize?(): void; load?(data?: any, silent?: boolean): void; stopSimulation?(): void; zoomIn?(): void; zoomOut?(): void; zoomReset?(): void } | undefined;
-        Graph: { refresh?(): void; applyLayout?(): void; setSelected?(): void } | undefined;
         HomeDashboardModule: {
             refresh?(): void;
             init?(): void;

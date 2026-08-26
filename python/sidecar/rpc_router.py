@@ -50,7 +50,7 @@ class RpcRouter:
     def register(self, method: str, handler: Callable) -> None:
         self._handlers[method] = RpcHandler(handler)
 
-    def handle(self, request: dict, extra_ctx: dict | None = None) -> None:
+    def handle(self, request: dict) -> None:
         method = request.get("method", "")
         params = request.get("params", {})
         req_id = request.get("id", "")

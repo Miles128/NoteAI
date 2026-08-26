@@ -24,6 +24,16 @@ REQUIRED_ELEMENT_IDS = frozenset(
     }
 )
 
+# 构建产物（npm run build:* 生成，不入库）：仅在已构建的环境中校验存在性
+GENERATED_ASSETS = frozenset(
+    {
+        "dist/main.js",
+        "highlight.min.js",
+        "js/storage.bundle.js",
+        "lib/tiptap-bundle.js",
+    }
+)
+
 REQUIRED_STATIC_ASSETS = (
     "css/variables.css",
     "css/layout.css",
@@ -59,6 +69,8 @@ def _linked_paths(html: str) -> list[str]:
 @pytest.mark.parametrize("asset", REQUIRED_STATIC_ASSETS)
 def test_required_static_asset_exists(asset: str) -> None:
     path = WEBUI / asset
+    if asset in GENERATED_ASSETS and not path.is_file():
+        pytest.skip(f"generated asset not built in this environment: {asset}")
     assert path.is_file(), f"missing webui asset: {asset}"
 
 
@@ -85,6 +97,6 @@ def test_index_linked_local_assets_exist() -> None:
         if rel.startswith("data:"):
             continue
         target = WEBUI / rel
-        if not target.is_file():
+        if not target.is_file() and rel not in GENERATED_ASSETS:
             missing.append(rel)
     assert not missing, f"index.html references missing files: {missing}"

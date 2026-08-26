@@ -26,24 +26,13 @@ EXTRACTION_PROMPT: |-
   只输出一个 JSON 对象，不要 Markdown 代码围栏：
   {{
     "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-    "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-    "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制的短证据"}}]
+    "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}]
   }}
 
   规则：
-  1. Claim 不是“任何可验证陈述”。只有作者明确得出的评价、比较、因果、趋势、预测、推荐等结论，才标为 conclusion。
-  2. 只有作者明确提出、尚待验证或带条件成立的推测/研究命题，才标为 hypothesis。
-  3. 定义、术语解释、产品属性、日期数字、背景事实、命令/参数/API/配置说明、安装步骤、操作指引、示例、代码行为复述，一律不要放进 claims。
-  4. 例如“75+ 模型”“支持 75 种模型”“运行 uv sync 安装依赖”“--port 指定端口”“Python 3.10 发布于 2021 年”都不是 Claim；“在该数据集上混合检索优于纯向量检索”才是 conclusion；“增大上下文窗口可能降低召回精度”可作为 hypothesis。
-  5. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；转述他人立场的“作者认为/论文指出”仍可抽取。
-  6. 主观评价/价值判断不是 Claim：如“X 最强大”“Y 更好用”“友好度最高”“优先级 P1”“no.1”“最佳实践推荐”这类主观比较与偏好陈述，没有事实证据可以证实或证伪，一律不得进入 claims。
-  6.5 格言、口号、警句式短句不是 Claim：如“选择比努力更重要”“少而精，比多而杂强”“压缩比扩展更重要”这类无适用对象、无适用场景的泛化断言，既不可证实也不可证伪，一律不得进入 claims。
-  6.6 产品功能/系统行为描述不是 Claim：如“忠实度下降自动告警”“负载过高自动降级”这类复述系统动作的句子，只是行为说明而非结论，一律不得进入 claims。
-  6. 代码块的 claims 必须为空；命令和说明仍可抽取 Concept/Entity。
-  7. evidence_quote 必须逐字来自原文，不能改写；没有明确证据的内容不要输出。
-  8. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。
-  9. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数（如 --port）、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
-  10. {object_name_rules}
+  1. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。
+  2. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数（如 --port）、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
+  3. {object_name_rules}
 
 BATCH_EXTRACTION_PROMPT: |-
   你是 NoteAI 的语义编译器。只抽取各 Block 原文明确支持的知识，不补充外部知识。
@@ -56,64 +45,20 @@ BATCH_EXTRACTION_PROMPT: |-
       {{
         "block_id": "输入中的原始 ID",
         "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-        "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}],
-        "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "只从该 block 原文逐字复制"}}]
+        "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}]
       }}
     ]
   }}
 
   规则：
-  1. Claim 不是普通事实。只允许作者的评价/比较/因果/趋势/预测/推荐等结论（conclusion），或明确待验证的假设/推测（hypothesis）。
-  2. 定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令/参数/API/配置说明、步骤、操作指引、示例、代码行为复述不得进入 claims；code 类型 Block 的 claims 必须为空。
-  3. 第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-  4. 主观评价/价值判断不是 Claim：如“X 最强大”“Y 更好用”“友好度最高”“优先级 P1”“no.1”这类主观比较与偏好陈述不得进入 claims。
-  4.5 格言、口号、警句式短句不是 Claim：“选择比努力更重要”“少而精，比多而杂强”这类无对象无场景的泛化断言不得进入 claims。
-  4.6 产品功能/系统行为描述不是 Claim：“忠实度下降自动告警”“负载过高自动降级”这类系统动作复述不是结论，不得进入 claims。
-  3. evidence_quote 必须逐字来自同一 block_id 的原文，不能跨 Block、不能改写。
-  4. 没有结论或假设的 Block 也必须返回，claims 为空；三个数组都无内容时均为空。
-  5. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。
-  6. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
-  7. {object_name_rules}
-
-CLAIM_EXTRACTION_PROMPT: |-
-  你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
-
-  块 ID：{block_id}
-  块类型：{block_type}
-  章节：{heading_path}
-  原文：
-  <source>
-  {content}
-  </source>
-
-  只输出 JSON：
-  {{"claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "从原文逐字复制"}}]}}
-
-  只有评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测才可进入 claims。
-  定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
-  第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-  主观评价/价值判断（“X 最强大”“更好用”“优先级 P1”等）也不是 Claim。
-  格言/口号式短句（“选择比努力更重要”“少而精，比多而杂强”）与产品功能/系统行为描述（“XX 自动告警”）同样不是 Claim。
-  code 类型块必须返回空 claims。evidence_quote 必须逐字来自原文。无结论或假设时返回 {{"claims": []}}。
-
-BATCH_CLAIM_EXTRACTION_PROMPT: |-
-  你是 NoteAI 的 Claim 编译器。本次只抽取结论与假设，不抽取 Concept 或 Entity。
-
-  {blocks}
-
-  必须为每个 block_id 返回一项，只输出 JSON：
-  {{"blocks": [{{"block_id": "原始 ID", "claims": [{{"statement": "作者得出的结论或提出的假设", "claim_type": "conclusion|hypothesis", "scope": "适用范围，可为空", "confidence": 0.0, "evidence_quote": "同一块原文逐字复制"}}]}}]}}
-
-  只允许评价、比较、因果、趋势、预测、推荐等结论，或明确待验证的假设/推测。
-  定义、术语解释、属性、数量（如“75+ 模型”“支持 75 种模型”）、日期数字、背景事实、命令、参数、API、配置、步骤、操作指引、示例和代码说明都不是 Claim。
-  第一人称主观意见（“我认为/我觉得/我的观点/主观上/我更偏好……”）不是 Claim；“作者认为/论文指出”等转述立场仍可抽取。
-  主观评价/价值判断（“X 最强大”“更好用”“优先级 P1”等）也不是 Claim。
-  格言/口号式短句（“选择比努力更重要”）与产品功能/系统行为描述（“XX 自动告警”）也不是 Claim。
-  code 类型块和没有结论/假设的块必须返回空 claims。不能遗漏、合并或改写 block_id。
+  1. 没有可抽取内容的 Block 也必须返回，两个数组均为空。
+  2. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。
+  3. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
+  4. {object_name_rules}
 
 REPAIR_SUFFIX: |-
   你上次的输出未通过编译器校验：{error}
   <invalid-output>
   {invalid_output}
   </invalid-output>
-  请只修复 JSON 结构或证据字段，仍然只能使用 source 中的原文。只输出修复后的 JSON。
+  请只修复 JSON 结构，仍然只能使用 source 中的原文。只输出修复后的 JSON。

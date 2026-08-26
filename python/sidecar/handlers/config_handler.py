@@ -189,7 +189,7 @@ class ConfigHandler(BaseHandler):
             if "semantic_workbench_tabs" in params:
                 tabs = params["semantic_workbench_tabs"]
                 if isinstance(tabs, list):
-                    valid_tabs = {"objects", "claims", "quality", "conflicts", "links", "brief"}
+                    valid_tabs = {"objects", "quality", "links", "brief"}
                     cleaned = [str(tab) for tab in tabs if str(tab) in valid_tabs]
                     if cleaned:
                         self.config.semantic_workbench_tabs = cleaned

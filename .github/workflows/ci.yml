@@ -94,11 +94,6 @@ jobs:
       - name: Build webui bundle + highlight
         run: npm run build:webui:min && npm run build:highlight
 
-      - name: Verify committed webui dist is current
-        run: |
-          git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js webui/js/storage.bundle.js
-          test -z "$(git status --porcelain webui/dist/main.js webui/highlight.min.js webui/lib/tiptap-bundle.js webui/js/storage.bundle.js)"
-
       - name: Syntax check webui/js
         run: |
           for f in webui/js/*.js; do
@@ -110,12 +105,6 @@ jobs:
       - name: Typecheck webui TS (progressive migration)
         run: npx tsc --noEmit -p webui/js/tsconfig.json
 
-      - name: Test mcp-server
-        working-directory: mcp-server
-        run: |
-          npm ci
-          npm test
-
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
@@ -126,6 +115,9 @@ jobs:
 
       - name: Verify RPC whitelist consistency (Python ↔ Rust ↔ api.js)
         run: uv run python scripts/sync_rpc_whitelist.py
+
+      - name: Verify webui assets resolve after build
+        run: uv run pytest tests/unit/test_webui_assets.py tests/unit/test_webui_smoke.py -q
 
   rust-check:
     runs-on: ubuntu-latest

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from sidecar.cli_agent.agents.claude_mcp import ClaudeMcpAgent
 from sidecar.cli_agent.agents.codex import CodexAgent
 from sidecar.cli_agent.agents.gemini import GeminiAgent
 from sidecar.cli_agent.agents.kimi import KimiAgent
@@ -18,13 +17,9 @@ class AgentRegistry:
     所有支持的 agent 都在这里注册。新增 agent 时：
     1. 在 agents/ 下创建子类
     2. 在 _AGENTS 字典中注册
-
-    Claude 默认走 MCP 模式（spawn Claude CLI + --mcp-config）。
-    其余 agent 启动前也会自动注册 NoteAI vault MCP server。
     """
 
     _AGENTS: dict[str, type[BaseCliAgent]] = {
-        ClaudeMcpAgent.agent_id: ClaudeMcpAgent,
         OpenCodeAgent.agent_id: OpenCodeAgent,
         CodexAgent.agent_id: CodexAgent,
         GeminiAgent.agent_id: GeminiAgent,

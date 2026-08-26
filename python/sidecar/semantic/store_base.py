@@ -2,7 +2,7 @@
 
 ``SemanticStoreBase`` owns connection creation, the transaction context and
 the cross-family audit/change-log helpers.  The per-family stores
-(documents/objects/claims/audit) inherit it; the ``SemanticStore`` facade
+(documents/objects/audit) inherit it; the ``SemanticStore`` facade
 orchestrates schema initialization order across all families.
 """
 
@@ -18,8 +18,7 @@ from uuid import uuid4
 
 from config.settings import WORKSPACE_APP_FOLDER
 
-SCHEMA_VERSION = 5
-CLAIM_POLICY_VERSION = 6
+SCHEMA_VERSION = 6
 # 抽取指纹算法版本：变更 name_fingerprint 算法时递增，initialize() 会全量重算
 # 存量对象的 name_fingerprint（如 v2 → v3 的标点变体归一：DALL-E/DALL·E）。
 FINGERPRINT_ALGORITHM_VERSION = 3
@@ -176,41 +175,6 @@ class SemanticStoreBase:
         if row is None:
             return "", ""
         return str(row["path"] or ""), str(row["topic"] or "")
-
-    @staticmethod
-    def _invalidate_orphan_claims(
-        conn: sqlite3.Connection,
-        *,
-        reason: str,
-        source_path: str = "",
-        topic: str = "",
-        detail: dict | None = None,
-    ) -> int:
-        """Record then delete claims that lost their last supporting evidence."""
-        orphans = conn.execute(
-            """SELECT c.id AS id, c.statement AS statement FROM claims c
-               WHERE NOT EXISTS (SELECT 1 FROM evidence e WHERE e.claim_id = c.id)"""
-        ).fetchall()
-        payload = {"reason": reason}
-        if detail:
-            payload.update(detail)
-        for row in orphans:
-            SemanticStoreBase._record_change(
-                conn,
-                change_kind="invalidated",
-                object_kind="claim",
-                object_id=row["id"],
-                label=row["statement"],
-                detail=payload,
-                source_path=source_path,
-                topic=topic,
-            )
-        if orphans:
-            conn.execute(
-                """DELETE FROM claims
-                   WHERE NOT EXISTS (SELECT 1 FROM evidence WHERE evidence.claim_id = claims.id)"""
-            )
-        return len(orphans)
 
     @staticmethod
     def _audit(

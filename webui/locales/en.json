@@ -5,23 +5,17 @@
     "save": "Save",
     "saved": "Saved",
     "loading": "Loading…",
-    "loadingAlt": "Loading…",
-    "error": "Error",
     "unknownError": "Unknown error",
-    "retry": "Retry",
     "skip": "Skip",
     "apply": "Apply",
     "resetDefault": "Reset defaults",
     "collapse": "Collapse",
     "noWorkspace": "No workspace",
-    "noData": "No data",
-    "items": "items",
     "notesCount": "{count} notes",
     "tagsCount": "{count} tags",
     "linksCount": "{count} links",
     "pendingCount": "{count} items",
     "pendingRemaining": "{count} pending",
-    "modified": "Modified",
     "or": "or",
     "timeJustNow": "Just now",
     "timeMinutesAgo": "{count} min ago",
@@ -29,25 +23,19 @@
     "timeDaysAgo": "{count} days ago",
     "timeMonthDay": "{month}/{day}",
     "confirmDelete": "Confirm delete",
-    "confirmDeleteTopic": "Confirm delete topic",
     "confirm": "Confirm",
     "file": "File",
     "backendError": "Backend error",
-    "errorOccurred": "An error occurred",
-    "ok": "OK"
+    "errorOccurred": "An error occurred"
   },
   "titlebar": {
     "webDownload": "Download from web",
     "importFiles": "Import files",
     "openWorkspace": "Open workspace",
-    "tree": "File tree",
-    "tags": "Tags",
-    "links": "Bidirectional links",
     "closePreview": "Close preview",
     "pending": "Pending",
     "aiAssistant": "AI assistant",
     "edit": "Edit",
-    "semanticWorkbench": "Semantic workbench",
     "relationGraph": "Relation graph",
     "search": "Search (Cmd+K)",
     "settings": "Settings",
@@ -57,10 +45,6 @@
   },
   "sidebar": {
     "collapse": "Collapse sidebar",
-    "inbox": "Inbox",
-    "allNotes": "All notes",
-    "archive": "Archive",
-    "folders": "Folders",
     "newTopic": "New topic",
     "newNote": "New note",
     "tagPlaceholder": "Enter tag name…",
@@ -69,17 +53,12 @@
     "addTagTitle": "Create a new tag"
   },
   "semantic": {
-    "eyebrow": "Semantic IR",
     "title": "Semantic relationship workbench",
-    "subtitle": "Review conclusions, evidence, concepts, entities, conflict candidates, and bidirectional links",
     "refresh": "Refresh",
     "searchPlaceholder": "Search this view",
     "loadFailed": "Could not load semantic data: {error}",
     "empty": "No data in this view",
     "emptyConflicts": "No controlled conflict candidates were found. This does not prove that the knowledge base has no contradictions.",
-    "notCompiled": "Semantic compilation has not completed",
-    "updatedAt": "Last compiled {time}",
-    "conflictCount": "{count} conflicts to review",
     "rescanConflicts": "Rescan",
     "scanConflictsDone": "Conflict scan complete",
     "scope": "Scope: {scope}",
@@ -96,7 +75,6 @@
     "verifyClaim": "Verify online",
     "verifyRunning": "Researching…",
     "verifyDone": "Verification complete",
-    "verifyNoAgent": "Select a research agent first",
     "verifyViaLlm": "API LLM (DeepSeek reasoning)",
     "verifyStart": "Research started…",
     "verifyFailed": "Research failed",
@@ -243,7 +221,6 @@
       "fallback": "No LLM configured or generation failed — showing the structured change log",
       "noTopics": "No semantic changes in the last {days} days — no topics available",
       "noTopicSelected": "Select a topic first",
-      "empty": "Select a topic and click Generate brief",
       "windowLabel": "Semantic changes in the last {days} days",
       "copy": "Copy",
       "copied": "Copied",
@@ -261,8 +238,6 @@
     "empty": "Nothing pending",
     "allDone": "All done",
     "allDoneCelebration": "All done",
-    "inboxTitle": "Inbox",
-    "activityTitle": "Activity",
     "healthCheck": "Health check",
     "scanMergeCandidates": "Scan merge suggestions",
     "scanningMergeCandidates": "Scanning…",
@@ -308,21 +283,23 @@
     "operationFailed": "Operation failed",
     "logEmpty": "No activity yet",
     "todoBadge": "Pending items ({count})",
-    "todoBadgeEmpty": "Pending items"
+    "todoBadgeEmpty": "Pending items",
+    "mergeCoverage": "Coverage {coverage}%",
+    "mergeReasonOverlap": "Content overlap",
+    "mergeReasonSemantic": "Semantically related",
+    "mergeScores": "Content {content}% · Title {title}% · Topic {topic}%",
+    "previewTopicMergeConflicts": "{count} name conflicts (auto-renamed on merge, nothing overwritten):",
+    "previewTopicMergeSummary": "{count} notes will be migrated to the new topic",
+    "previewTopicMergeSurveys": "{count} affected surveys (will be updated):",
+    "retryStarted": "Task started; the view will refresh when done",
+    "rewriteSurvey": "Rewrite survey"
   },
   "graph": {
     "stats": {
-      "notes": "Notes",
       "topics": "Topics",
       "survey": "Survey",
-      "avgLinks": "Avg links",
-      "surveyHint": "Survey coverage for L1/L2 topics",
-      "avgLinksHint": "Average outbound links per note",
-      "lintHint": "Total Lint issues",
       "notesSuffix": " notes",
-      "topicsSuffix": " topics",
-      "surveyLabel": "Survey ",
-      "avgLinksLabel": "Avg "
+      "topicsSuffix": " topics"
     },
     "filter": {
       "topic": "Topics",
@@ -351,8 +328,7 @@
       "concept": "Concept",
       "doc": "Note",
       "edge": "Co-occurrence",
-      "empty": "No semantic objects in current scope",
-      "hint": "Nodes are entities/concepts (blue=entity, purple=concept); edges are co-occurrence relations (thickness = shared source blocks). Click an object to open the semantic workbench, click a note to open it."
+      "empty": "No semantic objects in current scope"
     },
     "toggleFilenames": "Toggle filenames",
     "zoomIn": "Zoom in",
@@ -361,7 +337,6 @@
     "replay": "Replay animation",
     "refresh": "Refresh graph",
     "layoutSettings": "Layout settings",
-    "close": "Close graph",
     "loading": "Loading…",
     "empty": "No data",
     "paramGroup": {
@@ -441,10 +416,6 @@
       "replayRevealMinMs": "Reveal min interval (ms)",
       "replayRevealMaxMs": "Reveal max interval (ms)",
       "replayRevealBudgetMs": "Replay total budget (ms)"
-    },
-    "auto": {
-      "图谱数据格式异常": "graph数据格式异常:",
-      "图谱加载失败": "graphload失败:"
     }
   },
   "preview": {
@@ -513,7 +484,6 @@
     "labelSuffix": "(draft)",
     "untitled": "Untitled",
     "editorUnavailable": "Editor unavailable; cannot open draft",
-    "moduleUnavailable": "Draft module not loaded",
     "apiUnavailable": "Save API unavailable",
     "noActiveDraft": "No draft to save",
     "discard": "Discard draft",
@@ -525,25 +495,15 @@
   },
   "assistant": {
     "panelTitle": "RAG Assistant",
-    "mode": {
-      "rag": "RAG",
-      "cli": "CLI",
-      "qa": "Q&A mode"
-    },
     "send": "Send",
     "name": "RAG Assistant",
     "userLabel": "You",
     "system": "System",
-    "welcome": "Hi! I'm the RAG Assistant. I search your notes and surveys to answer questions—just ask.",
-    "ragPlaceholder": "Ask this knowledge base...",
     "cli": {
-      "selectTitle": "Choose external AI agent CLI",
-      "placeholder": "Send to {agent}...",
-      "pending": "{agent} is connected and ready for file-operation instructions."
+      "placeholder": "Send to {agent}..."
     },
     "requestFailed": "Request failed",
     "timeout": "Request timed out. Check API settings or try again.",
-    "userAvatar": "Robodog",
     "requestFailedMsg": "Request failed: {message}",
     "indexBuildDone": "Index built: {count} chunks",
     "indexBuildFailed": "Index build failed: {message}",
@@ -576,8 +536,7 @@
     "askKb": "Ask KB",
     "searchNotes": "Search notes",
     "webSearch": "Web search",
-    "copy": "Copy",
-    "ragPrompt": "Explain the selected term or sentence using the knowledge base:\n\n{text}\n\nFirst explain the meaning, then connect it to related topics or notes in this workspace, with citations."
+    "copy": "Copy"
   },
   "settings": {
     "topicThresholdApplied": "Threshold applied; moved {count} notes automatically",
@@ -636,9 +595,6 @@
     "semanticIntensityDeep": "Deep (everything)",
     "semanticIntensityDesc": "Light shows only high-confidence items; Deep shows everything, including low-confidence and legacy data.",
     "semanticAtLeastOneTab": "Keep at least one category",
-    "contentFonts": "Reading fonts",
-    "sidebarFont": "Left columns",
-    "previewFont": "Preview body",
     "fontSystem": "System",
     "fontSans": "Modern sans",
     "fontSerif": "Serif",
@@ -657,7 +613,6 @@
     "fontStyleBold": "Bold",
     "fontStyleItalic": "Italic",
     "fontStyleBoldItalic": "Bold italic",
-    "experimental": "Experimental",
     "saveConfig": "Save settings",
     "llmApi": "LLM API",
     "modelHint": "Used by built-in pipelines: ingest classification, survey generation, and RAG HyDE. CLI agents use their own API keys, separate from here.",
@@ -735,7 +690,6 @@
     "cliGenerateMdRunning": "Generating…",
     "cliGenerateMdDone": "Generated: {path}",
     "cliGenerateMdFailed": "Generation failed: {message}",
-    "assistantIntro1": "The RAG Assistant is your knowledge Q&A partner. It searches your compiled notes and topic surveys to answer questions, with citations you can open and verify.",
     "ragModeTitle": "Retrieval mode",
     "ragModeLabel": "Vector RAG retrieval",
     "ragModeDesc": "Off (default): topic tree + full-text search, fewer dependencies. On: semantic search via vector index.",
@@ -784,20 +738,6 @@
     "aboutTech": "Tech stack:",
     "aboutTechLine": "Tauri v2 + Python Sidecar + D3.js",
     "aboutTechDesc": "Rust desktop shell, Python AI sidecar, D3.js graph.",
-    "auto": {
-      "关于我": "## About me",
-      "职业": "- Occupation:",
-      "专业领域": "- Expertise:",
-      "兴趣": "- Interests:",
-      "学习目标": "- Learning goals:",
-      "偏好": "## Preferences",
-      "回答风格": "- Response style:",
-      "详细": "Detailed",
-      "简洁": "Concise",
-      "回答深度": "- Response depth:",
-      "通俗向": "Beginner-friendly",
-      "技术向": "Technical"
-    },
     "reliabilityBackupTitle": "Workspace backup",
     "reliabilityBackupHint": "Packages Notes, wiki, Raw and workspace metadata (rebuildable indices and caches excluded). Indices are not backed up; rebuild after restore.",
     "reliabilityBackupBtn": "Back up now",
@@ -834,7 +774,6 @@
     "filterTopic": "Filter by topic",
     "filterTag": "Filter by tag",
     "unavailable": "Search unavailable",
-    "searching": "Searching…",
     "failed": "Search failed",
     "loading": "Searching…",
     "error": "Search error: {message}",
@@ -952,12 +891,7 @@
       "gained": "Learned",
       "corrected": "Refined",
       "doubted": "Open to question",
-      "removed": "No longer kept",
-      "added": "Added",
-      "updated": "Updated",
-      "invalidated": "Invalidated",
-      "pending": "Pending",
-      "more": "and {count} more items"
+      "removed": "No longer kept"
     },
     "pendingTitle": "Pending sources",
     "openPending": "Open",
@@ -973,7 +907,6 @@
     "statusComplete": "Complete",
     "statusFailed": "Failed",
     "statusCancelled": "Cancelled",
-    "startIngest": "Start organizing",
     "checkUpdates": "Check updates",
     "checkingUpdates": "Checking…",
     "flow": {
@@ -1004,12 +937,10 @@
   "ingest": {
     "label": "Ingest",
     "retry": "Retry",
-    "cancel": "Cancel ingest",
     "retryTitle": "Retry ingest",
     "cancelTitle": "Cancel ingest",
     "stage": {
       "rules": "Rules",
-      "schema": "Rules",
       "convert": "Convert",
       "compile": "Compile",
       "classify": "Classify",
@@ -1063,21 +994,6 @@
     "extractTopicsFirst": "Select topics below first"
   },
   "links": {
-    "title": "Bidirectional links",
-    "loadFailed": "Could not load links",
-    "empty": "No links yet",
-    "configureApiKey": "Configure API Key in Settings first",
-    "apiConfigFailed": "Could not load API config: ",
-    "checking": "Checking…",
-    "testingApi": "Testing API connection…",
-    "apiFailed": "API connection failed: ",
-    "apiTestError": "API test error: ",
-    "analyzing": "Analyzing…",
-    "buildingPairs": "Reading files and building candidate pairs…",
-    "discoverDone": "Done: scanned {files} files, found {count} new links",
-    "discoverNone": "Done: scanned {files} files, no new links",
-    "discoverFailed": "Discovery failed",
-    "startFailed": "Start failed",
     "confirmAllBtn": "Confirm all"
   },
   "quickCreate": {
@@ -1089,12 +1005,6 @@
     "templateMeeting": "Meeting",
     "templateResearch": "Research",
     "templateTask": "Task",
-    "noteTitle": "Title",
-    "noteTitlePlaceholder": "Note title",
-    "noteTopic": "Topic (optional)",
-    "noteUncategorizedHint": "Saved to Notes/_uncategorized/ if no topic",
-    "createAndOpen": "Create & open",
-    "createDraft": "Create draft",
     "topicName": "Topic name",
     "topicNamePlaceholder": "e.g. Agent basics",
     "topicParent": "Parent topic (optional)",
@@ -1102,10 +1012,7 @@
     "createTopic": "Create topic",
     "uncategorized": "(None / uncategorized)",
     "enterTopicName": "Enter a topic name",
-    "enterNoteTitle": "Enter a note title",
     "topicCreated": "Topic created",
-    "noteCreated": "Note created",
-    "draftOpened": "Draft opened. Edits auto-save locally when you pause; click Save in the status bar to write to the workspace.",
     "createFailed": "Create failed: {message}"
   },
   "organizeRules": {
@@ -1164,13 +1071,7 @@
     "updatingSurvey": "Updating survey: {topic}",
     "surveyNewTopic": "New topic created with survey",
     "surveyUpdated": "Survey updated",
-    "cascadeFailed": "Cascade update failed: {topic}",
-    "auto": {
-      "App_合并重复主题": "[App] 合并重复topic:",
-      "个_去重文件": "个, 去重files:",
-      "个": "个",
-      "完成": "Done"
-    }
+    "cascadeFailed": "Cascade update failed: {topic}"
   },
   "confirm": {
     "cancel": "Cancel",
@@ -1180,20 +1081,15 @@
     "revealInFinder": "Reveal in Finder",
     "openInNewWindow": "Open in new window",
     "deleteTopic": "Delete topic",
-    "deleteFolder": "Delete folder",
     "deleteTopicFolder": "Delete topic folder",
     "delete": "Delete",
-    "deleteTopicConfirm": "Delete topic \"{name}\"? (Files move to Notes root)",
     "deleteConfirm": "Delete \"{name}\"?",
     "deleteTopicFolderConfirm": "Delete topic folder \"{name}\"?",
     "deleteTopicFolderDetail": "This will delete the topic ({path}) and its associated folder and files.",
     "deleteTopicFolderWarning": "This action cannot be undone. Deleted data cannot be recovered.",
-    "deleteTopicFolderFailed": "Delete topic folder failed: ",
     "deleteTopicFolderError": "Delete topic folder error: ",
     "deleteFolderFailed": "Delete folder failed: ",
     "enterTopicName": "Enter new topic name:\n\nCreates folder and auto-matches files.",
-    "deleteTopicFailed": "Delete topic failed: ",
-    "deleteTopicError": "Delete topic error: ",
     "createTopicFailed": "Create topic failed: ",
     "createTopicError": "Create topic error: ",
     "deleteFailed": "Delete failed: ",
@@ -1281,13 +1177,9 @@
     "mergeTopicBody": "Merge {source} into {target}",
     "acceptSuggestion": "Accept",
     "rejectSuggestion": "Reject",
-    "customTopicPlaceholder": "Enter custom topic",
     "suggestionTopicPlaceholder": "Enter topic name",
     "pendingHeader": "Topics to confirm",
-    "dragToFolderHint": "Drag to a folder on the left to file it; click an AI suggestion to move it now",
-    "auto": {
-      "Topic_主题创建成功": "[Topic] topiccreate成功:"
-    }
+    "dragToFolderHint": "Drag to a folder on the left to file it; click an AI suggestion to move it now"
   },
   "tags": {
     "loading": "Loading tags…",
@@ -1323,73 +1215,18 @@
     "author": "Author: Sihai",
     "opensource": "Open source · GitHub: Miles128/NoteAI"
   },
-  "api": {
-    "auto": {
-      "分页预览读取失败": "分页preview读取失败",
-      "设置工作区失败": "settingsworkspace失败",
-      "未选择文件夹": "未选择folder"
-    }
-  },
-  "converter": {
-    "auto": {
-      "正在准备转换": "正在准备convert...",
-      "转换完成": "Conversion complete",
-      "转换失败": "convert失败：",
-      "转换失败_2": "convert失败:"
-    }
-  },
-  "state": {
-    "auto": {
-      "加载_API_配置失败": "load API config失败:",
-      "加载_UI_配置失败": "load UI config失败:",
-      "加载主题偏好失败": "loadtopic偏好失败:",
-      "保存_API_配置失败": "save API config失败:",
-      "保存_UI_配置失败": "save UI config失败:",
-      "保存主题偏好失败": "savetopic偏好失败:"
-    }
-  },
-  "tiptapeditor": {
-    "auto": {
-      "解析排版": "Parsing layout…",
-      "summary_class_frontmatter_summary_元数据_summary": "<summary class=\"frontmatter-summary\">metadata</summary>",
-      "编辑器未加载_请重启应用": "editor未load，请重启应用",
-      "有未保存更改": "有未save更改..."
-    }
-  },
-  "topicTree": {
-    "auto": {
-      "加载主题树失败": "loadtopic树失败:",
-      "div_class_tier_label_一级标题_div": "<div class=\"tier-label\">Level 1title</div>",
-      "div_class_pending_topics_div_class_tier_label_待确": "<div class=\"pending-topics\"><div class=\"tier-label\">待confirm</div>",
-      "综述": " survey",
-      "h4_name_h4_p_加载失败或无文件_p": "<h4>${name}</h4><p>load失败或无files</p>",
-      "div_class_new_folder_btn_onclick_TopicTree3Tier_": "<div class=\"new-folder-btn\" onclick=\"TopicTree3Tier.showNewFolder('${this.esc(name)}', ${level})\"> + 新建子folder</div>",
-      "div_class_abstract_toggle_label_input_type_check": "<div class=\"abstract-toggle\"> <label><input type=\"checkbox\" onchange=\"TopicTree3Tier.toggleAbstract('${this.esc(name)}', ${level}, this.checked)\"> 生成survey</label> </div>",
-      "div_class_delete_btn_onclick_TopicTree3Tier_dele": "<div class=\"delete-btn\" onclick=\"TopicTree3Tier.deleteTopic('${this.esc(name)}', ${level})\">delete此title</div>",
-      "加载文件列表失败": "loadfiles列表失败:",
-      "在_parentName_下新建文件夹_将自动判定层级": "在「${parentName}」下新建folder（将自动判定层级）:",
-      "确定删除_name_吗_此操作不可撤销": "确定delete「${name}」吗？此操作不可撤销。"
-    }
-  },
   "workspace": {
     "sample": {
       "button": "Try sample workspace",
       "creating": "Creating sample workspace…",
       "ready": "Sample workspace is ready. Configure your LLM in Settings to compile semantic knowledge.",
       "failed": "Failed to create sample workspace"
-    },
-    "auto": {
-      "button_class_workspace_btn_onclick_window_Worksp": "<button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开workspace\"> ${window.Icons.get('folderFilled')} <span>打开workspace</span> </button>",
-      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
-      "检查工作区状态失败": "检查workspace状态失败:"
     }
   },
   "noteList": {
     "title": "Notes",
     "empty": "Select a topic to view notes",
-    "emptyTopic": "No notes in this topic",
-    "noSearchResult": "No matching notes",
-    "searchPlaceholder": "Search notes..."
+    "emptyTopic": "No notes in this topic"
   },
   "inspector": {
     "ai": "Chat",
@@ -1418,25 +1255,17 @@
     "generating": "Generating AGENTS.md...",
     "generateSuccess": "AGENTS.md generated",
     "generateFailed": "Generation failed",
-    "notInstalled": "Not installed",
     "starting": "Starting",
     "running": "Running…",
     "stop": "Stop",
     "stopped": "Task stopped",
-    "stopHint": "Click Stop to interrupt the current task",
     "timeoutWarningTotal": "Running for over {seconds}s — still in progress. You can stop anytime.",
     "timeoutWarningIdle": "No new output for {seconds}s — the agent may still be working. You can stop anytime.",
-    "workflow": "Workflow",
     "workflowRunning": "Running",
-    "workflowSteps": "Workflow ({count} steps)",
     "workflowStepsShort": "{count} steps",
-    "workflowDetails": "Details",
-    "reasoning": "Reasoning",
     "newSession": "New chat",
     "newSessionDone": "Started a new chat",
     "sessionContinue": "Continuing",
-    "sessionFresh": "New chat",
-    "completed": "Completed",
     "failed": "Failed",
     "tool": {
       "readNote": "Read note “{name}”",

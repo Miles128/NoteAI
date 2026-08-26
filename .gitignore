@@ -108,3 +108,6 @@ webui/dist/
 webui/highlight.min.js
 webui/js/storage.bundle.js
 webui/lib/tiptap-bundle.js
+
+# mcp-runtime 已移除（C4），忽略历史遗留本地产物
+src-tauri/resources/mcp-runtime/

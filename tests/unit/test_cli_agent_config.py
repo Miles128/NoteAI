@@ -29,10 +29,10 @@ def test_save_ui_config_updates_cli_agent_id(monkeypatch: pytest.MonkeyPatch) ->
     handler = ConfigHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
     monkeypatch.setattr(config, "save", lambda *args, **kwargs: (True, "ok"))
 
-    result = handler._save_ui_config({"cli_agent_id": "claude_mcp"})
+    result = handler._save_ui_config({"cli_agent_id": "kimi"})
     assert result["success"] is True
-    assert config.cli_agent_id == "claude_mcp"
-    assert handler._get_ui_config({})["cli_agent_id"] == "claude_mcp"
+    assert config.cli_agent_id == "kimi"
+    assert handler._get_ui_config({})["cli_agent_id"] == "kimi"
 
     cleared = handler._save_ui_config({"cli_agent_id": ""})
     assert cleared["success"] is True

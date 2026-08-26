@@ -18,7 +18,6 @@ from sidecar.cli_agent.process_control import CliProcessHandle, TimeoutWatcher, 
 from sidecar.cli_agent.workspace_bounds import (
     apply_workspace_bounds_env,
 )
-from sidecar.mcp_config_manager import register_mcp_server
 from utils.logger import logger
 
 EventEmitter = Callable[[dict[str, Any]], None]
@@ -63,8 +62,6 @@ class BaseCliAgent(ABC):
     command: str = ""
     aliases: list[str] | None = None
     env_keys: list[str] | None = None
-    # 非空时在 run() 前自动注册 NoteAI vault MCP server
-    mcp_target: str | None = None
     # 是否支持 CLI 原生 session/continue（不支持则每次独立 run）
     supports_cli_session: bool = True
 
@@ -152,22 +149,6 @@ class BaseCliAgent(ABC):
         except Exception:
             pass
 
-    def _ensure_mcp_registered(self, workspace: Path) -> str | None:
-        """启动前注册 NoteAI vault MCP；失败时返回错误信息。"""
-        if not self.mcp_target:
-            return None
-        result = register_mcp_server(
-            targets=[self.mcp_target],
-            workspace_path=str(workspace),
-        )
-        registered = result.get("registered") or []
-        if registered:
-            return None
-        errors = result.get("errors") or []
-        if errors:
-            return f"MCP 配置注册失败: {errors[0]}"
-        return None
-
     def run(
         self,
         prompt: str,
@@ -221,10 +202,6 @@ class BaseCliAgent(ABC):
             clear_session(self.agent_id, ws_key)
 
         continue_session = self.supports_cli_session and has_session(self.agent_id, ws_key)
-
-        mcp_error = self._ensure_mcp_registered(ws_path)
-        if mcp_error:
-            return AgentResult(False, mcp_error)
 
         try:
             args = self.build_args(

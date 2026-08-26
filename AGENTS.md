@@ -50,7 +50,7 @@ uv sync --extra dev --extra rag --extra ingest   # 安装依赖（RAG 与采集�
 uv run pytest                     # 运行测试
 ```
 
-依赖声明于 `pyproject.toml`；`uv.lock` 提交入库。前端依赖走 npm（`package.json`），`mcp-server/` 为独立 npm 包。
+依赖声明于 `pyproject.toml`；`uv.lock` 提交入库。前端依赖走 npm（`package.json`）。
 
 ### 1.6 Git 仓库配置
 

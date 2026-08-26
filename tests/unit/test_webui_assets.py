@@ -23,17 +23,31 @@ def test_index_referenced_local_assets_exist() -> None:
     assert missing == []
 
 
-def test_required_generated_assets_are_not_gitignored() -> None:
-    required = ["webui/lib/tiptap-bundle.js"]
-    result = subprocess.run(
-        ["git", "check-ignore", *required],
+def test_generated_assets_are_gitignored_and_untracked() -> None:
+    """构建产物一律不入库：由 npm run build:* / tauri beforeDevCommand 重新生成。"""
+    generated = [
+        "webui/dist/main.js",
+        "webui/highlight.min.js",
+        "webui/js/storage.bundle.js",
+        "webui/lib/tiptap-bundle.js",
+    ]
+    ignored = subprocess.run(
+        ["git", "check-ignore", *generated],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
+    assert sorted(ignored.stdout.split()) == sorted(generated)
 
-    assert result.stdout.strip() == ""
+    tracked = subprocess.run(
+        ["git", "ls-files", *generated],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert tracked.stdout.strip() == ""
 
 
 def test_node_modules_is_not_tracked() -> None:

@@ -285,9 +285,7 @@ declare global {
         getTauriEventAPI: () => any;
         Storage: StorageModule;
         state: StateModule;
-        apiConfig: ApiConfig | null;
         uiConfig: UiConfig | null;
-        themePreference: string | null;
         AppState: Record<string, any>;
         t: (key: string, params?: Record<string, string | number>) => string;
         I18nModule: I18nModule;
@@ -357,7 +355,6 @@ declare global {
             initWindowDrag?(): void;
         } | undefined;
         Graph3Tier: { pauseResize?(): void; resumeResize?(): void; load?(data?: any, silent?: boolean): void; stopSimulation?(): void; zoomIn?(): void; zoomOut?(): void; zoomReset?(): void } | undefined;
-        Graph: { refresh?(): void; applyLayout?(): void; setSelected?(): void } | undefined;
         HomeDashboardModule: {
             refresh?(): void;
             init?(): void;

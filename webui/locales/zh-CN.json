@@ -5,23 +5,17 @@
     "save": "保存",
     "saved": "已保存",
     "loading": "加载中...",
-    "loadingAlt": "加载中…",
-    "error": "错误",
     "unknownError": "未知错误",
-    "retry": "重试",
     "skip": "跳过",
     "apply": "应用",
     "resetDefault": "恢复默认",
     "collapse": "收起",
     "noWorkspace": "暂无工作区",
-    "noData": "暂无数据",
-    "items": "项",
     "notesCount": "{count} 篇笔记",
     "tagsCount": "{count} 个标签",
     "linksCount": "{count} 个链接",
     "pendingCount": "{count} 项",
     "pendingRemaining": "{count} 项待处理",
-    "modified": "已修改",
     "or": "或",
     "timeJustNow": "刚刚",
     "timeMinutesAgo": "{count} 分钟前",
@@ -29,25 +23,19 @@
     "timeDaysAgo": "{count} 天前",
     "timeMonthDay": "{month} 月 {day} 日",
     "confirmDelete": "确认删除",
-    "confirmDeleteTopic": "确认删除主题",
     "confirm": "确认",
     "file": "文件",
     "backendError": "后端错误",
-    "errorOccurred": "发生错误",
-    "ok": "确定"
+    "errorOccurred": "发生错误"
   },
   "titlebar": {
     "webDownload": "网页下载",
     "importFiles": "导入文件",
     "openWorkspace": "打开工作区",
-    "tree": "目录树",
-    "tags": "标签",
-    "links": "双向链接",
     "closePreview": "关闭预览",
     "pending": "待处理",
     "aiAssistant": "AI 助手",
     "edit": "编辑",
-    "semanticWorkbench": "语义关系工作台",
     "relationGraph": "关系图谱",
     "search": "搜索 (Cmd+K)",
     "settings": "设置",
@@ -57,10 +45,6 @@
   },
   "sidebar": {
     "collapse": "收起侧边栏",
-    "inbox": "收件箱",
-    "allNotes": "全部笔记",
-    "archive": "归档",
-    "folders": "文件夹",
     "newTopic": "新建主题",
     "newNote": "新建笔记",
     "tagPlaceholder": "输入标签名称...",
@@ -69,17 +53,12 @@
     "addTagTitle": "新加标签：创建新的标签分类"
   },
   "semantic": {
-    "eyebrow": "Semantic IR",
     "title": "语义关系工作台",
-    "subtitle": "审阅结论、证据、概念实体、冲突候选与双向链接",
     "refresh": "刷新",
     "searchPlaceholder": "搜索当前视图",
     "loadFailed": "语义数据加载失败：{error}",
     "empty": "当前视图暂无数据",
     "emptyConflicts": "当前没有受控冲突候选；这不代表知识库中一定不存在矛盾。",
-    "notCompiled": "尚未完成语义编译",
-    "updatedAt": "最近编译 {time}",
-    "conflictCount": "{count} 项待审阅冲突",
     "rescanConflicts": "重新扫描",
     "scanConflictsDone": "冲突扫描完成",
     "scope": "适用范围：{scope}",
@@ -96,7 +75,6 @@
     "verifyClaim": "联网核查",
     "verifyRunning": "深度研究中…",
     "verifyDone": "核查完成",
-    "verifyNoAgent": "请先选择核查 agent",
     "verifyViaLlm": "API LLM（DeepSeek 推理）",
     "verifyStart": "开始研究…",
     "verifyFailed": "研究失败",
@@ -243,7 +221,6 @@
       "fallback": "未配置 LLM 或生成失败，以下为结构化变化记录",
       "noTopics": "过去 {days} 天没有语义变化，暂无可生成简报的主题",
       "noTopicSelected": "请先选择主题",
-      "empty": "选择一个主题并点击「生成简报」",
       "windowLabel": "过去 {days} 天的语义变化",
       "copy": "复制",
       "copied": "已复制",
@@ -261,8 +238,6 @@
     "empty": "没有待处理的事项",
     "allDone": "所有事项已处理完毕",
     "allDoneCelebration": "所有事项已处理完毕",
-    "inboxTitle": "收件箱",
-    "activityTitle": "活动记录",
     "healthCheck": "健康检查",
     "scanMergeCandidates": "扫描合并建议",
     "scanningMergeCandidates": "扫描中…",
@@ -321,17 +296,10 @@
   },
   "graph": {
     "stats": {
-      "notes": "笔记",
       "topics": "主题",
       "survey": "综述",
-      "avgLinks": "均链",
-      "surveyHint": "一级/二级主题中有综述的占比",
-      "avgLinksHint": "每篇笔记平均出链数",
-      "lintHint": "Lint 问题总数",
       "notesSuffix": " 笔记",
-      "topicsSuffix": " 主题",
-      "surveyLabel": "综述 ",
-      "avgLinksLabel": "均链 "
+      "topicsSuffix": " 主题"
     },
     "filter": {
       "topic": "主题",
@@ -360,8 +328,7 @@
       "concept": "概念",
       "doc": "文档",
       "edge": "共现关系",
-      "empty": "当前范围没有语义对象",
-      "hint": "节点=实体/概念（蓝=实体、紫=概念），连线=共现关系（粗细=共同来源块数）。点击对象打开语义工作台，点击文档打开笔记。"
+      "empty": "当前范围没有语义对象"
     },
     "toggleFilenames": "显示/隐藏文件名",
     "zoomIn": "放大",
@@ -370,7 +337,6 @@
     "replay": "重放动画",
     "refresh": "刷新图谱",
     "layoutSettings": "布局参数",
-    "close": "关闭图谱",
     "loading": "加载中...",
     "empty": "暂无数据",
     "paramGroup": {
@@ -450,10 +416,6 @@
       "replayRevealMinMs": "逐层显示最短间隔 (ms)",
       "replayRevealMaxMs": "逐层显示最长间隔 (ms)",
       "replayRevealBudgetMs": "重播总时长预算 (ms)"
-    },
-    "auto": {
-      "图谱数据格式异常": "图谱数据格式异常:",
-      "图谱加载失败": "图谱加载失败:"
     }
   },
   "preview": {
@@ -522,7 +484,6 @@
     "labelSuffix": "(草稿)",
     "untitled": "未命名",
     "editorUnavailable": "编辑器不可用，无法打开草稿",
-    "moduleUnavailable": "草稿模块未加载",
     "apiUnavailable": "保存接口不可用",
     "noActiveDraft": "没有可保存的草稿",
     "discard": "作废草稿",
@@ -534,25 +495,15 @@
   },
   "assistant": {
     "panelTitle": "RAG助手",
-    "mode": {
-      "rag": "RAG",
-      "cli": "CLI",
-      "qa": "问答模式"
-    },
     "send": "发送",
     "name": "RAG助手",
     "userLabel": "你",
     "system": "系统",
-    "welcome": "你好，我是 RAG 助手，帮你从知识库检索笔记与综述来回答问题。有想问的直接告诉我就好。",
-    "ragPlaceholder": "问当前知识库...",
     "cli": {
-      "selectTitle": "选择外部 AI Agent CLI",
-      "placeholder": "发送给 {agent}...",
-      "pending": "{agent} 已连接，可直接发送文件操作指令。"
+      "placeholder": "发送给 {agent}..."
     },
     "requestFailed": "请求失败",
     "timeout": "响应超时，请检查 API 配置或稍后重试",
-    "userAvatar": "机器狗",
     "requestFailedMsg": "请求失败: {message}",
     "indexBuildDone": "知识库索引构建完成，共 {count} 个片段",
     "indexBuildFailed": "索引构建失败: {message}",
@@ -585,8 +536,7 @@
     "askKb": "问知识库",
     "searchNotes": "搜笔记",
     "webSearch": "联网搜索",
-    "copy": "复制",
-    "ragPrompt": "请基于知识库解释下面选中的词语或句子：\n\n{text}\n\n要求：先解释含义，再说明它在当前知识库中可能关联的主题或资料，并给出引用。"
+    "copy": "复制"
   },
   "settings": {
     "topicThresholdApplied": "阈值已应用，自动移动 {count} 篇笔记",
@@ -645,9 +595,6 @@
     "semanticIntensityDeep": "深度（全部）",
     "semanticIntensityDesc": "精简只显示置信度较高的内容；深度显示全部内容，包括低置信度与旧数据。",
     "semanticAtLeastOneTab": "至少保留一个类别",
-    "contentFonts": "阅读字体",
-    "sidebarFont": "左侧双栏",
-    "previewFont": "正文预览",
     "fontSystem": "系统默认",
     "fontSans": "现代黑体",
     "fontSerif": "宋体 / 衬线",
@@ -666,7 +613,6 @@
     "fontStyleBold": "粗体",
     "fontStyleItalic": "斜体",
     "fontStyleBoldItalic": "粗斜体",
-    "experimental": "实验功能",
     "saveConfig": "保存配置",
     "llmApi": "LLM API",
     "modelHint": "供内置流水线使用：入库分类、综述生成和 RAG HyDE。CLI Agent 使用各自 CLI 的 API Key，与此处独立。",
@@ -744,7 +690,6 @@
     "cliGenerateMdRunning": "正在生成…",
     "cliGenerateMdDone": "已生成: {path}",
     "cliGenerateMdFailed": "生成失败: {message}",
-    "assistantIntro1": "RAG 助手是你的知识库问答伙伴。它检索已编译的笔记与主题综述来回答，引用可点击定位与验证。",
     "ragModeTitle": "检索模式",
     "ragModeLabel": "向量 RAG 检索",
     "ragModeDesc": "关闭时使用主题树与全文搜索（默认，依赖更少）；开启后使用向量索引做语义检索",
@@ -793,20 +738,6 @@
     "aboutTech": "技术栈：",
     "aboutTechLine": "Tauri v2 + Python Sidecar + D3.js",
     "aboutTechDesc": "基于 Rust 构建桌面端，Python 提供 AI 能力，D3.js 渲染知识图谱。",
-    "auto": {
-      "关于我": "## 关于我",
-      "职业": "- 职业：",
-      "专业领域": "- 专业领域：",
-      "兴趣": "- 兴趣：",
-      "学习目标": "- 学习目标：",
-      "偏好": "## 偏好",
-      "回答风格": "- 回答风格：",
-      "详细": "详细",
-      "简洁": "简洁",
-      "回答深度": "- 回答深度：",
-      "通俗向": "通俗向",
-      "技术向": "技术向"
-    },
     "reliabilityBackupTitle": "工作区备份",
     "reliabilityBackupHint": "打包 Notes、wiki、Raw 与工作区元数据（排除可重建的索引与缓存）。备份不包含索引，恢复后需重建。",
     "reliabilityBackupBtn": "立即备份",
@@ -843,7 +774,6 @@
     "filterTopic": "主题过滤（含子串）",
     "filterTag": "标签过滤",
     "unavailable": "搜索不可用",
-    "searching": "搜索中...",
     "failed": "搜索失败",
     "loading": "搜索中...",
     "error": "搜索出错: {message}",
@@ -961,12 +891,7 @@
       "gained": "新学到",
       "corrected": "补充了看法",
       "doubted": "存疑待查",
-      "removed": "不再收录",
-      "added": "本周新增",
-      "updated": "本周更新",
-      "invalidated": "本周失效",
-      "pending": "待处理",
-      "more": "及其他 {count} 项"
+      "removed": "不再收录"
     },
     "pendingTitle": "待处理资料",
     "openPending": "查看",
@@ -982,7 +907,6 @@
     "statusComplete": "完成",
     "statusFailed": "失败",
     "statusCancelled": "已取消",
-    "startIngest": "开始整理",
     "checkUpdates": "检查更新",
     "checkingUpdates": "检查中…",
     "flow": {
@@ -1013,12 +937,10 @@
   "ingest": {
     "label": "入库",
     "retry": "重试",
-    "cancel": "取消入库",
     "retryTitle": "重新入库",
     "cancelTitle": "取消入库",
     "stage": {
       "rules": "规则",
-      "schema": "规则",
       "convert": "转换",
       "compile": "编译",
       "classify": "分类",
@@ -1072,21 +994,6 @@
     "extractTopicsFirst": "请先在下方选择主题"
   },
   "links": {
-    "title": "双向链接",
-    "loadFailed": "无法加载链接数据",
-    "empty": "暂无链接",
-    "configureApiKey": "请先在设置中配置 API Key",
-    "apiConfigFailed": "无法获取 API 配置: ",
-    "checking": "检查中",
-    "testingApi": "正在测试 API 连接",
-    "apiFailed": "API 连接失败: ",
-    "apiTestError": "API 连接测试出错: ",
-    "analyzing": "分析中",
-    "buildingPairs": "正在读取文件并构建候选对",
-    "discoverDone": "完成：扫描 {files} 个文件，发现 {count} 个新关联",
-    "discoverNone": "完成：扫描 {files} 个文件，未发现新关联",
-    "discoverFailed": "发现失败",
-    "startFailed": "启动失败",
     "confirmAllBtn": "全部确认"
   },
   "quickCreate": {
@@ -1098,12 +1005,6 @@
     "templateMeeting": "会议记录",
     "templateResearch": "研究笔记",
     "templateTask": "待办",
-    "noteTitle": "标题",
-    "noteTitlePlaceholder": "笔记标题",
-    "noteTopic": "主题（可选）",
-    "noteUncategorizedHint": "未选主题时保存到 Notes/_未分类/",
-    "createAndOpen": "创建并打开",
-    "createDraft": "创建草稿",
     "topicName": "主题名称",
     "topicNamePlaceholder": "例如：Agent 入门",
     "topicParent": "上级主题（可选）",
@@ -1111,10 +1012,7 @@
     "createTopic": "创建主题",
     "uncategorized": "（无 / 未分类）",
     "enterTopicName": "请输入主题名称",
-    "enterNoteTitle": "请输入笔记标题",
     "topicCreated": "主题已创建",
-    "noteCreated": "笔记已创建",
-    "draftOpened": "草稿已打开；停止输入后会自动保存草稿，点击底部「保存」写入工作区",
     "createFailed": "创建失败: {message}"
   },
   "organizeRules": {
@@ -1173,13 +1071,7 @@
     "updatingSurvey": "正在更新综述 {topic}",
     "surveyNewTopic": "新主题已创建并生成综述",
     "surveyUpdated": "综述已更新",
-    "cascadeFailed": "级联更新失败 {topic}",
-    "auto": {
-      "App_合并重复主题": "[App] 合并重复主题: ",
-      "个_去重文件": " 个, 去重文件: ",
-      "个": " 个",
-      "完成": "完成"
-    }
+    "cascadeFailed": "级联更新失败 {topic}"
   },
   "confirm": {
     "cancel": "取消",
@@ -1189,20 +1081,15 @@
     "revealInFinder": "在访达中显示",
     "openInNewWindow": "在新窗口打开",
     "deleteTopic": "删除主题",
-    "deleteFolder": "删除文件夹",
     "deleteTopicFolder": "删除主题文件夹",
     "delete": "删除",
-    "deleteTopicConfirm": "删除主题「{name}」？（文件将移至 Notes 根目录）",
     "deleteConfirm": "删除「{name}」？",
     "deleteTopicFolderConfirm": "确认删除主题文件夹「{name}」？",
     "deleteTopicFolderDetail": "将同时删除该主题（{path}）及其关联的文件夹与文件。",
     "deleteTopicFolderWarning": "此操作不可逆，删除的数据将无法恢复。",
-    "deleteTopicFolderFailed": "删除主题文件夹失败: ",
     "deleteTopicFolderError": "删除主题文件夹出错: ",
     "deleteFolderFailed": "删除文件夹失败: ",
     "enterTopicName": "请输入新主题名称：\n\n将创建对应的主题文件夹，并自动匹配相关文件。",
-    "deleteTopicFailed": "删除主题失败: ",
-    "deleteTopicError": "删除主题出错: ",
     "createTopicFailed": "创建主题失败: ",
     "createTopicError": "创建主题出错: ",
     "deleteFailed": "删除失败: ",
@@ -1290,13 +1177,9 @@
     "mergeTopicBody": "将 {source} 合并到 {target}",
     "acceptSuggestion": "采纳",
     "rejectSuggestion": "忽略",
-    "customTopicPlaceholder": "输入自定义主题",
     "suggestionTopicPlaceholder": "输入主题名称",
     "pendingHeader": "待确认主题",
-    "dragToFolderHint": "拖到左侧文件夹即可归类；点击 AI 建议会立即移动",
-    "auto": {
-      "Topic_主题创建成功": "[Topic] 主题创建成功:"
-    }
+    "dragToFolderHint": "拖到左侧文件夹即可归类；点击 AI 建议会立即移动"
   },
   "tags": {
     "loading": "正在加载标签...",
@@ -1332,73 +1215,18 @@
     "author": "作者：四海",
     "opensource": "开源项目 · GitHub: Miles128/NoteAI"
   },
-  "api": {
-    "auto": {
-      "分页预览读取失败": "分页预览读取失败",
-      "设置工作区失败": "设置工作区失败",
-      "未选择文件夹": "未选择文件夹"
-    }
-  },
-  "converter": {
-    "auto": {
-      "正在准备转换": "正在准备转换...",
-      "转换完成": "转换完成",
-      "转换失败": "转换失败：",
-      "转换失败_2": "转换失败: "
-    }
-  },
-  "state": {
-    "auto": {
-      "加载_API_配置失败": "加载 API 配置失败:",
-      "加载_UI_配置失败": "加载 UI 配置失败:",
-      "加载主题偏好失败": "加载主题偏好失败:",
-      "保存_API_配置失败": "保存 API 配置失败:",
-      "保存_UI_配置失败": "保存 UI 配置失败:",
-      "保存主题偏好失败": "保存主题偏好失败:"
-    }
-  },
-  "tiptapeditor": {
-    "auto": {
-      "解析排版": "解析排版…",
-      "summary_class_frontmatter_summary_元数据_summary": "<summary class=\"frontmatter-summary\">元数据</summary>",
-      "编辑器未加载_请重启应用": "编辑器未加载，请重启应用",
-      "有未保存更改": "有未保存更改..."
-    }
-  },
-  "topicTree": {
-    "auto": {
-      "加载主题树失败": "加载主题树失败:",
-      "div_class_tier_label_一级标题_div": "<div class=\"tier-label\">一级标题</div>",
-      "div_class_pending_topics_div_class_tier_label_待确": "<div class=\"pending-topics\"><div class=\"tier-label\">待确认</div>",
-      "综述": " 综述",
-      "h4_name_h4_p_加载失败或无文件_p": "<h4>${name}</h4><p>加载失败或无文件</p>",
-      "div_class_new_folder_btn_onclick_TopicTree3Tier_": "<div class=\"new-folder-btn\" onclick=\"TopicTree3Tier.showNewFolder('${this.esc(name)}', ${level})\">\n                     + 新建子文件夹</div>",
-      "div_class_abstract_toggle_label_input_type_check": "<div class=\"abstract-toggle\">\n                    <label><input type=\"checkbox\" onchange=\"TopicTree3Tier.toggleAbstract('${this.esc(name)}', ${level}, this.checked)\"> 生成综述</label>\n                </div>",
-      "div_class_delete_btn_onclick_TopicTree3Tier_dele": "<div class=\"delete-btn\" onclick=\"TopicTree3Tier.deleteTopic('${this.esc(name)}', ${level})\">删除此标题</div>",
-      "加载文件列表失败": "加载文件列表失败:",
-      "在_parentName_下新建文件夹_将自动判定层级": "在「${parentName}」下新建文件夹（将自动判定层级）:",
-      "确定删除_name_吗_此操作不可撤销": "确定删除「${name}」吗？此操作不可撤销。"
-    }
-  },
   "workspace": {
     "sample": {
       "button": "试用示例库",
       "creating": "正在创建示例库…",
       "ready": "示例库已就绪，可在设置中配置 LLM 后编译语义知识",
       "failed": "创建示例库失败"
-    },
-    "auto": {
-      "button_class_workspace_btn_onclick_window_Worksp": "\n                <button class=\"workspace-btn\" onclick=\"window.WorkspaceModule.openWorkspace()\" title=\"打开工作区\">\n                    ${window.Icons.get('folderFilled')}\n                    <span>打开工作区</span>\n                </button>\n            ",
-      "æ_å_è_æ_æ_¹å_ä½_å_ºï¼_å½_å_å_ä½_å_º": "æ¯å¦è¦æ´æ¹å·¥ä½åºï¼\n\nå½åå·¥ä½åº: ",
-      "检查工作区状态失败": "检查工作区状态失败:"
     }
   },
   "noteList": {
     "title": "笔记列表",
     "empty": "选择一个主题查看笔记",
-    "emptyTopic": "该主题下暂无笔记",
-    "noSearchResult": "无匹配笔记",
-    "searchPlaceholder": "搜索笔记..."
+    "emptyTopic": "该主题下暂无笔记"
   },
   "inspector": {
     "ai": "问答",
@@ -1427,25 +1255,17 @@
     "generating": "正在生成 AGENTS.md...",
     "generateSuccess": "AGENTS.md 已生成",
     "generateFailed": "生成失败",
-    "notInstalled": "未安装",
     "starting": "正在启动",
     "running": "运行中…",
     "stop": "停止",
     "stopped": "任务已停止",
-    "stopHint": "点击停止按钮可中断当前任务",
     "timeoutWarningTotal": "任务已运行超过 {seconds} 秒，仍在继续。可随时点击停止。",
     "timeoutWarningIdle": "已超过 {seconds} 秒无新输出，Agent 可能仍在处理。可随时点击停止。",
-    "workflow": "工作流",
     "workflowRunning": "运行中",
-    "workflowSteps": "工作流 ({count} 步)",
     "workflowStepsShort": "{count} 步",
-    "workflowDetails": "详情",
-    "reasoning": "思考过程",
     "newSession": "新对话",
     "newSessionDone": "已开始新对话",
     "sessionContinue": "续聊中",
-    "sessionFresh": "新对话",
-    "completed": "完成",
     "failed": "执行失败",
     "tool": {
       "readNote": "读取笔记「{name}」",

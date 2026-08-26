@@ -614,7 +614,6 @@ def _llm_pick_cross_refs(
 def discover_cross_refs_for_file(
     file_path: str,
     *,
-    min_links: int = 0,
     max_links: int = CROSS_REF_MAX,
     use_llm: bool = True,
 ) -> dict[str, Any]:
@@ -1084,7 +1083,7 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
     all_links = _dedupe_links(data.get("links", []))
     norm_center = _normalize_link_path(file_path)
 
-    def _to_view(link: dict[str, Any], center_file: str = "") -> dict[str, Any]:
+    def _to_view(link: dict[str, Any]) -> dict[str, Any]:
         # 归一化比较，避免 ``./Notes/A.md`` 与 ``Notes/A.md`` 等写法差异导致方向判错
         is_incoming = norm_center and _normalize_link_path(link["to"]) == norm_center
         other = link["from"] if is_incoming else link["to"]

@@ -46,7 +46,7 @@ cargo tauri dev          # 等效命令：依赖已就绪时直接启动 Tauri �
 使用 `uv` 管理 Python 依赖，禁止直接使用系统 `pip install`：
 
 ```bash
-uv sync --extra dev --extra rag   # 安装依赖（RAG 默认包含）
+uv sync --extra dev --extra rag --extra ingest   # 安装依赖（RAG 与采集转换链默认包含）
 uv run pytest                     # 运行测试
 ```
 
@@ -63,7 +63,7 @@ uv run pytest                     # 运行测试
 ## 2. 构建与测试
 
 ```bash
-uv sync --extra dev --extra rag   # 安装依赖
+uv sync --extra dev --extra rag --extra ingest   # 安装依赖
 uv run pytest                     # 运行全部测试（~69 单元 + 3 集成测试模块）
 uv run python run.py              # 启动 Tauri dev 模式（检查依赖 + cargo tauri dev）
 ```
@@ -84,7 +84,7 @@ Tauri v2 shell (src-tauri/)
 
 **Python sidecar**（`python/sidecar/server.py`）：`SidecarServer` 实例化 16 个 handler（cli_agent、component、config、files、ingest、intel、job、kb、links、rag、reliability、semantic、tags、topics、transfer、workspace），每个都是 `BaseHandler` 的子类。`BaseHandler` 通过显式 `@property` 访问器代理 server 属性（如 `config`、`_send_response`、`_resolve_path`、`_link_discovery_lock`）——handler 需要访问新的 server 属性时，在 `base.py` 中添加 property。每个 handler 通过 `RpcRouter` 注册路由。
 
-**请求分流**（`python/sidecar/intent_router.py`）：RAG 对话先经意图路由分类（问答/整理/闲聊等），再分发给对应链路；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
+**请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`force_intent`/`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
 **RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → FlagReranker（bge-reranker-v2-m3）→ LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
 
@@ -109,7 +109,7 @@ Tauri v2 shell (src-tauri/)
 - **Embedder 模块**（`rag/embedder.py`）：HF 环境变量（`HF_ENDPOINT`、`NO_PROXY`）与 `FASTEMBED_CACHE_PATH` 在首次加载模型时惰性设置，而非导入时。使用 hf-mirror.com。
 - **主题分配**：逻辑分布在 `utils/topic_assigner.py`、`topic_classifier.py`、`topic_file_ops.py`、`topic_manager.py`、`topic_dedup.py`、`topic_pending.py`、`topic_merge.py`。新增主题相关逻辑放在这一组模块中，不要继续膨胀 handler。
 - **`IGNORED_DIRS`**（`constants.py`）：小写匹配集合 `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`。
-- **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层解析/CRUD 辅助函数在 `utils/wiki_manager.py`、`utils/wiki_crud.py`、`utils/wiki_sync.py`。
+- **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层实现（解析/CRUD/去重/同步）统一在 `utils/wiki_store.py`（由原 wiki_manager/wiki_crud/wiki_sync/topic_dedup 合并）。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
 - **命题验证**（`python/sidecar/semantic/claim_verifier.py`）：基于同主题活跃证据交叉验证命题，结果写入 `claim_verifications` 表，语义工作台展示验证结论；抽取提示词见 `prompts/yaml/claim_verify.yaml`。
 - **归档目录**（`docs/archive/`）：一次性迁移脚本（`docs/archive/scripts/`）与过期的分析文档统一归档于此，ruff/mypy 已排除该目录。

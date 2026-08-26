@@ -19,7 +19,7 @@ from sidecar.workspace_rules import needs_workspace_rules_setup
 from utils.logger import logger
 from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
 from utils.topic_file_ops import check_topic_needs_processing
-from utils.wiki_sync import topic_from_notes_path
+from utils.wiki_store import topic_from_notes_path
 
 STAGES = (
     "rules",

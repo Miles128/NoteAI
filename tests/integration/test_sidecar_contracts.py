@@ -31,11 +31,12 @@ from utils.topic_assigner import (
 )
 from utils.topic_manager import TopicManager
 from utils.topic_pending import load_pending as load_pending_topics
-from utils.wiki_manager import (
+from utils.wiki_store import (
     parse_wiki_headings,
     parse_wiki_structure,
+    sync_wiki_with_files,
+    topic_from_notes_path,
 )
-from utils.wiki_sync import sync_wiki_with_files, topic_from_notes_path
 
 
 @pytest.fixture

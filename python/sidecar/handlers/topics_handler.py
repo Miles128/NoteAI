@@ -33,11 +33,12 @@ from utils.topic_assigner import (
     save_pending,
     write_topic_to_file,
 )
-from utils.topic_dedup import (
+from utils.topic_manager import TopicManager
+from utils.topic_membership import note_belongs_to_topic, split_topic_parts
+from utils.wiki_store import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
 )
-from utils.topic_manager import TopicManager
 
 _HEADING_RE = re.compile(r"^(#{2,4})\s+(.+)$")
 _META_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
@@ -149,30 +150,6 @@ def _latest_note_mtime(topic: str, workspace: str) -> float | None:
         except OSError:
             continue
     return max(mtimes) if mtimes else None
-
-
-def _note_matches_topic(
-    file_topic: str, file_topics: list, rel_parts: tuple, topic: str, topic_parts: list[str]
-) -> bool:
-    """单篇笔记是否归属指定主题：判定标准与 cascade.collect_topic_notes 完全一致
-    （frontmatter topic/前缀、frontmatter topics 列表、Notes 目录路径前缀）。"""
-    if file_topic and (
-        file_topic == topic
-        or topic_parts
-        and file_topic.startswith(topic + TOPIC_SEP)
-        or len(topic_parts) == 1
-        and (file_topic == topic_parts[0] or file_topic.startswith(topic_parts[0] + TOPIC_SEP))
-    ):
-        return True
-    if isinstance(file_topics, list) and topic in file_topics:
-        return True
-    if topic_parts and rel_parts and rel_parts[0] == topic_parts[0]:
-        if len(topic_parts) == 1:
-            return True
-        if len(rel_parts) >= 2 and rel_parts[1] == topic_parts[1]:
-            if len(topic_parts) == 2 or len(rel_parts) >= 3 and rel_parts[2] == topic_parts[2]:
-                return True
-    return False
 
 
 def _topic_conflict_pending_count(workspace: str, topic: str) -> int:
@@ -317,9 +294,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             for topic, _compiled_ts in candidates:
                 parts = topic_parts_cache.get(topic)
                 if parts is None:
-                    parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+                    parts = split_topic_parts(topic)
                     topic_parts_cache[topic] = parts
-                if _note_matches_topic(file_topic, file_topics, rel_parts, topic, parts):
+                if note_belongs_to_topic(topic, file_topic, file_topics, rel_parts, parts):
                     if mtime > latest_mtime.get(topic, float("-inf")):
                         latest_mtime[topic] = mtime
 

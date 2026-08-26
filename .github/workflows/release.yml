@@ -42,7 +42,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev --extra rag
+          uv sync --python 3.10 --extra dev --extra rag --extra ingest
 
       - name: Bundle sidecar Python runtime
         run: bash scripts/bundle_sidecar_python.sh

@@ -1328,7 +1328,7 @@
     "techFrontend": "前端：Tauri v2 + HTML / CSS / JS",
     "techBackend": "后端：Python sidecar",
     "techEditor": "编辑器：Tiptap",
-    "techLlm": "大模型：LangChain + ChatOpenAI",
+    "techLlm": "大模型：OpenAI 兼容 API 直连",
     "author": "作者：四海",
     "opensource": "开源项目 · GitHub: Miles128/NoteAI"
   },

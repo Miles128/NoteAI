@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
+from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.rag.chunker import chunk_file
 
 _VERSION = 1
@@ -79,14 +79,10 @@ def _atomic_json(path: Path, value: dict) -> None:
 
 
 def _collect(root: Path) -> list[dict]:
+    from utils.note_scanner import iter_note_files
+
     chunks: list[dict] = []
-    notes = root / NOTES_FOLDER
-    if not notes.exists():
-        return chunks
-    for note in sorted(notes.rglob("*.md")):
-        rel_parts = note.relative_to(root).parts
-        if note.name.startswith(".") or note.name.upper() == "README.MD" or any(p.startswith(".") for p in rel_parts):
-            continue
+    for note in sorted(iter_note_files(root), key=lambda p: str(p.relative_to(root))):
         text = note.read_text(encoding="utf-8")
         for chunk in chunk_file(str(note.relative_to(root)), text):
             body = chunk.get("content") or ""

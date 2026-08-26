@@ -371,7 +371,7 @@ def save_tags_md(workspace_path: str) -> dict:
     if not workspace.exists():
         return {"success": False, "message": "工作区不存在"}
 
-    from utils.wiki_sync import sync_wiki_with_files
+    from utils.wiki_store import sync_wiki_with_files
 
     result = sync_wiki_with_files()
     result["count"] = result.get("tags", 0)

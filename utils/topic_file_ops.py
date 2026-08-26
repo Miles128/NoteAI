@@ -153,7 +153,7 @@ def _clear_topic_in_file(file_path):
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):
-    from utils.wiki_crud import add_file_to_wiki_topic, remove_file_from_wiki_topic
+    from utils.wiki_store import add_file_to_wiki_topic, remove_file_from_wiki_topic
 
     new_topic = _norm_topic(new_topic)
     workspace = config.workspace_path

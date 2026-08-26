@@ -1319,7 +1319,7 @@
     "techFrontend": "Frontend: Tauri v2 + HTML / CSS / JS",
     "techBackend": "Backend: Python sidecar",
     "techEditor": "Editor: Tiptap",
-    "techLlm": "LLM: LangChain + ChatOpenAI",
+    "techLlm": "LLM: OpenAI-compatible API (direct)",
     "author": "Author: Sihai",
     "opensource": "Open source · GitHub: Miles128/NoteAI"
   },

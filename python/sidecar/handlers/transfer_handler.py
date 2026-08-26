@@ -448,11 +448,11 @@ class TransferHandler(BaseHandler):
         return {"success": True, "subscriptions": load_subscriptions(workspace)}
 
     def _discover_rss_sources(self, _params):
-        """自动发现 RSS 源：内置目录 LLM 匹配 + 联网搜索发现。"""
+        """推荐 RSS 源：内置目录由 LLM 按知识库主题匹配。"""
         workspace, err = self._require_workspace(message="请先设置工作区")
         if err:
             return err
-        from sidecar.rss_discovery import discover_rss_sources
+        from sidecar.multi_source import discover_rss_sources
 
         return discover_rss_sources(workspace)
 

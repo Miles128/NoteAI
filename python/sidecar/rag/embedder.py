@@ -1,4 +1,3 @@
-import math
 import os
 import shutil
 import threading
@@ -7,10 +6,6 @@ from pathlib import Path
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import numpy as np
-
-from config import config
-from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
-from utils.error_handler import log_exception
 
 _HF_ENV_CONFIGURED = False
 _FASTEMBED_CACHE_PATH_CONFIGURED = False
@@ -63,39 +58,8 @@ DENSE_DIM = 512
 # HF hub 缓存目录名 fastembed：Qdrant/bge-small-zh-v1.5
 _FF_MODEL_FOLDER = "models--Qdrant--bge-small-zh-v1.5"
 
-# jieba and fastembed are imported lazily inside functions to speed up
-# module import time (they are heavy C extensions).
-
-_STOP_WORDS = {
-    "的",
-    "了",
-    "在",
-    "是",
-    "我",
-    "有",
-    "和",
-    "就",
-    "不",
-    "人",
-    "都",
-    "一",
-    "一个",
-    "上",
-    "也",
-    "很",
-    "到",
-    "说",
-    "要",
-    "去",
-    "你",
-    "会",
-    "着",
-    "没有",
-    "看",
-    "好",
-    "自己",
-    "这",
-}
+# fastembed is imported lazily inside functions to speed up
+# module import time (it is a heavy C extension).
 
 
 def _onnx_inference_threads() -> int | None:
@@ -170,138 +134,6 @@ def _bge_prefix(texts: list[str], is_query: bool = False) -> list[str]:
     return texts
 
 
-_JIEBA_INIT = False
-
-
-def _ensure_jieba():
-    global _JIEBA_INIT
-    if _JIEBA_INIT:
-        return
-    import jieba
-
-    jieba.setLogLevel(jieba.logging.INFO)
-    _JIEBA_INIT = True
-
-
-def _compute_sparse(texts: list[str]) -> list[dict]:
-    """Compute sparse weights for a batch of texts using precomputed global IDF.
-
-    Falls back to batch-local IDF if global IDF is not available.
-    """
-    _ensure_jieba()
-    import jieba as _jieba
-
-    tokenized = []
-    for text in texts:
-        tokens = [w for w in _jieba.cut(text) if w.strip() and w not in _STOP_WORDS]
-        tokenized.append(tokens)
-
-    # Try global IDF first
-    global_idf = _load_global_idf()
-    if global_idf:
-        return _sparse_with_idf(tokenized, global_idf)
-
-    # Fallback: batch-local IDF (same as before)
-    doc_freq: dict[str, int] = {}
-    for tokens in tokenized:
-        seen = set(tokens)
-        for t in seen:
-            doc_freq[t] = doc_freq.get(t, 0) + 1
-
-    n_docs = len(texts)
-    idf = {}
-    for t, df in doc_freq.items():
-        if n_docs <= 1:
-            idf[t] = 1.0
-        else:
-            idf[t] = max(0.0, math.log((n_docs - df + 0.5) / (df + 0.5)) + 1.0)
-
-    return _sparse_with_idf(tokenized, idf)
-
-
-def _sparse_with_idf(tokenized: list[list[str]], idf: dict[str, float]) -> list[dict]:
-    """Compute TF * IDF sparse weights given tokenized texts and an IDF table."""
-    results = []
-    for tokens in tokenized:
-        tf: dict[str, int] = {}
-        for t in tokens:
-            tf[t] = tf.get(t, 0) + 1
-        sparse = {}
-        for t, count in tf.items():
-            idf_val = idf.get(t)
-            if idf_val is not None:
-                weight = (count / len(tokens)) * idf_val if tokens else 0
-            else:
-                # Term not in IDF table (new term), use neutral weight
-                weight = count / len(tokens) if tokens else 0
-            if weight > 0:
-                sparse[t] = weight
-        results.append(sparse)
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Global IDF persistence
-# ---------------------------------------------------------------------------
-
-_GLOBAL_IDF_LOCK = threading.Lock()
-
-
-def _idf_dir(workspace: str | None = None) -> Path:
-    ws = workspace or config.workspace_path or ""
-    return Path(ws) / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER
-
-
-def _idf_path(workspace: str | None = None) -> Path:
-    return _idf_dir(workspace) / "global_idf.json"
-
-
-def _load_global_idf(workspace: str | None = None) -> dict[str, float] | None:
-    """Load precomputed global IDF from disk. Returns None if not found."""
-    path = _idf_path(workspace)
-    if not path.exists():
-        return None
-    try:
-        import json
-
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return {k: float(v) for k, v in data.items()}
-    except Exception as e:
-        log_exception("[rag/embedder] failed to load global IDF", e, level="debug", logger=logger)
-        return None
-
-
-def build_and_save_global_idf(all_chunks: list[dict], workspace: str | None = None):
-    """Compute global IDF from all indexed chunks and persist to disk.
-
-    Called once during full index rebuild.
-    """
-    import jieba
-
-    doc_freq: dict[str, int] = {}
-    n_docs = len(all_chunks)
-
-    for chunk in all_chunks:
-        text = chunk.get("content", "")
-        tokens = set(w for w in jieba.cut(text) if w.strip() and w not in _STOP_WORDS)
-        for t in tokens:
-            doc_freq[t] = doc_freq.get(t, 0) + 1
-
-    idf = {}
-    for t, df in doc_freq.items():
-        idf[t] = max(0.0, math.log((n_docs - df + 0.5) / (df + 0.5)) + 1.0)
-
-    path = _idf_path(workspace)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    import json
-
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(idf, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
-    logger.info(f"[rag/embedder] Global IDF saved: {len(idf)} terms, {n_docs} docs")
-
-
 def get_model(download_callback=None):
     return _get_dense_model(download_callback)
 
@@ -310,15 +142,13 @@ def encode(
     texts: list,
     download_callback=None,
     progress_callback=None,
-    compute_sparse: bool = False,
 ) -> dict:
     """生成 dense 向量。
 
-    sparse 检索直接使用 bm25s 对原始文本建索引，lexical_weights 不参与索引写入
-    与检索，因此默认不计算 jieba TF-IDF 权重（compute_sparse=True 时可显式开启）。
+    sparse 检索由 bm25s 直接对原始文本建索引，embedder 只负责 dense 向量。
     """
     if not texts:
-        return {"dense_vecs": [], "lexical_weights": []}
+        return {"dense_vecs": []}
     texts = [t if t and t.strip() else " " for t in texts]
     model = _get_dense_model(download_callback=download_callback)
     prefixed = _bge_prefix(texts, is_query=False)
@@ -331,29 +161,25 @@ def encode(
             progress_callback(min(idx + 1, total), total, "正在生成 Embedding...")
 
     dense_vecs = np.array(embeddings)
-    sparse_weights = _compute_sparse(texts) if compute_sparse else [{} for _ in texts]
     if progress_callback and total > 0:
         progress_callback(total, total, "Embedding 生成完成")
-    return {"dense_vecs": dense_vecs, "lexical_weights": sparse_weights}
+    return {"dense_vecs": dense_vecs}
 
 
-def encode_query(query: str, compute_sparse: bool = False) -> dict:
+def encode_query(query: str) -> dict:
     if not query:
-        return {"dense_vec": None, "lexical_weights": {}}
+        return {"dense_vec": None}
     model = _get_dense_model()
     prefixed = _bge_prefix([query], is_query=True)
     embeddings = list(model.embed(prefixed))
     dense = embeddings[0].tolist()
-    # sparse 分支使用 bm25s + query_text，默认无需 jieba 权重
-    sparse = _compute_sparse([query])[0] if compute_sparse else {}
-    return {"dense_vec": dense, "lexical_weights": sparse}
+    return {"dense_vec": dense}
 
 
 def encode_documents(
     texts: list,
     download_callback=None,
     progress_callback=None,
-    compute_sparse: bool = False,
 ) -> list[dict]:
     if not texts:
         return []
@@ -361,11 +187,9 @@ def encode_documents(
         texts,
         download_callback=download_callback,
         progress_callback=progress_callback,
-        compute_sparse=compute_sparse,
     )
     output = []
     for i in range(len(texts)):
         dense = result["dense_vecs"][i].tolist()
-        sparse = result["lexical_weights"][i]
-        output.append({"dense_vec": dense, "lexical_weights": sparse})
+        output.append({"dense_vec": dense})
     return output

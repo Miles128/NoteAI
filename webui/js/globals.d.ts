@@ -255,8 +255,6 @@ declare global {
         isReady(): boolean;
     }
 
-    type StateSubscriber = (state: PersistedState) => void;
-
     interface PersistedState {
         apiConfig: ApiConfig | null;
         uiConfig: UiConfig | null;
@@ -266,8 +264,6 @@ declare global {
 
     interface StateModule {
         get(): PersistedState;
-        getState?(): PersistedState;
-        subscribe(cb: StateSubscriber): () => void;
         loadAllConfig(): Promise<PersistedState>;
         loadApiConfig(): Promise<ApiConfig | null>;
         loadUiConfig(force?: boolean): Promise<UiConfig | null>;
@@ -293,8 +289,6 @@ declare global {
         uiConfig: UiConfig | null;
         themePreference: string | null;
         AppState: Record<string, any>;
-        subscribeToState: (callback: StateSubscriber) => () => void;
-        notifyStateChange: () => void;
         t: (key: string, params?: Record<string, string | number>) => string;
         I18nModule: I18nModule;
         ThemeModule: ThemeModule;

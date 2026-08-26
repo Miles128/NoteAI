@@ -1,10 +1,9 @@
-"""Multi-source ingest: RSS feeds, transcripts → Notes Markdown."""
+"""Multi-source ingest: RSS feeds, transcripts → Notes Markdown；RSS 源推荐。"""
 
 from __future__ import annotations
 
 import json
 import re
-import threading
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,8 +13,8 @@ import requests
 
 from config import config
 from config.settings import NOTES_FOLDER
+from prompts import RSS_DISCOVERY_PROMPT
 from utils.helpers import is_valid_url, sanitize_filename
-from utils.logger import logger
 from utils.network_security import safe_get
 
 _INBOX = "_采集"
@@ -279,112 +278,126 @@ def fetch_all_subscriptions(workspace: str) -> dict:
     return {"success": True, "results": results}
 
 
-# ── RSS Automatic Polling ──
+# ── RSS 源推荐（内置目录 + LLM 主题匹配） ──
+
+# 内置 AI 主题候选源（name | url | topics 标签）
+_BUILTIN_FEEDS: list[dict] = [
+    {"name": "OpenAI Blog", "url": "https://openai.com/blog/rss.xml", "topics": ["llm", "model", "industry"]},
+    {"name": "Anthropic News", "url": "https://www.anthropic.com/rss.xml", "topics": ["llm", "agent", "industry"]},
+    {
+        "name": "Hugging Face Blog",
+        "url": "https://huggingface.co/blog/feed.xml",
+        "topics": ["llm", "open-source", "ml"],
+    },
+    {"name": "arXiv cs.AI", "url": "https://rss.arxiv.org/rss/cs.AI", "topics": ["paper", "research", "ml"]},
+    {"name": "arXiv cs.CL", "url": "https://rss.arxiv.org/rss/cs.CL", "topics": ["paper", "nlp", "llm"]},
+    {"name": "arXiv cs.LG", "url": "https://rss.arxiv.org/rss/cs.LG", "topics": ["paper", "ml", "research"]},
+    {"name": "Google DeepMind", "url": "https://deepmind.google/blog/rss.xml", "topics": ["research", "ml", "agent"]},
+    {
+        "name": "Google AI Blog",
+        "url": "https://blog.google/technology/ai/rss/",
+        "topics": ["llm", "product", "research"],
+    },
+    {
+        "name": "Lilian Weng (Lil'Log)",
+        "url": "https://lilianweng.github.io/posts.rss",
+        "topics": ["llm", "agent", "tutorial"],
+    },
+    {
+        "name": "Simon Willison's Weblog",
+        "url": "https://simonwillison.net/atom/everything/",
+        "topics": ["llm", "tools", "industry"],
+    },
+    {"name": "The Gradient", "url": "https://thegradient.pub/feed/", "topics": ["research", "llm", "analysis"]},
+    {"name": "BAIR Blog", "url": "https://bair.berkeley.edu/blog/feed.xml", "topics": ["research", "ml", "paper"]},
+    {
+        "name": "MIT Tech Review AI",
+        "url": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+        "topics": ["industry", "product", "analysis"],
+    },
+    {"name": "机器之心", "url": "https://www.jiqizhixin.com/rss", "topics": ["industry", "llm", "news"]},
+    {"name": "量子位", "url": "https://www.qbitai.com/feed", "topics": ["industry", "llm", "news"]},
+    {"name": "InfoQ 中文", "url": "https://www.infoq.cn/feed", "topics": ["industry", "engineering", "news"]},
+    {"name": "少数派", "url": "https://sspai.com/feed", "topics": ["product", "tools", "tutorial"]},
+    {"name": "MarkTechPost", "url": "https://www.marktechpost.com/feed/", "topics": ["llm", "research", "news"]},
+]
 
 
-class RssScheduler:
-    """后台定时轮询 RSS 订阅，到期订阅自动拉取并把新内容导入知识库。
+def load_knowledge_topics(workspace: str) -> list[str]:
+    """从 Notes 目录收集主题名（作为匹配信号）。"""
+    notes = Path(workspace) / "Notes"
+    if not notes.exists():
+        return []
+    topics = []
+    for child in sorted(notes.iterdir()):
+        if child.is_dir() and not child.name.startswith("."):
+            topics.append(child.name)
+    return topics
 
-    每个订阅按 ``interval_minutes``（默认 30 分钟）触发一次；首次添加且从未
-    拉取过的订阅会在第一个 tick 后自动拉取。
 
-    Args:
-        workspace_provider: 返回当前工作区路径（切换工作区后自动生效）。
-        send_event: 拉取完成后的事件回调（发送 rss_poll_complete 事件）。
-        tick_seconds: 调度检查间隔。
+def _parse_builtin_urls(raw: str) -> list[str]:
+    """解析 LLM 输出：{"builtin_urls": [...]}"""
+    text = (raw or "").strip()
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    if fence:
+        text = fence.group(1)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        # 容错：找 JSON 对象
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end < 0:
+            return []
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return []
+    return [str(u).strip() for u in (data.get("builtin_urls") or []) if str(u).strip()]
+
+
+def discover_rss_sources(workspace: str, llm_call=None) -> dict[str, Any]:
+    """从内置 RSS 目录中推荐与知识库主题匹配的源。
+
+    ``llm_call(prompt) -> str`` 可注入；默认 call_llm_raw。
+    只读分析：不写入订阅，由调用方（transfer_handler）负责 save_subscription。
     """
+    if llm_call is None:
+        from utils.llm_utils import call_llm_raw
 
-    def __init__(
-        self,
-        workspace_provider: Any,
-        send_event: Any = None,
-        tick_seconds: int = 60,
-    ):
-        self._workspace_provider = workspace_provider
-        self._send_event = send_event
-        self._tick_seconds = max(30, int(tick_seconds))
-        self._thread: threading.Thread | None = None
-        self._stop = threading.Event()
-        self._inflight: set[str] = set()
+        def llm_call(prompt: str) -> str:
+            return call_llm_raw(prompt, temperature=0.2)
 
-    def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="rss-scheduler", daemon=True)
-        self._thread.start()
-        logger.info("[rss-scheduler] 已启动，轮询间隔 %ss", self._tick_seconds)
+    topics = load_knowledge_topics(workspace)
+    if not topics:
+        return {"success": False, "message": "未找到知识库主题", "recommendations": []}
 
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-            self._thread = None
-        logger.info("[rss-scheduler] 已停止")
+    builtin_lines = "\n".join(f"- {f['name']} | {f['url']} | {','.join(f['topics'])}" for f in _BUILTIN_FEEDS)
+    prompt = RSS_DISCOVERY_PROMPT.format(topics="、".join(topics), builtin_feeds=builtin_lines)
+    try:
+        raw = llm_call(prompt)
+    except Exception as exc:
+        return {"success": False, "message": f"推荐规划失败: {exc}", "recommendations": []}
+    builtin_urls = _parse_builtin_urls(raw)
 
-    def _run(self) -> None:
-        while not self._stop.wait(self._tick_seconds):
-            try:
-                self._poll_due_subscriptions()
-            except Exception as e:
-                logger.warning(f"[rss-scheduler] tick 失败: {e}")
+    subscribed = {s["url"] for s in load_subscriptions(workspace)}
+    recommendations: list[dict] = []
+    seen: set[str] = set()
+    for feed in _BUILTIN_FEEDS:
+        if feed["url"] in builtin_urls and feed["url"] not in seen:
+            seen.add(feed["url"])
+            recommendations.append(
+                {
+                    "name": feed["name"],
+                    "url": feed["url"],
+                    "topics": feed["topics"],
+                    "source": "builtin",
+                    "subscribed": feed["url"] in subscribed,
+                }
+            )
 
-    def _poll_due_subscriptions(self) -> None:
-        workspace = self._workspace_provider()
-        if not workspace or not Path(workspace).exists():
-            return
-        for sub in load_subscriptions(workspace):
-            url = sub.get("url", "")
-            if not url or not self._is_due(sub) or url in self._inflight:
-                continue
-            self._inflight.add(url)
-            threading.Thread(
-                target=self._fetch_one,
-                args=(workspace, url),
-                daemon=True,
-            ).start()
-
-    @staticmethod
-    def _is_due(sub: dict) -> bool:
-        """判断订阅是否到期：无 last_fetched 或距上次拉取超过 interval_minutes。"""
-        interval_minutes = float(sub.get("interval_minutes") or 30)
-        last = sub.get("last_fetched")
-        if not last:
-            return True
-        try:
-            last_dt = datetime.fromisoformat(str(last))
-            if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=timezone.utc)
-            elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds()
-            return elapsed >= interval_minutes * 60
-        except Exception:
-            return True
-
-    def _fetch_one(self, workspace: str, url: str) -> None:
-        try:
-            result = import_rss_feed(url, max_items=10, fetch_articles=True)
-            self._mark_fetched(workspace, url)
-            imported = int(result.get("imported") or 0)
-            logger.info(f"[rss-scheduler] {url} 拉取完成: {imported} 篇")
-            if self._send_event:
-                self._send_event(
-                    {
-                        "type": "rss_poll_complete",
-                        "data": {"url": url, "imported": imported},
-                    }
-                )
-        except Exception as e:
-            logger.warning(f"[rss-scheduler] {url} 拉取失败: {e}")
-        finally:
-            self._inflight.discard(url)
-
-    def _mark_fetched(self, workspace: str, url: str) -> None:
-        try:
-            subs = load_subscriptions(workspace)
-            for sub in subs:
-                if sub.get("url") == url:
-                    sub["last_fetched"] = datetime.now(timezone.utc).isoformat()
-                    break
-            _persist_subscriptions(workspace, subs)
-        except Exception as e:
-            logger.warning(f"[rss-scheduler] 更新 last_fetched 失败: {e}")
+    return {
+        "success": True,
+        "topics": topics,
+        "recommendations": recommendations,
+        "message": f"发现 {len(recommendations)} 个推荐源",
+    }

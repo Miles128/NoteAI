@@ -23,7 +23,7 @@ def test_similarity_scan_builds_explainable_merge_candidates(tmp_path: Path, mon
     _write(root, "Prompt工程", "Prompt入门", "提示词需要清晰描述目标、上下文和输出格式，并提供示例。")
 
     def fake_encode(texts):
-        return [{"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}} for _ in texts]
+        return [{"dense_vec": [1.0, 0.0, 0.0]} for _ in texts]
 
     monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
     result = build_chunk_similarity_graph(root, top_k=6, threshold=0.68)
@@ -46,9 +46,9 @@ def test_merge_presets_control_candidate_discovery(tmp_path: Path, monkeypatch) 
         out = []
         for text in texts:
             if "机器学习与模型" in str(text):
-                out.append({"dense_vec": [0.82, 0.57, 0.0], "lexical_weights": {}})
+                out.append({"dense_vec": [0.82, 0.57, 0.0]})
             else:
-                out.append({"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}})
+                out.append({"dense_vec": [1.0, 0.0, 0.0]})
         return out
 
     monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
@@ -80,9 +80,9 @@ def test_merge_overrides_override_preset_thresholds(tmp_path: Path, monkeypatch)
         out = []
         for text in texts:
             if "机器学习与模型" in str(text):
-                out.append({"dense_vec": [0.82, 0.57, 0.0], "lexical_weights": {}})
+                out.append({"dense_vec": [0.82, 0.57, 0.0]})
             else:
-                out.append({"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}})
+                out.append({"dense_vec": [1.0, 0.0, 0.0]})
         return out
 
     monkeypatch.setattr("sidecar.rag.embedder.encode_documents", fake_encode)
@@ -106,7 +106,7 @@ def test_candidates_carry_semantic_share_signal(tmp_path: Path, monkeypatch) -> 
     _write(root, "人工智能", "乙笔记", "机器学习与模型训练的基础方法。")
 
     def fake_encode(texts):
-        return [{"dense_vec": [1.0, 0.0, 0.0], "lexical_weights": {}} for _ in texts]
+        return [{"dense_vec": [1.0, 0.0, 0.0]} for _ in texts]
 
     def fake_semantic_shares(r: Path) -> dict:
         a = "Notes/人工智能/甲笔记.md"

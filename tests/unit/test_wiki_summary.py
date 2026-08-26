@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from config import config
-from utils.wiki_sync import sync_wiki_with_files
+from utils.wiki_store import sync_wiki_with_files
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def test_wiki_contains_managed_tags_and_no_tags_file(workspace: Path) -> None:
 
 
 def test_wiki_tag_headings_are_not_topics(workspace: Path) -> None:
-    from utils.wiki_manager import parse_wiki_headings, parse_wiki_structure
+    from utils.wiki_store import parse_wiki_headings, parse_wiki_structure
 
     note = workspace / "Notes" / "AI" / "基础" / "标签笔记.md"
     note.write_text("---\ntags: [RAG]\n---\n正文\n", encoding="utf-8")

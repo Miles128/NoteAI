@@ -1,4 +1,4 @@
-"""单元测试：utils/wiki_crud.py 的 WIKI.md CRUD 全链路。
+"""单元测试：utils/wiki_store.py 的 WIKI.md CRUD 全链路。
 
 使用临时工作区 fixture 构造最小 WIKI.md 结构，覆盖段落创建/读取/
 更新/删除的 happy path 与目标不存在等边界。
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from config import config
-from utils.wiki_crud import (
+from utils.wiki_store import (
     _remove_topic_from_wiki,
     add_file_to_wiki_topic,
     create_topic,

@@ -1,4 +1,4 @@
-"""Persist user opt-out for optional installable components (RAG, cloud, …)."""
+"""Persist user opt-out for optional installable components (RAG)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ _COMPONENTS_FILE = SYSTEM_APP_DATA_DIR / "components.json"
 _lock = threading.Lock()
 
 # Components the user explicitly removed via Settings → Components.
-_KNOWN = frozenset({"rag", "cloud_tencent", "cloud_baidu"})
+_KNOWN = frozenset({"rag"})
 
 
 def _load() -> dict[str, Any]:

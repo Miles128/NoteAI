@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from pathlib import Path
 
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
+from sidecar.text_similarity import body_hash as _body_hash
 from utils.helpers import sanitize_filename
 from utils.text_utils import parse_frontmatter, write_frontmatter
 
@@ -25,11 +25,6 @@ def _safe_note(root: Path, rel: str) -> Path:
     if path.suffix.lower() != ".md" or not path.is_file():
         raise ValueError("只能处理 Notes/ 下存在的 Markdown 笔记")
     return path
-
-
-def _body_hash(body: str) -> str:
-    normalized = re.sub(r"\s+", "", body).casefold()
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def _pair_key(left: str, right: str) -> str:
@@ -179,14 +174,10 @@ def merge_note_group(
         f'<source index="{index + 1}" path="{file_paths[index]}">\n{body}\n</source>'
         for index, body in enumerate(bodies)
     )
-    prompt = f"""你是 NoteAI 的知识整合器。把以下笔记整合成一篇结构清晰的 Markdown。
-规则：删除重复表达；保留互补信息；日期、数字、结论或否定关系冲突时不得裁决，必须建立“## 观点差异（待确认）”并逐项标注 [来源N]；每个主要段落末尾标注来源；不要编造。
-
-{source_blocks}
-"""
+    from prompts import MERGE_NOTES_PROMPT
     from utils.llm_utils import call_llm_raw
 
-    merged_body = call_llm_raw(prompt, temperature=0.2).strip()
+    merged_body = call_llm_raw(MERGE_NOTES_PROMPT.format(source_blocks=source_blocks), temperature=0.2).strip()
     if not merged_body:
         return {"success": False, "message": "AI 未返回整合内容"}
     has_conflicts = "观点差异" in merged_body or "待确认冲突" in merged_body

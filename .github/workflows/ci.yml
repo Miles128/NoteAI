@@ -18,7 +18,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev --extra rag
+          uv sync --python 3.10 --extra dev --extra rag --extra ingest
 
       - name: Ruff check
         run: uv run ruff check .
@@ -41,7 +41,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev --extra rag
+          uv sync --python 3.10 --extra dev --extra rag --extra ingest
 
       - name: Mypy type check
         run: uv run mypy config modules prompts python utils
@@ -68,7 +68,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev --extra rag
+          uv sync --python 3.10 --extra dev --extra rag --extra ingest
 
       - name: Tests
         run: uv run pytest --tb=short -ra
@@ -122,7 +122,7 @@ jobs:
       - name: Install Python and dependencies
         run: |
           uv python install 3.10
-          uv sync --python 3.10 --extra dev --extra rag
+          uv sync --python 3.10 --extra dev --extra rag --extra ingest
 
       - name: Verify RPC whitelist consistency (Python ↔ Rust ↔ api.js)
         run: uv run python scripts/sync_rpc_whitelist.py

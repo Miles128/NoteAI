@@ -154,6 +154,56 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
+class _ChatClient:
+    """OpenAI 兼容 chat completions 直连封装（取代 langchain ChatOpenAI）。
+
+    ``invoke`` 返回纯文本；``stream`` 逐 token 产出 str。
+    SDK 自带重试关闭（max_retries=0），重试统一由 _retry_with_backoff 负责。
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        model: str,
+        temperature: float,
+        max_tokens: int,
+        extra_body: dict | None = None,
+    ):
+        from openai import OpenAI
+
+        self._model = model
+        self._temperature = temperature
+        self._max_tokens = max_tokens
+        self._extra_body = extra_body
+        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=60, max_retries=0)
+
+    def _params(self, text: str) -> dict[str, Any]:
+        return {
+            "model": self._model,
+            "messages": [{"role": "user", "content": text}],
+            "temperature": self._temperature,
+            "max_tokens": self._max_tokens,
+            "extra_body": self._extra_body,
+        }
+
+    def invoke(self, text: str) -> str:
+        resp = self._client.chat.completions.create(**self._params(text))
+        if not resp.choices:
+            return ""
+        return (resp.choices[0].message.content or "").strip()
+
+    def stream(self, text: str):
+        stream = self._client.chat.completions.create(**self._params(text), stream=True)
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
+
 def _create_llm(
     temperature: float = 0.7,
     max_tokens: int | None = None,
@@ -162,35 +212,31 @@ def _create_llm(
     api_base: str | None = None,
     model_name: str | None = None,
     disable_thinking: bool | None = None,
-):
-    """创建 ChatOpenAI 实例（内部复用）
+) -> _ChatClient:
+    """创建 OpenAI 兼容客户端（内部复用）
 
     api_key / api_base / model_name 未提供时从全局 config 读取；
     disable_thinking 未提供时取 config.disable_thinking。
     """
-    from langchain_openai import ChatOpenAI
-
     from config import config
 
     if disable_thinking is None:
         disable_thinking = bool(getattr(config, "disable_thinking", True))
     base_url = api_base if api_base is not None else config.api_base
 
-    kwargs: dict[str, Any] = {
-        "api_key": api_key if api_key is not None else config.api_key,
-        "base_url": base_url,
-        "model": model_name if model_name is not None else config.model_name,
-        "temperature": temperature,
-        "max_tokens": max_tokens or config.max_tokens,
-        "request_timeout": 60,
-    }
-
+    extra_body = None
     if disable_thinking and "deepseek.com" in base_url:
-        # 使用顶层 extra_body；放入 model_kwargs 会触发 LangChain UserWarning。
         # 仅 DeepSeek 支持该参数，其他 provider 一律不传。
-        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        extra_body = {"thinking": {"type": "disabled"}}
 
-    return ChatOpenAI(**kwargs)
+    return _ChatClient(
+        api_key=api_key if api_key is not None else config.api_key,
+        base_url=base_url,
+        model=model_name if model_name is not None else config.model_name,
+        temperature=temperature,
+        max_tokens=max_tokens or config.max_tokens,
+        extra_body=extra_body,
+    )
 
 
 create_llm = _create_llm
@@ -213,19 +259,7 @@ def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | N
     """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
     if not kwargs:
         return call_llm_raw(prompt_template, temperature, max_tokens)
-
-    from langchain_core.prompts import PromptTemplate
-
-    def _invoke():
-        llm = _create_llm(temperature, max_tokens)
-        prompt = PromptTemplate(template=prompt_template, input_variables=list(kwargs.keys()))
-        chain = prompt | llm
-        return chain.invoke(kwargs)
-
-    response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
-    if hasattr(response, "content"):
-        return response.content.strip()
-    return str(response).strip()
+    return call_llm_raw(prompt_template.format(**kwargs), temperature, max_tokens)
 
 
 def _clamp_prompt_text(prompt_text: str, max_tokens: int, model_name: str) -> str:
@@ -263,8 +297,6 @@ def call_llm_raw(
         return llm.invoke(prompt_text)
 
     response = _retry_with_backoff(lambda: _run_llm_with_timeout(_invoke))
-    if hasattr(response, "content"):
-        return response.content.strip()
     return str(response).strip()
 
 
@@ -501,7 +533,7 @@ def test_api_connection(
                 disable_thinking=disable_thinking,
             )
             response = llm.invoke("Hi")
-            if response and hasattr(response, "content"):
+            if response:
                 result[0] = (True, "API 连接成功")
             else:
                 result[0] = (False, "API 响应格式异常")
@@ -668,15 +700,11 @@ def rewrite_with_llm_stream(content: str, chunk_callback=None):
     if not is_valid:
         raise APIConfigError(error_msg)
 
-    from langchain_core.prompts import PromptTemplate
-
     from prompts import LLM_REWRITE_PROMPT
 
     def _stream():
         llm = _create_llm(temperature=0.3)
-        prompt = PromptTemplate(template=LLM_REWRITE_PROMPT, input_variables=["content"])
-        chain = prompt | llm
-        return chain.stream({"content": content})
+        return llm.stream(LLM_REWRITE_PROMPT.format(content=content))
 
     return _run_stream_with_timeout(_stream, chunk_callback)
 

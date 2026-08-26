@@ -1,7 +1,8 @@
-"""文本相似度公共原语：归一化、shingle、simhash、Jaccard。
+"""文本相似度公共原语：归一化、shingle、simhash、Jaccard、精确哈希。
 
 供笔记近似重复检测（organization_audit 等）复用；
-向量相似度见 sidecar/rag，精确哈希重复见 sidecar/kb_lint。
+向量相似度见 sidecar/rag；精确重复检测（body_hash）供 kb_lint 与
+duplicate_review 共用，禁止再各自实现。
 """
 
 from __future__ import annotations
@@ -13,6 +14,16 @@ import re
 SHINGLE_SIZE = 5
 MAX_SHINGLES = 4000
 MAX_COMPARE_CHARS = 16000
+
+
+def normalize_exact(body: str) -> str:
+    """精确重复判定的正文归一化：去除全部空白并统一大小写。"""
+    return re.sub(r"\s+", "", body).casefold()
+
+
+def body_hash(body: str) -> str:
+    """正文精确重复指纹：normalize_exact 后的 SHA-256。"""
+    return hashlib.sha256(normalize_exact(body).encode("utf-8")).hexdigest()
 
 
 def bounded(text: str, limit: int) -> str:

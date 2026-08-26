@@ -549,9 +549,9 @@ window.AssistantModule = (function() {
     }
 
     function _estimateIndexTime() {
-        // Rough estimate: ~0.5s per file for chunking + embedding on M-series Mac
-        var fileCount = window.AppState && window.AppState.files ? window.AppState.files.length : 100;
-        var seconds = Math.max(10, fileCount * 0.5);
+        // Rough estimate: ~0.5s per file for chunking + embedding on M-series Mac,
+        // 以 100 篇笔记为基线（文件树计数不可靠时保守估计）
+        var seconds = Math.max(10, 100 * 0.5);
         if (seconds < 60) {
             return Math.ceil(seconds) + '秒';
         }

@@ -55,14 +55,6 @@ function handleGlobalDownloadEvent(event: any) {
         handleDownloadCompleteEvent(data);
     } else if (data.type === 'web_download_error') {
         handleDownloadErrorEvent(data);
-    } else if (data.type === 'rss_poll_complete') {
-        var imported = data.data && data.data.imported ? data.data.imported : 0;
-        if (imported > 0) {
-            window.updateStatus(window.t('download.rssFetchAllDone', { count: imported }));
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                window.TreeModule.loadFileTree(true);
-            }
-        }
     } else if (data.type === 'folder_watch_complete') {
         var fwData = data.data || {};
         var fwImported = fwData.imported || 0;

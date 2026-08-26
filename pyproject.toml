@@ -8,30 +8,17 @@ authors = [
     { name = "NoteAI Contributors" }
 ]
 dependencies = [
-    "langchain-openai>=0.0.5",
-    "langchain-core>=0.1.0",
+    "openai>=1.50.0",
     "tiktoken>=0.5.0",
     "requests>=2.31.0",
-    "beautifulsoup4>=4.12.0",
-    "markdownify>=0.11.6",
-    "readability-lxml>=0.8.1",
     "validators>=0.22.0",
     "pydantic>=2.5.0",
-    "PyMuPDF>=1.23.0",
-    "mammoth>=1.0.0",
-    "python-docx>=1.0.0",
-    "python-pptx>=1.0.0",
-    "olefile>=0.47",
-    "pillow>=10.0.0",
-    "markdown>=3.5.0",
     "PyYAML>=6.0",
     "jieba>=0.42.1",
-    "html2text>=2024.2.26",
     "watchdog>=4.0.0",
     "send2trash>=1.8.0",
     "numpy>=1.24.0",
     "cryptography>=42.0.0",
-    "snownlp",
 ]
 
 [project.optional-dependencies]
@@ -40,20 +27,27 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.0",
 ]
+# 文档/网页采集转换链（PDF/DOCX/PPTX/HTML → Markdown）。应用内均为惰性导入，
+# 缺失时仅对应导入/预览功能报错，核心笔记与 RAG 不受影响。
+ingest = [
+    "PyMuPDF>=1.23.0",
+    "mammoth>=1.0.0",
+    "python-docx>=1.0.0",
+    "python-pptx>=1.0.0",
+    "olefile>=0.47",
+    "beautifulsoup4>=4.12.0",
+    "markdownify>=0.11.6",
+    "readability-lxml>=0.8.1",
+    "html2text>=2024.2.26",
+]
 rag = [
     "FlagEmbedding>=1.2.0",
     "bm25s>=0.2.0",
     "zvec>=0.5.0",
     "fastembed>=0.4.0",
 ]
-cloud_tencent = [
-    "cos-python-sdk-v5",
-]
-cloud_baidu = [
-    "bypy",
-]
 all = [
-    "NoteAI[rag,cloud_tencent,cloud_baidu]",
+    "NoteAI[rag,ingest]",
 ]
 
 [build-system]
@@ -125,8 +119,6 @@ indent-style = "space"
 [tool.pytest.ini_options]
 pythonpath = [".", "python"]
 testpaths = ["tests/unit", "tests/integration"]
-# langsmith pytest plugin (from langchain) can break headless CI without API keys
-addopts = ["-p", "no:langsmith_plugin"]
 filterwarnings = [
     # jieba 仍依赖 pkg_resources；在项目侧无法改第三方实现
     "ignore:pkg_resources is deprecated:UserWarning:jieba._compat",

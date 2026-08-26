@@ -1,24 +1,18 @@
 /**
  * state.ts —— 状态双轨门面（从 state.js 渐进迁移到 TS）。
- * 运行时语义与迁移前完全一致：
  * - window.state：配置持久化门面（apiConfig / uiConfig / themePreference / workspacePath），
- *   读写均伴随后端持久化与订阅通知。
- * - window.AppState：UI 运行时状态（Proxy 代理同一 _ui 对象），可任意增删键，
- *   写入即 notify；仅用于会话内 UI 状态，不做持久化。
+ *   读写均伴随后端持久化。
+ * - window.AppState：UI 运行时状态（普通对象），可任意增删键；
+ *   仅用于会话内 UI 状态，不做持久化。
  */
 (function() {
     'use strict';
 
-    interface StateData extends PersistedState {
-        _subscribers: StateSubscriber[];
-    }
-
-    var _state: StateData = {
+    var _state: PersistedState = {
         apiConfig: null,
         uiConfig: null,
         themePreference: null,
-        workspacePath: null,
-        _subscribers: []
+        workspacePath: null
     };
 
     var _ui: Record<string, any> = {
@@ -33,25 +27,6 @@
         lastTagsData: null,
         lastTopicData: null
     };
-
-    function subscribe(callback: StateSubscriber): () => void {
-        if (typeof callback === 'function') {
-            _state._subscribers.push(callback);
-        }
-        return function() {
-            _state._subscribers = _state._subscribers.filter(function(s) { return s !== callback; });
-        };
-    }
-
-    function notify(): void {
-        _state._subscribers.forEach(function(fn) {
-            try {
-                fn(_state);
-            } catch (e) {
-                console.error('State subscriber error:', e);
-            }
-        });
-    }
 
     function getState(): PersistedState {
         var snapshot: PersistedState = {
@@ -69,9 +44,7 @@
     }
 
     function setUi(key: string, value: any): void {
-        // 新键不再静默丢弃：正常写入并通知（与 AppState Proxy 行为对齐）
         _ui[key] = value;
-        notify();
     }
 
     var _uiConfigPromise: Promise<UiConfig | null> | null = null;
@@ -80,7 +53,6 @@
     async function loadApiConfig(): Promise<ApiConfig | null> {
         try {
             _state.apiConfig = await window.api.getApiConfig();
-            notify();
             return _state.apiConfig;
         } catch (e) {
             console.error('加载 API 配置失败:', e);
@@ -96,7 +68,6 @@
         _uiConfigPromise = (async function() {
             try {
                 _state.uiConfig = await window.api.getUiConfig();
-                notify();
                 return _state.uiConfig;
             } catch (e) {
                 console.error('加载 UI 配置失败:', e);
@@ -114,7 +85,6 @@
         _themePreferencePromise = (async function() {
             try {
                 _state.themePreference = await window.api.getThemePreference();
-                notify();
                 return _state.themePreference;
             } catch (e) {
                 console.error('加载主题偏好失败:', e);
@@ -144,7 +114,6 @@
         try {
             var result = await window.api.saveApiConfig(config);
             _state.apiConfig = Object.assign({}, _state.apiConfig, config);
-            notify();
             return result;
         } catch (e) {
             console.error('保存 API 配置失败:', e);
@@ -156,7 +125,6 @@
         try {
             var result = await window.api.saveUiConfig(config);
             _state.uiConfig = Object.assign({}, _state.uiConfig, config);
-            notify();
             return result;
         } catch (e) {
             console.error('保存 UI 配置失败:', e);
@@ -171,7 +139,6 @@
             try {
                 window.Storage.setRaw(window.Storage.KEYS.THEME, theme, { silent: true });
             } catch (_e) { /* noop */ }
-            notify();
         } catch (e) {
             console.error('保存主题偏好失败:', e);
             throw e;
@@ -180,12 +147,10 @@
 
     function setWorkspacePath(path: string): void {
         _state.workspacePath = path;
-        notify();
     }
 
     window.state = {
         get: getState,
-        subscribe: subscribe,
         loadAllConfig: loadAllConfig,
         loadApiConfig: loadApiConfig,
         loadUiConfig: loadUiConfig,
@@ -216,14 +181,5 @@
         configurable: true
     });
 
-    window.AppState = new Proxy(_ui, {
-        set: function(target: Record<string, any>, property: string, value: any): boolean {
-            target[property] = value;
-            notify();
-            return true;
-        }
-    });
-
-    window.subscribeToState = subscribe;
-    window.notifyStateChange = notify;
+    window.AppState = _ui;
 })();

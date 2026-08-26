@@ -662,8 +662,8 @@
     const _escapeHtml = window.escapeHtml;
 
     function _loadSavedCliAgentId() {
-        if (window.state && window.state.getState) {
-            var cached = window.state.getState().uiConfig;
+        if (window.state && window.state.get) {
+            var cached = window.state.get().uiConfig;
             if (cached && cached.cli_agent_id) {
                 return Promise.resolve(String(cached.cli_agent_id));
             }

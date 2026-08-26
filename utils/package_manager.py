@@ -4,7 +4,7 @@ Provides:
 - Isolated application-level venv under SYSTEM_APP_DATA_DIR
 - Wheel cache for offline reinstallation
 - Version locking via requirements file
-- Feature flags for optional dependency groups (rag, cloud, cloud_providers)
+- Feature flags for optional dependency groups (rag)
 """
 
 from __future__ import annotations
@@ -32,9 +32,6 @@ _FEATURE_GROUPS: dict[str, list[str]] = {
         "zvec>=0.5.0",
         "fastembed>=0.4.0",
     ],
-    "cloud_tencent": ["cos-python-sdk-v5"],
-    "cloud_baidu": ["bypy"],
-    "cloud_onedrive": [],
 }
 
 _FEATURE_LABELS: dict[str, dict[str, str]] = {
@@ -44,28 +41,14 @@ _FEATURE_LABELS: dict[str, dict[str, str]] = {
         "desc_zh": "语义检索、BM25 混合搜索与重排模型（fastembed、bm25s、zvec、FlagEmbedding）",
         "desc_en": "Semantic search, BM25 hybrid retrieval, and reranker models",
     },
-    "cloud_tencent": {
-        "name_zh": "腾讯云 COS",
-        "name_en": "Tencent COS",
-        "desc_zh": "腾讯云对象存储同步",
-        "desc_en": "Tencent Cloud object storage sync",
-    },
-    "cloud_baidu": {
-        "name_zh": "百度网盘",
-        "name_en": "Baidu Pan",
-        "desc_zh": "百度网盘同步（bypy）",
-        "desc_en": "Baidu Pan sync via bypy",
-    },
 }
 
 _import_map: dict[str, str] = {
-    "cos-python-sdk-v5": "qcloud_cos",
     "FlagEmbedding": "FlagEmbedding",
     "bm25s": "bm25s",
     "zvec": "zvec",
     "fastembed": "fastembed",
     "numpy": "numpy",
-    "bypy": "bypy",
 }
 
 

@@ -4,8 +4,8 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-from utils.logger import logger
 from utils.text_utils import parse_frontmatter
+from utils.topic_membership import note_belongs_to_topic, split_topic_parts
 
 _changelog_lock = threading.Lock()
 
@@ -86,7 +86,8 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
 
     workspace_path = Path(workspace)
     notes_dir = workspace_path / config.NOTES_FOLDER
-    topic_parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]
+    notes_dir_exists = notes_dir.exists()
+    topic_parts = split_topic_parts(topic)
     notes = []
     seen_paths: set[str] = set()
 
@@ -107,36 +108,24 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
                     text = fh.read(8192)
             fm, body = parse_frontmatter(text)
 
-            topic_match = False
+            file_topic = ""
+            file_topics: list = []
             if fm:
-                file_topic = fm.get("topic", "")
-                if isinstance(file_topic, str):
-                    if (
-                        file_topic == topic
-                        or topic_parts
-                        and file_topic.startswith(topic + TOPIC_SEP)
-                        or len(topic_parts) == 1
-                        and (file_topic == topic_parts[0] or file_topic.startswith(topic_parts[0] + TOPIC_SEP))
-                    ):
-                        topic_match = True
-                file_topics = fm.get("topics", [])
-                if isinstance(file_topics, list) and topic in file_topics:
-                    topic_match = True
+                raw_topic = fm.get("topic", "")
+                if isinstance(raw_topic, str):
+                    file_topic = raw_topic
+                raw_topics = fm.get("topics", [])
+                if isinstance(raw_topics, list):
+                    file_topics = raw_topics
 
-            if not topic_match and topic_parts and notes_dir.exists():
+            rel_parts: tuple = ()
+            if notes_dir_exists:
                 try:
-                    rel = md_file.relative_to(notes_dir)
+                    rel_parts = md_file.relative_to(notes_dir).parts
                 except ValueError:
-                    rel = None
-                if rel and rel.parts:
-                    if rel.parts[0] == topic_parts[0]:
-                        if len(topic_parts) == 1:
-                            topic_match = True
-                        elif len(rel.parts) >= 2 and rel.parts[1] == topic_parts[1]:
-                            if len(topic_parts) == 2 or len(rel.parts) >= 3 and rel.parts[2] == topic_parts[2]:
-                                topic_match = True
+                    rel_parts = ()
 
-            if topic_match:
+            if note_belongs_to_topic(topic, file_topic, file_topics, rel_parts, topic_parts):
                 rel_path = str(md_file.relative_to(workspace_path))
                 if rel_path in seen_paths:
                     continue
@@ -158,26 +147,7 @@ def collect_topic_notes(topic: str, include_content: bool = True) -> list[dict]:
 
 
 def _compress_text(content: str, target_ratio: float = 0.6) -> str:
-    try:
-        from snownlp import SnowNLP
-
-        s = SnowNLP(content)
-        sentences = s.sentences
-        if not sentences:
-            return content
-
-        target_count = max(1, int(len(sentences) * target_ratio))
-        summary = s.summary(target_count)
-        if not summary:
-            return content
-
-        return "".join(summary)
-    except Exception as e:
-        logger.warning(f"[compress_text] SnowNLP failed: {e}, fallback to jieba\n")
-        return _compress_text_jieba(content, target_ratio)
-
-
-def _compress_text_jieba(content: str, target_ratio: float = 0.6) -> str:
+    """jieba 关键词打分抽取式压缩。"""
     try:
         import jieba.analyse
     except ImportError:
@@ -411,7 +381,7 @@ def check_and_generate_surveys(on_progress=None) -> dict:
     if not workspace:
         return {"success": False, "message": "未设置工作区"}
 
-    from utils.wiki_manager import parse_wiki_headings
+    from utils.wiki_store import parse_wiki_headings
 
     headings = parse_wiki_headings()
     if not headings:

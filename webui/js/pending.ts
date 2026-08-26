@@ -684,16 +684,16 @@ function scanPendingMergeCandidates() {
     _setButtonBusy(btn, true, 'pending.scanningMergeCandidates');
     var preset = 'balanced';
     var overrides = {};
-    if (window.AppState && window.AppState.uiConfig && window.AppState.uiConfig.merge_preset) {
-        preset = window.AppState.uiConfig.merge_preset;
+    if (window.uiConfig && window.uiConfig.merge_preset) {
+        preset = window.uiConfig.merge_preset;
     } else {
         try {
             var saved = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');
             if (saved && saved.merge_preset) preset = saved.merge_preset;
         } catch (_e) {}
     }
-    if (window.AppState && window.AppState.uiConfig && window.AppState.uiConfig.merge_overrides) {
-        overrides = window.AppState.uiConfig.merge_overrides;
+    if (window.uiConfig && window.uiConfig.merge_overrides) {
+        overrides = window.uiConfig.merge_overrides;
     } else {
         try {
             var savedConfig = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');

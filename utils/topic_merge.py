@@ -1,7 +1,7 @@
 """LLM-assisted naming and safe migration for similar topic pairs.
 
 主题合并（文件/frontmatter 侧）在 utils/ 的唯一入口；WIKI 段侧的合并去重
-见 utils.topic_dedup。前端 RPC 经 handlers/topics_handler.py 调用本模块的
+见 utils.wiki_store。前端 RPC 经 handlers/topics_handler.py 调用本模块的
 suggest_merged_topic_names / preview_topic_merge / merge_topics。
 """
 

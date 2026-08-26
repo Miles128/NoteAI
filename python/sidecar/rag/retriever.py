@@ -193,7 +193,6 @@ def retrieve(
     results = hybrid_search(
         workspace,
         query_dense=query_emb["dense_vec"],
-        query_sparse=query_emb.get("lexical_weights", {}),
         query_text=query,
         top_k=candidate_k,
         topics=topics,
@@ -288,7 +287,6 @@ def _hyde_search(workspace, query, topics, tags, top_k, progress_callback=None) 
         return hybrid_search(
             workspace,
             query_dense=hyde_emb["dense_vec"],
-            query_sparse=hyde_emb.get("lexical_weights", {}),
             query_text=hypo_answer,
             top_k=top_k,
             topics=topics,
@@ -481,7 +479,7 @@ def _chunk_files_parallel(workspace_path: Path, rel_paths: list[str]) -> list[di
 def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str, dict], progress_callback=None):
     """Full rebuild path used when incremental rebuild is not possible."""
     from sidecar.rag.chunker import chunk_file
-    from sidecar.rag.embedder import build_and_save_global_idf, encode_documents
+    from sidecar.rag.embedder import encode_documents
     from sidecar.rag.index import build_index, rebuild_search_indices, save_manifest
 
     rel_paths = sorted(current_files.keys())
@@ -520,7 +518,6 @@ def _full_rebuild(workspace: str, workspace_path: Path, current_files: dict[str,
     chunk_count = rebuild_search_indices(
         workspace, all_chunk_ids, progress_callback=progress_callback, collection=collection
     )
-    build_and_save_global_idf(all_chunks, workspace)
 
     manifest: dict[str, Any] = {"version": 1, "files": {}}
     for c in all_chunks:
@@ -644,7 +641,7 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
             return {"success": False, "message": f"Embedding 生成失败: {e}"}
         add_chunks(workspace, new_chunks, embeddings, rebuild_bm25s=False)
 
-    # Rebuild BM25s, metadata, global IDF from the full collection
+    # Rebuild BM25s and metadata from the full collection
     all_chunk_ids: list[str] = []
     new_manifest: dict[str, Any] = {"version": 1, "files": {}}
 
@@ -667,13 +664,11 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
         )
         entry["chunks"].append(c["id"])
 
-    # 复用 rebuild_search_indices 的全量遍历顺带构建 global IDF，避免二次 fetch
     chunk_count = rebuild_search_indices(
         workspace,
         all_chunk_ids,
         progress_callback=progress_callback,
         collection=collection,
-        build_global_idf=True,
     )
 
     save_manifest(workspace, new_manifest)

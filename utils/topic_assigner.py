@@ -24,12 +24,12 @@ from utils.topic_pending import (
     load_pending,
     save_pending,
 )
-from utils.wiki_crud import add_file_to_wiki_topic
-from utils.wiki_sync import (
+from utils.wiki_store import (
     _write_file_topic_from_folder,
+    add_file_to_wiki_topic,
     topic_from_notes_path,
 )
-from utils.wiki_sync import (
+from utils.wiki_store import (
     sync_wiki_with_files as sync_wiki_with_files,  # noqa: F401  re-export（handler/测试沿用）
 )
 

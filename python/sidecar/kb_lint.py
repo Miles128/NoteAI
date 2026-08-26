@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -11,8 +10,9 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from config.settings import WORKSPACE_APP_FOLDER
+from sidecar.text_similarity import body_hash, normalize_exact
 from utils.text_utils import parse_frontmatter, write_frontmatter
-from utils.wiki_sync import topic_from_notes_path
+from utils.wiki_store import topic_from_notes_path
 
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _MIN_DUPLICATE_CHARS = 100
@@ -56,11 +56,9 @@ def _duplicate_content_groups(workspace: Path) -> list[list[Path]]:
             _, body = parse_frontmatter(note.read_text(encoding="utf-8"))
         except OSError:
             continue
-        normalized = re.sub(r"\s+", "", body).casefold()
-        if len(normalized) < _MIN_DUPLICATE_CHARS:
+        if len(normalize_exact(body)) < _MIN_DUPLICATE_CHARS:
             continue
-        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        by_hash.setdefault(digest, []).append(note)
+        by_hash.setdefault(body_hash(body), []).append(note)
     return [
         sorted(paths, key=lambda path: str(path.relative_to(workspace))) for paths in by_hash.values() if len(paths) > 1
     ]
@@ -118,14 +116,17 @@ def _build_leaf_to_topic_map(root: Path) -> dict[str, str]:
     return mapping
 
 
-def _find_stale_survey_topics(root: Path) -> list[str]:
-    leaf_map = _build_leaf_to_topic_map(root)
+def _survey_files_by_topic(root: Path) -> dict[str, Path]:
     survey_by_topic: dict[str, Path] = {}
-    wiki = root / "wiki"
+    wiki = root / config.ABSTRACT_FOLDER
     if wiki.exists():
         for survey in wiki.glob("*_综述.md"):
             survey_by_topic[survey.stem.replace("_综述", "")] = survey
+    return survey_by_topic
 
+
+def _note_mtimes_by_topic(root: Path) -> dict[str, float]:
+    """每个主题（叶子名与全路径各一份）下笔记的最新 mtime。"""
     notes_by_topic_mtime: dict[str, float] = {}
     for md in _iter_notes_md(root):
         try:
@@ -142,6 +143,13 @@ def _find_stale_survey_topics(root: Path) -> list[str]:
         mtime = md.stat().st_mtime
         notes_by_topic_mtime[leaf] = max(notes_by_topic_mtime.get(leaf, 0), mtime)
         notes_by_topic_mtime[t] = max(notes_by_topic_mtime.get(t, 0), mtime)
+    return notes_by_topic_mtime
+
+
+def _find_stale_survey_topics(root: Path) -> list[str]:
+    leaf_map = _build_leaf_to_topic_map(root)
+    survey_by_topic = _survey_files_by_topic(root)
+    notes_by_topic_mtime = _note_mtimes_by_topic(root)
 
     topics: list[str] = []
     seen: set[str] = set()
@@ -279,28 +287,8 @@ def _scan_lint_issues(root: Path) -> list[LintIssue]:
                     )
                 )
 
-    survey_by_topic: dict[str, Path] = {}
-    wiki = root / "wiki"
-    if wiki.exists():
-        for survey in wiki.glob("*_综述.md"):
-            survey_by_topic[survey.stem.replace("_综述", "")] = survey
-
-    notes_by_topic_mtime: dict[str, float] = {}
-    for md in _iter_notes_md(root):
-        try:
-            fm, _ = parse_frontmatter(md.read_text(encoding="utf-8"))
-        except OSError:
-            continue
-        t = topic_from_notes_path(md) or (fm.get("topic") if fm else "")
-        if isinstance(t, list):
-            t = t[0] if t else ""
-        t = str(t).strip()
-        if not t:
-            continue
-        leaf = t.rsplit(TOPIC_SEP, maxsplit=1)[-1]
-        mtime = md.stat().st_mtime
-        notes_by_topic_mtime[leaf] = max(notes_by_topic_mtime.get(leaf, 0), mtime)
-        notes_by_topic_mtime[t] = max(notes_by_topic_mtime.get(t, 0), mtime)
+    survey_by_topic = _survey_files_by_topic(root)
+    notes_by_topic_mtime = _note_mtimes_by_topic(root)
 
     for topic_key, survey_path in survey_by_topic.items():
         note_mtime = notes_by_topic_mtime.get(topic_key, 0)
@@ -566,28 +554,8 @@ def filter_stale_lint_issues(issues: list[dict], root: Path) -> list[dict]:
             _, duplicate_body = parse_frontmatter(duplicate.read_text(encoding="utf-8"))
             if not is_pair_resolved(root, rel, canonical, duplicate_body, canonical_body):
                 duplicate_issue_paths.add(rel)
-    survey_by_topic: dict[str, Path] = {}
-    wiki = root / config.ABSTRACT_FOLDER
-    if wiki.exists():
-        for survey in wiki.glob("*_综述.md"):
-            survey_by_topic[survey.stem.replace("_综述", "")] = survey
-
-    notes_by_topic_mtime: dict[str, float] = {}
-    for md in _iter_notes_md(root):
-        try:
-            fm, _ = parse_frontmatter(md.read_text(encoding="utf-8"))
-        except OSError:
-            continue
-        t = topic_from_notes_path(md) or (fm.get("topic") if fm else "")
-        if isinstance(t, list):
-            t = t[0] if t else ""
-        t = str(t).strip()
-        if not t:
-            continue
-        leaf = t.rsplit(TOPIC_SEP, maxsplit=1)[-1]
-        mtime = md.stat().st_mtime
-        notes_by_topic_mtime[leaf] = max(notes_by_topic_mtime.get(leaf, 0), mtime)
-        notes_by_topic_mtime[t] = max(notes_by_topic_mtime.get(t, 0), mtime)
+    survey_by_topic = _survey_files_by_topic(root)
+    notes_by_topic_mtime = _note_mtimes_by_topic(root)
 
     live: list[dict] = []
     for issue in issues:

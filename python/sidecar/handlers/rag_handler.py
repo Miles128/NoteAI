@@ -433,7 +433,6 @@ class RagHandler(BaseHandler):
 
     def _answer_selection_lookup(self, params, selection: str, *, use_vector_rag: bool) -> dict:
         """Stream a quick explanation first, then append evidence from the selected route."""
-        from sidecar.intent_router import classify_intent
         from utils.llm_utils import APIConfigError, call_llm_raw_stream
 
         current_file = params.get("current_file") or ""
@@ -446,28 +445,19 @@ class RagHandler(BaseHandler):
         try:
             batcher = RagChatChunkBatcher(self._send_response)
             try:
-                quick_answer = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=batcher.append)
+                call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=batcher.append)
             finally:
                 batcher.flush()
         except (APIConfigError, Exception) as e:
             return self._fail_rag(str(e))
 
+        # 划词路由：仅尊重显式 UI 覆盖；auto 与主对话一致默认走知识库。
         requested_route = params.get("selection_route", "auto")
-        if requested_route == "rag":
-            route = "workspace"
-        elif requested_route == "web":
-            route = "web"
-        else:
-            route_query = f"选中文本：{selection}\n上下文：{context}" if context else selection
-            route = classify_intent(route_query, history=params.get("history")).get("intent", "unknown")
-
-        if route in {"workspace", "unknown"}:
-            self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
-            return self._answer_with_rag(params, selection, "", use_vector_rag=use_vector_rag)
-        if route == "web":
+        if requested_route == "web":
             self._send_chat_chunk("\n\n---\n\n### 联网补充\n\n")
             return self._answer_without_retrieval(selection, "", intent="web")
-        return self._finish_chat(selection, quick_answer)
+        self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
+        return self._answer_with_rag(params, selection, "", use_vector_rag=use_vector_rag)
 
     def _send_chat_chunk(self, token: str) -> None:
         self._send_response(

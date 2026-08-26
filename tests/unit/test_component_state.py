@@ -33,6 +33,7 @@ class TestComponentState(unittest.TestCase):
         extras = deps_sync.default_sync_extras()
         self.assertIn("dev", extras)
         self.assertIn("rag", extras)
+        self.assertIn("ingest", extras)
 
     def test_sync_excludes_rag_when_user_removed(self):
         component_state.set_component_removed("rag", True)

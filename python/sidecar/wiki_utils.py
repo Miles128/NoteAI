@@ -3,16 +3,7 @@
 All WIKI.md read/write operations MUST go through this module.
 Downstream code should never open/read/write WIKI.md directly.
 
-Lower-level helpers live in:
-  - utils.wiki_manager: path resolution, heading parsing, renumbering, survey-off parsing
-  - utils.wiki_crud: CRUD (add/remove/rename topics & files)
-  - utils.wiki_sync: folder sync / topic inference
-  - utils.topic_dedup: merge/dedup
-
-Note: wiki_sync imports are deferred to function bodies because
-utils.wiki_sync imports this module (collect_survey_off_topics).
-
-The wiki_crud names imported above are public facade re-exports.
+底层实现全部在 utils/wiki_store.py（路径解析 / 标题解析 / CRUD / 去重 / 文件夹同步）。
 """
 
 from datetime import datetime
@@ -20,22 +11,34 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-from utils.wiki_crud import (  # noqa: F401  (facade re-exports)
-    add_file_to_wiki_topic,
-    create_topic,
-    delete_topic,
-    remove_file_from_wiki_topic,
-    rename_topic,
+from utils.topic_membership import note_belongs_to_topic
+from utils.wiki_store import (
+    _get_wiki_path as _resolve_wiki_path_impl,
 )
-from utils.wiki_manager import _get_wiki_path as _resolve_wiki_path_impl
-from utils.wiki_manager import (
+from utils.wiki_store import (
+    _write_file_topic_from_folder as _write_file_topic_from_folder_impl,
+)
+from utils.wiki_store import (
+    add_file_to_wiki_topic,  # noqa: F401  (facade re-export)
+    create_topic,  # noqa: F401  (facade re-export)
+    delete_topic,  # noqa: F401  (facade re-export)
+    remove_file_from_wiki_topic,  # noqa: F401  (facade re-export)
+    rename_topic,  # noqa: F401  (facade re-export)
+)
+from utils.wiki_store import (
     collect_survey_off_topics as _collect_survey_off_topics_impl,
 )
-from utils.wiki_manager import (
+from utils.wiki_store import (
     parse_wiki_headings as _parse_wiki_headings_full,
 )
-from utils.wiki_manager import (
+from utils.wiki_store import (
     parse_wiki_structure as _parse_wiki_structure_full,
+)
+from utils.wiki_store import (
+    sync_wiki_with_files as _sync_wiki_with_files_impl,
+)
+from utils.wiki_store import (
+    topic_from_notes_path as _topic_from_notes_path_impl,
 )
 
 
@@ -54,21 +57,15 @@ def parse_wiki_structure() -> list:
 
 
 def sync_wiki_with_files():
-    from utils.wiki_sync import sync_wiki_with_files as _impl
-
-    return _impl()
+    return _sync_wiki_with_files_impl()
 
 
 def write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
-    from utils.wiki_sync import _write_file_topic_from_folder as _impl
-
-    return _impl(file_path, topic)
+    return _write_file_topic_from_folder_impl(file_path, topic)
 
 
 def topic_from_notes_path(file_path: str | Path) -> str | None:
-    from utils.wiki_sync import topic_from_notes_path as _impl
-
-    return _impl(file_path)
+    return _topic_from_notes_path_impl(file_path)
 
 
 def read_wiki_text(workspace_str: str | Path | None = None) -> str | None:
@@ -342,25 +339,9 @@ def get_survey_overview(workspace_str: str | Path | None = None) -> dict[str, di
         for topic, parts in candidate_parts.items():
             if not parts:
                 continue
-            matched = bool(
-                file_topic
-                and (
-                    file_topic == topic
-                    or file_topic.startswith(topic + TOPIC_SEP)
-                    or len(parts) == 1
-                    and (file_topic == parts[0] or file_topic.startswith(parts[0] + TOPIC_SEP))
-                )
-            )
-            if not matched and topic in file_topics:
-                matched = True
-            if not matched and rel_parts and rel_parts[0] == parts[0]:
-                if len(parts) == 1:
-                    matched = True
-                elif len(rel_parts) >= 2 and rel_parts[1] == parts[1]:
-                    if len(parts) == 2 or len(rel_parts) >= 3 and rel_parts[2] == parts[2]:
-                        matched = True
-            if matched and mtime > latest_mtime.get(topic, float("-inf")):
-                latest_mtime[topic] = mtime
+            if note_belongs_to_topic(topic, file_topic, file_topics, rel_parts, parts):
+                if mtime > latest_mtime.get(topic, float("-inf")):
+                    latest_mtime[topic] = mtime
 
     # 计算 stale 并补齐 survey_path
     for topic, entry in overview.items():

@@ -77,7 +77,6 @@ class SidecarServer(PathHelpersMixin):
         self.file_previewer = FilePreviewer()
         self.topic_extractor = TopicExtractor()
         self.folder_watcher = FolderWatcher(on_files=self._handle_watched_folder_files)
-        self._rss_scheduler = None
         self._progress_callback = None
         self._running_tasks = set()
         self._running_tasks_lock = threading.Lock()
@@ -128,7 +127,6 @@ class SidecarServer(PathHelpersMixin):
         self._start_workspace_watcher()
         # Run heavy startup sync in background so stdin reader is not blocked.
         threading.Thread(target=self._startup_sync, daemon=True, name="startup-sync").start()
-        self._start_rss_scheduler()
 
     def _build_router(self):
         self._config_handler.register_routes(self._router)
@@ -363,16 +361,6 @@ class SidecarServer(PathHelpersMixin):
         workspace = config.workspace_path
         folders = load_watched_folders(workspace) if workspace and Path(workspace).exists() else []
         self.folder_watcher.start(folders)
-
-    def _start_rss_scheduler(self):
-        from sidecar.multi_source import RssScheduler
-
-        if self._rss_scheduler is None:
-            self._rss_scheduler = RssScheduler(
-                workspace_provider=lambda: config.workspace_path,
-                send_event=lambda payload: self._send_response({"id": "event", "result": payload}),
-            )
-        self._rss_scheduler.start()
 
     def _stop_watcher(self):
         with self._watcher_lock:
@@ -695,8 +683,6 @@ class SidecarServer(PathHelpersMixin):
         """Gracefully stop background services."""
         self._stop_watcher()
         self.folder_watcher.stop()
-        if self._rss_scheduler:
-            self._rss_scheduler.stop()
         self._router.shutdown(wait=False)
         # Shutdown module-level thread pools
         try:

@@ -12,12 +12,15 @@ from utils.logger import logger
 # Extras synced by default in dev/CI unless the user opted out in Settings.
 DEFAULT_DEV_EXTRA = "dev"
 DEFAULT_COMPONENT_EXTRAS = ("rag",)
+# 始终随默认安装的构建期 extra（非组件，不可在设置中移除）。
+ALWAYS_EXTRAS = ("ingest",)
 
 
 def default_sync_extras(*, include_dev: bool = True) -> list[str]:
     extras: list[str] = []
     if include_dev:
         extras.append(DEFAULT_DEV_EXTRA)
+    extras.extend(ALWAYS_EXTRAS)
     for name in DEFAULT_COMPONENT_EXTRAS:
         if not is_component_removed(name):
             extras.append(name)

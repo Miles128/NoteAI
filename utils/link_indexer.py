@@ -388,7 +388,6 @@ def _vector_search_candidates(
         hits = hybrid_search(
             workspace,
             qemb["dense_vec"],
-            qemb.get("lexical_weights") or {},
             top_k=limit + 5,
         )
     except Exception as e:

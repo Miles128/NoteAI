@@ -8,8 +8,6 @@ To add a new prompt: add the key to the appropriate YAML file in prompts/yaml/.
 
 from .loader import get_prompt
 
-INTENT_ROUTER_PROMPT = get_prompt("intent_router", "INTENT_ROUTER_PROMPT")
-
 TOPIC_NOTE_GENERATION_PROMPT = get_prompt("note_integration", "TOPIC_NOTE_GENERATION_PROMPT")
 CONTENT_SUMMARIZE_PROMPT = get_prompt("note_integration", "CONTENT_SUMMARIZE_PROMPT")
 CONTENT_COMPRESS_PROMPT = get_prompt("note_integration", "CONTENT_COMPRESS_PROMPT")
@@ -58,8 +56,8 @@ LINK_PAIR_JUDGE_PROMPT = get_prompt("link_indexer", "LINK_PAIR_JUDGE_PROMPT")
 
 CLAIM_VERIFY_CLI_PROMPT = get_prompt("claim_verify", "CLAIM_VERIFY_CLI_PROMPT")
 CLAIM_BATCH_VERIFY_PROMPT = get_prompt("claim_batch_verify", "CLAIM_BATCH_VERIFY_PROMPT")
+MERGE_NOTES_PROMPT = get_prompt("merge_notes", "MERGE_NOTES_PROMPT")
 RSS_DISCOVERY_PROMPT = get_prompt("rss_discovery", "RSS_DISCOVERY_PROMPT")
-DEEPSEEK_WEB_DISCOVERY_PROMPT = get_prompt("rss_discovery", "DEEPSEEK_WEB_DISCOVERY_PROMPT")
 CROSS_KIND_RESOLVE_PROMPT = get_prompt("cross_kind_resolve", "CROSS_KIND_RESOLVE_PROMPT")
 SEMANTIC_OBJECT_NAME_RULES = get_prompt("semantic_extract", "OBJECT_NAME_RULES")
 SEMANTIC_EXTRACT_PROMPT = get_prompt("semantic_extract", "EXTRACTION_PROMPT")
@@ -70,7 +68,6 @@ SEMANTIC_REPAIR_SUFFIX = get_prompt("semantic_extract", "REPAIR_SUFFIX")
 
 __all__ = [
     "get_prompt",
-    "INTENT_ROUTER_PROMPT",
     "TOPIC_NOTE_GENERATION_PROMPT",
     "CONTENT_SUMMARIZE_PROMPT",
     "CONTENT_COMPRESS_PROMPT",
@@ -103,6 +100,7 @@ __all__ = [
     "SCHEMA_FALLBACK_PROMPT",
     "CLAIM_VERIFY_CLI_PROMPT",
     "CLAIM_BATCH_VERIFY_PROMPT",
+    "MERGE_NOTES_PROMPT",
     "SEMANTIC_OBJECT_NAME_RULES",
     "SEMANTIC_EXTRACT_PROMPT",
     "SEMANTIC_BATCH_EXTRACT_PROMPT",

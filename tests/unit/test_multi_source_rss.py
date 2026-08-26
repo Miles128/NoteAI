@@ -1,9 +1,7 @@
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 from sidecar.multi_source import (
-    RssScheduler,
     fetch_all_subscriptions,
     import_rss_feed,
     load_subscriptions,
@@ -89,11 +87,3 @@ def test_save_subscription_fetches_feed_title(monkeypatch: pytest.MonkeyPatch, w
     subs = load_subscriptions(str(workspace))
     assert len(subs) == 1
     assert subs[0]["name"] == "My Feed"
-
-
-def test_rss_scheduler_is_due() -> None:
-    now = datetime.now(timezone.utc)
-    assert RssScheduler._is_due({"url": "x"})  # 从未拉取过
-    assert not RssScheduler._is_due({"url": "x", "last_fetched": now.isoformat(), "interval_minutes": 30})
-    old = (now - timedelta(minutes=31)).isoformat()
-    assert RssScheduler._is_due({"url": "x", "last_fetched": old, "interval_minutes": 30})

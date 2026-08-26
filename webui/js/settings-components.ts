@@ -470,8 +470,8 @@ async function refreshCliAgentsSettings() {
 
         var agents = (result && result.success && Array.isArray(result.agents)) ? result.agents : [];
         var uiConfig: any = {};
-        if (window.state && window.state.getState) {
-            uiConfig = window.state.getState().uiConfig || {};
+        if (window.state && window.state.get) {
+            uiConfig = window.state.get().uiConfig || {};
         }
         if (!uiConfig.cli_agent_id && window.api.getUiConfig) {
             uiConfig = await window.api.getUiConfig();

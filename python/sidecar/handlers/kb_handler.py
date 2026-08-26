@@ -82,7 +82,7 @@ class KbHandler(BaseHandler):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from sidecar.chunk_similarity import build_chunk_similarity_graph
+        from sidecar.duplicate_review import build_chunk_similarity_graph
 
         overrides = params.get("overrides") or {}
         if not isinstance(overrides, dict):

@@ -10,6 +10,4 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_COMMON_ENGLISH_WORDS = frozenset(
-    (Path(__file__).with_suffix(".txt")).read_text(encoding="utf-8").split()
-)
+_COMMON_ENGLISH_WORDS = frozenset((Path(__file__).with_suffix(".txt")).read_text(encoding="utf-8").split())

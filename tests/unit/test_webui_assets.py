@@ -7,6 +7,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WEBUI = ROOT / "webui"
 
+# 构建产物（npm run build:* 生成，不入库）：未构建的环境下跳过存在性校验
+GENERATED_ASSETS = frozenset(
+    {
+        "dist/main.js",
+        "highlight.min.js",
+        "js/storage.bundle.js",
+        "lib/tiptap-bundle.js",
+    }
+)
+
 
 def test_index_referenced_local_assets_exist() -> None:
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
@@ -16,8 +26,9 @@ def test_index_referenced_local_assets_exist() -> None:
     for ref in refs:
         if ref.startswith(("http://", "https://", "data:", "#")):
             continue
-        asset = WEBUI / ref.split("?", 1)[0]
-        if not asset.exists():
+        rel = ref.split("?", 1)[0]
+        asset = WEBUI / rel
+        if not asset.exists() and rel not in GENERATED_ASSETS:
             missing.append(ref)
 
     assert missing == []

@@ -1107,7 +1107,7 @@ def get_backlinks(file_path: str) -> dict[str, Any]:
         }
 
     related = [
-        _to_view(link, center_file=file_path)
+        _to_view(link)
         for link in all_links
         if _normalize_link_path(link["to"]) == norm_center or _normalize_link_path(link["from"]) == norm_center
     ]

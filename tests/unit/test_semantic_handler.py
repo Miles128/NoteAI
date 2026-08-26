@@ -49,26 +49,12 @@ def semantic_handler(tmp_path: Path):
             "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
             " VALUES('entity-3', 'BM25', 'algorithm', '', 0.85, 'active')"
         )
-        conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG',
-                      'conclusion', 0.92, 'active')"""
-        )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-1', 'claim-1', 'block-1', 'quote-hash')"""
-        )
         conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', 'block-1')")
         conn.execute("INSERT INTO semantic_mentions VALUES('entity-1', 'entity', 'block-1')")
         # Entity → Concept co-occurrence relation (target endpoint is a concept, not an entity)
         conn.execute(
             """INSERT INTO relations(id, source_id, relation_type, target_id, confidence, evidence_id, block_id)
                VALUES('rel-1', 'entity-1', 'RELATED_TO', 'concept-1', 0.9, NULL, 'block-1') """
-        )
-        conn.execute(
-            """INSERT INTO review_queue(id, item_kind, payload_json, reason, status, created_at)
-               VALUES('conflict-1', 'claim_conflict', '{"claim_a":"A","claim_b":"B"}',
-                      '数值不一致', 'pending', '2026-07-17T10:01:00Z')"""
         )
     (workspace / ".links.json").write_text(
         json.dumps(
@@ -87,19 +73,14 @@ def semantic_handler(tmp_path: Path):
     config.workspace_path = previous
 
 
-def test_overview_and_claim_evidence_are_real(semantic_handler: SemanticHandler) -> None:
+def test_overview_counts_are_real(semantic_handler: SemanticHandler) -> None:
     overview = semantic_handler._get_workbench({"tab": "overview"})
-    claims = semantic_handler._get_workbench({"tab": "claims", "query": "混合"})
 
     assert overview["success"] is True
-    assert overview["overview"]["claims"] == 1
-    assert overview["overview"]["evidence"] == 1
+    assert overview["overview"]["concepts"] == 1
+    assert overview["overview"]["entities"] == 3
     assert overview["overview"]["source_documents"] == 1
     assert overview["overview"]["uncompiled_documents"] == 0
-    assert claims["total"] == 1
-    assert claims["items"][0]["claim_type"] == "conclusion"
-    assert claims["items"][0]["evidence"][0]["path"] == "Notes/AI/RAG.md"
-    assert claims["items"][0]["evidence"][0]["heading_path"] == ["检索"]
 
 
 def test_concepts_entities_and_bidirectional_links(semantic_handler: SemanticHandler) -> None:
@@ -111,18 +92,6 @@ def test_concepts_entities_and_bidirectional_links(semantic_handler: SemanticHan
     assert entities["items"][0]["source_count"] == 1
     assert links["total"] == 2
     assert all(item["has_reverse"] for item in links["items"])
-
-
-def test_conflict_review_changes_only_review_status(semantic_handler: SemanticHandler) -> None:
-    pending = semantic_handler._get_workbench({"tab": "conflicts", "status": "pending"})
-    reviewed = semantic_handler._review_conflict({"id": "conflict-1", "status": "reviewed"})
-    history = semantic_handler._get_workbench({"tab": "conflicts", "status": "reviewed"})
-    claims = semantic_handler._get_workbench({"tab": "claims"})
-
-    assert pending["total"] == 1
-    assert reviewed["success"] is True
-    assert history["items"][0]["id"] == "conflict-1"
-    assert claims["total"] == 1
 
 
 def test_entity_quality_is_snapshot_only_and_reviewable(semantic_handler: SemanticHandler) -> None:
@@ -366,48 +335,12 @@ def test_cross_kind_resolver_keeps_distinct_pairs_and_parses_partial_batch(
         assert pending == 1
 
 
-def test_claim_can_be_edited_deleted_and_restored_with_audit(
+def test_entity_alias_is_audited(
     semantic_handler: SemanticHandler,
 ) -> None:
-    edited = semantic_handler._update_claim(
-        {
-            "id": "claim-1",
-            "statement": "混合检索通常优于单一路径。",
-            "scope": "检索质量",
-            "claim_type": "conclusion",
-        }
-    )
-    deleted = semantic_handler._set_claim_status({"id": "claim-1", "status": "deleted"})
-    active = semantic_handler._get_workbench({"tab": "claims"})
-    history = semantic_handler._get_workbench({"tab": "claims", "status": "deleted"})
-    restored = semantic_handler._set_claim_status({"id": "claim-1", "status": "active"})
-    detail = semantic_handler._get_detail({"kind": "claim", "id": "claim-1"})
-
-    assert edited["success"] is True
-    assert deleted["success"] is True
-    assert active["total"] == 0
-    assert history["total"] == 1
-    assert restored["success"] is True
-    assert detail["item"]["statement"] == "混合检索通常优于单一路径。"
-    assert [entry["action"] for entry in detail["item"]["audit"]] == [
-        "restore",
-        "delete",
-        "edit",
-    ]
-
-
-def test_evidence_exclusion_and_entity_alias_are_audited(
-    semantic_handler: SemanticHandler,
-) -> None:
-    excluded = semantic_handler._set_evidence_status({"id": "evidence-1", "status": "excluded"})
-    claims = semantic_handler._get_workbench({"tab": "claims"})
-    restored = semantic_handler._set_evidence_status({"id": "evidence-1", "status": "active"})
     alias = semantic_handler._add_entity_alias({"id": "entity-1", "alias": "Okapi BM25"})
     entity = semantic_handler._get_detail({"kind": "entity", "id": "entity-1"})
 
-    assert excluded["success"] is True
-    assert claims["total"] == 0
-    assert restored["success"] is True
     assert alias["success"] is True
     assert entity["item"]["aliases"] == ["Okapi BM25"]
     assert entity["item"]["audit"][0]["action"] == "add_alias"
@@ -420,7 +353,7 @@ def test_topic_wiki_page_can_be_previewed_and_published(semantic_handler: Semant
 
     assert preview["success"] is True
     assert "# RAG" in preview["content"]
-    assert "## 已发布结论" in preview["content"]
+    assert "**高频对象：**" in preview["content"]
     assert published["success"] is True
     merged = workspace / "wiki" / "semantic" / "AI_语义.md"
     assert merged.exists()
@@ -447,7 +380,6 @@ def test_block_extraction_materializes_traceable_entity_concept_relation(
                 "confidence": 0.9,
             }
         ],
-        claims=[],
     )
 
     detail = semantic_handler._get_detail({"kind": "entity", "id": "entity-1"})
@@ -496,7 +428,6 @@ def test_extraction_dedups_variant_spellings_into_existing_object(
                 "confidence": 0.8,
             }
         ],
-        claims=[],
     )
     # 第二个块抽到同一对象的不同变体：括号注释、空格、大小写均不同
     store.save_block_extraction(
@@ -521,7 +452,6 @@ def test_extraction_dedups_variant_spellings_into_existing_object(
                 "confidence": 0.9,
             }
         ],
-        claims=[],
     )
 
     with store.connect() as conn:
@@ -644,7 +574,7 @@ def test_automatic_materializer_refreshes_old_and_new_topics(
                       '2026-07-17T10:00:00Z') """
         )
 
-    result = materialize_documents(store, {"doc-1"}, affected_topics={"AI > RAG"}, include_objects=False)
+    result = materialize_documents(store, {"doc-1"}, affected_topics={"AI > RAG"})
     workspace = Path(semantic_handler.config.workspace_path)
 
     assert result["topics"] == 2
@@ -696,12 +626,10 @@ def test_unknown_tab_is_rejected(semantic_handler: SemanticHandler) -> None:
 
 def test_semantic_detail_returns_source_blocks(semantic_handler: SemanticHandler) -> None:
     concept = semantic_handler._get_detail({"kind": "concept", "id": "concept-1"})
-    claim = semantic_handler._get_detail({"kind": "claim", "id": "claim-1"})
 
     assert concept["success"] is True
     assert concept["item"]["sources"][0]["path"] == "Notes/AI/RAG.md"
-    assert claim["item"]["sources"][0]["excerpt"] == "混合检索结合向量与关键词。"
-    assert claim["item"]["claim_type"] == "conclusion"
+    assert concept["item"]["sources"][0]["excerpt"] == "混合检索结合向量与关键词。"
 
 
 def test_start_full_compile_uses_every_note(semantic_handler: SemanticHandler) -> None:
@@ -765,8 +693,6 @@ def test_full_compile_purges_deleted_documents_and_refreshes_object_pages(
             "documents": 0,
             "blocks": 0,
             "extracted_blocks": 0,
-            "claims": 0,
-            "rejected_claims": 0,
             "failed_blocks": 0,
             "pending_documents": 0,
             "failures": [],
@@ -843,13 +769,13 @@ def test_get_semantic_changes_is_read_only_and_validates_params(semantic_handler
             """INSERT INTO semantic_change_log(
                    id, change_kind, object_kind, object_id, label, detail_json,
                    source_path, topic, created_at
-               ) VALUES('chg-1', 'added', 'claim', 'claim-x', '新命题', '{}',
+               ) VALUES('chg-1', 'added', 'concept', 'concept-x', '新概念', '{}',
                         'Notes/AI/RAG.md', 'AI > RAG', datetime('now'))"""
         )
     listed = semantic_handler._get_changes({"days": 7})
     assert listed["total"] == 1
-    assert listed["items"][0]["label"] == "新命题"
-    assert listed["counts"] == [{"change_kind": "added", "object_kind": "claim", "count": 1}]
+    assert listed["items"][0]["label"] == "新概念"
+    assert listed["counts"] == [{"change_kind": "added", "object_kind": "concept", "count": 1}]
 
 
 def test_get_semantic_changes_repairs_legacy_store_without_change_log(
@@ -898,43 +824,31 @@ def test_change_log_read_methods_self_heal_legacy_store(tmp_path: Path) -> None:
         SemanticStore._record_change(
             conn,
             change_kind="added",
-            object_kind="claim",
-            object_id="claim-1",
-            label="测试命题",
+            object_kind="concept",
+            object_id="concept-1",
+            label="测试概念",
         )
     items, total = store.recent_changes(days=7)
     assert total == 1
-    assert items[0]["label"] == "测试命题"
+    assert items[0]["label"] == "测试概念"
 
 
 def test_workbench_intensity_filters_confidence(semantic_handler: SemanticHandler) -> None:
-    """Intensity light/standard/deep must filter claims and objects by confidence."""
+    """Intensity light/standard/deep must filter objects by confidence."""
     store = semantic_handler._store()
     with store.connect() as conn:
         conn.execute(
             "INSERT INTO entities(id, canonical_name, entity_type, description, confidence, status)"
             " VALUES('entity-4', '中置信实体', 'concept_type', '描述', 0.62, 'active')"
         )
-        conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-2', '低置信命题。', 'RAG', 'hypothesis', 0.31, 'active')"""
-        )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-2', 'claim-2', 'block-1', 'quote-hash-2')"""
-        )
 
     entities_deep = semantic_handler._get_workbench({"tab": "entities", "intensity": "deep"})
     entities_standard = semantic_handler._get_workbench({"tab": "entities", "intensity": "standard"})
     entities_light = semantic_handler._get_workbench({"tab": "entities", "intensity": "light"})
-    claims_deep = semantic_handler._get_workbench({"tab": "claims", "intensity": "deep"})
-    claims_light = semantic_handler._get_workbench({"tab": "claims", "intensity": "light"})
 
     assert entities_deep["total"] == 4
     assert entities_standard["total"] == 3  # 0.4 被过滤
     assert entities_light["total"] == 2  # 0.4 与 0.62 被过滤
-    assert claims_deep["total"] == 2
-    assert claims_light["total"] == 1  # 0.31 被过滤
 
     # 未知强度回退到标准强度
     fallback = semantic_handler._get_workbench({"tab": "entities", "intensity": "ultra"})
@@ -985,49 +899,49 @@ def test_low_frequency_objects_are_degraded_outside_deep_mode(semantic_handler: 
     assert entities_search["degraded_hidden"] == 0
 
 
-def _mark_claim_failed(store: SemanticStore, block_id: str, error: str = "LLM 超时") -> None:
-    with store.connect() as conn:
-        conn.execute(
-            """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
-               VALUES(?, 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', ?)""",
-            (block_id, error),
-        )
-
-
 def test_retry_failed_blocks_no_failures(semantic_handler: SemanticHandler) -> None:
-    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    result = semantic_handler._retry_failed_blocks({})
     assert result["success"] is True
     assert result["failed_blocks"] == 0
     assert result["extracted_blocks"] == 0
 
 
-def test_retry_failed_blocks_retries_and_completes(semantic_handler: SemanticHandler, monkeypatch) -> None:
-    _mark_claim_failed(semantic_handler._store(), "block-1")
-    calls: list[tuple[str, bool]] = []
+def _mark_extraction_failed(store: SemanticStore, block_id: str, error: str = "LLM 超时") -> None:
+    with store.connect() as conn:
+        conn.execute(
+            """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+               VALUES(?, 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', ?)""",
+            (block_id, error),
+        )
 
-    def fake_extract(store, doc_id, claims_only=False):
-        calls.append((doc_id, claims_only))
+
+def test_retry_failed_blocks_retries_and_completes(semantic_handler: SemanticHandler, monkeypatch) -> None:
+    _mark_extraction_failed(semantic_handler._store(), "block-1")
+    calls: list[str] = []
+
+    def fake_extract(store, doc_id):
+        calls.append(doc_id)
         with store.connect() as conn:
             conn.execute(
-                """UPDATE claim_extractions SET status='complete', error=NULL
+                """UPDATE block_extractions SET status='complete', error=NULL
                    WHERE block_id='block-1'"""
             )
-        return {"success": True, "extracted": 1, "claims": 1, "failed": 0, "failures": []}
+        return {"success": True, "extracted": 1, "failed": 0, "failures": []}
 
     monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
-    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    result = semantic_handler._retry_failed_blocks({})
     assert result["success"] is True
     assert result["failed_blocks"] == 1
     assert result["documents"] == 1
     assert result["extracted_blocks"] == 1
     assert result["remaining_failed"] == 0
-    assert calls == [("doc-1", True)]
+    assert calls == ["doc-1"]
 
 
 def test_retry_failed_blocks_limit(semantic_handler: SemanticHandler, monkeypatch) -> None:
     with semantic_handler._store().connect() as conn:
         conn.execute(
-            """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+            """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
                VALUES('block-1', 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', 'err-1')"""
         )
         for i in (2, 3):
@@ -1043,18 +957,18 @@ def test_retry_failed_blocks_limit(semantic_handler: SemanticHandler, monkeypatc
                 (f"block-{i}", f"doc-{i}"),
             )
             conn.execute(
-                """INSERT INTO claim_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
+                """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
                    VALUES(?, 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', ?)""",
                 (f"block-{i}", f"err-{i}"),
             )
     calls: list[str] = []
 
-    def fake_extract(store, doc_id, claims_only=False):
+    def fake_extract(store, doc_id):
         calls.append(doc_id)
-        return {"success": True, "extracted": 0, "claims": 0, "failures": []}
+        return {"success": True, "extracted": 0, "failures": []}
 
     monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
-    result = semantic_handler._retry_failed_blocks({"claims_only": True, "limit": 1})
+    result = semantic_handler._retry_failed_blocks({"limit": 1})
     assert result["failed_blocks"] == 1
     assert result["documents"] == 1
     assert len(calls) == 1
@@ -1063,43 +977,42 @@ def test_retry_failed_blocks_limit(semantic_handler: SemanticHandler, monkeypatc
 
 
 def test_retry_failed_blocks_reports_failure(semantic_handler: SemanticHandler, monkeypatch) -> None:
-    _mark_claim_failed(semantic_handler._store(), "block-1", "解析失败")
+    _mark_extraction_failed(semantic_handler._store(), "block-1", "解析失败")
 
-    def fake_extract(store, doc_id, claims_only=False):
+    def fake_extract(store, doc_id):
         return {
             "success": True,
             "extracted": 0,
-            "claims": 0,
             "failures": [{"block_id": "block-1", "error": "解析失败"}],
         }
 
     monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
-    result = semantic_handler._retry_failed_blocks({"claims_only": True})
+    result = semantic_handler._retry_failed_blocks({})
     assert result["failures"] == [{"document_id": "doc-1", "error": "解析失败"}]
     assert result["remaining_failed"] == 1
 
 
-def test_retry_failed_blocks_full_mode_uses_block_extractions(semantic_handler: SemanticHandler, monkeypatch) -> None:
+def test_retry_failed_blocks_completes_via_block_extractions(semantic_handler: SemanticHandler, monkeypatch) -> None:
     with semantic_handler._store().connect() as conn:
         conn.execute(
             """INSERT INTO block_extractions(block_id, block_hash, prompt_version, status, extracted_at, error)
                VALUES('block-1', 'block-hash', 4, 'failed', '2026-07-17T10:00:00Z', '超时')"""
         )
-    calls: list[bool] = []
+    calls: list[str] = []
 
-    def fake_extract(store, doc_id, claims_only=False):
-        calls.append(claims_only)
+    def fake_extract(store, doc_id):
+        calls.append(doc_id)
         with store.connect() as conn:
             conn.execute(
                 """UPDATE block_extractions SET status='complete', error=NULL
                    WHERE block_id='block-1'"""
             )
-        return {"success": True, "extracted": 1, "claims": 0, "failures": []}
+        return {"success": True, "extracted": 1, "failures": []}
 
     monkeypatch.setattr("sidecar.semantic.extractor.extract_document_semantics", fake_extract)
-    result = semantic_handler._retry_failed_blocks({"claims_only": False})
+    result = semantic_handler._retry_failed_blocks({})
     assert result["success"] is True
     assert result["failed_blocks"] == 1
     assert result["extracted_blocks"] == 1
     assert result["remaining_failed"] == 0
-    assert calls == [False]
+    assert calls == ["doc-1"]

@@ -43,21 +43,15 @@ def merged_store(tmp_path: Path):
                       'RAG 细节说明。', 'bh2', 1, 1)"""
         )
         conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-1', '混合检索结合向量与关键词。', 'RAG', 'conclusion', 0.92, 'active')"""
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-1', '混合检索', '组合检索方式', 0.95, 'active')"
         )
         conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-2', '细节决定成败。', '细节', 'conclusion', 0.8, 'active')"""
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-2', '细节管理', '细节说明', 0.9, 'active')"
         )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-1', 'claim-1', 'block-1', 'q1')"""
-        )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-2', 'claim-2', 'block-2', 'q2')"""
-        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-1', 'concept', 'block-1')")
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-2', 'concept', 'block-2')")
     yield store
     config.workspace_path = previous
 
@@ -78,8 +72,8 @@ def test_top_level_page_merges_descendant_sections(merged_store: SemanticStore) 
     assert "# AI" in content
     assert "## RAG" in content
     assert "### 细节" in content
-    assert "混合检索结合向量与关键词。" in content
-    assert "细节决定成败。" in content
+    assert "混合检索" in content
+    assert "细节管理" in content
 
 
 def test_materialize_from_subtopic_writes_merged_top_level(merged_store: SemanticStore) -> None:
@@ -102,7 +96,7 @@ def test_subtopic_preview_returns_own_section(merged_store: SemanticStore) -> No
     assert "# AI" not in page["content"]
 
 
-def test_subtopic_preview_excludes_sibling_claims(merged_store: SemanticStore) -> None:
+def test_subtopic_preview_excludes_sibling_objects(merged_store: SemanticStore) -> None:
     with merged_store.connect() as conn:
         conn.execute(
             """INSERT INTO documents(id, path, content_hash, title, topic, compiled_at)
@@ -116,18 +110,15 @@ def test_subtopic_preview_excludes_sibling_claims(merged_store: SemanticStore) -
                       '其他内容。', 'bh3', 1, 1)"""
         )
         conn.execute(
-            """INSERT INTO claims(id, statement, scope, claim_type, confidence, status)
-               VALUES('claim-3', '无关兄弟命题。', '其他', 'conclusion', 0.7, 'active')"""
+            "INSERT INTO concepts(id, canonical_name, description, confidence, status)"
+            " VALUES('concept-3', '无关兄弟对象', '其他', 0.9, 'active')"
         )
-        conn.execute(
-            """INSERT INTO evidence(id, claim_id, block_id, quote_hash)
-               VALUES('evidence-3', 'claim-3', 'block-3', 'q3')"""
-        )
+        conn.execute("INSERT INTO semantic_mentions VALUES('concept-3', 'concept', 'block-3')")
 
     page = build_topic_wiki_page(merged_store, "AI > RAG")
 
-    assert "无关兄弟命题。" not in page["content"]
-    assert "混合检索结合向量与关键词。" in page["content"]
+    assert "无关兄弟对象" not in page["content"]
+    assert "混合检索" in page["content"]
 
 
 def _seed_wiki(workspace: Path) -> None:

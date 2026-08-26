@@ -109,18 +109,12 @@ declare global {
         exportNotes(options?: any): Promise<any>;
         restoreWorkspaceBackup(options?: any): Promise<any>;
         startSemanticFullCompile(options?: any): Promise<any>;
-        reviewSemanticConflict(id: string, status?: string): Promise<any>;
-        scanSemanticConflicts(): Promise<any>;
         reviewSemanticEntityQuality(id: string, status?: string): Promise<any>;
         enqueueSemanticEntityQuality(id: string): Promise<any>;
         enqueueCrossKindSemanticMerges(): Promise<any>;
         resolveCrossKindMerges(dryRun?: boolean): Promise<any>;
         getSemanticEntityMergePreview(sourceId: string, targetId: string): Promise<any>;
         mergeSemanticEntities(sourceId: string, targetId: string): Promise<any>;
-        updateSemanticClaim(id: string, statement: string, scope?: string, claimType?: string): Promise<any>;
-        verifySemanticClaim(id: string, agent: string, method?: string): Promise<any>;
-        setSemanticClaimStatus(id: string, status: string): Promise<any>;
-        setSemanticEvidenceStatus(id: string, status: string): Promise<any>;
         getSemanticTopicWikiPage(topic: string): Promise<any>;
         publishSemanticTopicWikiPage(topic: string): Promise<any>;
         addSemanticEntityAlias(id: string, alias: string): Promise<any>;

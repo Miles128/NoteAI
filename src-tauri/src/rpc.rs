@@ -130,7 +130,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "retry_ingest",
     "reveal_in_finder",
     "resolve_cross_kind_merges",
-    "review_semantic_conflict",
     "review_semantic_entity_quality",
     "run_cli_agent",
     "run_kb_lint",
@@ -142,11 +141,8 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "save_ui_config",
     "save_workspace_rules",
     "scan_merge_candidates",
-    "scan_semantic_conflicts",
     "scan_watched_folder",
     "search_files",
-    "set_semantic_claim_status",
-    "set_semantic_evidence_status",
     "set_workspace_path",
     "start_file_conversion",
     "start_ingest",
@@ -160,8 +156,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "toggle_survey",
     "topic_meta",
     "uninstall_component",
-    "update_semantic_claim",
-    "verify_semantic_claim",
 ];
 
 /// RPC ack timeout. Long work (RAG chat, ingest) returns immediately and streams via python-event.
@@ -169,7 +163,6 @@ fn rpc_timeout_secs(method: &str) -> u64 {
     match method {
         // CLI 联网深度研究需多轮检索+打开网页核对，实测约 5-6 分钟；
         // Python 侧硬超时 840s，此处留 60s 余量。
-        "verify_semantic_claim" => 900,
         "resolve_cross_kind_merges" => 1800,
         "start_ingest" | "ensure_ingest" | "retry_ingest" | "rag_rebuild_index"
         | "cancel_ingest" => 120,

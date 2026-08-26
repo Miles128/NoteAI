@@ -28,11 +28,11 @@ def _restore_semantic_settings():
 
 def test_get_ui_config_exposes_semantic_workbench_fields(_restore_semantic_settings) -> None:
     config.semantic_workbench_enabled = False
-    config.semantic_workbench_tabs = ["objects", "claims"]
+    config.semantic_workbench_tabs = ["objects", "links"]
     config.semantic_workbench_intensity = "light"
     ui = _handler()._get_ui_config({})
     assert ui["semantic_workbench_enabled"] is False
-    assert ui["semantic_workbench_tabs"] == ["objects", "claims"]
+    assert ui["semantic_workbench_tabs"] == ["objects", "links"]
     assert ui["semantic_workbench_intensity"] == "light"
 
 
@@ -66,14 +66,14 @@ def test_save_ui_config_ignores_empty_tab_list_and_saves_valid_intensity(
     handler._save_ui_config(
         {
             "semantic_workbench_enabled": True,
-            "semantic_workbench_tabs": ["claims"],
+            "semantic_workbench_tabs": ["quality"],
             "semantic_workbench_intensity": "deep",
         }
     )
     assert config.semantic_workbench_enabled is True
-    assert config.semantic_workbench_tabs == ["claims"]
+    assert config.semantic_workbench_tabs == ["quality"]
     assert config.semantic_workbench_intensity == "deep"
 
     handler._save_ui_config({"semantic_workbench_tabs": []})
     # 空列表不覆盖已有配置
-    assert config.semantic_workbench_tabs == ["claims"]
+    assert config.semantic_workbench_tabs == ["quality"]

@@ -70,7 +70,7 @@ class AppConfig:
     # Tabs mirror the sidebar categories; intensity filters low-confidence items.
     semantic_workbench_enabled: bool = True
     semantic_workbench_tabs: list[str] = field(
-        default_factory=lambda: ["objects", "claims", "quality", "conflicts", "links", "brief"]
+        default_factory=lambda: ["objects", "quality", "links", "brief"]
     )
     semantic_workbench_intensity: str = "standard"
     cli_agent_id: str = ""

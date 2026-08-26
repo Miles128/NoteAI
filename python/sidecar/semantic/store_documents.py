@@ -142,7 +142,7 @@ class DocumentsStore(SemanticStoreBase):
             )
 
     def save_block_extraction(self, **kwargs) -> None:
-        """薄委托：写入主体在 claims/objects 侧（见 ``ClaimsStore.save_block_extraction``）。"""
+        """薄委托：写入主体在 objects 侧（见 ``ObjectsStore.save_block_extraction``）。"""
         self._facade.save_block_extraction(**kwargs)  # type: ignore[attr-defined]
 
     def replace_document(
@@ -177,12 +177,6 @@ class DocumentsStore(SemanticStoreBase):
             stale = existing - new_ids
             if stale:
                 conn.executemany("DELETE FROM blocks WHERE id = ?", ((item,) for item in stale))
-                self._invalidate_orphan_claims(
-                    conn,
-                    reason="source_block_removed",
-                    source_path=document.get("path", ""),
-                    topic=document.get("topic", ""),
-                )
             self._record_change(
                 conn,
                 change_kind="updated" if existed else "added",
@@ -246,11 +240,6 @@ class DocumentsStore(SemanticStoreBase):
                 return []
             conn.executemany("DELETE FROM documents WHERE id = ?", ((row["id"],) for row in missing))
             removed_paths = [row["path"] for row in missing]
-            self._invalidate_orphan_claims(
-                conn,
-                reason="source_deleted",
-                detail={"documents": removed_paths[:8]},
-            )
             for row in missing:
                 self._record_change(
                     conn,

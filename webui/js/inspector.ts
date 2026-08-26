@@ -256,7 +256,6 @@
 
             var html = group(window.t ? window.t('semantic.tabs.entities') : '实体', data.entities, 'entity') +
                 group(window.t ? window.t('semantic.tabs.concepts') : '概念', data.concepts, 'concept') +
-                group(window.t ? window.t('semantic.tabs.claims') : '命题与证据', data.claims, 'claim') +
                 (relations ? '<div class="inspector-semantic-group"><div class="inspector-semantic-title">' + _escapeHtml(window.t ? window.t('semantic.related') : '相关') + '</div><div class="inspector-semantic-items">' + relations + '</div></div>' : '');
 
             body.innerHTML = html || '<div class="inspector-empty">' +

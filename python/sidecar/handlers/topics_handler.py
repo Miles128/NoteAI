@@ -152,38 +152,6 @@ def _latest_note_mtime(topic: str, workspace: str) -> float | None:
     return max(mtimes) if mtimes else None
 
 
-def _topic_conflict_pending_count(workspace: str, topic: str) -> int:
-    """该主题未裁决的 claim_conflict 数（同 semantic_handler overview 的 review_queue 查询）。"""
-    import sqlite3
-
-    db_path = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "semantic.db"
-    if not db_path.is_file():
-        return 0
-    try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
-        conn.row_factory = sqlite3.Row
-    except sqlite3.Error:
-        return 0
-    try:
-        row = conn.execute(
-            """SELECT count(DISTINCT rq.id) AS cnt FROM review_queue rq
-               JOIN claims c ON c.id IN (
-                   json_extract(rq.payload_json, '$.claim_a_id'),
-                   json_extract(rq.payload_json, '$.claim_b_id'))
-               JOIN evidence e ON e.claim_id = c.id AND e.status = 'active'
-               JOIN blocks b ON b.id = e.block_id
-               JOIN documents d ON d.id = b.document_id
-               WHERE rq.item_kind = 'claim_conflict' AND rq.status = 'pending'
-                 AND (d.topic = ? OR instr(d.topic, ?) = 1)""",
-            (topic, topic + " > "),
-        ).fetchone()
-        return int(row["cnt"]) if row else 0
-    except sqlite3.Error:
-        return 0
-    finally:
-        conn.close()
-
-
 class TopicsHandler(BaseHandler, Topics3TierMixin):
     _pending_maintenance_schedule_lock = threading.Lock()
     _pending_maintenance_last_scheduled: dict[str, float] = {}
@@ -337,15 +305,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             )
         except (TypeError, ValueError):
             source_count = 0
-        try:
-            conflict_count = int(wiki_meta.get("conflict_pending_count", 0))
-        except (TypeError, ValueError):
-            conflict_count = 0
-        if conflict_count == 0:
-            try:
-                conflict_count = _topic_conflict_pending_count(workspace, topic)
-            except Exception:
-                conflict_count = 0
         compiled_at = state.get("generated_at") if state else None
         is_stale = False
         try:
@@ -358,7 +317,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         return {
             "exists": True,
             "source_count": source_count,
-            "conflict_pending_count": conflict_count,
             "compiled_at": compiled_at,
             "is_stale": is_stale,
         }

@@ -154,9 +154,7 @@
                         </div>
                         <nav class="semantic-categories" id="semantic-categories" aria-label="Semantic categories">
                             <button type="button" data-category="objects"><span class="semantic-nav-icon">◇</span><span data-i18n="semantic.categories.objects"></span></button>
-                            <button type="button" data-category="claims"><span class="semantic-nav-icon">≡</span><span data-i18n="semantic.categories.claims"></span></button>
                             <button type="button" data-category="quality"><span class="semantic-nav-icon">◌</span><span data-i18n="semantic.categories.quality"></span></button>
-                            <button type="button" data-category="conflicts"><span class="semantic-nav-icon">!</span><span data-i18n="semantic.categories.conflicts"></span></button>
                             <button type="button" data-category="links"><span class="semantic-nav-icon">↔</span><span data-i18n="semantic.categories.links"></span></button>
                             <button type="button" data-category="brief"><span class="semantic-nav-icon">▤</span><span data-i18n="semantic.categories.brief"></span></button>
                         </nav>
@@ -211,7 +209,6 @@
                 <div class="semantic-toolbar" id="semantic-toolbar">
                     <input type="search" id="semantic-search" data-i18n-placeholder="semantic.searchPlaceholder" autocomplete="off">
                     <select id="semantic-status-filter" hidden aria-label="Status"></select>
-                    <button type="button" id="semantic-scan-conflicts" hidden data-i18n="semantic.rescanConflicts"></button>
                 </div>
                 <div class="semantic-list" id="semantic-workbench-list" aria-live="polite"></div>
             </section>
@@ -1190,9 +1187,7 @@
                                 <p class="settings-hint" data-i18n="settings.semanticTabsHint"></p>
                                 <div class="settings-semantic-tabs-list" id="settings-semantic-tabs-list">
                                     <label class="settings-check-row"><input type="checkbox" value="objects" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabObjects"></span></label>
-                                    <label class="settings-check-row"><input type="checkbox" value="claims" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabClaims"></span></label>
                                     <label class="settings-check-row"><input type="checkbox" value="quality" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabQuality"></span></label>
-                                    <label class="settings-check-row"><input type="checkbox" value="conflicts" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabConflicts"></span></label>
                                     <label class="settings-check-row"><input type="checkbox" value="links" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabLinks"></span></label>
                                     <label class="settings-check-row"><input type="checkbox" value="brief" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabBrief"></span></label>
                                 </div>

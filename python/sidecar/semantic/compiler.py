@@ -138,7 +138,6 @@ def compile_semantic_batch(
     file_paths: Sequence[str | Path],
     *,
     extract: bool = True,
-    claims_only: bool = False,
     progress_cb=None,
     cancelled=None,
 ) -> dict:
@@ -150,8 +149,6 @@ def compile_semantic_batch(
         "documents": 0,
         "blocks": 0,
         "extracted_blocks": 0,
-        "claims": 0,
-        "rejected_claims": 0,
         "failed_blocks": 0,
         "pending_documents": 0,
         "topics": set(),
@@ -234,7 +231,7 @@ def compile_semantic_batch(
         worker_count = min(4, len(compiled_documents))
 
         def extract_one(document_id: str) -> dict:
-            return extract_document_semantics(SemanticStore(workspace), document_id, claims_only=claims_only)
+            return extract_document_semantics(SemanticStore(workspace), document_id)
 
         with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="semantic-extract") as pool:
             futures = {pool.submit(extract_one, item["document_id"]): item["file"] for item in compiled_documents}
@@ -249,8 +246,6 @@ def compile_semantic_batch(
                 try:
                     semantic = future.result()
                     stats["extracted_blocks"] += int(semantic.get("extracted") or 0)
-                    stats["claims"] += int(semantic.get("claims") or 0)
-                    stats["rejected_claims"] += int(semantic.get("rejected_claims") or 0)
                     stats["failed_blocks"] += int(semantic.get("failed") or 0)
                     if semantic.get("pending"):
                         stats["pending_documents"] += 1
@@ -273,7 +268,6 @@ def compile_semantic_batch(
             {item["document_id"] for item in compiled_documents},
             previous_objects=[obj for item in compiled_documents for obj in item["previous_objects"]],
             affected_topics=set(stats["affected_topics"]),
-            include_objects=not claims_only,
         )
         stats["materialized"] = materialized
         stats["failures"].extend({"materialization": failure} for failure in materialized["failures"])
@@ -285,16 +279,6 @@ def compile_semantic_batch(
             "removed": {"entities": 0, "concepts": 0},
             "failures": [],
         }
-    # Structured conflict detection is a derived view over the fresh claim
-    # snapshot; rerun it after extraction settles so the Conflicts tab always
-    # reflects the latest conclusions.
-    if extract and compiled_documents and not (cancelled and cancelled()):
-        try:
-            from sidecar.semantic.conflict_detector import scan_and_persist
-
-            stats["conflicts"] = scan_and_persist(store)
-        except Exception as exc:
-            stats["failures"].append({"conflict_scan": str(exc)})
     stats["topics"] = sorted(stats["topics"])
     stats["affected_topics"] = sorted(stats["affected_topics"])
     return stats
@@ -303,20 +287,18 @@ def compile_semantic_batch(
 def retry_failed_blocks(
     store: SemanticStore,
     *,
-    claims_only: bool,
     limit: int,
 ) -> dict:
-    """重试抽取失败的块（claim_extractions / block_extractions 中 status='failed'）。
+    """重试抽取失败的块（block_extractions 中 status='failed'）。
 
     失败块不会被 is_current 跳过（is_current 只认 'complete'），因此直接对
     失败块所属文档重新抽取即可；成功后会写回 complete 状态。同步执行并
     限制单次数量，避免 API 长时间不可用时一次重试上千块阻塞 sidecar。
     """
-    table = "claim_extractions" if claims_only else "block_extractions"
     with store.connect() as conn:
         failed = conn.execute(
-            f"""SELECT ce.block_id, ce.error, b.document_id
-                FROM {table} ce JOIN blocks b ON b.id = ce.block_id
+            """SELECT ce.block_id, ce.error, b.document_id
+                FROM block_extractions ce JOIN blocks b ON b.id = ce.block_id
                 WHERE ce.status = 'failed'
                 ORDER BY ce.extracted_at
                 LIMIT ?""",
@@ -330,12 +312,11 @@ def retry_failed_blocks(
 
     def extract_one(doc_id: str) -> dict:
         try:
-            return extract_document_semantics(store, doc_id, claims_only=claims_only)
+            return extract_document_semantics(store, doc_id)
         except Exception as exc:  # 抽取器内部异常也归为失败，不让单文档拖垮整批
             return {
                 "success": False,
                 "extracted": 0,
-                "claims": 0,
                 "failures": [{"block_id": None, "error": str(exc)}],
             }
 
@@ -356,7 +337,7 @@ def retry_failed_blocks(
                 failures.append({"document_id": doc_id, "error": key[1]})
     with store.connect() as conn:
         remaining = conn.execute(
-            f"SELECT count(*) FROM {table} ce JOIN blocks b ON b.id = ce.block_id WHERE ce.status = 'failed'"
+            "SELECT count(*) FROM block_extractions ce JOIN blocks b ON b.id = ce.block_id WHERE ce.status = 'failed'"
         ).fetchone()[0]
     return {
         "success": True,
@@ -372,7 +353,6 @@ def run_full_compile(
     workspace: str | Path,
     paths: Sequence[str | Path],
     *,
-    claims_only: bool = False,
     progress_cb=None,
     done_cb=None,
 ) -> None:
@@ -400,14 +380,13 @@ def run_full_compile(
                 {"processed_documents": current, "total_documents": len(paths)},
             )
 
-    stats = compile_semantic_batch(workspace, paths, progress_cb=progress, claims_only=claims_only)
+    stats = compile_semantic_batch(workspace, paths, progress_cb=progress)
     cleanup_failures = []
-    if not claims_only:
-        for kind in ("entity", "concept"):
-            try:
-                materialize_object_collection(store, kind)
-            except (OSError, ValueError, sqlite3.Error) as exc:
-                cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
+    for kind in ("entity", "concept"):
+        try:
+            materialize_object_collection(store, kind)
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            cleanup_failures.append({"kind": f"{kind}_collection", "error": str(exc)})
     for topic in sorted(removed_topics):
         try:
             materialize_topic_state(store, topic)
@@ -417,18 +396,12 @@ def run_full_compile(
     if cleanup_failures:
         stats["failures"].extend({"cleanup": item} for item in cleanup_failures)
     materialized = stats.get("materialized", {})
-    if claims_only:
-        message = (
-            f"全库命题编译完成：{stats['documents']} 篇，"
-            f"命题 {stats['claims']} 条（拒绝 {stats['rejected_claims']}），失败块 {stats['failed_blocks']}"
-        )
-    else:
-        materialized_message = (
-            f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
-            f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
-            f"主题页 {materialized.get('topics', 0)}"
-        )
-        message = f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
+    materialized_message = (
+        f"；已自动更新实体聚合页（涉及 {materialized.get('entities', 0)} 条）、"
+        f"概念聚合页（涉及 {materialized.get('concepts', 0)} 条）、"
+        f"主题页 {materialized.get('topics', 0)}"
+    )
+    message = f"全库语义编译完成：{stats['documents']} 篇，失败块 {stats['failed_blocks']}{materialized_message}"
     if done_cb:
         done_cb(
             message,
@@ -436,8 +409,6 @@ def run_full_compile(
                 "processed_documents": stats["documents"],
                 "total_documents": len(paths),
                 "blocks": stats["blocks"],
-                "claims": stats["claims"],
-                "rejected_claims": stats["rejected_claims"],
                 "failed_blocks": stats["failed_blocks"],
                 "pending_documents": stats["pending_documents"],
                 "failure_count": len(stats["failures"]),

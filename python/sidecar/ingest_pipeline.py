@@ -536,7 +536,6 @@ def run_ingest(
         "semantic_documents": 0,
         "semantic_blocks": 0,
         "semantic_extracted_blocks": 0,
-        "semantic_claims": 0,
         "semantic_failed_blocks": 0,
         "semantic_pending_documents": 0,
         "semantic_failures": [],
@@ -810,7 +809,6 @@ def run_ingest(
                 stats["semantic_documents"] = semantic_stats["documents"]
                 stats["semantic_blocks"] = semantic_stats["blocks"]
                 stats["semantic_extracted_blocks"] = semantic_stats["extracted_blocks"]
-                stats["semantic_claims"] = semantic_stats["claims"]
                 stats["semantic_failed_blocks"] = semantic_stats["failed_blocks"]
                 stats["semantic_pending_documents"] = semantic_stats["pending_documents"]
                 stats["semantic_failures"] = semantic_stats["failures"]

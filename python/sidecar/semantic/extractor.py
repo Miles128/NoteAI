@@ -10,9 +10,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from prompts import (
-    SEMANTIC_BATCH_CLAIM_EXTRACT_PROMPT,
     SEMANTIC_BATCH_EXTRACT_PROMPT,
-    SEMANTIC_CLAIM_EXTRACT_PROMPT,
     SEMANTIC_EXTRACT_PROMPT,
     SEMANTIC_OBJECT_NAME_RULES,
     SEMANTIC_REPAIR_SUFFIX,
@@ -21,76 +19,17 @@ from sidecar.semantic.english_common_words import _COMMON_ENGLISH_WORDS
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 9
+PROMPT_VERSION = 10
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
 # variant-spelling dedup rules are spelled out so the model never emits them
 # in the first place. validate_extraction below remains the hard fallback.
 _OBJECT_NAME_RULES = SEMANTIC_OBJECT_NAME_RULES
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _ENTITY_TYPES = {"person", "organization", "product", "model", "protocol", "artifact", "other"}
-_CLAIM_TYPES = {"conclusion", "hypothesis"}
 _BATCH_MAX_BLOCKS = 8
 _BATCH_MAX_CHARS = 12_000
 _SQLITE_LOCK_RETRIES = 4
 _SQLITE_LOCK_RETRY_DELAY = 0.05
-
-# Claim is a deliberately narrower product concept than a logically verifiable
-# sentence.  Requiring an explicit judgment marker gives the deterministic
-# validator a semantic floor instead of trusting an LLM-supplied claim_type.
-_CONCLUSION_MARKERS = re.compile(
-    r"(?:"
-    r"优于|劣于|不如|高于|低于|强于|弱于|胜过|落后于|相比|相较|"
-    r"比.{1,30}(?:优|劣|好|差|高|低|强|弱|快|慢|稳健|可靠|有效|适合)|"
-    r"更(?:优|劣|好|差|高|低|强|弱|快|慢|稳健|可靠|有效|适合)|"
-    r"最(?:佳|优|差|高|低|强|弱|快|慢|重要|关键)|"
-    r"提升|提高|改善|增强(?![生学模型器])|增长|上升|增加|降低|下降|减少|削弱|恶化|"
-    r"导致|造成|引发|使得|源于|取决于|影响|促进|抑制|有助于|归因于|因此|因而|"
-    r"趋势|逐渐|持续|越来越|"
-    r"预测|预计|将会|有望|"
-    r"建议|推荐|应当|应该|值得|适合|不适合|"
-    r"有效|无效|可靠|稳健|重要|关键|合理|可行|不足|优势|局限|风险|足以|难以|易于|较差|优秀|出色|"
-    r"表明|证明|显示|发现|可见|得出结论|支持.{0,8}(?:结论|判断|假设|推断)|"
-    r"outperform(?:s|ed)?|better|worse|higher|lower|improv(?:e|es|ed|ement)|"
-    r"increas(?:e|es|ed)|decreas(?:e|es|ed)|reduc(?:e|es|ed)|caus(?:e|es|ed)|leads?\s+to|"
-    r"recommend(?:s|ed)?|should|effective|reliable|risk"
-    r")",
-    re.IGNORECASE,
-)
-_HYPOTHESIS_MARKERS = re.compile(
-    r"(?:可能|或许|也许|推测|猜想|假设|尚待|有待|待验证|待检验|未验证|"
-    r"如果|若(?:是|在|能|可|将|要|有|无)|倘若|may|might|could|possibly|perhaps|"
-    r"hypothes(?:is|ize|ized)|unverified)",
-    re.IGNORECASE,
-)
-# 主观评价/价值判断（最强大、更好用、友好度最高、优先级 P1、no.1、best）：
-# 这类陈述无法用事实证据证实或证伪，不是 conclusion/hypothesis 的合格候选。
-# 只覆盖纯主观评价词；事实性比较（最高/最低/最快/更强/更好/最佳实践/信号最强处）放行。
-_SUBJECTIVE_COMPARATIVE_RE = re.compile(
-    r"(?:最(?:好|强大|优秀|出色|合适|适合|友好|流行|受欢迎|方便|好用|理想|完美|推荐)|"
-    r"更好(?:用|看|使)|更(?:友好|方便|好用|完美|出色)|"
-    r"最佳(?!实践)(?:选择|选项|方案|工具|模型|组合|平衡点|体验|效果)?|"
-    r"优先级\s*P\d|no\.?\s*1|"
-    r"(?:the\s+)?best(?:est)?\b|strongest|easiest|most\s+popular|most\s+friendly|highly\s+recommended)",
-    re.IGNORECASE,
-)
-
-# 格言/口号式短句（过度简单命题）：全中文、无英文/数字/引号，长度 ≤ 16，
-# 只含抽象概念的“X 比 Y 更重要/更强”“X 远高于 Y”式判断（选择比努力更重要、
-# 压缩比扩展更重要、少而精比多而杂强、分步构建比一步到位更好、切换成本远高于模型差价）。
-# 这类陈述没有适用对象与场景，既不可证实也不可证伪，是结论标记词表过宽的漏网之鱼。
-# 技术名（GPT-4o、RAG、通义千问）含英文/数字/标点，不会命中。
-_TRIVIAL_APHORISM_RE = re.compile(
-    r"^[\u4e00-\u9fff，,]{2,16}"
-    r"(?:比[\u4e00-\u9fff]{1,8}(?:更|较)?(?:重要|好|强|优|差|有效|值得|实在|划算|便宜|高效|清晰)|"
-    r"(?:远)?高于[\u4e00-\u9fff]{1,8})[。！!]?$"
-)
-
-# 产品功能/系统行为描述（忠实度下降自动告警、负载过高自动降级）：只是复述
-# 系统动作，不构成评价/因果/趋势结论；“自动 X”模式是提示词漏拦的伪命题来源。
-_TRIVIAL_BEHAVIOR_RE = re.compile(
-    r"^[\u4e00-\u9fffA-Za-z0-9]{2,16}自动(?:告警|报警|触发|执行|识别|检测|生成|保存|记录|上报|恢复|降级|切换|汇总|同步|重试)[。！!]?$"
-)
-
 
 # 噪声对象名确定性过滤：拦截把文件名、章节标题、纯符号/数字等抽成实体/概念。
 _FILE_SUFFIX_RE = re.compile(
@@ -327,25 +266,6 @@ def _is_noise_object_name(name: str) -> bool:
     return False
 
 
-# First-person subjective opinions (我/本人 + 看法、偏好、喜恶) are deliberately
-# NOT Claims: they express personal taste rather than an author judgment that
-# could be supported or refuted by evidence.  Third-person attributions such as
-# "作者认为 …" stay eligible because they state the author's position as a
-# verifiable fact about the source.
-_OPINION_MARKERS = re.compile(
-    r"(?:"
-    r"我认为|我觉得|我个人(?:认为|觉得|的看法|的观点|而言)|在我看来|依我(?:之见|看来)|"
-    r"我的(?:观点|看法|立场|经验)|主观(?:上|地)?(?:认为|觉得|看|判断)|"
-    r"说句(?:公道话|实话|心里话)|坦白(?:地)?说|个人而言|以我之见|"
-    r"我(?:个人)?(?:更)?(?:喜欢|偏爱|偏好|欣赏|看好)|我(?:更)?(?:倾向|倾向于|愿意)|"
-    r"我不(?:喜欢|看好|赞成|同意|认为|觉得)|我(?:坚决)?(?:支持|反对)这个观点|"
-    r"凭(?:感觉|直觉)|感觉上|直觉上|"
-    r"i\s+(?:think|believe|feel|prefer|like|recommend|personally)"
-    r")",
-    re.IGNORECASE,
-)
-
-
 class ExtractionValidationError(ValueError):
     pass
 
@@ -360,61 +280,6 @@ def _bounded_confidence(value) -> float:
     return number
 
 
-# 标点/空白（含全角）在证据引文中属于可容忍差异；文字序列必须保持逐字一致。
-_QUOTE_PUNCT_RE = re.compile(r"[^0-9A-Za-z\u4e00-\u9fff]+")
-# LLM 常以省略号表示省略中间内容（如 “甲……乙”）
-_QUOTE_SEGMENT_SPLIT_RE = re.compile(r"…{1,3}|\.{3,}")
-# 引文与原文的模糊匹配阈值：去标点后 90% 以上字符一致即接受（容忍个别字差异）
-_QUOTE_FUZZY_RATIO = 0.90
-_QUOTE_MIN_COMPACT = 8
-
-
-def _quote_matches(quote: str, normalized_block: str) -> bool:
-    """证据引文必须大致来自原文，按分级容忍度验证。
-
-    依次尝试（任一通过即接受）：
-    1. 原文精确包含；
-    2. 去掉引文首尾标点/空白后包含；
-    3. 去掉全部标点后为连续子序列（原逻辑，保留）；
-    4. 引文由省略号分隔的多个片段组成，每段都是原文子序列且顺序一致；
-    5. 去标点后与原文模糊相似度 ≥ 0.90（容忍 LLM 偶发删字/换字）。
-
-    任何一级只放行“文字高度重合”的引文，避免语义无关内容混入证据。
-    """
-    if quote in normalized_block:
-        return True
-    core = quote.strip(" \t\u3000，。、；：？！,.!?;:\"'“”‘’（）()【】[]《》<>-–—…")
-    if core and core in normalized_block:
-        return True
-    compact_quote = _QUOTE_PUNCT_RE.sub("", quote)
-    compact_block = _QUOTE_PUNCT_RE.sub("", normalized_block)
-    if len(compact_quote) >= _QUOTE_MIN_COMPACT and compact_quote in compact_block:
-        return True
-    # 4. 拼接片段（省略号拆段，逐段按顺序匹配）
-    segments = [seg.strip() for seg in _QUOTE_SEGMENT_SPLIT_RE.split(quote) if seg.strip()]
-    if len(segments) >= 2:
-        pos = 0
-        matched = 0
-        for seg in segments:
-            compact_seg = _QUOTE_PUNCT_RE.sub("", seg)
-            if len(compact_seg) < 3:
-                continue
-            idx = compact_block.find(compact_seg, pos)
-            if idx < 0:
-                matched = -1
-                break
-            pos = idx + len(compact_seg)
-            matched += 1
-        if matched > 0:
-            return True
-    # 5. 模糊相似度兜底
-    if len(compact_quote) >= _QUOTE_MIN_COMPACT:
-        from difflib import SequenceMatcher
-
-        return SequenceMatcher(None, compact_quote, compact_block).ratio() >= _QUOTE_FUZZY_RATIO
-    return False
-
-
 def parse_extraction_json(raw: str) -> dict:
     text = _FENCE.sub("", raw.strip()).strip()
     try:
@@ -424,33 +289,6 @@ def parse_extraction_json(raw: str) -> dict:
     if not isinstance(data, dict):
         raise ExtractionValidationError("LLM 输出根节点必须是对象")
     return data
-
-
-def _claim_has_required_judgment(statement: str, claim_type: str) -> bool:
-    """Return whether a candidate clears the product-level Claim gate.
-
-    This intentionally rejects plain attributes, counts, dates, definitions and
-    factual fragments such as ``75+ 模型`` or ``支持 75 种模型`` even if the LLM
-    labels them as conclusion.  Quantitative findings remain eligible when the
-    statement explicitly expresses a comparison, change, causal judgment, or
-    another supported conclusion marker.
-
-    First-person opinions (我认为/我觉得/我的观点/主观上 …) never enter the
-    conclusion stream regardless of the LLM-supplied claim_type: personal
-    taste cannot be supported or refuted, so an opinion-labeled candidate is
-    dropped just like any other pseudo-claim.
-    """
-    if _OPINION_MARKERS.search(statement):
-        return False
-    if _SUBJECTIVE_COMPARATIVE_RE.search(statement):
-        return False  # 主观评价/价值判断（最强大、更好用、优先级 P1）非事实结论
-    if _TRIVIAL_APHORISM_RE.match(statement):
-        return False  # 格言/口号式短句（选择比努力更重要）过度简单，无对象与场景
-    if _TRIVIAL_BEHAVIOR_RE.match(statement):
-        return False  # 产品功能/系统行为描述（XX 自动告警）不是结论
-    if claim_type == "hypothesis":
-        return _HYPOTHESIS_MARKERS.search(statement) is not None
-    return _CONCLUSION_MARKERS.search(statement) is not None
 
 
 def _retry_sqlite_lock(operation: Callable[[], object]) -> object:
@@ -475,11 +313,9 @@ def validate_extraction(
 ) -> dict:
     """Validate and canonicalize one block extraction.
 
-    Claims without an exact source quote are rejected rather than downgraded.
-    ``rejections`` collects per-rule drop counts for diagnostics (claims).
+    ``rejections`` collects per-rule drop counts for diagnostics.
     """
-    result: dict[str, list[dict]] = {"concepts": [], "entities": [], "claims": []}
-    normalized_block = normalize_text(block_content)
+    result: dict[str, list[dict]] = {"concepts": [], "entities": []}
 
     for item in data.get("concepts", []):
         if not isinstance(item, dict):
@@ -524,70 +360,6 @@ def validate_extraction(
             }
         )
 
-    raw_claims = data.get("claims", [])
-    if not isinstance(raw_claims, list):
-        raise ExtractionValidationError("claims 必须是数组")
-    if block_type == "code":
-        return result
-
-    for item in raw_claims:
-        if not isinstance(item, dict):
-            raise ExtractionValidationError("claims 元素必须是对象")
-        statement = normalize_text(str(item.get("statement") or ""))
-        scope = normalize_text(str(item.get("scope") or ""))
-        quote = normalize_text(str(item.get("evidence_quote") or ""))
-        claim_type = normalize_text(str(item.get("claim_type") or "")).lower()
-        # Claim-level failures reject only that candidate. One bad candidate
-        # must not discard valid Concepts, Entities, or Claims from the block.
-        if not statement:
-            if rejections is not None:
-                rejections["claims_no_statement"] = rejections.get("claims_no_statement", 0) + 1
-            continue
-        if claim_type not in _CLAIM_TYPES:
-            if rejections is not None:
-                rejections["claims_no_type"] = rejections.get("claims_no_type", 0) + 1
-            continue
-        if not _claim_has_required_judgment(statement, claim_type):
-            if _TRIVIAL_APHORISM_RE.match(statement):
-                if rejections is not None:
-                    rejections["claims_trivial_aphorism"] = rejections.get("claims_trivial_aphorism", 0) + 1
-            elif _TRIVIAL_BEHAVIOR_RE.match(statement):
-                if rejections is not None:
-                    rejections["claims_trivial_behavior"] = rejections.get("claims_trivial_behavior", 0) + 1
-            elif rejections is not None:
-                rejections["claims_no_judgment"] = rejections.get("claims_no_judgment", 0) + 1
-            continue
-        if not quote:
-            if rejections is not None:
-                rejections["claims_no_quote"] = rejections.get("claims_no_quote", 0) + 1
-            continue
-        if not _quote_matches(quote, normalized_block):
-            if rejections is not None:
-                rejections["claims_quote_mismatch"] = rejections.get("claims_quote_mismatch", 0) + 1
-            continue
-        try:
-            confidence = _bounded_confidence(item.get("confidence", 0.5))
-        except ExtractionValidationError:
-            if rejections is not None:
-                rejections["claims_bad_confidence"] = rejections.get("claims_bad_confidence", 0) + 1
-            continue
-        claim_id = stable_id("clm", claim_type, statement.casefold(), scope.casefold())
-        quote_hash = content_hash(quote)
-        result["claims"].append(
-            {
-                "id": claim_id,
-                "statement": statement,
-                "scope": scope,
-                "claim_type": claim_type,
-                "confidence": confidence,
-                "evidence": {
-                    "id": stable_id("evd", claim_id, block_id, quote_hash),
-                    "claim_id": claim_id,
-                    "block_id": block_id,
-                    "quote_hash": quote_hash,
-                },
-            }
-        )
     return result
 
 
@@ -619,28 +391,6 @@ def build_batch_extraction_prompt(blocks: list[dict]) -> str:
         )
     joined = "\n\n".join(sources)
     return SEMANTIC_BATCH_EXTRACT_PROMPT.format(blocks=joined, object_name_rules=_OBJECT_NAME_RULES)
-
-
-def build_claim_extraction_prompt(*, block_id: str, heading_path: str, content: str, block_type: str) -> str:
-    return SEMANTIC_CLAIM_EXTRACT_PROMPT.format(
-        block_id=block_id,
-        block_type=block_type,
-        heading_path=heading_path or "（无）",
-        content=content,
-    )
-
-
-def build_batch_claim_extraction_prompt(blocks: list[dict]) -> str:
-    sources = []
-    for block in blocks:
-        sources.append(
-            f"""<block id="{block["id"]}" type="{block["type"]}">
-章节：{block["heading"] or "（无）"}
-原文：
-{block["content"]}
-</block>"""
-        )
-    return SEMANTIC_BATCH_CLAIM_EXTRACT_PROMPT.format(blocks=chr(10).join(sources))
 
 
 def validate_batch_extraction(
@@ -694,7 +444,6 @@ def extract_document_semantics(
     document_id: str,
     *,
     llm_call: Callable[[str], str] | None = None,
-    claims_only: bool = False,
 ) -> dict:
     """Extract all pending blocks, degrading cleanly when no LLM is configured."""
     use_batch = llm_call is None
@@ -716,14 +465,12 @@ def extract_document_semantics(
         raise ValueError(f"语义文档不存在: {document_id}")
 
     extracted = 0
-    claim_count = 0
     skipped = 0
     failures: list[dict] = []
     pending_blocks: list[dict] = []
     rejections: dict[str, int] = {}
     for stored_block in store.blocks_for_document(document_id):
-        is_current = store.claim_extraction_is_current if claims_only else store.extraction_is_current
-        if is_current(stored_block["id"], stored_block["content_hash"], PROMPT_VERSION):
+        if store.extraction_is_current(stored_block["id"], stored_block["content_hash"], PROMPT_VERSION):
             skipped += 1
             continue
         pending_blocks.append(
@@ -741,38 +488,25 @@ def extract_document_semantics(
         return source.is_file() and content_hash(source.read_text(encoding="utf-8")) == document["content_hash"]
 
     def save_result(block: dict, parsed: dict, now: str) -> None:
-        nonlocal extracted, claim_count
+        nonlocal extracted
         if not source_is_current():
             raise RuntimeError("源文件在语义抽取期间发生变化，已丢弃本次结果")
-        if claims_only:
-            _retry_sqlite_lock(
-                lambda: store.save_block_claim_extraction(
-                    block_id=block["id"],
-                    block_hash=block["hash"],
-                    prompt_version=PROMPT_VERSION,
-                    extracted_at=now,
-                    claims=parsed["claims"],
-                )
+        _retry_sqlite_lock(
+            lambda: store.save_block_extraction(
+                block_id=block["id"],
+                block_hash=block["hash"],
+                prompt_version=PROMPT_VERSION,
+                extracted_at=now,
+                **parsed,
             )
-        else:
-            _retry_sqlite_lock(
-                lambda: store.save_block_extraction(
-                    block_id=block["id"],
-                    block_hash=block["hash"],
-                    prompt_version=PROMPT_VERSION,
-                    extracted_at=now,
-                    **parsed,
-                )
-            )
+        )
         extracted += 1
-        claim_count += len(parsed["claims"])
 
     def extract_single(block: dict) -> None:
         nonlocal failures
         now = datetime.now(timezone.utc).isoformat()
         try:
-            prompt_builder = build_claim_extraction_prompt if claims_only else build_extraction_prompt
-            prompt = prompt_builder(
+            prompt = build_extraction_prompt(
                 block_id=block["id"],
                 heading_path=block["heading"],
                 content=block["content"],
@@ -798,17 +532,18 @@ def extract_document_semantics(
                 )
             save_result(block, parsed, now)
         except Exception as exc:
-            marker = store.mark_claim_extraction_failed if claims_only else store.mark_extraction_failed
             error = str(exc)
             try:
-                _retry_sqlite_lock(lambda: marker(block["id"], block["hash"], PROMPT_VERSION, now, error))
+                _retry_sqlite_lock(
+                    lambda: store.mark_extraction_failed(block["id"], block["hash"], PROMPT_VERSION, now, error)
+                )
             except Exception as marker_exc:
                 error = f"{error}; 记录失败状态失败: {marker_exc}"
             failures.append({"block_id": block["id"], "error": error})
 
     if use_batch:
         for group in _group_extraction_blocks(pending_blocks):
-            prompt = build_batch_claim_extraction_prompt(group) if claims_only else build_batch_extraction_prompt(group)
+            prompt = build_batch_extraction_prompt(group)
             try:
                 raw = llm_call(prompt)
                 try:
@@ -836,24 +571,11 @@ def extract_document_semantics(
     if rejected_total:
         from utils.logger import logger
 
-        logger.info(
-            f"[semantic-extract] 文档 {document_id}: 拒绝 {rejected_total} 条命题候选 "
-            f"(no_statement={rejections.get('claims_no_statement', 0)}, "
-            f"no_type={rejections.get('claims_no_type', 0)}, "
-            f"no_judgment={rejections.get('claims_no_judgment', 0)}, "
-            f"trivial_aphorism={rejections.get('claims_trivial_aphorism', 0)}, "
-            f"trivial_behavior={rejections.get('claims_trivial_behavior', 0)}, "
-            f"no_quote={rejections.get('claims_no_quote', 0)}, "
-            f"quote_mismatch={rejections.get('claims_quote_mismatch', 0)}, "
-            f"bad_confidence={rejections.get('claims_bad_confidence', 0)})"
-        )
+        logger.info(f"[semantic-extract] 文档 {document_id}: 拒绝 {rejected_total} 条对象候选 ({rejections})")
     return {
         "success": not failures,
         "pending": False,
         "extracted": extracted,
-        "claims": claim_count,
-        "rejected_claims": rejected_total,
-        "rejection_details": rejections,
         "skipped": skipped,
         "failed": len(failures),
         "failures": failures,

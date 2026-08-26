@@ -147,23 +147,24 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count("data-category=") == 6
+    assert html.count("data-category=") == 4
     assert 'data-category="quality"' in html
     assert 'data-category="brief"' in html
+    assert 'data-category="claims"' not in html
+    assert 'data-category="conflicts"' not in html
     assert 'data-object-kind="entities"' in html
     assert 'data-object-kind="concepts"' in html
     assert "import('./semantic-workbench.ts')" in main_js
     assert "get_semantic_workbench" in api_js
     assert "get_semantic_detail" in api_js
     assert "start_semantic_full_compile" in api_js
-    assert "review_semantic_conflict" in api_js
+    assert "review_semantic_conflict" not in api_js
     assert "review_semantic_entity_quality" in api_js
     assert "get_semantic_topic_wiki_page" in api_js
     assert "get_topic_brief" in api_js
     assert "publish_semantic_topic_wiki_page" in api_js
     assert "data-preview-topic-page" in workbench_js
     assert "data-open-path" in workbench_js
-    assert "semantic.claimTypes." in workbench_js
     assert ".catch(function(error)" in workbench_js
 
 

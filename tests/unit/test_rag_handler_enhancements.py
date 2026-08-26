@@ -112,14 +112,12 @@ def test_answer_with_rag_pipeline_injects_anchors(tmp_path, monkeypatch):
         captured["query"] = query
         return {"results": [], "retrieval_debug": {}}
 
-    import sidecar.rag.claim_context as claim_mod
     import sidecar.rag.object_context as object_mod
     import sidecar.rag.retriever as retriever_mod
 
     import utils.llm_utils as llm_mod
 
     monkeypatch.setattr(retriever_mod, "retrieve", fake_retrieve)
-    monkeypatch.setattr(claim_mod, "retrieve_claim_context", lambda *a, **k: [])
     monkeypatch.setattr(object_mod, "retrieve_object_context", lambda *a, **k: [])
     monkeypatch.setattr(llm_mod, "call_llm_raw_stream", lambda prompt, **k: "回答正文")
 

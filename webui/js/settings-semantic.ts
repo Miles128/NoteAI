@@ -8,7 +8,7 @@
 // ============================================================================
 (function() { 'use strict';
 
-var _SEMANTIC_TAB_VALUES = ['objects', 'claims', 'quality', 'conflicts', 'links', 'brief'];
+var _SEMANTIC_TAB_VALUES = ['objects', 'quality', 'links', 'brief'];
 
 function applySemanticSettingsToForm(uiConfig: any) {
     if (!uiConfig) return;

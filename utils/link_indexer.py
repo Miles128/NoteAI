@@ -1,11 +1,9 @@
 """双向链接索引引擎（门面）。
 
-两阶段发现：
-1. 本地粗筛：同 topic / 共享 tag / 文件名 token 重叠 → 候选对
-2. AI 精判：批处理候选对，LLM 判断是否内容相关
+保存触发的发现只产生真实引用（正文提及 / 对方摘要提及 / 共享实体概念）。
+全库双向补链走 ``backfill_semantic_bidirectional``。
 
 存储：workspace/.links.json
-
 实现拆在 ``utils/links/{persist,discover,actions}.py``。
 """
 
@@ -20,7 +18,6 @@ from utils.links.actions import (
 from utils.links.discover import (
     backfill_semantic_bidirectional,
     discover_cross_refs_for_file,
-    discover_links,
     suggest_links_for_file,
 )
 from utils.links.persist import (
@@ -36,7 +33,6 @@ __all__ = [
     "confirm_all_links",
     "confirm_link",
     "discover_cross_refs_for_file",
-    "discover_links",
     "get_backlinks",
     "load_links",
     "purge_weak_links",

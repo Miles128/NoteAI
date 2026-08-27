@@ -109,7 +109,7 @@ Tauri v2 shell (src-tauri/)
 - **Embedder 模块**（`rag/embedder.py`）：HF 环境变量（`HF_ENDPOINT`、`NO_PROXY`）与 `FASTEMBED_CACHE_PATH` 在首次加载模型时惰性设置，而非导入时。使用 hf-mirror.com。
 - **入库流水线**：`sidecar/ingest_pipeline.py` 编排；阶段实现在 `sidecar/ingest_stages.py`（`IngestCtx`）。测试 patch 仍打在 `sidecar.ingest_pipeline.*`（阶段函数运行时从该模块取名）。
 - **`IGNORED_DIRS`**（`constants.py`）：小写匹配集合 `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`。
-- **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层实现拆在 `utils/wiki/{parse,crud,sync}.py`，`utils/wiki_store.py` 为对外门面。
+- **WIKI.md 操作**：生产读写走 `sidecar/wiki_utils.py`（语义卡注入、综述开关等）；底层 CRUD/同步走 `utils/wiki_store.py` → `utils/wiki/{parse,crud,sync}.py`。测试与内部模块可直接 import store。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
 - **命题验证**：已随 C2b 去掉命题层；语义工作台只留实体/概念。
 - **归档目录**（`docs/archive/`）：一次性迁移脚本（`docs/archive/scripts/`）与过期的分析文档统一归档于此，ruff/mypy 已排除该目录。
@@ -123,7 +123,7 @@ Tauri v2 shell (src-tauri/)
 - **测试覆盖**：~69 个单元测试模块 + 3 个集成测试模块（含 `tests/integration/test_sidecar_contracts.py`）；发布前运行 `uv run pytest`。
 - **Prompts**：`prompts/yaml/*.yaml` 是单一事实来源；`prompts/__init__.py` 经 `prompts/loader.py` 在导入时解析常量。
 - **Sidecar Python**：开发使用项目 `.venv`；发布可通过 `scripts/bundle_sidecar_python.sh` 打包到 `src-tauri/resources/sidecar-python`，或设置 `NOTEAI_PYTHON`。
-- **`rag_enabled`**：默认 `True`（`config/app_config.py`）；关闭时使用 `sidecar/classic_retriever.py` 传统检索。
+- **`rag_enabled`**：默认 `True`（`config/app_config.py`）；关闭时拒绝对话与索引构建（无 classic 检索伪装 RAG）。全文搜索仍走 `utils/fulltext_index.py`（情报搜索等）。
 
 ---
 

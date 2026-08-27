@@ -121,7 +121,7 @@ def test_answer_with_rag_pipeline_injects_anchors(tmp_path, monkeypatch):
     monkeypatch.setattr(object_mod, "retrieve_object_context", lambda *a, **k: [])
     monkeypatch.setattr(llm_mod, "call_llm_raw_stream", lambda prompt, **k: "回答正文")
 
-    result = handler._answer_with_rag({"history": history}, "继续", "", use_vector_rag=True)
+    result = handler._answer_with_rag({"history": history}, "继续", "")
 
     assert result["success"] is True
     # 检索 query = 原问题 + 锚点词，原问题保持完整在前

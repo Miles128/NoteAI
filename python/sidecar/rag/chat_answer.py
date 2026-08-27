@@ -77,11 +77,10 @@ def answer_without_retrieval(handler, question: str, compressed_history: str, *,
     return handler._finish_chat(question, answer, citations=citations)
 
 
-def answer_with_rag(
-    handler, params, question: str, compressed_history: str, *, use_vector_rag: bool, intent: str = "workspace"
-) -> dict:
+def answer_with_rag(handler, params, question: str, compressed_history: str, *, intent: str = "workspace") -> dict:
     cls = type(handler)
     from prompts import RAG_CHAT_PROMPT
+    from sidecar.rag.retriever import retrieve as vector_retrieve
     from utils.llm_utils import APIConfigError, call_llm_raw_stream
 
     topics = params.get("topics") or None
@@ -92,29 +91,22 @@ def answer_with_rag(
     hyde_enabled_flag = False
     hyde_query: str | None = None
     try:
-        if use_vector_rag:
-            from sidecar.rag.retriever import retrieve as vector_retrieve
-
-            # Session-only topic anchoring: append anchor terms from early
-            # turns as extra retrieval keywords (original query kept intact).
-            anchors = cls._session_topic_anchors(params.get("history"))
-            retrieval_query = f"{question} {' '.join(anchors)}" if anchors else question
-            retrieval = vector_retrieve(
-                retrieval_query,
-                topics=topics,
-                tags=tags,
-                current_file=current_file,
-            )
-            search_results = retrieval.get("results") or []
-            retrieval_debug = dict(retrieval.get("retrieval_debug") or {})
-            if anchors:
-                retrieval_debug["anchor_terms"] = anchors
-            hyde_enabled_flag = bool(retrieval_debug.get("hyde_enabled"))
-            hyde_query = retrieval_debug.get("hyde_query")
-        else:
-            from sidecar.classic_retriever import retrieve as classic_retrieve
-
-            search_results = classic_retrieve(question, topics=topics, tags=tags)
+        # Session-only topic anchoring: append anchor terms from early
+        # turns as extra retrieval keywords (original query kept intact).
+        anchors = cls._session_topic_anchors(params.get("history"))
+        retrieval_query = f"{question} {' '.join(anchors)}" if anchors else question
+        retrieval = vector_retrieve(
+            retrieval_query,
+            topics=topics,
+            tags=tags,
+            current_file=current_file,
+        )
+        search_results = retrieval.get("results") or []
+        retrieval_debug = dict(retrieval.get("retrieval_debug") or {})
+        if anchors:
+            retrieval_debug["anchor_terms"] = anchors
+        hyde_enabled_flag = bool(retrieval_debug.get("hyde_enabled"))
+        hyde_query = retrieval_debug.get("hyde_query")
     except Exception as e:
         cls._record_error(f"检索失败: {e}")
         return handler._fail_rag(f"检索失败: {e}")

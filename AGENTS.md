@@ -107,11 +107,11 @@ Tauri v2 shell (src-tauri/)
 - **`rag_chat_with_actions` RPC 已移除**：它只是 `rag_chat` 的别名。文件操作现在通过 CLI Agent 对话框完成（PRD §3.8）。内置的 `agent_runner.py` / `agent_handler.py`（6 个结构化工具）已删除。
 - **`rag/index.py:hybrid_search()`**：sparse-only 命中会查询 zvec 的 body text；空 chunk 被丢弃（`filter_usable_chunks`），过期的 sparse id 被清理。
 - **Embedder 模块**（`rag/embedder.py`）：HF 环境变量（`HF_ENDPOINT`、`NO_PROXY`）与 `FASTEMBED_CACHE_PATH` 在首次加载模型时惰性设置，而非导入时。使用 hf-mirror.com。
-- **主题分配**：逻辑分布在 `utils/topic/` 子包（`assigner` / `classifier` / `file_ops` / `manager` / `membership` / `merge` / `pending`）。新增主题相关逻辑放在该子包中，不要继续膨胀 handler。
+- **入库流水线**：`sidecar/ingest_pipeline.py` 编排；阶段实现在 `sidecar/ingest_stages.py`（`IngestCtx`）。测试 patch 仍打在 `sidecar.ingest_pipeline.*`（阶段函数运行时从该模块取名）。
 - **`IGNORED_DIRS`**（`constants.py`）：小写匹配集合 `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`。
-- **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层实现（解析/CRUD/去重/同步）统一在 `utils/wiki_store.py`（由原 wiki_manager/wiki_crud/wiki_sync/topic_dedup 合并）。
+- **WIKI.md 操作**：生产写入通过 `sidecar/wiki_utils.py`；底层实现拆在 `utils/wiki/{parse,crud,sync}.py`，`utils/wiki_store.py` 为对外门面。
 - **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
-- **命题验证**（`python/sidecar/semantic/claim_verifier.py`）：基于同主题活跃证据交叉验证命题，结果写入 `claim_verifications` 表，语义工作台展示验证结论；抽取提示词见 `prompts/yaml/claim_verify.yaml`。
+- **命题验证**：已随 C2b 去掉命题层；语义工作台只留实体/概念。
 - **归档目录**（`docs/archive/`）：一次性迁移脚本（`docs/archive/scripts/`）与过期的分析文档统一归档于此，ruff/mypy 已排除该目录。
 - **RAG 端点**除 LLM 信号量外无额外速率限制。
 
@@ -129,6 +129,6 @@ Tauri v2 shell (src-tauri/)
 
 ## 7. 产品行为规范
 
-- **链接索引**（`utils/link_indexer.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），api.js 未暴露属预期。
+- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），api.js 未暴露属预期。
 - **综述写作规则**（硬化于 `prompts/yaml/topic_survey.yaml` 与 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
 - NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

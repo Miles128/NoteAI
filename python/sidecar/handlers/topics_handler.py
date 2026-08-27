@@ -32,6 +32,7 @@ from utils.topic.assigner import (
     write_topic_to_file,
 )
 from utils.topic.manager import TopicManager
+from utils.topic.paths import topic_artifact_dir, topic_notes_dir
 from utils.topic.stale import _parse_iso_timestamp, collect_stale_topics
 from utils.wiki_store import (
     _deduplicate_files_in_wiki,
@@ -153,20 +154,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return {"success": False, "message": str(e)}
 
     def _topic_dir_path(self, workspace_path: Path, topic_name: str) -> Path:
-        normalized = topic_name.replace("/", TOPIC_SEP)
-        parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
-        topic_dir = workspace_path / config.NOTES_FOLDER
-        for part in parts:
-            topic_dir = topic_dir / part
-        return topic_dir
+        return topic_notes_dir(workspace_path, topic_name)
 
     def _topic_artifact_dir_path(self, workspace_path: Path, root_folder: str, topic_name: str) -> Path:
-        normalized = topic_name.replace("/", TOPIC_SEP)
-        parts = [p.strip() for p in normalized.split(TOPIC_SEP) if p.strip()]
-        topic_dir = workspace_path / root_folder
-        for part in parts:
-            topic_dir = topic_dir / part
-        return topic_dir
+        return topic_artifact_dir(workspace_path, root_folder, topic_name)
 
     def _get_topic_tree(self, params):
         return self._get_topic_tree_3tier(params)

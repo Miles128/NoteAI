@@ -96,8 +96,8 @@ src-tauri/target/
 src-tauri/Notes/
 src-tauri/My Paper/
 
-# AI-generated wiki content (per-workspace wiki/ is inside workspace, not repo root)
-wiki/
+# AI-generated wiki content (workspace wiki/ at repo root during local runs)
+/wiki/
 
 # Workspace runtime artifacts (when created inside repo during dev)
 **/rag_index/

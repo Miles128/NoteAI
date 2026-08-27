@@ -104,7 +104,7 @@ def test_purge_weak_links_empty(workspace: Path) -> None:
 
 
 def test_backfill_semantic_bidirectional_skips_existing(workspace: Path, monkeypatch) -> None:
-    import utils.link_indexer as li
+    import utils.links.discover as discover
 
     save_links(
         {
@@ -115,11 +115,11 @@ def test_backfill_semantic_bidirectional_skips_existing(workspace: Path, monkeyp
         }
     )
     monkeypatch.setattr(
-        li,
+        discover,
         "_load_all_metas_cached",
         lambda ws: {"a.md": {"title": "A"}, "b.md": {"title": "B"}, "c.md": {"title": "C"}},
     )
-    monkeypatch.setattr(li, "_BIDIRECTIONAL_SHARE_MIN", 1)
+    monkeypatch.setattr(discover, "_BIDIRECTIONAL_SHARE_MIN", 1)
     monkeypatch.setattr("sidecar.semantic.store.SemanticStore", lambda ws: object())
 
     def fake_names(store, cache, doc_id):
@@ -132,7 +132,7 @@ def test_backfill_semantic_bidirectional_skips_existing(workspace: Path, monkeyp
         }
         return names.get(doc_id, set())
 
-    monkeypatch.setattr(li, "_object_names_for", fake_names)
+    monkeypatch.setattr(discover, "_object_names_for", fake_names)
 
     result = backfill_semantic_bidirectional()
     assert result["success"] is True

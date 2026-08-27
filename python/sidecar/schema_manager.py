@@ -8,7 +8,7 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from prompts import SCHEMA_FALLBACK_PROMPT
-from utils.topic_manager import TopicManager
+from utils.topic.manager import TopicManager
 
 SCHEMA_FILENAME = "schema.md"
 LEGACY_SCHEMA_FILENAME = "SCHEMA.md"

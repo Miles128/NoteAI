@@ -143,7 +143,7 @@ class TestTopicAssigner:
     """Test topic assignment from file paths."""
 
     def test_auto_assign_from_notes_folder(self, workspace: Path) -> None:
-        from utils.topic_assigner import auto_assign_topic_for_file
+        from utils.topic.assigner import auto_assign_topic_for_file
 
         topic_dir = workspace / "Notes" / "AI" / "LLM"
         topic_dir.mkdir(parents=True)
@@ -156,7 +156,7 @@ class TestTopicAssigner:
         assert result.get("topic") == "AI > LLM"
 
     def test_sync_wiki_with_files(self, workspace: Path) -> None:
-        from utils.topic_assigner import sync_wiki_with_files
+        from utils.topic.assigner import sync_wiki_with_files
 
         topic_dir = workspace / "Notes" / "AI" / "Products"
         topic_dir.mkdir(parents=True)

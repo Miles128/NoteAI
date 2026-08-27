@@ -2,24 +2,37 @@
 
 from __future__ import annotations
 
-import json
-import os
-import tempfile
-import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
 from time import monotonic
 from typing import Any
 
-from config import config, is_ignored_dir
-from config.settings import NOTES_FOLDER, RAW_FOLDER, WORKSPACE_APP_FOLDER
+from config import config
+from config.settings import NOTES_FOLDER, RAW_FOLDER
 from modules.file_converter import FileConverterManager
+from sidecar.ingest_index import (
+    _index_markdown_files,
+    _purge_deleted_index_files,
+)
+from sidecar.ingest_scan import (
+    _scan_classify_pending,
+    _scan_convert_pending,
+    _scan_index_pending,
+)
+from sidecar.ingest_state import (
+    _save_fingerprint,
+    _workspace_files_changed,
+    cancel_generation,
+    clear_cancel,
+    is_cancelled,
+    load_ingest_state,
+    normalize_ingest_state,
+    request_cancel,
+    save_ingest_state,
+)
 from sidecar.workspace_rules import needs_workspace_rules_setup
-from utils.logger import logger
-from utils.topic_assigner import auto_assign_topic_for_file, sync_wiki_with_files
-from utils.topic_file_ops import check_topic_needs_processing
-from utils.wiki_store import topic_from_notes_path
+from utils.topic.assigner import auto_assign_topic_for_file, sync_wiki_with_files
 
 STAGES = (
     "rules",
@@ -34,162 +47,23 @@ STAGES = (
     "sync",
 )
 
-_cancel_event = threading.Event()
-_cancel_lock = threading.Lock()
-_cancel_generation = 0
-_state_lock = threading.Lock()
 
 # ingest 进度写盘节流间隔（秒）：避免千级文件全量导入时每次 mkstemp+fsync
 _PROG_SAVE_INTERVAL_SECS = 0.5
 
-
-def _state_path() -> Path | None:
-    ws = config.workspace_path
-    if not ws:
-        return None
-    p = Path(ws) / WORKSPACE_APP_FOLDER / "ingest_state.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def _fingerprint_path(workspace: str) -> Path:
-    p = Path(workspace) / WORKSPACE_APP_FOLDER / "ingest_fingerprint.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def _load_fingerprint(workspace: str) -> dict:
-    path = _fingerprint_path(workspace)
-    if not path.exists():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _save_fingerprint(workspace: str, fingerprint: dict) -> None:
-    path = _fingerprint_path(workspace)
-    try:
-        _write_json_atomic(path, fingerprint)
-    except OSError as e:
-        logger.warning("[ingest] failed to save fingerprint: %s", e)
-
-
-def _workspace_file_fingerprint(workspace: str) -> dict:
-    """Fast fingerprint of tracked files: path -> [mtime, size]."""
-    ws = Path(workspace)
-    supported = set(FileConverterManager.get_supported_formats())
-    fingerprint: dict = {}
-    for f in ws.rglob("*"):
-        if not f.is_file() or f.name.startswith("."):
-            continue
-        rel = f.relative_to(ws)
-        if any(part.startswith(".") for part in rel.parts):
-            continue
-        if any(is_ignored_dir(p) for p in rel.parts):
-            continue
-        if WORKSPACE_APP_FOLDER in rel.parts or "wiki" in rel.parts or RAW_FOLDER in rel.parts:
-            continue
-        suffix = f.suffix.lower()
-        is_md = suffix == ".md"
-        is_convertible = suffix in supported
-        if not is_md and not is_convertible:
-            continue
-        try:
-            stat = f.stat()
-            fingerprint[str(rel).replace("\\", "/")] = [stat.st_mtime, stat.st_size]
-        except OSError:
-            continue
-    return fingerprint
-
-
-def _workspace_files_changed(workspace: str) -> tuple[bool, dict]:
-    """Return (changed, current_fingerprint).
-
-    Uses mtime + size as the change signal. A full hash is computed only when
-    mtime/size match but we still want to be safe, which is skipped here for
-    speed; callers fall back to content checks when needed.
-    """
-    current = _workspace_file_fingerprint(workspace)
-    previous = _load_fingerprint(workspace)
-    if previous == current:
-        return False, current
-    return True, current
-
-
-def load_ingest_state() -> dict:
-    path = _state_path()
-    if not path or not path.exists():
-        return {"status": "idle"}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {"status": "idle"}
-    except (OSError, json.JSONDecodeError):
-        return {"status": "idle"}
-
-
-def save_ingest_state(state: dict) -> None:
-    path = _state_path()
-    if not path:
-        return
-    with _state_lock:
-        _write_json_atomic(path, state)
-
-
-def _write_json_atomic(path: Path, payload: dict) -> None:
-    data = json.dumps(payload, ensure_ascii=False, indent=2)
-    fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(data)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
-
-
-def request_cancel() -> None:
-    global _cancel_generation
-    with _cancel_lock:
-        _cancel_generation += 1
-        _cancel_event.set()
-
-
-def clear_cancel() -> None:
-    _cancel_event.clear()
-
-
-def is_cancelled() -> bool:
-    return _cancel_event.is_set()
-
-
-def cancel_generation() -> int:
-    with _cancel_lock:
-        return _cancel_generation
-
-
-def normalize_ingest_state() -> dict:
-    """Mark orphaned ``running`` state (process killed mid-pipeline) as interrupted."""
-    state = load_ingest_state()
-    if state.get("status") == "running":
-        state["status"] = "interrupted"
-        state["interrupted_at"] = time.time()
-        msg = (state.get("message") or "").strip()
-        if "续跑" not in msg:
-            state["message"] = (msg + " — 上次未跑完，将自动续跑").strip(" —")
-        save_ingest_state(state)
-    return state
+__all__ = [
+    "STAGES",
+    "cancel_generation",
+    "clear_cancel",
+    "is_cancelled",
+    "load_ingest_state",
+    "normalize_ingest_state",
+    "prepare_auto_ingest",
+    "request_cancel",
+    "request_full_ingest",
+    "run_ingest",
+    "save_ingest_state",
+]
 
 
 def _workspace_has_pending_ingest(workspace: str) -> bool:
@@ -287,211 +161,6 @@ def request_full_ingest() -> None:
     state = load_ingest_state()
     state["force_full_next"] = True
     save_ingest_state(state)
-
-
-def _scan_convert_pending(workspace: str) -> list[str]:
-    supported = set(FileConverterManager.get_supported_formats())
-    ws = Path(workspace)
-    pending: list[str] = []
-    for f in ws.rglob("*"):
-        if not f.is_file() or f.name.startswith("."):
-            continue
-        rel = f.relative_to(ws)
-        if any(part.startswith(".") for part in rel.parts):
-            continue
-        if RAW_FOLDER in rel.parts:
-            continue
-        if f.suffix.lower() in supported:
-            pending.append(str(f))
-    return pending
-
-
-def _scan_index_pending(workspace: str) -> list[Path]:
-    """Markdown under Notes/ whose mtime differs from last indexed state."""
-    from sidecar.rag.index_state import file_needs_index
-
-    ws = Path(workspace)
-    out: list[Path] = []
-    for md in ws.rglob("*.md"):
-        if (
-            md.name.startswith(".")
-            or any(part.startswith(".") for part in md.relative_to(ws).parts[:-1])
-            or "wiki" in md.parts
-        ):
-            continue
-        if md.name.endswith("_综述.md"):
-            continue
-        if NOTES_FOLDER not in md.parts:
-            continue
-        try:
-            rel = str(md.relative_to(ws))
-            if file_needs_index(rel, md.stat().st_mtime, workspace):
-                out.append(md)
-        except OSError:
-            continue
-    return out
-
-
-def _scan_classify_pending(workspace: str) -> list[Path]:
-    ws = Path(workspace)
-    out: list[Path] = []
-    for md in ws.rglob("*.md"):
-        if md.name.startswith(".") or "wiki" in md.parts:
-            continue
-        if any(is_ignored_dir(p) for p in md.parts):
-            continue
-        if md.name.endswith("_综述.md") or md.name.endswith("综述.md"):
-            continue
-        if md.name == "schema.md" or NOTES_FOLDER not in md.parts:
-            continue
-        from sidecar.workspace_meta import is_inbox_orphan_path, is_workspace_meta_path
-
-        if is_workspace_meta_path(md):
-            continue
-        if not is_inbox_orphan_path(md, workspace):
-            continue
-        try:
-            from utils.text_utils import parse_frontmatter
-
-            text = md.read_text(encoding="utf-8")
-            fm, _ = parse_frontmatter(text)
-            if topic_from_notes_path(md):
-                continue
-            if not is_inbox_orphan_path(md, workspace):
-                continue
-            if fm is None or check_topic_needs_processing(fm):
-                out.append(md)
-        except OSError:
-            continue
-    return out
-
-
-def _index_markdown_files(
-    workspace: str,
-    files: list[Path],
-    progress_cb: Callable[[int, int, str], None] | None,
-    cancelled: Callable[[], bool] = is_cancelled,
-) -> tuple[int, list[str]]:
-    from sidecar.rag.index import index_operation
-
-    with index_operation(workspace, blocking=False) as acquired:
-        if not acquired:
-            raise RuntimeError("RAG 索引正在由另一个任务更新，请稍后重试")
-        return _index_markdown_files_locked(workspace, files, progress_cb, cancelled)
-
-
-def _index_markdown_files_locked(
-    workspace: str,
-    files: list[Path],
-    progress_cb: Callable[[int, int, str], None] | None,
-    cancelled: Callable[[], bool],
-) -> tuple[int, list[str]]:
-    if not config.rag_enabled:
-        return 0, []
-
-    from sidecar.rag.chunker import chunk_file
-    from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import count_indexed_chunks, load_manifest, replace_file_chunks
-    from sidecar.rag.index_state import file_needs_index, mark_many_indexed
-
-    manifest = load_manifest(workspace)
-    expected_chunks = sum(len(entry.get("chunks") or []) for entry in manifest.get("files", {}).values())
-    actual_chunks = count_indexed_chunks(workspace, allow_metadata_fallback=False)
-    if actual_chunks < 0:
-        raise RuntimeError("RAG 索引当前不可访问，请关闭其他 NoteAI 实例后重试")
-    repair_all = expected_chunks > 0 and actual_chunks != expected_chunks
-    if repair_all:
-        logger.warning(
-            "[ingest/index] integrity mismatch actual=%s expected=%s; repairing all notes",
-            actual_chunks,
-            expected_chunks,
-        )
-        ws_path = Path(workspace)
-        files = [
-            md
-            for md in ws_path.rglob("*.md")
-            if not md.name.startswith(".")
-            and not any(part.startswith(".") for part in md.relative_to(ws_path).parts[:-1])
-            and "wiki" not in md.parts
-            and NOTES_FOLDER in md.parts
-            and not md.name.endswith("_综述.md")
-        ]
-
-    indexed = 0
-    indexed_paths: list[str] = []
-    total = len(files)
-    replacements: dict[str, dict] = {}
-    pending_updates: dict[str, float] = {}
-    preparation_errors: list[str] = []
-
-    for i, md in enumerate(files):
-        if cancelled():
-            break
-        try:
-            rel = str(md.relative_to(workspace))
-            mtime = md.stat().st_mtime
-            if not repair_all and not file_needs_index(rel, mtime, workspace):
-                if progress_cb:
-                    progress_cb(i + 1, total, f"跳过未改动 ({i + 1}/{total}): {md.name}")
-                continue
-            if progress_cb:
-                progress_cb(i + 1, total, f"索引 ({i + 1}/{total}): {md.name}")
-            text = md.read_text(encoding="utf-8")
-            chunks = chunk_file(rel, text)
-            if not chunks:
-                replacements[rel] = {
-                    "chunks": [],
-                    "embeddings": [],
-                    "mtime": mtime,
-                    "size": md.stat().st_size,
-                }
-                pending_updates[rel] = mtime
-                continue
-            embeddings = encode_documents([c["content"] for c in chunks])
-            replacements[rel] = {
-                "chunks": chunks,
-                "embeddings": embeddings,
-                "mtime": mtime,
-                "size": md.stat().st_size,
-            }
-            pending_updates[rel] = mtime
-        except Exception as e:
-            logger.warning("[ingest/index] failed to prepare %s: %s", md, e)
-            preparation_errors.append(f"{md.name}: {e}")
-            continue
-
-    if preparation_errors:
-        raise RuntimeError(f"索引准备失败 {len(preparation_errors)} 篇: {'; '.join(preparation_errors[:3])}")
-
-    # Do not mutate the index after cancellation. Prepared embeddings can be
-    # safely discarded and the unchanged state will cause a retry next run.
-    if cancelled():
-        return 0, []
-
-    if pending_updates:
-        replace_file_chunks(workspace, replacements)
-        mark_many_indexed(pending_updates, workspace)
-        indexed = len(pending_updates)
-        indexed_paths = list(pending_updates)
-
-    return indexed, indexed_paths
-
-
-def _purge_deleted_index_files(workspace: str) -> list[str]:
-    """Remove chunks and state entries for Notes files deleted from disk."""
-    if not config.rag_enabled:
-        return []
-
-    from sidecar.rag.index import delete_files_batched
-    from sidecar.rag.index_state import load_state, remove_indexed
-
-    ws = Path(workspace)
-    stale_paths = [rel for rel in load_state(workspace) if not (ws / rel).is_file()]
-    if stale_paths:
-        # 批量删除：单次 writer lock + 末尾一次 BM25 重建（原实现逐文件全量重建）
-        delete_files_batched(workspace, stale_paths)
-        remove_indexed(stale_paths, workspace)
-    return stale_paths
 
 
 def run_ingest(

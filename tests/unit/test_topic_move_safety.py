@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from config import config
-from utils.topic_assigner import _apply_auto_topic
-from utils.topic_file_ops import move_file_to_notes_topic_folder
+from utils.topic.assigner import _apply_auto_topic
+from utils.topic.file_ops import move_file_to_notes_topic_folder
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def test_auto_topic_reports_move_failure_instead_of_success(workspace: Path, mon
     note = workspace / "Notes" / "note.md"
     note.write_text("# note", encoding="utf-8")
     monkeypatch.setattr(
-        "utils.topic_assigner.move_file_to_notes_topic_folder",
+        "utils.topic.assigner.move_file_to_notes_topic_folder",
         lambda *_args, **_kwargs: {"success": False, "message": "disk full"},
     )
 

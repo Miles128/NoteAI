@@ -49,7 +49,7 @@ def _parse_tags(raw_tags) -> list[str]:
 
 
 def _topic_tree_context(workspace: str) -> dict | None:
-    from utils.topic_manager import TopicManager
+    from utils.topic.manager import TopicManager
 
     labels = TopicManager.collect_topic_labels(workspace)
     if not labels:

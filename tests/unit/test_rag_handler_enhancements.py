@@ -66,7 +66,7 @@ def test_anchors_empty_when_history_short():
 
 def test_anchors_extracts_terms_from_older_turns():
     history = _mk_history(5)  # 10 条 > 6
-    with patch("sidecar.handlers.rag_handler._jieba_analyse_available", return_value=True):
+    with patch("sidecar.rag.chat_support._jieba_analyse_available", return_value=True):
         anchors = RagHandler._session_topic_anchors(history)
     assert isinstance(anchors, list)
     assert anchors  # jieba 应能从压缩前文中提取出词
@@ -75,13 +75,13 @@ def test_anchors_extracts_terms_from_older_turns():
 
 def test_anchors_skips_invalid_entries():
     history = ["bad", {"no_role": True}] + _mk_history(4)
-    with patch("sidecar.handlers.rag_handler._jieba_analyse_available", return_value=True):
+    with patch("sidecar.rag.chat_support._jieba_analyse_available", return_value=True):
         anchors = RagHandler._session_topic_anchors(history)
     assert isinstance(anchors, list)
 
 
 def test_anchors_empty_without_jieba():
-    with patch("sidecar.handlers.rag_handler._jieba_analyse_available", return_value=False):
+    with patch("sidecar.rag.chat_support._jieba_analyse_available", return_value=False):
         assert RagHandler._session_topic_anchors(_mk_history(5)) == []
 
 

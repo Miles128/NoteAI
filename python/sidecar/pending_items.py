@@ -9,7 +9,7 @@ from pathlib import Path
 from config import config
 from sidecar.cascade_runner import load_cascade_failures
 from sidecar.kb_lint import auto_fix_broken_links, filter_stale_lint_issues, load_lint_report
-from utils.topic_pending import load_pending
+from utils.topic.pending import load_pending
 
 _PRIORITY = {
     "ingest": 0,
@@ -62,13 +62,13 @@ def run_pending_cleanups_if_due(
         _MAINTENANCE_LAST_RUN[root_key] = now
 
         try:
-            from utils.topic_assigner import sync_all_folder_topics
+            from utils.topic.assigner import sync_all_folder_topics
 
             sync_all_folder_topics(ws)
         except Exception:
             pass
         try:
-            from utils.topic_pending import cleanup_stale_pending
+            from utils.topic.pending import cleanup_stale_pending
 
             cleanup_stale_pending()
         except Exception:

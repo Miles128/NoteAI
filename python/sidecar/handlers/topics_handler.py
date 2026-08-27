@@ -3,7 +3,6 @@ import re
 import shutil
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 
 from config import config, is_ignored_dir
@@ -25,16 +24,15 @@ from sidecar.wiki_utils import (
 )
 from utils.activity_log import get_entries
 from utils.logger import logger
-from utils.text_utils import parse_frontmatter
-from utils.topic_assigner import (
+from utils.topic.assigner import (
     auto_assign_topic_for_file,
     load_pending,
     move_file_to_notes_topic_folder,
     save_pending,
     write_topic_to_file,
 )
-from utils.topic_manager import TopicManager
-from utils.topic_membership import note_belongs_to_topic, split_topic_parts
+from utils.topic.manager import TopicManager
+from utils.topic.stale import _parse_iso_timestamp, collect_stale_topics
 from utils.wiki_store import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
@@ -124,19 +122,6 @@ def _read_topic_state(workspace: str, topic: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _parse_iso_timestamp(value) -> float | None:
-    """将 ISO 时间字符串转为 epoch 秒，失败返回 None。"""
-    if not isinstance(value, str) or not value.strip():
-        return None
-    text = value.strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        return datetime.fromisoformat(text).timestamp()
-    except ValueError:
-        return None
-
-
 def _latest_note_mtime(topic: str, workspace: str) -> float | None:
     """主题下源笔记的最新 mtime（复用 get_survey_overview 同款 collect_topic_notes 判定）。"""
     from sidecar.cascade import collect_topic_notes
@@ -156,6 +141,9 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     _pending_maintenance_schedule_lock = threading.Lock()
     _pending_maintenance_last_scheduled: dict[str, float] = {}
     _pending_maintenance_interval_seconds = 30.0
+
+    def _collect_stale_topics(self, workspace: str) -> list[str]:
+        return collect_stale_topics(workspace)
 
     def _sync_wiki_with_folder_system(self, _params=None):
         try:
@@ -195,85 +183,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
                 logger.warning(f"[topics_handler] stale topics scan failed: {e}\n")
         result["stale_topics"] = stale
         return result
-
-    def _collect_stale_topics(self, workspace: str) -> list[str]:
-        """轻量 stale 扫描：仅检查已有 topic_states 的主题，判定逻辑与 get_survey_overview 一致。
-
-        单次全库遍历：一次 rglob + 逐文件头部 frontmatter 解析，按候选主题聚合
-        最新 mtime，避免逐主题调用 collect_topic_notes 造成 O(主题数×全库文件数)。
-        """
-        states_dir = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "topic_states"
-        if not states_dir.is_dir():
-            return []
-        candidates: list[tuple[str, float]] = []
-        for state_file in sorted(states_dir.glob("*.json")):
-            try:
-                data = json.loads(state_file.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if not isinstance(data, dict):
-                continue
-            topic = data.get("topic")
-            compiled_ts = _parse_iso_timestamp(data.get("generated_at"))
-            if not topic or compiled_ts is None:
-                continue
-            candidates.append((str(topic), compiled_ts))
-        if not candidates:
-            return []
-
-        ws = Path(workspace)
-        notes_dir = ws / config.NOTES_FOLDER
-        notes_dir_exists = notes_dir.exists()
-        topic_parts_cache: dict[str, list[str]] = {}
-        latest_mtime: dict[str, float] = {}
-        for md_file in ws.rglob("*.md"):
-            if md_file.name.startswith("."):
-                continue
-            if "wiki" in md_file.parts:
-                continue
-            if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
-                continue
-            try:
-                # 只读文件头部解析 frontmatter（同 collect_topic_notes 轻量模式），大文件不读全文
-                with md_file.open("r", encoding="utf-8") as fh:
-                    text = fh.read(8192)
-                fm, _body = parse_frontmatter(text)
-            except Exception:
-                continue
-            file_topic = ""
-            file_topics: list = []
-            if fm:
-                ft = fm.get("topic", "")
-                if isinstance(ft, str):
-                    file_topic = ft
-                fts = fm.get("topics", [])
-                if isinstance(fts, list):
-                    file_topics = fts
-            rel_parts: tuple = ()
-            if notes_dir_exists:
-                try:
-                    rel_parts = md_file.relative_to(notes_dir).parts
-                except ValueError:
-                    rel_parts = ()
-            try:
-                mtime = md_file.stat().st_mtime
-            except OSError:
-                continue
-            for topic, _compiled_ts in candidates:
-                parts = topic_parts_cache.get(topic)
-                if parts is None:
-                    parts = split_topic_parts(topic)
-                    topic_parts_cache[topic] = parts
-                if note_belongs_to_topic(topic, file_topic, file_topics, rel_parts, parts):
-                    if mtime > latest_mtime.get(topic, float("-inf")):
-                        latest_mtime[topic] = mtime
-
-        stale: list[str] = []
-        for topic, compiled_ts in candidates:
-            latest = latest_mtime.get(topic)
-            if latest is not None and latest > compiled_ts:
-                stale.append(topic)
-        return stale
 
     def _topic_meta(self, params):
         """主题可信度元数据（只读）：来源数/冲突待处理数/编译时间/是否过期。"""
@@ -725,7 +634,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from utils.topic_merge import suggest_merged_topic_names
+        from utils.topic.merge import suggest_merged_topic_names
 
         return suggest_merged_topic_names(workspace, [str(topic) for topic in (params.get("topics") or [])])
 
@@ -733,7 +642,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from utils.topic_merge import merge_topics
+        from utils.topic.merge import merge_topics
 
         result = merge_topics(
             workspace,
@@ -749,7 +658,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        from utils.topic_merge import preview_topic_merge
+        from utils.topic.merge import preview_topic_merge
 
         return preview_topic_merge(
             workspace,

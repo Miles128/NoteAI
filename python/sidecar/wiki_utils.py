@@ -11,7 +11,7 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
-from utils.topic_membership import note_belongs_to_topic
+from utils.topic.membership import note_belongs_to_topic
 from utils.wiki_store import (
     _get_wiki_path as _resolve_wiki_path_impl,
 )

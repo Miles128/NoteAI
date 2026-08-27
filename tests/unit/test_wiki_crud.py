@@ -251,7 +251,7 @@ def test_delete_topic_moves_files_and_removes_wiki_section(workspace: Path, monk
     (workspace / "wiki" / "WIKI.md").write_text(
         _wiki_with_topic("\n## 待删主题\n\n1. **甲文件**\n2. **乙文件**\n"), encoding="utf-8"
     )
-    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
+    monkeypatch.setattr("utils.topic.assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
 
     result = delete_topic("待删主题")
 
@@ -273,7 +273,7 @@ def test_delete_topic_counts_reassigned_files(workspace: Path, monkeypatch):
     topic_dir.mkdir()
     (topic_dir / "文件.md").write_text("# 内容\n", encoding="utf-8")
     (workspace / "wiki" / "WIKI.md").write_text(_wiki_with_topic("\n## 重分配主题\n\n1. **文件**\n"), encoding="utf-8")
-    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "auto_assigned"})
+    monkeypatch.setattr("utils.topic.assigner.auto_assign_topic_for_file", lambda path: {"status": "auto_assigned"})
 
     result = delete_topic("重分配主题")
     assert result["moved"] == 1
@@ -282,7 +282,7 @@ def test_delete_topic_counts_reassigned_files(workspace: Path, monkeypatch):
 
 
 def test_delete_missing_topic_is_graceful(workspace: Path, monkeypatch):
-    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
+    monkeypatch.setattr("utils.topic.assigner.auto_assign_topic_for_file", lambda path: {"status": "pending"})
     before = read_wiki(workspace)
 
     result = delete_topic("不存在主题")
@@ -316,7 +316,7 @@ def test_rename_topic_simple_path_updates_files_and_dir(workspace: Path, monkeyp
     (old_dir / "文件A.md").write_text("---\n---\n内容\n", encoding="utf-8")
 
     written: list[tuple[str, str]] = []
-    monkeypatch.setattr("utils.topic_assigner.write_topic_to_file", lambda path, topic: written.append((path, topic)))
+    monkeypatch.setattr("utils.topic.assigner.write_topic_to_file", lambda path, topic: written.append((path, topic)))
 
     result = rename_topic("旧主题", "新主题")
     assert result["success"] is True
@@ -360,7 +360,7 @@ def test_rename_topic_into_existing_topic_merges(workspace: Path, monkeypatch):
     (jia_dir / "甲文件.md").write_text("---\n---\n内容\n", encoding="utf-8")
     (workspace / "Notes" / "乙").mkdir()
 
-    monkeypatch.setattr("utils.topic_assigner.write_topic_to_file", lambda path, topic: None)
+    monkeypatch.setattr("utils.topic.assigner.write_topic_to_file", lambda path, topic: None)
 
     result = rename_topic("甲", "乙")
     assert result["success"] is True
@@ -378,7 +378,7 @@ def test_rename_topic_into_existing_topic_merges(workspace: Path, monkeypatch):
 
 
 def test_rename_topic_missing_old_and_new_exists_fails(workspace: Path, monkeypatch):
-    monkeypatch.setattr("utils.topic_assigner.write_topic_to_file", lambda path, topic: None)
+    monkeypatch.setattr("utils.topic.assigner.write_topic_to_file", lambda path, topic: None)
     result = rename_topic("幽灵主题", "AI基础")
     assert result["success"] is False
     assert "不存在" in result["message"]

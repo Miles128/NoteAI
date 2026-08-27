@@ -8,6 +8,7 @@ from pathlib import Path
 
 from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
+from sidecar.semantic.briefs import _compose_topic_brief, _compose_weekly_brief
 from sidecar.semantic.detail import list_semantic_objects
 from sidecar.semantic.store import SemanticStore
 
@@ -18,6 +19,9 @@ class SemanticHandler(BaseHandler):
     # Workbench display intensity → minimum confidence for semantic objects.
     # "deep" keeps every item (including legacy rows without confidence).
     _INTENSITY_MIN_CONFIDENCE = {"light": 0.8, "standard": 0.5, "deep": 0.0}
+
+    _compose_weekly_brief = staticmethod(_compose_weekly_brief)
+    _compose_topic_brief = staticmethod(_compose_topic_brief)
 
     def _store(self) -> SemanticStore | None:
         workspace = self.config.workspace_path
@@ -245,26 +249,6 @@ class SemanticHandler(BaseHandler):
         brief, fallback = self._compose_weekly_brief(days, counts_summary, records, WEEKLY_BRIEF_PROMPT)
         return {"success": True, "days": days, "brief": brief, "fallback": fallback}
 
-    @staticmethod
-    def _compose_weekly_brief(days: int, counts_summary: str, records: str, prompt_template: str) -> tuple[str, bool]:
-        """LLM-generated weekly brief when available; structured fallback otherwise."""
-        from utils.llm_utils import call_llm_raw
-
-        try:
-            prompt = prompt_template.format(days=days, counts_summary=counts_summary, change_records=records)
-            text = call_llm_raw(prompt, temperature=0.3)
-        except Exception:
-            text = ""
-        if not text or not text.strip():
-            fallback = (
-                f"## 知识库周报\n\n"
-                f"（未配置 LLM 或生成失败，以下为结构化变化记录）\n\n"
-                f"## 统计概览\n\n{counts_summary}\n\n"
-                f"## 变化记录\n\n{records}\n"
-            )
-            return fallback, True
-        return text.strip(), False
-
     def _get_topic_brief(self, params):
         """One-topic review brief from the change log.
         Uses the LLM when configured; otherwise falls back to a structured
@@ -308,26 +292,6 @@ class SemanticHandler(BaseHandler):
             "brief": brief,
             "fallback": fallback,
         }
-
-    @staticmethod
-    def _compose_topic_brief(topic: str, days: int, records: str) -> tuple[str, bool]:
-        """LLM-generated brief when available; structured fallback otherwise."""
-        from prompts import TOPIC_BRIEF_PROMPT
-        from utils.llm_utils import call_llm_raw
-
-        try:
-            prompt = TOPIC_BRIEF_PROMPT.format(topic_name=topic, days=days, change_records=records)
-            text = call_llm_raw(prompt, temperature=0.3)
-        except Exception:
-            text = ""
-        if not text or not text.strip():
-            fallback = (
-                f"## 主题简报：{topic}\n\n"
-                f"（未配置 LLM 或生成失败，以下为结构化变化记录）\n\n"
-                f"过去 {days} 天变化：\n\n{records}\n"
-            )
-            return fallback, True
-        return text.strip(), False
 
     def _all_note_paths(self) -> list[Path]:
         workspace = self.config.workspace_path

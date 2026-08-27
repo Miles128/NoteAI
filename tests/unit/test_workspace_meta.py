@@ -8,7 +8,7 @@ from sidecar.workspace_meta import (
 )
 
 from config import config
-from utils.topic_assigner import auto_assign_topic_for_file, sync_all_folder_topics
+from utils.topic.assigner import auto_assign_topic_for_file, sync_all_folder_topics
 
 
 @pytest.fixture

@@ -92,7 +92,7 @@ def test_startup_sync_schedules_non_destructive_organization_lint(monkeypatch, t
     monkeypatch.setattr("sidecar.server.config.workspace_path", str(tmp_path))
     monkeypatch.setattr("sidecar.server.config.rag_enabled", False)
     monkeypatch.setattr("sidecar.workspace_meta.merge_meta_docs_into_project_rules", lambda _ws: None)
-    monkeypatch.setattr("utils.topic_assigner.sync_all_folder_topics", lambda _ws: None)
+    monkeypatch.setattr("utils.topic.assigner.sync_all_folder_topics", lambda _ws: None)
     monkeypatch.setattr("sidecar.kb_lint.auto_fix_broken_links", lambda _ws: None)
     monkeypatch.setattr("sidecar.workspace_rules.needs_workspace_rules_setup", lambda _ws: True)
     monkeypatch.setattr(server, "_send_response", lambda _event: None)

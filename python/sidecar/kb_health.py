@@ -8,7 +8,7 @@ from config import config
 from config.settings import NOTES_FOLDER
 from sidecar.kb_lint import load_lint_report
 from utils.link_indexer import load_links
-from utils.topic_manager import TopicManager
+from utils.topic.manager import TopicManager
 
 
 def _iter_active_topics(tree: list[dict]) -> list[dict]:

@@ -664,10 +664,10 @@ def create_topic(topic_name):  # noqa: PLR0912
 
 
 def delete_topic(topic_name):  # noqa: PLR0912, PLR0915
-    from utils.topic_assigner import (  # noqa: PLC0415
+    from utils.topic.assigner import (  # noqa: PLC0415
         auto_assign_topic_for_file,
     )
-    from utils.topic_file_ops import (  # noqa: PLC0415
+    from utils.topic.file_ops import (  # noqa: PLC0415
         _clear_topic_in_file,
         _remove_empty_dir,
     )
@@ -770,7 +770,7 @@ def delete_topic(topic_name):  # noqa: PLR0912, PLR0915
 
 
 def rename_topic(old_topic, new_topic):  # noqa: PLR0911, PLR0912, PLR0915
-    from utils.topic_assigner import write_topic_to_file  # noqa: PLC0415
+    from utils.topic.assigner import write_topic_to_file  # noqa: PLC0415
 
     if not old_topic or not new_topic:
         return {"success": False, "message": "主题名不能为空"}

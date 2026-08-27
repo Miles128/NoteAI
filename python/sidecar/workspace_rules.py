@@ -134,7 +134,7 @@ def list_l1_topics(workspace: str | None = None) -> list[str]:
     ws = workspace or config.workspace_path
     if not ws:
         return []
-    from utils.topic_manager import TopicManager
+    from utils.topic.manager import TopicManager
 
     tree = TopicManager.build_tree_from_filesystem(ws)
     return [t["name"] for t in tree]

@@ -691,7 +691,7 @@ class FileConverterManager:
 
             if assign_topic:
                 try:
-                    from utils.topic_assigner import auto_assign_topic_for_file
+                    from utils.topic.assigner import auto_assign_topic_for_file
 
                     assignment = auto_assign_topic_for_file(str(output_file))
                     if assignment and assignment.get("status") == "auto_assigned":

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from config import config
 from utils.text_utils import parse_frontmatter
-from utils.topic_merge import merge_topics, preview_topic_merge, suggest_merged_topic_names
+from utils.topic.merge import merge_topics, preview_topic_merge, suggest_merged_topic_names
 
 
 def _write(root: Path, topic: str, name: str, body: str = "正文") -> None:

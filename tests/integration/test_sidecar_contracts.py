@@ -26,11 +26,11 @@ from config.constants import TOPIC_SEP
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_preview import FilePreviewer
 from utils.activity_log import add_entry, get_entries
-from utils.topic_assigner import (
+from utils.topic.assigner import (
     auto_assign_topic_for_file,
 )
-from utils.topic_manager import TopicManager
-from utils.topic_pending import load_pending as load_pending_topics
+from utils.topic.manager import TopicManager
+from utils.topic.pending import load_pending as load_pending_topics
 from utils.wiki_store import (
     parse_wiki_headings,
     parse_wiki_structure,

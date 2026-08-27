@@ -7,9 +7,9 @@ from typing import Any, Protocol
 
 from config import config
 from utils.text_utils import parse_frontmatter
-from utils.topic_assigner import sync_wiki_with_files
-from utils.topic_manager import TopicManager
-from utils.topic_pending import load_pending
+from utils.topic.assigner import sync_wiki_with_files
+from utils.topic.manager import TopicManager
+from utils.topic.pending import load_pending
 
 _WIKI_SYNC_MIN_INTERVAL_SECS = 15.0
 _wiki_sync_last: float = 0.0

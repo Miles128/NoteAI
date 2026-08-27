@@ -135,7 +135,7 @@ def _auto_move_misplaced_notes_locked(workspace: str | Path) -> dict:
         return {"success": True, "moved": [], "skipped": "auto_topic_disabled"}
 
     from sidecar.organization_audit import find_misplaced_notes
-    from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+    from utils.topic.assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
     threshold = min(1.0, max(0.0, float(config.topic_auto_assign_threshold)))
     moved: list[dict] = []

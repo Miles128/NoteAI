@@ -53,7 +53,7 @@ def test_convert_file_returns_path_after_topic_assignment(tmp_path: Path, monkey
 
     manager = FileConverterManager()
     monkeypatch.setattr(manager, "_get_converter", lambda _ext: Converter())
-    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", assign)
+    monkeypatch.setattr("utils.topic.assigner.auto_assign_topic_for_file", assign)
 
     result = manager.convert_file(str(source), str(output_dir))
 
@@ -77,7 +77,7 @@ def test_parallel_conversions_do_not_overwrite_same_output(tmp_path: Path, monke
             return f"# 标题\n\n{path} 的完整转换内容，包含足够的标点和句子。"
 
     monkeypatch.setattr(FileConverterManager, "_get_converter", lambda _self, _ext: Converter())
-    monkeypatch.setattr("utils.topic_assigner.auto_assign_topic_for_file", lambda _path: None)
+    monkeypatch.setattr("utils.topic.assigner.auto_assign_topic_for_file", lambda _path: None)
 
     threads = [
         Thread(
@@ -122,7 +122,7 @@ def test_convert_can_defer_topic_assignment_for_ingest(tmp_path: Path, monkeypat
     manager = FileConverterManager()
     monkeypatch.setattr(manager, "_get_converter", lambda _ext: Converter())
     monkeypatch.setattr(
-        "utils.topic_assigner.auto_assign_topic_for_file",
+        "utils.topic.assigner.auto_assign_topic_for_file",
         lambda path: assignment_calls.append(path),
     )
 

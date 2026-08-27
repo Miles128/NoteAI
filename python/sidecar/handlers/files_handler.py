@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
-from utils.topic_assigner import sync_wiki_with_files
+from utils.topic.assigner import sync_wiki_with_files
 
 _MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MiB
 

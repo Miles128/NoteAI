@@ -5,7 +5,7 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from utils.text_utils import parse_frontmatter
-from utils.topic_membership import note_belongs_to_topic, split_topic_parts
+from utils.topic.membership import note_belongs_to_topic, split_topic_parts
 
 _changelog_lock = threading.Lock()
 
@@ -23,7 +23,7 @@ def _safe_topic_segment(segment: str) -> str:
 
 def _safe_topic_path(topic: str) -> str:
     """将 > 分隔的主题字符串转为文件系统安全路径（用 / 连接）。"""
-    from utils.topic_classifier import _norm_topic
+    from utils.topic.classifier import _norm_topic
 
     topic = _norm_topic(topic)
     parts = [p.strip() for p in topic.split(TOPIC_SEP) if p.strip()]

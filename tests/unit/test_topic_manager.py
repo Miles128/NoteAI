@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "python"))
 
-from utils.topic_manager import (
+from utils.topic.manager import (
     LEVEL1_TOPICS,
     MAX_LEVEL,
     TopicManager,

@@ -9,7 +9,7 @@ from sidecar.pending_items import collect_pending_items, run_pending_cleanups_if
 
 from config import config
 from utils.link_indexer import load_links, save_links
-from utils.topic_pending import save_pending
+from utils.topic.pending import save_pending
 
 
 @pytest.fixture

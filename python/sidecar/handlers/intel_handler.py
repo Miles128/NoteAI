@@ -445,7 +445,7 @@ class IntelHandler(BaseHandler):
         return Path(found) if found else None
 
     def _assign_note_to_topic(self, md_file, fname, topic_name):
-        from utils.topic_assigner import move_file_to_notes_topic_folder, write_topic_to_file
+        from utils.topic.assigner import move_file_to_notes_topic_folder, write_topic_to_file
 
         write_topic_to_file(str(md_file), topic_name)
         move_file_to_notes_topic_folder(str(md_file), topic_name)
@@ -528,7 +528,7 @@ class IntelHandler(BaseHandler):
 
     def _apply_merge_topic(self, suggestion, workspace_path, wiki_path):
         from utils.text_utils import write_frontmatter
-        from utils.topic_assigner import move_file_to_notes_topic_folder
+        from utils.topic.assigner import move_file_to_notes_topic_folder
 
         source = suggestion.get("source_topic", "").strip()
         target = suggestion.get("target_topic", "").strip()

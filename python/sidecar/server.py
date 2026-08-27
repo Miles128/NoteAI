@@ -6,6 +6,7 @@ import json
 import sys
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -42,7 +43,6 @@ from sidecar.handlers import (
 from sidecar.mixins.path_helpers import PathHelpersMixin
 from sidecar.rag.model_preload import ModelWarmupManager
 from sidecar.rpc_router import RpcRouter
-from sidecar.service_context import ServiceContext
 from sidecar.wiki_utils import (
     sync_wiki_with_files,
 )
@@ -92,7 +92,7 @@ class SidecarServer(PathHelpersMixin):
         self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
         self._router = RpcRouter(send_response=self._send_response)
-        self._ctx = ServiceContext(config=config, logger=logger)
+        self._ctx = SimpleNamespace(config=config, logger=logger)
         self._config_handler = ConfigHandler(self)
         self._component_handler = ComponentHandler(self)
         self._workspace_handler = WorkspaceHandler(self)

@@ -3,7 +3,7 @@
 All WIKI.md read/write operations MUST go through this module.
 Downstream code should never open/read/write WIKI.md directly.
 
-底层实现全部在 utils/wiki_store.py（路径解析 / 标题解析 / CRUD / 去重 / 文件夹同步）。
+底层实现拆在 utils/wiki/{parse,crud,sync}.py；utils/wiki_store.py 为对外门面。
 """
 
 from datetime import datetime

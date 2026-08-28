@@ -171,7 +171,8 @@ pub fn find_python() -> Result<PathBuf, String> {
     }
 
     let mut dir = exe_dir.clone();
-    for _ in 0..6 {
+    for _ in 0..10 {
+        candidates.push(dir.join(".venv").join("bin").join("python3"));
         candidates.push(dir.join(".venv").join("bin").join("python"));
         if let Some(parent) = dir.parent() {
             dir = parent.to_path_buf();

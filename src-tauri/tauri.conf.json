@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../webui",
     "beforeDevCommand": "npm run build:webui && npm run build:tiptap && npm run build:highlight",
-    "beforeBuildCommand": "npm run build:desktop && npm run build:webui:min"
+    "beforeBuildCommand": "npm run build:desktop && npm run build:highlight && npm run build:webui:min && bash scripts/bundle_sidecar_python.sh"
   },
   "app": {
     "withGlobalTauri": true,
@@ -34,8 +34,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../python/**/*"
-    ]
+    "resources": {
+      "resources/release/python": "python",
+      "resources/release/config": "config",
+      "resources/release/modules": "modules",
+      "resources/release/prompts": "prompts",
+      "resources/release/utils": "utils"
+    }
   }
 }

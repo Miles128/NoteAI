@@ -122,7 +122,7 @@ Tauri v2 shell (src-tauri/)
 - **Tauri sidecar**：配置在 `src-tauri/tauri.conf.json`。Python 二进制通过 `python/main.py` → `sidecar.server.main()` 解析。
 - **测试覆盖**：~69 个单元测试模块 + 3 个集成测试模块（含 `tests/integration/test_sidecar_contracts.py`）；发布前运行 `uv run pytest`。
 - **Prompts**：`prompts/yaml/*.yaml` 是单一事实来源；`prompts/__init__.py` 经 `prompts/loader.py` 在导入时解析常量。
-- **Sidecar Python**：开发使用项目 `.venv`；发布可通过 `scripts/bundle_sidecar_python.sh` 打包到 `src-tauri/resources/sidecar-python`，或设置 `NOTEAI_PYTHON`。
+- **Sidecar Python**：开发使用项目 `.venv`；发布包不内嵌 `.venv`。`scripts/bundle_sidecar_python.sh` 把无 `__pycache__` 的 Python 包暂存到 `src-tauri/resources/release/`，运行时用 `NOTEAI_PYTHON`、附近项目 `.venv` 或系统 `python3`。
 - **`rag_enabled`**：默认 `True`（`config/app_config.py`）；关闭时拒绝对话与索引构建（无 classic 检索伪装 RAG）。全文搜索仍走 `utils/fulltext_index.py`（情报搜索等）。
 
 ---

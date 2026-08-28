@@ -23,6 +23,10 @@ libc = "0.2"
 default = ["devtools"]
 devtools = ["tauri/devtools"]
 
+[profile.release]
+strip = true
+lto = "thin"
+
 [lib]
 name = "noteai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

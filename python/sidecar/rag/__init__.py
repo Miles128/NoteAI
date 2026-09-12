@@ -1,6 +1,6 @@
 """RAG pipeline package.
 
-The RAG stack (zvec, bm25s, fastembed, FlagEmbedding) is an optional feature.
+The RAG stack (zvec, bm25s, fastembed ONNX embed/rerank) is an optional feature.
 If dependencies are missing, callers can use ``utils.package_manager.ensure_feature("rag")``
 to install them on demand.
 """

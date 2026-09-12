@@ -436,6 +436,8 @@ var API_DEFS: ApiDef[] = [
     { name: 'getTopicBrief', method: 'get_topic_brief', params: function(options) { return options || {}; } },
     { name: 'generateWeeklyBrief', method: 'generate_weekly_brief', params: function(options) { return options || {}; } },
     { name: 'getIndexHealth', method: 'get_index_health', params: function() { return {}; } },
+    { name: 'getStorageUsage', method: 'get_storage_usage', params: function() { return {}; } },
+    { name: 'clearStorage', method: 'clear_storage', params: function(targets) { return { targets: targets }; }, write: true },
     { name: 'backupWorkspace', method: 'backup_workspace', params: function(options) { return options || {}; }, write: true },
     { name: 'exportNotes', method: 'export_notes', params: function(options) { return options || {}; }, write: true },
     { name: 'restoreWorkspaceBackup', method: 'restore_workspace_backup', params: function(options) { return options || {}; }, write: true },

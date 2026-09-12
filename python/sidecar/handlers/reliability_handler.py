@@ -11,6 +11,8 @@ class ReliabilityHandler(BaseHandler):
         router.register("export_notes", self._export_notes)
         router.register("restore_workspace_backup", self._restore_workspace_backup)
         router.register("get_index_health", self._get_index_health)
+        router.register("get_storage_usage", self._get_storage_usage)
+        router.register("clear_storage", self._clear_storage)
 
     def _workspace(self) -> str | None:
         return self.config.workspace_path
@@ -40,3 +42,18 @@ class ReliabilityHandler(BaseHandler):
         from sidecar.workspace_backup import check_index_health
 
         return check_index_health(self._workspace() or "")
+
+    def _get_storage_usage(self, _params):
+        from sidecar.storage_usage import get_storage_usage
+
+        return get_storage_usage(self._workspace())
+
+    def _clear_storage(self, params):
+        from sidecar.storage_usage import clear_storage
+
+        targets = params.get("targets") if isinstance(params, dict) else None
+        if isinstance(targets, str):
+            targets = [targets]
+        if not isinstance(targets, list):
+            targets = []
+        return clear_storage(targets, self._workspace())

@@ -80,6 +80,7 @@ function applyRagSettingsToForm(uiConfig: any) {
         refreshRagIndexStatus();
     }
     refreshComponentsStatus();
+    refreshStorageUsage();
 }
 
 function _updateDenseWeightHint() {
@@ -245,6 +246,123 @@ function _estimateIndexTime() {
     return Math.ceil(seconds / 60) + '分钟';
 }
 
+function _formatStorageBytes(bytes: any) {
+    var n = Number(bytes);
+    if (!isFinite(n) || n <= 0) return window.t('settings.storageEmpty');
+    if (n < 1024) return Math.round(n) + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function _storageSizeEl(id: any) {
+    if (id === 'hf_hub') return document.getElementById('settings-storage-hf-hub-size');
+    if (id === 'fastembed') return document.getElementById('settings-storage-fastembed-size');
+    if (id === 'index') return document.getElementById('settings-storage-index-size');
+    return null;
+}
+
+function _storageClearBtn(id: any) {
+    if (id === 'hf_hub') return document.getElementById('settings-storage-clear-hf-hub') as HTMLButtonElement | null;
+    if (id === 'fastembed') return document.getElementById('settings-storage-clear-fastembed') as HTMLButtonElement | null;
+    if (id === 'index') return document.getElementById('settings-storage-clear-index') as HTMLButtonElement | null;
+    return null;
+}
+
+function _showStorageMsg(text: any, isError: any) {
+    var msgEl = document.getElementById('settings-storage-msg');
+    if (!msgEl) return;
+    msgEl.textContent = text || '';
+    msgEl.style.display = text ? 'block' : 'none';
+    msgEl.style.color = isError ? 'var(--danger, #c0392b)' : 'var(--text-muted)';
+}
+
+function _applyStorageUsage(result: any) {
+    var items = (result && result.items) || [];
+    var byId: Record<string, any> = {};
+    items.forEach(function(item: any) {
+        if (item && item.id) byId[item.id] = item;
+    });
+    ['hf_hub', 'fastembed', 'index'].forEach(function(id) {
+        var item = byId[id] || { bytes: 0 };
+        var sizeEl = _storageSizeEl(id);
+        if (sizeEl) sizeEl.textContent = _formatStorageBytes(item.bytes);
+        var btn = _storageClearBtn(id);
+        if (btn) btn.disabled = !item.bytes;
+    });
+    var totalEl = document.getElementById('settings-storage-total');
+    if (totalEl) {
+        totalEl.textContent = window.t('settings.storageTotal', {
+            size: _formatStorageBytes(result && result.total_bytes),
+        });
+    }
+}
+
+async function refreshStorageUsage() {
+    if (!window.api || !window.api.getStorageUsage) return;
+    try {
+        var result = await window.api.getStorageUsage();
+        if (!result || !result.success) {
+            _showStorageMsg(window.t('settings.storageUnavailable'), true);
+            return;
+        }
+        _applyStorageUsage(result);
+        if (result.purged_stale_bytes > 0) {
+            _showStorageMsg(window.t('settings.storageStalePurged', {
+                size: _formatStorageBytes(result.purged_stale_bytes),
+            }), false);
+        }
+    } catch (e) {
+        _showStorageMsg(window.t('settings.storageUnavailable'), true);
+    }
+}
+
+async function clearStorageTarget(target: any) {
+    if (!window.api || !window.api.clearStorage) return;
+    var sizeEl = _storageSizeEl(target);
+    var sizeText = sizeEl ? sizeEl.textContent : window.t('settings.storageEmpty');
+    var confirmKey = target === 'index' ? 'settings.storageClearIndexConfirm' : 'settings.storageClearModelsConfirm';
+    if (!window.confirm(window.t(confirmKey, { size: sizeText || window.t('settings.storageEmpty') }))) return;
+    var btn = _storageClearBtn(target);
+    if (btn) btn.disabled = true;
+    try {
+        var result = await window.api.clearStorage([target]);
+        if (!result || !result.success) {
+            _showStorageMsg(window.t('settings.storageClearFailed', {
+                message: (result && result.message) || window.t('common.unknownError'),
+            }), true);
+            if (btn) btn.disabled = false;
+            return;
+        }
+        _applyStorageUsage(result);
+        _showStorageMsg(window.t('settings.storageClearDone', {
+            size: _formatStorageBytes(result.freed_bytes),
+        }), false);
+        if (target === 'index') {
+            refreshRagIndexStatus();
+        }
+    } catch (e) {
+        _showStorageMsg(window.t('settings.storageClearFailed', { message: (e as Error).message || String(e) }), true);
+        if (btn) btn.disabled = false;
+    }
+}
+
+function _bindStorageControls() {
+    var mapping: Record<string, string> = {
+        'settings-storage-clear-hf-hub': 'hf_hub',
+        'settings-storage-clear-fastembed': 'fastembed',
+        'settings-storage-clear-index': 'index',
+    };
+    Object.keys(mapping).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el || el.dataset.bound) return;
+        el.dataset.bound = '1';
+        el.addEventListener('click', function() {
+            clearStorageTarget(mapping[id]);
+        });
+    });
+}
+
 function _bindRagAdvancedControls() {
     var denseEl = document.getElementById('settings-rag-dense-weight');
     if (denseEl && !denseEl.dataset.bound) {
@@ -315,6 +433,7 @@ function initRagSettings() {
     }
 
     _bindRagAdvancedControls();
+    _bindStorageControls();
 
     var rebuildBtn = document.getElementById('settings-assistant-rebuild-index-btn');
     if (rebuildBtn && !rebuildBtn.dataset.bound) {
@@ -727,6 +846,7 @@ window.SettingsComponents = {
     applyCliSettingsToForm,
     refreshCliAgentsSettings,
     persistCliAgentId,
+    refreshStorageUsage,
     syncCliAgentSelectors: _syncCliAgentSelectors,
     // 共享保存通道（settings-semantic.js 等子模块复用，避免逐字重复实现）
     saveAssistantUiConfig,

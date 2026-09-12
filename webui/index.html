@@ -714,6 +714,16 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
                             <span data-i18n="settings.nav.rag"></span>
                         </button>
+                        <button class="settings-nav-btn" data-tab="reliability">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                            <span data-i18n="settings.nav.reliability"></span>
+                        </button>
+                        <div class="settings-nav-more">
+                            <button type="button" class="settings-nav-btn settings-nav-more-toggle" id="settings-nav-more-toggle" aria-expanded="false" aria-controls="settings-nav-more-list">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                <span data-i18n="settings.nav.more"></span>
+                            </button>
+                            <div class="settings-nav-more-list" id="settings-nav-more-list" hidden>
                         <button class="settings-nav-btn" data-tab="semantic">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="m19.1 4.9-2.8 2.8"/><path d="m7.7 16.3-2.8 2.8"/></svg>
                             <span data-i18n="settings.nav.semantic"></span>
@@ -730,10 +740,8 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
                             <span data-i18n="settings.nav.organizeRules"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="reliability">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                            <span data-i18n="settings.nav.reliability"></span>
-                        </button>
+                            </div>
+                        </div>
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                             <span data-i18n="settings.nav.about"></span>
@@ -1135,7 +1143,7 @@
                                     </div>
                                     <div class="form-field">
                                         <div class="form-label" data-i18n="settings.ragRerankModelLabel"></div>
-                                        <div class="settings-hint" id="settings-rag-rerank-model" style="margin-top:4px">BAAI/bge-reranker-v2-m3</div>
+                                        <div class="settings-hint" id="settings-rag-rerank-model" style="margin-top:4px">Xenova/bge-reranker-base</div>
                                     </div>
                                 </div>
                             </div>
@@ -1154,6 +1162,41 @@
                                     </div>
                                 </div>
                                 <div id="settings-component-rag-msg" class="settings-hint" style="display:none;margin-top:8px"></div>
+                            </div>
+                            <div class="card" id="settings-storage-card" style="margin-top:16px">
+                                <div class="card-title" data-i18n="settings.storageTitle"></div>
+                                <p class="settings-hint" data-i18n="settings.storageHint"></p>
+                                <div id="settings-storage-rows" class="settings-storage-rows">
+                                    <div class="settings-component-row" data-storage-id="hf_hub">
+                                        <div class="settings-component-info">
+                                            <div class="settings-component-name" data-i18n="settings.storageHfHub"></div>
+                                            <p class="settings-hint" id="settings-storage-hf-hub-size" data-i18n="settings.storageLoading"></p>
+                                        </div>
+                                        <div class="settings-component-actions">
+                                            <button type="button" class="btn btn-secondary" id="settings-storage-clear-hf-hub" data-i18n="settings.storageClear" disabled></button>
+                                        </div>
+                                    </div>
+                                    <div class="settings-component-row" data-storage-id="fastembed">
+                                        <div class="settings-component-info">
+                                            <div class="settings-component-name" data-i18n="settings.storageFastembed"></div>
+                                            <p class="settings-hint" id="settings-storage-fastembed-size" data-i18n="settings.storageLoading"></p>
+                                        </div>
+                                        <div class="settings-component-actions">
+                                            <button type="button" class="btn btn-secondary" id="settings-storage-clear-fastembed" data-i18n="settings.storageClear" disabled></button>
+                                        </div>
+                                    </div>
+                                    <div class="settings-component-row" data-storage-id="index">
+                                        <div class="settings-component-info">
+                                            <div class="settings-component-name" data-i18n="settings.storageIndex"></div>
+                                            <p class="settings-hint" id="settings-storage-index-size" data-i18n="settings.storageLoading"></p>
+                                        </div>
+                                        <div class="settings-component-actions">
+                                            <button type="button" class="btn btn-secondary" id="settings-storage-clear-index" data-i18n="settings.storageClear" disabled></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="settings-hint" id="settings-storage-total" style="margin-top:8px"></p>
+                                <div id="settings-storage-msg" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                             <div class="card" id="settings-assistant-rag-index-card" style="margin-top:16px;display:none">
                                 <div class="card-title" data-i18n="settings.indexTitle"></div>

@@ -108,9 +108,12 @@ def test_rag_context_numbers_only_direct_evidence_and_returns_used_source(monkey
     result = handler._answer_with_rag({}, "问题", "", use_vector_rag=False)
 
     assert result["success"] is True
-    assert "宽泛综述" not in captured["prompt"]
+    assert "【讲解骨架】" in captured["prompt"]
+    assert "宽泛综述" in captured["prompt"]
+    assert "【可引用原文】" in captured["prompt"]
     assert "[1] a.md" in captured["prompt"]
     assert "[2] current.md" in captured["prompt"]
+    assert "本题型指引" in captured["prompt"]
     payload = events[-1]["result"]
     assert [row["file_path"] for row in payload["citations"]] == ["Notes/current.md"]
 
@@ -141,7 +144,7 @@ def test_user_profile_is_read_only_background(tmp_path) -> None:
     assert json.loads(profile_path.read_text(encoding="utf-8"))["profile_md"] == "偏好中文回答"
 
 
-def test_empty_retrieval_switches_to_no_evidence_prompt(monkeypatch, tmp_path) -> None:
+def test_survey_only_becomes_teaching_skeleton(monkeypatch, tmp_path) -> None:
     config.workspace_path = str(tmp_path)
     events = []
     handler = RagHandler(
@@ -165,9 +168,37 @@ def test_empty_retrieval_switches_to_no_evidence_prompt(monkeypatch, tmp_path) -
     result = handler._answer_with_rag({}, "完全不存在的话题", "", use_vector_rag=False)
 
     assert result["success"] is True
-    assert "检索不到" in captured["prompt"]
-    assert "直接相关的资料" in captured["prompt"]
+    assert "【讲解骨架】" in captured["prompt"]
+    assert "综述内容" in captured["prompt"]
+    assert "检索不到" not in captured["prompt"]
+    assert "综述有概述，但缺少可点开的原文" in captured["prompt"]
     done = events[-1]["result"]
     assert done["type"] == "rag_chat_done"
     assert done["citations"] == []
     assert done["citation_quality"]["level"] == "none"
+
+
+def test_empty_retrieval_without_survey_uses_no_evidence_prompt(monkeypatch, tmp_path) -> None:
+    config.workspace_path = str(tmp_path)
+    events = []
+    handler = RagHandler(
+        SimpleNamespace(
+            _ctx=SimpleNamespace(config=config, logger=None),
+            _send_response=lambda resp: events.append(resp),
+        )
+    )
+    captured = {}
+    monkeypatch.setattr("sidecar.classic_retriever.retrieve", lambda *_args, **_kwargs: [])
+
+    def fake_stream(prompt, **kwargs):
+        captured["prompt"] = prompt
+        return "知识库中没有找到与该问题直接相关的资料。"
+
+    monkeypatch.setattr("utils.llm_utils.call_llm_raw_stream", fake_stream)
+
+    result = handler._answer_with_rag({}, "完全不存在的话题", "", use_vector_rag=False)
+
+    assert result["success"] is True
+    assert "检索不到" in captured["prompt"]
+    assert "直接相关的资料" in captured["prompt"]
+    assert events[-1]["result"]["citation_quality"]["level"] == "none"

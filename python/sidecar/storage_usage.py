@@ -108,15 +108,17 @@ def get_storage_usage(workspace: str | None = None, *, purge_stale: bool = True)
     leftover_stale = sum(dir_size_bytes(p) for p in stale_fastembed_dirs(fe))
     index_paths = _index_dirs(workspace)
     index_bytes = sum(dir_size_bytes(p) for p in index_paths)
-    items = [
+    hf_bytes = dir_size_bytes(hf)
+    fe_bytes = dir_size_bytes(fe)
+    items: list[dict[str, Any]] = [
         {
             "id": "hf_hub",
-            "bytes": dir_size_bytes(hf),
+            "bytes": hf_bytes,
             "path": str(hf),
         },
         {
             "id": "fastembed",
-            "bytes": dir_size_bytes(fe),
+            "bytes": fe_bytes,
             "path": str(fe),
             "stale_bytes": leftover_stale,
         },
@@ -126,12 +128,13 @@ def get_storage_usage(workspace: str | None = None, *, purge_stale: bool = True)
             "path": str(index_paths[0]) if index_paths else "",
         },
     ]
-    total = sum(int(item["bytes"]) for item in items)
+    freed_raw = purged.get("freed_bytes")
+    purged_stale_bytes = int(freed_raw) if isinstance(freed_raw, (int, float)) else 0
     return {
         "success": True,
         "items": items,
-        "total_bytes": total,
-        "purged_stale_bytes": int(purged.get("freed_bytes") or 0),
+        "total_bytes": hf_bytes + fe_bytes + index_bytes,
+        "purged_stale_bytes": purged_stale_bytes,
     }
 
 

@@ -6,7 +6,6 @@ import time
 from types import SimpleNamespace
 
 import pytest
-
 import sidecar.rag.reranker as rk
 
 
@@ -37,7 +36,8 @@ def test_score_documents_uses_rerank_not_flagembedding():
     assert calls == [("q", ["a", "b"], 64)]
 
 
-def test_get_reranker_returns_cached_instance():
+def test_get_reranker_returns_cached_instance(monkeypatch):
+    monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
     sentinel = object()
     rk._RERANKER = sentinel
     assert rk.get_reranker() is sentinel

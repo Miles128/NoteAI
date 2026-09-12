@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from sidecar import storage_usage
 from sidecar.handlers.reliability_handler import ReliabilityHandler
 from sidecar.rag.reranker import reset_reranker
@@ -112,9 +111,7 @@ def test_reset_reranker_clears_cached_model() -> None:
     assert reranker._RERANKER_DISABLED_UNTIL == 0.0
 
 
-def test_reliability_handler_storage_rpc(
-    app_data: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_reliability_handler_storage_rpc(app_data: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from config import config
 
     _write_bytes(app_data / "hf_hub" / "m.bin", 7)

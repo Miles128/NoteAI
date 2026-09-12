@@ -9,7 +9,12 @@
 // ============================================================================
 (function() { 'use strict';
 
-var SETTINGS_MORE_TABS = { semantic: true, cli: true, 'activity-log': true, 'organize-rules': true };
+var SETTINGS_MORE_TABS: Record<string, boolean> = {
+    semantic: true,
+    cli: true,
+    'activity-log': true,
+    'organize-rules': true,
+};
 
 function setSettingsMoreOpen(open: boolean) {
     var toggle = document.getElementById('settings-nav-more-toggle');
@@ -19,7 +24,7 @@ function setSettingsMoreOpen(open: boolean) {
     list.hidden = !open;
 }
 
-function switchSettingsTab(tabName: any) {
+function switchSettingsTab(tabName: string) {
     if (SETTINGS_MORE_TABS[tabName]) {
         setSettingsMoreOpen(true);
     }

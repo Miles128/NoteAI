@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from sidecar.rag.rag_config import (
     RERANK_MODEL_FILE,
@@ -59,10 +60,12 @@ def _ensure_quantized_model(encoder_cls) -> None:
     _CUSTOM_REGISTERED = True
 
 
-def _load_onnx_reranker():
-    encoder_cls = globals().get("TextCrossEncoder")
+def _load_onnx_reranker() -> Any:
+    encoder_cls: Any = globals().get("TextCrossEncoder")
     if encoder_cls is None:
-        from fastembed.rerank.cross_encoder import TextCrossEncoder as encoder_cls
+        from fastembed.rerank.cross_encoder import TextCrossEncoder as loaded
+
+        encoder_cls = loaded
 
     _ensure_quantized_model(encoder_cls)
     return encoder_cls(
@@ -99,9 +102,7 @@ def get_reranker():
             return _RERANKER
         except Exception as e:
             _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
-            logger.warning(
-                f"[rag/reranker] unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}"
-            )
+            logger.warning(f"[rag/reranker] unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}")
             return None
 
 

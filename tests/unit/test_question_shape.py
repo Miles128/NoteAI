@@ -1,11 +1,9 @@
 from pathlib import Path
 
 import yaml
-
 from sidecar.rag.question_shape import (
     SHAPE_COMPARE,
     SHAPE_DEFAULT,
-    SHAPE_DEFINE,
     SHAPE_GAP,
     SHAPE_TEACH,
     classify_question_shape,

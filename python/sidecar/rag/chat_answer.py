@@ -6,7 +6,28 @@ from pathlib import Path
 
 from config import config
 from sidecar.rag.chat_stream import RagChatChunkBatcher
+from sidecar.rag.question_shape import classify_question_shape
 from utils.logger import logger
+
+_SKELETON_SOURCE_TYPES = frozenset({"survey"})
+_SKIP_SOURCE_TYPES = frozenset({"backlink", "topic_tree"})
+
+
+def _shape_instructions(shape: str) -> str:
+    from prompts import (
+        RAG_CHAT_SHAPE_COMPARE,
+        RAG_CHAT_SHAPE_DEFAULT,
+        RAG_CHAT_SHAPE_DEFINE,
+        RAG_CHAT_SHAPE_GAP,
+        RAG_CHAT_SHAPE_TEACH,
+    )
+
+    return {
+        "define": RAG_CHAT_SHAPE_DEFINE,
+        "teach": RAG_CHAT_SHAPE_TEACH,
+        "compare": RAG_CHAT_SHAPE_COMPARE,
+        "gap": RAG_CHAT_SHAPE_GAP,
+    }.get(shape, RAG_CHAT_SHAPE_DEFAULT)
 
 
 def answer_without_retrieval(handler, question: str, compressed_history: str, *, intent: str = "general") -> dict:
@@ -153,13 +174,19 @@ def answer_with_rag(
             }
         )
 
+    skeleton_parts: list[str] = []
     for r in search_results:
-        # Surveys and graph neighbors are helpful retrieval expansion, but
-        # are not direct evidence for a conversational answer.
-        if r.get("source_type") in {"survey", "backlink", "topic_tree"}:
+        source_type = r.get("source_type")
+        # Graph neighbors stay retrieval-only; surveys become a teaching
+        # skeleton and must not be numbered as [n] evidence.
+        if source_type in _SKIP_SOURCE_TYPES:
             continue
         body = (r.get("content") or "").strip()
         if not body:
+            continue
+        if source_type in _SKELETON_SOURCE_TYPES:
+            label = r.get("source_label") or r.get("file_name") or r.get("file_path") or "主题综述"
+            skeleton_parts.append(f"{label}\n{body}")
             continue
         fp = r.get("file_path", "")
         if fp and fp in seen_paths:
@@ -181,7 +208,12 @@ def answer_with_rag(
                 "score": r.get("rerank_score", r.get("score")),
             }
         )
-    context = "\n\n".join(context_parts)
+    sections: list[str] = []
+    if skeleton_parts:
+        sections.append("【讲解骨架】\n" + "\n\n".join(skeleton_parts))
+    if context_parts:
+        sections.append("【可引用原文】\n" + "\n\n".join(context_parts))
+    context = "\n\n".join(sections)
 
     # P9: emit retrieval transparency meta after retrieval, before the
     # answer stream starts.
@@ -215,6 +247,7 @@ def answer_with_rag(
             context=context,
             history=compressed_history if compressed_history else "无历史对话",
             question=question,
+            shape_instructions=_shape_instructions(classify_question_shape(question)),
         )
 
     try:

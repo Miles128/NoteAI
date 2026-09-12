@@ -1,0 +1,41 @@
+# 20-question gold set for learning-first Q&A shapes (heuristic only; no LLM).
+- q: 什么是检索增强生成？
+  shape: define
+- q: RAG 的定义是什么
+  shape: define
+- q: What is HyDE
+  shape: define
+- q: MMR 指什么
+  shape: define
+- q: 帮我讲解一下主题综述怎么用
+  shape: teach
+- q: 如何理解双向链接
+  shape: teach
+- q: 教我入门知识库编译
+  shape: teach
+- q: 为什么综述不能当唯一证据
+  shape: teach
+- q: Explain how to learn from a topic survey
+  shape: teach
+- q: RAG 和微调的区别
+  shape: compare
+- q: 综述和原文有什么不同
+  shape: compare
+- q: 对比实体页和主题页
+  shape: compare
+- q: Notes vs wiki
+  shape: compare
+- q: 这个主题还缺什么
+  shape: gap
+- q: 我接下来该读哪几篇
+  shape: gap
+- q: 知识库里有哪些空白
+  shape: gap
+- q: What's missing in my notes on ingest
+  shape: gap
+- q: 把昨天那篇笔记打开
+  shape: default
+- q: 继续
+  shape: default
+- q: 列出工作区里所有 PDF
+  shape: default

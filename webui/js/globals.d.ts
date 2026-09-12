@@ -105,6 +105,8 @@ declare global {
         getTopicBrief(options?: any): Promise<any>;
         generateWeeklyBrief(options?: any): Promise<any>;
         getIndexHealth(): Promise<any>;
+        getStorageUsage(): Promise<any>;
+        clearStorage(targets: string[]): Promise<any>;
         backupWorkspace(options?: any): Promise<any>;
         exportNotes(options?: any): Promise<any>;
         restoreWorkspaceBackup(options?: any): Promise<any>;
@@ -462,6 +464,7 @@ declare global {
             persistCliAgentId(agentId: string): void;
             syncCliAgentSelectors(agentId: any): void;
             saveAssistantUiConfig(partial: any): Promise<any>;
+            refreshStorageUsage(): Promise<any>;
         } | undefined;
         DownloaderModule: {
             startWebDownload(): Promise<any>;

@@ -41,7 +41,6 @@ ingest = [
     "html2text>=2024.2.26",
 ]
 rag = [
-    "FlagEmbedding>=1.2.0",
     "bm25s>=0.2.0",
     "zvec>=0.5.0",
     "fastembed>=0.4.0",

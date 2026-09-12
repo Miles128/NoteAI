@@ -11,9 +11,10 @@ DEFAULT_TOP_K_TAGS = 7
 DEFAULT_HYDE_THRESHOLD = 0.33
 DEFAULT_RERANK_SKIP_SCORE = 0.75
 DEFAULT_DENSE_WEIGHT = 0.7
-# 更小的 reranker（XLM-RoBERTa-base，278M 参数）：磁盘 ~1.1G / 内存 fp16 ~557M，
-# 相比 bge-reranker-v2-m3（2.1G）省一半体积，中文检索质量仍好。
-RERANK_MODEL_NAME = "BAAI/bge-reranker-base"
+# INT8 量化 ONNX（Xenova/bge-reranker-base，约 280MB），中英都可用；不下载 1GB fp32。
+RERANK_MODEL_NAME = "Xenova/bge-reranker-base"
+RERANK_MODEL_FILE = "onnx/model_quantized.onnx"
+RERANK_MODEL_SOURCE = "Xenova/bge-reranker-base"
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:

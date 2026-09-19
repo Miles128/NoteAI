@@ -449,6 +449,13 @@ function showWeeklyBriefModal() {
     var modal = document.getElementById('weekly-brief-modal');
     if (!modal) return;
     modal.style.display = 'flex';
+    // 预取有过变化的主题列表填充下拉（无 topic 时不走 LLM）
+    var params = _briefParams();
+    if (window.api && window.api.getTopicBrief) {
+        window.api.getTopicBrief({ days: params.days }).then(function(result: any) {
+            if (result && result.success && Array.isArray(result.topics)) _populateBriefTopicOptions(result.topics);
+        }).catch(function() {});
+    }
     generateWeeklyBrief();
 }
 
@@ -464,22 +471,50 @@ function setWeeklyBriefBusy(busy: any) {
     if (saveBtn) saveBtn.disabled = busy;
 }
 
+function _populateBriefTopicOptions(topics: any[]) {
+    var select = document.getElementById('weekly-brief-topic') as HTMLSelectElement | null;
+    if (!select) return;
+    var current = select.value;
+    var first = select.querySelector('option');
+    var options = first ? '<option value="">' + window.escapeHtml(first.textContent || '') + '</option>' : '<option value=""></option>';
+    topics.forEach(function(topic: any) {
+        var name = String(topic.name || topic);
+        options += '<option value="' + window.escapeHtml(name) + '">' + window.escapeHtml(name) + '</option>';
+    });
+    select.innerHTML = options;
+    var stillThere = Array.prototype.some.call(select.options, function(o: any) { return o.value === current; });
+    select.value = stillThere ? current : (first ? (first as HTMLOptionElement).value : '');
+}
+
+function _briefParams() {
+    var topicEl = document.getElementById('weekly-brief-topic') as HTMLSelectElement | null;
+    var daysEl = document.getElementById('weekly-brief-days') as HTMLSelectElement | null;
+    var days = daysEl ? (parseInt(daysEl.value, 10) || 7) : 7;
+    var topic = topicEl ? topicEl.value.trim() : '';
+    return { topic: topic, days: days };
+}
+
 function generateWeeklyBrief() {
     const status = document.getElementById('weekly-brief-status');
     const content = document.getElementById('weekly-brief-content');
     const saveBtn = document.getElementById('weekly-brief-save-btn');
     if (!status || !content) return;
+    var params = _briefParams();
+    var isTopicBrief = !!params.topic;
     status.hidden = false;
     content.hidden = true;
     status.textContent = window.t('weeklyBrief.generating');
     setWeeklyBriefBusy(true);
     if (saveBtn) saveBtn.dataset.path = '';
-    if (!window.api || !window.api.generateWeeklyBrief) {
+    if (!window.api) {
         status.textContent = window.t('weeklyBrief.notAvailable');
         setWeeklyBriefBusy(false);
         return;
     }
-    window.api.generateWeeklyBrief({ days: 7 }).then(function(result) {
+    var p = isTopicBrief
+        ? window.api.getTopicBrief({ topic: params.topic, days: params.days })
+        : (window.api.generateWeeklyBrief ? window.api.generateWeeklyBrief({ days: params.days }) : Promise.reject(new Error(window.t('weeklyBrief.notAvailable'))));
+    p.then(function(result: any) {
         setWeeklyBriefBusy(false);
         if (!result || !result.success) {
             status.textContent = (result && result.message) || window.t('weeklyBrief.failed');
@@ -491,11 +526,14 @@ function generateWeeklyBrief() {
         } else {
             status.hidden = true;
         }
+        if (isTopicBrief && Array.isArray(result.topics)) _populateBriefTopicOptions(result.topics);
         content.innerHTML = renderMarkdown(result.brief || '');
         content.dataset.markdown = result.brief || '';
+        content.dataset.topic = params.topic;
+        content.dataset.days = String(params.days);
         content.hidden = false;
         if (saveBtn) saveBtn.dataset.path = '';
-    }).catch(function(err) {
+    }).catch(function(err: any) {
         setWeeklyBriefBusy(false);
         status.textContent = (err && err.message) || window.t('weeklyBrief.failed');
     });
@@ -510,8 +548,11 @@ function saveWeeklyBriefAsNote() {
     if (!brief.trim()) return;
     saveBtn.dataset.saving = '1';
     saveBtn.disabled = true;
-    var title = '知识库周报 ' + new Date().toISOString().slice(0, 10);
-    window.api.createNoteFromDraft(title, '知识库周报', brief).then(function(result) {
+    var briefTopic = (content.dataset && content.dataset.topic) || '';
+    var title = briefTopic
+        ? '主题简报 ' + briefTopic + ' ' + new Date().toISOString().slice(0, 10)
+        : '知识库周报 ' + new Date().toISOString().slice(0, 10);
+    window.api.createNoteFromDraft(title, briefTopic || '知识库周报', brief).then(function(result) {
         delete saveBtn.dataset.saving;
         saveBtn.disabled = false;
         if (!result || !result.success) {

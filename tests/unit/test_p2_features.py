@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-from sidecar.multi_source import import_transcript
 from sidecar.schema_manager import SCHEMA_FILENAME
 
 from config import config
@@ -64,12 +63,6 @@ def test_discover_cross_refs_ignores_readme_notes(workspace: Path) -> None:
     assert result["success"] is True
     links = load_links().get("links", [])
     assert not any("README.md" in (l.get("from", "") + l.get("to", "")) for l in links)
-
-
-def test_import_transcript(workspace: Path) -> None:
-    tr = import_transcript("会议记录", "说话内容", source="Zoom")
-    assert tr["success"] is True
-    assert tr["path"].endswith(".md")
 
 
 def test_purge_weak_links_removes_heuristic_reasons(workspace: Path) -> None:

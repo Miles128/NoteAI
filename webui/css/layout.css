@@ -3141,6 +3141,27 @@ body {
     opacity: 1;
 }
 
+.settings-nav-more {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-nav-more-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+}
+
+.settings-nav-more-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 8px;
+}
+
+.settings-nav-more-list[hidden] {
+    display: none;
+}
+
 .settings-content {
     flex: 1;
     overflow-y: auto;

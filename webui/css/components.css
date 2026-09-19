@@ -818,6 +818,12 @@
     margin-top: 4px;
 }
 
+.rag-preset-btn.is-active {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--surface-hover);
+}
+
 ::-webkit-scrollbar {
     width: 6px;
     height: 6px;

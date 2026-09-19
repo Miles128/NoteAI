@@ -80,6 +80,7 @@ function applyRagSettingsToForm(uiConfig: any) {
         refreshRagIndexStatus();
     }
     refreshComponentsStatus();
+    refreshStorageUsage();
 }
 
 function _updateDenseWeightHint() {
@@ -96,21 +97,10 @@ function _updateDenseWeightHint() {
     });
 }
 
-function _readRagAdvancedConfig() {
-    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
-    var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
-    if (isNaN(densePct)) densePct = 70;
-    densePct = Math.max(0, Math.min(100, densePct));
-
-    return {
-        rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
-        rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
-        rag_dense_weight: densePct / 100,
-        rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
-        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
-    };
+function _readRagAdvancedConfig(): Record<string, any> {
+    var config = _readRagPresetFromForm();
+    config.rag_dense_weight = Math.max(0, Math.min(1, config.rag_dense_weight));
+    return config;
 }
 
 function saveRagAdvancedConfig() {
@@ -245,14 +235,218 @@ function _estimateIndexTime() {
     return Math.ceil(seconds / 60) + '分钟';
 }
 
+function _formatStorageBytes(bytes: any) {
+    var n = Number(bytes);
+    if (!isFinite(n) || n <= 0) return window.t('settings.storageEmpty');
+    if (n < 1024) return Math.round(n) + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
+function _storageSizeEl(id: any) {
+    if (id === 'hf_hub') return document.getElementById('settings-storage-hf-hub-size');
+    if (id === 'fastembed') return document.getElementById('settings-storage-fastembed-size');
+    if (id === 'index') return document.getElementById('settings-storage-index-size');
+    return null;
+}
+
+function _storageClearBtn(id: any) {
+    if (id === 'hf_hub') return document.getElementById('settings-storage-clear-hf-hub') as HTMLButtonElement | null;
+    if (id === 'fastembed') return document.getElementById('settings-storage-clear-fastembed') as HTMLButtonElement | null;
+    if (id === 'index') return document.getElementById('settings-storage-clear-index') as HTMLButtonElement | null;
+    return null;
+}
+
+function _showStorageMsg(text: any, isError: any) {
+    var msgEl = document.getElementById('settings-storage-msg');
+    if (!msgEl) return;
+    msgEl.textContent = text || '';
+    msgEl.style.display = text ? 'block' : 'none';
+    msgEl.style.color = isError ? 'var(--danger, #c0392b)' : 'var(--text-muted)';
+}
+
+function _applyStorageUsage(result: any) {
+    var items = (result && result.items) || [];
+    var byId: Record<string, any> = {};
+    items.forEach(function(item: any) {
+        if (item && item.id) byId[item.id] = item;
+    });
+    ['hf_hub', 'fastembed', 'index'].forEach(function(id) {
+        var item = byId[id] || { bytes: 0 };
+        var sizeEl = _storageSizeEl(id);
+        if (sizeEl) sizeEl.textContent = _formatStorageBytes(item.bytes);
+        var btn = _storageClearBtn(id);
+        if (btn) btn.disabled = !item.bytes;
+    });
+    var totalEl = document.getElementById('settings-storage-total');
+    if (totalEl) {
+        totalEl.textContent = window.t('settings.storageTotal', {
+            size: _formatStorageBytes(result && result.total_bytes),
+        });
+    }
+}
+
+async function refreshStorageUsage() {
+    if (!window.api || !window.api.getStorageUsage) return;
+    try {
+        var result = await window.api.getStorageUsage();
+        if (!result || !result.success) {
+            _showStorageMsg(window.t('settings.storageUnavailable'), true);
+            return;
+        }
+        _applyStorageUsage(result);
+        if (result.purged_stale_bytes > 0) {
+            _showStorageMsg(window.t('settings.storageStalePurged', {
+                size: _formatStorageBytes(result.purged_stale_bytes),
+            }), false);
+        }
+    } catch (e) {
+        _showStorageMsg(window.t('settings.storageUnavailable'), true);
+    }
+}
+
+async function clearStorageTarget(target: any) {
+    if (!window.api || !window.api.clearStorage) return;
+    var sizeEl = _storageSizeEl(target);
+    var sizeText = sizeEl ? sizeEl.textContent : window.t('settings.storageEmpty');
+    var confirmKey = target === 'index' ? 'settings.storageClearIndexConfirm' : 'settings.storageClearModelsConfirm';
+    if (!window.confirm(window.t(confirmKey, { size: sizeText || window.t('settings.storageEmpty') }))) return;
+    var btn = _storageClearBtn(target);
+    if (btn) btn.disabled = true;
+    try {
+        var result = await window.api.clearStorage([target]);
+        if (!result || !result.success) {
+            _showStorageMsg(window.t('settings.storageClearFailed', {
+                message: (result && result.message) || window.t('common.unknownError'),
+            }), true);
+            if (btn) btn.disabled = false;
+            return;
+        }
+        _applyStorageUsage(result);
+        _showStorageMsg(window.t('settings.storageClearDone', {
+            size: _formatStorageBytes(result.freed_bytes),
+        }), false);
+        if (target === 'index') {
+            refreshRagIndexStatus();
+        }
+    } catch (e) {
+        _showStorageMsg(window.t('settings.storageClearFailed', { message: (e as Error).message || String(e) }), true);
+        if (btn) btn.disabled = false;
+    }
+}
+
+function _bindStorageControls() {
+    var mapping: Record<string, string> = {
+        'settings-storage-clear-hf-hub': 'hf_hub',
+        'settings-storage-clear-fastembed': 'fastembed',
+        'settings-storage-clear-index': 'index',
+    };
+    Object.keys(mapping).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el || el.dataset.bound) return;
+        el.dataset.bound = '1';
+        el.addEventListener('click', function() {
+            clearStorageTarget(mapping[id]);
+        });
+    });
+}
+
+var RAG_PRESETS: Record<string, any> = {
+    fast: {
+        rag_hyde_enabled: false, rag_hyde_threshold: 0.33,
+        rag_rerank_enabled: false, rag_rerank_skip_score: 0.75,
+        rag_dense_weight: 0.6, rag_top_k: 3, rag_top_k_tags: 4,
+    },
+    balanced: {
+        rag_hyde_enabled: true, rag_hyde_threshold: 0.33,
+        rag_rerank_enabled: true, rag_rerank_skip_score: 0.75,
+        rag_dense_weight: 0.7, rag_top_k: 5, rag_top_k_tags: 7,
+    },
+    deep: {
+        rag_hyde_enabled: true, rag_hyde_threshold: 0.30,
+        rag_rerank_enabled: true, rag_rerank_skip_score: 0.60,
+        rag_dense_weight: 0.75, rag_top_k: 8, rag_top_k_tags: 10,
+    },
+};
+
+function _readRagPresetFromForm(): Record<string, any> {
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
+    var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
+    if (isNaN(densePct)) densePct = 70;
+    return {
+        rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
+        rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
+        rag_dense_weight: densePct / 100,
+        rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
+        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
+    };
+}
+
+function _syncRagPresetButtons() {
+    var row = document.getElementById('settings-rag-preset-row');
+    if (!row) return;
+    var current = _readRagPresetFromForm();
+    var matched = '';
+    Object.keys(RAG_PRESETS).forEach(function(name) {
+        var preset = RAG_PRESETS[name];
+        var ok = Object.keys(preset).every(function(k) {
+            return Math.abs((current[k] || 0) - (preset[k] || 0)) < 1e-9;
+        });
+        if (ok) matched = name;
+    });
+    var buttons = row.querySelectorAll('.rag-preset-btn');
+    buttons.forEach(function(btn: any) {
+        btn.classList.toggle('is-active', btn.dataset.ragPreset === matched);
+    });
+}
+
+function applyRagPreset(name: string) {
+    var preset = RAG_PRESETS[name];
+    if (!preset) return;
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
+    if (denseEl) denseEl.value = String(Math.round((preset.rag_dense_weight || 0.7) * 100));
+    var hydeEl = document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null;
+    if (hydeEl) hydeEl.checked = preset.rag_hyde_enabled !== false;
+    var hydeThresholdEl = document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null;
+    if (hydeThresholdEl) hydeThresholdEl.value = String(preset.rag_hyde_threshold != null ? preset.rag_hyde_threshold : 0.33);
+    var rerankEl = document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null;
+    if (rerankEl) rerankEl.checked = preset.rag_rerank_enabled !== false;
+    var rerankSkipEl = document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null;
+    if (rerankSkipEl) rerankSkipEl.value = String(preset.rag_rerank_skip_score != null ? preset.rag_rerank_skip_score : 0.75);
+    var topKEl = document.getElementById('settings-rag-top-k') as HTMLInputElement | null;
+    if (topKEl) topKEl.value = String(preset.rag_top_k != null ? preset.rag_top_k : 5);
+    var topKTagsEl = document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null;
+    if (topKTagsEl) topKTagsEl.value = String(preset.rag_top_k_tags != null ? preset.rag_top_k_tags : 7);
+    _updateDenseWeightHint();
+    _syncRagPresetButtons();
+    saveRagAdvancedConfig();
+}
+
 function _bindRagAdvancedControls() {
+    var presetRow = document.getElementById('settings-rag-preset-row');
+    if (presetRow && !presetRow.dataset.bound) {
+        presetRow.dataset.bound = '1';
+        presetRow.querySelectorAll('.rag-preset-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var name = (btn as HTMLElement).dataset.ragPreset;
+                if (name) applyRagPreset(name);
+            });
+        });
+    }
+
     var denseEl = document.getElementById('settings-rag-dense-weight');
     if (denseEl && !denseEl.dataset.bound) {
         denseEl.dataset.bound = '1';
         denseEl.addEventListener('input', function() {
             _updateDenseWeightHint();
         });
-        denseEl.addEventListener('change', saveRagAdvancedConfig);
+        denseEl.addEventListener('change', function() {
+            _syncRagPresetButtons();
+            saveRagAdvancedConfig();
+        });
     }
 
     [
@@ -266,7 +460,10 @@ function _bindRagAdvancedControls() {
         var el = document.getElementById(id);
         if (!el || el.dataset.bound) return;
         el.dataset.bound = '1';
-        el.addEventListener('change', saveRagAdvancedConfig);
+        el.addEventListener('change', function() {
+            _syncRagPresetButtons();
+            saveRagAdvancedConfig();
+        });
     });
 }
 
@@ -315,6 +512,7 @@ function initRagSettings() {
     }
 
     _bindRagAdvancedControls();
+    _bindStorageControls();
 
     var rebuildBtn = document.getElementById('settings-assistant-rebuild-index-btn');
     if (rebuildBtn && !rebuildBtn.dataset.bound) {
@@ -727,6 +925,7 @@ window.SettingsComponents = {
     applyCliSettingsToForm,
     refreshCliAgentsSettings,
     persistCliAgentId,
+    refreshStorageUsage,
     syncCliAgentSelectors: _syncCliAgentSelectors,
     // 共享保存通道（settings-semantic.js 等子模块复用，避免逐字重复实现）
     saveAssistantUiConfig,

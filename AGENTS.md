@@ -86,7 +86,7 @@ Tauri v2 shell (src-tauri/)
 
 **请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`force_intent`/`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
-**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → FlagReranker（bge-reranker-v2-m3）→ LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
+**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
 
 **三层知识架构**：`Notes/`（原始 Markdown，不可变来源）→ `wiki/`（AI 编译的结构化知识）→ `Raw/`（原始 PDF/DOCX 归档）。配置项 `ABSTRACT_FOLDER = "wiki"`。
 
@@ -131,4 +131,5 @@ Tauri v2 shell (src-tauri/)
 
 - **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），api.js 未暴露属预期。
 - **综述写作规则**（硬化于 `prompts/yaml/topic_survey.yaml` 与 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
+- **问答**：`question_shape.py` 启发式分型（定义 / 讲解 / 对比 / 缺口）；检索到的主题综述进入 `【讲解骨架】`，不得作为 `[n]` 引用。Notes 才进 `【可引用原文】`。产品赌注见 `documents/PRD.md` v4.2。
 - NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

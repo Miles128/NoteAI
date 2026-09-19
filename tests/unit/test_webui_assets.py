@@ -147,9 +147,8 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
     assert 'id="semantic-list-pane"' in html
     assert 'id="note-list-normal"' in html
     assert 'class="semantic-detail-pane"' in html
-    assert html.count("data-category=") == 4
+    assert html.count("data-category=") == 3
     assert 'data-category="quality"' in html
-    assert 'data-category="brief"' in html
     assert 'data-category="claims"' not in html
     assert 'data-category="conflicts"' not in html
     assert 'data-object-kind="entities"' in html

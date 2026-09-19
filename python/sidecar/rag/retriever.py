@@ -1,6 +1,4 @@
 import os
-import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -10,7 +8,6 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 from config import config
 from config.settings import NOTES_FOLDER, RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.rag.rag_config import (
-    RERANK_MODEL_NAME,
     hyde_enabled,
     hyde_threshold,
     rerank_enabled,
@@ -28,11 +25,6 @@ _MMR_CANDIDATE_CAP = 10
 _RERANK_CANDIDATE_CAP = 10
 _RERANK_MAX_CHARS = 512
 
-_RERANKER = None
-_RERANKER_DISABLED_UNTIL: float = 0.0
-_RERANKER_COOLDOWN_SECONDS = 60
-_RERANKER_LOCK = threading.Lock()
-
 _RETRIEVE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_retrieve")
 
 # TTL cache for identical queries: key -> (expanded_results, citations)
@@ -44,90 +36,20 @@ def clear_query_cache() -> None:
     _query_cache.clear()
 
 
+def reset_reranker() -> None:
+    from sidecar.rag.reranker import reset_reranker as _reset
+
+    _reset()
+
+
 def _reranker_enabled() -> bool:
     return rerank_enabled()
 
 
-def _patch_prepare_for_model(tokenizer: Any) -> None:
-    """兼容 transformers 5.x：fast tokenizer 移除了 prepare_for_model。
-
-    FlagReranker 内部对每个 pair 调用 tokenizer.prepare_for_model(q, p,
-    truncation='only_second', max_length=..., padding=False)。transformers 5.x
-    的 fast tokenizer 只有 build_inputs_with_special_tokens（无该方法），
-    导致 compute_score 报 AttributeError、rerank 静默降级。这里补一个等价的
-    实现：XLM-R special tokens 固定开销 3（1 CLS + 2 SEP），only_second 从
-    passage 尾部截断。
-    """
-    if hasattr(tokenizer, "prepare_for_model"):
-        return
-
-    def prepare_for_model(
-        self,
-        ids,
-        second_ids=None,
-        truncation: str | None = None,
-        max_length: int | None = None,
-        padding=None,
-        **kwargs,
-    ):
-        token_ids_0 = list(ids)
-        token_ids_1 = list(second_ids) if second_ids is not None else None
-        # XLM-R special tokens 固定开销 3（1 CLS + 2 SEP）
-        if (
-            token_ids_1 is not None
-            and truncation == "only_second"
-            and max_length is not None
-            and len(token_ids_0) + len(token_ids_1) + 3 > max_length
-        ):
-            excess = len(token_ids_0) + len(token_ids_1) + 3 - max_length
-            token_ids_1 = token_ids_1[: max(0, len(token_ids_1) - excess)]
-        cls_id = getattr(self, "cls_token_id", 0)
-        sep_id = getattr(self, "sep_token_id", 2)
-        input_ids = [cls_id] + token_ids_0 + [sep_id]
-        if token_ids_1 is not None:
-            input_ids += token_ids_1 + [sep_id]
-        return {"input_ids": input_ids}
-
-    tokenizer.prepare_for_model = prepare_for_model.__get__(tokenizer)  # type: ignore[attr-defined]
-
-
 def _get_reranker():
-    global _RERANKER, _RERANKER_DISABLED_UNTIL
+    from sidecar.rag.reranker import get_reranker
 
-    if not _reranker_enabled():
-        return None
-    if time.time() < _RERANKER_DISABLED_UNTIL:
-        return None
-    if _RERANKER is not None:
-        return _RERANKER
-    with _RERANKER_LOCK:
-        if time.time() < _RERANKER_DISABLED_UNTIL:
-            return None
-        if _RERANKER is not None:
-            return _RERANKER
-        try:
-            from config.constants import SYSTEM_APP_DATA_DIR
-            from sidecar.rag.embedder import _ensure_hf_env
-
-            _ensure_hf_env()
-            from FlagEmbedding import FlagReranker
-
-            _hf_cache = SYSTEM_APP_DATA_DIR / "hf_hub"
-            _hf_cache.mkdir(parents=True, exist_ok=True)
-            _RERANKER = FlagReranker(
-                RERANK_MODEL_NAME,
-                use_fp16=True,
-                cache_dir=str(_hf_cache),
-                batch_size=64,
-            )
-            _patch_prepare_for_model(_RERANKER.tokenizer)
-            return _RERANKER
-        except Exception as e:
-            _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
-            logger.warning(
-                f"[rag/retriever] reranker unavailable, cooling down for {_RERANKER_COOLDOWN_SECONDS}s: {e}\n"
-            )
-            return None
+    return get_reranker()
 
 
 def _cache_key(query: str, topics, tags, current_file: str = "") -> str:
@@ -378,10 +300,9 @@ def _rerank(query: str, results: list, top_k: int = 5) -> list:
         if not scored:
             return results[:top_k]
 
-        pairs = [[query, text] for _, text in scored]
-        scores = reranker.compute_score(pairs, normalize=True)
-        if isinstance(scores, float):
-            scores = [scores]
+        from sidecar.rag.reranker import score_documents
+
+        scores = score_documents(reranker, query, [text for _, text in scored])
 
         for (row, _), score in zip(scored, scores, strict=False):
             row["rerank_score"] = float(score)

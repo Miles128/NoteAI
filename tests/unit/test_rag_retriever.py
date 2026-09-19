@@ -1,30 +1,20 @@
 """Unit tests for RAG retriever: _reranker_enabled and _get_reranker."""
 
-import sys
-from types import ModuleType
-from unittest.mock import MagicMock
-
 import pytest
 import sidecar.rag.retriever as _mod
 
 
 @pytest.fixture(autouse=True)
 def _reset_reranker_globals():
-    original_reranker = _mod._RERANKER
-    original_disabled_until = _mod._RERANKER_DISABLED_UNTIL
-    _mod._RERANKER = None
-    _mod._RERANKER_DISABLED_UNTIL = 0.0
+    import sidecar.rag.reranker as rk
+
+    original_reranker = rk._RERANKER
+    original_disabled_until = rk._RERANKER_DISABLED_UNTIL
+    rk._RERANKER = None
+    rk._RERANKER_DISABLED_UNTIL = 0.0
     yield
-    _mod._RERANKER = original_reranker
-    _mod._RERANKER_DISABLED_UNTIL = original_disabled_until
-
-
-@pytest.fixture()
-def _mock_embedder_module(monkeypatch):
-    fake_embedder = ModuleType("sidecar.rag.embedder")
-    fake_embedder._ensure_hf_env = MagicMock()
-    monkeypatch.setitem(sys.modules, "sidecar.rag.embedder", fake_embedder)
-    return fake_embedder
+    rk._RERANKER = original_reranker
+    rk._RERANKER_DISABLED_UNTIL = original_disabled_until
 
 
 class TestRerankerEnabled:
@@ -97,49 +87,38 @@ class TestGetReranker:
     def test_returns_none_when_disabled_flag_set(self, monkeypatch):
         import time
 
+        import sidecar.rag.reranker as rk
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        _mod._RERANKER_DISABLED_UNTIL = time.time() + 60
+        rk._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
 
     def test_returns_cached_reranker(self):
+        import sidecar.rag.reranker as rk
+
         sentinel = object()
-        _mod._RERANKER = sentinel
+        rk._RERANKER = sentinel
         assert _mod._get_reranker() is sentinel
 
-    def test_sets_disabled_flag_on_import_error(self, monkeypatch, _mock_embedder_module):
+    def test_sets_disabled_flag_on_load_error(self, monkeypatch):
         import time
 
+        import sidecar.rag.reranker as rk
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        monkeypatch.setitem(sys.modules, "FlagEmbedding", None)
-
-        real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
-
-        def _fake_import(name, *args, **kwargs):
-            if name == "FlagEmbedding":
-                raise ImportError("no FlagEmbedding")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr("builtins.__import__", _fake_import)
+        monkeypatch.setattr(rk, "_load_onnx_reranker", lambda: (_ for _ in ()).throw(ImportError("no onnx")))
 
         result = _mod._get_reranker()
         assert result is None
-        assert time.time() < _mod._RERANKER_DISABLED_UNTIL
-
-    def test_sets_disabled_flag_on_generic_exception(self, monkeypatch, _mock_embedder_module):
-        import time
-
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        _mock_embedder_module._ensure_hf_env = MagicMock(side_effect=RuntimeError("boom"))
-
-        result = _mod._get_reranker()
-        assert result is None
-        assert time.time() < _mod._RERANKER_DISABLED_UNTIL
+        assert time.time() < rk._RERANKER_DISABLED_UNTIL
 
     def test_returns_none_after_previous_failure(self, monkeypatch):
         import time
 
+        import sidecar.rag.reranker as rk
+
         monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        _mod._RERANKER_DISABLED_UNTIL = time.time() + 60
+        rk._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
 
 

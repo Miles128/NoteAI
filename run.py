@@ -19,7 +19,6 @@ _RAG_IMPORTS = (
     ("bm25s", "bm25s"),
     ("fastembed", "fastembed"),
     ("zvec", "zvec"),
-    ("FlagEmbedding", "FlagEmbedding"),
 )
 
 

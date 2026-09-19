@@ -9,13 +9,34 @@
 // ============================================================================
 (function() { 'use strict';
 
-function switchSettingsTab(tabName: any) {
+var SETTINGS_MORE_TABS: Record<string, boolean> = {
+    semantic: true,
+    cli: true,
+    'activity-log': true,
+    'organize-rules': true,
+};
+
+function setSettingsMoreOpen(open: boolean) {
+    var toggle = document.getElementById('settings-nav-more-toggle');
+    var list = document.getElementById('settings-nav-more-list');
+    if (!toggle || !list) return;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    list.hidden = !open;
+}
+
+function switchSettingsTab(tabName: string) {
+    if (SETTINGS_MORE_TABS[tabName]) {
+        setSettingsMoreOpen(true);
+    }
     document.querySelectorAll('.settings-nav-btn').forEach((btn: any) => {
         btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
     document.querySelectorAll('.settings-tab').forEach(tab => {
         tab.classList.toggle('active', tab.id === 'tab-' + tabName);
     });
+    if (tabName === 'rag') {
+        window.SettingsComponents!.refreshStorageUsage();
+    }
     if (tabName === 'cli') {
         window.SettingsComponents!.initCliSettings();
         window.SettingsComponents!.refreshCliAgentsSettings();
@@ -41,6 +62,11 @@ function switchSettingsTab(tabName: any) {
     if (settingsNav) {
         settingsNav.addEventListener('click', function(e) {
             var btn = (e.target as Element).closest('.settings-nav-btn') as HTMLElement | null;
+            if (btn && btn.id === 'settings-nav-more-toggle') {
+                var expanded = btn.getAttribute('aria-expanded') === 'true';
+                setSettingsMoreOpen(!expanded);
+                return;
+            }
             if (btn && btn.dataset.tab) {
                 switchSettingsTab(btn.dataset.tab);
             }

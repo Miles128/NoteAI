@@ -45,6 +45,12 @@ def _ensure_fastembed_cache():
     cache = _fastembed_cache_root()
     os.environ["FASTEMBED_CACHE_PATH"] = str(cache)
     _FASTEMBED_CACHE_PATH_CONFIGURED = True
+    try:
+        from sidecar.storage_usage import purge_stale_fastembed
+
+        purge_stale_fastembed(cache)
+    except Exception:
+        pass
 
 
 from utils.logger import logger

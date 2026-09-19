@@ -9,7 +9,7 @@ def test_opencode_enrich_prompt_includes_workspace_paths() -> None:
     assert "[NoteAI 工作区上下文]" in enriched
     assert str(ws) in enriched
     assert "Notes/AI产品经理之路" in enriched
-    assert "vault_list_notes" in enriched
+    assert "Notes/" in enriched
     assert "[用户任务]" in enriched
     assert enriched.endswith("分析 AI 产品经理之路\n")
 

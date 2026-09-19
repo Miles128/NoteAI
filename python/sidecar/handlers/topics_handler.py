@@ -1,24 +1,39 @@
-import json
-import re
-import shutil
 import threading
 import time
 from pathlib import Path
 
 from config import config, is_ignored_dir
-from config.constants import TOPIC_SEP, WORKSPACE_APP_FOLDER
+from config.constants import TOPIC_SEP
 from sidecar.cascade import (
     append_changelog,
     ensure_topic_folder,
 )
 from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
+from sidecar.topics.folders import (
+    delete_topic_folder as _delete_topic_folder_service,
+)
+from sidecar.topics.folders import (
+    rename_topic_folder as _rename_topic_folder_service,
+)
+from sidecar.topics.meta import build_topic_meta
+from sidecar.topics.wiki_meta import (
+    latest_note_mtime as _latest_note_mtime,
+)
+from sidecar.topics.wiki_meta import (
+    parse_heading_comment as _parse_heading_comment,
+)
+from sidecar.topics.wiki_meta import (
+    parse_topic_wiki_meta as _parse_topic_wiki_meta,
+)
+from sidecar.topics.wiki_meta import (
+    read_topic_state as _read_topic_state,
+)
 from sidecar.wiki_utils import (
     create_topic as wiki_create_topic,
 )
 from sidecar.wiki_utils import (
     parse_wiki_headings,
-    read_wiki_text,
     sync_wiki_with_files,
     toggle_survey,
 )
@@ -33,109 +48,17 @@ from utils.topic.assigner import (
 )
 from utils.topic.manager import TopicManager
 from utils.topic.paths import topic_artifact_dir, topic_notes_dir
-from utils.topic.stale import _parse_iso_timestamp, collect_stale_topics
+from utils.topic.stale import collect_stale_topics
 from utils.wiki_store import (
     _deduplicate_files_in_wiki,
     _merge_duplicate_topics_in_wiki,
 )
 
-_HEADING_RE = re.compile(r"^(#{2,4})\s+(.+)$")
-_META_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
-
-
-def _parse_heading_comment(comment: str) -> dict:
-    """解析段头注释内容，兼容 JSON 对象与 `key: value` 行两种格式。"""
-    body = comment.strip()
-    try:
-        data = json.loads(body)
-        if isinstance(data, dict):
-            return data
-    except (TypeError, ValueError):
-        pass
-    result: dict = {}
-    for line in body.splitlines():
-        key, sep, value = line.strip().partition(":")
-        if sep and key.strip():
-            result[key.strip()] = value.strip()
-    return result
-
-
-def parse_topic_wiki_meta(topic: str) -> dict | None:
-    """读取 WIKI.md 中指定主题段头的 HTML 注释元数据。
-
-    Returns:
-        dict —— 主题段存在（元数据可能为空字典）；None —— WIKI.md 不存在或主题段不存在。
-    """
-    text = read_wiki_text()
-    if text is None:
-        return None
-    topic_stack: list[str] = []
-    found = False
-    section_lines: list[str] = []
-    comment_balance = 0
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped == "<!-- NOTEAI_TAGS_START -->":
-            break
-        match = _HEADING_RE.match(stripped)
-        if match:
-            if found:
-                break
-            label = match.group(2).strip()
-            if label in ("目录", "来源文件"):
-                continue
-            level = len(match.group(1)) - 1
-            while len(topic_stack) >= level:
-                topic_stack.pop()
-            parent = topic_stack[-1] if topic_stack else ""
-            full = f"{parent}{TOPIC_SEP}{label}" if parent else label
-            topic_stack.append(full)
-            if full == topic:
-                found = True
-                section_lines = []
-                comment_balance = 0
-            continue
-        if found:
-            section_lines.append(line)
-            comment_balance += stripped.count("<!--") - stripped.count("-->")
-            if comment_balance <= 0 and stripped and not stripped.startswith("<!--") and "-->" not in stripped:
-                break
-    if not found:
-        return None
-    meta: dict = {}
-    for m in _META_COMMENT_RE.finditer("\n".join(section_lines)):
-        meta.update(_parse_heading_comment(m.group(1)))
-    return meta
-
-
-def _read_topic_state(workspace: str, topic: str) -> dict | None:
-    """读取主题的语义编译状态文件（topic_states/{topic_id}.json），不存在时返回 None。"""
-    from sidecar.semantic.ids import stable_id
-
-    topic_id = stable_id("top", topic.casefold())
-    state_path = Path(workspace) / WORKSPACE_APP_FOLDER / "compiler" / "topic_states" / f"{topic_id}.json"
-    if not state_path.is_file():
-        return None
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _latest_note_mtime(topic: str, workspace: str) -> float | None:
-    """主题下源笔记的最新 mtime（复用 get_survey_overview 同款 collect_topic_notes 判定）。"""
-    from sidecar.cascade import collect_topic_notes
-
-    ws = Path(workspace)
-    mtimes: list[float] = []
-    for note in collect_topic_notes(topic, include_content=False):
-        note_path = ws / note["file_path"]
-        try:
-            mtimes.append(note_path.stat().st_mtime)
-        except OSError:
-            continue
-    return max(mtimes) if mtimes else None
+# 兼容 re-export：既有测试/调用方仍从本模块 import（PEP 484 冗余别名，ruff 不删）
+parse_topic_wiki_meta = _parse_topic_wiki_meta
+parse_heading_comment = _parse_heading_comment
+read_topic_state = _read_topic_state
+latest_note_mtime = _latest_note_mtime
 
 
 class TopicsHandler(BaseHandler, Topics3TierMixin):
@@ -183,43 +106,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         workspace, err = self._require_workspace()
         if err:
             return err
-        try:
-            wiki_meta = parse_topic_wiki_meta(topic)
-        except Exception as e:
-            logger.warning(f"[topics_handler] parse wiki meta failed: {e}\n")
-            wiki_meta = None
-        state = _read_topic_state(workspace, topic)
-        if wiki_meta is None and state is None:
-            try:
-                latest = _latest_note_mtime(topic, workspace)
-            except Exception:
-                latest = None
-            if latest is None:
-                return {"exists": False}
-        wiki_meta = wiki_meta or {}
-        stats = state.get("stats") if state else None
-        stats_documents = stats.get("documents") if isinstance(stats, dict) else None
-        try:
-            source_count = int(
-                stats_documents if isinstance(stats_documents, int) else wiki_meta.get("source_count", 0)
-            )
-        except (TypeError, ValueError):
-            source_count = 0
-        compiled_at = state.get("generated_at") if state else None
-        is_stale = False
-        try:
-            latest_mtime = _latest_note_mtime(topic, workspace)
-        except Exception:
-            latest_mtime = None
-        if latest_mtime is not None:
-            compiled_ts = _parse_iso_timestamp(compiled_at)
-            is_stale = compiled_ts is None or latest_mtime > compiled_ts
-        return {
-            "exists": True,
-            "source_count": source_count,
-            "compiled_at": compiled_at,
-            "is_stale": is_stale,
-        }
+        return build_topic_meta(topic, workspace)
 
     def _parse_wiki_headings(self):
         return parse_wiki_headings()
@@ -372,45 +259,20 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
         workspace_path = Path(workspace)
         try:
-            old_notes_dir = self._topic_dir_path(workspace_path, old_name)
-            new_notes_dir = self._topic_dir_path(workspace_path, new_name)
-            if not old_notes_dir.exists():
-                return {"success": False, "message": f"主题文件夹不存在: {old_name}"}
-
-            new_notes_dir.parent.mkdir(parents=True, exist_ok=True)
-            merged = False
-            if new_notes_dir.exists():
-                merged = True
-                for item in old_notes_dir.iterdir():
-                    dst = new_notes_dir / item.name
-                    if dst.exists():
-                        stem = item.stem
-                        suffix = item.suffix
-                        counter = 1
-                        while dst.exists():
-                            dst = new_notes_dir / f"{stem}_{counter}{suffix}"
-                            counter += 1
-                    shutil.move(str(item), str(dst))
-                shutil.rmtree(str(old_notes_dir))
-            else:
-                shutil.move(str(old_notes_dir), str(new_notes_dir))
-
-            old_abstract_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, old_name)
-            new_abstract_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, new_name)
-            if old_abstract_dir.exists() and not new_abstract_dir.exists():
-                new_abstract_dir.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old_abstract_dir), str(new_abstract_dir))
-
-            sync_result = self._sync_wiki_with_folder_system()
-            updated_count = sync_result.get("updated", 0) if sync_result.get("success") else 0
-            return {
-                "success": True,
-                "message": f"已{'合并' if merged else '重命名'}主题，更新 {updated_count} 个文件",
-                "updated": updated_count,
-                "merged": merged,
-            }
+            result = _rename_topic_folder_service(workspace_path, old_name, new_name)
+        except FileNotFoundError as e:
+            return {"success": False, "message": str(e)}
         except Exception as e:
             return {"success": False, "message": f"重命名失败: {str(e)}"}
+
+        sync_result = self._sync_wiki_with_folder_system()
+        updated_count = sync_result.get("updated", 0) if sync_result.get("success") else 0
+        return {
+            "success": True,
+            "message": f"已{'合并' if result['merged'] else '重命名'}主题，更新 {updated_count} 个文件",
+            "updated": updated_count,
+            "merged": result["merged"],
+        }
 
     def _delete_topic(self, params):
         topic_name = params.get("topic_name", "").strip()
@@ -421,35 +283,10 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             return err
 
         workspace_path = Path(workspace)
-        notes_root = workspace_path / config.NOTES_FOLDER
-        notes_topic_dir = self._topic_dir_path(workspace_path, topic_name)
-        moved_files = []
-
-        if notes_topic_dir.exists() and notes_topic_dir.is_dir():
-            for f in sorted(notes_topic_dir.rglob("*.md")):
-                dst = notes_root / f.name
-                if dst.exists():
-                    stem = f.stem
-                    counter = 1
-                    while dst.exists():
-                        dst = notes_root / f"{stem}_{counter}{f.suffix}"
-                        counter += 1
-                try:
-                    shutil.move(str(f), str(dst))
-                    moved_files.append(dst)
-                except Exception as e:
-                    logger.warning(f"[delete_topic] move failed: {e}\n")
-            try:
-                shutil.rmtree(str(notes_topic_dir))
-            except Exception as e:
-                logger.error(f"[delete_topic] rmdir: {e}")
-
-        org_dir = self._topic_artifact_dir_path(workspace_path, config.ABSTRACT_FOLDER, topic_name)
-        if org_dir.exists():
-            try:
-                shutil.rmtree(str(org_dir))
-            except Exception as e:
-                logger.error(f"[delete_topic] rmdir org: {e}")
+        try:
+            moved_files = _delete_topic_folder_service(workspace_path, topic_name)
+        except Exception as e:
+            return {"success": False, "message": f"删除失败: {str(e)}"}
 
         try:
             sync_result = self._sync_wiki_with_folder_system()

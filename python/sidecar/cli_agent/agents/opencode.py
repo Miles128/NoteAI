@@ -12,11 +12,10 @@ from sidecar.cli_agent.workspace_bounds import append_workspace_boundary, bounda
 class OpenCodeAgent(BaseCliAgent):
     agent_id = "opencode"
     display_name = "OpenCode"
-    description = "Open source terminal AI coding assistant (MCP mode)"
+    description = "Open source terminal AI coding assistant"
     command = "opencode"
     aliases = ["oc"]
     env_keys = ["OPENCODE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
-    mcp_target = "opencode"
 
     @classmethod
     def _saved_auth_exists(cls) -> bool:
@@ -51,9 +50,8 @@ class OpenCodeAgent(BaseCliAgent):
             f"- 笔记目录: {notes}（所有 Markdown 笔记在此；不在 NoteAI 源码项目目录）\n"
             f"- 结构化知识: {wiki}\n"
             f"- 原始归档: {raw}\n"
-            "- 访问笔记优先使用 noteai-vault MCP（vault_list_topics / vault_list_notes / "
-            "vault_read_note / vault_search_notes）\n"
-            "- vault 路径相对工作区根目录，例如 Notes/AI产品经理之路/01_认知重塑/术语手册.md\n"
+            "- 访问笔记直接读文件：Notes/ 下的 Markdown 笔记（可用 glob/grep 检索）\n"
+            "- 路径相对工作区根目录，例如 Notes/AI产品经理之路/01_认知重塑/术语手册.md\n"
             "- 当前 cwd 已是工作区根目录；中文主题文件夹通常无空格（如 AI产品经理之路）\n"
             "- 批量分析请分批读取，避免一次启动过多子 Agent\n"
             f"{boundary_block(workspace)}\n"

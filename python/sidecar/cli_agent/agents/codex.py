@@ -11,11 +11,10 @@ from sidecar.cli_agent.workspace_bounds import append_workspace_boundary
 class CodexAgent(BaseCliAgent):
     agent_id = "codex"
     display_name = "Codex CLI"
-    description = "OpenAI Codex CLI (MCP mode)"
+    description = "OpenAI Codex CLI"
     command = "codex"
     aliases = ["openai-codex"]
     env_keys = ["OPENAI_API_KEY"]
-    mcp_target = "codex"
 
     def build_args(
         self,

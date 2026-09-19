@@ -35,7 +35,7 @@ async function loadModules() {
 
     // settings 子模块须先于薄主入口 settings.js 加载（主入口组装 window.SettingsModule）
     await import('./settings-general.ts');
-    await import('./settings-components.ts');
+    await import('./settings-components/index.ts');
     await import('./settings-semantic.ts');
     await import('./settings.ts');
     const {

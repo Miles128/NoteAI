@@ -36,12 +36,25 @@ const storageOptions = {
     logLevel: 'info',
 };
 
+const errorOptions = {
+    entryPoints: ['webui/js/error-handler.ts'],
+    bundle: true,
+    format: 'iife',
+    target: 'es2020',
+    outfile: 'webui/js/error-handler.bundle.js',
+    minify,
+    sourcemap: minify ? false : 'inline',
+    logLevel: 'info',
+};
+
 if (watch) {
     const ctx = await build({ ...mainOptions, sourcemap: 'inline' });
     await ctx.watch();
     const storageCtx = await build({ ...storageOptions, sourcemap: 'inline' });
     await storageCtx.watch();
+    const errorCtx = await build({ ...errorOptions, sourcemap: 'inline' });
+    await errorCtx.watch();
     console.log('[build-webui] watching for changes…');
 } else {
-    await Promise.all([build(mainOptions), build(storageOptions)]);
+    await Promise.all([build(mainOptions), build(storageOptions), build(errorOptions)]);
 }

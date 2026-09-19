@@ -1612,8 +1612,8 @@
     </div>
     <!-- error-handler/storage 保持经典脚本：需在模块执行前尽早安装错误捕获与存储层；
          G3.js 已迁入 main.mjs 动态加载序列（其顶层依赖的 window.Storage 由上方经典脚本先行提供）；
-         storage.bundle.js 为 storage.ts 的 esbuild IIFE 产物（scripts/build-webui.mjs） -->
-    <script src="js/error-handler.js"></script>
+         storage.bundle.js / error-handler.bundle.js 均为对应 .ts 的 esbuild IIFE 产物（scripts/build-webui.mjs） -->
+    <script src="js/error-handler.bundle.js"></script>
     <script src="js/storage.bundle.js"></script>
 </body>
 </html>

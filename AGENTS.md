@@ -111,7 +111,7 @@ Tauri v2 shell (src-tauri/)
 - **入库流水线**：`sidecar/ingest_pipeline.py` 编排；阶段实现在 `sidecar/ingest_stages.py`（`IngestCtx`）。测试 patch 仍打在 `sidecar.ingest_pipeline.*`（阶段函数运行时从该模块取名）。
 - **`IGNORED_DIRS`**（`constants.py`）：小写匹配集合 `{"ai", "noteai", ".noteai", ".NoteAI", "wiki", "ai wiki", "ai-wiki", "ai_wiki", "aiwiki"}`。
 - **WIKI.md 操作**：生产读写走 `sidecar/wiki_utils.py`（语义卡注入、综述开关等）；底层 CRUD/同步走 `utils/wiki_store.py` → `utils/wiki/{parse,crud,sync}.py`。测试与内部模块可直接 import store。
-- **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 使用 Fernet 加密文件存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。PBKDF2 派生密钥与每安装随机 secret 只提供混淆，非硬件级保护。
+- **凭据存储**：环境变量为只读覆盖；持久化的 API key、云密码与 token 以**明文**文件（0600）存放于 `SYSTEM_APP_DATA_DIR/credentials/`。不要使用 macOS Keychain 或其他系统钥匙串。此前 Fernet 加密密钥绑定 hostname，hostname 变更后凭据静默失效，已改为明文（2026-09-20，用户决策）。
 - **命题验证**：已随 C2b 去掉命题层；语义工作台只留实体/概念。
 - **归档目录**（`docs/archive/`）：一次性迁移脚本（`docs/archive/scripts/`）与过期的分析文档统一归档于此，ruff/mypy 已排除该目录。
 - **RAG 端点**除 LLM 信号量外无额外速率限制。

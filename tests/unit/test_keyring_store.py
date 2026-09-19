@@ -25,17 +25,15 @@ class TestKeyringStore:
             assert _fallback_path().stat().st_mode & 0o777 == 0o600
             assert _fallback_path().parent.stat().st_mode & 0o777 == 0o700
 
-    def test_fallback_encrypt_decrypt_roundtrip(self, monkeypatch, tmp_path):
+    def test_plaintext_roundtrip(self, monkeypatch, tmp_path):
         from config import constants
-        from utils.keyring_store import _decrypt, _encrypt
+        from utils.keyring_store import _fallback_path, load_api_key, store_api_key
 
         monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
-        key = "sk-test-12345"
-        encrypted = _encrypt(key)
-        assert encrypted != key.encode()
-        decrypted = _decrypt(encrypted)
-        assert decrypted == key
+        assert store_api_key("sk-plain-12345") is True
+        assert _fallback_path().read_bytes().decode("utf-8").strip() == "sk-plain-12345"
+        assert load_api_key() == "sk-plain-12345"
 
     def test_generic_credential_roundtrip(self, monkeypatch, tmp_path):
         from config import constants
@@ -50,15 +48,29 @@ class TestKeyringStore:
 
     def test_legacy_file_is_migrated(self, monkeypatch, tmp_path):
         from config import constants
-        from utils.keyring_store import _encrypt, load_api_key
+        from utils.keyring_store import load_api_key
 
         monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
 
-        legacy_data = _encrypt("sk-legacy-encrypted")
-        credentials_dir = tmp_path / "credentials"
-        (credentials_dir / ".install_secret").replace(tmp_path / ".install_secret")
-        (tmp_path / "api_key.dat").write_bytes(legacy_data)
+        legacy_path = tmp_path / "api_key.dat"
+        legacy_path.write_text("sk-legacy-plaintext", encoding="utf-8")
 
-        assert load_api_key() == "sk-legacy-encrypted"
-        assert not (tmp_path / "api_key.dat").exists()
-        assert (credentials_dir / "api_key.dat").exists()
+        assert load_api_key() == "sk-legacy-plaintext"
+        assert not legacy_path.exists()
+        assert (tmp_path / "credentials" / "api_key.dat").exists()
+
+    def test_unreadable_legacy_blob_treated_as_missing(self, monkeypatch, tmp_path):
+        """Fernet blobs from the pre-plaintext backend decode as garbage → treated as missing."""
+        from config import constants
+        from utils.keyring_store import _fallback_path, load_api_key, store_api_key
+
+        monkeypatch.setattr(constants, "SYSTEM_APP_DATA_DIR", tmp_path)
+
+        credentials_dir = tmp_path / "credentials"
+        credentials_dir.mkdir(parents=True)
+        (credentials_dir / "api_key.dat").write_bytes(b"\x00\xe6garbage-not-utf8")
+
+        assert load_api_key() == ""
+        assert store_api_key("sk-new-key") is True
+        assert load_api_key() == "sk-new-key"
+        assert _fallback_path().read_bytes().decode("utf-8").strip() == "sk-new-key"

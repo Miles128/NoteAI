@@ -11,11 +11,10 @@ from sidecar.cli_agent.workspace_bounds import append_workspace_boundary
 class GeminiAgent(BaseCliAgent):
     agent_id = "gemini"
     display_name = "Gemini CLI"
-    description = "Google Gemini CLI (MCP mode)"
+    description = "Google Gemini CLI"
     command = "gemini"
     aliases = ["gemini-cli"]
     env_keys = ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
-    mcp_target = "gemini"
     supports_cli_session = False
 
     def build_args(

@@ -1095,6 +1095,15 @@
                             <div class="card" id="settings-rag-advanced-card" style="margin-top:16px;display:none">
                                 <div class="card-title" data-i18n="settings.ragAdvancedTitle"></div>
                                 <p class="settings-hint" data-i18n="settings.ragAdvancedHint"></p>
+                                <div class="form-group">
+                                    <div class="form-label" data-i18n="settings.ragPresetLabel"></div>
+                                    <div class="settings-rag-preset-row" id="settings-rag-preset-row" style="display:flex;gap:8px">
+                                        <button type="button" class="btn btn-secondary rag-preset-btn" data-rag-preset="fast" data-i18n="settings.ragPresetFast"></button>
+                                        <button type="button" class="btn btn-secondary rag-preset-btn is-active" data-rag-preset="balanced" data-i18n="settings.ragPresetBalanced"></button>
+                                        <button type="button" class="btn btn-secondary rag-preset-btn" data-rag-preset="deep" data-i18n="settings.ragPresetDeep"></button>
+                                    </div>
+                                    <div class="settings-hint" id="settings-rag-preset-hint" data-i18n="settings.ragPresetHint" style="margin-top:6px"></div>
+                                </div>
                                 <div class="form-group form-row" style="margin-top:12px">
                                     <div class="form-field flex-1">
                                         <div class="form-label" data-i18n="settings.ragDenseWeightLabel"></div>

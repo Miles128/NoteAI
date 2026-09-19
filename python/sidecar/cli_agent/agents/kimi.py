@@ -1,7 +1,6 @@
 """Kimi Code CLI agent。
 
 Kimi Code 是 Moonshot AI 推出的终端 AI 编程助手，命令通常为 kimi。
-启动前自动注册 ~/.kimi-code/mcp.json 中的 NoteAI vault MCP server。
 """
 
 from __future__ import annotations
@@ -16,11 +15,10 @@ from sidecar.cli_agent.workspace_bounds import append_workspace_boundary
 class KimiAgent(BaseCliAgent):
     agent_id = "kimi"
     display_name = "Kimi Code"
-    description = "Moonshot Kimi Code CLI (MCP mode)"
+    description = "Moonshot Kimi Code CLI"
     command = "kimi"
     aliases = ["kimi-code"]
     env_keys = ["MOONSHOT_API_KEY", "KIMI_API_KEY"]
-    mcp_target = "kimi"
 
     @classmethod
     def _saved_auth_exists(cls) -> bool:

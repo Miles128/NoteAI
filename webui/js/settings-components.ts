@@ -97,21 +97,10 @@ function _updateDenseWeightHint() {
     });
 }
 
-function _readRagAdvancedConfig() {
-    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
-    var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
-    if (isNaN(densePct)) densePct = 70;
-    densePct = Math.max(0, Math.min(100, densePct));
-
-    return {
-        rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
-        rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
-        rag_dense_weight: densePct / 100,
-        rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
-        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
-    };
+function _readRagAdvancedConfig(): Record<string, any> {
+    var config = _readRagPresetFromForm();
+    config.rag_dense_weight = Math.max(0, Math.min(1, config.rag_dense_weight));
+    return config;
 }
 
 function saveRagAdvancedConfig() {
@@ -363,14 +352,101 @@ function _bindStorageControls() {
     });
 }
 
+var RAG_PRESETS: Record<string, any> = {
+    fast: {
+        rag_hyde_enabled: false, rag_hyde_threshold: 0.33,
+        rag_rerank_enabled: false, rag_rerank_skip_score: 0.75,
+        rag_dense_weight: 0.6, rag_top_k: 3, rag_top_k_tags: 4,
+    },
+    balanced: {
+        rag_hyde_enabled: true, rag_hyde_threshold: 0.33,
+        rag_rerank_enabled: true, rag_rerank_skip_score: 0.75,
+        rag_dense_weight: 0.7, rag_top_k: 5, rag_top_k_tags: 7,
+    },
+    deep: {
+        rag_hyde_enabled: true, rag_hyde_threshold: 0.30,
+        rag_rerank_enabled: true, rag_rerank_skip_score: 0.60,
+        rag_dense_weight: 0.75, rag_top_k: 8, rag_top_k_tags: 10,
+    },
+};
+
+function _readRagPresetFromForm(): Record<string, any> {
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
+    var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
+    if (isNaN(densePct)) densePct = 70;
+    return {
+        rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
+        rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
+        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
+        rag_dense_weight: densePct / 100,
+        rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
+        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
+    };
+}
+
+function _syncRagPresetButtons() {
+    var row = document.getElementById('settings-rag-preset-row');
+    if (!row) return;
+    var current = _readRagPresetFromForm();
+    var matched = '';
+    Object.keys(RAG_PRESETS).forEach(function(name) {
+        var preset = RAG_PRESETS[name];
+        var ok = Object.keys(preset).every(function(k) {
+            return Math.abs((current[k] || 0) - (preset[k] || 0)) < 1e-9;
+        });
+        if (ok) matched = name;
+    });
+    var buttons = row.querySelectorAll('.rag-preset-btn');
+    buttons.forEach(function(btn: any) {
+        btn.classList.toggle('is-active', btn.dataset.ragPreset === matched);
+    });
+}
+
+function applyRagPreset(name: string) {
+    var preset = RAG_PRESETS[name];
+    if (!preset) return;
+    var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
+    if (denseEl) denseEl.value = String(Math.round((preset.rag_dense_weight || 0.7) * 100));
+    var hydeEl = document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null;
+    if (hydeEl) hydeEl.checked = preset.rag_hyde_enabled !== false;
+    var hydeThresholdEl = document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null;
+    if (hydeThresholdEl) hydeThresholdEl.value = String(preset.rag_hyde_threshold != null ? preset.rag_hyde_threshold : 0.33);
+    var rerankEl = document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null;
+    if (rerankEl) rerankEl.checked = preset.rag_rerank_enabled !== false;
+    var rerankSkipEl = document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null;
+    if (rerankSkipEl) rerankSkipEl.value = String(preset.rag_rerank_skip_score != null ? preset.rag_rerank_skip_score : 0.75);
+    var topKEl = document.getElementById('settings-rag-top-k') as HTMLInputElement | null;
+    if (topKEl) topKEl.value = String(preset.rag_top_k != null ? preset.rag_top_k : 5);
+    var topKTagsEl = document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null;
+    if (topKTagsEl) topKTagsEl.value = String(preset.rag_top_k_tags != null ? preset.rag_top_k_tags : 7);
+    _updateDenseWeightHint();
+    _syncRagPresetButtons();
+    saveRagAdvancedConfig();
+}
+
 function _bindRagAdvancedControls() {
+    var presetRow = document.getElementById('settings-rag-preset-row');
+    if (presetRow && !presetRow.dataset.bound) {
+        presetRow.dataset.bound = '1';
+        presetRow.querySelectorAll('.rag-preset-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var name = (btn as HTMLElement).dataset.ragPreset;
+                if (name) applyRagPreset(name);
+            });
+        });
+    }
+
     var denseEl = document.getElementById('settings-rag-dense-weight');
     if (denseEl && !denseEl.dataset.bound) {
         denseEl.dataset.bound = '1';
         denseEl.addEventListener('input', function() {
             _updateDenseWeightHint();
         });
-        denseEl.addEventListener('change', saveRagAdvancedConfig);
+        denseEl.addEventListener('change', function() {
+            _syncRagPresetButtons();
+            saveRagAdvancedConfig();
+        });
     }
 
     [
@@ -384,7 +460,10 @@ function _bindRagAdvancedControls() {
         var el = document.getElementById(id);
         if (!el || el.dataset.bound) return;
         el.dataset.bound = '1';
-        el.addEventListener('change', saveRagAdvancedConfig);
+        el.addEventListener('change', function() {
+            _syncRagPresetButtons();
+            saveRagAdvancedConfig();
+        });
     });
 }
 

@@ -5,20 +5,17 @@
 //       workspace 未设置且未完成过引导时打开（完成标记：localStorage 为主，
 //       workspace_state.json 的 onboarding_done 为后端镜像）。
 // 步骤状态机：
-//   Step 0 欢迎 + 工作区（选择/新建 或 示例库）
+//   Step 0 欢迎 + 工作区（选择/新建）
 //   Step 1 API Key（服务商预设 + test_api_config 测试 + save_api_config 保存）
 //   Step 2 模型与索引准备（阶段态轮询 get_onboarding_status / rag_index_status，
 //          并复用现有 rag_index_built python-event）
-//   Step 3 示范提问（仅示例库路径且索引就绪；由 AssistantModule.ask 发起）
-// 「跳过」全程可用；wizard 不写任何笔记，凭据仅走 save_api_config 加密存储。
+// 「跳过」全程可用；wizard 不写任何笔记，凭据仅走 save_api_config 存储。
 // ============================================================================
 (function() { 'use strict';
 
 var STORAGE_KEY = 'noteai.onboardingDone';
-var SAMPLE_QUESTION = '这份指南对普通人使用 AI 的核心建议是什么？';
 var MODEL_POLL_MS = 3000;
 var INDEX_POLL_MS = 5000;
-var SAMPLE_POLL_MAX = 40;
 
 var PROVIDER_PRESETS = [
     {
@@ -47,7 +44,6 @@ var PROVIDER_PRESETS = [
 var state: any = {
     open: false,
     step: 0,
-    sampleMode: false,       // Step 0 是否走了示例库路径
     workspacePath: '',
     modelsReady: false,
     indexReady: false,
@@ -79,10 +75,6 @@ function btn(className: any, text: any, onClick?: any, disabled?: any) {
     if (onClick) b.addEventListener('click', onClick);
     if (disabled) b.disabled = true;
     return b;
-}
-
-function sleep(ms: any) {
-    return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +116,6 @@ function open() {
     if (state.open || state.root) return;
     state.open = true;
     state.step = 0;
-    state.sampleMode = false;
     state.modelsReady = false;
     state.indexReady = false;
     state.apiTested = false;
@@ -169,9 +160,7 @@ function _destroy() {
 function _renderDots() {
     if (!state.dotsEl) return;
     state.dotsEl.textContent = '';
-    var labels = state.sampleMode
-        ? ['工作区', 'API Key', '模型准备', '试一试']
-        : ['工作区', 'API Key', '模型准备'];
+    var labels = ['工作区', 'API Key', '模型准备'];
     labels.forEach(function(label, i) {
         var cls = 'onb-dot';
         if (i === state.step) cls += ' active';
@@ -212,8 +201,7 @@ function renderStep() {
     _renderDots();
     if (state.step === 0) renderStep0(state.bodyEl);
     else if (state.step === 1) renderStep1(state.bodyEl);
-    else if (state.step === 2) renderStep2(state.bodyEl);
-    else renderStep3(state.bodyEl);
+    else renderStep2(state.bodyEl);
 }
 
 // ---- Step 0：欢迎 + 工作区 -------------------------------------------------
@@ -231,19 +219,12 @@ function renderStep0(container: any) {
     chooseBtn.addEventListener('click', _chooseWorkspace);
     row.appendChild(chooseBtn);
 
-    var sampleBtn = el('button', 'onb-big-btn');
-    sampleBtn.type = 'button';
-    sampleBtn.appendChild(el('strong', null, '先用示例库体验'));
-    sampleBtn.appendChild(el('span', null, '自动创建「普通人的AI指南」示例笔记库，快速体验 AI 问答'));
-    sampleBtn.addEventListener('click', _chooseSample);
-    row.appendChild(sampleBtn);
-
     container.appendChild(row);
 
     var status = el('div', 'onb-status info', '');
     container.appendChild(status);
     state._step0Status = status;
-    state._step0Btns = [chooseBtn, sampleBtn];
+    state._step0Btns = [chooseBtn];
 }
 
 function _step0Busy(busy: any, message: any) {
@@ -268,39 +249,6 @@ async function _chooseWorkspace() {
         _step0Busy(false, (result && result.message) || '未选择文件夹');
     } catch (e) {
         _step0Busy(false, '设置工作区失败：' + ((e as Error) && (e as Error).message || e));
-    }
-}
-
-async function _chooseSample() {
-    if (state.busy) return;
-    _step0Busy(true, '正在创建示例库…');
-    try {
-        var result = await window.api.createSampleWorkspace();
-        if (!result || !result.success) {
-            _step0Busy(false, (result && result.message) || '创建示例库失败');
-            return;
-        }
-        // 创建为同步 RPC，成功即就绪；仍轮询 get_workspace_status 做就绪确认，
-        // 期间展示进度文案（阶段态）。
-        var phrases = ['正在复制示例笔记…', '正在初始化目录结构…', '正在激活工作区…'];
-        for (var i = 0; i < SAMPLE_POLL_MAX; i++) {
-            _step0Busy(true, phrases[i % phrases.length]);
-            var ws = null;
-            try { ws = await window.api.getWorkspaceStatus(); } catch (e) { ws = null; }
-            if (ws && ws.is_set) {
-                state.sampleMode = true;
-                state.workspacePath = ws.workspace_path || result.workspace_path || '';
-                goStep(1);
-                return;
-            }
-            await sleep(1500);
-        }
-        // 轮询超时但创建 RPC 已成功，按就绪处理
-        state.sampleMode = true;
-        state.workspacePath = result.workspace_path || '';
-        goStep(1);
-    } catch (e) {
-        _step0Busy(false, '创建示例库失败：' + ((e as Error) && (e as Error).message || e));
     }
 }
 
@@ -488,8 +436,8 @@ function renderStep2(container: any) {
     indexRow.appendChild(indexState);
     container.appendChild(indexRow);
 
-    var hint = state.sampleMode ? '索引就绪后可体验示范提问' : '索引在后台持续构建，可随时使用';
-    container.appendChild(_footer(hint, '继续', _onStep2Next, false, false));
+    var hint = '索引在后台持续构建，可随时使用';
+    container.appendChild(_footer(hint, '完成', finish, false, false));
 
     _startModelPolling(modelState);
     if (state.workspacePath) _startIndexPolling(indexState);
@@ -576,35 +524,15 @@ function _listenRagEvents() {
     } catch (e) { /* ignore */ }
 }
 
-function _onStep2Next() {
-    // Step 3（示范提问）仅在示例库路径且索引就绪时展示
-    if (state.sampleMode && state.indexReady) {
-        goStep(3);
-    } else {
-        finish(false);
-    }
-}
-
-// ---- Step 3：示范提问 -------------------------------------------------------
-
-function renderStep3(container: any) {
-    container.appendChild(el('div', 'onb-desc',
-        '示例库已就绪。试试向 AI 提一个关于示例笔记的问题，体验基于你自己知识库的问答：'));
-
-    container.appendChild(el('div', 'onb-sample-q', '「' + SAMPLE_QUESTION + '」'));
-
-    container.appendChild(_footer('将由 AI 助手面板发起提问', '试试看', function() { finish(true); }, false, false));
-}
-
 // ---------------------------------------------------------------------------
 // 结束
 // ---------------------------------------------------------------------------
 
 function skip() {
-    finish(false);
+    finish();
 }
 
-async function finish(askSample: any) {
+async function finish() {
     if (!state.open) return;
     _stopPolling();
     markDoneLocal();
@@ -623,12 +551,6 @@ async function finish(askSample: any) {
             window.TreeModule.loadFileTree();
         }
     } catch (e) { /* ignore */ }
-    if (askSample && window.AssistantModule && window.AssistantModule.ask) {
-        var askFn = window.AssistantModule.ask;
-        setTimeout(function() {
-            try { askFn(SAMPLE_QUESTION); } catch (e) { console.warn('[Onboarding] sample ask failed:', e); }
-        }, 400);
-    }
 }
 
 window.OnboardingModule = {

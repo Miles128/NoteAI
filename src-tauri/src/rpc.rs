@@ -35,7 +35,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "confirm_all_links",
     "confirm_link",
     "create_note_from_draft",
-    "create_sample_workspace",
     "create_tag",
     "create_topic",
     "delete_file",

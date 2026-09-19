@@ -24,29 +24,6 @@ async function openWorkspace() {
     }
 }
 
-async function createSampleWorkspace() {
-    const t = window.t || function(k: any) { return k; };
-    window.updateStatus(t('workspace.sample.creating'));
-    try {
-        const result = await window.api.createSampleWorkspace();
-        if (result && result.success) {
-            updateWorkspaceDisplay(result.workspace_path);
-            window.updateStatus(result.message || t('workspace.sample.ready'));
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                await window.TreeModule.loadFileTree(true);
-            }
-            if (typeof window.runPostWorkspaceSetup === 'function') {
-                window.runPostWorkspaceSetup();
-            }
-        } else {
-            window.updateStatus((result && result.message) || t('workspace.sample.failed'));
-        }
-    } catch (e) {
-        console.error('[Workspace] createSampleWorkspace error:', e);
-        window.updateStatus(((e as any) && (e as any).message) || t('workspace.sample.failed'));
-    }
-}
-
 function updateWorkspaceDisplay(workspacePath: any) {
     const container = document.getElementById('workspace-container');
     const nameDisplay = document.getElementById('workspace-name-display');
@@ -85,15 +62,10 @@ function updateWorkspaceDisplay(workspacePath: any) {
                 </div>
             `;
         } else {
-            const sampleLabel = window.t ? window.t('workspace.sample.button') : '试用示例库';
             container.innerHTML = `
                 <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="打开工作区">
                     ${window.Icons!.get('folderFilled')}
                     <span>打开工作区</span>
-                </button>
-                <button class="workspace-btn workspace-btn-secondary" onclick="window.WorkspaceModule.createSampleWorkspace()" title="${window.escapeHtml(sampleLabel)}">
-                    ${window.Icons!.get('folderFilled')}
-                    <span>${window.escapeHtml(sampleLabel)}</span>
                 </button>
             `;
         }
@@ -271,7 +243,6 @@ document.addEventListener('localechange', function() {
 
 window.WorkspaceModule = {
     openWorkspace,
-    createSampleWorkspace,
     updateWorkspaceDisplay,
     showWorkspaceOptions,
     checkWorkspaceStatus,

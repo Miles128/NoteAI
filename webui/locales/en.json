@@ -1235,12 +1235,6 @@
     "opensource": "Open source · GitHub: Miles128/NoteAI"
   },
   "workspace": {
-    "sample": {
-      "button": "Try sample workspace",
-      "creating": "Creating sample workspace…",
-      "ready": "Sample workspace is ready. Configure your LLM in Settings to compile semantic knowledge.",
-      "failed": "Failed to create sample workspace"
-    }
   },
   "noteList": {
     "title": "Notes",

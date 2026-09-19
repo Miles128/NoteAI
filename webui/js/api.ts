@@ -189,14 +189,6 @@ async function getWorkspaceStatus(): Promise<any> {
     return result;
 }
 
-async function createSampleWorkspace(): Promise<any> {
-    var pyResult = await pyCall('create_sample_workspace', {}, { noRetry: true });
-    if (pyResult && pyResult.success && checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        if (invoke) await invoke('set_workspace_path', { path: pyResult.workspace_path });
-    }
-    return pyResult || { success: false, message: '创建示例库失败' };
-}
 
 async function addFiles(): Promise<string[]> {
     if (!checkIsTauri()) {
@@ -517,7 +509,6 @@ Object.assign(builtApi, generatedApi, {
 
     // 特殊 API（涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览）
     openWorkspace: openWorkspace,
-    createSampleWorkspace: createSampleWorkspace,
     getWorkspaceStatus: getWorkspaceStatus,
     addFiles: addFiles,
     importFilesToWorkspace: importFilesToWorkspace,

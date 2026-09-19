@@ -171,7 +171,6 @@ declare global {
 
         // 特殊 API（对话框 / 多步逻辑 / 分页预览）
         openWorkspace(): Promise<any>;
-        createSampleWorkspace(): Promise<any>;
         getWorkspaceStatus(): Promise<any>;
         addFiles(): Promise<string[]>;
         importFilesToWorkspace(): Promise<any>;
@@ -433,7 +432,6 @@ declare global {
         WorkspaceModule: {
             checkWorkspaceStatus(): Promise<any>;
             openWorkspace?(): Promise<any>;
-            createSampleWorkspace?(): Promise<any>;
             updateWorkspaceDisplay?(workspacePath: any): void;
             showWorkspaceOptions?(): void;
             addFiles?(): Promise<any>;

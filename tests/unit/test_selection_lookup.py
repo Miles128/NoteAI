@@ -33,7 +33,6 @@ def test_selection_lookup_streams_quick_answer_then_rag(monkeypatch) -> None:
     result = handler._answer_selection_lookup(
         {"selection_route": "rag", "current_file": "Notes/a.md"},
         "测试术语",
-        use_vector_rag=True,
     )
 
     assert result["success"] is True
@@ -55,7 +54,7 @@ def test_selection_lookup_routes_web_after_quick_answer(monkeypatch) -> None:
         lambda _question, _history, *, intent: {"success": intent == "web"},
     )
 
-    result = handler._answer_selection_lookup({"selection_route": "web"}, "最新消息", use_vector_rag=True)
+    result = handler._answer_selection_lookup({"selection_route": "web"}, "最新消息")
 
     assert result["success"] is True
     assert events[-1]["result"]["token"] == "\n\n---\n\n### 联网补充\n\n"
@@ -79,7 +78,7 @@ def test_normal_chat_defaults_to_workspace_rag(monkeypatch, tmp_path) -> None:
         lambda *_args, **_kwargs: pytest.fail("normal chat should not bypass RAG"),
     )
 
-    result = handler._do_rag_chat_inner({"question": "你好"}, use_vector_rag=True)
+    result = handler._do_rag_chat_inner({"question": "你好"})
 
     assert result["success"] is True
     assert calls == ["你好"]

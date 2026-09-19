@@ -54,7 +54,6 @@ TOPIC_SUGGESTION_PROMPT = get_prompt("topic_assignment", "TOPIC_SUGGESTION_PROMP
 SCHEMA_FALLBACK_PROMPT = get_prompt("schema_fallback", "SCHEMA_FALLBACK_PROMPT")
 
 CROSS_REF_LLM_PROMPT = get_prompt("link_indexer", "CROSS_REF_LLM_PROMPT")
-LINK_PAIR_JUDGE_PROMPT = get_prompt("link_indexer", "LINK_PAIR_JUDGE_PROMPT")
 
 MERGE_NOTES_PROMPT = get_prompt("merge_notes", "MERGE_NOTES_PROMPT")
 RSS_DISCOVERY_PROMPT = get_prompt("rss_discovery", "RSS_DISCOVERY_PROMPT")

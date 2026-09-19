@@ -187,16 +187,17 @@ class RagHandler(BaseHandler):
         if not question:
             return {"success": False, "message": "问题不能为空"}
 
+        if not config.rag_enabled:
+            return {"success": False, "message": self._rag_disabled_message()}
+
         session_id = str(params.get("session_id") or "") or "_global"
         gate = self._acquire_chat_gate(session_id)
         if gate is None:
             return {"success": False, "message": "该对话正在进行中，请稍候"}
 
-        use_vector_rag = config.rag_enabled
-
         def _worker() -> None:
             try:
-                result = self._do_rag_chat_inner(params, use_vector_rag=use_vector_rag)
+                result = self._do_rag_chat_inner(params)
                 if isinstance(result, dict) and not result.get("success", True):
                     if not result.get("error_emitted"):
                         self._emit_rag_error(result.get("message", "请求失败"))
@@ -228,7 +229,7 @@ class RagHandler(BaseHandler):
             if gate.users <= 0:
                 RagHandler._session_gates.pop(session_id, None)
 
-    def _do_rag_chat_inner(self, params, *, use_vector_rag: bool = True):
+    def _do_rag_chat_inner(self, params):
         from sidecar.rag.model_preload import ModelWarmupManager
 
         # 兜底触发模型预热：若启动延迟尚未开始（或用户立即提问），确保加载启动
@@ -259,16 +260,16 @@ class RagHandler(BaseHandler):
         profile = self._load_user_profile(workspace)
         context = self._personal_context(profile, history)
         if params.get("selection_lookup"):
-            return self._answer_selection_lookup(params, question, use_vector_rag=use_vector_rag)
+            return self._answer_selection_lookup(params, question)
 
         # Default every normal conversation to the workspace so a greeting or
         # broadly phrased question cannot silently bypass the evidence path.
         # Web remains available only through an explicit UI override.
         if params.get("force_intent") == "web":
             return self._answer_without_retrieval(question, context, intent="web")
-        return self._answer_with_rag(params, question, context, use_vector_rag=use_vector_rag)
+        return self._answer_with_rag(params, question, context)
 
-    def _answer_selection_lookup(self, params, selection: str, *, use_vector_rag: bool) -> dict:
+    def _answer_selection_lookup(self, params, selection: str) -> dict:
         """Stream a quick explanation first, then append evidence from the selected route."""
         from utils.llm_utils import APIConfigError, call_llm_raw_stream
 
@@ -294,7 +295,7 @@ class RagHandler(BaseHandler):
             self._send_chat_chunk("\n\n---\n\n### 联网补充\n\n")
             return self._answer_without_retrieval(selection, "", intent="web")
         self._send_chat_chunk("\n\n---\n\n### 知识库补充\n\n")
-        return self._answer_with_rag(params, selection, "", use_vector_rag=use_vector_rag)
+        return self._answer_with_rag(params, selection, "")
 
     def _send_chat_chunk(self, token: str) -> None:
         self._send_response(
@@ -331,10 +332,8 @@ class RagHandler(BaseHandler):
     def _answer_without_retrieval(self, question: str, compressed_history: str, *, intent: str = "general") -> dict:
         return answer_without_retrieval(self, question, compressed_history, intent=intent)
 
-    def _answer_with_rag(
-        self, params, question: str, compressed_history: str, *, use_vector_rag: bool, intent: str = "workspace"
-    ) -> dict:
-        return answer_with_rag(self, params, question, compressed_history, use_vector_rag=use_vector_rag, intent=intent)
+    def _answer_with_rag(self, params, question: str, compressed_history: str, *, intent: str = "workspace") -> dict:
+        return answer_with_rag(self, params, question, compressed_history, intent=intent)
 
     def _rag_rebuild_index(self, params):
         """Manual index update; incremental when the existing collection is healthy."""

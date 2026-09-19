@@ -26,6 +26,7 @@ ENV/
 env/
 .venv/
 src-tauri/resources/sidecar-python/
+src-tauri/resources/release/
 mcp-server/dist/
 
 # JavaScript dependencies

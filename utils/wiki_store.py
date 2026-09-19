@@ -1,7 +1,8 @@
 """WIKI.md 底层存储层门面 — 路径解析、标题解析、编号、综述开关、CRUD、去重、文件夹同步。
 
-本模块是 WIKI.md 唯一的对外入口；实现拆在 ``utils/wiki/{parse,crud,sync}.py``。
-生产写入统一走 sidecar/wiki_utils.py 门面。
+实现拆在 ``utils/wiki/{parse,crud,sync}.py``。
+生产读写统一走 ``sidecar/wiki_utils.py``（语义卡注入、综述开关等产品层行为）。
+测试与内部模块可直接 import 本门面。
 """
 
 from __future__ import annotations

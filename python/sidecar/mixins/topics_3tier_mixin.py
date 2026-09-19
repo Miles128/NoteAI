@@ -46,8 +46,6 @@ class _TopicsHost(Protocol):
 
     def _get_graph_data(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
-    def _delete_topic_safe(self, params: dict[str, Any]) -> dict[str, Any]: ...
-
     def _toggle_survey(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
 
@@ -241,36 +239,6 @@ class Topics3TierMixin:
             "layout": "force",
         }
 
-    def _delete_topic_safe(self, params):
-        """安全删除主题（含删除保护）"""
-        topic_name = params.get("topic_name", "").strip()
-
-        if not topic_name:
-            return {"success": False, "message": "主题名不能为空"}
-
-        tree_result = self._get_topic_tree_3tier({})
-        tree = tree_result.get("topics", [])
-        topic_level = 0
-        for l1 in tree:
-            if l1["name"] == topic_name:
-                topic_level = 1
-                break
-            for l2 in l1.get("children", []):
-                if l2["name"] == topic_name:
-                    topic_level = 2
-                    break
-                for l3 in l2.get("children", []):
-                    if l3["name"] == topic_name:
-                        topic_level = 3
-                        break
-        if topic_level > 0:
-            can, reason = TopicManager.can_delete_topic(topic_name, topic_level, tree)
-            if not can:
-                return {"success": False, "message": reason}
-
-        return self._delete_topic(params)
-
     def register_routes_3tier(self: _TopicsHost, router):
         """注册三层主题相关路由"""
         router.register("get_graph_data", self._get_graph_data)
-        router.register("delete_topic_safe", self._delete_topic_safe)

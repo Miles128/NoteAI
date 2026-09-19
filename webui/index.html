@@ -156,7 +156,6 @@
                             <button type="button" data-category="objects"><span class="semantic-nav-icon">◇</span><span data-i18n="semantic.categories.objects"></span></button>
                             <button type="button" data-category="quality"><span class="semantic-nav-icon">◌</span><span data-i18n="semantic.categories.quality"></span></button>
                             <button type="button" data-category="links"><span class="semantic-nav-icon">↔</span><span data-i18n="semantic.categories.links"></span></button>
-                            <button type="button" data-category="brief"><span class="semantic-nav-icon">▤</span><span data-i18n="semantic.categories.brief"></span></button>
                         </nav>
                         <button type="button" class="semantic-compile-all" id="semantic-compile-all" data-i18n="semantic.compileAll"></button>
                         <div class="semantic-compile-progress" id="semantic-compile-progress" hidden></div>
@@ -1355,7 +1354,6 @@
                         <button type="button" class="multi-source-tab active" data-ms-tab="url" data-i18n="download.tabWeb"></button>
                         <button type="button" class="multi-source-tab" data-ms-tab="rss" data-i18n="download.tabRss"></button>
                         <button type="button" class="multi-source-tab" data-ms-tab="folder" data-i18n="download.tabFolder"></button>
-                        <button type="button" class="multi-source-tab" data-ms-tab="transcript" data-i18n="download.tabTranscript"></button>
                     </div>
                     <div class="multi-source-pane active" id="ms-pane-url">
                         <textarea id="modal-urls" class="form-input form-textarea modal-url-textarea" data-i18n-placeholder="download.urlsPlaceholder"></textarea>
@@ -1388,12 +1386,6 @@
                             <button type="button" class="btn btn-secondary btn-sm" id="ms-folder-scan-all-btn" data-i18n="download.folderScanAll"></button>
                         </div>
                         <div id="ms-folder-list" class="rss-sub-list"></div>
-                    </div>
-                    <div class="multi-source-pane" id="ms-pane-transcript" hidden>
-                        <input type="text" id="ms-transcript-title" class="form-input form-input-full" data-i18n-placeholder="download.transcriptTitle">
-                        <input type="text" id="ms-transcript-source" class="form-input form-input-full" data-i18n-placeholder="download.transcriptSource" style="margin-top:8px">
-                        <textarea id="ms-transcript-content" class="form-input form-textarea" data-i18n-placeholder="download.transcriptContent" style="margin-top:8px;min-height:120px"></textarea>
-                        <button type="button" class="btn btn-secondary" id="ms-transcript-import-btn" style="margin-top:8px" data-i18n="download.saveTranscript"></button>
                     </div>
                     <div class="url-hint-text"></div>
                     <div class="modal-progress-container" id="modal-progress-container" style="display: none;">
@@ -1429,6 +1421,21 @@
             </div>
             <div class="modal-body">
                 <p class="hint" data-i18n="weeklyBrief.desc"></p>
+                <div class="form-group form-row" style="display:flex;gap:8px;align-items:flex-end">
+                    <div class="form-field flex-1">
+                        <div class="form-label" data-i18n="weeklyBrief.topicLabel"></div>
+                        <select id="weekly-brief-topic" class="form-input"><option value="" data-i18n="weeklyBrief.allTopics"></option></select>
+                    </div>
+                    <div class="form-field" style="width:110px">
+                        <div class="form-label" data-i18n="weeklyBrief.daysLabel"></div>
+                        <select id="weekly-brief-days" class="form-input">
+                            <option value="7">7</option>
+                            <option value="14">14</option>
+                            <option value="30">30</option>
+                            <option value="90">90</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="weekly-brief-status" id="weekly-brief-status" hidden></div>
                 <div class="weekly-brief-content" id="weekly-brief-content" hidden></div>
             </div>

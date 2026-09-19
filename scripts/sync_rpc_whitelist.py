@@ -28,7 +28,6 @@ BARE_INVOKE_RE = re.compile(r"api\.invoke\(\s*'(\w+)'")
 # 已注册于 Python / Rust 白名单，但仅供后端内部或其他客户端使用、
 # 前端刻意不暴露的方法（新增此类方法时在此登记并注明原因）。
 KNOWN_BACKEND_ONLY_METHODS = {
-    "delete_topic_safe",  # 3 层主题树内部使用
     "purge_weak_links",  # 链接清洗，历史弱链接一次性治理，未暴露前端
     "backfill_semantic_bidirectional",  # 语义双向回填，历史数据一次性治理，未暴露前端
 }

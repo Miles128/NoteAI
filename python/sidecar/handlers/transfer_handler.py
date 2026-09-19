@@ -25,7 +25,6 @@ class TransferHandler(BaseHandler):
         router.register("retry_convert_file", self._retry_convert_file)
         router.register("dismiss_convert_failure", self._dismiss_convert_failure)
         router.register("import_rss_feed", self._import_rss_feed)
-        router.register("import_transcript", self._import_transcript)
         router.register("save_rss_subscription", self._save_rss_subscription)
         router.register("remove_rss_subscription", self._remove_rss_subscription)
         router.register("list_rss_subscriptions", self._list_rss_subscriptions)
@@ -403,19 +402,6 @@ class TransferHandler(BaseHandler):
             fn=lambda: import_rss_feed(url, max_items=max_items, fetch_articles=fetch_articles),
             complete_message=lambda result: f"RSS 导入完成: {result.get('imported', 0)} 条",
             complete_metadata=lambda result: {"imported": result.get("imported", 0)},
-        )
-
-    def _import_transcript(self, params):
-        from sidecar.multi_source import import_transcript
-
-        _, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-        return import_transcript(
-            params.get("title", ""),
-            params.get("content", ""),
-            source=params.get("source", ""),
-            speakers=params.get("speakers", ""),
         )
 
     # ── RSS Subscription Management ──

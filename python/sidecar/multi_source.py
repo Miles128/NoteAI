@@ -1,4 +1,4 @@
-"""Multi-source ingest: RSS feeds, transcripts → Notes Markdown；RSS 源推荐。"""
+"""Multi-source ingest: RSS feeds → Notes Markdown；RSS 源推荐。"""
 
 from __future__ import annotations
 
@@ -170,28 +170,6 @@ def import_rss_feed(feed_url: str, *, max_items: int = 10, fetch_articles: bool 
         "errors": errors,
         "message": f"RSS 导入 {len(saved)} 篇" + (f"，失败 {len(errors)}" if errors else ""),
     }
-
-
-def import_transcript(
-    title: str,
-    content: str,
-    *,
-    source: str = "",
-    speakers: str = "",
-) -> dict[str, Any]:
-    title = (title or "").strip() or "转录"
-    content = (content or "").strip()
-    if not content:
-        return {"success": False, "message": "转录内容为空"}
-    extra: dict[str, Any] = {}
-    if source:
-        extra["transcript_source"] = source
-    if speakers:
-        extra["speakers"] = speakers
-    body = content
-    if speakers:
-        body = f"**说话人**: {speakers}\n\n{body}"
-    return _write_note(title, body, source_type="transcript", extra_meta=extra)
 
 
 # ── RSS Subscription Persistence ──

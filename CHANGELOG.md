@@ -27,10 +27,12 @@
 
 ### 移除
 - 死 RPC 与死代码：`append_chat_to_survey`、`get_survey_status`、`get_topic_tree_3tier`、`rag_retrieval_debug`、`start_semantic_claims_compile`、`retry_semantic_failed_blocks`、`set_abstract_config`（含 `survey_append.py` 模块与 `SURVEY_CHAT_APPEND_PROMPT`）
+- 仓库垃圾清理：根目录 `tmp_rebuild_rag.log`、空目录 `Projects/`、`NoteAI.egg-info/`；`.gitignore` 补 `*.egg-info/` 与 `src-tauri/resources/`（打包暂存产物）
 
 ### 变更
 - 文档清理：合并 CLAUDE.md → AGENTS.md，合并 简介.md → README.md，删除过时的 docs/API.md、docs/USAGE.md、docs/README.md 及旧设计文档
 - 更新 CI 配置以支持更多检查
+- AGENTS.md 前端架构描述修正：TS 源码 + esbuild 打包（此前仍写 vanilla JS 无 bundler）；inspector 描述移除已删除的命题层
 
 ## [0.1.0] - 2024-XX-XX
 

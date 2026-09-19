@@ -15,9 +15,10 @@
 
 ### 1.2 技术架构
 
-- **前端**：Tauri v2 + 原生 HTML/CSS/JS。
+- **前端**：Tauri v2 + TypeScript（`webui/js/*.ts`，esbuild 打包）。构建入口 `scripts/build-webui.mjs`（`npm run build:webui`），产物为 `webui/dist/main.js`（ESM + 分包）与经典 IIFE bundle（`storage.bundle.js`、`error-handler.bundle.js`，供 index.html 在模块前同步加载）；`webui/dist/` 已 gitignore，Tauri `beforeDevCommand`/`beforeBuildCommand` 自动构建。
 - **后端**：Python sidecar，通过 stdin/stdout JSON-RPC 与前端通信。
-- **前端调用后端**：统一使用 `window.api` 对象（定义在 `webui/js/api.js`），禁止使用其他兼容层。
+- **前端调用后端**：统一使用 `window.api` 对象（定义在 `webui/js/api.ts`），禁止使用其他兼容层。
+- **模块契约**：模块仍以 IIFE 挂载 `window.*`（如 `window.SettingsComponents`、`window.I18nModule`），无虚拟 DOM；`webui/js/main.mjs` 是打包入口，动态 import 控制加载顺序。TS 类型检查：`webui/js/tsconfig.json` + `tsc --noEmit`。
 - **界面风格**：整体对标 Obsidian 应用。
 
 ### 1.3 Prompt 管理
@@ -117,8 +118,8 @@ Tauri v2 shell (src-tauri/)
 
 ## 6. 项目记忆
 
-- **`webui/js/`**：vanilla JS IIFE 模块挂载在 `window.*`，无 bundler，无虚拟 DOM。状态在 `window.AppState` 与 `window.state`。`main.mjs` 是唯一的 ES module。
-- **右侧检查器**（`webui/js/inspector.js`）：AI/CLI/属性/反向链接/语义 多 Tab 面板；笔记的语义参数（实体/概念/命题与证据/相关）在「语义」Tab 中展示，点击实体/概念经 `SemanticWorkbenchModule.openObject` 打开工作台详情。
+- **`webui/js/`**：TypeScript 源码，esbuild 打包（`scripts/build-webui.mjs` → `webui/dist/`）；模块以 IIFE 挂载 `window.*`，无虚拟 DOM。状态在 `window.AppState` 与 `window.state`。`main.mjs` 是打包入口，经动态 import 控制模块加载顺序；`tsc --noEmit`（`webui/js/tsconfig.json`）做类型检查。
+- **右侧检查器**（`webui/js/inspector.ts`）：AI/CLI/属性/反向链接/语义 多 Tab 面板；笔记的语义参数（实体/概念/相关）在「语义」Tab 中展示（命题层已随 C2b 移除），点击实体/概念经 `SemanticWorkbenchModule.openObject` 打开工作台详情。
 - **Tauri sidecar**：配置在 `src-tauri/tauri.conf.json`。Python 二进制通过 `python/main.py` → `sidecar.server.main()` 解析。
 - **测试覆盖**：~69 个单元测试模块 + 3 个集成测试模块（含 `tests/integration/test_sidecar_contracts.py`）；发布前运行 `uv run pytest`。
 - **Prompts**：`prompts/yaml/*.yaml` 是单一事实来源；`prompts/__init__.py` 经 `prompts/loader.py` 在导入时解析常量。

@@ -56,6 +56,7 @@ def load_questions() -> list[dict]:
 
 def make_handler(events: list):
     from sidecar.handlers.rag_handler import RagHandler
+
     from config import config
 
     return RagHandler(
@@ -103,7 +104,11 @@ def run_question(question: str, dry_run: bool) -> dict:
         prompt = ""
 
     done = next(
-        (e["result"] for e in reversed(events) if isinstance(e, dict) and e.get("result", {}).get("type") == "rag_chat_done"),
+        (
+            e["result"]
+            for e in reversed(events)
+            if isinstance(e, dict) and e.get("result", {}).get("type") == "rag_chat_done"
+        ),
         None,
     )
     meta = next(
@@ -157,8 +162,7 @@ def render_markdown(questions: list[dict], records: list[dict], mode: str, elaps
         "",
         "## 打分表",
         "",
-        "| # | 问题 | 期望题型 | 识别 | 检索 | 引用数 | 质量 | "
-        + " | ".join(SCORE_COLS) + " |",
+        "| # | 问题 | 期望题型 | 识别 | 检索 | 引用数 | 质量 | " + " | ".join(SCORE_COLS) + " |",
         "|---|------|----------|------|------|--------|------" + "------|" * len(SCORE_COLS),
     ]
     for i, r in enumerate(records, 1):
@@ -183,7 +187,9 @@ def render_markdown(questions: list[dict], records: list[dict], mode: str, elaps
         if r["citations"]:
             lines.append("- 引用：")
             for c in r["citations"]:
-                lines.append(f"  - [{c['type']}] {c['file'] or c['label']}（{c['topic'] or '无主题'}，score={c['score']}）")
+                lines.append(
+                    f"  - [{c['type']}] {c['file'] or c['label']}（{c['topic'] or '无主题'}，score={c['score']}）"
+                )
         else:
             lines.append("- 引用：无")
         answer = r["answer"].strip()

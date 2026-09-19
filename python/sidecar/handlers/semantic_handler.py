@@ -8,7 +8,13 @@ from pathlib import Path
 
 from sidecar import job_status
 from sidecar.handlers.base import BaseHandler
-from sidecar.semantic.briefs import _compose_topic_brief, _compose_weekly_brief
+from sidecar.semantic.briefs import (
+    _compose_topic_brief,
+    _compose_weekly_brief,
+    build_change_digest,
+    build_topic_change_records,
+    empty_weekly_brief,
+)
 from sidecar.semantic.detail import list_semantic_objects
 from sidecar.semantic.store import SemanticStore
 from sidecar.semantic.workbench import (
@@ -179,69 +185,24 @@ class SemanticHandler(BaseHandler):
             days = max(1, min(int(params.get("days", 7) or 7), 90))
         except (TypeError, ValueError):
             days = 7
+        no_changes = {
+            "success": True,
+            "days": days,
+            "brief": empty_weekly_brief(days),
+            "fallback": False,
+        }
         if not store.path.exists():
-            return {
-                "success": True,
-                "days": days,
-                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
-                "fallback": False,
-            }
+            return no_changes
         try:
             counts = store.change_counts(days=days)
             items, total = store.recent_changes(days=days, limit=60)
         except sqlite3.OperationalError:
-            return {
-                "success": True,
-                "days": days,
-                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
-                "fallback": False,
-            }
+            return no_changes
 
         if total < 1:
-            return {
-                "success": True,
-                "days": days,
-                "brief": f"## 知识库周报\n\n过去 {days} 天没有语义变化。",
-                "fallback": False,
-            }
+            return no_changes
 
-        by_kind: dict[str, int] = {}
-        by_object: dict[str, int] = {}
-        for c in counts:
-            if c["object_kind"] == "claim":
-                continue  # 命题层已下线；跳过历史 claim 变更行
-            by_kind[c["change_kind"]] = by_kind.get(c["change_kind"], 0) + c["count"]
-            by_object[c["object_kind"]] = by_object.get(c["object_kind"], 0) + c["count"]
-        # 面向普通用户的口语化表述：不暴露内部英文键名。
-        kind_label = {
-            "added": "新增了知识",
-            "updated": "补充/修正了旧内容",
-            "invalidated": "存疑或暂时无法确认",
-            "removed": "不再收录",
-        }
-        object_label = {
-            "entity": "笔记中提到的人/事物",
-            "concept": "概念",
-            "document": "笔记",
-        }
-        counts_summary = (
-            "\n".join(
-                f"- {kind_label.get(kind, kind)}：{n} 条" for kind, n in sorted(by_kind.items(), key=lambda kv: -kv[1])
-            )
-            + "\n"
-            + "\n".join(
-                f"- {object_label.get(kind, kind)}：{n} 条"
-                for kind, n in sorted(by_object.items(), key=lambda kv: -kv[1])
-            )
-        )
-
-        records = "\n".join(
-            f"- [{c['created_at'][:10]}] {kind_label.get(c['change_kind'], c['change_kind'])}"
-            f"（{object_label.get(c['object_kind'], c['object_kind'])}）: {c['label'] or c['object_id']}"
-            + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
-            for c in items
-            if c["object_kind"] != "claim"
-        )
+        counts_summary, records = build_change_digest(counts, items)
         brief, fallback = self._compose_weekly_brief(days, counts_summary, records, WEEKLY_BRIEF_PROMPT)
         return {"success": True, "days": days, "brief": brief, "fallback": fallback}
 
@@ -265,20 +226,15 @@ class SemanticHandler(BaseHandler):
             return {"success": True, "days": days, "topics": topics[:50], "topic": "", "brief": "", "fallback": False}
         changes = store.topic_changes(topic=topic, days=days)
         if not changes:
-            brief = f"## 主题简报：{topic}\n\n过去 {days} 天该主题没有语义变化。"
             return {
                 "success": True,
                 "days": days,
                 "topics": topics[:50],
                 "topic": topic,
-                "brief": brief,
+                "brief": f"## 主题简报：{topic}\n\n过去 {days} 天该主题没有语义变化。",
                 "fallback": False,
             }
-        records = "\n".join(
-            f"- [{c['created_at'][:10]}] {c['change_kind']} · {c['object_kind']}: {c['label'] or c['object_id']}"
-            + (f"（来源：{Path(c['source_path']).name}）" if c.get("source_path") else "")
-            for c in changes
-        )
+        records = build_topic_change_records(changes)
         brief, fallback = self._compose_topic_brief(topic, days, records)
         return {
             "success": True,

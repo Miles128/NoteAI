@@ -179,6 +179,15 @@ async function openWorkspace(): Promise<any> {
     return { success: false, message: '未选择文件夹' };
 }
 
+async function getThemePreference(): Promise<string> {
+    const cfg = await pyCall('get_ui_config');
+    return (cfg && cfg.theme_preference) || 'system';
+}
+
+async function saveThemePreference(theme: string): Promise<any> {
+    return pyCall('save_ui_config', { theme_preference: theme }, { noRetry: true });
+}
+
 async function getWorkspaceStatus(): Promise<any> {
     var result = await pyCall('get_workspace_status');
     if (result && result.is_set && checkIsTauri()) {
@@ -189,14 +198,6 @@ async function getWorkspaceStatus(): Promise<any> {
     return result;
 }
 
-async function createSampleWorkspace(): Promise<any> {
-    var pyResult = await pyCall('create_sample_workspace', {}, { noRetry: true });
-    if (pyResult && pyResult.success && checkIsTauri()) {
-        var invoke = getTauriInvoke();
-        if (invoke) await invoke('set_workspace_path', { path: pyResult.workspace_path });
-    }
-    return pyResult || { success: false, message: '创建示例库失败' };
-}
 
 async function addFiles(): Promise<string[]> {
     if (!checkIsTauri()) {
@@ -393,8 +394,6 @@ var API_DEFS: ApiDef[] = [
     { name: 'getComponentsStatus', method: 'get_components_status' },
     { name: 'installComponent', method: 'install_component', params: function(p) { return p; }, write: true },
     { name: 'uninstallComponent', method: 'uninstall_component', params: function(p) { return p; }, write: true },
-    { name: 'getThemePreference', method: 'get_theme_preference' },
-    { name: 'saveThemePreference', method: 'save_theme_preference', params: function(theme) { return { theme: theme }; }, write: true },
 
     // ---- 下载 / 转换 / 整合 ----
     { name: 'startWebDownload', method: 'start_web_download', params: function(urls, aiAssist, includeImages) { return { urls: urls, ai_assist: aiAssist, include_images: includeImages }; }, write: true },
@@ -517,7 +516,8 @@ Object.assign(builtApi, generatedApi, {
 
     // 特殊 API（涉及 Tauri 原生对话框 / 多步逻辑 / 分页预览）
     openWorkspace: openWorkspace,
-    createSampleWorkspace: createSampleWorkspace,
+    getThemePreference: getThemePreference,
+    saveThemePreference: saveThemePreference,
     getWorkspaceStatus: getWorkspaceStatus,
     addFiles: addFiles,
     importFilesToWorkspace: importFilesToWorkspace,

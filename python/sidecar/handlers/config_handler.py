@@ -20,8 +20,6 @@ class ConfigHandler(BaseHandler):
         router.register("test_api_config", self._test_api_config)
         router.register("get_ui_config", self._get_ui_config)
         router.register("save_ui_config", self._save_ui_config)
-        router.register("get_theme_preference", self._get_theme_preference)
-        router.register("save_theme_preference", self._save_theme_preference)
         router.register("get_project_rules", self._get_project_rules)
         router.register("save_project_rules", self._save_project_rules)
         router.register("get_workspace_rules", self._get_workspace_rules)
@@ -126,6 +124,7 @@ class ConfigHandler(BaseHandler):
             "rag_top_k_tags": self.config.rag_top_k_tags,
             "rag_rerank_model": RERANK_MODEL_NAME,
             "locale": self.config.locale,
+            "theme_preference": self.config.theme_preference,
         }
 
     @staticmethod
@@ -224,6 +223,10 @@ class ConfigHandler(BaseHandler):
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"
+            if "theme_preference" in params:
+                theme = str(params["theme_preference"] or "").strip()
+                if theme in {"system", "light", "dark"}:
+                    self.config.theme_preference = theme
             save_ok, save_msg = self.config.save()
         if not save_ok:
             return {"success": False, "message": save_msg}
@@ -244,17 +247,6 @@ class ConfigHandler(BaseHandler):
             except Exception:
                 pass
         return {"success": True, "message": "UI 配置已保存"}
-
-    def _get_theme_preference(self, params):
-        return self.config.theme_preference
-
-    def _save_theme_preference(self, params):
-        with self.config._lock:
-            self.config.theme_preference = params.get("theme", "system")
-            save_ok, save_msg = self.config.save()
-        if not save_ok:
-            return {"success": False, "message": save_msg}
-        return {"success": True}
 
     def _get_project_rules(self, params):
         workspace = self.config.workspace_path

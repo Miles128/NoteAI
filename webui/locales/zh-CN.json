@@ -1235,12 +1235,6 @@
     "opensource": "开源项目 · GitHub: Miles128/NoteAI"
   },
   "workspace": {
-    "sample": {
-      "button": "试用示例库",
-      "creating": "正在创建示例库…",
-      "ready": "示例库已就绪，可在设置中配置 LLM 后编译语义知识",
-      "failed": "创建示例库失败"
-    }
   },
   "noteList": {
     "title": "笔记列表",

@@ -662,11 +662,6 @@ function initRssTab() {
     discoverBtn.addEventListener('click', discoverRssSources);
     (discoverBtn as any)._rssBound = true;
   }
-  var transcriptBtn = document.getElementById('ms-transcript-import-btn');
-  if (transcriptBtn && !(transcriptBtn as any)._trBound) {
-    transcriptBtn.addEventListener('click', startTranscriptImport);
-    (transcriptBtn as any)._trBound = true;
-  }
   loadRssSubscriptions();
 }
 
@@ -772,24 +767,6 @@ async function fetchAllRssSubscriptions() {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssFetchAll'); }
   }
-}
-
-async function startTranscriptImport() {
-  var titleEl = document.getElementById('ms-transcript-title') as HTMLInputElement | null;
-  var sourceEl = document.getElementById('ms-transcript-source') as HTMLInputElement | null;
-  var contentEl = document.getElementById('ms-transcript-content') as HTMLTextAreaElement | null;
-  var title = titleEl ? titleEl.value.trim() : '';
-  var content = contentEl ? contentEl.value.trim() : '';
-  if (!content) { alert('请输入转录内容'); return; }
-  try {
-    var result = await window.api.importTranscript(title, content, sourceEl ? sourceEl.value.trim() : '');
-    if (result && result.success) {
-      alert(result.message || '转录保存成功');
-      if (titleEl) titleEl.value = '';
-      if (sourceEl) sourceEl.value = '';
-      if (contentEl) contentEl.value = '';
-    } else { alert('保存失败: ' + (result && result.message || '未知错误')); }
-  } catch(e) { alert('保存失败: ' + (e as Error).message); }
 }
 
 function getRssStorageKey() { return _RSS_LEGACY_KEY; }

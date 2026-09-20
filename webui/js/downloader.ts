@@ -281,7 +281,6 @@ function openDownloadModal() {
     
     initModalDrag();
     initMsTabs();
-    initRssTab();
     initFolderTab();
     
     setTimeout(() => {
@@ -501,7 +500,6 @@ window.DownloaderModule = {
     closeDownloadModal,
     autoSaveModalConfig,
     startDownloadFromModal,
-    loadRssSubscriptions,
     loadWatchedFolders,
     getDownloadState: function() { return _downloadState; }
 };
@@ -523,7 +521,6 @@ function initMsTabs() {
             document.querySelectorAll('.multi-source-pane').forEach(function(pane) {
                 (pane as HTMLElement).hidden = pane.id !== 'ms-pane-' + name;
             });
-            if (name === 'rss') loadRssSubscriptions();
             if (name === 'folder') loadWatchedFolders();
         });
         (tab as any)._msTabBound = true;
@@ -551,14 +548,14 @@ async function addWatchedFolder() {
     var pathEl = document.getElementById('ms-folder-path') as HTMLInputElement | null;
     var recursiveEl = document.getElementById('ms-folder-recursive') as HTMLInputElement | null;
     var path = pathEl ? pathEl.value.trim() : '';
-    if (!path) { alert(_rssT('download.folderPlaceholder')); return; }
+    if (!path) { alert(_t('download.folderPlaceholder')); return; }
     try {
         var result = await window.api.addWatchedFolder(path, recursiveEl ? recursiveEl.checked : true);
         if (result && result.success) {
-            alert(result.message || _rssT('download.folderAddDone'));
+            alert(result.message || _t('download.folderAddDone'));
             if (pathEl) pathEl.value = '';
         } else {
-            alert('Folder: ' + (result && result.message || _rssT('download.folderAddFailed')));
+            alert('Folder: ' + (result && result.message || _t('download.folderAddFailed')));
         }
         await loadWatchedFolders();
     } catch (e) { alert('Folder: ' + (e as Error).message); }
@@ -568,7 +565,7 @@ async function removeWatchedFolder(path: any) {
     if (!path || !window.api || !window.api.removeWatchedFolder) return;
     try {
         var result = await window.api.removeWatchedFolder(path);
-        if (result && !result.success) alert('Folder: ' + (result.message || _rssT('common.unknownError')));
+        if (result && !result.success) alert('Folder: ' + (result.message || _t('common.unknownError')));
         await loadWatchedFolders();
     } catch (e) { alert('Folder: ' + (e as Error).message); }
 }
@@ -576,21 +573,21 @@ async function removeWatchedFolder(path: any) {
 async function scanAllWatchedFolders() {
     if (!window.api || !window.api.scanWatchedFolder) return;
     var btn = document.getElementById('ms-folder-scan-all-btn') as HTMLButtonElement | null;
-    if (btn) { btn.disabled = true; btn.textContent = _rssT('download.folderScanning'); }
+    if (btn) { btn.disabled = true; btn.textContent = _t('download.folderScanning'); }
     try {
         var result = await window.api.scanWatchedFolder('', true);
         if (result && result.success) {
             if (result.scanned > 0) {
-                window.updateStatus(_rssT('download.folderScanDone', { count: result.scanned }));
+                window.updateStatus(_t('download.folderScanDone', { count: result.scanned }));
             } else {
-                alert(_rssT('download.folderScanNone'));
+                alert(_t('download.folderScanNone'));
             }
         } else {
-            alert('Folder: ' + (result && result.message || _rssT('common.unknownError')));
+            alert('Folder: ' + (result && result.message || _t('common.unknownError')));
         }
     } catch (e) { alert('Folder: ' + (e as Error).message); }
     finally {
-        if (btn) { btn.disabled = false; btn.textContent = _rssT('download.folderScanAll'); }
+        if (btn) { btn.disabled = false; btn.textContent = _t('download.folderScanAll'); }
     }
 }
 
@@ -612,7 +609,7 @@ function updateFolderList(folders: any) {
     var container = document.getElementById('ms-folder-list');
     if (!container) return;
     if (!folders || folders.length === 0) {
-        container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.folderNoFolders')) + '</div>';
+        container.innerHTML = '<div class="dl-sub-empty">' + _escapeHtml(_t('download.folderNoFolders')) + '</div>';
         return;
     }
     var html = '';
@@ -621,15 +618,15 @@ function updateFolderList(folders: any) {
         if (!path) return;
         var label = path;
         var short = label.length > 48 ? label.substring(0, 48) + '...' : label;
-        html += '<div class="rss-sub-item" data-path="' + encodeURIComponent(path) + '">';
-        html += '<span class="rss-sub-url" title="' + _escapeHtml(label) + '">' + _escapeHtml(short) + '</span>';
-        html += '<button type="button" class="rss-sub-remove" title="' + _escapeHtml(_rssT('download.folderRemove')) + '">✕</button>';
+        html += '<div class="dl-sub-item" data-path="' + encodeURIComponent(path) + '">';
+        html += '<span class="dl-sub-url" title="' + _escapeHtml(label) + '">' + _escapeHtml(short) + '</span>';
+        html += '<button type="button" class="dl-sub-remove" title="' + _escapeHtml(_t('download.folderRemove')) + '">✕</button>';
         html += '</div>';
     });
     container.innerHTML = html;
-    container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
+    container.querySelectorAll('.dl-sub-remove').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            var row = btn.closest('.rss-sub-item');
+            var row = btn.closest('.dl-sub-item');
             if (row && (row as HTMLElement).dataset.path) removeWatchedFolder(decodeURIComponent((row as HTMLElement).dataset.path!));
         });
     });
@@ -637,213 +634,11 @@ function updateFolderList(folders: any) {
 
 (window as any).removeWatchedFolder = removeWatchedFolder;
 
-// ── RSS Tab ──
-var _RSS_LEGACY_KEY = 'noteai_rss_subscriptions';
-
-function _rssT(key: any, params?: any) {
+function _t(key: any, params?: any) {
     return window.t ? window.t(key, params) : key;
 }
 
 const _escapeHtml = window.escapeHtml;
-
-function initRssTab() {
-  var rssImportBtn = document.getElementById('ms-rss-import-btn');
-  if (rssImportBtn && !(rssImportBtn as any)._rssBound) {
-    rssImportBtn.addEventListener('click', startRssImport);
-    (rssImportBtn as any)._rssBound = true;
-  }
-  var fetchAllBtn = document.getElementById('ms-rss-fetch-all-btn');
-  if (fetchAllBtn && !(fetchAllBtn as any)._rssBound) {
-    fetchAllBtn.addEventListener('click', fetchAllRssSubscriptions);
-    (fetchAllBtn as any)._rssBound = true;
-  }
-  var discoverBtn = document.getElementById('ms-rss-discover-btn');
-  if (discoverBtn && !(discoverBtn as any)._rssBound) {
-    discoverBtn.addEventListener('click', discoverRssSources);
-    (discoverBtn as any)._rssBound = true;
-  }
-  loadRssSubscriptions();
-}
-
-async function discoverRssSources() {
-  if (!window.api || !window.api.discoverRssSources) return;
-  var btn = document.getElementById('ms-rss-discover-btn') as HTMLButtonElement | null;
-  var container = document.getElementById('ms-rss-recommend');
-  if (!container) return;
-  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssDiscovering'); }
-  try {
-    var result = await window.api.discoverRssSources();
-    if (!result || !result.success) {
-      container.hidden = false;
-      container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml((result && result.message) || _rssT('download.rssDiscoverFail')) + '</div>';
-      return;
-    }
-    var recs = result.recommendations || [];
-    if (!recs.length) {
-      container.hidden = false;
-      container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.rssDiscoverEmpty')) + '</div>';
-      return;
-    }
-    container.hidden = false;
-    container.innerHTML = '<div class="rss-sub-header"><span class="rss-sub-title">' + _escapeHtml(_rssT('download.rssRecommendTitle')) + '</span><span class="rss-sub-title">' + _escapeHtml(result.message || '') + '</span></div>' +
-      '<div class="rss-rec-list">' + recs.map(function(rec: any) {
-        var topicTag = (rec.topics || []).length
-          ? '<span class="rss-rec-tag">' + _escapeHtml((rec.topics || []).join(' · ')) + '</span>' : '';
-        var sourceTag = '<span class="rss-rec-source rss-rec-source-' + _escapeHtml(rec.source || '') + '">' + _escapeHtml(_rssT(rec.source === 'search' ? 'download.rssSourceSearch' : 'download.rssSourceBuiltin')) + '</span>';
-        var action = rec.subscribed
-          ? '<span class="rss-rec-subscribed">' + _escapeHtml(_rssT('download.rssSubscribed')) + '</span>'
-          : '<button type="button" class="btn btn-secondary btn-sm" data-rss-subscribe="' + _escapeHtml(rec.url) + '">' + _escapeHtml(_rssT('download.rssSubscribe')) + '</button>';
-        return '<div class="rss-sub-item rss-rec-item">' +
-          '<div><span class="rss-rec-name">' + _escapeHtml(rec.name || rec.url) + '</span>' + sourceTag + topicTag +
-          '<div class="rss-rec-url" title="' + _escapeHtml(rec.url) + '">' + _escapeHtml(rec.url) + '</div></div>' + action + '</div>';
-      }).join('') + '</div>';
-    container.querySelectorAll('[data-rss-subscribe]').forEach(function(subBtn) {
-      subBtn.addEventListener('click', async function() {
-        var url = decodeURIComponent((subBtn as HTMLElement).dataset.rssSubscribe!);
-        try {
-          var saved = await window.api.saveRssSubscription(url, '');
-          if (saved && saved.success) {
-            subBtn.outerHTML = '<span class="rss-rec-subscribed">' + _escapeHtml(_rssT('download.rssSubscribed')) + '</span>';
-            await loadRssSubscriptions();
-          } else {
-            alert('RSS: ' + ((saved && saved.message) || _rssT('common.unknownError')));
-          }
-        } catch (e) { alert('RSS: ' + (e as Error).message); }
-      });
-    });
-  } catch (e) {
-    container.hidden = false;
-    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml('RSS: ' + (e as Error).message) + '</div>';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssDiscover'); }
-  }
-}
-
-async function startRssImport() {
-  var urlEl = document.getElementById('ms-rss-url') as HTMLInputElement | null;
-  var maxEl = document.getElementById('ms-rss-max') as HTMLInputElement | null;
-  var fetchEl = document.getElementById('ms-rss-fetch') as HTMLInputElement | null;
-  var url = urlEl ? urlEl.value.trim() : '';
-  if (!url) { alert(_rssT('download.rssPlaceholder')); return; }
-  var maxItems = maxEl ? parseInt(maxEl.value, 10) || 10 : 10;
-  var fetchArticles = fetchEl ? fetchEl.checked : true;
-  var btn = document.getElementById('ms-rss-import-btn') as HTMLButtonElement | null;
-  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssImporting'); }
-  try {
-    var result = await window.api.importRssFeed(url, maxItems, fetchArticles);
-    if (result && result.success) {
-      alert(result.message || _rssT('download.importRss'));
-      if (urlEl) urlEl.value = '';
-      await saveRssSubscription(url);
-      if (window.TreeModule && window.TreeModule.loadFileTree) window.TreeModule.loadFileTree(true);
-    } else {
-      alert('RSS: ' + (result && result.message || _rssT('download.failed', { message: '' })));
-    }
-  } catch(e) { alert('RSS: ' + (e as Error).message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = _rssT('download.importRss'); } }
-}
-
-async function fetchAllRssSubscriptions() {
-  if (!window.api || !window.api.fetchAllRss) return;
-  var btn = document.getElementById('ms-rss-fetch-all-btn') as HTMLButtonElement | null;
-  if (btn) { btn.disabled = true; btn.textContent = _rssT('download.rssUpdating'); }
-  try {
-    var result = await window.api.fetchAllRss();
-    if (!result || !result.success) {
-      alert('RSS: ' + (result && result.message || _rssT('common.unknownError')));
-      return;
-    }
-    var imported = 0;
-    (result.results || []).forEach(function(r: any) { imported += r.imported || 0; });
-    alert(imported > 0
-      ? _rssT('download.rssFetchAllDone', { count: imported })
-      : _rssT('download.rssFetchAllNone'));
-    if (imported > 0 && window.TreeModule && window.TreeModule.loadFileTree) {
-      window.TreeModule.loadFileTree(true);
-    }
-    await loadRssSubscriptions();
-  } catch (e) {
-    alert('RSS: ' + (e as Error).message);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = _rssT('download.rssFetchAll'); }
-  }
-}
-
-function getRssStorageKey() { return _RSS_LEGACY_KEY; }
-
-async function _migrateLegacyRssSubscriptions() {
-  if (!window.Storage || !window.api || !window.api.saveRssSubscription) return;
-  var legacy: any = window.Storage.getItem(_RSS_LEGACY_KEY, [], { silent: true });
-  if (!legacy || !legacy.length) return;
-  for (var i = 0; i < legacy.length; i++) {
-    var url = legacy[i];
-    if (url) {
-      try { await window.api.saveRssSubscription(url, ''); } catch (_e) {}
-    }
-  }
-  window.Storage.setItem(_RSS_LEGACY_KEY, [], { silent: true });
-}
-
-async function loadRssSubscriptions() {
-  if (!window.api || !window.api.listRssSubscriptions) {
-    updateRssSubList([]);
-    return;
-  }
-  await _migrateLegacyRssSubscriptions();
-  try {
-    var result = await window.api.listRssSubscriptions();
-    var subs = (result && result.success && result.subscriptions) ? result.subscriptions : [];
-    updateRssSubList(subs);
-  } catch (_e) {
-    updateRssSubList([]);
-  }
-}
-
-async function saveRssSubscription(url: any) {
-  if (!url || !window.api || !window.api.saveRssSubscription) return;
-  try {
-    await window.api.saveRssSubscription(url, '');
-    await loadRssSubscriptions();
-  } catch (_e) {}
-}
-
-async function removeRssSubscription(url: any) {
-  if (!url || !window.api || !window.api.removeRssSubscription) return;
-  try {
-    await window.api.removeRssSubscription(url);
-    await loadRssSubscriptions();
-  } catch (e) {
-    alert('RSS: ' + (e as Error).message);
-  }
-}
-
-function updateRssSubList(subs: any) {
-  var container = document.getElementById('ms-rss-sub-list');
-  if (!container) return;
-  if (!subs || subs.length === 0) {
-    container.innerHTML = '<div class="rss-sub-empty">' + _escapeHtml(_rssT('download.rssNoSubscriptions')) + '</div>';
-    return;
-  }
-  var html = '';
-  subs.forEach(function(sub: any) {
-    var url = (sub && sub.url) ? sub.url : String(sub || '');
-    if (!url) return;
-    var short = url.length > 50 ? url.substring(0, 50) + '...' : url;
-    html += '<div class="rss-sub-item" data-url="' + encodeURIComponent(url) + '">';
-    html += '<span class="rss-sub-url" title="' + _escapeHtml(url) + '">' + _escapeHtml(short) + '</span>';
-    html += '<button type="button" class="rss-sub-remove" title="' + _escapeHtml(_rssT('download.rssRemove')) + '">✕</button>';
-    html += '</div>';
-  });
-  container.innerHTML = html;
-  container.querySelectorAll('.rss-sub-remove').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var row = btn.closest('.rss-sub-item');
-      if (row && (row as HTMLElement).dataset.url) removeRssSubscription(decodeURIComponent((row as HTMLElement).dataset.url!));
-    });
-  });
-}
-
-(window as any).removeRssSubscription = removeRssSubscription;
 
 })();
 

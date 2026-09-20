@@ -76,12 +76,6 @@ declare global {
         saveFileContent(path: string, content: string): Promise<any>;
         readFileRaw(path: string): Promise<any>;
         importFilesDirect(files: string[]): Promise<any>;
-        importRssFeed(url: string, maxItems: number, fetchArticles: boolean): Promise<any>;
-        listRssSubscriptions(): Promise<any>;
-        saveRssSubscription(url: string, name?: string): Promise<any>;
-        removeRssSubscription(url: string): Promise<any>;
-        fetchAllRss(): Promise<any>;
-        discoverRssSources(): Promise<any>;
         importTranscript(title: string, content: string, source: string): Promise<any>;
         listWatchedFolders(): Promise<any>;
         addWatchedFolder(path: string, recursive?: boolean): Promise<any>;
@@ -474,7 +468,6 @@ declare global {
             closeDownloadModal(): void;
             autoSaveModalConfig(): void;
             startDownloadFromModal(): Promise<any>;
-            loadRssSubscriptions(): Promise<any>;
             loadWatchedFolders(): Promise<any>;
             getDownloadState(): any;
         } | undefined;

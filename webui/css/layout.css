@@ -1277,19 +1277,19 @@ body {
     display: none;
 }
 
-.rss-sub-list {
+.dl-sub-list {
     max-height: 150px;
     overflow-y: auto;
     margin-top: 6px;
 }
 
-.rss-sub-empty {
+.dl-sub-empty {
     color: var(--text-muted);
     font-size: 13px;
     padding: 8px 0;
 }
 
-.rss-sub-item {
+.dl-sub-item {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1299,7 +1299,7 @@ body {
     font-size: 13px;
 }
 
-.rss-sub-url {
+.dl-sub-url {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -1308,7 +1308,7 @@ body {
     color: var(--text);
 }
 
-.rss-sub-remove {
+.dl-sub-remove {
     flex-shrink: 0;
     padding: 2px 6px;
     background: none;
@@ -1319,7 +1319,7 @@ body {
     line-height: 1;
 }
 
-.rss-sub-remove:hover {
+.dl-sub-remove:hover {
     color: var(--text);
 }
 

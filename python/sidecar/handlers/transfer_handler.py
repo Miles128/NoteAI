@@ -24,12 +24,6 @@ class TransferHandler(BaseHandler):
         router.register("start_note_integration", self._start_note_integration)
         router.register("retry_convert_file", self._retry_convert_file)
         router.register("dismiss_convert_failure", self._dismiss_convert_failure)
-        router.register("import_rss_feed", self._import_rss_feed)
-        router.register("save_rss_subscription", self._save_rss_subscription)
-        router.register("remove_rss_subscription", self._remove_rss_subscription)
-        router.register("list_rss_subscriptions", self._list_rss_subscriptions)
-        router.register("fetch_all_rss", self._fetch_all_rss)
-        router.register("discover_rss_sources", self._discover_rss_sources)
         router.register("list_watched_folders", self._list_watched_folders)
         router.register("add_watched_folder", self._add_watched_folder)
         router.register("remove_watched_folder", self._remove_watched_folder)
@@ -383,87 +377,6 @@ class TransferHandler(BaseHandler):
                 ni.documents = []
             logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
             self._send_response({"id": "event", "result": {"type": "note_integration_error", "error": str(e)}})
-
-    def _import_rss_feed(self, params):
-        from sidecar.multi_source import import_rss_feed
-
-        url = params.get("feed_url", "") or params.get("url", "")
-        max_items = int(params.get("max_items", 10) or 10)
-        fetch_articles = bool(params.get("fetch_articles", True))
-        _, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-        return self._run_sync_job(
-            "rss_import",
-            kind="ingest",
-            label="RSS import",
-            message="正在手动导入 RSS",
-            metadata={"experimental": True, "url": url},
-            fn=lambda: import_rss_feed(url, max_items=max_items, fetch_articles=fetch_articles),
-            complete_message=lambda result: f"RSS 导入完成: {result.get('imported', 0)} 条",
-            complete_metadata=lambda result: {"imported": result.get("imported", 0)},
-        )
-
-    # ── RSS Subscription Management ──
-
-    def _save_rss_subscription(self, params):
-        url = params.get("url", "")
-        name = params.get("name", "")
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "缺少工作区"}
-        from sidecar.multi_source import save_subscription
-
-        return save_subscription(workspace, url, name)
-
-    def _remove_rss_subscription(self, params):
-        url = params.get("url", "")
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "message": "缺少工作区"}
-        from sidecar.multi_source import remove_subscription
-
-        return remove_subscription(workspace, url)
-
-    def _list_rss_subscriptions(self, _params):
-        workspace = self.config.workspace_path
-        if not workspace:
-            return {"success": False, "subscriptions": []}
-        from sidecar.multi_source import load_subscriptions
-
-        return {"success": True, "subscriptions": load_subscriptions(workspace)}
-
-    def _discover_rss_sources(self, _params):
-        """推荐 RSS 源：内置目录由 LLM 按知识库主题匹配。"""
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-        from sidecar.multi_source import discover_rss_sources
-
-        return discover_rss_sources(workspace)
-
-    def _fetch_all_rss(self, _params):
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-        from sidecar.multi_source import fetch_all_subscriptions
-
-        def imported_count(result):
-            total = 0
-            for item in result.get("results", []) if isinstance(result, dict) else []:
-                total += int(item.get("imported") or 0)
-            return total
-
-        return self._run_sync_job(
-            "rss_fetch_all",
-            kind="ingest",
-            label="RSS manual fetch",
-            message="正在手动拉取 RSS 订阅",
-            metadata={"experimental": True},
-            fn=lambda: fetch_all_subscriptions(workspace),
-            complete_message=lambda result: f"RSS 手动拉取完成: {imported_count(result)} 条",
-            complete_metadata=lambda result: {"imported": imported_count(result)},
-        )
 
     # ── Folder Watching ──
 

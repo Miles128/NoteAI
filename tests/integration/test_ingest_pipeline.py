@@ -211,4 +211,3 @@ class TestTransferHandler:
         result = handler._auto_convert_pending({})
         assert result.get("success") is True
         assert result.get("converted", 0) == 0
-

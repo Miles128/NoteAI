@@ -67,7 +67,7 @@ def test_semantic_stage_failure_does_not_block_ingest(workspace: Path) -> None:
         "failures": [{"file": "Notes/RAG/note.md", "error": "bad json"}],
     }
     with (
-        patch("sidecar.ingest_pipeline._scan_convert_pending", return_value=[]),
+        patch("sidecar.ingest_pipeline.scan_convert_pending", return_value=[]),
         patch("utils.note_compiler.scan_compile_pending", return_value=[]),
         patch("sidecar.ingest_pipeline._scan_classify_pending", return_value=[]),
         patch("sidecar.topic_placement.auto_move_misplaced_notes", return_value={"moved": []}),
@@ -214,7 +214,7 @@ def test_convert_failure_does_not_commit_convert_stage(workspace: Path) -> None:
             return [{"success": False, "error": "broken document"}]
 
     with (
-        patch("sidecar.ingest_pipeline._scan_convert_pending", return_value=["broken.pdf"]),
+        patch("sidecar.ingest_pipeline.scan_convert_pending", return_value=["broken.pdf"]),
         patch("sidecar.ingest_pipeline.FileConverterManager", return_value=FailingConverter()),
     ):
         result = run_ingest(mode="full")
@@ -231,7 +231,7 @@ def test_classify_failure_does_not_commit_classify_stage(workspace: Path) -> Non
     note.write_text("# broken", encoding="utf-8")
 
     with (
-        patch("sidecar.ingest_pipeline._scan_convert_pending", return_value=[]),
+        patch("sidecar.ingest_pipeline.scan_convert_pending", return_value=[]),
         patch("utils.note_compiler.scan_compile_pending", return_value=[]),
         patch("sidecar.ingest_pipeline._scan_classify_pending", return_value=[note]),
         patch(

@@ -11,7 +11,8 @@ from utils.topic.file_ops import check_topic_needs_processing
 from utils.wiki_store import topic_from_notes_path
 
 
-def _scan_convert_pending(workspace: str) -> list[str]:
+def scan_convert_pending(workspace: str) -> list[str]:
+    """Workspace files awaiting conversion (shared by ingest + transfer paths)."""
     supported = set(FileConverterManager.get_supported_formats())
     ws = Path(workspace)
     pending: list[str] = []

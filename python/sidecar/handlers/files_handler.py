@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from sidecar.handlers.base import BaseHandler
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.topic.assigner import sync_wiki_with_files
 
@@ -128,7 +129,7 @@ class FilesHandler(BaseHandler):
                 first_part = Path(rel_path).parts[0].lower()
                 if first_part in protected_roots:
                     return {"success": False, "message": "不能保存到系统或运行时目录"}
-            full.write_text(content, encoding="utf-8")
+            atomic_write_text(full, content)
             if rel_path.lower().endswith(".md"):
                 self._start_task(
                     f"suggest_links_{Path(rel_path).stem}",
@@ -363,7 +364,7 @@ class FilesHandler(BaseHandler):
         if err:
             return err
 
-        candidate.write_text(str(content), encoding="utf-8")
+        atomic_write_text(candidate, str(content))
         rel = str(candidate.relative_to(Path(self.config.workspace_path)))
 
         from sidecar.cascade import append_changelog

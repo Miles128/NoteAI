@@ -142,46 +142,6 @@ class WorkspaceStateManager:
         except Exception as e:
             return False, f"清除工作区状态失败: {e}"
 
-    def get_workspace_info(self) -> dict[str, Any]:
-        info = {
-            "is_saved": False,
-            "saved_path": None,
-            "workspace_path": None,
-            "is_valid": False,
-            "workspace_name": None,
-            "last_opened_at": None,
-            "state_file": str(self.state_file),
-            "state_file_exists": self.state_file.exists(),
-        }
-
-        if not self.state_file.exists():
-            return info
-
-        try:
-            with open(self.state_file, encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            data = self._try_read_backup()
-
-        saved_path = data.get("workspace_path")
-
-        if saved_path:
-            info["is_saved"] = True
-            info["saved_path"] = saved_path
-            info["last_opened_at"] = data.get("last_opened_at")
-
-            workspace = Path(saved_path)
-            if workspace.exists():
-                info["is_valid"] = True
-                info["workspace_path"] = saved_path
-                info["workspace_name"] = workspace.name
-            else:
-                info["is_valid"] = False
-                info["workspace_path"] = None
-                info["workspace_name"] = None
-
-        return info
-
     def _try_read_backup(self) -> dict[str, Any]:
         backup_file = self.state_file.with_suffix(".json.bak")
         if not backup_file.exists():

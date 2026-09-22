@@ -125,10 +125,19 @@
         if (isNaN(d.getTime())) return '';
         var now = new Date();
         var diff = (now as any) - (d as any);
-        if (diff < 60000) return '刚刚';
-        if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-        if (diff < 604800000) return Math.floor(diff / 86400000) + '天前';
+        if (diff < 60000) return window.t ? window.t('noteList.justNow') : '刚刚';
+        if (diff < 3600000) {
+            var mins = Math.floor(diff / 60000);
+            return window.t ? window.t('noteList.minutesAgo', { count: mins }) : mins + '分钟前';
+        }
+        if (diff < 86400000) {
+            var hours = Math.floor(diff / 3600000);
+            return window.t ? window.t('noteList.hoursAgo', { count: hours }) : hours + '小时前';
+        }
+        if (diff < 604800000) {
+            var days = Math.floor(diff / 86400000);
+            return window.t ? window.t('noteList.daysAgo', { count: days }) : days + '天前';
+        }
         var mm = String(d.getMonth() + 1).padStart(2, '0');
         var dd = String(d.getDate()).padStart(2, '0');
         return mm + '-' + dd;

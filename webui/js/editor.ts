@@ -374,7 +374,7 @@ async function toggleEditMode() {
             if (window.TiptapEditorModule && window.TiptapEditorModule.openMarkdownInEditor) {
                 const success = await window.TiptapEditorModule.openMarkdownInEditor(
                     pd.content,
-                    window.AppState.selectedFilePath
+                    window.AppState.selectedFilePath || ''
                 );
                 if (!success) {
                     console.warn('[Editor] Tiptap init failed, using CodeMirror fallback');

@@ -788,7 +788,9 @@
       "links": "Link index",
       "fulltext": "Full-text index",
       "recoveryQueued": "Recovery queued; re-run the check when it finishes"
-    }
+    },
+    "estimateSeconds": "{count}s",
+    "estimateMinutes": "{count} min"
   },
   "search": {
     "placeholder": "Search notes…",
@@ -1213,11 +1215,17 @@
     "opensource": "Open source · GitHub: Miles128/NoteAI"
   },
   "workspace": {
+    "openWorkspace": "Open workspace",
+    "changeConfirm": "Change workspace?\n\nCurrent workspace: {path}"
   },
   "noteList": {
     "title": "Notes",
     "empty": "Select a topic to view notes",
-    "emptyTopic": "No notes in this topic"
+    "emptyTopic": "No notes in this topic",
+    "justNow": "just now",
+    "minutesAgo": "{count} min ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago"
   },
   "inspector": {
     "ai": "Chat",

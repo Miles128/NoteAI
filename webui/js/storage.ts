@@ -137,26 +137,6 @@
             }
         },
 
-        /**
-         * 清空所有应用相关的存储
-         * @param {Object} [options] - 选项
-         * @param {boolean} [options.silent=false] - 是否静默失败
-         * @returns {boolean} 是否全部清空成功
-         */
-        clearAppStorage: function(options?: StorageOpts): boolean {
-            options = options || {};
-            var success = true;
-            var self: StorageModule = this;
-            Object.keys(this.KEYS).forEach(function(k) {
-                if (!self.removeItem(self.KEYS[k as keyof StorageKeys], { silent: true })) {
-                    success = false;
-                }
-            });
-            if (!success && !options.silent) {
-                console.warn('[Storage] Some items failed to clear');
-            }
-            return success;
-        }
     };
 
     window.Storage = StorageImpl as any;

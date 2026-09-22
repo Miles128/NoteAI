@@ -13,6 +13,7 @@ from sidecar.wiki_utils import (
     remove_file_from_wiki_topic,
     resolve_wiki_path,
 )
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 
 
@@ -121,7 +122,7 @@ class IntelHandler(BaseHandler):
                 final_text = f"---\n{fm_str}\n---\n\n{rewritten_text}"
             else:
                 final_text = rewritten_text
-            full_path.write_text(final_text, encoding="utf-8")
+            atomic_write_text(full_path, final_text)
             return {"success": True, "message": "已保存"}
         except Exception as e:
             return {"success": False, "message": f"保存失败: {str(e)}"}
@@ -367,7 +368,7 @@ class IntelHandler(BaseHandler):
             fm = {"topic": topic_name, "type": "survey", "tags": [topic_name]}
             fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
             survey_with_fm = f"---\n{fm_str}\n---\n\n{full_text.strip()}"
-            survey_path.write_text(survey_with_fm, encoding="utf-8")
+            atomic_write_text(survey_path, survey_with_fm)
             survey_file = str(survey_path.relative_to(workspace_path))
 
             self._send_response(
@@ -549,7 +550,7 @@ class IntelHandler(BaseHandler):
 
         for md_file, fm, body in source_files:
             fm["topics"] = [target if t == source else t for t in fm["topics"]]
-            md_file.write_text(write_frontmatter(fm, body), encoding="utf-8")
+            atomic_write_text(md_file, write_frontmatter(fm, body))
             remove_file_from_wiki_topic(str(md_file))
             move_file_to_notes_topic_folder(str(md_file), target)
             add_file_to_wiki_topic(str(md_file), target, md_file.stem)

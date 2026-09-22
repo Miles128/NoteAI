@@ -788,7 +788,9 @@
       "links": "链接索引",
       "fulltext": "全文索引",
       "recoveryQueued": "恢复任务已提交，完成后可在此复查"
-    }
+    },
+    "estimateSeconds": "{count}秒",
+    "estimateMinutes": "{count}分钟"
   },
   "search": {
     "placeholder": "搜索笔记...",
@@ -1213,11 +1215,17 @@
     "opensource": "开源项目 · GitHub: Miles128/NoteAI"
   },
   "workspace": {
+    "openWorkspace": "打开工作区",
+    "changeConfirm": "是否要更改工作区？\n\n当前工作区: {path}"
   },
   "noteList": {
     "title": "笔记列表",
     "empty": "选择一个主题查看笔记",
-    "emptyTopic": "该主题下暂无笔记"
+    "emptyTopic": "该主题下暂无笔记",
+    "justNow": "刚刚",
+    "minutesAgo": "{count}分钟前",
+    "hoursAgo": "{count}小时前",
+    "daysAgo": "{count}天前"
   },
   "inspector": {
     "ai": "问答",

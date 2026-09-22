@@ -31,7 +31,6 @@ class TestRerankerEnabled:
         assert _mod._reranker_enabled() is False
 
 
-
 def test_scan_files_indexes_only_non_readme_notes(tmp_path):
     notes = tmp_path / "Notes"
     (notes / "AI").mkdir(parents=True)

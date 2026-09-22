@@ -23,7 +23,6 @@ def _restore_rag_settings():
         "rag_rerank_skip_score": config.rag_rerank_skip_score,
         "rag_dense_weight": config.rag_dense_weight,
         "rag_top_k": config.rag_top_k,
-        "rag_top_k_tags": config.rag_top_k_tags,
     }
     yield
     for key, value in snapshot.items():
@@ -37,7 +36,8 @@ def test_get_ui_config_exposes_rag_advanced_fields(_restore_rag_settings) -> Non
     ui = handler._get_ui_config({})
     assert ui["rag_dense_weight"] == 0.6
     assert ui["rag_hyde_enabled"] is False
-    assert ui["rag_rerank_model"] == "Xenova/bge-reranker-base"
+    assert "rag_top_k_tags" not in ui
+    assert "rag_rerank_model" not in ui
 
 
 def test_save_ui_config_clamps_rag_advanced_fields(monkeypatch: pytest.MonkeyPatch, _restore_rag_settings) -> None:
@@ -50,7 +50,6 @@ def test_save_ui_config_clamps_rag_advanced_fields(monkeypatch: pytest.MonkeyPat
             "rag_hyde_threshold": -0.2,
             "rag_rerank_skip_score": 2.0,
             "rag_top_k": 0,
-            "rag_top_k_tags": 999,
         }
     )
     assert result["success"] is True
@@ -58,4 +57,3 @@ def test_save_ui_config_clamps_rag_advanced_fields(monkeypatch: pytest.MonkeyPat
     assert config.rag_hyde_threshold == 0.0
     assert config.rag_rerank_skip_score == 1.0
     assert config.rag_top_k == 1
-    assert config.rag_top_k_tags == 50

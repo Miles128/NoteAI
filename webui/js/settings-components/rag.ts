@@ -37,14 +37,6 @@ export function applyRagSettingsToForm(uiConfig: any) {
     if (topKEl) {
         topKEl.value = uiConfig.rag_top_k != null ? uiConfig.rag_top_k : 5;
     }
-    var topKTagsEl = document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null;
-    if (topKTagsEl) {
-        topKTagsEl.value = uiConfig.rag_top_k_tags != null ? uiConfig.rag_top_k_tags : 7;
-    }
-    var rerankModelEl = document.getElementById('settings-rag-rerank-model');
-    if (rerankModelEl && uiConfig.rag_rerank_model) {
-        rerankModelEl.textContent = uiConfig.rag_rerank_model;
-    }
     _updateDenseWeightHint();
 
     if (uiConfig.rag_enabled === true) {
@@ -331,17 +323,17 @@ var RAG_PRESETS: Record<string, any> = {
     fast: {
         rag_hyde_enabled: false, rag_hyde_threshold: 0.33,
         rag_rerank_enabled: false, rag_rerank_skip_score: 0.75,
-        rag_dense_weight: 0.6, rag_top_k: 3, rag_top_k_tags: 4,
+        rag_dense_weight: 0.6, rag_top_k: 3,
     },
     balanced: {
         rag_hyde_enabled: true, rag_hyde_threshold: 0.33,
         rag_rerank_enabled: true, rag_rerank_skip_score: 0.75,
-        rag_dense_weight: 0.7, rag_top_k: 5, rag_top_k_tags: 7,
+        rag_dense_weight: 0.7, rag_top_k: 5,
     },
     deep: {
         rag_hyde_enabled: true, rag_hyde_threshold: 0.30,
         rag_rerank_enabled: true, rag_rerank_skip_score: 0.60,
-        rag_dense_weight: 0.75, rag_top_k: 8, rag_top_k_tags: 10,
+        rag_dense_weight: 0.75, rag_top_k: 8,
     },
 };
 
@@ -356,7 +348,6 @@ function _readRagPresetFromForm(): Record<string, any> {
         rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
         rag_dense_weight: densePct / 100,
         rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
-        rag_top_k_tags: parseInt(((document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null)?.value) || '', 10) || 7,
     };
 }
 
@@ -364,10 +355,12 @@ function _syncRagPresetButtons() {
     var row = document.getElementById('settings-rag-preset-row');
     if (!row) return;
     var current = _readRagPresetFromForm();
+    // 只比对仍在表单上的可见键（已删输入框的 threshold/skip 由预设直接入库，不参与匹配）
+    var visibleKeys = ['rag_hyde_enabled', 'rag_rerank_enabled', 'rag_dense_weight', 'rag_top_k'];
     var matched = '';
     Object.keys(RAG_PRESETS).forEach(function(name) {
         var preset = RAG_PRESETS[name];
-        var ok = Object.keys(preset).every(function(k) {
+        var ok = visibleKeys.every(function(k) {
             return Math.abs((current[k] || 0) - (preset[k] || 0)) < 1e-9;
         });
         if (ok) matched = name;
@@ -393,11 +386,14 @@ function applyRagPreset(name: string) {
     if (rerankSkipEl) rerankSkipEl.value = String(preset.rag_rerank_skip_score != null ? preset.rag_rerank_skip_score : 0.75);
     var topKEl = document.getElementById('settings-rag-top-k') as HTMLInputElement | null;
     if (topKEl) topKEl.value = String(preset.rag_top_k != null ? preset.rag_top_k : 5);
-    var topKTagsEl = document.getElementById('settings-rag-top-k-tags') as HTMLInputElement | null;
-    if (topKTagsEl) topKTagsEl.value = String(preset.rag_top_k_tags != null ? preset.rag_top_k_tags : 7);
     _updateDenseWeightHint();
     _syncRagPresetButtons();
-    saveRagAdvancedConfig();
+    // 预设值直接入库（含已从表单移除的 threshold/skip，避免重读表单丢失）
+    var toSave = _readRagPresetFromForm();
+    Object.keys(preset).forEach(function(k) {
+        if (preset[k] !== undefined) toSave[k] = preset[k];
+    });
+    saveAssistantUiConfig(toSave);
 }
 
 function _bindRagAdvancedControls() {
@@ -426,11 +422,8 @@ function _bindRagAdvancedControls() {
 
     [
         'settings-rag-hyde-enabled',
-        'settings-rag-hyde-threshold',
         'settings-rag-rerank-enabled',
-        'settings-rag-rerank-skip-score',
         'settings-rag-top-k',
-        'settings-rag-top-k-tags',
     ].forEach(function(id) {
         var el = document.getElementById(id);
         if (!el || el.dataset.bound) return;

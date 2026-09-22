@@ -6,8 +6,6 @@ from sidecar.rag.rag_config import (
     DEFAULT_HYDE_THRESHOLD,
     DEFAULT_RERANK_SKIP_SCORE,
     DEFAULT_TOP_K,
-    DEFAULT_TOP_K_TAGS,
-    RERANK_MODEL_NAME,
 )
 from utils.llm_utils import test_api_connection
 from utils.logger import logger
@@ -105,9 +103,6 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
-            "semantic_workbench_enabled": self.config.semantic_workbench_enabled,
-            "semantic_workbench_tabs": list(self.config.semantic_workbench_tabs),
-            "semantic_workbench_intensity": self.config.semantic_workbench_intensity,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "rag_hyde_enabled": self.config.rag_hyde_enabled,
@@ -116,8 +111,6 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score": self.config.rag_rerank_skip_score,
             "rag_dense_weight": self.config.rag_dense_weight,
             "rag_top_k": self.config.rag_top_k,
-            "rag_top_k_tags": self.config.rag_top_k_tags,
-            "rag_rerank_model": RERANK_MODEL_NAME,
             "locale": self.config.locale,
             "theme_preference": self.config.theme_preference,
         }
@@ -168,19 +161,6 @@ class ConfigHandler(BaseHandler):
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
                 self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
-            if "semantic_workbench_enabled" in params:
-                self.config.semantic_workbench_enabled = bool(params["semantic_workbench_enabled"])
-            if "semantic_workbench_tabs" in params:
-                tabs = params["semantic_workbench_tabs"]
-                if isinstance(tabs, list):
-                    valid_tabs = {"objects", "quality", "links", "brief"}
-                    cleaned = [str(tab) for tab in tabs if str(tab) in valid_tabs]
-                    if cleaned:
-                        self.config.semantic_workbench_tabs = cleaned
-            if "semantic_workbench_intensity" in params:
-                intensity = str(params["semantic_workbench_intensity"] or "").strip()
-                if intensity in {"light", "standard", "deep"}:
-                    self.config.semantic_workbench_intensity = intensity
             if "cli_agent_id" in params:
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:
@@ -203,8 +183,6 @@ class ConfigHandler(BaseHandler):
                 )
             if "rag_top_k" in params:
                 self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, 1, 50)
-            if "rag_top_k_tags" in params:
-                self.config.rag_top_k_tags = self._coerce_int(params["rag_top_k_tags"], DEFAULT_TOP_K_TAGS, 1, 50)
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"
@@ -222,7 +200,6 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score",
             "rag_dense_weight",
             "rag_top_k",
-            "rag_top_k_tags",
         )
         if any(k in params for k in rag_keys):
             try:

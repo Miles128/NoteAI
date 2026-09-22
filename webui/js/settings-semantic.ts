@@ -10,21 +10,56 @@
 
 var _SEMANTIC_TAB_VALUES = ['objects', 'quality', 'links', 'brief'];
 
-function applySemanticSettingsToForm(uiConfig: any) {
-    if (!uiConfig) return;
+var _SEMANTIC_DEFAULTS = {
+    semantic_workbench_enabled: true,
+    semantic_workbench_tabs: ['objects', 'quality', 'links', 'brief'],
+    semantic_workbench_intensity: 'standard',
+};
+
+function readSemanticWorkbenchPrefs(): any {
+    var fallback = {
+        semantic_workbench_enabled: _SEMANTIC_DEFAULTS.semantic_workbench_enabled,
+        semantic_workbench_tabs: _SEMANTIC_DEFAULTS.semantic_workbench_tabs.slice(),
+        semantic_workbench_intensity: _SEMANTIC_DEFAULTS.semantic_workbench_intensity,
+    };
+    try {
+        if (!window.Storage) return fallback;
+        var stored = window.Storage.getItem(window.Storage.KEYS.SEMANTIC_WORKBENCH, null, { silent: true }) as any;
+        if (!stored || typeof stored !== 'object') return fallback;
+        return {
+            semantic_workbench_enabled: stored.semantic_workbench_enabled !== false,
+            semantic_workbench_tabs: Array.isArray(stored.semantic_workbench_tabs) && stored.semantic_workbench_tabs.length
+                ? stored.semantic_workbench_tabs
+                : fallback.semantic_workbench_tabs,
+            semantic_workbench_intensity: ['light', 'standard', 'deep'].indexOf(stored.semantic_workbench_intensity) !== -1
+                ? stored.semantic_workbench_intensity
+                : fallback.semantic_workbench_intensity,
+        };
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function persistSemanticWorkbenchPrefs(config: any): void {
+    try {
+        if (window.Storage) {
+            window.Storage.setItem(window.Storage.KEYS.SEMANTIC_WORKBENCH, config, { silent: true });
+        }
+    } catch (e) { /* noop */ }
+}
+
+function applySemanticSettingsToForm(_uiConfig: any) {
+    // 唯一数据源：localStorage（后端不再持久化这三个键）
+    var prefs = readSemanticWorkbenchPrefs();
     var enabledEl = document.getElementById('settings-semantic-workbench-enabled') as HTMLInputElement | null;
     if (enabledEl) {
-        enabledEl.checked = uiConfig.semantic_workbench_enabled !== false;
+        enabledEl.checked = prefs.semantic_workbench_enabled !== false;
     }
-    var savedTabs = Array.isArray(uiConfig.semantic_workbench_tabs)
-        ? uiConfig.semantic_workbench_tabs
-        : _SEMANTIC_TAB_VALUES;
+    var savedTabs = prefs.semantic_workbench_tabs;
     document.querySelectorAll('.settings-semantic-tab').forEach(function(input: any) {
         input.checked = savedTabs.indexOf(input.value) !== -1;
     });
-    var intensity = ['light', 'standard', 'deep'].indexOf(uiConfig.semantic_workbench_intensity) !== -1
-        ? uiConfig.semantic_workbench_intensity
-        : 'standard';
+    var intensity = prefs.semantic_workbench_intensity;
     document.querySelectorAll('input[name="settings-semantic-intensity"]').forEach(function(radio: any) {
         radio.checked = radio.value === intensity;
     });
@@ -67,14 +102,12 @@ function readSemanticWorkbenchConfig() {
 
 function saveSemanticWorkbenchConfig() {
     var config = readSemanticWorkbenchConfig();
-    var saver = window.SettingsComponents && window.SettingsComponents.saveAssistantUiConfig;
-    if (!saver) return Promise.resolve(config);
-    return saver(config).then(function(result: any) {
-        if (result && result.success && window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.applyVisibilityConfig) {
-            window.SemanticWorkbenchModule.applyVisibilityConfig();
-        }
-        return result;
-    });
+    persistSemanticWorkbenchPrefs(config);
+    if (window.ToastModule) window.ToastModule.show(window.t ? window.t('settings.autoSaved') : '已保存');
+    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.applyVisibilityConfig) {
+        window.SemanticWorkbenchModule.applyVisibilityConfig();
+    }
+    return Promise.resolve(config);
 }
 
 function initSemanticWorkbenchSettings() {
@@ -112,6 +145,8 @@ window.SettingsSemantic = {
     applySemanticSettingsToForm,
     initSemanticWorkbenchSettings,
     saveSemanticWorkbenchConfig,
+    readSemanticWorkbenchPrefs,
+    persistSemanticWorkbenchPrefs,
 };
 
 })();

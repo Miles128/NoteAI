@@ -250,7 +250,7 @@ def fetch_page_content(url: str) -> str:
         return ""
 
 
-def search_and_fetch(query: str, max_pages: int = 3) -> list:
+def search_and_fetch(query: str, max_pages: int = 2) -> list:
     results = web_search(query)
     if not results:
         return []

@@ -60,11 +60,6 @@ class AppConfig:
     topic_auto_assign_threshold: float = 0.80
     ingest_auto_enabled: bool = True
     semantic_compile_enabled: bool = True
-    # Semantic workbench UI: master switch, enabled categories, display intensity.
-    # Tabs mirror the sidebar categories; intensity filters low-confidence items.
-    semantic_workbench_enabled: bool = True
-    semantic_workbench_tabs: list[str] = field(default_factory=lambda: ["objects", "quality", "links", "brief"])
-    semantic_workbench_intensity: str = "standard"
     cli_agent_id: str = ""
     rag_enabled: bool = True
     rag_hyde_enabled: bool = True
@@ -73,7 +68,6 @@ class AppConfig:
     rag_rerank_skip_score: float = 0.75
     rag_dense_weight: float = 0.7
     rag_top_k: int = 5
-    rag_top_k_tags: int = 7
     rag_error_cooldown_seconds: int = 180
     locale: str = "zh-CN"
 

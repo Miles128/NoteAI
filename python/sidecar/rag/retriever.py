@@ -109,7 +109,7 @@ def retrieve(
     if not query_emb.get("dense_vec"):
         return {"results": [], "retrieval_debug": debug}
 
-    configured_top_k = rag_top_k(has_filters=bool(topics or tags))
+    configured_top_k = rag_top_k()
     candidate_k = min(max(configured_top_k * 3, 12), 24)
 
     results = hybrid_search(

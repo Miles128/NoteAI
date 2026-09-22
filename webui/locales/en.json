@@ -478,7 +478,8 @@
     "draftMode": "Draft mode · use H1 as the note title, then Save to write into the current folder",
     "draftUnsaved": "Draft not saved to workspace",
     "draftAutoSaved": "Draft auto-saved",
-    "parseFailed": "Parse failed"
+    "parseFailed": "Parse failed",
+    "openFailed": "Editor failed to initialize"
   },
   "noteDraft": {
     "labelSuffix": "(draft)",

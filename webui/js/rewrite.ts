@@ -132,8 +132,10 @@ function _showRewriteDiffView() {
     if (!diffPanel) {
         diffPanel = document.createElement('div');
         diffPanel.id = 'rewrite-diff-panel';
-        var mainContent = document.querySelector('.main-content');
-        if (mainContent) mainContent.appendChild(diffPanel);
+        var host = document.getElementById('content-panel')
+            || (previewPanel ? previewPanel.parentElement : null)
+            || document.body;
+        host.appendChild(diffPanel);
     }
 
     var oldHtml = window.marked ? window.marked.parse(oldText) : '<pre>' + window.escapeHtml(oldText) + '</pre>';

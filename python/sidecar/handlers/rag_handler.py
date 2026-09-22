@@ -264,9 +264,7 @@ class RagHandler(BaseHandler):
 
         # Default every normal conversation to the workspace so a greeting or
         # broadly phrased question cannot silently bypass the evidence path.
-        # Web remains available only through an explicit UI override.
-        if params.get("force_intent") == "web":
-            return self._answer_without_retrieval(question, context, intent="web")
+        # Web remains available only through the selection route override.
         return self._answer_with_rag(params, question, context)
 
     def _answer_selection_lookup(self, params, selection: str) -> dict:

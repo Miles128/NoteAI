@@ -29,26 +29,6 @@ function _deactivatePendingBtn() {
     if (pendingView) pendingView.style.display = 'none';
 }
 
-function showGraphHomeView() {
-    if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.deactivate) window.SemanticWorkbenchModule.deactivate();
-    var contentPanel = document.getElementById('content-panel');
-    var previewPanel = document.getElementById('preview-panel');
-    var contentArea = document.getElementById('content-area');
-    var graphPanel = document.getElementById('graph-panel');
-    var pendingView = document.getElementById('pending-view');
-    var home = document.getElementById('home-dashboard');
-    if (contentPanel) contentPanel.style.display = 'flex';
-    if (previewPanel) previewPanel.style.display = 'none';
-    if (graphPanel) graphPanel.style.display = 'none';
-    if (contentArea) contentArea.style.display = 'none';
-    if (pendingView) pendingView.style.display = 'none';
-    if (home) home.style.display = '';
-    _deactivatePendingBtn();
-    updateHomeStats();
-    if (window.HomeDashboardModule && window.HomeDashboardModule.refresh) {
-        window.HomeDashboardModule.refresh();
-    }
-}
 
 function updateHomeStats() {
     var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
@@ -230,7 +210,6 @@ function switchSidebarView(view: any) {
 window.switchSidebarView = switchSidebarView;
 window.updateSidebarStats = updateSidebarStats;
 window.setSidebarStatus = setSidebarStatus;
-window.showGraphHomeView = showGraphHomeView;
 window.updateHomeStats = updateHomeStats;
 
 window.toggleSidebar = toggleSidebar;

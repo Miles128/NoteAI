@@ -53,17 +53,11 @@ class AppConfig:
     preview_font_family: str = "system"
     typography: dict[str, Any] = field(default_factory=dict)
 
-    web_ai_assist: bool = False
-    web_include_images: bool = False
-    conv_ai_assist: bool = False
-
-    integration_strategy: str = "ml"
     auto_topic: bool = True
     # Minimum confidence used when a single LLM topic suggestion is eligible
     # for automatic filing. The model output is not calibrated, so 0.80 is a
     # conservative product default rather than a probability guarantee.
     topic_auto_assign_threshold: float = 0.80
-    topic_list: str = ""
     ingest_auto_enabled: bool = True
     semantic_compile_enabled: bool = True
     # Semantic workbench UI: master switch, enabled categories, display intensity.

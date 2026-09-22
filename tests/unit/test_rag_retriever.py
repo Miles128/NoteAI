@@ -19,43 +19,15 @@ def _reset_reranker_globals():
 
 class TestRerankerEnabled:
     def test_default_returns_true(self, monkeypatch):
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        monkeypatch.delenv("NOTEAI_ENABLE_RERANKER", raising=False)
+        from config import config
+
+        monkeypatch.setattr(config, "rag_rerank_enabled", True)
         assert _mod._reranker_enabled() is True
 
-    def test_disable_env_1(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
-        assert _mod._reranker_enabled() is False
+    def test_disabled_via_config(self, monkeypatch):
+        from config import config
 
-    def test_disable_env_true(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "true")
-        assert _mod._reranker_enabled() is False
-
-    def test_disable_env_yes(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "yes")
-        assert _mod._reranker_enabled() is False
-
-    def test_disable_env_case_insensitive(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "True")
-        assert _mod._reranker_enabled() is False
-
-    def test_disable_env_other_value(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
-        assert _mod._reranker_enabled() is True
-
-    def test_enable_env_1(self, monkeypatch):
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        monkeypatch.setenv("NOTEAI_ENABLE_RERANKER", "1")
-        assert _mod._reranker_enabled() is True
-
-    def test_enable_env_true(self, monkeypatch):
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
-        monkeypatch.setenv("NOTEAI_ENABLE_RERANKER", "true")
-        assert _mod._reranker_enabled() is True
-
-    def test_disable_takes_precedence_over_enable(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
-        monkeypatch.setenv("NOTEAI_ENABLE_RERANKER", "1")
+        monkeypatch.setattr(config, "rag_rerank_enabled", False)
         assert _mod._reranker_enabled() is False
 
 
@@ -76,12 +48,15 @@ def test_scan_files_indexes_only_non_readme_notes(tmp_path):
 class TestGetReranker:
     @pytest.fixture(autouse=True)
     def _reranker_enabled_unless_test_sets_disable(self, monkeypatch):
-        """Job-level NOTEAI_DISABLE_RERANKER=1 in CI must not leak into enable tests."""
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
-        monkeypatch.delenv("NOTEAI_ENABLE_RERANKER", raising=False)
+        """Force reranker enabled unless a test disables it via config."""
+        from config import config
+
+        monkeypatch.setattr(config, "rag_rerank_enabled", True)
 
     def test_returns_none_when_disabled(self, monkeypatch):
-        monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
+        from config import config
+
+        monkeypatch.setattr(config, "rag_rerank_enabled", False)
         assert _mod._get_reranker() is None
 
     def test_returns_none_when_disabled_flag_set(self, monkeypatch):
@@ -89,7 +64,6 @@ class TestGetReranker:
 
         import sidecar.rag.reranker as rk
 
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         rk._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
 
@@ -105,7 +79,6 @@ class TestGetReranker:
 
         import sidecar.rag.reranker as rk
 
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         monkeypatch.setattr(rk, "_load_onnx_reranker", lambda: (_ for _ in ()).throw(ImportError("no onnx")))
 
         result = _mod._get_reranker()
@@ -117,7 +90,6 @@ class TestGetReranker:
 
         import sidecar.rag.reranker as rk
 
-        monkeypatch.delenv("NOTEAI_DISABLE_RERANKER", raising=False)
         rk._RERANKER_DISABLED_UNTIL = time.time() + 60
         assert _mod._get_reranker() is None
 

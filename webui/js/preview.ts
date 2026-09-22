@@ -200,7 +200,6 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
     
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
-    const previewTitle = document.getElementById('preview-file-name');
 
     if (!previewPanel || !previewContent) {
         console.error('[Preview] Missing DOM elements');
@@ -214,10 +213,6 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
     }
 
     isPreviewActive = true;
-
-    if (previewTitle) {
-        previewTitle.textContent = fileName;
-    }
 
     previewContent.style.display = 'block';
     previewContent.innerHTML = `
@@ -716,8 +711,6 @@ window.PreviewModule = {
     updateTitlebarFileName,
     showEditButton
 };
-
-window.showTagsView = function() { window.switchSidebarView('tree'); };
 
 window.closePreview = closePreview;
 window.closePreviewPanel = closePreviewPanel;

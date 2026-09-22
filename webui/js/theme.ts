@@ -363,46 +363,6 @@ function initPreviewResizer(): void {
     });
 }
 
-function showAboutPanel(): void {
-    const aboutContent = `
-        <h2>NoteAI</h2>
-        <p class="about-version">${window.t('about.version')}</p>
-        <p class="about-desc">${window.t('about.desc')}</p>
-        <div class="about-features">
-            <h3>${window.t('about.coreFeatures')}</h3>
-            <ul>
-                <li>${window.t('about.feature1')}</li>
-                <li>${window.t('about.feature2')}</li>
-                <li>${window.t('about.feature3')}</li>
-                <li>${window.t('about.feature4')}</li>
-                <li>${window.t('about.feature5')}</li>
-                <li>${window.t('about.feature6')}</li>
-                <li>${window.t('about.feature7')}</li>
-                <li>${window.t('about.feature8')}</li>
-            </ul>
-        </div>
-        <div class="about-features">
-            <h3>${window.t('about.techArchitecture')}</h3>
-            <ul>
-                <li>${window.t('about.techFrontend')}</li>
-                <li>${window.t('about.techBackend')}</li>
-                <li>${window.t('about.techEditor')}</li>
-                <li>${window.t('about.techLlm')}</li>
-            </ul>
-        </div>
-        <p class="about-author" style="margin-top: 20px; font-size: 15px; color: var(--text);">${window.t('about.author')}</p>
-        <p class="about-email" style="margin-top: 4px; font-size: 13px; color: var(--text-muted);">mai.yuxiang@foxmail.com</p>
-        <p class="about-tech" style="margin-top: 4px;">${window.t('about.opensource')}</p>
-    `;
-
-    document.getElementById('about-panel-content')!.innerHTML = aboutContent;
-    document.getElementById('about-panel')!.classList.add('active');
-}
-
-function hideAboutPanel(): void {
-    document.getElementById('about-panel')!.classList.remove('active');
-}
-
 window.setTheme = setTheme;
 window.setAccentColor = setAccentColor;
 window.setFontSize = applyFontSize;
@@ -458,8 +418,6 @@ window.ThemeModule = {
     restoreSidebarWidth,
     initResizer,
     initPreviewResizer,
-    showAboutPanel,
-    hideAboutPanel
 };
 
 })();

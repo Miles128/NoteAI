@@ -456,7 +456,7 @@ var API_DEFS: ApiDef[] = [
     { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; }, write: true },
 
     // ---- RAG ----
-    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, history: opts.history || [], force_intent: opts.forceIntent || null, selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
+    { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, history: opts.history || [], selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
     { name: 'ragRebuildIndex', method: 'rag_rebuild_index', params: function() { return {}; }, write: true },
     { name: 'ragIndexStatus', method: 'rag_index_status', params: function() { return {}; } },
     { name: 'runKbLint', method: 'run_kb_lint', params: function() { return {}; }, write: true },

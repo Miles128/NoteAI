@@ -97,13 +97,8 @@ class ConfigHandler(BaseHandler):
 
     def _get_ui_config(self, params):
         return {
-            "web_ai_assist": self.config.web_ai_assist,
-            "web_include_images": self.config.web_include_images,
-            "conv_ai_assist": self.config.conv_ai_assist,
-            "integration_strategy": self.config.integration_strategy,
             "auto_topic": self.config.auto_topic,
             "topic_auto_assign_threshold": self.config.topic_auto_assign_threshold,
-            "topic_list": self.config.topic_list,
             "font_size": self.config.font_size,
             "sidebar_font_family": self.config.sidebar_font_family,
             "preview_font_family": self.config.preview_font_family,
@@ -155,22 +150,12 @@ class ConfigHandler(BaseHandler):
 
     def _save_ui_config(self, params):
         with self.config._lock:
-            if "web_ai_assist" in params:
-                self.config.web_ai_assist = params["web_ai_assist"]
-            if "web_include_images" in params:
-                self.config.web_include_images = params["web_include_images"]
-            if "conv_ai_assist" in params:
-                self.config.conv_ai_assist = params["conv_ai_assist"]
-            if "integration_strategy" in params:
-                self.config.integration_strategy = params["integration_strategy"]
             if "auto_topic" in params:
                 self.config.auto_topic = params["auto_topic"]
             if "topic_auto_assign_threshold" in params:
                 self.config.topic_auto_assign_threshold = self._coerce_float(
                     params["topic_auto_assign_threshold"], 0.80, 0.0, 1.0
                 )
-            if "topic_list" in params:
-                self.config.topic_list = params["topic_list"]
             if "font_size" in params:
                 self.config.font_size = params["font_size"]
             if "sidebar_font_family" in params:

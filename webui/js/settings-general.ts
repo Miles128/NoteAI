@@ -119,11 +119,7 @@ function closeLogPanel() {
 async function autoSaveConfig() {
     try {
         const uiConfig = {
-            web_ai_assist: (document.getElementById('web-ai-toggle') as HTMLInputElement | null)?.checked || false,
-            web_include_images: (document.getElementById('web-include-images') as HTMLInputElement | null)?.checked || false,
-            conv_ai_assist: (document.getElementById('conv-ai-toggle') as HTMLInputElement | null)?.checked || false,
             auto_topic: true,
-            topic_list: (document.getElementById('topic-list') as HTMLInputElement | null)?.value || ''
         };
 
         const result = await window.api.saveUiConfig(uiConfig);

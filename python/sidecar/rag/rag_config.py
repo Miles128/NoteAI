@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from config import config
 
 DEFAULT_TOP_K = 5
@@ -44,8 +42,6 @@ def hyde_threshold() -> float:
 
 
 def rerank_enabled() -> bool:
-    if os.environ.get("NOTEAI_DISABLE_RERANKER", "").lower() in ("1", "true", "yes"):
-        return False
     return bool(getattr(config, "rag_rerank_enabled", True))
 
 

@@ -228,8 +228,6 @@ declare global {
         restoreSidebarWidth(): void;
         initResizer(): void;
         initPreviewResizer(): void;
-        showAboutPanel(): void;
-        hideAboutPanel(): void;
     }
 
     interface I18nModule {
@@ -614,7 +612,6 @@ declare global {
         saveTypographySettings(): void;
         setLocale(locale: string): void;
         showAbout(): void;
-        showGraphHomeView(): void;
         showProjectRulesModal(): void;
         startFileConversion(): void;
         startNoteIntegration(): void;
@@ -670,7 +667,6 @@ declare global {
         updateHomeStats?: (() => void) | undefined;
         _pdfKeyHandler: ((e: KeyboardEvent) => void) | null;
         switchSidebarView(view: string): void;
-        showTagsView(): void;
         closePreview(): void;
         backToContent(): void;
         showPreview(options: { path: string; name?: string }): void;
@@ -717,7 +713,6 @@ declare global {
             loadTreeState(): void;
             saveTreeState(): void;
             toggleTreeFolder(element: HTMLElement): void;
-            renderFileTree(treeData: any, container: HTMLElement): void;
             loadFileTree(force?: boolean): Promise<void>;
             selectFile(path: string, fileName?: string): void;
             setSelectedFile(path: string, name?: string): void;

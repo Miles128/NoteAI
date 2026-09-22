@@ -143,28 +143,10 @@ async function loadModules() {
 
     await import('./topic.ts');
     const {
-        loadTopicTree, loadTopicView, loadTopicPendingPanel,
-        onBatchAutoAssignTopics, onAITopicAnalyze, onAITopicSurvey,
-        onShowTopicInput, onHideTopicInput, onConfirmTopic,
-        closeAISuggestionPanel, onCandidateClick, onInputChange,
-        onTopicSelectChange, onInputEnter, onConfirmBtnClick,
-        hasTopicPending,
+        loadTopicPendingPanel, onCandidateClick, hasTopicPending,
     } = window;
-    window.loadTopicTree = loadTopicTree;
-    window.loadTopicView = loadTopicView;
     window.loadTopicPendingPanel = loadTopicPendingPanel;
-    window.onBatchAutoAssignTopics = onBatchAutoAssignTopics;
-    window.onAITopicAnalyze = onAITopicAnalyze;
-    window.onAITopicSurvey = onAITopicSurvey;
-    window.onShowTopicInput = onShowTopicInput;
-    window.onHideTopicInput = onHideTopicInput;
-    window.onConfirmTopic = onConfirmTopic;
-    window.closeAISuggestionPanel = closeAISuggestionPanel;
     window.onCandidateClick = onCandidateClick;
-    window.onInputChange = onInputChange;
-    window.onTopicSelectChange = onTopicSelectChange;
-    window.onInputEnter = onInputEnter;
-    window.onConfirmBtnClick = onConfirmBtnClick;
     window.hasTopicPending = hasTopicPending;
 
     await import('./search.ts');

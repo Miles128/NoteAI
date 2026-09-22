@@ -37,19 +37,25 @@ def test_score_documents_uses_rerank_not_flagembedding():
 
 
 def test_get_reranker_returns_cached_instance(monkeypatch):
-    monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
+    from config import config
+
+    monkeypatch.setattr(config, "rag_rerank_enabled", True)
     sentinel = object()
     rk._RERANKER = sentinel
     assert rk.get_reranker() is sentinel
 
 
 def test_get_reranker_none_when_disabled(monkeypatch):
-    monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "1")
+    from config import config
+
+    monkeypatch.setattr(config, "rag_rerank_enabled", False)
     assert rk.get_reranker() is None
 
 
 def test_get_reranker_cools_down_on_load_error(monkeypatch):
-    monkeypatch.setenv("NOTEAI_DISABLE_RERANKER", "0")
+    from config import config
+
+    monkeypatch.setattr(config, "rag_rerank_enabled", True)
     monkeypatch.setattr(rk, "_load_onnx_reranker", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     assert rk.get_reranker() is None
     assert time.time() < rk._RERANKER_DISABLED_UNTIL

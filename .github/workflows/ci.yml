@@ -54,7 +54,6 @@ jobs:
       LC_ALL: C.UTF-8
       PYTHONUTF8: "1"
       NOTEAI_LOG_DIR: /tmp/noteai-logs
-      NOTEAI_DISABLE_RERANKER: "1"
       LANGCHAIN_TRACING_V2: "false"
       LANGSMITH_TRACING: "false"
       HF_HUB_OFFLINE: "1"

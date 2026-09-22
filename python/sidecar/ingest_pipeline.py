@@ -15,8 +15,8 @@ from sidecar.ingest_index import (
 )
 from sidecar.ingest_scan import (
     _scan_classify_pending,
-    _scan_convert_pending,
     _scan_index_pending,
+    scan_convert_pending,
 )
 from sidecar.ingest_stages import (
     Cancelled,
@@ -82,7 +82,7 @@ __all__ = [
     "_index_markdown_files",
     "_purge_deleted_index_files",
     "_scan_classify_pending",
-    "_scan_convert_pending",
+    "scan_convert_pending",
     "_scan_index_pending",
 ]
 
@@ -93,7 +93,7 @@ def _workspace_has_pending_ingest(workspace: str) -> bool:
     if not changed:
         return False
 
-    if _scan_convert_pending(workspace):
+    if scan_convert_pending(workspace):
         return True
     if _scan_classify_pending(workspace):
         return True
@@ -161,7 +161,7 @@ def prepare_auto_ingest(
     if status == "complete" and not has_work:
         return {"action": "none", "reason": "up_to_date"}
 
-    if never_completed or _scan_convert_pending(ws):
+    if never_completed or scan_convert_pending(ws):
         mode = "full"
     else:
         mode = "incremental"

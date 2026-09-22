@@ -4,8 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from config import config
-from config.constants import TOPIC_SEP
 from sidecar.handlers.base import BaseHandler
 from sidecar.wiki_utils import (
     add_file_to_wiki_topic,
@@ -283,132 +281,20 @@ class IntelHandler(BaseHandler):
             return {"success": False, "message": f"分析失败: {str(e)}"}
 
     def _ai_topic_survey(self, params):
-        from prompts import TOPIC_SURVEY_PROMPT
-        from utils.llm_utils import APIConfigError, check_api_config
+        """单主题综述生成：cascade 唯一写者（run_cascade_survey_update）的别名。
+
+        历史实现直接写 abstract_folder/topic.md（无 _综述 后缀、无 changelog、
+        无重试），与 cascade 路径行为不一致，已收敛。保留 RPC 名以兼容旧调用。
+        """
+        from sidecar.cascade_runner import run_cascade_survey_update
 
         topic_name = params.get("topic", "")
         if not topic_name:
             return {"success": False, "message": "未指定主题"}
-
         workspace, err = self._require_workspace()
         if err:
             return err
-
-        try:
-            is_valid, error_msg = check_api_config()
-            if not is_valid:
-                return {"success": False, "message": error_msg}
-        except APIConfigError as e:
-            return {"success": False, "message": str(e)}
-
-        workspace_path = Path(workspace)
-        notes_parts = []
-        for md_file in sorted(workspace_path.rglob("*.md")):
-            if md_file.name.startswith("."):
-                continue
-            if "wiki" in md_file.parts:
-                continue
-            try:
-                text = md_file.read_text(encoding="utf-8")
-                fm, body = self._parse_frontmatter(text)
-                if fm and isinstance(fm.get("topics"), list) and topic_name in fm["topics"]:
-                    content = body.strip()[:2000]
-                    if content:
-                        notes_parts.append(f"### {md_file.name}\n\n{content}")
-            except Exception:
-                continue
-
-        if not notes_parts:
-            return {"success": False, "message": f'主题 "{topic_name}" 下没有找到任何文件'}
-
-        notes_content = "\n\n---\n\n".join(notes_parts)
-        prompt = TOPIC_SURVEY_PROMPT.format(topic_name=topic_name, notes_content=notes_content)
-
-        full_text = ""
-
-        def on_chunk(token):
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "survey_chunk",
-                        "topic": topic_name,
-                        "token": token,
-                    },
-                }
-            )
-
-        try:
-            from utils.llm_utils import call_llm_raw_stream
-
-            full_text = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_chunk)
-
-            safe_name = "".join(
-                c for c in topic_name if c.isalnum() or c in ("_", "-", ".", " ") or "\u4e00" <= c <= "\u9fff"
-            ).strip()
-            if not safe_name or ".." in safe_name:
-                return {"success": False, "message": "主题名称包含非法字符"}
-
-            abstract_folder = workspace_path / config.ABSTRACT_FOLDER
-            abstract_folder.mkdir(parents=True, exist_ok=True)
-
-            if TOPIC_SEP in topic_name:
-                parts = [p.strip() for p in topic_name.split(TOPIC_SEP) if p.strip()]
-                parent_name = parts[0]
-                child_name = parts[-1]
-                parent_folder = abstract_folder / parent_name
-                parent_folder.mkdir(exist_ok=True)
-                survey_path = parent_folder / f"{child_name}.md"
-            else:
-                survey_path = abstract_folder / f"{topic_name}.md"
-            try:
-                survey_path.resolve().relative_to(workspace_path.resolve())
-            except ValueError:
-                return {"success": False, "message": "主题名称路径非法"}
-            fm = {"topic": topic_name, "type": "survey", "tags": [topic_name]}
-            fm_str = yaml.dump(fm, allow_unicode=True, default_flow_style=False).strip()
-            survey_with_fm = f"---\n{fm_str}\n---\n\n{full_text.strip()}"
-            atomic_write_text(survey_path, survey_with_fm)
-            survey_file = str(survey_path.relative_to(workspace_path))
-
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "survey_done",
-                        "topic": topic_name,
-                        "success": True,
-                        "file_path": survey_file,
-                    },
-                }
-            )
-            return {"success": True, "message": "综述撰写完成", "file_path": survey_file}
-        except APIConfigError as e:
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "survey_done",
-                        "topic": topic_name,
-                        "success": False,
-                        "message": str(e),
-                    },
-                }
-            )
-            return {"success": False, "message": str(e)}
-        except Exception as e:
-            self._send_response(
-                {
-                    "id": "event",
-                    "result": {
-                        "type": "survey_done",
-                        "topic": topic_name,
-                        "success": False,
-                        "message": f"撰写失败: {str(e)}",
-                    },
-                }
-            )
-            return {"success": False, "message": f"撰写失败: {str(e)}"}
+        return run_cascade_survey_update(topic_name, send_response=self._send_response)
 
     def _apply_topic_suggestion(self, params):
 

@@ -16,7 +16,6 @@ def _restore_rag_settings():
         "rag_rerank_enabled": config.rag_rerank_enabled,
         "rag_dense_weight": config.rag_dense_weight,
         "rag_top_k": config.rag_top_k,
-        "rag_top_k_tags": config.rag_top_k_tags,
     }
     yield
     for key, value in snapshot.items():
@@ -30,11 +29,9 @@ def test_hybrid_weights_from_config(_restore_rag_settings) -> None:
     assert sparse == pytest.approx(0.2)
 
 
-def test_top_k_respects_filters(_restore_rag_settings) -> None:
+def test_top_k_from_config(_restore_rag_settings) -> None:
     config.rag_top_k = 4
-    config.rag_top_k_tags = 9
-    assert rag_config.top_k(has_filters=False) == 4
-    assert rag_config.top_k(has_filters=True) == 9
+    assert rag_config.top_k() == 4
 
 
 def test_hyde_can_be_disabled(_restore_rag_settings) -> None:

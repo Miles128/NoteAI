@@ -10,7 +10,6 @@ from typing import Any
 from sidecar.rag.rag_config import (
     RERANK_MODEL_FILE,
     RERANK_MODEL_NAME,
-    RERANK_MODEL_SOURCE,
     rerank_enabled,
 )
 from utils.logger import logger
@@ -51,7 +50,7 @@ def _ensure_quantized_model(encoder_cls) -> None:
 
         encoder_cls.add_custom_model(
             model=RERANK_MODEL_NAME,
-            sources=ModelSource(hf=RERANK_MODEL_SOURCE),
+            sources=ModelSource(hf=RERANK_MODEL_NAME),
             model_file=RERANK_MODEL_FILE,
             description="INT8 quantized BGE reranker base",
             license="mit",

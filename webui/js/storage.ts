@@ -22,7 +22,8 @@
             TREE_STATE: 'tree-expanded-state',
             TREE_SHOW_FILE_COUNT: 'noteai.treeShowFileCount',
             SIDEBAR_WIDTH: 'sidebar-width',
-            FONT_SIZE: 'noteai_font_size'
+            FONT_SIZE: 'noteai_font_size',
+            SEMANTIC_WORKBENCH: 'noteai.semanticWorkbench.v1'
         } as StorageKeys,
 
         /**

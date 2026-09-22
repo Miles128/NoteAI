@@ -5,27 +5,23 @@ from __future__ import annotations
 from config import config
 
 DEFAULT_TOP_K = 5
-DEFAULT_TOP_K_TAGS = 7
 DEFAULT_HYDE_THRESHOLD = 0.33
 DEFAULT_RERANK_SKIP_SCORE = 0.75
 DEFAULT_DENSE_WEIGHT = 0.7
 # INT8 量化 ONNX（Xenova/bge-reranker-base，约 280MB），中英都可用；不下载 1GB fp32。
 RERANK_MODEL_NAME = "Xenova/bge-reranker-base"
 RERANK_MODEL_FILE = "onnx/model_quantized.onnx"
-RERANK_MODEL_SOURCE = "Xenova/bge-reranker-base"
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def top_k(*, has_filters: bool = False) -> int:
-    key = "rag_top_k_tags" if has_filters else "rag_top_k"
-    default = DEFAULT_TOP_K_TAGS if has_filters else DEFAULT_TOP_K
+def top_k() -> int:
     try:
-        raw = int(getattr(config, key, default))
+        raw = int(getattr(config, "rag_top_k", DEFAULT_TOP_K))
     except (TypeError, ValueError):
-        raw = default
+        raw = DEFAULT_TOP_K
     return int(_clamp(float(raw), 1.0, 50.0))
 
 

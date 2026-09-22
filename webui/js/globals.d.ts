@@ -191,6 +191,7 @@ declare global {
         TREE_SHOW_FILE_COUNT: string;
         SIDEBAR_WIDTH: string;
         FONT_SIZE: string;
+        SEMANTIC_WORKBENCH: string;
     }
 
     interface StorageModule {
@@ -568,7 +569,7 @@ declare global {
             loadUiConfigToForm?(): void;
             setLocale?(locale: string): void;
         } | undefined;
-        SettingsSemantic: { init?(): void; applySemanticSettingsToForm?(uiConfig: any): void; initSemanticWorkbenchSettings?(): void; saveSemanticWorkbenchConfig?(): Promise<any> } | undefined;
+        SettingsSemantic: { init?(): void; applySemanticSettingsToForm?(uiConfig: any): void; initSemanticWorkbenchSettings?(): void; saveSemanticWorkbenchConfig?(): Promise<any>; readSemanticWorkbenchPrefs?(): any; persistSemanticWorkbenchPrefs?(config: any): void } | undefined;
         TabsModule: { open?(tabId: string): void; switchTab?(id: string): void } | undefined;
         cachedReadFileRaw(path: string): Promise<any>;
         closeLogPanel(): void;

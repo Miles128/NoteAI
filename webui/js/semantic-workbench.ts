@@ -29,6 +29,12 @@ function t(key: string, vars?: any): string { return window.t ? window.t(key, va
 function currentTab() { return _category === 'objects' ? _objectKind : _category; }
 
 function isEnabled() {
+    // 本地偏好优先（后端不再持久化这三个键）；降级走旧逻辑
+    if (window.SettingsSemantic && window.SettingsSemantic.readSemanticWorkbenchPrefs) {
+        try {
+            return window.SettingsSemantic.readSemanticWorkbenchPrefs().semantic_workbench_enabled !== false;
+        } catch (e) { /* fall through */ }
+    }
     var ui = window.uiConfig;
     return ui ? ui.semantic_workbench_enabled !== false : _workbenchEnabled;
 }
@@ -702,6 +708,13 @@ function applyVisibilityConfig() {
 
 function applyVisibilityConfigWith(ui: any) {
     if (!ui) return;
+    // localStorage 优先（后端不再持久化这三个键，仅作迁移期兜底）
+    if (window.SettingsSemantic && window.SettingsSemantic.readSemanticWorkbenchPrefs) {
+        try {
+            var stored = window.SettingsSemantic.readSemanticWorkbenchPrefs();
+            ui = Object.assign({}, ui, stored);
+        } catch (e) { /* noop, fall back to ui */ }
+    }
     _workbenchEnabled = ui.semantic_workbench_enabled !== false;
     var group = document.getElementById('semantic-sidebar-group');
     if (group) group.style.display = _workbenchEnabled ? '' : 'none';

@@ -42,7 +42,7 @@ def answer_without_retrieval(handler, question: str, compressed_history: str, *,
 
         web_results = []
         try:
-            web_results = search_and_fetch(question, max_pages=2)
+            web_results = search_and_fetch(question)
         except Exception as e:
             logger.warning(f"[rag/web] search failed: {e}")
 

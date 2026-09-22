@@ -1,5 +1,6 @@
-use std::collections::HashSet;
-use std::sync::OnceLock;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Mutex as StdMutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::sidecar;
 use crate::state::{AppState, PyRequestRef};
@@ -169,6 +170,55 @@ fn is_allowed_method(method: &str) -> bool {
         .contains(method)
 }
 
+/// 高危 RPC：被循环调用会销毁用户数据或反复拉起子进程。
+/// 常规高频方法（save_file_content/move_file 等）不在此列，避免误伤正常使用。
+const DESTRUCTIVE_METHODS: &[&str] = &[
+    "clear_storage",
+    "restore_workspace_backup",
+    "run_cli_agent",
+    "delete_file",
+    "delete_topic",
+    "delete_tag",
+];
+
+/// 滑动窗口配额：每方法 60 秒内至多 30 次。人工操作（均有确认框/RTT 间隔）
+/// 远达不到该量级，只有失控循环会被拦截。
+const DESTRUCTIVE_WINDOW: Duration = Duration::from_secs(60);
+const DESTRUCTIVE_MAX_CALLS: usize = 30;
+
+static DESTRUCTIVE_CALLS: OnceLock<StdMutex<HashMap<&'static str, VecDeque<Instant>>>> =
+    OnceLock::new();
+
+/// 在白名单中找到方法名并返回其静态引用；非高危方法返回 None。
+fn destructive_key(method: &str) -> Option<&'static str> {
+    DESTRUCTIVE_METHODS.iter().copied().find(|m| *m == method)
+}
+
+/// 滑动窗口准入（纯逻辑，可单测）：淘汰窗口外记录，未满则记入本次并返回 true。
+fn window_allows(hits: &mut VecDeque<Instant>, now: Instant, max: usize, window: Duration) -> bool {
+    while hits
+        .front()
+        .is_some_and(|t| now.duration_since(*t) >= window)
+    {
+        hits.pop_front();
+    }
+    if hits.len() >= max {
+        return false;
+    }
+    hits.push_back(now);
+    true
+}
+
+fn check_destructive_rate_limit(method: &'static str) -> bool {
+    let now = Instant::now();
+    let mut map = DESTRUCTIVE_CALLS
+        .get_or_init(|| StdMutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let hits = map.entry(method).or_default();
+    window_allows(hits, now, DESTRUCTIVE_MAX_CALLS, DESTRUCTIVE_WINDOW)
+}
+
 fn is_pipe_broken(err: &str) -> bool {
     err.contains("Broken pipe") || err.contains("os error 32")
 }
@@ -294,6 +344,13 @@ pub async fn py_call(
     if !is_allowed_method(&method) {
         return Err(format!("Method not allowed: {}", method));
     }
+    // 高危方法审计 + 限流（只记方法名，params 可能含密钥，绝不打日志）。
+    if let Some(key) = destructive_key(&method) {
+        eprintln!("[audit] py_call destructive method={}", method);
+        if !check_destructive_rate_limit(key) {
+            return Err("操作过于频繁，请稍后再试".to_string());
+        }
+    }
     call_python(&state, &method, params).await
 }
 
@@ -329,5 +386,36 @@ mod tests {
         let err = resp.error.expect("error payload present");
         assert_eq!(err["message"], "文件不存在");
         assert_eq!(err["code"], "NOT_FOUND");
+    }
+
+    #[test]
+    fn destructive_key_matches_only_listed_methods() {
+        assert_eq!(destructive_key("delete_file"), Some("delete_file"));
+        assert_eq!(destructive_key("run_cli_agent"), Some("run_cli_agent"));
+        assert_eq!(destructive_key("clear_storage"), Some("clear_storage"));
+        assert_eq!(destructive_key("get_topic_tree"), None);
+        assert_eq!(destructive_key("save_file_content"), None);
+        assert_eq!(destructive_key(""), None);
+    }
+
+    #[test]
+    fn window_allows_up_to_max_then_rejects() {
+        let mut hits = VecDeque::new();
+        let now = Instant::now();
+        assert!(window_allows(&mut hits, now, 2, Duration::from_secs(60)));
+        assert!(window_allows(&mut hits, now, 2, Duration::from_secs(60)));
+        assert!(!window_allows(&mut hits, now, 2, Duration::from_secs(60)));
+        assert_eq!(hits.len(), 2);
+    }
+
+    #[test]
+    fn window_allows_prunes_expired_entries() {
+        let mut hits = VecDeque::new();
+        let old = Instant::now() - Duration::from_secs(61);
+        assert!(window_allows(&mut hits, old, 1, Duration::from_secs(60)));
+        // 旧记录已过窗口，应被淘汰后重新准入。
+        let now = Instant::now();
+        assert!(window_allows(&mut hits, now, 1, Duration::from_secs(60)));
+        assert_eq!(hits.len(), 1);
     }
 }

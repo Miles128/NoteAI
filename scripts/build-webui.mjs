@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
  * webui 前端打包：
- *  1) main.mjs + 48 个模块 → 单个 ESM bundle（webui/dist/main.js）
+ *  1) main.mjs + 48 个模块 → ESM bundle（webui/dist/main.js + chunks/，splitting）
  *  2) storage.ts → 经典 IIFE bundle（webui/js/storage.bundle.js），
  *     供 index.html 在模块执行前同步加载（window.Storage 前置契约）
+ *  3) error-handler.ts → 经典 IIFE bundle（webui/js/error-handler.bundle.js）
+ *  4) 上述产物 + 静态资源组装到 webui/app/（stage-webui.mjs，gitignore），
+ *     Tauri frontendDist 只 serve 该目录，源码不进生产包。
  * dev 模式默认非压缩（含 inline sourcemap），release 用 --minify。
  */
-import { build } from 'esbuild';
+import { build, context } from 'esbuild';
+import { stageWebui, watchStage } from './stage-webui.mjs';
 
 const minify = process.argv.includes('--minify');
 const watch = process.argv.includes('--watch');
@@ -48,13 +52,15 @@ const errorOptions = {
 };
 
 if (watch) {
-    const ctx = await build({ ...mainOptions, sourcemap: 'inline' });
-    await ctx.watch();
-    const storageCtx = await build({ ...storageOptions, sourcemap: 'inline' });
-    await storageCtx.watch();
-    const errorCtx = await build({ ...errorOptions, sourcemap: 'inline' });
-    await errorCtx.watch();
+    // NOTE: esbuild 的 build() 结果没有 .watch()，watch 模式必须用 context API。
+    const mainCtx = await context({ ...mainOptions, sourcemap: 'inline' });
+    const storageCtx = await context({ ...storageOptions, sourcemap: 'inline' });
+    const errorCtx = await context({ ...errorOptions, sourcemap: 'inline' });
+    await stageWebui({ strict: false });
+    await Promise.all([mainCtx.watch(), storageCtx.watch(), errorCtx.watch()]);
+    watchStage();
     console.log('[build-webui] watching for changes…');
 } else {
     await Promise.all([build(mainOptions), build(storageOptions), build(errorOptions)]);
+    await stageWebui();
 }

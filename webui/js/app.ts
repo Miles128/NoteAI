@@ -49,8 +49,6 @@ async function initApp() {
       });
     })();
 
-    initTabSwitching();
-
     initCustomTooltip();
 
     if (window.TiptapEditorModule && window.TiptapEditorModule.preloadModules) {
@@ -215,12 +213,6 @@ function initWindowDrag() {
     }
 }
 
-function initTabSwitching() {
-    if ((window.TabsModule as any) && (window.TabsModule as any).initTabs) {
-        (window.TabsModule as any).initTabs();
-    }
-}
-
 async function checkWorkspaceStatus() {
     if (window.WorkspaceModule && window.WorkspaceModule.checkWorkspaceStatus) {
         await window.WorkspaceModule.checkWorkspaceStatus();
@@ -379,7 +371,6 @@ window.App = {
     initResizer,
     initPreviewResizer,
     initWindowDrag,
-    initTabSwitching,
     checkWorkspaceStatus,
     initWorkspaceFileWatcher: function() {
         if (window.EventListeners) {

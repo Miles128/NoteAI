@@ -51,9 +51,9 @@ function updateWorkspaceDisplay(workspacePath: any) {
             `;
         } else {
             container.innerHTML = `
-                <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="打开工作区">
+                <button class="workspace-btn" onclick="window.WorkspaceModule.openWorkspace()" title="${window.t ? window.t('workspace.openWorkspace') : '打开工作区'}">
                     ${window.Icons!.get('folderFilled')}
-                    <span>打开工作区</span>
+                    <span>${window.t ? window.t('workspace.openWorkspace') : '打开工作区'}</span>
                 </button>
             `;
         }
@@ -65,7 +65,7 @@ function showWorkspaceOptions() {
 
     window.api.getWorkspaceStatus().then(async status => {
         if (status.is_set) {
-            if (await window._customConfirm('是否要更改工作区？\n\n当前工作区: ' + status.workspace_path)) {
+            if (await window._customConfirm(window.t ? window.t('workspace.changeConfirm', { path: status.workspace_path }) : '是否要更改工作区？\n\n当前工作区: ' + status.workspace_path)) {
                 openWorkspace();
             }
         } else {

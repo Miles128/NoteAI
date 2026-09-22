@@ -200,7 +200,6 @@ declare global {
         setRaw(key: string, value: unknown, opts?: Record<string, any>): boolean;
         getRaw(key: string, fallback?: unknown, opts?: Record<string, any>): unknown;
         removeItem(key: string, opts?: Record<string, any>): boolean;
-        clearAppStorage(opts?: Record<string, any>): boolean;
     }
 
     interface TypographyRow {
@@ -484,7 +483,6 @@ declare global {
             initResizer?(): void;
             initPreviewResizer?(): void;
             initWindowDrag?(): void;
-            initTabSwitching?(): void;
             checkWorkspaceStatus?(): Promise<void>;
             initWorkspaceFileWatcher?(): void;
         } | undefined;
@@ -619,13 +617,12 @@ declare global {
         SettingsModule: {
             saveFontSize?(size: string): void;
             persistCliAgentId?(id: string): void;
-            switchSettingsTab?(tab: string): void;
+            switchSettingsTab?(tabName: string): void;
             saveApiConfig?(config?: Partial<ApiConfig>): void;
             loadApiConfigToForm?(): void;
             refreshLog?(): void;
             closeSettingsPanel?(): void;
             closeLogPanel?(): void;
-            switchSettingsTab?(tabName: any): void;
             autoSaveConfig?(): void;
             resetApiConfig?(): Promise<any>;
             saveFontFamily?(family: string): void;

@@ -202,8 +202,12 @@ function updateRagIndexCardVisibility(ragEnabled: any) {
 function _estimateIndexTime() {
     var files = (window.AppState && window.AppState.files) ? window.AppState.files.length : 0;
     var seconds = files > 0 ? Math.max(10, files * 0.5) : 60;
-    if (seconds < 60) return Math.ceil(seconds) + '秒';
-    return Math.ceil(seconds / 60) + '分钟';
+    if (seconds < 60) {
+        var s = Math.ceil(seconds);
+        return window.t ? window.t('settings.estimateSeconds', { count: s }) : s + '秒';
+    }
+    var m = Math.ceil(seconds / 60);
+    return window.t ? window.t('settings.estimateMinutes', { count: m }) : m + '分钟';
 }
 
 function _formatStorageBytes(bytes: any) {

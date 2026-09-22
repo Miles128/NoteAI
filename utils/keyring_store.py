@@ -175,12 +175,6 @@ def load_api_key() -> str:
     return ""
 
 
-def delete_api_key() -> bool:
-    current_deleted = _delete_path(_fallback_path())
-    legacy_deleted = _delete_path(_legacy_fallback_path())
-    return current_deleted and legacy_deleted
-
-
 def _credential_filename(service: str, account: str) -> str:
     safe_service = base64.urlsafe_b64encode(hashlib.sha256(service.encode()).digest()).decode()[:16]
     safe_account = base64.urlsafe_b64encode(hashlib.sha256(account.encode()).digest()).decode()[:16]

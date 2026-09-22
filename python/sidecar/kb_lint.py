@@ -11,6 +11,7 @@ from config import config
 from config.constants import TOPIC_SEP
 from config.settings import WORKSPACE_APP_FOLDER
 from sidecar.text_similarity import body_hash, normalize_exact
+from utils.atomic_write import atomic_write_text
 from utils.text_utils import parse_frontmatter, write_frontmatter
 from utils.wiki_store import topic_from_notes_path
 
@@ -76,7 +77,7 @@ def _write_preserving_frontmatter(path: Path, new_body: str) -> None:
     had_bom = text.startswith("\ufeff")
     meta, _ = parse_frontmatter(text)
     new_text = write_frontmatter(meta, new_body, had_bom=had_bom)
-    path.write_text(new_text, encoding="utf-8")
+    atomic_write_text(path, new_text)
 
 
 def _remove_broken_wikilinks(body: str, names: set[str]) -> tuple[str, list[str]]:
@@ -469,7 +470,7 @@ def _save_report(workspace: Path, report: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     import json
 
-    p.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(p, json.dumps(report, ensure_ascii=False, indent=2))
 
 
 _KIND_LABELS = {

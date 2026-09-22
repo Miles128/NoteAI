@@ -4,6 +4,7 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
+from utils.atomic_write import atomic_write_text
 from utils.text_utils import parse_frontmatter
 from utils.topic.membership import note_belongs_to_topic, split_topic_parts
 
@@ -262,7 +263,7 @@ def fix_existing_survey_topics() -> dict:
                 continue
 
             new_content = _add_survey_frontmatter(topic_name, body.strip())
-            md_file.write_text(new_content, encoding="utf-8")
+            atomic_write_text(md_file, new_content)
             fixed += 1
         except Exception:
             skipped += 1
@@ -302,7 +303,7 @@ def generate_new_survey(topic: str, notes: list[dict], on_chunk=None) -> dict:
 
         survey_path.parent.mkdir(parents=True, exist_ok=True)
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
-        survey_path.write_text(survey_content, encoding="utf-8")
+        atomic_write_text(survey_path, survey_content)
 
         append_changelog(f"生成综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}
@@ -348,7 +349,7 @@ def update_existing_survey(topic: str, new_notes: list[dict], on_chunk=None) -> 
         full_text = call_llm_raw_stream(prompt, temperature=0.3, chunk_callback=on_chunk)
 
         survey_content = _add_survey_frontmatter(topic, full_text.strip())
-        survey_path.write_text(survey_content, encoding="utf-8")
+        atomic_write_text(survey_path, survey_content)
 
         append_changelog(f"更新综述: {config.ABSTRACT_FOLDER}/{_safe_topic_path(topic)}/{survey_path.name}")
         return {"success": True, "survey_path": str(survey_path)}

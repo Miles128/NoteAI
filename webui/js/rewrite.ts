@@ -189,7 +189,7 @@ async function onRewriteConfirm() {
         window._rewritePendingText = null;
         _cleanupRewriteState();
         if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
-            window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
+            window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName || '');
         }
     }
 }
@@ -206,7 +206,7 @@ function onRewriteCancel() {
     window.updateStatus(window.t('app.rewriteCancelled'));
     _cleanupRewriteState();
     if (window.AppState.selectedFilePath && window.PreviewModule && window.PreviewModule.loadFilePreview) {
-        window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName);
+        window.PreviewModule.loadFilePreview(window.AppState.selectedFilePath, window.AppState.selectedFileName || '');
     }
 }
 

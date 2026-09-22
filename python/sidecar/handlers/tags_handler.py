@@ -2,6 +2,7 @@ from pathlib import Path
 
 from config import config, is_ignored_dir
 from sidecar.handlers.base import BaseHandler
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.tag_extractor import save_tags_md
 
@@ -248,7 +249,7 @@ class TagsHandler(BaseHandler):
                 meta["tags"] = new_tags
             else:
                 meta.pop("tags", None)
-            md_file.write_text(_dump_frontmatter(meta, body, had_bom), encoding="utf-8")
+            atomic_write_text(md_file, _dump_frontmatter(meta, body, had_bom))
             return True
         except Exception as e:
             logger.warning(f"[tags] error writing {md_file}: {e}\n")

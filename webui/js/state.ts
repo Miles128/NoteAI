@@ -15,7 +15,7 @@
         workspacePath: null
     };
 
-    var _ui: Record<string, any> = {
+    var _ui: AppUiState = {
         selectedFilePath: null,
         selectedFileName: null,
         activeTreeItem: null,
@@ -23,6 +23,7 @@
         currentSidebarView: 'tree',
         linkFilter: 'all',
         graphFilter: 'all',
+        graphMode: 'notes',
         lastFileTreeData: null,
         lastTagsData: null,
         lastTopicData: null

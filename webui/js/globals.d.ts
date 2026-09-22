@@ -264,6 +264,24 @@ declare global {
         setUi(key: string, value: any): void;
     }
 
+    /** 会话内 UI 运行时状态（与 state.ts 的 _ui 初始形状一致）。
+     * 允许任意增删键（见 state.ts 注释），索引签名保留该契约；
+     * 已知键走精确类型，拼写/类型错误会被 tsc 捕获。 */
+    interface AppUiState {
+        selectedFilePath: string | null;
+        selectedFileName: string | null;
+        activeTreeItem: Element | null;
+        treeExpandedState: Record<string, boolean>;
+        currentSidebarView: string;
+        linkFilter: string;
+        graphFilter: string;
+        graphMode: string;
+        lastFileTreeData: any;
+        lastTagsData: any;
+        lastTopicData: any;
+        [key: string]: any;
+    }
+
     interface Window {
         api: WindowApi;
         __TAURI__: any;
@@ -274,7 +292,7 @@ declare global {
         Storage: StorageModule;
         state: StateModule;
         uiConfig: UiConfig | null;
-        AppState: Record<string, any>;
+        AppState: AppUiState;
         t: (key: string, params?: Record<string, string | number>) => string;
         I18nModule: I18nModule;
         ThemeModule: ThemeModule;

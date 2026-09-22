@@ -11,6 +11,7 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
+from utils.atomic_write import atomic_write_text
 from utils.topic.membership import note_belongs_to_topic
 from utils.wiki_store import (
     _get_wiki_path as _resolve_wiki_path_impl,
@@ -82,7 +83,7 @@ def write_wiki_text(content: str, workspace_str: str | Path | None = None) -> bo
     wiki_path = resolve_wiki_path(workspace_str)
     wiki_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        wiki_path.write_text(content, encoding="utf-8")
+        atomic_write_text(wiki_path, content)
         return True
     except Exception:
         return False
@@ -131,7 +132,7 @@ def sync_semantic_links(workspace_str: str | Path | None = None) -> dict:
                 injected += 1
         rebuilt.append(first_line + sep + body)
     try:
-        wiki_path.write_text("\n## ".join(rebuilt), encoding="utf-8")
+        atomic_write_text(wiki_path, "\n## ".join(rebuilt))
     except Exception as exc:
         return {"success": False, "message": f"写入 WIKI.md 失败：{exc}"}
     return {"success": True, "injected": injected}
@@ -142,7 +143,7 @@ def ensure_wiki_exists(workspace_str: str | Path | None = None) -> Path:
     if not wiki_path.exists():
         wiki_path.parent.mkdir(parents=True, exist_ok=True)
         content = f"# WIKI\n\n生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n主题数量: 0\n\n## 目录\n\n"
-        wiki_path.write_text(content, encoding="utf-8")
+        atomic_write_text(wiki_path, content)
     return wiki_path
 
 
@@ -248,7 +249,7 @@ def toggle_survey(
 
         i += 1
 
-    wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
+    atomic_write_text(wiki_path, "\n".join(new_lines))
     return {"success": True, "message": "已切换综述状态"}
 
 

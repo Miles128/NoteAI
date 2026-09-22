@@ -24,7 +24,7 @@ function getSelectedFileName() {
 
 function loadTreeState() {
     var saved = window.Storage.getItem(window.Storage.KEYS.TREE_STATE, null, { silent: true });
-    treeExpandedState = saved || {};
+    treeExpandedState = (saved || {}) as Record<string, boolean>;
 }
 
 function saveTreeState() {

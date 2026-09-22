@@ -4,6 +4,8 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 WEBUI = ROOT / "webui"
 
@@ -41,6 +43,9 @@ def test_generated_assets_are_gitignored_and_untracked() -> None:
         "webui/highlight.min.js",
         "webui/js/storage.bundle.js",
         "webui/lib/tiptap-bundle.js",
+        # staged publish dir (stage-webui.mjs): Tauri frontendDist serves only this
+        "webui/app/index.html",
+        "webui/app/dist/main.js",
     ]
     ignored = subprocess.run(
         ["git", "check-ignore", *generated],
@@ -179,3 +184,29 @@ def test_semantic_workbench_reuses_native_three_columns() -> None:
     assert 'id="semantic-list-pane"' in note_panel
     assert 'id="semantic-workbench-detail"' in content_panel
     assert "semantic-category-pane" not in html
+
+
+def test_staged_frontend_is_self_contained() -> None:
+    """发布组装目录自包含：全部引用在目录内可解析，且无源码混入。"""
+    staged_index = WEBUI / "app" / "index.html"
+    if not staged_index.is_file():
+        pytest.skip("staged frontend not built in this environment: webui/app/")
+    staged_root = WEBUI / "app"
+    html = staged_index.read_text(encoding="utf-8")
+    refs = re.findall(r"""(?:src|href)=["']([^"']+)["']""", html)
+
+    missing = []
+    for ref in refs:
+        if ref.startswith(("http://", "https://", "data:", "#")):
+            continue
+        rel = ref.split("?", 1)[0]
+        if not (staged_root / rel).exists():
+            missing.append(ref)
+    assert missing == []
+
+    sources = [
+        p.relative_to(staged_root).as_posix()
+        for p in staged_root.rglob("*")
+        if p.suffix == ".ts" or p.name in {"main.mjs", "package.json"}
+    ]
+    assert sources == []

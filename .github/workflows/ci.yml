@@ -92,7 +92,13 @@ jobs:
         run: npm run build:tiptap
 
       - name: Build webui bundle + highlight
-        run: npm run build:webui:min && npm run build:highlight
+        run: npm run build:webui:min && npm run build:highlight && npm run stage:webui
+
+      - name: Verify staged frontend has no sources
+        run: |
+          test -f webui/app/index.html
+          test -f webui/app/dist/main.js
+          test -z "$(find webui/app \( -name '*.ts' -o -name 'main.mjs' -o -name 'package.json' \) -print -quit)"
 
       - name: Syntax check webui/js
         run: |
@@ -136,6 +142,9 @@ jobs:
 
       - name: Build tiptap bundle
         run: npm run build:tiptap
+
+      - name: Build and stage webui frontend
+        run: npm run build:webui:min && npm run build:highlight && npm run stage:webui
 
       - name: Install Linux dependencies (Tauri)
         run: |

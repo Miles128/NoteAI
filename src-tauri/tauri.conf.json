@@ -4,9 +4,9 @@
   "version": "1.1.0",
   "identifier": "com.noteai.app",
   "build": {
-    "frontendDist": "../webui",
-    "beforeDevCommand": "npm run build:webui && npm run build:tiptap && npm run build:highlight",
-    "beforeBuildCommand": "npm run build:desktop && npm run build:webui:min"
+    "frontendDist": "../webui/app",
+    "beforeDevCommand": "npm run build:webui && npm run build:tiptap && npm run build:highlight && npm run stage:webui",
+    "beforeBuildCommand": "npm run build:desktop && npm run build:webui:min && npm run build:highlight && npm run stage:webui"
   },
   "app": {
     "withGlobalTauri": true,

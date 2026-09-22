@@ -90,6 +90,9 @@ webui/lib/*
 webui/dist/*
 !webui/dist/main.js
 
+# webui 发布组装目录（stage-webui.mjs 生成，frontendDist 只 serve 它）
+webui/app/
+
 # Tauri
 src-tauri/target/
 

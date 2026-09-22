@@ -55,7 +55,7 @@ def run_convert_stage(ctx: IngestCtx) -> None:
         ctx.prog("convert", 0.16, "跳过转换（已完成）")
         return
     if not ctx.incremental and not ctx.file_paths:
-        pending_files = pipe._scan_convert_pending(ctx.workspace)
+        pending_files = pipe.scan_convert_pending(ctx.workspace)
         if pending_files:
             ctx.prog("convert", 0.05, f"转换 {len(pending_files)} 个文件…")
             raw_path = str(Path(ctx.workspace) / RAW_FOLDER)

@@ -3,7 +3,6 @@ import traceback
 from pathlib import Path
 
 from config.settings import NOTES_FOLDER, RAW_FOLDER
-from modules.file_converter import FileConverterManager
 from modules.note_integration import NoteIntegration
 from sidecar import job_status
 from sidecar.convert_failures import (
@@ -230,21 +229,9 @@ class TransferHandler(BaseHandler):
         if not workspace:
             return {"success": False, "pending": 0, "converted": 0}
 
-        supported = set(FileConverterManager.get_supported_formats())
-        ws = Path(workspace)
-        ws / RAW_FOLDER
+        from sidecar.ingest_scan import scan_convert_pending
 
-        pending = []
-        for f in ws.rglob("*"):
-            if not f.is_file() or f.name.startswith("."):
-                continue
-            rel = f.relative_to(ws)
-            if any(part.startswith(".") for part in rel.parts):
-                continue
-            if RAW_FOLDER in rel.parts:
-                continue
-            if f.suffix.lower() in supported:
-                pending.append(str(f))
+        pending = scan_convert_pending(workspace)
 
         if not pending:
             return {"success": True, "pending": 0, "converted": 0}

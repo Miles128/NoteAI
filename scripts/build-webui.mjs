@@ -5,8 +5,9 @@
  *  2) storage.ts → 经典 IIFE bundle（webui/js/storage.bundle.js），
  *     供 index.html 在模块执行前同步加载（window.Storage 前置契约）
  *  3) error-handler.ts → 经典 IIFE bundle（webui/js/error-handler.bundle.js）
- *  4) 上述产物 + 静态资源组装到 webui/app/（stage-webui.mjs，gitignore），
- *     Tauri frontendDist 只 serve 该目录，源码不进生产包。
+ * 发布组装不在此做（highlight/tiptap 在本脚本之后构建）：
+ *  由 npm run stage:webui 把产物 + 静态资源组装到 webui/app/（gitignore），
+ *  Tauri frontendDist 只 serve 该目录，源码不进生产包。
  * dev 模式默认非压缩（含 inline sourcemap），release 用 --minify。
  */
 import { build, context } from 'esbuild';
@@ -62,5 +63,6 @@ if (watch) {
     console.log('[build-webui] watching for changes…');
 } else {
     await Promise.all([build(mainOptions), build(storageOptions), build(errorOptions)]);
-    await stageWebui();
+    // NOTE: 发布组装不在此做：highlight/tiptap bundle 在本脚本之后才构建，
+    // 由 npm run stage:webui（或 tauri beforeDev/BuildCommand 链尾）统一组装。
 }

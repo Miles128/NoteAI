@@ -92,7 +92,7 @@ jobs:
         run: npm run build:tiptap
 
       - name: Build webui bundle + highlight
-        run: npm run build:webui:min && npm run build:highlight
+        run: npm run build:webui:min && npm run build:highlight && npm run stage:webui
 
       - name: Verify staged frontend has no sources
         run: |

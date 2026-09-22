@@ -12,6 +12,7 @@
     "build:webui": "node scripts/build-webui.mjs",
     "build:webui:min": "node scripts/build-webui.mjs --minify",
     "build:highlight": "node scripts/build-highlight.mjs",
+    "stage:webui": "node scripts/stage-webui.mjs",
     "dev:webui": "node scripts/build-webui.mjs --watch",
     "build:desktop": "npm run build:tiptap"
   },

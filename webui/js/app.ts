@@ -14,7 +14,6 @@ async function initApp() {
 
     initResizer();
     initPreviewResizer();
-    initWindowDrag();
 
     // ── Drag-and-drop file import ──
     (function(){
@@ -207,12 +206,6 @@ function initPreviewResizer() {
     }
 }
 
-function initWindowDrag() {
-    if (window.EditorModule && window.EditorModule.initWindowDrag) {
-        window.EditorModule.initWindowDrag();
-    }
-}
-
 async function checkWorkspaceStatus() {
     if (window.WorkspaceModule && window.WorkspaceModule.checkWorkspaceStatus) {
         await window.WorkspaceModule.checkWorkspaceStatus();
@@ -370,7 +363,6 @@ window.App = {
     setTheme,
     initResizer,
     initPreviewResizer,
-    initWindowDrag,
     checkWorkspaceStatus,
     initWorkspaceFileWatcher: function() {
         if (window.EventListeners) {

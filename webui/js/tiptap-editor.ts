@@ -65,7 +65,6 @@
         originalContent: '',
         saveTimer: null as any,
         savePromise: null as any,
-        fallbackTextarea: null as any,
         isActive: false,
         userEdited: false,
         frontmatterText: '',
@@ -178,7 +177,6 @@
             this.draftTopic = draftMeta && draftMeta.draftTopic ? draftMeta.draftTopic : '';
             this.frontmatterText = parts.yaml;
             this.originalContent = composeMarkdown(this.frontmatterText, parts.body);
-            this.fallbackTextarea = null;
             this.userEdited = false;
 
             if (this.draftId && window.NoteDraftModule && window.NoteDraftModule.setActiveDraft) {
@@ -193,14 +191,12 @@
                 this.instance = null;
             }
             editorEl.innerHTML = '';
-            editorEl.classList.remove('tiptap-fallback-mode');
             this.renderFrontmatterPanel();
 
             var modules = this.getModules()!;
             if (!modules) {
                 console.error('[Tiptap] Failed to load modules: TiptapModules not found');
-                this._createTextareaFallback(editorEl, parts.body);
-                return true;
+                return false;
             }
 
             var bodyStr = String(parts.body || '');
@@ -288,7 +284,6 @@
                     }
                 } catch (e) {
                     console.error('[Tiptap] Init error:', (e as Error).message || e);
-                    self._createTextareaFallback(editorEl, parts.body);
                     return;
                 }
 
@@ -326,9 +321,6 @@
                     console.warn('[Tiptap] getContent error:', e);
                 }
             }
-            if (this.fallbackTextarea) {
-                return this.fallbackTextarea.value;
-            }
             return null;
         },
 
@@ -339,24 +331,18 @@
                 } catch (e) {
                     console.warn('[Tiptap] setContent error:', e);
                 }
-            } else if (this.fallbackTextarea) {
-                this.fallbackTextarea.value = content || '';
             }
         },
 
         setEditable: function(editable: any) {
             if (this.editor) {
                 this.editor.setEditable(editable);
-            } else if (this.fallbackTextarea) {
-                this.fallbackTextarea.disabled = !editable;
             }
         },
 
         focus: function() {
             if (this.editor) {
                 this.editor.commands.focus();
-            } else if (this.fallbackTextarea) {
-                this.fallbackTextarea.focus();
             }
         },
 
@@ -369,7 +355,6 @@
                 this.editor = null;
                 this.instance = null;
             }
-            this.fallbackTextarea = null;
             this.filePath = null;
             this.draftId = null;
             this.draftTitle = '';
@@ -384,7 +369,7 @@
             }
 
             var staleEl = document.getElementById('tiptap-editor');
-            if (staleEl && !this.editor && !this.fallbackTextarea) {
+            if (staleEl && !this.editor) {
                 staleEl.innerHTML = '';
             }
         },
@@ -438,24 +423,6 @@
             if (window.StatusbarModule && window.StatusbarModule.setMetadataToggleVisible) {
                 window.StatusbarModule.setMetadataToggleVisible(false);
             }
-        },
-
-        _createTextareaFallback: function(editorEl: any, content: any) {
-            var self = this;
-            var ta = document.createElement('textarea');
-            ta.className = 'tiptap-fallback';
-            ta.value = content || '';
-            ta.style.cssText = 'width:100%;height:100%;border:none;padding:21px 21px calc(140px * var(--font-scale, 1));font-family:monospace;font-size:14px;line-height:1.7;resize:none;background:var(--bg, #fff);color:var(--text, #333);overflow-y:auto;';
-            ta.addEventListener('input', function() {
-                self.userEdited = true;
-                self.scheduleAutoSave(ta.value);
-            });
-            editorEl.innerHTML = '';
-            editorEl.classList.add('tiptap-fallback-mode');
-            editorEl.appendChild(ta);
-            this.fallbackTextarea = ta;
-            this.isActive = true;
-            updateSaveStatus('error', '编辑器未加载，请重启应用');
         },
 
         persistDraft: function(content: any) {
@@ -640,7 +607,7 @@
             return new Promise(function(resolve) {
                 requestAnimationFrame(function() {
                     var ok = TiptapEditor.init(editorEl, content, path, function() {}, draftMeta || null);
-                    resolve(!!ok && !TiptapEditor.fallbackTextarea);
+                    resolve(!!ok);
                 });
             });
         },

@@ -478,7 +478,8 @@
     "draftMode": "草稿模式 · 用一级标题作为笔记名，点击保存写入当前文件夹",
     "draftUnsaved": "草稿未保存到工作区",
     "draftAutoSaved": "草稿已自动保存",
-    "parseFailed": "解析失败"
+    "parseFailed": "解析失败",
+    "openFailed": "编辑器初始化失败"
   },
   "noteDraft": {
     "labelSuffix": "(草稿)",

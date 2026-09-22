@@ -334,29 +334,13 @@ declare global {
         closeSettingsPanel(): void;
         saveApiConfig(config?: Partial<ApiConfig>): void;
         EditorModule: {
-            updateEditorTheme?(): void;
             renderMarkdownPreview?(content: string): string;
-            destroyCodeMirrorEditor?(): void;
             isActive?: boolean;
             exitEditMode?(): void;
-            mdEditor?: any;
             initMarked?(): void;
             getEffectiveTheme?(): string;
             updateHljsTheme?(): void;
-            updateSaveStatus?(status: any, text: any): void;
-            initCodeMirrorEditor?(content: any, filePath: any): void;
-            createTextareaFallback?(content: any, filePath: any, container: any): void;
-            updateMarkdownPreview?(content: any): void;
-            scheduleAutoSave?(content: any): void;
-            performImmediateSave?(): void;
-            performSave?(content: any): Promise<void>;
-            initPreviewScrollListener?(): void;
-            syncScrollFromEditor?(view: any): void;
-            syncScrollFromPreview?(previewScroll: any): void;
-            enterEditMode?(): void;
             toggleEditMode?(): Promise<void>;
-            initEditorInnerResizer?(): void;
-            initWindowDrag?(): void;
         } | undefined;
         Graph3Tier: { pauseResize?(): void; resumeResize?(): void; load?(data?: any, silent?: boolean): void; stopSimulation?(): void; zoomIn?(): void; zoomOut?(): void; zoomReset?(): void } | undefined;
         HomeDashboardModule: {
@@ -498,7 +482,6 @@ declare global {
             setTheme?(theme: string): void;
             initResizer?(): void;
             initPreviewResizer?(): void;
-            initWindowDrag?(): void;
             checkWorkspaceStatus?(): Promise<void>;
             initWorkspaceFileWatcher?(): void;
         } | undefined;
@@ -670,16 +653,6 @@ declare global {
         closePreview(): void;
         backToContent(): void;
         showPreview(options: { path: string; name?: string }): void;
-        mdEditor: {
-            view: any;
-            filePath: any;
-            saveTimer: any;
-            isScrollSyncing: boolean;
-            originalContent: any;
-            isActive: boolean;
-            usingFallback: boolean;
-            getFallbackContent: any;
-        } | undefined;
         TiptapEditorModule: {
             hideEditorUI?(): Promise<any> | void;
             openMarkdownInEditor?(content: string, path: string, draftMeta?: any): Promise<boolean>;

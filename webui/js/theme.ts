@@ -173,9 +173,6 @@ function setTheme(theme: string): void {
         });
     }
 
-    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
-        window.EditorModule.updateEditorTheme();
-    }
 }
 
 function applySystemTheme(): void {
@@ -188,9 +185,6 @@ function applySystemTheme(): void {
         html.removeAttribute('data-theme');
     }
 
-    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
-        window.EditorModule.updateEditorTheme();
-    }
 }
 
 function initSystemThemeListener(): void {
@@ -230,9 +224,6 @@ async function applyThemeBootstrap(): Promise<void> {
     applyAccentBootstrap();
     restoreTypography();
 
-    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
-        window.EditorModule.updateEditorTheme();
-    }
 }
 
 function applyTheme(theme: string): void {
@@ -265,9 +256,6 @@ function applyTheme(theme: string): void {
         }
     }
 
-    if (window.EditorModule && window.EditorModule.updateEditorTheme) {
-        window.EditorModule.updateEditorTheme();
-    }
 }
 
 function restoreSidebarWidth(): void {

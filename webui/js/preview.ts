@@ -206,12 +206,6 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
         return;
     }
 
-    if (window.mdEditor && window.mdEditor.isActive) {
-        if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
-            window.EditorModule.destroyCodeMirrorEditor();
-        }
-    }
-
     isPreviewActive = true;
 
     previewContent.style.display = 'block';
@@ -653,12 +647,6 @@ function closePreview() {
     if (window.TiptapEditor && window.TiptapEditor.isActive) {
         if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
             window.TiptapEditorModule.hideEditorUI();
-        }
-    }
-
-    if (window.mdEditor && window.mdEditor.isActive) {
-        if (window.EditorModule && window.EditorModule.destroyCodeMirrorEditor) {
-            window.EditorModule.destroyCodeMirrorEditor();
         }
     }
 

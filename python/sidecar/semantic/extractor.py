@@ -19,7 +19,7 @@ from sidecar.semantic.english_common_words import _COMMON_ENGLISH_WORDS
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 10
+PROMPT_VERSION = 11
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
 # variant-spelling dedup rules are spelled out so the model never emits them
 # in the first place. validate_extraction below remains the hard fallback.

@@ -56,4 +56,4 @@ def test_save_ui_config_clamps_rag_advanced_fields(monkeypatch: pytest.MonkeyPat
     assert config.rag_dense_weight == 1.0
     assert config.rag_hyde_threshold == 0.0
     assert config.rag_rerank_skip_score == 1.0
-    assert config.rag_top_k == 1
+    assert config.rag_top_k == 4

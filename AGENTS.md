@@ -97,7 +97,7 @@ Tauri v2 shell (src-tauri/)
 - **Frontmatter**：规范解析器是 `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)`。handler 中应使用 `self._parse_frontmatter()` 或直接导入，避免手写正则。
 - **LLM 调用**：统一走 `utils/llm_utils`。`_LLM_SEMAPHORE = Semaphore(4)` 限制并发；`call_llm_raw()` 使用 `_retry_with_backoff()` 对限流指数退避。同步与流式变体都遵守信号量。输入 prompt 通过 `_clamp_prompt_text()` 截断到 `config.max_context_tokens`。
 - **Chunk ID**：`hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]`，位于 `chunker.py:155`。注意 `section_title` 可能为 `None`。
-- **线程安全**：`SidecarServer` 使用锁保护 stdout（`_stdout_lock`）、缓存（`_cache_lock`）、运行中任务、watcher 防抖、link discovery。RAG 对话通过 `_rag_chat_lock` 单线程化。
+- **线程安全**：`SidecarServer` 用锁保护 stdout（`_stdout_lock`）、运行中任务（`_running_tasks_lock`）、watcher 防抖（`_watcher_debounce_lock`）、自动转换（`_auto_convert_lock`）。`_cache` 是 TTLCache，无独立锁。RAG 对话按会话串行（`rag_handler.py` 的 `SessionGate`），不同会话可并行。历史上的 `_cache_lock` / `_link_discovery_lock` / `_rag_chat_lock` 均不存在（前两者从未被 `with` 使用，已删），不要照旧文档添加。
 - **文件监听**：watchdog 监听工作区；3 秒防抖；忽略点文件、`wiki/` 目录及非媒体后缀。
 - **工作区路径**：始终使用 `config.workspace_path`，禁止硬编码。`scripts/` 中的脚本如需导入项目模块，先执行 `sys.path.insert(0, str(Path(__file__).parent.parent))`，再从 `config.settings` 导入。
 
@@ -130,7 +130,7 @@ Tauri v2 shell (src-tauri/)
 
 ## 7. 产品行为规范
 
-- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），并暴露为 `api.purgeWeakLinks()` / `api.backfillSemanticBidirectional()`；两者列入 `DESTRUCTIVE_METHODS` 限流，暂无 UI 按钮（全库操作耗时且影响面大）。
+- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。两个全库治理接口 `backfill_semantic_bidirectional` / `purge_weak_links` 已于 2026-09-26 下线（Python 路由、Rust 白名单与 `DESTRUCTIVE_METHODS`、`api.ts` 封装全部移除）：前者只补「两侧都零边」的文档对、且一产出就是双份 pending，后者只对已绝迹的弱启发式 reason 生效，对真实工作区空转——**不要**再接回，历史弱链接爆炸的一次清洗已由其备份 `.links.json.bak`（16236→2533）证明完成。
 - **综述写作规则**（硬化于 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
 - **问答**：`question_shape.py` 启发式分型（定义 / 讲解 / 对比 / 缺口）；检索到的主题综述进入 `【讲解骨架】`，不得作为 `[n]` 引用。Notes 才进 `【可引用原文】`。产品赌注见 `documents/PRD.md` v4.2。
 - NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

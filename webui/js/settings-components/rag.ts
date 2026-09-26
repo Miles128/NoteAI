@@ -35,7 +35,9 @@ export function applyRagSettingsToForm(uiConfig: any) {
     }
     var topKEl = document.getElementById('settings-rag-top-k') as HTMLInputElement | null;
     if (topKEl) {
-        topKEl.value = uiConfig.rag_top_k != null ? uiConfig.rag_top_k : 5;
+        var savedTopK = uiConfig.rag_top_k != null ? parseInt(String(uiConfig.rag_top_k), 10) : 5;
+        if (isNaN(savedTopK)) savedTopK = 5;
+        topKEl.value = String(Math.min(8, Math.max(4, savedTopK)));
     }
     _updateDenseWeightHint();
 
@@ -323,7 +325,7 @@ var RAG_PRESETS: Record<string, any> = {
     fast: {
         rag_hyde_enabled: false, rag_hyde_threshold: 0.33,
         rag_rerank_enabled: false, rag_rerank_skip_score: 0.75,
-        rag_dense_weight: 0.6, rag_top_k: 3,
+        rag_dense_weight: 0.6, rag_top_k: 4,
     },
     balanced: {
         rag_hyde_enabled: true, rag_hyde_threshold: 0.33,

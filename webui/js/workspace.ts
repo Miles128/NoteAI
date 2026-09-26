@@ -171,19 +171,6 @@ function clearFiles() {
     }
 }
 
-async function showAbout() {
-    const settingsPanel = document.getElementById('settings-panel');
-    if (settingsPanel) {
-        settingsPanel.classList.add('active');
-        if (window.SettingsModule && window.SettingsModule.loadApiConfigToForm) {
-            window.SettingsModule.loadApiConfigToForm();
-        }
-        if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
-            window.SettingsModule.switchSettingsTab('about');
-        }
-    }
-}
-
 function showSettings() {
     const settingsPanel = document.getElementById('settings-panel');
     if (settingsPanel) settingsPanel.classList.add('active');
@@ -218,7 +205,6 @@ window.WorkspaceModule = {
     addFiles,
     addFolder,
     clearFiles,
-    showAbout,
     showSettings
 };
 
@@ -227,6 +213,5 @@ window.showProjectRulesModal = showProjectRulesModal;
 window.closeProjectRulesModal = closeProjectRulesModal;
 window.saveProjectRulesModal = saveProjectRulesModal;
 window.showSettings = showSettings;
-window.showAbout = showAbout;
 
 })();

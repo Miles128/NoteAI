@@ -75,10 +75,6 @@ class BaseHandler:
     def file_previewer(self):
         return self._server.file_previewer
 
-    @property
-    def _link_discovery_lock(self):
-        return self._server._link_discovery_lock
-
     @staticmethod
     def _parse_frontmatter(md_text: str) -> tuple[dict | None, str]:
         """解析 frontmatter，返回 (meta_dict|None, body_str)，与 utils.text_utils.parse_frontmatter 一致。"""

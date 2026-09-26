@@ -19,6 +19,10 @@
 - CI/CD 完善：添加 Python lint、type check
 
 ### 变更
+- 二轮审计清理：删除零调用死代码——`rag/retriever.py:incremental_update`（与 `ingest_index.py:replace_file_chunks` 重叠的旧单文件索引路径，全仓无调用者）、`_link_discovery_lock` 空锁（声明并代理到 `BaseHandler`，从未被 `with` 使用）、无读取方的 window 挂载（`showAbout`/`onConfirmLink`/`onRejectLink`/`onAddTopicFromFileTree`/`onAddNoteFromFileTree`/`graphSetLayoutMode`/`toggleSemanticWorkbench`/`SchemaWizard`/`loadLazyCss`/`checkIsTauri`/`getTauriInvoke`）与 `main.mjs` 的 `IconsModule`/`SearchModule` 自我赋值；AGENTS.md 线程安全条目按实际锁清单更正（`_cache_lock`、`_rag_chat_lock` 均不存在）
+- 下线链接治理双件套 `purge_weak_links` / `backfill_semantic_bidirectional`（Python 路由 + Rust 白名单与 `DESTRUCTIVE_METHODS` + `api.ts` 封装 + 单测）：对用户工作区实测，前者只补「两侧都零边」的文档对且一产出就是双份 pending，后者只对已绝迹的弱启发式 reason 生效、对真实库空转
+- 语义抽取 confidence 标定：`semantic_extract.yaml` 两处 JSON 示例值从 `0.0` 改为 `0.9` 并写明取值规则（此前模型照抄示例的 0.0，被工作台 standard 档 `≥0.5` 全部过滤，表现为「编译跑了但工作台空着」）；`PROMPT_VERSION` 10→11，已编译的语义库需重跑全量语义编译才享受新标定
+- 「召回 Top-K」改名「召回候选深度」并收到真实生效区间 4-8（候选数 = `top_k × 3` 且被夹在 [12, 24]，此前 1-50 的滑块几乎无感）；补提示说明最终引用条数由问题类型自动决定、上限 8；后端 `rag_top_k` 读写两侧同步夹紧
 - 综述写作规则硬化：`CASCADE_SURVEY_NEW/UPDATE_PROMPT` 重写——综述定位改为「简略概括而非复述」（1-3 句讲清核心结论、禁止完整代码/长表格/逐步操作、篇幅为原文 10%-30%、深度内容用「详见：文件名.md」替代），消除原「全面性/篇幅匹配」导致的综述复述问题
 - 黄金评测集扩充至 105 例：新增属性/定义/指令类拒收与 `reduces` 等英文判断门禁；修复「检索增强生成」定义泄漏与 `reduces` 误拒；`CLAIM_POLICY_VERSION` 5→6
 - 链接治理（`.links.json`）：保存时交叉引用只保留真实引用（正文/摘要提及标题），移除「共享标签/语义相关/邻居/同主题」四路对称弱启发式（此前导致 92% 链接双向爆炸、反向链接面板充满无关内容）；新增 `purge_weak_links` RPC 清洗历史弱链接，新增 `backfill_semantic_bidirectional` RPC 对「共享 ≥6 个实体/概念」的文档对补双向链接（用户工作区 16236 → 1253 条，删除 15585 条弱链接 + 回填 602 条语义双向）

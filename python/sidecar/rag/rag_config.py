@@ -5,6 +5,10 @@ from __future__ import annotations
 from config import config
 
 DEFAULT_TOP_K = 5
+# 召回深度只有这一段真正改变检索候选数：候选数 = top_k * 3，并被夹在 [12, 24]
+# （retriever._retrieve），所以 1-3 全等于 12、9 以上全等于 24。
+MIN_TOP_K = 4
+MAX_TOP_K = 8
 DEFAULT_HYDE_THRESHOLD = 0.33
 DEFAULT_RERANK_SKIP_SCORE = 0.75
 DEFAULT_DENSE_WEIGHT = 0.7
@@ -22,7 +26,7 @@ def top_k() -> int:
         raw = int(getattr(config, "rag_top_k", DEFAULT_TOP_K))
     except (TypeError, ValueError):
         raw = DEFAULT_TOP_K
-    return int(_clamp(float(raw), 1.0, 50.0))
+    return int(_clamp(float(raw), float(MIN_TOP_K), float(MAX_TOP_K)))
 
 
 def hyde_enabled() -> bool:

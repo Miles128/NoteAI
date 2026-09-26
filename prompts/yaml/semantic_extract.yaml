@@ -25,12 +25,12 @@ EXTRACTION_PROMPT: |-
 
   只输出一个 JSON 对象，不要 Markdown 代码围栏：
   {{
-    "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-    "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}]
+    "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.9}}],
+    "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.9}}]
   }}
 
   规则：
-  1. confidence 表示抽取把握，范围 0 到 1；无内容时返回对应空数组。
+  1. confidence 表示抽取把握，范围 0 到 1，且必须逐对象如实评估：原文明确支持、名称规范时给 0.8 以上；只能靠推测归入对象时给 0.5 以下。拿不准就不要输出该对象，禁止用 confidence=0 来"输出后再表示怀疑"（0 会被下游当成噪声丢弃）。无内容时返回对应空数组。
   2. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数（如 --port）、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
   3. {object_name_rules}
 
@@ -44,15 +44,15 @@ BATCH_EXTRACTION_PROMPT: |-
     "blocks": [
       {{
         "block_id": "输入中的原始 ID",
-        "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.0}}],
-        "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.0}}]
+        "concepts": [{{"name": "概念名", "description": "原文内定义", "confidence": 0.9}}],
+        "entities": [{{"name": "实体名", "type": "person|organization|product|model|protocol|artifact|other", "description": "原文内描述", "confidence": 0.9}}]
       }}
     ]
   }}
 
   规则：
   1. 没有可抽取内容的 Block 也必须返回，两个数组均为空。
-  2. confidence 表示抽取把握，范围 0 到 1；只输出 JSON。
+  2. confidence 表示抽取把握，范围 0 到 1，逐对象如实评估：原文明确支持且名称规范给 0.8 以上，靠推测给 0.5 以下；不要用 confidence=0 表示怀疑（0 会被下游当噪声丢弃），拿不准就放弃该对象。只输出 JSON。
   3. 实体与概念必须是领域内稳定的具名对象或术语；文件名、章节标题、目录名、列表序号、纯数字/日期/版本号、命令参数、URL、邮箱、代码标识符、临时命名一律不得抽取为实体或概念。
   4. {object_name_rules}
 

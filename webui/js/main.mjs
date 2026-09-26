@@ -22,8 +22,6 @@ async function loadModules() {
     await import('./assistant.ts');
 
     await import('./icons.ts');
-    const { IconsModule } = window;
-    window.IconsModule = IconsModule;
 
     // 顺序契约：graph-layout-params.js 顶层读取 window.Storage.KEYS，依赖 index.html 末尾经典脚本
     // storage.js 先行——经典脚本在 HTML 解析期执行，必早于本模块脚本，顺序恒成立。
@@ -127,7 +125,6 @@ async function loadModules() {
     };
 
     await import('./search.ts');
-    window.SearchModule = window.SearchModule || {};
 
     await import('./pending.ts');
     const {
@@ -139,7 +136,6 @@ async function loadModules() {
 
     await import('./semantic-workbench.ts');
     window.SemanticWorkbenchModule = window.SemanticWorkbenchModule || {};
-    window.toggleSemanticWorkbench = window.SemanticWorkbenchModule.toggle;
     if (window.SemanticWorkbenchModule.init) window.SemanticWorkbenchModule.init();
 
     await import('./semantic-graph.ts');

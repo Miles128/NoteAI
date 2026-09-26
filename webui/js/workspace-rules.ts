@@ -291,6 +291,4 @@ window.OrganizeRulesModule = {
     maybePromptSetup: maybePromptSetup
 };
 
-window.SchemaWizard = window.OrganizeRulesModule;
-
 })();

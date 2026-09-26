@@ -39,8 +39,6 @@ function isEnabled() {
     return ui ? ui.semantic_workbench_enabled !== false : _workbenchEnabled;
 }
 
-function toggle() { _visible ? hide() : show(_category); }
-
 function show(category: any) {
     if (!isEnabled()) return;
     if (category) _category = category;
@@ -780,7 +778,6 @@ function init() {
     applyVisibilityConfig();
 }
 
-window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };
-window.toggleSemanticWorkbench = toggle;
+window.SemanticWorkbenchModule = { init: init, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };
 
 })();

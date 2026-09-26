@@ -150,16 +150,4 @@ window.openQuickCreate = function(tab: any) {
     _open();
 };
 
-window.onAddTopicFromFileTree = function() {
-    window.openQuickCreate('topic');
-};
-
-window.onAddNoteFromFileTree = function() {
-    if (window.NoteDraftModule && window.NoteDraftModule.createNoteInContext) {
-        window.NoteDraftModule.createNoteInContext();
-    } else if (window.createNoteFromNoteList) {
-        window.createNoteFromNoteList();
-    }
-};
-
 })();

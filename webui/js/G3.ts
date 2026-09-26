@@ -996,7 +996,6 @@ function graphZoomOut() { Graph3Tier.zoomOut(); }
 function graphZoomReset() { Graph3Tier.zoomReset(); }
 function graphReplay() { Graph3Tier.replay(); }
 function loadRelationGraphData() { Graph3Tier.load(); }
-function graphSetLayoutMode(mode: any) { Graph3Tier.setLayoutMode(mode); }
 function graphToggleFilenames() {
     Graph3Tier.showFilenames = !Graph3Tier.showFilenames;
     Graph3Tier.treeInitialCollapseApplied = false;
@@ -1019,7 +1018,6 @@ window.graphZoomOut = graphZoomOut;
 window.graphZoomReset = graphZoomReset;
 window.graphReplay = graphReplay;
 window.loadRelationGraphData = loadRelationGraphData;
-window.graphSetLayoutMode = graphSetLayoutMode;
 window.graphToggleFilenames = graphToggleFilenames;
 
 // graphOpenLayoutSettings / graphCloseLayoutSettings / graphApplyLayoutSettings /

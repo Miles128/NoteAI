@@ -33,7 +33,8 @@ var _MERGE_THRESHOLD_FIELDS = [
 ];
 
 function _mergeThresholdEl(key: any) {
-    return document.getElementById('settings-merge-threshold-' + key) as HTMLInputElement | null;
+    // 数据键用下划线（与后端 _MERGE_PRESETS 一致），DOM id 用连字符
+    return document.getElementById('settings-merge-threshold-' + String(key).replace(/_/g, '-')) as HTMLInputElement | null;
 }
 
 export function applyMergeAdvancedToForm(overrides: any) {
@@ -89,6 +90,15 @@ export function initMergeAdvancedSettings() {
         el.addEventListener('change', function() {
             saveMergeAdvancedConfig();
         });
+    });
+}
+
+export function initAutoTopicSettings() {
+    const el = document.getElementById('settings-auto-topic') as HTMLInputElement | null;
+    if (!el || el.dataset.bound) return;
+    el.dataset.bound = '1';
+    el.addEventListener('change', function() {
+        saveAssistantUiConfig({ auto_topic: el.checked });
     });
 }
 

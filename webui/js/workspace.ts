@@ -185,12 +185,7 @@ async function showAbout() {
 }
 
 function showSettings() {
-    const aboutPanel = document.getElementById('about-panel');
-    const logPanel = document.getElementById('log-panel');
     const settingsPanel = document.getElementById('settings-panel');
-
-    if (aboutPanel) aboutPanel.classList.remove('active');
-    if (logPanel) logPanel.classList.remove('active');
     if (settingsPanel) settingsPanel.classList.add('active');
 
     if (window.SettingsModule && window.SettingsModule.loadApiConfigToForm) {
@@ -204,20 +199,6 @@ function showSettings() {
     }
     if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
         window.SettingsModule.switchSettingsTab('model');
-    }
-}
-
-function showLog() {
-    const aboutPanel = document.getElementById('about-panel');
-    const settingsPanel = document.getElementById('settings-panel');
-    const logPanel = document.getElementById('log-panel');
-
-    if (aboutPanel) aboutPanel.classList.remove('active');
-    if (settingsPanel) settingsPanel.classList.remove('active');
-    if (logPanel) logPanel.classList.add('active');
-
-    if (window.SettingsModule && window.SettingsModule.refreshLog) {
-        window.SettingsModule.refreshLog();
     }
 }
 
@@ -238,8 +219,7 @@ window.WorkspaceModule = {
     addFolder,
     clearFiles,
     showAbout,
-    showSettings,
-    showLog
+    showSettings
 };
 
 window.openWorkspace = openWorkspace;

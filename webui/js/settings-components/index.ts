@@ -6,7 +6,7 @@
  */
 import { initRagSettings, applyRagSettingsToForm, refreshStorageUsage } from './rag';
 import { applyCliSettingsToForm, refreshCliAgentsSettings, persistCliAgentId, _syncCliAgentSelectors, initCliSettings } from './cli';
-import { initIngestAutoSettings, initTopicAutoThresholdSettings, initMergePresetSettings, initMergeAdvancedSettings, applyMergeAdvancedToForm } from './merge';
+import { initIngestAutoSettings, initAutoTopicSettings, initTopicAutoThresholdSettings, initMergePresetSettings, initMergeAdvancedSettings, applyMergeAdvancedToForm } from './merge';
 import { saveAssistantUiConfig } from './shared';
 
 (function() { 'use strict';
@@ -14,6 +14,7 @@ import { saveAssistantUiConfig } from './shared';
 window.SettingsComponents = {
     initRagSettings,
     initIngestAutoSettings,
+    initAutoTopicSettings,
     initTopicAutoThresholdSettings,
     initMergePresetSettings,
     initMergeAdvancedSettings,

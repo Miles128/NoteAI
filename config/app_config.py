@@ -58,6 +58,8 @@ class AppConfig:
     # for automatic filing. The model output is not calibrated, so 0.80 is a
     # conservative product default rather than a probability guarantee.
     topic_auto_assign_threshold: float = 0.80
+    merge_preset: str = "balanced"
+    merge_overrides: dict[str, Any] = field(default_factory=dict)
     ingest_auto_enabled: bool = True
     semantic_compile_enabled: bool = True
     cli_agent_id: str = ""

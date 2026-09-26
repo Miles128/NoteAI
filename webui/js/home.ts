@@ -86,37 +86,12 @@ function renderPending(summary: any) {
     }).join('');
 }
 
-function jobLabel(job: any) {
-    return job.label || job.id || window.t('home.jobUnknown');
-}
-
 function statusLabel(status: any) {
     if (status === 'running') return window.t('home.statusRunning');
     if (status === 'complete') return window.t('home.statusComplete');
     if (status === 'failed') return window.t('home.statusFailed');
     if (status === 'cancelled') return window.t('home.statusCancelled');
     return status || '-';
-}
-
-function renderJobs(targetId: any, jobs: any, emptyText: any) {
-    var el = document.getElementById(targetId);
-    if (!el) return;
-    if (!jobs || !jobs.length) {
-        el.innerHTML = '<div class="home-empty">' + esc(emptyText) + '</div>';
-        return;
-    }
-    el.innerHTML = jobs.slice(0, 4).map(function(job: any) {
-        var progress = Math.round((job.progress || 0) * 100);
-        var cls = 'home-job-status is-' + esc(job.status || 'idle');
-        return '<div class="home-job-row">' +
-            '<div class="home-job-main">' +
-                '<span class="home-job-title">' + esc(jobLabel(job)) + '</span>' +
-                '<span class="' + cls + '">' + esc(statusLabel(job.status)) + '</span>' +
-            '</div>' +
-            '<div class="home-job-message">' + esc(job.message || '') + '</div>' +
-            '<div class="home-job-track"><div style="width:' + progress + '%"></div></div>' +
-        '</div>';
-    }).join('');
 }
 
 function renderOrganize(status: any, jobs: any) {
@@ -126,7 +101,7 @@ function renderOrganize(status: any, jobs: any) {
     var body = document.getElementById('home-organize-body');
     if (!body) return;
     if (running.length) {
-        renderJobs('home-organize-body', running, window.t('home.organizeIdle'));
+        body.innerHTML = '<div class="home-status-row"><span>' + esc(window.t('home.jobsRunning', { count: running.length })) + '</span><strong>' + esc(window.t('home.statusRunning')) + '</strong></div>';
         return;
     }
     var msg = window.t('home.organizeIdle');
@@ -146,7 +121,13 @@ function renderCompile(jobs: any) {
         return job.kind === 'survey' || job.kind === 'rag_index' ||
             job.id === 'ingest_cascade_surveys' || job.id === 'rag-index-progress';
     });
-    renderJobs('home-compile-body', compileJobs, window.t('home.compileIdle'));
+    var body = document.getElementById('home-compile-body');
+    if (!body) return;
+    if (!compileJobs.length) {
+        body.innerHTML = '<div class="home-empty">' + esc(window.t('home.compileIdle')) + '</div>';
+        return;
+    }
+    body.innerHTML = '<div class="home-status-row"><span>' + esc(window.t('home.jobsRunning', { count: compileJobs.length })) + '</span><strong>' + esc(window.t('home.statusRunning')) + '</strong></div>';
 }
 
 function renderFlow(summary: any, ingestStatus: any, jobs: any, indexStatus: any) {

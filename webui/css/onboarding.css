@@ -250,17 +250,6 @@
     }
 }
 
-.onb-sample-q {
-    padding: 14px 16px;
-    border: 1px dashed var(--primary, #4f8cff);
-    border-radius: 10px;
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--text, inherit);
-    background: var(--surface-hover, rgba(79, 140, 255, 0.05));
-    margin: 10px 0 16px;
-}
-
 .onb-footer {
     display: flex;
     align-items: center;

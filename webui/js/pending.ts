@@ -25,8 +25,7 @@ function showPendingViewContent() {
     var contentPanel = document.getElementById('content-panel');
     if (contentPanel) contentPanel.style.display = 'flex';
 
-    var views = ['home-dashboard', 'graph-home-view', 'graph-panel', 'semantic-workbench', 'content-area', 'preview-panel',
-                 'topic-pending-panel', 'ai-suggestion-panel'];
+    var views = ['home-dashboard', 'graph-home-view', 'graph-panel', 'semantic-workbench', 'content-area', 'preview-panel'];
     views.forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -682,24 +681,9 @@ function scanPendingMergeCandidates() {
     var btn = document.getElementById('pending-merge-scan-btn');
     if (!window.api || !window.api.scanMergeCandidates) return;
     _setButtonBusy(btn, true, 'pending.scanningMergeCandidates');
-    var preset = 'balanced';
-    var overrides = {};
-    if (window.uiConfig && window.uiConfig.merge_preset) {
-        preset = window.uiConfig.merge_preset;
-    } else {
-        try {
-            var saved = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');
-            if (saved && saved.merge_preset) preset = saved.merge_preset;
-        } catch (_e) {}
-    }
-    if (window.uiConfig && window.uiConfig.merge_overrides) {
-        overrides = window.uiConfig.merge_overrides;
-    } else {
-        try {
-            var savedConfig = JSON.parse(localStorage.getItem('noteai_ui_config') || '{}');
-            if (savedConfig && savedConfig.merge_overrides) overrides = savedConfig.merge_overrides;
-        } catch (_e) {}
-    }
+    var ui = window.uiConfig || {};
+    var preset = ui.merge_preset || 'balanced';
+    var overrides = ui.merge_overrides || {};
     window.api.scanMergeCandidates(preset, overrides).then(function(result) {
         window.updateStatus(window.t('pending.mergeScanDone', { count: (result && result.candidate_count) || 0 }));
         loadPendingItems();
@@ -711,8 +695,8 @@ function scanPendingMergeCandidates() {
     });
 }
 
-function retryAllPendingSurveys() {
-    var btn = document.getElementById('pending-cascade-retry-all-btn');
+function retryAllCascadeFailures() {
+    var btn = document.getElementById('pending-cascade-retry-btn');
     if (!window.api || !window.api.retryAllCascadeFailures) return;
     _setButtonBusy(btn, true, 'pending.retrying');
     window.api.retryAllCascadeFailures().then(function(result) {
@@ -720,7 +704,7 @@ function retryAllPendingSurveys() {
         loadPendingItems();
         refreshPendingBtnState();
     }).catch(function(e) {
-        window.updateStatus(window.t('pending.loadFailed', { error: e.message || String(e) }));
+        window.updateStatus(e.message || window.t('pending.operationFailed'));
     }).finally(function() {
         _setButtonBusy(btn, false, 'pending.retryAllSurveys');
     });
@@ -729,21 +713,17 @@ function retryAllPendingSurveys() {
 document.addEventListener('click', _handlePendingClick);
 // 本模块由 main.mjs 动态 import，执行时 DOM 已解析完成，直接绑定（不再依赖 DOMContentLoaded 重放）
 (function() {
-    var lintBtn = document.getElementById('pending-lint-run-btn');
-    var mergeScanBtn = document.getElementById('pending-merge-scan-btn');
-    var retryBtn = document.getElementById('pending-cascade-retry-all-btn');
-    if (lintBtn && !lintBtn.dataset.pendingBound) {
-        lintBtn.addEventListener('click', runPendingHealthCheck);
-        lintBtn.dataset.pendingBound = '1';
-    }
-    if (mergeScanBtn && !mergeScanBtn.dataset.pendingBound) {
-        mergeScanBtn.addEventListener('click', scanPendingMergeCandidates);
-        mergeScanBtn.dataset.pendingBound = '1';
-    }
-    if (retryBtn && !retryBtn.dataset.pendingBound) {
-        retryBtn.addEventListener('click', retryAllPendingSurveys);
-        retryBtn.dataset.pendingBound = '1';
-    }
+    var bindings: Array<[HTMLElement | null, () => void]> = [
+        [document.getElementById('pending-lint-run-btn'), runPendingHealthCheck],
+        [document.getElementById('pending-merge-scan-btn'), scanPendingMergeCandidates],
+        [document.getElementById('pending-cascade-retry-btn'), retryAllCascadeFailures],
+    ];
+    bindings.forEach(function(pair) {
+        var btn = pair[0];
+        if (!btn || btn.dataset.pendingBound) return;
+        btn.addEventListener('click', pair[1]);
+        btn.dataset.pendingBound = '1';
+    });
 })();
 
 window.togglePendingView = togglePendingView;

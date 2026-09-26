@@ -418,7 +418,7 @@ function setupFileTreeDragDrop(container: any) {
 
 document.addEventListener('click', function() { hideTreeContextMenu(); });
 document.addEventListener('contextmenu', function(e) {
-    if (!(e.target as Element).closest('.tree-item') && !(e.target as Element).closest('.sidebar-tag-row') && !(e.target as Element).closest('.sidebar-tag-file')) hideTreeContextMenu();
+    if (!(e.target as Element).closest('.tree-item')) hideTreeContextMenu();
 });
 
 var _virtualScrollRAF: any = null;
@@ -744,11 +744,6 @@ function selectFile(path: any, fileName: any) {
         if (graphBtn) graphBtn.classList.remove('active');
     }
 
-    var pendingPanel = document.getElementById('topic-pending-panel');
-    if (pendingPanel && pendingPanel.style.display !== 'none') {
-        pendingPanel.style.display = 'none';
-    }
-
     if (window.PreviewModule && window.PreviewModule.loadFilePreview) {
         window.PreviewModule.loadFilePreview(path, fileName);
     }
@@ -764,10 +759,7 @@ window.TreeModule = {
     isTreeFileCountEnabled: isTreeFileCountEnabled,
     setTreeFileCountEnabled: setTreeFileCountEnabled,
     refreshTreeDisplay: refreshTreeDisplay,
-    initTreeFileCountSetting: initTreeFileCountSetting,
-    hasTopicPending: function() { return window.hasTopicPending ? window.hasTopicPending() : false; },
-    updateWebAIStatus: function() {},
-    updateConvAIStatus: function() {}
+    initTreeFileCountSetting: initTreeFileCountSetting
 };
 
 window.switchSidebarView = window.switchSidebarView;

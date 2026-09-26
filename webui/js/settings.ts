@@ -76,6 +76,7 @@ function switchSettingsTab(tabName: string) {
     window.SettingsComponents!.initRagSettings();
     window.SettingsComponents!.initCliSettings();
     window.SettingsComponents!.initIngestAutoSettings();
+    window.SettingsComponents!.initAutoTopicSettings();
     window.SettingsComponents!.initTopicAutoThresholdSettings();
     window.SettingsComponents!.initMergePresetSettings();
     window.SettingsComponents!.initMergeAdvancedSettings();
@@ -91,9 +92,7 @@ window.SettingsModule = {
     loadApiConfigToForm: window.SettingsGeneral!.loadApiConfigToForm,
     refreshLog: window.SettingsGeneral!.refreshLog,
     closeSettingsPanel: window.SettingsGeneral!.closeSettingsPanel,
-    closeLogPanel: window.SettingsGeneral!.closeLogPanel,
     switchSettingsTab,
-    autoSaveConfig: window.SettingsGeneral!.autoSaveConfig,
     resetApiConfig: window.SettingsGeneral!.resetApiConfig,
     saveFontSize: window.SettingsGeneral!.saveFontSize,
     saveFontFamily: window.SettingsGeneral!.saveFontFamily,
@@ -124,7 +123,6 @@ window.SettingsModule = {
 window.saveApiConfig = window.SettingsGeneral!.saveApiConfig!;
 window.refreshLog = window.SettingsGeneral!.refreshLog!;
 window.closeSettingsPanel = window.SettingsGeneral!.closeSettingsPanel!;
-window.closeLogPanel = window.SettingsGeneral!.closeLogPanel!;
 window.resetApiConfig = window.SettingsGeneral!.resetApiConfig!;
 
 })();

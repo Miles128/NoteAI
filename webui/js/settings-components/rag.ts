@@ -341,11 +341,16 @@ function _readRagPresetFromForm(): Record<string, any> {
     var denseEl = document.getElementById('settings-rag-dense-weight') as HTMLInputElement | null;
     var densePct = denseEl ? parseInt(denseEl.value, 10) : 70;
     if (isNaN(densePct)) densePct = 70;
+    // 这两个键已无表单控件（只由预设写入），必须沿用已保存值，
+    // 否则任何一次整表保存都会把「深度」档打回硬默认。
+    var saved = window.uiConfig || {};
+    var hydeEl = document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null;
+    var skipEl = document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null;
     return {
         rag_hyde_enabled: (document.getElementById('settings-rag-hyde-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_hyde_threshold: parseFloat(((document.getElementById('settings-rag-hyde-threshold') as HTMLInputElement | null)?.value) || '') || 0.33,
+        rag_hyde_threshold: parseFloat(hydeEl?.value || '') || saved.rag_hyde_threshold || 0.33,
         rag_rerank_enabled: (document.getElementById('settings-rag-rerank-enabled') as HTMLInputElement | null)?.checked !== false,
-        rag_rerank_skip_score: parseFloat(((document.getElementById('settings-rag-rerank-skip-score') as HTMLInputElement | null)?.value) || '') || 0.75,
+        rag_rerank_skip_score: parseFloat(skipEl?.value || '') || saved.rag_rerank_skip_score || 0.75,
         rag_dense_weight: densePct / 100,
         rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
     };

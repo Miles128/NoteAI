@@ -40,13 +40,12 @@ async function loadModules() {
     await import('./settings.ts');
     const {
         SettingsModule, saveApiConfig, refreshLog, closeSettingsPanel,
-        closeLogPanel, resetApiConfig,
+        resetApiConfig,
     } = window;
     window.SettingsModule = SettingsModule;
     window.saveApiConfig = saveApiConfig;
     window.refreshLog = refreshLog;
     window.closeSettingsPanel = closeSettingsPanel;
-    window.closeLogPanel = closeLogPanel;
     window.resetApiConfig = resetApiConfig;
 
     await import('./workspace.ts');
@@ -84,12 +83,9 @@ async function loadModules() {
     window.switchSidebarView = window.switchSidebarView;
     window.updateSidebarStats = window.updateSidebarStats;
     window.setSidebarStatus = window.setSidebarStatus;
-    window.showGraphHomeView = window.showGraphHomeView;
     window.updateHomeStats = window.updateHomeStats;
     // toggleSidebar 的真实实现在 sidebar.js；模块加载前由 index.html 内联脚本与
     // utils.js 的 _earlyGlobals 提供 noop 占位，此处不再重复兜底。
-
-    await import('./tags.ts');
 
     await import('./tiptap-editor.ts');
     const { TiptapEditorModule, TiptapEditor } = window;
@@ -114,11 +110,10 @@ async function loadModules() {
         window.onLLMRewrite = window.RewriteManager.onLLMRewrite;
     }
 
-    // downloader/converter 按需加载（代码分割）：面板首次打开/操作时才 import 对应 chunk，
-    // 首屏不再解析这两个模块。
+    // downloader 按需加载（代码分割）：面板首次打开/操作时才 import 对应 chunk，
+    // 首屏不再解析该模块。
     window.openDownloadModal = function() {
         return import('./downloader.ts').then(function() {
-            if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) window.DownloaderModule.loadSavedConfig();
             if (window.DownloaderModule && window.DownloaderModule.openDownloadModal) window.DownloaderModule.openDownloadModal();
         }).catch(function(err) { console.warn('[Downloader] lazy load failed:', err); });
     };
@@ -130,24 +125,6 @@ async function loadModules() {
     window.closeDownloadModal = function() {
         if (window.DownloaderModule && window.DownloaderModule.closeDownloadModal) window.DownloaderModule.closeDownloadModal();
     };
-    window.startFileConversion = function() {
-        return import('./converter.ts').then(function() {
-            if (window.ConverterModule && window.ConverterModule.loadSavedConvConfig) window.ConverterModule.loadSavedConvConfig();
-            if (window.ConverterModule && window.ConverterModule.startFileConversion) window.ConverterModule.startFileConversion();
-        }).catch(function(err) { console.warn('[Converter] lazy load failed:', err); });
-    };
-
-    await import('./integrator.ts');
-    const { IntegratorModule } = window;
-    window.IntegratorModule = IntegratorModule;
-
-    await import('./topic.ts');
-    const {
-        loadTopicPendingPanel, onCandidateClick, hasTopicPending,
-    } = window;
-    window.loadTopicPendingPanel = loadTopicPendingPanel;
-    window.onCandidateClick = onCandidateClick;
-    window.hasTopicPending = hasTopicPending;
 
     await import('./search.ts');
     window.SearchModule = window.SearchModule || {};

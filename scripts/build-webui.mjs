@@ -10,6 +10,7 @@
  *  Tauri frontendDist 只 serve 该目录，源码不进生产包。
  * dev 模式默认非压缩（含 inline sourcemap），release 用 --minify。
  */
+import { rm } from 'node:fs/promises';
 import { build, context } from 'esbuild';
 import { stageWebui, watchStage } from './stage-webui.mjs';
 
@@ -62,6 +63,7 @@ if (watch) {
     watchStage();
     console.log('[build-webui] watching for changes…');
 } else {
+    await rm('webui/dist', { recursive: true, force: true });
     await Promise.all([build(mainOptions), build(storageOptions), build(errorOptions)]);
     // NOTE: 发布组装不在此做：highlight/tiptap bundle 在本脚本之后才构建，
     // 由 npm run stage:webui（或 tauri beforeDev/BuildCommand 链尾）统一组装。

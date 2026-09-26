@@ -142,17 +142,6 @@ class WorkspaceStateManager:
         except Exception as e:
             return False, f"清除工作区状态失败: {e}"
 
-    def _try_read_backup(self) -> dict[str, Any]:
-        backup_file = self.state_file.with_suffix(".json.bak")
-        if not backup_file.exists():
-            return {}
-
-        try:
-            with open(backup_file, encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-
     def _get_timestamp(self) -> str:
         from datetime import datetime
 

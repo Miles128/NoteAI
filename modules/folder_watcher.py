@@ -1,7 +1,6 @@
 """本机文件夹监控：监控用户指定目录，新增可消化文件时自动触发知识库导入。
 
-与 RSS 订阅（sidecar/multi_source.py）同属"多源采集"能力，
-复用 FileConverterManager / WebDownloader 的既有下载、解析与入库流程。
+复用既有下载、解析与入库流程（WebDownloader / FileConverterManager）。
 """
 
 from __future__ import annotations

@@ -18,7 +18,6 @@
             THEME: 'noteai_theme',
             ACCENT_COLOR: 'noteai_accent_color',
             DOWNLOADER_CONFIG: 'downloader-config',
-            CONVERTER_CONFIG: 'converter-config',
             TREE_STATE: 'tree-expanded-state',
             TREE_SHOW_FILE_COUNT: 'noteai.treeShowFileCount',
             SIDEBAR_WIDTH: 'sidebar-width',

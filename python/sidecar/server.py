@@ -20,7 +20,6 @@ from config.settings import NOTES_FOLDER
 from modules.file_converter import FileConverterManager
 from modules.file_preview import FilePreviewer
 from modules.folder_watcher import FolderWatcher, load_watched_folders
-from modules.topic_extractor import TopicExtractor
 from sidecar import job_status
 from sidecar.handlers import (
     CliAgentHandler,
@@ -35,7 +34,6 @@ from sidecar.handlers import (
     RagHandler,
     ReliabilityHandler,
     SemanticHandler,
-    TagsHandler,
     TopicsHandler,
     TransferHandler,
     WorkspaceHandler,
@@ -74,7 +72,6 @@ class SidecarServer(PathHelpersMixin):
         self._web_downloader = None
         self.file_converter = FileConverterManager()
         self.file_previewer = FilePreviewer()
-        self.topic_extractor = TopicExtractor()
         self.folder_watcher = FolderWatcher(on_files=self._handle_watched_folder_files)
         self._progress_callback = None
         self._running_tasks = set()
@@ -98,7 +95,6 @@ class SidecarServer(PathHelpersMixin):
         self._workspace_handler = WorkspaceHandler(self)
         self._transfer_handler = TransferHandler(self)
         self._files_handler = FilesHandler(self)
-        self._tags_handler = TagsHandler(self)
         self._topics_handler = TopicsHandler(self)
         self._links_handler = LinksHandler(self)
         self._intel_handler = IntelHandler(self)
@@ -133,7 +129,6 @@ class SidecarServer(PathHelpersMixin):
         self._workspace_handler.register_routes(self._router)
         self._transfer_handler.register_routes(self._router)
         self._files_handler.register_routes(self._router)
-        self._tags_handler.register_routes(self._router)
         self._topics_handler.register_routes(self._router)
         self._topics_handler.register_routes_3tier(self._router)
         self._links_handler.register_routes(self._router)
@@ -396,9 +391,6 @@ class SidecarServer(PathHelpersMixin):
 
     def _do_cascade_survey_update(self, topic):
         return self._topics_handler._do_cascade_survey_update(topic)
-
-    def _batch_auto_assign_topics(self, params):
-        return self._topics_handler._batch_auto_assign_topics(params)
 
     @staticmethod
     def _rel_parts(file_path: str | Path) -> tuple[str, ...]:

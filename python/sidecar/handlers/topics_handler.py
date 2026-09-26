@@ -2,7 +2,7 @@ import threading
 import time
 from pathlib import Path
 
-from config import config, is_ignored_dir
+from config import config
 from config.constants import TOPIC_SEP
 from sidecar.cascade import (
     append_changelog,
@@ -12,9 +12,6 @@ from sidecar.handlers.base import BaseHandler
 from sidecar.mixins.topics_3tier_mixin import Topics3TierMixin
 from sidecar.topics.folders import (
     delete_topic_folder as _delete_topic_folder_service,
-)
-from sidecar.topics.folders import (
-    rename_topic_folder as _rename_topic_folder_service,
 )
 from sidecar.topics.meta import build_topic_meta
 from sidecar.topics.wiki_meta import (
@@ -35,7 +32,6 @@ from sidecar.wiki_utils import (
 from sidecar.wiki_utils import (
     parse_wiki_headings,
     sync_wiki_with_files,
-    toggle_survey,
 )
 from utils.activity_log import get_entries
 from utils.logger import logger
@@ -47,7 +43,6 @@ from utils.topic.assigner import (
     write_topic_to_file,
 )
 from utils.topic.manager import TopicManager
-from utils.topic.paths import topic_artifact_dir, topic_notes_dir
 from utils.topic.stale import collect_stale_topics
 from utils.wiki_store import (
     _deduplicate_files_in_wiki,
@@ -75,12 +70,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         except Exception as e:
             logger.warning(f"[topics_handler] sync WIKI with folder system failed: {e}\n")
             return {"success": False, "message": str(e)}
-
-    def _topic_dir_path(self, workspace_path: Path, topic_name: str) -> Path:
-        return topic_notes_dir(workspace_path, topic_name)
-
-    def _topic_artifact_dir_path(self, workspace_path: Path, root_folder: str, topic_name: str) -> Path:
-        return topic_artifact_dir(workspace_path, root_folder, topic_name)
 
     def _get_topic_tree(self, params):
         return self._get_topic_tree_3tier(params)
@@ -110,92 +99,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
 
     def _parse_wiki_headings(self):
         return parse_wiki_headings()
-
-    def _batch_auto_assign_topics(self, _params):
-        if not config.workspace_path:
-            return {"success": False, "message": "未设置工作区或工作区不存在"}
-
-        from sidecar.workspace_meta import is_inbox_orphan_path
-
-        ws = Path(config.workspace_path)
-        md_files = [
-            f
-            for f in ws.rglob("*.md")
-            if not f.name.startswith(".")
-            and "wiki" not in f.parts
-            and not is_ignored_dir(f.parent.name)
-            and is_inbox_orphan_path(f)
-        ]
-        total = len(md_files)
-        auto_assigned = 0
-        need_confirm = 0
-        skipped = 0
-        assigned_topics = set()
-
-        for i, md_file in enumerate(md_files):
-            try:
-                result = auto_assign_topic_for_file(str(md_file))
-                if result and result.get("status") == "auto_assigned":
-                    topic = result.get("topic", "")
-                    if topic:
-                        assigned_topics.add(topic)
-                    auto_assigned += 1
-                elif result and result.get("status") == "pending":
-                    need_confirm += 1
-                else:
-                    skipped += 1
-            except Exception as e:
-                logger.error(f"[topics_handler] batch assign error {md_file}: {e}")
-                skipped += 1
-
-            if i % 10 == 0:
-                self._send_progress("topic-assign-progress", int((i + 1) / total * 100), f"处理中 {i + 1}/{total}")
-
-        for topic in assigned_topics:
-            self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
-
-        if assigned_topics:
-            self._sync_wiki_with_folder_system()
-
-        return {
-            "success": True,
-            "total": total,
-            "auto_assigned": auto_assigned,
-            "need_confirm": need_confirm,
-            "skipped": skipped,
-            "assigned_topics": list(assigned_topics),
-        }
-
-    def _move_file_to_topic(self, params):
-        path = params.get("path", "")
-        if not path:
-            return {"success": False, "message": "未指定文件"}
-        topic = params.get("topic", "").strip()
-        if not topic:
-            return {"success": False, "message": "未指定目标主题"}
-        full_path = self._resolve_path(path)
-        if not full_path:
-            return {"success": False, "message": "路径无效"}
-        full_path = Path(full_path)
-        if not full_path.exists():
-            return {"success": False, "message": "文件不存在"}
-        from sidecar.workspace_rules_validator import require_topic
-
-        ok, err = require_topic(topic)
-        if not ok:
-            return {"success": False, "message": err}
-        try:
-            write_result = write_topic_to_file(str(full_path), topic)
-            if not write_result.get("success"):
-                return write_result
-            move_result = move_file_to_notes_topic_folder(str(full_path), topic)
-            if not move_result.get("success"):
-                return move_result
-            self._sync_wiki_with_folder_system()
-            self._start_task(f"cascade_update_{topic}", self._do_cascade_survey_update, args=(topic,))
-            return {"success": True, "message": f"已移动到主题「{topic}」"}
-        except Exception as e:
-            return {"success": False, "message": f"移动失败: {str(e)}"}
 
     def _create_topic(self, params):
         topic_name = params.get("name", "").strip()
@@ -245,34 +148,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             msg += f"，自动分配 {assigned} 个文件"
 
         return {"success": True, "message": msg, "topic": topic_full}
-
-    def _rename_topic(self, params):
-        old_name = params.get("old_name", "").strip()
-        new_name = params.get("new_name", "").strip()
-        if not old_name or not new_name:
-            return {"success": False, "message": "主题名不能为空"}
-        if old_name == new_name:
-            return {"success": True, "message": "主题名相同"}
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-
-        workspace_path = Path(workspace)
-        try:
-            result = _rename_topic_folder_service(workspace_path, old_name, new_name)
-        except FileNotFoundError as e:
-            return {"success": False, "message": str(e)}
-        except Exception as e:
-            return {"success": False, "message": f"重命名失败: {str(e)}"}
-
-        sync_result = self._sync_wiki_with_folder_system()
-        updated_count = sync_result.get("updated", 0) if sync_result.get("success") else 0
-        return {
-            "success": True,
-            "message": f"已{'合并' if result['merged'] else '重命名'}主题，更新 {updated_count} 个文件",
-            "updated": updated_count,
-            "merged": result["merged"],
-        }
 
     def _delete_topic(self, params):
         topic_name = params.get("topic_name", "").strip()
@@ -506,11 +381,7 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
     def register_routes(self, router):
         router.register("get_topic_tree", self._get_topic_tree)
         router.register("topic_meta", self._topic_meta)
-        router.register("sync_wiki_with_files", self._sync_wiki_with_folder_system)
-        router.register("batch_auto_assign_topics", self._batch_auto_assign_topics)
-        router.register("move_file_to_topic", self._move_file_to_topic)
         router.register("create_topic", self._create_topic)
-        router.register("rename_topic", self._rename_topic)
         router.register("delete_topic", self._delete_topic)
         router.register("resolve_topic", self._resolve_topic)
         router.register("keep_note_in_topic", self._keep_note_in_topic)
@@ -521,27 +392,3 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("get_all_pending", self._get_all_pending)
         router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)
-        router.register("get_survey_overview", self._get_survey_overview)
-        router.register("toggle_survey", self._toggle_survey)
-        router.register("fix_survey_topics", self._fix_survey_topics)
-
-    def _fix_survey_topics(self, _params):
-        try:
-            from sidecar.wiki_utils import sync_wiki_with_files
-
-            sync_wiki_with_files()
-            return {"success": True, "message": "已同步 wiki 与文件系统"}
-        except Exception as e:
-            logger.warning(f"[fix_survey_topics] failed: {e}")
-            return {"success": False, "message": str(e)}
-
-    def _get_survey_overview(self, _params):
-        from sidecar.wiki_utils import get_survey_overview
-
-        return {"success": True, "overview": get_survey_overview()}
-
-    def _toggle_survey(self, params):
-        topic_name = params.get("topic", "").strip()
-        if not topic_name:
-            return {"success": False, "message": "未指定主题"}
-        return toggle_survey(topic_name)

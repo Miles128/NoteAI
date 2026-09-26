@@ -6,7 +6,7 @@
  * 2. CLI - CLI Agent
  * 3. Properties - 当前笔记的 frontmatter 属性
  * 4. Backlinks - 反向链接（引用当前笔记的其他笔记）
- * 5. Semantic - 当前笔记的语义参数（实体/概念/命题与证据/相关）
+ * 5. Semantic - 当前笔记的语义参数（实体/概念/相关）
  */
 (function() {
     'use strict';
@@ -215,7 +215,7 @@
     }
 
     /**
-     * 加载 Semantic Tab：当前笔记的语义参数（实体/概念/命题与证据/相关）
+     * 加载 Semantic Tab：当前笔记的语义参数（实体/概念/相关）
      */
     function loadSemantic(filePath: any) {
         const body = document.getElementById('inspector-semantic-body');

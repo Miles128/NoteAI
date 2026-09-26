@@ -25,7 +25,6 @@
         graphFilter: 'all',
         graphMode: 'notes',
         lastFileTreeData: null,
-        lastTagsData: null,
         lastTopicData: null
     };
 

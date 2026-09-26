@@ -433,9 +433,6 @@ class SemanticHandler(BaseHandler):
             "wiki_links": wiki_links,
         }
 
-    def _quality(self, store: SemanticStore, params: dict):
-        return quality_tab(store, params, page=self._page(params))
-
     def _review_entity_quality(self, params):
         issue_id = str(params.get("id", "") or "")
         status = str(params.get("status", "reviewed") or "reviewed")
@@ -594,12 +591,6 @@ class SemanticHandler(BaseHandler):
         from sidecar.semantic.entity_merge import merge_entities
 
         return merge_entities(store, source_id, target_id)
-
-    def _links(self, params: dict):
-        workspace, err = self._require_workspace()
-        if err:
-            return err
-        return links_tab(workspace, params, page=self._page(params))
 
     def register_routes(self, router):
         router.register("get_semantic_workbench", self._get_workbench)

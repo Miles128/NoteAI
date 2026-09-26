@@ -46,8 +46,6 @@ class _TopicsHost(Protocol):
 
     def _get_graph_data(self, params: dict[str, Any]) -> dict[str, Any]: ...
 
-    def _toggle_survey(self, params: dict[str, Any]) -> dict[str, Any]: ...
-
 
 def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = None) -> str:
     """Stable unique graph node id (name alone collides across L1/L2)."""
@@ -70,7 +68,6 @@ def _graph_topic_node_id(workspace: str, topic: dict, parent_tid: str | None = N
 class Topics3TierMixin:
     """三层主题系统扩展方法（通过 mixin 注入 TopicsHandler）"""
 
-    _toggle_survey: Callable[[dict[str, Any]], dict[str, Any]]
     _delete_topic: Callable[[dict[str, Any]], dict[str, Any]]
 
     def _get_topic_tree_3tier(self, _params):

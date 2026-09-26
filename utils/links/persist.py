@@ -73,6 +73,15 @@ def _is_readme_note(path: str | Path) -> bool:
     return Path(str(path)).stem.casefold() == "readme"
 
 
+def _is_survey_note(path: str | Path, note_type: str | None = None) -> bool:
+    """综述页是聚合视图（什么都提一点），不参与笔记↔笔记链接图。
+
+    两条判据命中其一即算：级联生成的 ``type: survey``，或文件名以「综述」结尾
+    （手写章节综述没有标记，只能靠命名识别）。
+    """
+    return Path(str(path)).stem.endswith("综述") or (note_type or "").strip().casefold() == "survey"
+
+
 def _normalize_links(links: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Drop README links; keep each record's own status (pending stays pending)."""
     normalized: list[dict[str, Any]] = []

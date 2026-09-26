@@ -13,6 +13,7 @@ from utils.links.persist import (
     _extract_json_array,
     _is_readme_note,
     _is_self_link,
+    _is_survey_note,
     load_links,
     save_links,
 )
@@ -62,6 +63,8 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
+    if _is_survey_note(full, source.get("type")):
+        return {"success": True, "message": "综述页不参与链接图", "added": 0}
 
     try:
         _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
@@ -280,6 +283,8 @@ def discover_cross_refs_for_file(
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
+    if _is_survey_note(full, source.get("type")):
+        return {"success": True, "message": "综述页不参与链接图", "added": 0}
 
     try:
         _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
@@ -410,6 +415,7 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
     title = md_file.stem
     tags = []
     topic = None
+    note_type = ""
 
     if meta:
         t = meta.get("title")
@@ -423,6 +429,9 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
         raw_topic = meta.get("topic")
         if isinstance(raw_topic, str) and raw_topic.strip():
             topic = raw_topic.strip()
+        raw_type = meta.get("type")
+        if isinstance(raw_type, str):
+            note_type = raw_type.strip()
     else:
         body = text
 
@@ -434,6 +443,7 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
         "title": title,
         "tags": tags,
         "topic": topic,
+        "type": note_type,
         "summary": summary,
     }
 
@@ -462,13 +472,14 @@ def _load_all_metas_cached(workspace: Path) -> dict[str, dict[str, Any]]:
         for rel, (mtime, _) in current.items():
             cached = cache.get(rel)
             if cached and abs(cached[0] - mtime) <= 0.5 and cached[1] is not None:
-                result[rel] = cached[1]
+                meta = cached[1]
             else:
-                full = workspace / rel
-                meta = _parse_file_meta(full)
+                meta = _parse_file_meta(workspace / rel)
                 if meta:
-                    result[rel] = meta
                     cache[rel] = (mtime, meta)
+            # 综述页是聚合视图，不进候选池：既不会被建议成关联对象
+            if meta and not _is_survey_note(rel, meta.get("type")):
+                result[rel] = meta
 
         # 清理已删除文件的缓存
         stale = set(cache.keys()) - set(current.keys())

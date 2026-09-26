@@ -78,14 +78,6 @@ async function initApp() {
             window.updateHomeStats && window.updateHomeStats();
         }
 
-        if (window.DownloaderModule && window.DownloaderModule.loadSavedConfig) {
-            window.DownloaderModule.loadSavedConfig();
-        }
-
-        if (window.ConverterModule && window.ConverterModule.loadSavedConvConfig) {
-            window.ConverterModule.loadSavedConvConfig();
-        }
-
         if (typeof window.runPostWorkspaceSetup === 'function') {
             /* ingest deferred until schema wizard completes, if needed */
         }
@@ -122,34 +114,6 @@ async function initApp() {
             setTheme((radio as HTMLInputElement).value);
         });
     });
-
-    const webAiToggle = document.getElementById('web-ai-toggle');
-    if (webAiToggle) {
-        webAiToggle.addEventListener('change', () => {
-            if (window.TreeModule && window.TreeModule.updateWebAIStatus) {
-                window.TreeModule.updateWebAIStatus();
-            }
-        });
-    }
-
-    const convAiToggle = document.getElementById('conv-ai-toggle');
-    if (convAiToggle) {
-        convAiToggle.addEventListener('change', () => {
-            if (window.TreeModule && window.TreeModule.updateConvAIStatus) {
-                window.TreeModule.updateConvAIStatus();
-            }
-        });
-    }
-
-    const topicList = document.getElementById('topic-list');
-    if (topicList) {
-        topicList.addEventListener('input', () => {
-            if (window.IntegratorModule) {
-                window.IntegratorModule.topicsReady = true;
-                window.IntegratorModule.updateIntegrateBtnState?.();
-            }
-        });
-    }
 
     console.log('[App] Initialization complete');
 }

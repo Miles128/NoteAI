@@ -12,7 +12,6 @@
     <link rel="stylesheet" href="css/editor.css">
     <link rel="stylesheet" href="css/preview.css">
     <link rel="stylesheet" href="css/ingest.css">
-    <link rel="stylesheet" href="css/schema-wizard.css">
     <link rel="stylesheet" href="css/onboarding.css">
     <link rel="stylesheet" href="css/inspector.css">
     <link rel="stylesheet" href="css/semantic-workbench.css">
@@ -161,21 +160,6 @@
                         <div class="semantic-compile-progress" id="semantic-compile-progress" hidden></div>
                         <div class="semantic-version-hint" id="semantic-version-hint" hidden></div>
                     </section>
-                </div>
-                <div class="sidebar-pane" id="sidebar-pane-tags" data-sidebar-pane="tags" hidden>
-                    <div class="sidebar-view-container" id="sidebar-tags"></div>
-                    <div class="sidebar-tag-input" id="sidebar-tag-input" style="display: none;">
-                        <input type="text" class="topic-input" id="tag-input-field" data-i18n-placeholder="sidebar.tagPlaceholder">
-                        <button class="topic-input-btn topic-input-cancel" id="tag-input-cancel" data-i18n-title="common.cancel">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                        <button class="topic-input-btn topic-input-confirm" id="tag-input-confirm" data-i18n-title="sidebar.confirmCreateTag">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="sidebar-pane" id="sidebar-pane-graph" data-sidebar-pane="graph" hidden>
-                    <div class="sidebar-view-container" id="sidebar-graph"></div>
                 </div>
             </div>
         </div>
@@ -326,8 +310,8 @@
                         <span class="pending-view-count" id="pending-view-count" data-i18n="common.pendingCount" data-i18n-count="0"></span>
                         <div class="pending-header-actions">
                             <button type="button" class="pending-header-btn" id="pending-merge-scan-btn" data-i18n="pending.scanMergeCandidates" data-i18n-title="pending.scanMergeCandidates"></button>
+                            <button type="button" class="pending-header-btn" id="pending-cascade-retry-btn" data-i18n="pending.retryAllSurveys" data-i18n-title="pending.retryAllSurveys"></button>
                             <button type="button" class="pending-header-btn" id="pending-lint-run-btn" data-i18n="pending.healthCheck" data-i18n-title="pending.healthCheck"></button>
-                            <button type="button" class="pending-header-btn" id="pending-cascade-retry-all-btn" data-i18n="pending.retryAllSurveys" data-i18n-title="pending.retryAllSurveys"></button>
                         </div>
                     </div>
                     <p class="pending-view-hint" data-i18n="pending.hint"></p>
@@ -338,10 +322,6 @@
                                 <div class="pending-view-empty" data-i18n="pending.empty"></div>
                             </div>
                         </div>
-                        <div class="pending-section" id="pending-cascade-section" style="display:none;" hidden>
-                            <div class="pending-cascade-list" id="pending-cascade-list"></div>
-                            <span class="pending-cascade-count" id="pending-cascade-count" hidden></span>
-                        </div>
                     </div>
                 </div>
                 <main class="semantic-detail-pane" id="semantic-workbench-detail" hidden aria-live="polite"></main>
@@ -349,42 +329,6 @@
                     <div class="tab-content active" id="tab-0">
                     </div>
 
-                    <div class="tab-content" id="tab-1">
-                        <div class="card">
-                            <div class="card-title" data-i18n="integrator.cardTitle"></div>
-                            <div class="ai-status-box">
-                                <span class="status-dot"></span>
-                                <span class="status-text" data-i18n="integrator.statusLine"></span>
-                            </div>
-                        </div>
-
-                        <div class="card" id="topic-card">
-                            <div class="card-title" data-i18n="integrator.topicSettings"></div>
-                            <div class="form-group form-row">
-                                <div class="form-row-item">
-                                    <div class="form-label" data-i18n="integrator.topicCount"></div>
-                                    <input type="number" id="topic-count" class="form-input form-input-full" data-i18n-placeholder="integrator.topicCountPlaceholder" min="2">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="form-label" data-i18n="integrator.topicListHint"></div>
-                                <textarea id="topic-list" class="form-input form-textarea" data-i18n-placeholder="integrator.topicListPlaceholder" oninput="updateIntegrateBtnState()"></textarea>
-                            </div>
-                            <div class="btn-group btn-group-spacing">
-                                <button class="btn btn-secondary btn-flex" id="extract-topics-btn" onclick="extractTopics()" data-i18n-title="integrator.extractTopicsHint" data-i18n="integrator.extractTopics"></button>
-                                <button class="btn btn-primary btn-flex" id="integrate-btn" onclick="startNoteIntegration()" disabled data-i18n-title="integrator.startHint" data-i18n="integrator.start"></button>
-                            </div>
-                        </div>
-
-                        <div class="integration-hint" id="integration-hint"></div>
-
-                        <div class="progress-container">
-                            <div class="progress-bar">
-                                <div class="progress-fill" id="integration-progress-fill"></div>
-                            </div>
-                            <div class="progress-text" id="integration-status"></div>
-                        </div>
-                    </div>
                 </div>
                 <div class="graph-panel" id="graph-panel" style="display: none;">
                     <div class="graph-panel-header">
@@ -479,11 +423,6 @@
                         </aside>
                     </div>
                 </div>
-
-            <div class="topic-pending-panel" id="topic-pending-panel" style="display: none;"></div>
-            <div class="topic-files-panel" id="topic-files-panel" style="display: none;"></div>
-
-            <div class="ai-suggestion-panel" id="ai-suggestion-panel" style="display: none;"></div>
 
             </div>
 
@@ -856,6 +795,15 @@
                                         <span style="color:var(--text-muted);font-size:12px" data-i18n="settings.fontLargeHint"></span>
                                     </label>
                                 </div>
+                                <div class="form-group">
+                                    <label class="form-label" data-i18n="settings.previewFont"></label>
+                                    <select id="settings-preview-font-family" class="form-input typography-select" onchange="saveFontFamily('preview_font_family', this.value)">
+                                        <option value="system" data-i18n="settings.fontSystem"></option>
+                                        <option value="sans" data-i18n="settings.fontSans"></option>
+                                        <option value="serif" data-i18n="settings.fontSerif"></option>
+                                        <option value="mono" data-i18n="settings.fontMono"></option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="card" style="margin-top:16px">
                                 <div class="card-title" data-i18n="settings.typographyTitle"></div>
@@ -987,6 +935,13 @@
                                     </div>
                                 </div>
                                 <div class="form-group" style="margin-top:16px">
+                                    <label class="font-size-option" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                                        <input type="checkbox" id="settings-auto-topic" checked>
+                                        <span data-i18n="settings.autoTopic"></span>
+                                    </label>
+                                    <p class="settings-hint" data-i18n="settings.autoTopicHint"></p>
+                                </div>
+                                <div class="form-group" style="margin-top:16px">
                                     <label class="form-label" for="settings-topic-auto-threshold" data-i18n="settings.topicAutoThresholdLabel"></label>
                                     <input type="number" id="settings-topic-auto-threshold" class="form-input" min="0" max="1" step="0.01" value="0.80">
                                     <p class="settings-hint" data-i18n="settings.topicAutoThresholdHint"></p>
@@ -1036,12 +991,6 @@
                                     <button type="button" class="btn btn-primary" id="settings-project-rules-save-btn" data-i18n="projectRules.save"></button>
                                 </div>
                                 <div id="settings-project-rules-status" class="settings-hint" style="display:none;margin-top:8px"></div>
-                            </div>
-                            <div class="card" style="margin-top:16px">
-                                <div class="card-title" data-i18n="settings.maintenanceTitle"></div>
-                                <p class="settings-hint" data-i18n="settings.maintenanceHint"></p>
-                                <button type="button" class="btn btn-secondary" id="settings-raw-convert-btn" data-i18n="settings.rawConvertBtn"></button>
-                                <div id="settings-raw-convert-status" class="settings-hint" style="display:none;margin-top:8px"></div>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-reliability">
@@ -1384,7 +1333,7 @@
                 </button>
             </div>
             <div class="modal-body">
-                <p class="hint" data-i18n="weeklyBrief.desc"></p>
+                <p class="settings-hint" data-i18n="weeklyBrief.desc"></p>
                 <div class="form-group form-row" style="display:flex;gap:8px;align-items:flex-end">
                     <div class="form-field flex-1">
                         <div class="form-label" data-i18n="weeklyBrief.topicLabel"></div>
@@ -1418,8 +1367,8 @@
                 <h3 data-i18n="organizeRules.modalTitle"></h3>
             </div>
             <div class="modal-body">
-                <p class="hint" data-i18n="settings.organizeRulesTopicsHint"></p>
-                <div id="organize-rules-modal-topics" class="schema-l1-tags hint"></div>
+                <p class="settings-hint" data-i18n="settings.organizeRulesTopicsHint"></p>
+                <div id="organize-rules-modal-topics" class="schema-l1-tags settings-hint"></div>
                 <div class="form-group" style="margin-top:16px">
                     <div class="form-label" data-i18n="settings.organizeRulesDepthLabel"></div>
                     <div class="schema-option-list schema-option-list-inline">
@@ -1532,18 +1481,6 @@
                 </button>
                 <span class="sidebar-footer-status" id="sidebar-status-tree" data-i18n="common.notesCount" data-i18n-count="0"></span>
             </div>
-            <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-tags" data-sidebar-dock="tags" hidden>
-                <button type="button" class="sidebar-footer-btn" id="btn-auto-tag" onclick="doAutoTag()" data-i18n-title="sidebar.autoTagTitle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                </button>
-                <button type="button" class="sidebar-footer-btn" id="btn-add-tag" onclick="onShowAddTagInput()" data-i18n-title="sidebar.addTagTitle">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                </button>
-                <span class="sidebar-footer-status" id="sidebar-status-tags" data-i18n="common.tagsCount" data-i18n-count="0"></span>
-            </div>
-            <div class="sidebar-footer sidebar-dock-panel" id="sidebar-footer-graph" data-sidebar-dock="graph" hidden>
-                <span class="sidebar-footer-status" id="sidebar-status-graph" data-i18n="common.linksCount" data-i18n-count="0"></span>
-            </div>
         </div>
         <span class="statusbar-separator statusbar-separator-dock" aria-hidden="true"></span>
         <div class="statusbar-left">
@@ -1557,7 +1494,6 @@
             <span class="ingest-label" id="ingest-pipeline-stage" data-i18n="ingest.label"></span>
             <div class="ingest-track"><div class="ingest-fill" id="ingest-pipeline-fill"></div></div>
             <span class="ingest-message" id="ingest-pipeline-message"></span>
-            <button type="button" id="ingest-pipeline-retry" data-i18n-title="ingest.retryTitle" data-i18n="ingest.retry"></button>
             <button type="button" id="ingest-pipeline-cancel" data-i18n-title="ingest.cancelTitle" data-i18n="common.cancel"></button>
         </div>
         <div class="statusbar-right">

@@ -11,7 +11,6 @@ from .links_handler import LinksHandler
 from .rag_handler import RagHandler
 from .reliability_handler import ReliabilityHandler
 from .semantic_handler import SemanticHandler
-from .tags_handler import TagsHandler
 from .topics_handler import TopicsHandler
 from .transfer_handler import TransferHandler
 from .workspace_handler import WorkspaceHandler
@@ -23,7 +22,6 @@ __all__ = [
     "WorkspaceHandler",
     "TransferHandler",
     "FilesHandler",
-    "TagsHandler",
     "TopicsHandler",
     "LinksHandler",
     "IntelHandler",

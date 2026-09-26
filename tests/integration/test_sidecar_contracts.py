@@ -14,7 +14,6 @@ from types import SimpleNamespace
 
 import pytest
 from sidecar.handlers.files_handler import FilesHandler
-from sidecar.handlers.tags_handler import TagsHandler
 from sidecar.handlers.topics_handler import TopicsHandler
 from sidecar.handlers.workspace_handler import WorkspaceHandler
 from sidecar.paths import find_file_by_name_in_workspace, resolve_workspace_path
@@ -235,66 +234,6 @@ class TestFilesHandler:
 
         assert result["success"] is False
         assert source.exists()
-
-
-class TestTagsHandler:
-    def test_all_tags_uses_wiki_database(self, workspace: Path) -> None:
-        note = workspace / "Notes" / "tagged.md"
-        note.write_text("---\ntags: [RAG]\n---\nbody\n", encoding="utf-8")
-        sync_wiki_with_files()
-        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
-
-        result = handler._compute_all_tags()
-
-        assert result == {"tags": [{"name": "RAG", "count": 1, "files": ["Notes/tagged.md"]}]}
-
-    def test_add_tag_to_file_preserves_body(self, workspace: Path) -> None:
-        note = workspace / "Notes" / "tagged.md"
-        body = "\n# Title\n\nOriginal body\n"
-        note.write_text("---\ntags:\n- A\n---" + body, encoding="utf-8")
-        handler = TagsHandler(
-            SimpleNamespace(
-                _ctx=SimpleNamespace(config=config, logger=None),
-                _resolve_path=resolve_workspace_path,
-                _invalidate_cache=lambda: None,
-            )
-        )
-
-        result = handler._add_tag_to_file({"file_path": "Notes/tagged.md", "tag": "B"})
-
-        assert result["success"] is True
-        updated = note.read_text(encoding="utf-8")
-        assert "tags:\n- A\n- B" in updated
-        assert "# Title\n\nOriginal body" in updated
-
-    def test_auto_tag_files_only_updates_frontmatter(self, workspace: Path) -> None:
-        notes = workspace / "Notes"
-        source = notes / "source.md"
-        source.write_text("---\ntags:\n- LangGraph\n---\nsource body", encoding="utf-8")
-        target = notes / "LangGraph 实战.md"
-        body = "\n# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
-        target.write_text(body, encoding="utf-8")
-        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
-
-        result = handler._auto_tag_files({"dry_run": False})
-
-        assert result["updated"] == 1
-        updated = target.read_text(encoding="utf-8")
-        assert "tags:\n- LangGraph" in updated
-        assert "# LangGraph 实战\n\n| A | B |\n|---|---|\n| 1 | 2 |" in updated
-
-    def test_delete_tag_preserves_body(self, workspace: Path) -> None:
-        note = workspace / "Notes" / "tagged.md"
-        body = "\n# Title\n\nOriginal body\n"
-        note.write_text("---\ntags:\n- A\n- B\n---" + body, encoding="utf-8")
-        handler = TagsHandler(SimpleNamespace(_ctx=SimpleNamespace(config=config, logger=None)))
-
-        result = handler._delete_tag({"tag_name": "A"})
-
-        assert result["updated"] == 1
-        updated = note.read_text(encoding="utf-8")
-        assert "tags:\n- B" in updated
-        assert "# Title\n\nOriginal body" in updated
 
 
 class TestParseWikiStructure:

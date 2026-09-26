@@ -57,8 +57,7 @@ function show(category: any) {
     if (semanticList) semanticList.hidden = false;
     var contentPanel = document.getElementById('content-panel');
     if (contentPanel) contentPanel.style.display = 'flex';
-    ['home-dashboard', 'graph-home-view', 'graph-panel', 'content-area', 'preview-panel', 'pending-view',
-     'topic-pending-panel', 'topic-files-panel', 'ai-suggestion-panel'].forEach(function(id) {
+    ['home-dashboard', 'graph-home-view', 'graph-panel', 'content-area', 'preview-panel', 'pending-view'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });

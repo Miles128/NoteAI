@@ -86,32 +86,6 @@
     transform: scale(0.94);
 }
 
-.note-list-search {
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-}
-
-.note-list-search-input {
-    width: 100%;
-    padding: 4px 8px;
-    font-size: 12px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--input-radius);
-    color: var(--text);
-    outline: none;
-    box-sizing: border-box;
-}
-
-.note-list-search-input:focus {
-    border-color: var(--primary);
-}
-
-.note-list-search-input::placeholder {
-    color: var(--text-muted);
-}
-
 .note-list-body {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -177,17 +151,6 @@
 .note-list-item-date {
     flex-shrink: 0;
     font-variant-numeric: tabular-nums;
-}
-
-.note-list-item-tag {
-    display: inline-block;
-    font-size: 10px;
-    padding: 0 5px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--btn-radius);
-    color: var(--text-muted);
-    flex-shrink: 0;
 }
 
 /* ---------- Note List Resizer (扁平化 1px) ---------- */
@@ -806,74 +769,9 @@
     margin-top: 4px;
 }
 
-.cli-workflow-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    cursor: pointer;
-    list-style: none;
-}
-
-.cli-workflow-status::-webkit-details-marker {
-    display: none;
-}
-
-.cli-workflow-pulse {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--primary);
-    flex-shrink: 0;
-}
-
-.cli-workflow-activity.is-running .cli-workflow-pulse {
-    animation: cli-workflow-pulse 1.2s ease-in-out infinite;
-}
-
-.cli-workflow-activity.is-done .cli-workflow-pulse {
-    background: var(--text-muted);
-    animation: none;
-}
-
 @keyframes cli-workflow-pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.45; transform: scale(0.85); }
-}
-
-.cli-workflow-status-label {
-    font-weight: 600;
-    color: var(--text);
-}
-
-.cli-workflow-status-hint {
-    flex: 1 1 auto;
-    min-width: 0;
-    color: var(--text-muted);
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.cli-workflow-status-chevron {
-    margin-left: auto;
-    color: var(--text-muted);
-    font-size: 11px;
-    flex-shrink: 0;
-}
-
-.cli-workflow-block[open] .cli-workflow-status-chevron::before {
-    content: '▾ ';
-}
-
-.cli-workflow-block:not([open]) .cli-workflow-status-chevron::before {
-    content: '▸ ';
-}
-
-.cli-workflow-block.is-done .cli-workflow-status-label {
-    color: var(--text-muted);
-    font-weight: 500;
 }
 
 .cli-timeout-notice {

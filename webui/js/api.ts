@@ -193,7 +193,6 @@ async function getWorkspaceStatus(): Promise<any> {
     if (result && result.is_set && checkIsTauri()) {
         var invoke = getTauriInvoke();
         await invoke('set_workspace_path', { path: result.workspace_path });
-        pyCall('fix_survey_topics', {}).catch(function(err) { console.warn('[fix_survey_topics]', err); });
     }
     return result;
 }
@@ -262,58 +261,8 @@ async function getFilePreview(path: string): Promise<any> {
 }
 
 // ---------------------------------------------------------------------------
-// 窗口控制：直接调用 Tauri 窗口 API，不走 pyCall
+// 独立窗口：直接调用 Tauri 窗口 API，不走 pyCall
 // ---------------------------------------------------------------------------
-
-function getTauriWindow(): any {
-    if (window.__TAURI__ && window.__TAURI__.window) {
-        if (typeof window.__TAURI__.window.getCurrentWindow === 'function') {
-            return window.__TAURI__.window.getCurrentWindow();
-        }
-        if (typeof window.__TAURI__.window.getCurrent === 'function') {
-            return window.__TAURI__.window.getCurrent();
-        }
-    }
-    if (window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.window) {
-        if (typeof window.__TAURI_INTERNALS__.window.getCurrentWindow === 'function') {
-            return window.__TAURI_INTERNALS__.window.getCurrentWindow();
-        }
-        if (typeof window.__TAURI_INTERNALS__.window.getCurrent === 'function') {
-            return window.__TAURI_INTERNALS__.window.getCurrent();
-        }
-    }
-    return null;
-}
-
-function moveWindow(_dx?: number, _dy?: number): void {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win && typeof win.startDragging === 'function') {
-            win.startDragging();
-        }
-    }
-}
-
-function minimizeWindow(): void {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.minimize();
-    }
-}
-
-function maximizeWindow(): void {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.toggleMaximize();
-    }
-}
-
-function closeWindow(): void {
-    if (checkIsTauri()) {
-        var win = getTauriWindow();
-        if (win) win.close();
-    }
-}
 
 async function openFileInNewWindow(path: string, name?: string): Promise<any> {
     if (checkIsTauri()) {
@@ -354,15 +303,8 @@ var API_DEFS: ApiDef[] = [
     { name: 'getWorkspaceTree', method: 'get_workspace_tree' },
     { name: 'getTopicTree', method: 'get_topic_tree' },
     { name: 'topicMeta', method: 'topic_meta', params: function(topic) { return { topic: topic }; } },
-    { name: 'getSurveyOverview', method: 'get_survey_overview' },
-    { name: 'toggleSurvey', method: 'toggle_survey', params: function(topic) { return { topic: topic }; }, write: true },
-    { name: 'getAllTags', method: 'get_all_tags' },
-    { name: 'autoTagFiles', method: 'auto_tag_files', params: function(dryRun) { return { dry_run: !!dryRun }; }, write: true },
-    { name: 'ensureTagsMd', method: 'ensure_tags_md', params: function() { return {}; }, write: true },
-    { name: 'batchAutoAssignTopics', method: 'batch_auto_assign_topics', params: function() { return {}; }, write: true },
     { name: 'createTopic', method: 'create_topic', params: function(name, parent) { return { name: name, parent: parent || '' }; }, write: true },
     { name: 'createNoteFromDraft', method: 'create_note_from_draft', params: function(title, topic, content) { return { title: title, topic: topic || '', content: content || '' }; }, write: true },
-    { name: 'createTag', method: 'create_tag', params: function(name) { return { name: name }; }, write: true },
     { name: 'getAllPending', method: 'get_all_pending' },
     { name: 'retryCascadeTopic', method: 'retry_cascade_topic', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'retryAllCascadeFailures', method: 'retry_all_cascade_failures', params: function() { return {}; }, write: true },
@@ -375,13 +317,8 @@ var API_DEFS: ApiDef[] = [
     { name: 'keepNoteInTopic', method: 'keep_note_in_topic', params: function(filePath, currentTopic, suggestedTopic) { return { file_path: filePath, current_topic: currentTopic, suggested_topic: suggestedTopic }; }, write: true },
     { name: 'applyTopicPlacementThreshold', method: 'apply_topic_placement_threshold', params: function() { return {}; }, write: true },
     { name: 'mergeDuplicateTopics', method: 'merge_duplicate_topics', params: function() { return {}; }, write: true },
-    { name: 'renameTopic', method: 'rename_topic', params: function(oldTopic, newTopic) { return { old_topic: oldTopic, new_topic: newTopic }; }, write: true },
     { name: 'deleteTopic', method: 'delete_topic', params: function(topicName) { return { topic_name: topicName }; }, write: true },
-    { name: 'renameTag', method: 'rename_tag', params: function(oldTag, newTag) { return { old_tag: oldTag, new_tag: newTag }; }, write: true },
-    { name: 'deleteTag', method: 'delete_tag', params: function(tagName) { return { tag_name: tagName }; }, write: true },
-    { name: 'moveFileToTopic', method: 'move_file_to_topic', params: function(filePath, newTopic) { return { file_path: filePath, new_topic: newTopic }; }, write: true },
     { name: 'moveFile', method: 'move_file', params: function(filePath, targetFolder) { return { file_path: filePath, target_folder: targetFolder }; }, write: true },
-    { name: 'addTagToFile', method: 'add_tag_to_file', params: function(filePath, tag) { return { file_path: filePath, tag: tag }; }, write: true },
 
     // ---- 配置 ----
     { name: 'getApiConfig', method: 'get_api_config' },
@@ -397,10 +334,7 @@ var API_DEFS: ApiDef[] = [
 
     // ---- 下载 / 转换 / 整合 ----
     { name: 'startWebDownload', method: 'start_web_download', params: function(urls, aiAssist, includeImages) { return { urls: urls, ai_assist: aiAssist, include_images: includeImages }; }, write: true },
-    { name: 'startFileConversion', method: 'start_file_conversion', params: function(aiAssist) { return { ai_assist: aiAssist }; }, write: true },
     { name: 'autoConvertPending', method: 'auto_convert_pending', params: function() { return {}; }, write: true },
-    { name: 'extractTopics', method: 'extract_topics', params: function(topicCount) { return { topic_count: topicCount }; }, write: true },
-    { name: 'startNoteIntegration', method: 'start_note_integration', params: function(autoTopic, topics) { return { auto_topic: autoTopic, topics: topics }; }, write: true },
     { name: 'refreshLog', method: 'refresh_log' },
     { name: 'onFileSelected', method: 'on_file_selected', params: function(path) { return { path: path }; } },
     { name: 'saveFileContent', method: 'save_file_content', params: function(path, content) { return { path: path, content: content }; }, write: true },
@@ -444,16 +378,12 @@ var API_DEFS: ApiDef[] = [
     { name: 'publishSemanticTopicWikiPage', method: 'publish_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'addSemanticEntityAlias', method: 'add_semantic_entity_alias', params: function(id, alias) { return { id: id, alias: alias }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
-    { name: 'syncWikiWithFiles', method: 'sync_wiki_with_files', params: function() { return {}; }, write: true },
+    { name: 'purgeWeakLinks', method: 'purge_weak_links', params: function() { return {}; }, write: true },
+    { name: 'backfillSemanticBidirectional', method: 'backfill_semantic_bidirectional', params: function() { return {}; }, write: true },
 
     // ---- LLM 改写 ----
     { name: 'llmRewriteStream', method: 'llm_rewrite_stream', params: function(filePath) { return { file_path: filePath }; } },
     { name: 'llmRewriteApply', method: 'llm_rewrite_apply', params: function(filePath, rewrittenText) { return { file_path: filePath, rewritten_text: rewrittenText }; }, write: true },
-
-    // ---- AI 主题 ----
-    { name: 'aiTopicAnalyze', method: 'ai_topic_analyze', params: function() { return {}; }, write: true },
-    { name: 'aiTopicSurvey', method: 'ai_topic_survey', params: function(topic) { return { topic: topic }; }, write: true },
-    { name: 'applyTopicSuggestion', method: 'apply_topic_suggestion', params: function(suggestion) { return { suggestion: suggestion }; }, write: true },
 
     // ---- RAG ----
     { name: 'ragChat', method: 'rag_chat', params: function(question, topics, tags, currentFile, options) { var opts = options || {}; return { question: question, topics: topics || null, tags: tags || null, current_file: currentFile || null, history: opts.history || [], selection_lookup: !!opts.selectionLookup, selection_route: opts.selectionRoute || 'auto', selection_context: opts.selectionContext || '' }; } },
@@ -492,7 +422,7 @@ var API_DEFS: ApiDef[] = [
     { name: 'getJobs', method: 'get_jobs', params: function(options) { var opts = options || {}; return { include_finished: opts.include_finished !== false, limit: opts.limit || 50 }; } },
 
     // ---- 搜索 ----
-    { name: 'searchFiles', method: 'search_files', params: function(query) { return { query: query }; } },
+    { name: 'searchFiles', method: 'search_files', params: function(query, topic, tag) { return { query: query, topic: topic || '', tag: tag || '' }; } },
 
     // ---- 文件操作 ----
     { name: 'deleteFile', method: 'delete_file', params: function(path) { return { path: path }; }, write: true },
@@ -519,11 +449,7 @@ Object.assign(builtApi, generatedApi, {
     openArchiveDialog: openArchiveDialog,
     getFilePreview: getFilePreview,
 
-    // 窗口控制
-    moveWindow: moveWindow,
-    minimizeWindow: minimizeWindow,
-    maximizeWindow: maximizeWindow,
-    closeWindow: closeWindow,
+    // 独立窗口
     openFileInNewWindow: openFileInNewWindow
 });
 window.api = builtApi as WindowApi;

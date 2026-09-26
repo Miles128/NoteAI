@@ -10,7 +10,7 @@
 
 - **项目必须模块化**：每个功能模块独立成文件/目录，职责单一，禁止在单文件中混合多个不相关功能。
 - **前端模块化**：JS/CSS 按功能拆分文件，通过统一入口加载，禁止所有代码堆在一个文件中。
-- **后端模块化**：Python 按功能拆分模块（如 `note_integration.py`、`web_download.py`），通过 `__init__.py` 统一导出。
+- **后端模块化**：Python 按功能拆分模块（如 `ingest_pipeline.py`、`wiki_utils.py`），通过 `__init__.py` 统一导出。
 - **模块间通信**：通过明确的接口/函数调用交互，禁止模块间直接操作彼此内部状态。
 
 ### 1.2 技术架构
@@ -65,7 +65,7 @@ uv run pytest                     # 运行测试
 
 ```bash
 uv sync --extra dev --extra rag --extra ingest   # 安装依赖
-uv run pytest                     # 运行全部测试（~69 单元 + 3 集成测试模块）
+uv run pytest                     # 运行全部测试（~85 单元 + 3 集成测试模块）
 uv run python run.py              # 启动 Tauri dev 模式（检查依赖 + cargo tauri dev）
 ```
 
@@ -83,9 +83,9 @@ Tauri v2 shell (src-tauri/)
 
 **通信流程**：前端 JS → `window.api`（Tauri invoke）→ Rust → 拉起 Python sidecar → stdin/stdout JSON-RPC → `server.py:main()` 逐行读取，通过 `RpcRouter` 分发。
 
-**Python sidecar**（`python/sidecar/server.py`）：`SidecarServer` 实例化 16 个 handler（cli_agent、component、config、files、ingest、intel、job、kb、links、rag、reliability、semantic、tags、topics、transfer、workspace），每个都是 `BaseHandler` 的子类。`BaseHandler` 通过显式 `@property` 访问器代理 server 属性（如 `config`、`_send_response`、`_resolve_path`、`_link_discovery_lock`）——handler 需要访问新的 server 属性时，在 `base.py` 中添加 property。每个 handler 通过 `RpcRouter` 注册路由。
+**Python sidecar**（`python/sidecar/server.py`）：`SidecarServer` 实例化 15 个 handler（cli_agent、component、config、files、ingest、intel、job、kb、links、rag、reliability、semantic、topics、transfer、workspace），每个都是 `BaseHandler` 的子类。`BaseHandler` 通过显式 `@property` 访问器代理 server 属性（如 `config`、`_send_response`、`_resolve_path`、`_link_discovery_lock`）——handler 需要访问新的 server 属性时，在 `base.py` 中添加 property。每个 handler 通过 `RpcRouter` 注册路由。
 
-**请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`force_intent`/`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
+**请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
 **RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
 
@@ -121,7 +121,7 @@ Tauri v2 shell (src-tauri/)
 - **`webui/js/`**：TypeScript 源码，esbuild 打包（`scripts/build-webui.mjs` → `webui/dist/`）；模块以 IIFE 挂载 `window.*`，无虚拟 DOM。状态在 `window.AppState` 与 `window.state`。`main.mjs` 是打包入口，经动态 import 控制模块加载顺序；`tsc --noEmit`（`webui/js/tsconfig.json`）做类型检查。
 - **右侧检查器**（`webui/js/inspector.ts`）：AI/CLI/属性/反向链接/语义 多 Tab 面板；笔记的语义参数（实体/概念/相关）在「语义」Tab 中展示（命题层已随 C2b 移除），点击实体/概念经 `SemanticWorkbenchModule.openObject` 打开工作台详情。
 - **Tauri sidecar**：配置在 `src-tauri/tauri.conf.json`。Python 二进制通过 `python/main.py` → `sidecar.server.main()` 解析。
-- **测试覆盖**：~69 个单元测试模块 + 3 个集成测试模块（含 `tests/integration/test_sidecar_contracts.py`）；发布前运行 `uv run pytest`。
+- **测试覆盖**：~85 个单元测试模块 + 3 个集成测试模块（含 `tests/integration/test_sidecar_contracts.py`）；发布前运行 `uv run pytest`。
 - **Prompts**：`prompts/yaml/*.yaml` 是单一事实来源；`prompts/__init__.py` 经 `prompts/loader.py` 在导入时解析常量。
 - **Sidecar Python**：开发使用项目 `.venv`；发布包不内嵌 `.venv`。`scripts/bundle_sidecar_python.sh` 把无 `__pycache__` 的 Python 包暂存到 `src-tauri/resources/release/`，运行时用 `NOTEAI_PYTHON`、附近项目 `.venv` 或系统 `python3`。
 - **`rag_enabled`**：默认 `True`（`config/app_config.py`）；关闭时拒绝对话与索引构建（无 classic 检索伪装 RAG）。全文搜索仍走 `utils/fulltext_index.py`（情报搜索等）。
@@ -130,7 +130,7 @@ Tauri v2 shell (src-tauri/)
 
 ## 7. 产品行为规范
 
-- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），api.js 未暴露属预期。
-- **综述写作规则**（硬化于 `prompts/yaml/topic_survey.yaml` 与 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
+- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），并暴露为 `api.purgeWeakLinks()` / `api.backfillSemanticBidirectional()`；两者列入 `DESTRUCTIVE_METHODS` 限流，暂无 UI 按钮（全库操作耗时且影响面大）。
+- **综述写作规则**（硬化于 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
 - **问答**：`question_shape.py` 启发式分型（定义 / 讲解 / 对比 / 缺口）；检索到的主题综述进入 `【讲解骨架】`，不得作为 `[n]` 引用。Notes 才进 `【可引用原文】`。产品赌注见 `documents/PRD.md` v4.2。
 - NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

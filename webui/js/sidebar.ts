@@ -92,16 +92,6 @@ function updateSidebarStats() {
         var fileCount = window.AppState.lastFileTreeData ? _countFiles(window.AppState.lastFileTreeData) : 0;
         el.textContent = window.t('common.notesCount', { count: fileCount });
     }
-    var tagsEl = document.getElementById('sidebar-status-tags');
-    if (tagsEl) {
-        var tagCount = document.querySelectorAll('#sidebar-tags .sidebar-tag-group[data-tag-name]').length;
-        tagsEl.textContent = window.t('common.tagsCount', { count: tagCount });
-    }
-    var graphEl = document.getElementById('sidebar-status-graph');
-    if (graphEl) {
-        var linkCount = document.querySelectorAll('#sidebar-graph .link-card.link-confirmed').length;
-        graphEl.textContent = window.t('common.linksCount', { count: linkCount });
-    }
 }
 
 document.addEventListener('localechange', function() {
@@ -124,9 +114,7 @@ function setSidebarStatus(view: any, text: any, isActive: any) {
 function switchSidebarView(view: any) {
     window.AppState.currentSidebarView = view;
 
-    var sidebar = document.querySelector('.sidebar-left');
     var resizer = document.getElementById('sidebar-resizer');
-    var tagInput = document.getElementById('sidebar-tag-input');
 
     document.querySelectorAll('.sidebar-pane').forEach(function(pane: any) {
         pane.classList.remove('is-active');
@@ -136,7 +124,6 @@ function switchSidebarView(view: any) {
         dock.classList.remove('is-active');
         dock.hidden = true;
     });
-    if (tagInput) tagInput.style.display = 'none';
 
     var activePane = document.getElementById('sidebar-pane-' + view);
     if (activePane) {
@@ -150,20 +137,7 @@ function switchSidebarView(view: any) {
     }
 
     if (view === 'tree') {
-        if (sidebar) sidebar.classList.remove('sidebar-narrow');
         if (resizer) resizer.style.display = '';
-        // 文件变化时树视图不可见被标记 dirty，切回时补一次强制刷新
-        if (window.EventListeners && window.EventListeners.consumeSidebarTreeDirty && window.EventListeners.consumeSidebarTreeDirty()) {
-            if (window.TreeModule && window.TreeModule.loadFileTree) {
-                window.TreeModule.loadFileTree(true);
-            }
-        }
-    } else if (view === 'tags') {
-        if (sidebar) sidebar.classList.add('sidebar-narrow');
-        if (resizer) resizer.style.display = 'none';
-    } else if (view === 'graph') {
-        if (sidebar) sidebar.classList.add('sidebar-narrow');
-        if (resizer) resizer.style.display = 'none';
     }
 
     var contentPanel = document.getElementById('content-panel');
@@ -192,17 +166,9 @@ function switchSidebarView(view: any) {
         }
     }
 
-    if (view === 'tags') (window.loadTagsView() as any).then(function() { window.updateSidebarStats(); }).catch(function() {});
-
     // 联动知识图谱过滤
-    if (window.Graph3Tier && window.Graph3Tier.load) {
-        if (view === 'tags') {
-            window.Graph3Tier.load('tag');
-        } else if (view === 'graph') {
-            window.Graph3Tier.load('all');
-        } else if (view === 'tree') {
-            window.Graph3Tier.load('topic');
-        }
+    if (window.Graph3Tier && window.Graph3Tier.load && view === 'tree') {
+        window.Graph3Tier.load('topic');
     }
     window.updateSidebarStats();
 }

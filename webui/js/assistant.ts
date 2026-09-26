@@ -310,11 +310,10 @@ window.AssistantModule = (function() {
         _currentStreamEl = assistantEl;
 
         var topics = _extractTopics();
-        var tags = _extractTags();
         var currentFile = _extractCurrentFile();
 
         options.history = requestHistory;
-        window.api.ragChat(question, topics, tags, currentFile, options).then(function(result) {
+        window.api.ragChat(question, topics, null, currentFile, options).then(function(result) {
             if (result && result.started) {
                 setTimeout(function() {
                     if (_isStreaming && _currentStreamEl === assistantEl && !_streamRawText) {
@@ -365,16 +364,6 @@ window.AssistantModule = (function() {
         }
         if (!data || !data.topics) return null;
         return data.topics.map(function(t: any) { return t.name; });
-    }
-
-    function _extractTags() {
-        if (!window.AppState || !window.AppState.lastTagsData) return null;
-        var data = window.AppState.lastTagsData;
-        if (typeof data === 'string') {
-            try { data = JSON.parse(data); } catch (_e) { return null; }
-        }
-        if (!data || !data.tags) return null;
-        return data.tags.map(function(t: any) { return t.name; });
     }
 
     function _extractCurrentFile() {

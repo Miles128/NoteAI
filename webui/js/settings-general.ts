@@ -28,25 +28,14 @@ async function saveApiConfig() {
         disable_thinking: disableThinkingEl ? disableThinkingEl.checked : true
     };
 
-    const statusEl = document.getElementById('api-config-status');
-    const popupStatusEl = document.getElementById('api-config-status-popup');
-
     const showStatus = (msg: any, isError = false) => {
-        if (statusEl) {
-            statusEl.textContent = msg;
-            statusEl.style.color = isError ? '#e53e3e' : '#38a169';
-            statusEl.style.display = 'block';
-        }
-        if (popupStatusEl) {
-            popupStatusEl.textContent = msg;
-            popupStatusEl.style.color = isError ? '#e53e3e' : '#38a169';
-            popupStatusEl.style.display = 'block';
-        }
+        showReliabilityStatus('api-config-status', msg, isError);
+        showReliabilityStatus('api-config-status-popup', msg, isError);
     };
 
     const hideStatus = () => {
-        if (statusEl) statusEl.style.display = 'none';
-        if (popupStatusEl) popupStatusEl.style.display = 'none';
+        hideReliabilityStatus('api-config-status');
+        hideReliabilityStatus('api-config-status-popup');
     };
 
     showStatus(window.t('settings.testingConnection'));
@@ -109,30 +98,6 @@ function closeSettingsPanel() {
     }
 }
 
-function closeLogPanel() {
-    const logPanel = document.getElementById('log-panel');
-    if (logPanel) {
-        logPanel.classList.remove('active');
-    }
-}
-
-async function autoSaveConfig() {
-    try {
-        const uiConfig = {
-            auto_topic: true,
-        };
-
-        const result = await window.api.saveUiConfig(uiConfig);
-        if (result && result.success) {
-            window.updateStatus(window.t('settings.autoSaved'));
-        } else {
-            window.updateStatus(window.t('settings.autoSaveFailed', { message: result?.message || window.t('common.unknownError') }));
-        }
-    } catch (e) {
-        console.error('[Settings] Auto save config error:', e);
-    }
-}
-
 function resetApiConfig() {
     const apiBaseEl = document.getElementById('api-base') as HTMLInputElement | null;
     const modelNameEl = document.getElementById('model-name') as HTMLInputElement | null;
@@ -162,9 +127,18 @@ async function saveFontFamily(key: any, value: any) {
     try {
         var payload: Record<string, any> = {};
         payload[key] = value;
-        var result = await window.api.saveUiConfig(payload);
+        // 走 state 门面：让 uiConfig 缓存同步更新，本次会话内即可读到新值
+        var result = window.state && window.state.saveUiConfig
+            ? await window.state.saveUiConfig(payload)
+            : await window.api.saveUiConfig(payload);
         if (!result || !result.success) {
             console.error('[Settings] save font family failed:', result);
+            return;
+        }
+        var sidebarFont = (window.uiConfig && window.uiConfig.sidebar_font_family) || 'system';
+        var previewFont = (window.uiConfig && window.uiConfig.preview_font_family) || 'system';
+        if (window.ThemeModule && window.ThemeModule.applyContentFonts) {
+            window.ThemeModule.applyContentFonts(sidebarFont, previewFont);
         }
     } catch (e) {
         console.error('[Settings] save font family error:', e);
@@ -244,11 +218,9 @@ async function loadUiConfigToForm() {
             var previewFont = uiConfig.preview_font_family || 'system';
             if (window.ThemeModule && window.ThemeModule.applyContentFonts) {
                 window.ThemeModule.applyContentFonts(sidebarFont, previewFont);
-                try {
-                    localStorage.setItem('noteai_sidebar_font_family', sidebarFont);
-                    localStorage.setItem('noteai_preview_font_family', previewFont);
-                } catch (_e) {}
             }
+            var previewFontEl = document.getElementById('settings-preview-font-family') as HTMLSelectElement | null;
+            if (previewFontEl) previewFontEl.value = previewFont;
             var typography = uiConfig.typography || {};
             if (window.ThemeModule && window.ThemeModule.applyTypography) {
                 typography = window.ThemeModule.applyTypography(typography);
@@ -266,6 +238,8 @@ async function loadUiConfigToForm() {
             if (topicThresholdEl) {
                 topicThresholdEl.value = uiConfig.topic_auto_assign_threshold != null ? uiConfig.topic_auto_assign_threshold : 0.80;
             }
+            var autoTopicEl = document.getElementById('settings-auto-topic') as HTMLInputElement | null;
+            if (autoTopicEl) autoTopicEl.checked = uiConfig.auto_topic !== false;
             var mergePresetEls = document.querySelectorAll('input[name="settings-merge-preset"]');
             if (mergePresetEls.length) {
                 var savedPreset = uiConfig.merge_preset || 'balanced';
@@ -478,8 +452,6 @@ window.SettingsGeneral = {
     loadApiConfigToForm,
     refreshLog,
     closeSettingsPanel,
-    closeLogPanel,
-    autoSaveConfig,
     resetApiConfig,
     saveFontSize,
     saveFontFamily,
@@ -492,11 +464,11 @@ window.SettingsGeneral = {
 
 // 历史全局别名（保持对外行为不变）
 window.setLocale = setLocale;
+window.saveFontFamily = saveFontFamily;
 window.saveTypographySettings = saveTypographySettings;
 window.saveApiConfig = saveApiConfig;
 window.refreshLog = refreshLog;
 window.closeSettingsPanel = closeSettingsPanel;
-window.closeLogPanel = closeLogPanel;
 window.resetApiConfig = resetApiConfig as any;
 
 })();

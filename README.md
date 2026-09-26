@@ -28,7 +28,7 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 | You do | NoteAI helps |
 |--------|----------------|
 | 📥 Drop PDFs / web pages / Word files | 🔄 Auto-convert to Markdown, archive originals in `Raw/` |
-| 📂 Skip folder planning | 🏷️ AI suggests topics & tags — you confirm |
+| 📂 Skip folder planning | 🏷️ AI suggests topics; tags derived from filenames — you confirm |
 | 📚 Topics keep growing | 📑 Auto-generate & cascade-update topic surveys |
 | ❓ Ask a question | 🤖 RAG Assistant searches your notes & surveys first |
 
@@ -102,7 +102,7 @@ python run.py
 | Feature | Description |
 |---------|-------------|
 | 📁 3-tier topics | `L1 > L2 > L3` → `Notes/` folders + frontmatter |
-| 🏷️ Auto tags | jieba + TF-IDF; 2–5 distinctive Chinese tags |
+| 🏷️ Auto tags | Split from the note filename during import; 2–5 distinctive tags |
 | 🧠 Topic suggestions | LLM proposes new / merged topics |
 | 📚 WIKI index | `wiki/WIKI.md` + `{topic}_survey.md` |
 | 📋 schema.md | Workspace rules: AI write scope, topic levels, conflicts |
@@ -232,7 +232,7 @@ Aligned with [PRD](./documents/PRD.md) — evolve from batch tool to **continuou
 
 | Priority | Focus |
 |----------|--------|
-| 🔥 P0 | Ingest 默认开启 · 后台综述 · 有限会话上下文 · CLI 文件操作 · RSS 手动触发 |
+| 🔥 P0 | Ingest 默认开启 · 后台综述 · 有限会话上下文 · CLI 文件操作 |
 | 🟡 P1 | Cross-ref on save · search UX · WIKI summaries · standalone App packaging |
 | 🎨 P1 | Main-area state machine · onboarding · standalone App packaging & clean-machine validation |
 | 🟢 P2 | Contradiction detection · graph + editor coexist · Vite bundle (later) |
@@ -268,7 +268,7 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 | 你做的事 | NoteAI 帮你做的 |
 |---------|----------------|
 | 📥 丢进 PDF / 网页 / Word | 🔄 自动转 Markdown、归档到 `Raw/` |
-| 📂 不想先想文件夹 | 🏷️ AI 建议主题与标签，待你确认 |
+| 📂 不想先想文件夹 | 🏷️ AI 建议主题、标签由文件名切出，待你确认 |
 | 📚 主题越积越多 | 📑 自动生成 / 级联更新主题综述 |
 | ❓ 想问一个问题 | 🤖 RAG 助手先查你的笔记与综述，再回答 |
 
@@ -332,7 +332,7 @@ python run.py
 | 功能 | 说明 |
 |------|------|
 | 📁 三级主题 | `一级 > 二级 > 三级`，对应 `Notes/` 目录与 frontmatter |
-| 🏷️ 自动标签 | jieba 分词 + 词频，2–5 个有区分度的中文标签 |
+| 🏷️ 自动标签 | 导入时按文件名切分，2–5 个有区分度的标签 |
 | 🧠 主题建议 | LLM 分析结构，建议新建 / 合并主题 |
 | 📚 WIKI 索引 | 自动维护 `wiki/WIKI.md` 与 `{主题}_综述.md` |
 | 📋 schema.md | 工作区规范：AI 可写范围、主题层级、冲突策略 |
@@ -464,7 +464,7 @@ pytest
 | 优先级 | 方向 |
 |--------|------|
 | 🔥 P0 | 级联更新 · Ingest 进度与断点续跑 · Query→Archive · Lint · schema.md |
-| 🟡 P1 | 保存时交叉引用 · 搜索增强 · WIKI 摘要索引 · 云盘产品化 |
+| 🟡 P1 | 保存时交叉引用 · 搜索增强 · WIKI 摘要索引 |
 | 🎨 P1 | 主区域状态机 · 首次引导 · App 打包与干净机器验收 |
 | 🟢 P2 | 矛盾检测 · 图谱与编辑并存 · 前端 Vite 打包（不急） |
 

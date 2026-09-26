@@ -28,15 +28,8 @@ declare global {
         getWorkspaceTree(): Promise<any>;
         getTopicTree(): Promise<any>;
         topicMeta(topic: string): Promise<any>;
-        getSurveyOverview(): Promise<any>;
-        toggleSurvey(topic: string): Promise<any>;
-        getAllTags(): Promise<any>;
-        autoTagFiles(dryRun?: boolean): Promise<any>;
-        ensureTagsMd(): Promise<any>;
-        batchAutoAssignTopics(): Promise<any>;
         createTopic(name: string, parent?: string): Promise<any>;
         createNoteFromDraft(title: string, topic?: string, content?: string): Promise<any>;
-        createTag(name: string): Promise<any>;
         getAllPending(): Promise<any>;
         retryCascadeTopic(topic: string): Promise<any>;
         retryAllCascadeFailures(): Promise<any>;
@@ -49,13 +42,8 @@ declare global {
         keepNoteInTopic(filePath: string, currentTopic: string, suggestedTopic: string): Promise<any>;
         applyTopicPlacementThreshold(): Promise<any>;
         mergeDuplicateTopics(): Promise<any>;
-        renameTopic(oldTopic: string, newTopic: string): Promise<any>;
         deleteTopic(topicName: string): Promise<any>;
-        renameTag(oldTag: string, newTag: string): Promise<any>;
-        deleteTag(tagName: string): Promise<any>;
-        moveFileToTopic(filePath: string, newTopic: string): Promise<any>;
         moveFile(filePath: string, targetFolder: string): Promise<any>;
-        addTagToFile(filePath: string, tag: string): Promise<any>;
 
         // 配置
         testApiConfig(cfg?: Partial<ApiConfig>): Promise<any>;
@@ -67,10 +55,7 @@ declare global {
 
         // 下载 / 转换 / 整合
         startWebDownload(urls: string[], aiAssist: boolean, includeImages: boolean): Promise<any>;
-        startFileConversion(aiAssist: boolean): Promise<any>;
         autoConvertPending(): Promise<any>;
-        extractTopics(topicCount: number): Promise<any>;
-        startNoteIntegration(autoTopic: boolean, topics: string[]): Promise<any>;
         refreshLog(): Promise<any>;
         onFileSelected(path: string): Promise<any>;
         saveFileContent(path: string, content: string): Promise<any>;
@@ -115,14 +100,12 @@ declare global {
         publishSemanticTopicWikiPage(topic: string): Promise<any>;
         addSemanticEntityAlias(id: string, alias: string): Promise<any>;
         confirmAllLinks(): Promise<any>;
-        syncWikiWithFiles(): Promise<any>;
+        purgeWeakLinks(): Promise<any>;
+        backfillSemanticBidirectional(): Promise<any>;
 
-        // LLM 改写 / AI 主题
+        // LLM 改写
         llmRewriteStream(filePath: string): Promise<any>;
         llmRewriteApply(filePath: string, rewrittenText: string): Promise<any>;
-        aiTopicAnalyze(): Promise<any>;
-        aiTopicSurvey(topic: string): Promise<any>;
-        applyTopicSuggestion(suggestion: any): Promise<any>;
 
         // RAG
         ragChat(question: string, topics?: any, tags?: any, currentFile?: string, options?: any): Promise<any>;
@@ -159,7 +142,7 @@ declare global {
         getJobs(options?: any): Promise<any>;
 
         // 搜索 / 文件操作
-        searchFiles(query: string): Promise<any>;
+        searchFiles(query: string, topic?: string, tag?: string): Promise<any>;
         deleteFile(path: string): Promise<any>;
         revealInFinder(path: string): Promise<any>;
 
@@ -172,11 +155,7 @@ declare global {
         openArchiveDialog(): Promise<any>;
         getFilePreview(path: string): Promise<any>;
 
-        // 窗口控制
-        moveWindow(dx?: number, dy?: number): void;
-        minimizeWindow(): void;
-        maximizeWindow(): void;
-        closeWindow(): void;
+        // 独立窗口
         openFileInNewWindow(path: string, name?: string): Promise<any>;
     }
 
@@ -186,7 +165,6 @@ declare global {
         THEME: string;
         ACCENT_COLOR: string;
         DOWNLOADER_CONFIG: string;
-        CONVERTER_CONFIG: string;
         TREE_STATE: string;
         TREE_SHOW_FILE_COUNT: string;
         SIDEBAR_WIDTH: string;
@@ -276,7 +254,6 @@ declare global {
         graphFilter: string;
         graphMode: string;
         lastFileTreeData: any;
-        lastTagsData: any;
         lastTopicData: any;
         [key: string]: any;
     }
@@ -433,7 +410,6 @@ declare global {
             clearFiles?(): void;
             showAbout?(): Promise<any>;
             showSettings?(): void;
-            showLog?(): void;
         } | undefined;
         _rewritingFilePath: string | null;
         _pendingSectionLocate: string;
@@ -444,6 +420,7 @@ declare global {
             initRagSettings(): void;
             initIngestAutoSettings(): void;
             initAssistantSettings(): void;
+            initAutoTopicSettings(): void;
             initTopicAutoThresholdSettings(): void;
             initMergePresetSettings(): void;
             initMergeAdvancedSettings(): void;
@@ -459,11 +436,6 @@ declare global {
             refreshStorageUsage(): Promise<any>;
         } | undefined;
         DownloaderModule: {
-            startWebDownload(): Promise<any>;
-            updateWebImageStatus(): void;
-            autoSaveConfig(): void;
-            loadSavedConfig(): void;
-            clearUrls(): void;
             openDownloadModal(): void;
             closeDownloadModal(): void;
             autoSaveModalConfig(): void;
@@ -486,12 +458,6 @@ declare global {
             checkWorkspaceStatus?(): Promise<void>;
             initWorkspaceFileWatcher?(): void;
         } | undefined;
-        ConverterModule: {
-            convertFile?(file: any, targetFormat: any, options?: any): Promise<any>;
-            startFileConversion?(aiAssist?: boolean): Promise<any>;
-            autoSaveConvConfig?(): void;
-            loadSavedConvConfig?(): void;
-        } | undefined;
         EventListeners: {
             init?(): void;
             initWorkspaceFileWatcher?(): void;
@@ -501,8 +467,6 @@ declare global {
             refreshCurrentSidebarView?(force?: any): void;
             refreshKnowledgeGraph?(): void;
             markInitialIngestDone?(): void;
-            markSidebarTreeDirty?(): void;
-            consumeSidebarTreeDirty?(): boolean;
         } | undefined;
         GraphLayoutParams: {
             open?(category?: string): void;
@@ -528,15 +492,6 @@ declare global {
             initIngestUi?(): void;
             refresh?(): void;
         } | undefined;
-        IntegratorModule: {
-            startIntegration?(options?: any): Promise<any>;
-            refresh?(): void;
-            topicsReady?: boolean;
-            updateIntegrateBtnState?(): void;
-            extractTopics?(): Promise<any>;
-            startNoteIntegration?(): Promise<any>;
-            clearTopicList?(): void;
-        } | undefined;
         JobCenterModule: { refresh?(options?: any): Promise<any>; getJobs?(options?: any): any[]; getJob?(id: any): any; handleJobUpdate?(job: any): void; replaceJobs?(jobs: any): any[]; show?(): void } | undefined;
         OrganizeRulesModule: { show?(): void; save?(): void; close?(): void; load?(): void; init?(): void; open?(): Promise<boolean>; maybePromptSetup?(flag?: any): Promise<boolean> } | undefined;
         QuickCreateModule: { open?(options?: any): void; close?(): void; init?(): void } | undefined;
@@ -559,8 +514,6 @@ declare global {
             saveApiConfig?(config?: Partial<ApiConfig>): void;
             loadApiConfigToForm?(): void;
             refreshLog?(): void;
-            closeLogPanel?(): void;
-            autoSaveConfig?(): void;
             resetApiConfig?(): Promise<any>;
             saveFontSize?(size: string): void;
             saveFontFamily?(family: string): void;
@@ -572,20 +525,15 @@ declare global {
         SettingsSemantic: { init?(): void; applySemanticSettingsToForm?(uiConfig: any): void; initSemanticWorkbenchSettings?(): void; saveSemanticWorkbenchConfig?(): Promise<any>; readSemanticWorkbenchPrefs?(): any; persistSemanticWorkbenchPrefs?(config: any): void } | undefined;
         TabsModule: { open?(tabId: string): void; switchTab?(id: string): void } | undefined;
         cachedReadFileRaw(path: string): Promise<any>;
-        closeLogPanel(): void;
         closeProjectRulesModal(): void;
         closeSearchModal(): void;
         createNoteFromNoteList(): void;
-        doAutoTag(): Promise<any>;
-        extractTopics(): Promise<any>;
         graphApplyLayoutSettings(): void;
         graphCloseLayoutSettings(): void;
         graphOpenLayoutSettings(): void;
         graphResetLayoutSettings(): void;
-        loadTagsView(silent?: boolean): Promise<any>;
         onAddNoteFromFileTree(): void;
         onSearchResultClick(el?: any): void;
-        onShowAddTagInput(): void;
         openQuickCreate(tab?: string): void;
         openSearchModal(query?: string): void;
         refreshLog(): void;
@@ -593,14 +541,12 @@ declare global {
         resetApiConfig(): Promise<any>;
         runPostWorkspaceSetup(): void;
         saveProjectRulesModal(): void;
+        saveFontFamily(key: string, value: string): Promise<void>;
         saveTypographySettings(): void;
         setLocale(locale: string): void;
         showAbout(): void;
         showProjectRulesModal(): void;
-        startFileConversion(): void;
-        startNoteIntegration(): void;
         toast: any;
-        updateIntegrateBtnState(): void;
         _pendingViewVisible: boolean;
         _rewriteBuffer: string;
         _rewriteDisplayText: string;
@@ -621,8 +567,6 @@ declare global {
             loadApiConfigToForm?(): void;
             refreshLog?(): void;
             closeSettingsPanel?(): void;
-            closeLogPanel?(): void;
-            autoSaveConfig?(): void;
             resetApiConfig?(): Promise<any>;
             saveFontFamily?(family: string): void;
             saveTypographySettings?(): void;
@@ -631,6 +575,7 @@ declare global {
             setLocale?(locale: string): void;
             initRagSettings?(): void;
             initIngestAutoSettings?(): void;
+            initAutoTopicSettings?(): void;
             initTopicAutoThresholdSettings?(): void;
             initMergePresetSettings?(): void;
             initMergeAdvancedSettings?(): void;
@@ -694,9 +639,6 @@ declare global {
             setTreeFileCountEnabled(enabled: boolean): void;
             refreshTreeDisplay(): void;
             initTreeFileCountSetting(): void;
-            hasTopicPending(): boolean;
-            updateWebAIStatus?: () => void;
-            updateConvAIStatus?: () => void;
         } | undefined;
         graphZoomIn(): void;
         graphZoomOut(): void;
@@ -749,35 +691,12 @@ declare global {
         _customConfirm(message: string): Promise<boolean>;
         hideTreeContextMenu(): void;
         revealInFinder(path: string): void;
-        _surveyOverviewMap?: Record<string, any>;
         _topicStaleMap?: Record<string, boolean>;
         _surveyStreamText: string;
         _surveyBuffer: string;
         _surveyDisplayText: string;
         _surveyFlushTimer: number | null;
         _surveyStreamUnlisten: (() => void) | null;
-        loadTopicTree(silent?: boolean, forceRefresh?: boolean): Promise<void>;
-        loadTopicView(): Promise<void>;
-        loadTopicPendingPanel(pending: any[], topicNames?: string[]): void;
-        onBatchAutoAssignTopics(): Promise<void>;
-        onAITopicAnalyze(): Promise<void>;
-        onAITopicSurvey(prefillTopic?: string): Promise<void>;
-        topicRowClick(rowEl: HTMLElement): void;
-        previewTopicSurvey(topic: string): void;
-        previewSemanticWikiPage(topic: string): void;
-        toggleTopicSurvey(topic: string): Promise<void>;
-        updateTopicSurvey(topic: string): void;
-        onShowTopicInput(): void;
-        onHideTopicInput(): void;
-        onTopicInputChange(): void;
-        onConfirmTopic(): Promise<void>;
-        closeAISuggestionPanel(): void;
-        onCandidateClick(btnEl: HTMLElement): void;
-        onInputChange(inputEl: HTMLInputElement): void;
-        onTopicSelectChange(selectEl: HTMLSelectElement): void;
-        onInputEnter(inputEl: HTMLInputElement): void;
-        onConfirmBtnClick(btnEl: HTMLButtonElement): void;
-        hasTopicPending(): boolean;
     }
 
     interface PreviewModule {

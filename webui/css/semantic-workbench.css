@@ -105,25 +105,9 @@
 .semantic-actions button { border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px; background: var(--surface); color: var(--text); cursor: pointer; }
 .semantic-actions button.primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
 .semantic-actions button.danger { border-color: color-mix(in srgb, var(--error) 55%, var(--border)); color: var(--error); }
-.semantic-claim-editor { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
-.semantic-claim-editor[hidden] { display: none; }
-.semantic-claim-editor label { display: grid; gap: 6px; color: var(--text-muted); font-size: 11px; }
 .semantic-claim-editor input, .semantic-claim-editor select, .semantic-claim-editor textarea, .semantic-alias-form input { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; background: var(--article-bg); color: var(--text); font: inherit; }
-.semantic-claim-editor textarea { min-height: 92px; resize: vertical; line-height: 1.55; }
 .semantic-actions select { border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; background: var(--surface); color: var(--text); font: inherit; }
-.semantic-verdict { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 600; line-height: 1.7; }
-.semantic-verdict-supported { background: color-mix(in srgb, #2e8b57 16%, transparent); color: #2e8b57; }
-.semantic-verdict-refuted { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); }
-.semantic-verdict-unclear { background: color-mix(in srgb, #b8860b 16%, transparent); color: #b8860b; }
-.semantic-verification { border: 1px solid var(--border); border-radius: 7px; padding: 12px; margin-top: 10px; background: var(--surface); }
-.semantic-verification-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--text-muted); }
-.semantic-verification p { margin: 8px 0 0; font-size: 13px; line-height: 1.6; }
-.semantic-verification-sources { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
-.semantic-verification-sources a { color: var(--primary); }
 .semantic-source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-.semantic-evidence-action { flex: 0 0 auto; border: 0; padding: 0; background: transparent; color: var(--text-muted); font-size: 10px; cursor: pointer; }
-.semantic-source-card.is-excluded { opacity: .55; }
-.semantic-source-card.is-excluded blockquote { text-decoration: line-through; }
 .semantic-aliases { display: flex; flex-wrap: wrap; gap: 6px; }
 .semantic-alias-chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 8px; background: var(--surface); color: var(--text-muted); font-size: 10px; }
 .semantic-muted { color: var(--text-muted); font-size: 11px; }
@@ -144,10 +128,6 @@
 .semantic-changes-window { color: var(--text-muted); font-size: 10px; font-weight: 400; }
 .semantic-change-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .semantic-change-badge { border-radius: 999px; padding: 2px 8px; font-size: 10px; border: 1px solid var(--border); color: var(--text-muted); background: var(--surface); }
-.semantic-change-added { color: #1a7f37; border-color: rgba(26, 127, 55, .35); }
-.semantic-change-updated { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
-.semantic-change-invalidated { color: #b45309; border-color: rgba(180, 83, 9, .35); }
-.semantic-change-removed { color: #b91c1c; border-color: rgba(185, 28, 28, .35); }
 .semantic-change-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .semantic-change-row { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 12px; }
 .semantic-change-row:last-child { border-bottom: 0; }
@@ -155,23 +135,6 @@
 .semantic-change-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .semantic-change-source { flex: 0 1 auto; max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: 10px; }
 .semantic-changes-total { margin: 8px 0 0; color: var(--text-muted); font-size: 11px; }
-.semantic-brief-controls { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
-.semantic-brief-controls label { display: grid; gap: 5px; color: var(--text-muted); font-size: 11px; }
-.semantic-brief-controls select, .semantic-brief-controls button { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; background: var(--article-bg); color: var(--text); font: inherit; }
-.semantic-brief-controls button.primary { background: var(--primary); border-color: var(--primary); color: #fff; cursor: pointer; }
-.semantic-brief-controls button.primary:disabled { opacity: .55; cursor: default; }
-.semantic-brief-body { line-height: 1.65; font-size: 13px; }
-.semantic-brief-body h1, .semantic-brief-body h2, .semantic-brief-body h3 { margin: 14px 0 6px; }
-.semantic-brief-body ul, .semantic-brief-body ol { padding-left: 20px; }
-.semantic-brief-body code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
-.semantic-brief-fallback { margin-top: 12px; padding: 8px 10px; border: 1px solid rgba(180, 83, 9, .35); border-radius: 5px; color: #b45309; background: var(--surface); font-size: 11px; }
 .semantic-narrative-card { margin-top: 25px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
 .semantic-narrative-title { margin: 0 0 6px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); cursor: help; }
 .semantic-narrative-text { margin: 0; font-size: 13px; line-height: 1.6; }
-
-.semantic-list-item.needs-verify { box-shadow: inset 3px 0 var(--warning, #b45309); }
-.semantic-list-item.needs-verify strong::after { content: " ⚠"; color: var(--warning, #b45309); font-size: 11px; }
-.semantic-verify-stream { display: none; margin-top: 20px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); padding: 12px 14px; }
-.semantic-verify-stream.active { display: block; }
-.semantic-verify-stream h3 { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--primary); }
-.semantic-verify-stream-body { max-height: 260px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; color: var(--sidebar-text-muted); }

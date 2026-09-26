@@ -174,7 +174,7 @@ def test_semantic_workbench_assets_and_contract_are_wired() -> None:
 
 def test_semantic_workbench_reuses_native_three_columns() -> None:
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    tree_pane = html.split('id="sidebar-pane-tree"', 1)[1].split('id="sidebar-pane-tags"', 1)[0]
+    tree_pane = html.split('id="sidebar-pane-tree"', 1)[1].split('id="sidebar-resizer"', 1)[0]
     note_panel = html.split('id="note-list-panel"', 1)[1].split('id="note-list-resizer"', 1)[0]
     content_panel = html.split('id="content-panel"', 1)[1].split('id="preview-panel"', 1)[0]
 

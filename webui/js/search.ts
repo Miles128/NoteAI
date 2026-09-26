@@ -41,6 +41,15 @@ function closeSearchModal() {
     }
 }
 
+function _readSearchFilters() {
+    const topicEl = document.getElementById('search-filter-topic') as HTMLInputElement | null;
+    const tagEl = document.getElementById('search-filter-tag') as HTMLInputElement | null;
+    return {
+        topic: topicEl ? topicEl.value.trim() : '',
+        tag: tagEl ? tagEl.value.trim() : ''
+    };
+}
+
 function doSearch(query: any) {
     const resultsEl = document.getElementById('search-results');
     if (!resultsEl) return;
@@ -61,7 +70,8 @@ function doSearch(query: any) {
     resultsEl.innerHTML =
         '<div class="search-loading">' + window.t('search.loading') + '</div>';
 
-    window.api.searchFiles(query.trim())
+    var filters = _readSearchFilters();
+    window.api.searchFiles(query.trim(), filters.topic, filters.tag)
         .then(function (result) {
             console.log('[Search] result:', JSON.stringify(result).substring(0, 500));
             if (result && result.success) {
@@ -195,6 +205,18 @@ document.addEventListener('keydown', function (e) {
             }
         });
     }
+
+    ['search-filter-topic', 'search-filter-tag'].forEach(function (filterId) {
+        const filterEl = document.getElementById(filterId) as HTMLInputElement | null;
+        if (!filterEl) return;
+        filterEl.addEventListener('input', function () {
+            if (!input || !input.value.trim()) return;
+            if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+            _searchDebounceTimer = setTimeout(function () {
+                doSearch(input.value);
+            }, 200);
+        });
+    });
 
     var overlay = document.getElementById('search-modal');
     if (overlay) {

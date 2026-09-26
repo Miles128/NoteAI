@@ -6,7 +6,11 @@
 
 export async function saveAssistantUiConfig(partial: any) {
     try {
-        var result = await window.api.saveUiConfig(partial);
+        // 走 state 门面而非裸 api：门面会把改动并进 uiConfig 缓存，
+        // 否则本次会话内读到的仍是保存前的旧值。
+        var result = window.state && window.state.saveUiConfig
+            ? await window.state.saveUiConfig(partial)
+            : await window.api.saveUiConfig(partial);
         if (result && result.success) {
             window.updateStatus(window.t('settings.autoSaved'));
         } else {

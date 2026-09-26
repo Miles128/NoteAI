@@ -374,116 +374,6 @@ async function startDownloadFromModal() {
     }
 }
 
-async function startWebDownload() {
-    const btn = document.querySelector('#tab-0 .btn-primary') as HTMLButtonElement | null;
-    const originalText = btn ? btn.textContent : window.t('download.start');
-    
-    if (_downloadState.isDownloading) {
-        alert(window.t('download.taskRunning'));
-        return;
-    }
-    
-    if (btn) {
-        btn.disabled = true;
-        btn.textContent = window.t('download.downloading');
-    }
-
-    try {
-        const urlsEl = document.getElementById('web-urls') as HTMLTextAreaElement | null;
-        const aiToggleEl = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
-        const includeImagesEl = document.getElementById('web-include-images') as HTMLInputElement | null;
-
-        const urls = urlsEl ? urlsEl.value.split('\n').map((u: any) => u.trim()).filter(u => u) : [];
-        const aiAssist = aiToggleEl ? aiToggleEl.checked : false;
-        const includeImages = includeImagesEl ? includeImagesEl.checked : false;
-
-        if (urls.length === 0) {
-            alert(window.t('download.enterUrlSingle'));
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = originalText;
-            }
-            return;
-        }
-        
-        _downloadState.isDownloading = true;
-        _downloadState.totalUrls = urls.length;
-        _downloadState.currentIndex = 0;
-        _downloadState.completedUrls = [];
-        _downloadState.failedUrls = [];
-
-        window.updateStatus(window.t('download.downloading'));
-        window.updateProgress('web-progress', 0, window.t('download.preparing'));
-
-        const result = await window.api.startWebDownload(urls, aiAssist, includeImages);
-        
-        if (result && result.success) {
-            window.updateStatus(window.t('download.waiting'));
-        } else {
-            window.updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (result?.message || window.t('common.unknownError')));
-            window.updateProgress('web-progress', 0, window.t('download.failed', { message: result?.message || window.t('common.unknownError') }));
-            _downloadState.isDownloading = false;
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = originalText;
-            }
-        }
-    } catch (e) {
-        console.error('[Downloader] Download error:', e);
-        window.updateStatus(window.t('download.failed', { message: '' }).replace(': ', '') + (e as Error).message);
-        window.updateProgress('web-progress', 0, window.t('download.failed', { message: (e as Error).message }));
-        _downloadState.isDownloading = false;
-        if (btn) {
-            btn.disabled = false;
-            btn.textContent = originalText;
-        }
-    }
-}
-
-function updateWebImageStatus() {
-    autoSaveConfig();
-}
-
-function autoSaveConfig() {
-    const aiToggle = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
-    const includeImages = document.getElementById('web-include-images') as HTMLInputElement | null;
-    
-    const config = {
-        webAiAssist: aiToggle ? aiToggle.checked : false,
-        webIncludeImages: includeImages ? includeImages.checked : true
-    };
-    
-    window.Storage.setItem(window.Storage.KEYS.DOWNLOADER_CONFIG, config);
-}
-
-function loadSavedConfig() {
-    const config: any = window.Storage.getItem(window.Storage.KEYS.DOWNLOADER_CONFIG, null);
-    if (config) {
-        const aiToggle = document.getElementById('web-ai-toggle') as HTMLInputElement | null;
-        const includeImages = document.getElementById('web-include-images') as HTMLInputElement | null;
-        
-        if (aiToggle && config.webAiAssist !== undefined) {
-            aiToggle.checked = config.webAiAssist;
-        }
-        if (includeImages && config.webIncludeImages !== undefined) {
-            includeImages.checked = config.webIncludeImages;
-        }
-        
-        if (window.TreeModule) {
-            if (window.TreeModule.updateWebAIStatus) {
-                window.TreeModule.updateWebAIStatus();
-            }
-        }
-    }
-}
-
-function clearUrls() {
-    const urlsEl = document.getElementById('web-urls') as HTMLTextAreaElement | null;
-    if (urlsEl) {
-        urlsEl.value = '';
-    }
-}
-
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initDownloadEventListener);
 } else {
@@ -491,11 +381,6 @@ if (document.readyState === 'loading') {
 }
 
 window.DownloaderModule = {
-    startWebDownload,
-    updateWebImageStatus,
-    autoSaveConfig,
-    loadSavedConfig,
-    clearUrls,
     openDownloadModal,
     closeDownloadModal,
     autoSaveModalConfig,

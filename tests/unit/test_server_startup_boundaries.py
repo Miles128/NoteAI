@@ -1,7 +1,7 @@
 from sidecar.server import SidecarServer
 
 
-def test_start_runs_watcher_and_sync_without_rss_polling(monkeypatch) -> None:
+def test_start_runs_watcher_and_sync_only(monkeypatch) -> None:
     server = SidecarServer()
     calls = []
     monkeypatch.setattr(server, "_start_workspace_watcher", lambda: calls.append("watcher"))
@@ -9,7 +9,7 @@ def test_start_runs_watcher_and_sync_without_rss_polling(monkeypatch) -> None:
 
     server.start()
 
-    # RSS 只允许手动拉取（PRD），启动不得创建后台轮询定时器
+    # 启动只跑 watcher + 同步，不得创建任何后台轮询定时器
     assert calls == ["watcher", "sync"]
 
 

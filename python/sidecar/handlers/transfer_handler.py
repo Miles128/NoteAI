@@ -3,8 +3,6 @@ import traceback
 from pathlib import Path
 
 from config.settings import NOTES_FOLDER, RAW_FOLDER
-from modules.note_integration import NoteIntegration
-from sidecar import job_status
 from sidecar.convert_failures import (
     clear_convert_failure,
     record_convert_batch_results,
@@ -17,52 +15,13 @@ class TransferHandler(BaseHandler):
     def register_routes(self, router):
         router.register("start_web_download", self._start_web_download)
         router.register("import_files", self._import_files)
-        router.register("start_file_conversion", self._start_file_conversion)
         router.register("auto_convert_pending", self._auto_convert_pending)
-        router.register("extract_topics", self._extract_topics)
-        router.register("start_note_integration", self._start_note_integration)
         router.register("retry_convert_file", self._retry_convert_file)
         router.register("dismiss_convert_failure", self._dismiss_convert_failure)
         router.register("list_watched_folders", self._list_watched_folders)
         router.register("add_watched_folder", self._add_watched_folder)
         router.register("remove_watched_folder", self._remove_watched_folder)
         router.register("scan_watched_folder", self._scan_watched_folder)
-
-    def _run_sync_job(
-        self,
-        job_id: str,
-        *,
-        kind: str,
-        label: str,
-        message: str,
-        metadata: dict | None,
-        fn,
-        complete_message,
-        complete_metadata=None,
-    ):
-        job_status.start_job(
-            job_id,
-            kind=kind,
-            label=label,
-            message=message,
-            metadata=metadata,
-            send_event=self._send_response,
-        )
-        try:
-            result = fn()
-            if result.get("success"):
-                job_status.complete_job(
-                    job_id,
-                    message=complete_message(result),
-                    metadata=complete_metadata(result) if complete_metadata else None,
-                    send_event=self._send_response,
-                )
-                return result
-            job_status.fail_job(job_id, result.get("message", "任务失败"), send_event=self._send_response)
-            return result
-        except Exception as e:
-            job_status.fail_job(job_id, str(e), send_event=self._send_response)
-            raise
 
     def _start_web_download(self, params):
         urls = params.get("urls", [])
@@ -194,36 +153,6 @@ class TransferHandler(BaseHandler):
             logger.warning(f"[ERROR] file_import: {e}\n{traceback.format_exc()}")
             self._send_response({"id": "event", "result": {"type": "file_import_error", "error": str(e)}})
 
-    def _start_file_conversion(self, params):
-        ai_assist = params.get("ai_assist", False)
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-
-        if not self._start_task(
-            "file_conversion",
-            self._do_file_conversion,
-            args=(workspace, ai_assist),
-            kind="conversion",
-            label="File conversion",
-        ):
-            return {"success": False, "message": "转换任务正在进行中，请稍后"}
-
-        return {"success": True, "message": "转换已开始"}
-
-    def _do_file_conversion(self, workspace, ai_assist):
-        _ = ai_assist
-        try:
-            result = self.file_converter.convert_folder(
-                workspace,
-                output_path=str(Path(workspace) / NOTES_FOLDER),
-                raw_path=str(Path(workspace) / RAW_FOLDER),
-            )
-            self._send_response({"id": "event", "result": {"type": "file_conversion_complete", "data": result}})
-        except Exception as e:
-            logger.warning(f"[ERROR] file_conversion: {e}\n{traceback.format_exc()}")
-            self._send_response({"id": "event", "result": {"type": "file_conversion_error", "error": str(e)}})
-
     def _auto_convert_pending(self, _params=None):
         workspace = self.config.workspace_path
         if not workspace:
@@ -296,74 +225,12 @@ class TransferHandler(BaseHandler):
         results = self.file_converter.convert_batch([str(full)], output_path, raw_path=raw_path)
         record_convert_batch_results(results)
 
-    def _do_retry_all_converts(self, files: list[str], workspace: str) -> None:
-        ws = Path(workspace)
-        paths = []
-        for rel in files:
-            full = ws / rel
-            if full.exists():
-                paths.append(str(full))
-        if not paths:
-            return
-        raw_path = str(ws / RAW_FOLDER)
-        output_path = str(ws / NOTES_FOLDER)
-        results = self.file_converter.convert_batch(paths, output_path, raw_path=raw_path)
-        record_convert_batch_results(results)
-
     def _dismiss_convert_failure(self, params):
         file_path = (params.get("file") or params.get("path") or "").strip()
         if not file_path:
             return {"success": False, "message": "缺少文件路径"}
         clear_convert_failure(file_path)
         return {"success": True, "message": f"已忽略：{file_path}"}
-
-    def _extract_topics(self, params):
-        topic_count = params.get("topic_count", None)
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-
-        result = self.topic_extractor.extract_topics(specified_topic_count=topic_count)
-        if not result.get("success"):
-            return {"success": False, "message": result.get("error", "提取主题失败")}
-        return result
-
-    def _start_note_integration(self, params):
-        auto_topic = params.get("auto_topic", True)
-        topics = params.get("topics", [])
-        workspace, err = self._require_workspace(message="请先设置工作区")
-        if err:
-            return err
-
-        self._note_integration = NoteIntegration()
-
-        if not self._start_task(
-            "note_integration",
-            self._do_note_integration,
-            args=(workspace, auto_topic, topics),
-            kind="ingest",
-            label="Note integration",
-        ):
-            return {"success": False, "message": "整合任务正在进行中，请稍后"}
-
-        return {"success": True, "message": "整合已开始"}
-
-    def _do_note_integration(self, workspace, auto_topic, topics):
-        _ = auto_topic
-        ni = getattr(self, "_note_integration", None)
-        if ni is None:
-            ni = NoteIntegration()
-            self._note_integration = ni
-        try:
-            documents = ni.load_documents_from_folder(workspace)
-            result = ni.integrate(documents=documents, save_path=workspace, user_topics=topics if topics else None)
-            ni.documents = []
-            self._send_response({"id": "event", "result": {"type": "note_integration_complete", "data": result}})
-        except Exception as e:
-            if ni:
-                ni.documents = []
-            logger.warning(f"[ERROR] note_integration: {e}\n{traceback.format_exc()}")
-            self._send_response({"id": "event", "result": {"type": "note_integration_error", "error": str(e)}})
 
     # ── Folder Watching ──
 

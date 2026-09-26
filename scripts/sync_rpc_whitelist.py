@@ -75,11 +75,11 @@ def check_frontend_consistency(rust_names, py_names):
 
     # 其他前端文件中绕过 API_DEFS 的裸 api.invoke('method', ...) 调用
     bare_invokes = []
-    for js_file in sorted(WEBUI_JS.glob("*.js")):
-        if js_file == API_JS:
-            continue
-        for m in BARE_INVOKE_RE.finditer(js_file.read_text(encoding="utf-8")):
-            bare_invokes.append((str(js_file.relative_to(ROOT)), m.group(1)))
+    for src_file in sorted(
+        p for p in WEBUI_JS.rglob("*") if p.is_file() and p.suffix in (".js", ".ts", ".mjs") and p != API_JS
+    ):
+        for m in BARE_INVOKE_RE.finditer(src_file.read_text(encoding="utf-8")):
+            bare_invokes.append((str(src_file.relative_to(ROOT)), m.group(1)))
 
     ok = True
 

@@ -97,6 +97,8 @@ class ConfigHandler(BaseHandler):
         return {
             "auto_topic": self.config.auto_topic,
             "topic_auto_assign_threshold": self.config.topic_auto_assign_threshold,
+            "merge_preset": self.config.merge_preset,
+            "merge_overrides": self.config.merge_overrides if isinstance(self.config.merge_overrides, dict) else {},
             "font_size": self.config.font_size,
             "sidebar_font_family": self.config.sidebar_font_family,
             "preview_font_family": self.config.preview_font_family,
@@ -144,11 +146,33 @@ class ConfigHandler(BaseHandler):
     def _save_ui_config(self, params):
         with self.config._lock:
             if "auto_topic" in params:
-                self.config.auto_topic = params["auto_topic"]
+                self.config.auto_topic = self._coerce_bool(params["auto_topic"], True)
             if "topic_auto_assign_threshold" in params:
                 self.config.topic_auto_assign_threshold = self._coerce_float(
                     params["topic_auto_assign_threshold"], 0.80, 0.0, 1.0
                 )
+            if "merge_preset" in params:
+                from sidecar.duplicate_review import _MERGE_PRESETS
+
+                preset = str(params["merge_preset"] or "").strip()
+                if preset in _MERGE_PRESETS:
+                    self.config.merge_preset = preset
+            if "merge_overrides" in params:
+                from sidecar.duplicate_review import _MERGE_PRESETS
+
+                raw = params["merge_overrides"]
+                allowed = _MERGE_PRESETS["balanced"]
+                cleaned: dict[str, float] = {}
+                if isinstance(raw, dict):
+                    for key, value in raw.items():
+                        if key not in allowed:
+                            continue
+                        try:
+                            parsed = float(value)
+                        except (TypeError, ValueError):
+                            continue
+                        cleaned[str(key)] = max(0.0, min(1.0, parsed))
+                self.config.merge_overrides = cleaned
             if "font_size" in params:
                 self.config.font_size = params["font_size"]
             if "sidebar_font_family" in params:
@@ -188,7 +212,7 @@ class ConfigHandler(BaseHandler):
                 self.config.locale = "en" if loc == "en" else "zh-CN"
             if "theme_preference" in params:
                 theme = str(params["theme_preference"] or "").strip()
-                if theme in {"system", "light", "dark"}:
+                if theme in {"system", "light", "dark", "paper"}:
                     self.config.theme_preference = theme
             save_ok, save_msg = self.config.save()
         if not save_ok:

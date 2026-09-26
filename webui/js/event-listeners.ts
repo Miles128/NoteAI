@@ -48,32 +48,10 @@ function markInitialIngestDone() {
     _hasRunInitialIngest = true;
 }
 
-var _treeRefreshDirty = false;
-
-function markSidebarTreeDirty() {
-    _treeRefreshDirty = true;
-}
-
-function consumeSidebarTreeDirty() {
-    var dirty = _treeRefreshDirty;
-    _treeRefreshDirty = false;
-    return dirty;
-}
-
-function getActiveSidebarView() {
-    var activeView = document.querySelector('.sidebar-view-btn.active');
-    return activeView ? activeView.getAttribute('data-sidebar') : null;
-}
-
 function refreshWorkspaceViewsAfterChange() {
-    var treeLoad = null;
-    if (getActiveSidebarView() === 'tree') {
-        treeLoad = window.TreeModule && window.TreeModule.loadFileTree ? window.TreeModule.loadFileTree(true) : null;
-    } else {
-        // 树视图不可见：标记 dirty，切回 tree 视图时由 switchSidebarView 补刷，
-        // 避免每次文件变化都在隐藏容器上全量重建
-        markSidebarTreeDirty();
-    }
+    var treeLoad = window.TreeModule && window.TreeModule.loadFileTree
+        ? window.TreeModule.loadFileTree(true)
+        : null;
 
     refreshCurrentSidebarView(true);
     refreshKnowledgeGraph();
@@ -90,31 +68,8 @@ function refreshWorkspaceViewsAfterChange() {
 }
 
 function refreshCurrentSidebarView(forceRefresh: any) {
-    var activeView = document.querySelector('.sidebar-view-btn.active');
-    if (!activeView) {
-        if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree(!!forceRefresh);
-        }
-        return;
-    }
-
-    var view = activeView.getAttribute('data-sidebar');
-    if (view === 'tree') {
-        if (window.TreeModule && window.TreeModule.loadFileTree) {
-            window.TreeModule.loadFileTree(!!forceRefresh);
-        }
-    } else if (view === 'tags') {
-        if (typeof window.loadTagsView === 'function') {
-            (window.loadTagsView as any)(true);
-        }
-    } else if (view === 'graph') {
-        if (window.Graph3Tier && typeof window.Graph3Tier.load === 'function') {
-            window.Graph3Tier.load('all');
-        }
-    } else if (view === 'relation') {
-        if (typeof window.loadRelationGraphData === 'function') {
-            window.loadRelationGraphData();
-        }
+    if (window.TreeModule && window.TreeModule.loadFileTree) {
+        window.TreeModule.loadFileTree(!!forceRefresh);
     }
 }
 
@@ -246,9 +201,7 @@ return {
     refreshWorkspaceViewsAfterChange: refreshWorkspaceViewsAfterChange,
     refreshCurrentSidebarView: refreshCurrentSidebarView,
     refreshKnowledgeGraph: refreshKnowledgeGraph,
-    markInitialIngestDone: markInitialIngestDone,
-    markSidebarTreeDirty: markSidebarTreeDirty,
-    consumeSidebarTreeDirty: consumeSidebarTreeDirty
+    markInitialIngestDone: markInitialIngestDone
 };
 
 })();

@@ -64,10 +64,6 @@ class BaseHandler:
         return self._server._do_cascade_survey_update
 
     @property
-    def _batch_auto_assign_topics(self):
-        return self._server._batch_auto_assign_topics
-
-    @property
     def web_downloader(self):
         return self._server.web_downloader
 
@@ -78,10 +74,6 @@ class BaseHandler:
     @property
     def file_previewer(self):
         return self._server.file_previewer
-
-    @property
-    def topic_extractor(self):
-        return self._server.topic_extractor
 
     @property
     def _link_discovery_lock(self):

@@ -483,9 +483,20 @@ def extract_document_semantics(
             }
         )
 
+    source_snapshot: list[tuple[int, int, str] | None] = [None]
+
     def source_is_current() -> bool:
         source = store.workspace / document["path"]
-        return source.is_file() and content_hash(source.read_text(encoding="utf-8")) == document["content_hash"]
+        if not source.is_file():
+            return False
+        stat = source.stat()
+        stamp = (stat.st_mtime_ns, stat.st_size)
+        cached = source_snapshot[0]
+        if cached is not None and cached[:2] == stamp:
+            return cached[2] == document["content_hash"]
+        digest = content_hash(source.read_text(encoding="utf-8"))
+        source_snapshot[0] = (*stamp, digest)
+        return digest == document["content_hash"]
 
     def save_result(block: dict, parsed: dict, now: str) -> None:
         nonlocal extracted

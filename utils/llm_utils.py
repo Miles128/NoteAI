@@ -154,6 +154,28 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
+_SDK_CLIENTS: dict[tuple[str, str], Any] = {}
+_SDK_CLIENTS_LOCK = threading.Lock()
+
+
+def _get_sdk_client(*, api_key: str, base_url: str):
+    """按凭据复用 OpenAI SDK 客户端。
+
+    每次新建会重建 httpx 连接池，白付一次 TCP+TLS 握手（约 100-300ms）；
+    一次导入要发 6+ 次 LLM 调用，复用后只握手一次。改 API key / base_url
+    会换 key，自然拿到新客户端。
+    """
+    key = (api_key, base_url)
+    with _SDK_CLIENTS_LOCK:
+        client = _SDK_CLIENTS.get(key)
+        if client is None:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=api_key, base_url=base_url, timeout=60, max_retries=0)
+            _SDK_CLIENTS[key] = client
+        return client
+
+
 class _ChatClient:
     """OpenAI 兼容 chat completions 直连封装（取代 langchain ChatOpenAI）。
 
@@ -171,13 +193,11 @@ class _ChatClient:
         max_tokens: int,
         extra_body: dict | None = None,
     ):
-        from openai import OpenAI
-
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._extra_body = extra_body
-        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=60, max_retries=0)
+        self._client = _get_sdk_client(api_key=api_key, base_url=base_url)
 
     def _params(self, text: str) -> dict[str, Any]:
         return {

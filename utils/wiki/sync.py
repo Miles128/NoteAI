@@ -91,9 +91,14 @@ def write_wiki_tag_map(wiki_path: Path, tag_map: dict[str, list[str]]) -> bool:
     return True
 
 
-def _write_file_topic_from_folder(file_path: Path, topic: str | None) -> bool:
+def _write_file_topic_from_folder(file_path: Path, topic: str | None, text: str | None = None) -> bool:
+    """\u628a\u76ee\u5f55\u63a8\u5bfc\u51fa\u7684\u4e3b\u9898\u5199\u56de\u7b14\u8bb0 frontmatter\u3002
+
+    ``text`` \u5141\u8bb8\u8c03\u7528\u65b9\u590d\u7528\u5df2\u8bfb\u5230\u7684\u6b63\u6587\uff0c\u907f\u514d\u540c\u4e00\u7bc7\u7b14\u8bb0\u88ab\u8bfb\u4e24\u904d\u3002
+    """
     try:
-        text = file_path.read_text(encoding="utf-8")
+        if text is None:
+            text = file_path.read_text(encoding="utf-8")
         had_bom = text.startswith("\ufeff")
 
         raw_meta, body = parse_frontmatter(text)
@@ -229,8 +234,10 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
 
             if is_workspace_meta_path(md_file):
                 continue
+            text: str | None = None
             try:
-                meta, _ = parse_frontmatter(md_file.read_text(encoding="utf-8"))
+                text = md_file.read_text(encoding="utf-8")
+                meta, _ = parse_frontmatter(text)
                 raw_tags = (meta or {}).get("tags", [])
                 if isinstance(raw_tags, str):
                     raw_tags = [raw_tags]
@@ -248,7 +255,7 @@ def sync_wiki_with_files():  # noqa: PLR0912, PLR0915
             topic = TOPIC_SEP.join(parts)
             topic_parts.setdefault(topic, parts)
             topic_files.setdefault(topic, []).append(md_file.stem)
-            if _write_file_topic_from_folder(md_file, topic):
+            if _write_file_topic_from_folder(md_file, topic, text):
                 updated_files += 1
 
     for md_file in root_md_files:

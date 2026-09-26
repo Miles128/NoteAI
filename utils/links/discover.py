@@ -1,9 +1,8 @@
-"""Link discovery: save-time mentions, vector/semantic candidates, LLM batch."""
+"""Link discovery: save-time mentions, semantic-share candidates, LLM batch."""
 
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -22,9 +21,6 @@ from utils.text_utils import (
     _normalize_for_match,
     parse_frontmatter,
 )
-
-_VECTOR_SEARCH_COOLDOWN_SECONDS = 60
-_vector_search_disabled_until: float = 0.0
 
 # 工作区文件元数据缓存：{workspace: {rel_path: (mtime, meta)}}
 _file_meta_cache: dict[str, dict[str, tuple[float, dict[str, Any] | None]]] = {}
@@ -134,75 +130,9 @@ CROSS_REF_MAX = 25  # soft cap when ranking very long candidate lists
 CROSS_REF_CANDIDATE_PREVIEW = 40
 
 
-def _vector_search_candidates(
-    source_meta: dict[str, Any],
-    body: str,
-    exclude_rel: str,
-    *,
-    limit: int = 30,
-) -> list[tuple[str, float, str]]:
-    """RAG hybrid search → candidate rel_paths with scores."""
-    workspace = config.workspace_path
-    if not workspace:
-        return []
-
-    query = f"{source_meta.get('title', '')}\n{body[:800]}".strip()
-    if not query:
-        return []
-
-    global _vector_search_disabled_until
-    if time.time() < _vector_search_disabled_until:
-        return []
-
-    try:
-        from sidecar.rag.embedder import encode_query
-        from sidecar.rag.index import hybrid_search
-
-        qemb = encode_query(query)
-        if not qemb.get("dense_vec"):
-            return []
-        hits = hybrid_search(
-            workspace,
-            qemb["dense_vec"],
-            top_k=limit + 5,
-        )
-    except Exception as e:
-        logger.warning(f"[link_indexer] vector search failed, cooling down for {_VECTOR_SEARCH_COOLDOWN_SECONDS}s: {e}")
-        _vector_search_disabled_until = time.time() + _VECTOR_SEARCH_COOLDOWN_SECONDS
-        return []
-
-    out: list[tuple[str, float, str]] = []
-    seen: set[str] = set()
-    for hit in hits:
-        rel = hit.get("file_path", "")
-        if not rel or rel == exclude_rel or rel in seen or _is_readme_note(rel):
-            continue
-        seen.add(rel)
-        score = float(hit.get("score") or hit.get("dense_score") or 0.0)
-        out.append((rel, score, "语义相关"))
-        if len(out) >= limit:
-            break
-    return out
-
-
-def _one_hop_neighbors(rel_path: str, links: list[dict]) -> list[tuple[str, str]]:
-    """Confirmed links → 1-hop neighbor paths."""
-    neighbors: list[tuple[str, str]] = []
-    for link in links:
-        if link.get("status") != "confirmed":
-            continue
-        other = ""
-        if link.get("from") == rel_path:
-            other = link.get("to", "")
-        elif link.get("to") == rel_path:
-            other = link.get("from", "")
-        if other and not _is_readme_note(other):
-            neighbors.append((other, "已确认链接的邻居"))
-    return neighbors
-
-
-#: 两篇文章共享多少实体/概念才算「实质关联」并建议双向链接
-_SEMANTIC_SHARE_MIN = 3
+#: 两篇文章共享多少实体/概念才算「实质关联」并建议双向链接。
+#: 3~5 这一档曾占用户待确认积压的 65%（1636 条已批量丢弃），不再产出。
+_SEMANTIC_SHARE_MIN = 6
 
 
 def _semantic_share_candidates(
@@ -239,8 +169,8 @@ def _semantic_share_candidates(
                 continue
             other_id = stable_id("doc", other)
             shared = src_names & _object_names_for(store, cache, other_id)
-            # 分成两档：强共享（≥5）高置信；中等（≥3）次之
-            if len(shared) >= 5:
+            # 分成两档：强共享（≥8）高置信；中等（≥6）次之
+            if len(shared) >= 8:
                 out.append((other, f"共享 {len(shared)} 个实体/概念", 90.0 + min(len(shared), 10)))
             elif len(shared) >= _SEMANTIC_SHARE_MIN:
                 out.append((other, f"共享 {len(shared)} 个实体/概念", 70.0 + len(shared)))

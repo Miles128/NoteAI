@@ -13,6 +13,7 @@ from sidecar.rag.index_bm25 import (
     rebuild_search_indices,
 )
 from sidecar.rag.index_core import (
+    cached_manifest,
     clear_bm25_cache,
     clear_collection_cache,
     filter_usable_chunks,
@@ -40,6 +41,7 @@ __all__ = [
     "add_chunks",
     "bm25_index_ready",
     "build_index",
+    "cached_manifest",
     "clear_bm25_cache",
     "clear_collection_cache",
     "count_indexed_chunks",

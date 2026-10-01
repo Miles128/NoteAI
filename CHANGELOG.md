@@ -19,6 +19,10 @@
 - CI/CD 完善：添加 Python lint、type check
 
 ### 变更
+- 知识库体检不再有两行假结果：`rag` 只查向量索引、BM25 缺失也报「正常」（`bm25_index_ready` 的结果算了但没进 detail），`fulltext` 直接硬编码 `{"ok": True}`——全文索引在内存里、不建就永远不知道覆盖了多少。现在 RAG 分三种文案（索引缺失 / 向量与 BM25 均正常 / BM25 缺失但查询时自动重建），全文索引真建一次并报实测条数（用户工作区 224 篇、9.2 万词条）；`semantic` 把早已算出的编译覆盖率写进 detail（192/194 篇时明确提示「有笔记未编译」）
+- 删除 `.links.json` 的 `last_scan` 死字段：全仓 `webui/js/` 零引用，写入方 `discover.py` 两处、读取方 `persist.py` 两处与语义工作台链接分页一并清掉，索引文件回到只有 `links` 一个键
+- 下线 `get_activity_log` RPC（api.ts + Rust 白名单 + Python 路由三层同步，前端方法数 109→108）：删除设置页「操作记录」Tab 后已无任何前端调用方。连带删除 `utils/activity_log.py` 整个兼容壳——`add_entry` 只是 `append_log` 的别名，`get_entries` 是给已删 UI 整形的读取器，`clear_log` 零调用；两个写入方（`topic/assigner.py`、`topic_placement.py`）改为直接调 `append_log`，与 `cascade.py`/`kb_lint.py` 一致
+- 打包瘦身：`bundle.resources` 的 glob 收 `python/` 全部文件且 Tauri 不支持取反，`__pycache__`（2.2 MB，占该目录 69%）与 `.DS_Store` 一直被打进 app 包——新增 `scripts/clean-python-artifacts.mjs`（`npm run clean:pycache`）挂在 `beforeBuildCommand` 最前，`python/` 3.2 MB→1.0 MB；`bundle_sidecar_python.sh` 复制 venv 后同样剔除字节码缓存。删除零引用的依赖：`cryptography`（24 MB，连带 `cffi`/`pycparser`；凭据自 2026-09-20 起明文存放，Fernet 路径已删）与 npm 的 `punycode`（全仓无一处 import）
 - 修复首启向导点遮罩后界面半加载：`workspace-rules.ts` 的遮罩关闭只隐藏 DOM、不结束 `openSetupModal()` 的 Promise，而启动链 `app.ts:60 → checkWorkspaceStatus → maybePromptSetup` 正在 await 它，于是文件树加载、首页刷新与启动入库全部不执行。关闭改走 `resolve(false)` 并透传给调用方，未配置时照常继续 `runPostWorkspaceSetup()`
 - 删除设置页「操作记录」Tab：全仓无一处 JS 读取 `#settings-activity-log`，切进去永远停在「加载中…」；同时删除待确认页的活动日志分支（取的 `#pending-view-log` 元素不存在，每次加载白发一次 `get_activity_log` 再整段丢弃）。连带清理导航按钮、4 条 CSS 规则与 5 个 locale key。`wiki/log.md` 仍照常写入，`parse_log_entries` 的库内读取方（级联、Lint）不受影响
 - 首页「知识动态 · 查看全部」改跳 `objects`：原先跳 `overview`，而 `semantic.categories` 没有这个键，点进去标题直接显示原始 key、列表恒空

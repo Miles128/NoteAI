@@ -40,7 +40,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "export_notes",
     "generate_vault_agents_md",
     "generate_weekly_brief",
-    "get_activity_log",
     "get_all_pending",
     "get_api_config",
     "get_backlinks",

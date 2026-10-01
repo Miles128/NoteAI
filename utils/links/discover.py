@@ -119,7 +119,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         added += 1
 
     if added:
-        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+        save_links({"links": merged})
 
     return {
         "success": True,
@@ -371,7 +371,7 @@ def discover_cross_refs_for_file(
             confirmed += 1
 
     if added:
-        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+        save_links({"links": merged})
 
     return {
         "success": True,

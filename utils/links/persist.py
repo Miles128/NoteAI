@@ -124,12 +124,12 @@ def _dedupe_links(links: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def load_links() -> dict[str, Any]:
     path = _get_links_path()
     if not path or not path.exists():
-        return {"links": [], "last_scan": None}
+        return {"links": []}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
         logger.warning(f"[link_indexer] 读取 .links.json 失败: {e}")
-        return {"links": [], "last_scan": None}
+        return {"links": []}
 
     links = data.get("links", []) or []
     deduped = _dedupe_links(links)

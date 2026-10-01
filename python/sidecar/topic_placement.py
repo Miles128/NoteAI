@@ -11,7 +11,7 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
-from utils.activity_log import add_entry as _log
+from utils.workspace_log import append_log
 
 _STATE_FILE = "topic_placement_resolutions.json"
 _AUTO_MOVE_LOCK = threading.Lock()
@@ -96,7 +96,7 @@ def keep_note_in_current_topic(
         "file_hash": _file_hash(note),
     }
     _save_state(root, data)
-    _log("topic_keep", f"保留主题「{current}」→ {note.name}", note.name)
+    append_log("topic_keep", f"保留主题「{current}」→ {note.name}", note.name)
     return {"success": True, "message": f"已保留在「{current}」"}
 
 
@@ -161,7 +161,7 @@ def _auto_move_misplaced_notes_locked(workspace: str | Path) -> dict:
                 "new_path": move_result.get("new_path", ""),
             }
             moved.append(row)
-            _log(
+            append_log(
                 "topic_auto_move",
                 f"相似度 {score:.0%} ≥ 阈值 {threshold:.0%}，自动移至「{suggested}」→ {note.name}",
                 note.name,

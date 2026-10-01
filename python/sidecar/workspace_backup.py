@@ -266,13 +266,19 @@ def check_index_health(workspace: str) -> dict:
 
     # RAG collection + BM25.
     try:
-        from sidecar.rag.index import index_exists, manifest_path
+        from sidecar.rag.index import bm25_index_ready, index_exists, manifest_path
 
         rag_ok = index_exists(workspace)
-        bm25_ok = (root / "zvec" / "bm25").exists() or (root / "bm25").exists()
+        bm25_ok = rag_ok and bm25_index_ready(workspace)
+        if not rag_ok:
+            detail = "索引缺失，可重建"
+        elif bm25_ok:
+            detail = "向量索引与 BM25 均正常"
+        else:
+            detail = "向量索引正常，BM25 缺失（下次查询时自动重建）"
         report["rag"] = {
             "ok": rag_ok,
-            "detail": "索引存在" if rag_ok else "索引缺失，可重建",
+            "detail": detail,
             "bm25_ok": bm25_ok,
             "manifest_mtime": manifest_path(workspace).stat().st_mtime if manifest_path(workspace).exists() else None,
         }
@@ -294,9 +300,15 @@ def check_index_health(workspace: str) -> dict:
             if (root / "Notes").is_dir()
             else []
         )
+        if not store_ok:
+            semantic_detail = "语义库缺失，可全量编译"
+        elif compiled < len(notes):
+            semantic_detail = f"语义库存在，已编译 {compiled}/{len(notes)} 篇（有笔记未编译）"
+        else:
+            semantic_detail = f"语义库存在，已编译 {compiled} 篇"
         report["semantic"] = {
             "ok": store_ok,
-            "detail": "语义库存在" if store_ok else "语义库缺失，可全量编译",
+            "detail": semantic_detail,
             "compiled_documents": compiled,
             "note_files": len(notes),
         }
@@ -314,6 +326,22 @@ def check_index_health(workspace: str) -> dict:
     except (json.JSONDecodeError, OSError) as exc:
         report["links"] = {"ok": False, "detail": f"链接索引损坏：{exc}"}
 
-    # Full-text index rebuilds itself in memory; report capability only.
-    report["fulltext"] = {"ok": True, "detail": "内存全文索引按需自愈"}
+    # Full-text index lives in memory and is rebuilt on demand, so actually build
+    # it: reporting a fixed pass here told the user nothing about real coverage.
+    try:
+        from utils.fulltext_index import fulltext_index
+
+        fulltext_index.clear()
+        fulltext_index.ensure_indexed()
+        stats = fulltext_index.stats()
+        report["fulltext"] = {
+            "ok": stats["files"] > 0,
+            "detail": (
+                f"已索引 {stats['files']} 篇、{stats['terms']} 个词条"
+                if stats["files"]
+                else "没有可索引的 Markdown，全文搜索不会返回结果"
+            ),
+        }
+    except Exception as exc:  # noqa: BLE001
+        report["fulltext"] = {"ok": False, "detail": f"检查失败：{exc}"}
     return report

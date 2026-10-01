@@ -312,7 +312,6 @@ var API_DEFS: ApiDef[] = [
     { name: 'retryConvertFile', method: 'retry_convert_file', params: function(file) { return { file: file }; }, write: true },
     { name: 'dismissConvertFailure', method: 'dismiss_convert_failure', params: function(file) { return { file: file }; }, write: true },
     { name: 'getDashboardStatus', method: 'get_dashboard_status' },
-    { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; }, write: true },
     { name: 'keepNoteInTopic', method: 'keep_note_in_topic', params: function(filePath, currentTopic, suggestedTopic) { return { file_path: filePath, current_topic: currentTopic, suggested_topic: suggestedTopic }; }, write: true },
     { name: 'applyTopicPlacementThreshold', method: 'apply_topic_placement_threshold', params: function() { return {}; }, write: true },

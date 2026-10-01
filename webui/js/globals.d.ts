@@ -37,7 +37,6 @@ declare global {
         retryConvertFile(file: string): Promise<any>;
         dismissConvertFailure(file: string): Promise<any>;
         getDashboardStatus(): Promise<any>;
-        getActivityLog(limit?: number): Promise<any>;
         resolveTopic(filePath: string, topic: string): Promise<any>;
         keepNoteInTopic(filePath: string, currentTopic: string, suggestedTopic: string): Promise<any>;
         applyTopicPlacementThreshold(): Promise<any>;

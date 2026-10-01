@@ -157,6 +157,11 @@ class FullTextIndex:
         with self._lock:
             self._dirty = True
 
+    def stats(self) -> dict[str, int]:
+        """Indexed file / term counts, for health reporting."""
+        with self._lock:
+            return {"files": len(self._files), "terms": len(self._index)}
+
     def clear(self) -> None:
         with self._lock:
             self._index.clear()

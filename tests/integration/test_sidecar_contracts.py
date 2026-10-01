@@ -24,7 +24,6 @@ from config import config
 from config.constants import TOPIC_SEP
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from modules.file_preview import FilePreviewer
-from utils.activity_log import add_entry, get_entries
 from utils.topic.assigner import (
     auto_assign_topic_for_file,
 )
@@ -36,6 +35,7 @@ from utils.wiki_store import (
     sync_wiki_with_files,
     topic_from_notes_path,
 )
+from utils.workspace_log import append_log, parse_log_entries
 
 
 @pytest.fixture
@@ -188,11 +188,11 @@ class TestWorkspaceTree:
         assert (workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER).is_dir()
         assert WORKSPACE_APP_FOLDER.startswith(".")
 
-    def test_activity_log_writes_unified_wiki_log(self, workspace: Path) -> None:
-        add_entry("test", "hello", "detail")
+    def test_append_log_writes_unified_wiki_log(self, workspace: Path) -> None:
+        append_log("test", "hello", "detail")
 
         log_path = workspace / "wiki" / "log.md"
-        entries = get_entries(10)
+        entries = parse_log_entries(10)
 
         assert log_path.exists()
         assert entries[-1]["msg"] == "hello"

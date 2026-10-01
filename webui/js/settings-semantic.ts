@@ -8,11 +8,11 @@
 // ============================================================================
 (function() { 'use strict';
 
-var _SEMANTIC_TAB_VALUES = ['objects', 'quality', 'links', 'brief'];
+var _SEMANTIC_TAB_VALUES = ['objects', 'quality', 'links'];
 
 var _SEMANTIC_DEFAULTS = {
     semantic_workbench_enabled: true,
-    semantic_workbench_tabs: ['objects', 'quality', 'links', 'brief'],
+    semantic_workbench_tabs: ['objects', 'quality', 'links'],
     semantic_workbench_intensity: 'standard',
 };
 
@@ -26,11 +26,16 @@ function readSemanticWorkbenchPrefs(): any {
         if (!window.Storage) return fallback;
         var stored = window.Storage.getItem(window.Storage.KEYS.SEMANTIC_WORKBENCH, null, { silent: true }) as any;
         if (!stored || typeof stored !== 'object') return fallback;
+        // 过滤掉已下线的 tab 值（历史 localStorage 里可能存着 'brief'），
+        // 否则工作台侧栏会被全部隐藏、再也进不去。
+        var tabs = Array.isArray(stored.semantic_workbench_tabs)
+            ? stored.semantic_workbench_tabs.filter(function(tab: any) {
+                return _SEMANTIC_TAB_VALUES.indexOf(tab) !== -1;
+            })
+            : [];
         return {
             semantic_workbench_enabled: stored.semantic_workbench_enabled !== false,
-            semantic_workbench_tabs: Array.isArray(stored.semantic_workbench_tabs) && stored.semantic_workbench_tabs.length
-                ? stored.semantic_workbench_tabs
-                : fallback.semantic_workbench_tabs,
+            semantic_workbench_tabs: tabs.length ? tabs : fallback.semantic_workbench_tabs,
             semantic_workbench_intensity: ['light', 'standard', 'deep'].indexOf(stored.semantic_workbench_intensity) !== -1
                 ? stored.semantic_workbench_intensity
                 : fallback.semantic_workbench_intensity,

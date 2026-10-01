@@ -91,8 +91,7 @@
       "claims": "Conclusions & evidence",
       "quality": "Entity quality",
       "conflicts": "Conflicts",
-      "links": "Bidirectional links",
-      "brief": "Topic brief"
+      "links": "Bidirectional links"
     },
     "tabs": {
       "overview": "Overview",
@@ -224,7 +223,6 @@
     "confirmLink": "Confirm link",
     "rejectLink": "Reject",
     "operationFailed": "Operation failed",
-    "logEmpty": "No activity yet",
     "todoBadge": "Pending items ({count})",
     "todoBadgeEmpty": "Pending items",
     "mergeCoverage": "Coverage {coverage}%",
@@ -488,7 +486,6 @@
       "rag": "RAG",
       "semantic": "Semantic",
       "cli": "CLI Agent",
-      "activityLog": "Activity log",
       "organizeRules": "Organization rules",
       "about": "About",
       "reliability": "Backup & restore",
@@ -527,7 +524,6 @@
     "semanticTabObjects": "Entities & concepts",
     "semanticTabQuality": "Entity quality",
     "semanticTabLinks": "Bidirectional links",
-    "semanticTabBrief": "Topic brief",
     "semanticIntensityTitle": "Display intensity",
     "semanticIntensityHint": "Intensity controls the confidence filter for conclusions, entities, and concepts.",
     "semanticIntensityLight": "Light (high confidence)",
@@ -683,9 +679,6 @@
     "indexTitle": "Knowledge index",
     "indexHint": "Only needed when vector RAG is enabled. Ingest updates it incrementally; a manual update repairs a missing or inconsistent index only when needed.",
     "rebuildIndexBtn": "Update knowledge index",
-    "activityLogTitle": "Activity log",
-    "activityLogHint": "AI and ingest actions logged to wiki/log.md. Health check fixes broken links and stale surveys.",
-    "activityLogLoading": "Loading…",
     "aboutDesc": "NoteAI helps you organize and manage Markdown notes with AI.",
     "aboutFeatures": "Features:",
     "aboutFeature1": "Multi-level topic tree & graph",

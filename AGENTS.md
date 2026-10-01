@@ -87,7 +87,7 @@ Tauri v2 shell (src-tauri/)
 
 **请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
-**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
+**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。sparse 检索直接用 bm25s 对原始 query 文本。
 
 **三层知识架构**：`Notes/`（原始 Markdown，不可变来源）→ `wiki/`（AI 编译的结构化知识）→ `Raw/`（原始 PDF/DOCX 归档）。配置项 `ABSTRACT_FOLDER = "wiki"`。
 

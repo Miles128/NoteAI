@@ -19,14 +19,18 @@
 - CI/CD 完善：添加 Python lint、type check
 
 ### 变更
+- 修复首启向导点遮罩后界面半加载：`workspace-rules.ts` 的遮罩关闭只隐藏 DOM、不结束 `openSetupModal()` 的 Promise，而启动链 `app.ts:60 → checkWorkspaceStatus → maybePromptSetup` 正在 await 它，于是文件树加载、首页刷新与启动入库全部不执行。关闭改走 `resolve(false)` 并透传给调用方，未配置时照常继续 `runPostWorkspaceSetup()`
+- 删除设置页「操作记录」Tab：全仓无一处 JS 读取 `#settings-activity-log`，切进去永远停在「加载中…」；同时删除待确认页的活动日志分支（取的 `#pending-view-log` 元素不存在，每次加载白发一次 `get_activity_log` 再整段丢弃）。连带清理导航按钮、4 条 CSS 规则与 5 个 locale key。`wiki/log.md` 仍照常写入，`parse_log_entries` 的库内读取方（级联、Lint）不受影响
+- 首页「知识动态 · 查看全部」改跳 `objects`：原先跳 `overview`，而 `semantic.categories` 没有这个键，点进去标题直接显示原始 key、列表恒空
+- 语义工作台可见类别改为只认侧栏真实存在的 `data-category`：设置里的「主题简报」勾选没有对应入口（勾了无效），且只留它一项还能通过「至少保留一个」校验、把三个入口全部隐藏，工作台从此进不去。删掉该勾选，并过滤历史 localStorage 中残留的 `brief` 值
+- AGENTS.md 删除对 `embedder.py` 中 `lexical_weights` 的描述：全仓 `lexical` 只命中 AGENTS.md 自己，该机制早已整体删除，按文档排查会白找一轮
 - 二轮审计清理：删除零调用死代码——`rag/retriever.py:incremental_update`（与 `ingest_index.py:replace_file_chunks` 重叠的旧单文件索引路径，全仓无调用者）、`_link_discovery_lock` 空锁（声明并代理到 `BaseHandler`，从未被 `with` 使用）、无读取方的 window 挂载（`showAbout`/`onConfirmLink`/`onRejectLink`/`onAddTopicFromFileTree`/`onAddNoteFromFileTree`/`graphSetLayoutMode`/`toggleSemanticWorkbench`/`SchemaWizard`/`loadLazyCss`/`checkIsTauri`/`getTauriInvoke`）与 `main.mjs` 的 `IconsModule`/`SearchModule` 自我赋值；AGENTS.md 线程安全条目按实际锁清单更正（`_cache_lock`、`_rag_chat_lock` 均不存在）
 - 下线链接治理双件套 `purge_weak_links` / `backfill_semantic_bidirectional`（Python 路由 + Rust 白名单与 `DESTRUCTIVE_METHODS` + `api.ts` 封装 + 单测）：对用户工作区实测，前者只补「两侧都零边」的文档对且一产出就是双份 pending，后者只对已绝迹的弱启发式 reason 生效、对真实库空转
 - 语义抽取 confidence 标定：`semantic_extract.yaml` 两处 JSON 示例值从 `0.0` 改为 `0.9` 并写明取值规则（此前模型照抄示例的 0.0，被工作台 standard 档 `≥0.5` 全部过滤，表现为「编译跑了但工作台空着」）；`PROMPT_VERSION` 10→11，已编译的语义库需重跑全量语义编译才享受新标定
 - 「召回 Top-K」改名「召回候选深度」并收到真实生效区间 4-8（候选数 = `top_k × 3` 且被夹在 [12, 24]，此前 1-50 的滑块几乎无感）；补提示说明最终引用条数由问题类型自动决定、上限 8；后端 `rag_top_k` 读写两侧同步夹紧
 - 全文搜索改为中文可用：`utils/fulltext_index.py` 原先把连续汉字切成一个 token 并只做精确匹配，搜「笔记」命中不了「我的笔记系统」；现按相邻二字组合（bigram）入索引，查询侧同切并要求同组全部命中（等价子串包含），组间改 AND 计分。实测用户工作区 224 篇笔记：建索引 0.5s、单次查询 0.3ms、词条 9.2 万；「笔记」命中 46 篇、「反向传播」17 篇、「A2A」10 篇
-- 综述页退出链接图：新增 `utils/links/persist.py:_is_survey_note`（文件名以「综述」结尾 **或** frontmatter `type: survey`，任一命中即算），链接发现的两个入口按来源侧提前返回、候选池按目标侧过滤，与 README 同级处理；综述页是聚合视图，什么都提一点，过去只贡献高共享数的虚关联。用户工作区实测：判据命中 2 篇（1 篇级联生成落在 Notes/、1 篇手写章节综述），一次性删除相关边 99 条（86 待确认 + 13 已确认，按用户要求不分状态全删），待确认从 531 降到 445；wiki/ 下 4 篇主题综述本就被目录跳过，不参与
+- 综述页退出链接图：新增 `utils/links/persist.py:_is_survey_note`（文件名以「综述」结尾 **或** frontmatter `type: survey`，任一命中即算），链接发现的两个入口按来源侧提前返回、候选池按目标侧过滤，与 README 同级处理；综述页是聚合视图，什么都提一点，过去只贡献高共享数的虚关联。用户工作区实测：判据命中 2 篇（1 篇级联生成落在 Notes/、1 篇手写章节综述），一次性删除相关边 99 条（86 待确认 + 13 已确认，按用户指令不分状态全删），链接索引 897→798、待确认 531→445，备份 `.links.json.pre-survey-exclude-2026-09-26`；wiki/ 下 4 篇主题综述本就被目录跳过，不参与
 - 链接建议不再重灌低置信 pending：`_SEMANTIC_SHARE_MIN` 3→6（3~5 档曾占待确认积压的 65%），强/中两档改判为 ≥8/≥6；同时删除从未挂上链路的 `_vector_search_candidates`（"语义相关"）与 `_one_hop_neighbors`（"已确认链接的邻居"）两个弱启发式生成器
-- 综述页退出链接图：新增 `utils/links/persist.py:_is_survey_note`（文件名以「综述」结尾 **或** frontmatter `type: survey`，任一命中即算），链接发现两个入口按来源侧提前返回、候选池按目标侧过滤，与 README 同级处理——综述是聚合视图，过去只贡献高共享数的虚关联。用户工作区实测判据命中 2 篇，一并清掉其涉及的 99 条边（86 待确认 + 13 已确认，按用户指令不分状态），链接索引 897→798 条，备份 `.links.json.pre-survey-exclude-2026-09-26`
 - LLM 客户端按 (api_key, base_url) 复用：`_ChatClient` 此前每次调用新建 OpenAI SDK 实例（重建 httpx 连接池、多付一次 TCP+TLS 握手约 100-300ms），一次导入发 6+ 次调用就握手 6+ 次
 - 语义抽取的源文件变更校验按 (mtime_ns, size) 记忆整篇哈希：原来每个 block 落库前都重读并哈希一次全文（50 块文档＝50 次全文件读），现在文件未变则只读一次，判定逻辑不变
 - `sync_wiki_with_files` 不再把每篇笔记读两遍（frontmatter 解析与主题回写共用同一次读取）

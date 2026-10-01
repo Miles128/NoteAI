@@ -145,7 +145,7 @@ async function finishModal() {
         if (typeof window.runPostWorkspaceSetup === 'function') {
             window.runPostWorkspaceSetup();
         }
-        if (_resolveOpen) _resolveOpen(true);
+        settleModal(true);
     } catch (e) {
         console.error('[OrganizeRules] save failed:', e);
         window.updateStatus(window.t('organizeRules.saveFailed', { message: (e as Error).message }));
@@ -165,6 +165,19 @@ function showModal() {
 function hideModal() {
     var modal = $('organize-rules-modal');
     if (modal) modal.style.display = 'none';
+}
+
+// 关闭弹窗必须同时结束 openSetupModal 的 Promise：启动链 app.ts → checkWorkspaceStatus
+// 在 await 它，只隐藏 DOM 会让后续的文件树加载和启动入库全部不执行。
+function settleModal(result: boolean) {
+    var resolve = _resolveOpen;
+    _resolveOpen = null;
+    if (resolve) resolve(result);
+}
+
+function dismissModal() {
+    hideModal();
+    settleModal(false);
 }
 
 function openSetupModal() {
@@ -191,8 +204,7 @@ async function maybePromptSetup(flag: any) {
             window.SettingsModule.switchSettingsTab('organize-rules');
         }
     }
-    await openSetupModal();
-    return true;
+    return await openSetupModal();
 }
 
 function initOrganizeRules() {
@@ -221,7 +233,7 @@ function initOrganizeRules() {
                 if (typeof window.runPostWorkspaceSetup === 'function') {
                     window.runPostWorkspaceSetup();
                 }
-                if (_resolveOpen) _resolveOpen(true);
+                settleModal(true);
             } catch (e) {
                 console.error('[OrganizeRules] defaults:', e);
             }
@@ -279,7 +291,7 @@ function initOrganizeRules() {
     if (modal && !modal.dataset.bound) {
         modal.dataset.bound = '1';
         modal.addEventListener('click', function(e) {
-            if (e.target === modal) hideModal();
+            if (e.target === modal) dismissModal();
         });
     }
 }

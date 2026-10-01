@@ -719,9 +719,16 @@ function applyVisibilityConfigWith(ui: any) {
         if (_visible) hide();
         return;
     }
-    var tabs = Array.isArray(ui.semantic_workbench_tabs) && ui.semantic_workbench_tabs.length
-        ? ui.semantic_workbench_tabs
-        : ['objects', 'quality', 'links'];
+    // 只认侧栏真实存在的类别：历史配置里可能留着已下线的 tab 值，
+    // 直接照单渲染会把所有入口隐藏掉。
+    var available: any = [];
+    document.querySelectorAll('#semantic-categories [data-category]').forEach(function(button) {
+        available.push((button as HTMLElement).dataset.category);
+    });
+    var tabs = (Array.isArray(ui.semantic_workbench_tabs) ? ui.semantic_workbench_tabs : []).filter(function(tab: any) {
+        return available.indexOf(tab) !== -1;
+    });
+    if (!tabs.length) tabs = available.slice();
     _enabledCategories = tabs.slice();
     var visible: any = {};
     tabs.forEach(function(tab: any) { visible[tab] = true; });

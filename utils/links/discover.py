@@ -470,6 +470,7 @@ def _load_all_metas_cached(workspace: Path) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
 
         for rel, (mtime, _) in current.items():
+            meta: dict[str, Any] | None
             cached = cache.get(rel)
             if cached and abs(cached[0] - mtime) <= 0.5 and cached[1] is not None:
                 meta = cached[1]

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from utils.atomic_write import atomic_write_text
 from utils.error_handler import log_exception
 
 from .constants import (
@@ -269,8 +270,7 @@ class AppConfig:
                 with open(config_path, encoding="utf-8") as f:
                     data = json.load(f)
                 data = {k: v for k, v in data.items() if k in valid_keys}
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                atomic_write_text(config_path, json.dumps(data, ensure_ascii=False, indent=2))
                 _logger.info("配置清理: 移除 %d 个失效键", len(stale_keys))
             except Exception as e:
                 _logger.warning("配置清理失败: %s", e)
@@ -308,8 +308,7 @@ class AppConfig:
                 if k not in api_fields and k not in runtime_fields and k not in _skip_keys
             }
 
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(non_api_config, f, ensure_ascii=False, indent=2)
+            atomic_write_text(config_path, json.dumps(non_api_config, ensure_ascii=False, indent=2))
 
             _logger.info("配置已保存到: %s", config_path)
         except PermissionError:
@@ -334,8 +333,7 @@ class AppConfig:
                 api_config.pop("api_key", None)
 
             if api_config:
-                with open(API_CONFIG_FILE, "w", encoding="utf-8") as f:
-                    json.dump(api_config, f, ensure_ascii=False, indent=2)
+                atomic_write_text(API_CONFIG_FILE, json.dumps(api_config, ensure_ascii=False, indent=2))
 
                 _restrict_file_permissions(API_CONFIG_FILE)
             _logger.info("API配置已保存到: %s", API_CONFIG_FILE)

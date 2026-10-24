@@ -8,6 +8,7 @@ from pathlib import Path
 from config import config
 from config.constants import TOPIC_SEP
 from prompts import SCHEMA_FALLBACK_PROMPT
+from utils.atomic_write import atomic_write_text
 from utils.topic.manager import TopicManager
 
 SCHEMA_FILENAME = "schema.md"
@@ -77,7 +78,7 @@ def needs_schema_setup(workspace: str | None = None) -> bool:
         return False
     # 已有完整 schema（升级前自动生成）视为已配置，仅补标记
     if SCHEMA_VERSION_MARKER in text and len(text) > 400:
-        path.write_text(finalize_schema_content(text), encoding="utf-8")
+        atomic_write_text(path, finalize_schema_content(text), encoding="utf-8")
         return False
     return True
 
@@ -119,7 +120,7 @@ def save_schema_text(content: str, workspace: str | None = None) -> bool:
     path = schema_path(workspace)
     if not path:
         return False
-    path.write_text(content, encoding="utf-8")
+    atomic_write_text(path, content, encoding="utf-8")
     return True
 
 
@@ -278,10 +279,10 @@ def save_schema_options(options: dict, workspace: str | None = None) -> bool:
         return False
     content = finalize_schema_content(build_schema_markdown(options, ws))
     path = Path(ws) / SCHEMA_FILENAME
-    path.write_text(content, encoding="utf-8")
+    atomic_write_text(path, content, encoding="utf-8")
     rules_path = Path(ws) / ".ai_memory" / "project_rules.md"
     rules_path.parent.mkdir(parents=True, exist_ok=True)
-    rules_path.write_text(build_project_rules_from_workspace(ws), encoding="utf-8")
+    atomic_write_text(rules_path, build_project_rules_from_workspace(ws), encoding="utf-8")
     return True
 
 

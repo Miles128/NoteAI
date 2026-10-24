@@ -53,6 +53,9 @@
 - 新笔记自动归类补开关：设置面板新增「新笔记自动归入主题」，`auto_topic` 保存走 `_coerce_bool`（此前只有 `autoSaveConfig` 把值硬写成 `true` 且无人调用）；预览字体补下拉控件，接上早已存在的 `applyContentFonts` 生效路径
 - 链接治理两个操作补成真实 RPC：`purge_weak_links` / `backfill_semantic_bidirectional` 注册到 `links_handler` + Rust 白名单 + `api.ts`，并纳入 `DESTRUCTIVE_METHODS` 限流（此前只是被单测调用的 Python 函数，AGENTS.md 却记载为已在白名单）
 - 待确认页补「全部重试综述」按钮，接上后端一直完整的 `retry_all_cascade_failures`
+- 修复流式 LLM 调用把有效并发砍半：`call_llm_raw_stream` 的槽位在 `_retry_with_backoff` 与 `_run_stream_with_timeout` 各取一次，而 `threading.Semaphore` 不可重入，于是**一次流式调用占掉 4 个槽位里的 2 个**。后果是第 3 个并发调用者在 `acquire(timeout=60)` 等满后直接吃到「LLM 调用并发已满」的硬错误，且该文案不匹配 `_RETRYABLE_KEYWORDS`、不会退避重试；一次全量语义编译的 `ThreadPoolExecutor(max_workers=4)` 与 RAG 对话争抢同一批槽位就能把对话挤爆。现在槽位由 `_retry_with_backoff` 单点持有、内层传 `slot_held=True` 复用，有效并发恢复为 4
+- 流式调用超时不再永久泄漏并发槽位：`stop` 事件只在 chunk 之间检查，provider TCP 层挂死时后台线程永不退出，槽位随其 `finally` 被永久占住，累计 4 次即让整个进程的 AI 功能失效（且不像 reranker 有 60s 冷却兜底）。改为超时分支在调用线程侧兜底归还，新增 `_LLMSlot` 保证「谁归还、归还几次」收敛到一次，旧线程随后退出时其 `finally` 归还被去重
+- 用户可见写路径补齐原子写：全仓 49 处 `.write_text(` 里只有 13 处走 `atomic_write_text`——WIKI.md 的 7 处 CRUD（`utils/wiki/crud.py`，AI 编译的知识层，崩溃即半截）、标签 frontmatter 回写（`tag_extractor` 2 处）、编译后的笔记正文（`note_compiler`）、主题移动/清空/格式优化（`topic/file_ops` 3 处）、笔记合并稿（`duplicate_review` 2 处）、用户 `schema.md` 与 `.ai_memory/project_rules.md`（`schema_manager` 4 处）、设置与 API 配置 JSON（`app_config` 3 处）全是裸写。`atomic_write_text` 同步补上权限位继承：目标已存在时沿用原权限（`mkstemp` 默认 0600，直接 `os.replace` 会把原本 0644 的用户笔记悄悄改成 0600），新文件仍为 0600
 
 ### 移除
 - D1 功能裁撤：标签/关系侧栏视图（tags.ts、integrator.ts、tab-1 整合页、sidebar-tags/graph 面板与 dock）、主题提取链（`extract_topics` RPC + `topic_extractor.py` + `topic_extraction.yaml`），并清理对应 locales（`integrator`/`tags`/`sidebar.tag*`/`common.tagsCount|linksCount`）与 CSS 孤儿（`sidebar-tag*`、`link-card*`、`progress-container`）；7 个 tags RPC 保留为 backend-only（`KNOWN_BACKEND_ONLY_METHODS`）

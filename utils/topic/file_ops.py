@@ -3,6 +3,7 @@ from pathlib import Path
 
 from config import config
 from config.constants import TOPIC_SEP
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.text_utils import parse_frontmatter, write_frontmatter
 from utils.topic.classifier import _norm_topic
@@ -18,7 +19,7 @@ def write_topic_to_file(file_path, topic):
             meta = {}
         meta["topic"] = topic
         new_text = write_frontmatter(meta, body, had_bom=had_bom)
-        Path(file_path).write_text(new_text, encoding="utf-8")
+        atomic_write_text(file_path, new_text, encoding="utf-8")
         return {"success": True}
     except Exception as e:
         logger.warning(f"[write_topic] failed: {e}")
@@ -122,7 +123,7 @@ def _optimize_file_format(full_path, text, meta=None, body=None):
     new_content = write_frontmatter(meta, optimized_body, had_bom=had_bom)
 
     try:
-        full_path.write_text(new_content, encoding="utf-8")
+        atomic_write_text(full_path, new_content, encoding="utf-8")
         return True
     except (OSError, ValueError) as e:
         logger.warning(f"[topic_assigner] _optimize_file_format write failed: {e}")
@@ -149,7 +150,7 @@ def _clear_topic_in_file(file_path):
         return
     meta.pop("topic", None)
     new_text = write_frontmatter(meta if meta else None, body, had_bom=had_bom)
-    Path(file_path).write_text(new_text, encoding="utf-8")
+    atomic_write_text(file_path, new_text, encoding="utf-8")
 
 
 def move_file_to_topic(file_rel_path, new_topic, file_title=None):

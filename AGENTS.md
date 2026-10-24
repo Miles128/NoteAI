@@ -96,6 +96,8 @@ Tauri v2 shell (src-tauri/)
 - **Config**：单例 `config` 在 `config/app_config.py` 导入时加载。不要直接实例化 `AppConfig`，使用 `from config import config` 或 `from config.settings import config`。工作区路径通过 `config/workspace_state.py` 持久化；运行时值是 `config.workspace_path`。
 - **Frontmatter**：规范解析器是 `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)`。handler 中应使用 `self._parse_frontmatter()` 或直接导入，避免手写正则。
 - **LLM 调用**：统一走 `utils/llm_utils`。`_LLM_SEMAPHORE = Semaphore(4)` 限制并发；`call_llm_raw()` 使用 `_retry_with_backoff()` 对限流指数退避。同步与流式变体都遵守信号量。输入 prompt 通过 `_clamp_prompt_text()` 截断到 `config.max_context_tokens`。
+- **LLM 槽位归属**：`Semaphore` 不可重入，**一次逻辑调用只能取一个槽位**。`_retry_with_backoff()` 是流式路径的槽位持有者，`_run_stream_with_timeout()` 因此必须传 `slot_held=True`（历史上漏传，导致一次流式调用占两个槽位、有效并发减半）。自行调用 `_run_stream_with_timeout()` 的路径（如 `rewrite_with_llm_stream`）用默认的 `slot_held=False` 自行取还。超时分支由调用线程兜底 `slot.return_slot()`，`_LLMSlot` 保证旧线程的 `finally` 不会重复归还——**不要**改回「只由后台线程归还」。
+- **文件写入**：用户可见内容（笔记正文、WIKI.md、`schema.md`、`project_rules.md`、配置 JSON）一律走 `utils/atomic_write.atomic_write_text()`，不要用裸 `write_text()` / `open(...,'w')`。`mode=None` 时会继承已有文件的权限位，新文件为 0600。纯运行时状态 JSON 可继续用 `temp + replace`。
 - **Chunk ID**：`hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]`，位于 `chunker.py:155`。注意 `section_title` 可能为 `None`。
 - **线程安全**：`SidecarServer` 用锁保护 stdout（`_stdout_lock`）、运行中任务（`_running_tasks_lock`）、watcher 防抖（`_watcher_debounce_lock`）、自动转换（`_auto_convert_lock`）。`_cache` 是 TTLCache，无独立锁。RAG 对话按会话串行（`rag_handler.py` 的 `SessionGate`），不同会话可并行。历史上的 `_cache_lock` / `_link_discovery_lock` / `_rag_chat_lock` 均不存在（前两者从未被 `with` 使用，已删），不要照旧文档添加。
 - **文件监听**：watchdog 监听工作区；3 秒防抖；忽略点文件、`wiki/` 目录及非媒体后缀。

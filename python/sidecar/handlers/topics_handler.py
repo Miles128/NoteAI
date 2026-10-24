@@ -33,7 +33,6 @@ from sidecar.wiki_utils import (
     parse_wiki_headings,
     sync_wiki_with_files,
 )
-from utils.activity_log import get_entries
 from utils.logger import logger
 from utils.topic.assigner import (
     auto_assign_topic_for_file,
@@ -369,10 +368,6 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             str(params.get("new_topic") or "").strip(),
         )
 
-    def _get_activity_log(self, params):
-        limit = params.get("limit", 50)
-        return {"entries": get_entries(limit)}
-
     def _merge_duplicate_topics(self, _params):
         merged = _merge_duplicate_topics_in_wiki()
         deduped = _deduplicate_files_in_wiki()
@@ -390,5 +385,4 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
         router.register("merge_similar_topics", self._merge_similar_topics)
         router.register("preview_topic_merge", self._preview_topic_merge)
         router.register("get_all_pending", self._get_all_pending)
-        router.register("get_activity_log", self._get_activity_log)
         router.register("merge_duplicate_topics", self._merge_duplicate_topics)

@@ -9,6 +9,7 @@ on POSIX, so a crash can never leave a half-written user note.
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 from pathlib import Path
 
@@ -23,11 +24,19 @@ def atomic_write_text(
 ) -> Path:
     """Write text to *path* atomically. Returns the resolved target path.
 
+    mode=None 时若目标已存在则继承其权限位（mkstemp 默认 0600，直接
+    os.replace 会把原本 0644 的用户笔记悄悄改成 0600）；新文件沿用 0600。
+
     Raises OSError on failure (callers convert to user-facing errors).
     """
     target = Path(path)
     if mkdir_parents:
         target.parent.mkdir(parents=True, exist_ok=True)
+    if mode is None and target.exists():
+        try:
+            mode = stat.S_IMODE(target.stat().st_mode)
+        except OSError:
+            mode = None
     fd, temp_path = tempfile.mkstemp(dir=str(target.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding=encoding) as f:

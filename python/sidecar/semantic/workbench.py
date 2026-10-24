@@ -106,7 +106,6 @@ def links_tab(workspace: str, params: dict, *, page: tuple[int, int]) -> dict:
         "total": total,
         "limit": limit,
         "offset": offset,
-        "last_scan": data.get("last_scan"),
     }
 
 

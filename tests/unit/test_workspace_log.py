@@ -6,7 +6,6 @@ import pytest
 
 from config import config
 from config.settings import WORKSPACE_APP_FOLDER
-from utils.activity_log import add_entry, get_entries
 from utils.workspace_log import append_log, migrate_legacy_logs, parse_log_entries
 
 
@@ -29,12 +28,6 @@ def test_append_and_parse_log(workspace: Path) -> None:
     entries = parse_log_entries(10)
     assert entries[-1]["msg"] == "测试入库"
     assert entries[-1]["type"] == "ingest"
-
-
-def test_activity_log_compat(workspace: Path) -> None:
-    add_entry("convert", "转换完成", "a.pdf")
-    rows = get_entries(5)
-    assert rows[-1]["msg"] == "转换完成"
 
 
 def test_migrate_legacy_activity_json(workspace: Path) -> None:

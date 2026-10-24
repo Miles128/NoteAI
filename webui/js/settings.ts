@@ -12,7 +12,6 @@
 var SETTINGS_MORE_TABS: Record<string, boolean> = {
     semantic: true,
     cli: true,
-    'activity-log': true,
     'organize-rules': true,
 };
 

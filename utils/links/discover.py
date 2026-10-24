@@ -1,9 +1,8 @@
-"""Link discovery: save-time mentions, vector/semantic candidates, LLM batch."""
+"""Link discovery: save-time mentions, semantic-share candidates, LLM batch."""
 
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +13,7 @@ from utils.links.persist import (
     _extract_json_array,
     _is_readme_note,
     _is_self_link,
+    _is_survey_note,
     load_links,
     save_links,
 )
@@ -22,9 +22,6 @@ from utils.text_utils import (
     _normalize_for_match,
     parse_frontmatter,
 )
-
-_VECTOR_SEARCH_COOLDOWN_SECONDS = 60
-_vector_search_disabled_until: float = 0.0
 
 # 工作区文件元数据缓存：{workspace: {rel_path: (mtime, meta)}}
 _file_meta_cache: dict[str, dict[str, tuple[float, dict[str, Any] | None]]] = {}
@@ -66,6 +63,8 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
+    if _is_survey_note(full, source.get("type")):
+        return {"success": True, "message": "综述页不参与链接图", "added": 0}
 
     try:
         _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
@@ -120,7 +119,7 @@ def suggest_links_for_file(file_path: str, *, max_suggestions: int = 8) -> dict[
         added += 1
 
     if added:
-        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+        save_links({"links": merged})
 
     return {
         "success": True,
@@ -134,75 +133,9 @@ CROSS_REF_MAX = 25  # soft cap when ranking very long candidate lists
 CROSS_REF_CANDIDATE_PREVIEW = 40
 
 
-def _vector_search_candidates(
-    source_meta: dict[str, Any],
-    body: str,
-    exclude_rel: str,
-    *,
-    limit: int = 30,
-) -> list[tuple[str, float, str]]:
-    """RAG hybrid search → candidate rel_paths with scores."""
-    workspace = config.workspace_path
-    if not workspace:
-        return []
-
-    query = f"{source_meta.get('title', '')}\n{body[:800]}".strip()
-    if not query:
-        return []
-
-    global _vector_search_disabled_until
-    if time.time() < _vector_search_disabled_until:
-        return []
-
-    try:
-        from sidecar.rag.embedder import encode_query
-        from sidecar.rag.index import hybrid_search
-
-        qemb = encode_query(query)
-        if not qemb.get("dense_vec"):
-            return []
-        hits = hybrid_search(
-            workspace,
-            qemb["dense_vec"],
-            top_k=limit + 5,
-        )
-    except Exception as e:
-        logger.warning(f"[link_indexer] vector search failed, cooling down for {_VECTOR_SEARCH_COOLDOWN_SECONDS}s: {e}")
-        _vector_search_disabled_until = time.time() + _VECTOR_SEARCH_COOLDOWN_SECONDS
-        return []
-
-    out: list[tuple[str, float, str]] = []
-    seen: set[str] = set()
-    for hit in hits:
-        rel = hit.get("file_path", "")
-        if not rel or rel == exclude_rel or rel in seen or _is_readme_note(rel):
-            continue
-        seen.add(rel)
-        score = float(hit.get("score") or hit.get("dense_score") or 0.0)
-        out.append((rel, score, "语义相关"))
-        if len(out) >= limit:
-            break
-    return out
-
-
-def _one_hop_neighbors(rel_path: str, links: list[dict]) -> list[tuple[str, str]]:
-    """Confirmed links → 1-hop neighbor paths."""
-    neighbors: list[tuple[str, str]] = []
-    for link in links:
-        if link.get("status") != "confirmed":
-            continue
-        other = ""
-        if link.get("from") == rel_path:
-            other = link.get("to", "")
-        elif link.get("to") == rel_path:
-            other = link.get("from", "")
-        if other and not _is_readme_note(other):
-            neighbors.append((other, "已确认链接的邻居"))
-    return neighbors
-
-
-#: 两篇文章共享多少实体/概念才算「实质关联」并建议双向链接
-_SEMANTIC_SHARE_MIN = 3
+#: 两篇文章共享多少实体/概念才算「实质关联」并建议双向链接。
+#: 3~5 这一档曾占用户待确认积压的 65%（1636 条已批量丢弃），不再产出。
+_SEMANTIC_SHARE_MIN = 6
 
 
 def _semantic_share_candidates(
@@ -239,8 +172,8 @@ def _semantic_share_candidates(
                 continue
             other_id = stable_id("doc", other)
             shared = src_names & _object_names_for(store, cache, other_id)
-            # 分成两档：强共享（≥5）高置信；中等（≥3）次之
-            if len(shared) >= 5:
+            # 分成两档：强共享（≥8）高置信；中等（≥6）次之
+            if len(shared) >= 8:
                 out.append((other, f"共享 {len(shared)} 个实体/概念", 90.0 + min(len(shared), 10)))
             elif len(shared) >= _SEMANTIC_SHARE_MIN:
                 out.append((other, f"共享 {len(shared)} 个实体/概念", 70.0 + len(shared)))
@@ -263,75 +196,6 @@ def _object_names_for(store: Any, cache: dict[str, set[str]], document_id: str) 
         names = {name for name in raw if isinstance(name, str) and name.strip()}
         cache[document_id] = names
     return cache[document_id]
-
-
-#: 全库回填双向链接时，两篇文章共享实体/概念的强阈值
-_BIDIRECTIONAL_SHARE_MIN = 6
-
-
-def backfill_semantic_bidirectional() -> dict[str, Any]:
-    """
-    全库回填：对「共享大量实体/概念」的文档对建立双向链接。
-
-    仅在两侧（A→B 与 B→A）都尚无任何边时才补（avoid the hub-diameter
-    麻团：只把真正多次共同出现的实体对连通，不重复叠加）。
-    产出的是 pending，等待人工确认。
-    """
-    workspace = config.workspace_path
-    if not workspace:
-        return {"success": False, "message": "未设置工作区", "added": 0}
-    ws = Path(workspace)
-    try:
-        from sidecar.semantic.ids import stable_id
-        from sidecar.semantic.store import SemanticStore
-    except Exception as e:
-        return {"success": False, "message": f"语义库不可用: {e}", "added": 0}
-
-    all_metas = _load_all_metas_cached(ws)
-    if len(all_metas) < 2:
-        return {"success": False, "message": "可解析文件不足", "added": 0}
-
-    store = SemanticStore(ws)
-    names: dict[str, set[str]] = {}
-    for rel in all_metas:
-        doc_id = stable_id("doc", rel)
-        s = _object_names_for(store, names, doc_id)
-        # 空集合也要占位（不缓存会反复查库）
-        names[rel] = s
-
-    existing = load_links()
-    existing_links = existing.get("links", [])
-    directed = {k for k in (_link_key(l.get("from", ""), l.get("to", "")) for l in existing_links) if k}
-
-    rels = list(all_metas)
-    added = 0
-    for i in range(len(rels)):
-        a = rels[i]
-        a_names = names.get(a) or set()
-        if not a_names:
-            continue
-        for b in rels[i + 1 :]:
-            bn = names.get(b) or set()
-            shared = a_names & bn
-            if len(shared) < _BIDIRECTIONAL_SHARE_MIN:
-                continue
-            k_ab = _link_key(a, b)
-            k_ba = _link_key(b, a)
-            if k_ab is None or k_ba is None:
-                continue
-            if k_ab in directed or k_ba in directed:
-                continue
-            reason = f"共享 {len(shared)} 个实体/概念"
-            existing_links.append({"from": a, "to": b, "reason": reason, "status": "pending"})
-            existing_links.append({"from": b, "to": a, "reason": reason, "status": "pending"})
-            directed.add(k_ab)
-            directed.add(k_ba)
-            added += 2
-
-    if added:
-        save_links({"links": existing_links, "last_scan": existing.get("last_scan")})
-        logger.info(f"[link_indexer] 双向语义回填: 新增 {added} 条")
-    return {"success": True, "added": added, "total": len(existing_links)}
 
 
 def _llm_pick_cross_refs(
@@ -419,6 +283,8 @@ def discover_cross_refs_for_file(
     source = _parse_file_meta(full)
     if not source:
         return {"success": False, "message": "无法解析文件", "added": 0}
+    if _is_survey_note(full, source.get("type")):
+        return {"success": True, "message": "综述页不参与链接图", "added": 0}
 
     try:
         _, body = parse_frontmatter(full.read_text(encoding="utf-8"))
@@ -505,7 +371,7 @@ def discover_cross_refs_for_file(
             confirmed += 1
 
     if added:
-        save_links({"links": merged, "last_scan": existing.get("last_scan")})
+        save_links({"links": merged})
 
     return {
         "success": True,
@@ -549,6 +415,7 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
     title = md_file.stem
     tags = []
     topic = None
+    note_type = ""
 
     if meta:
         t = meta.get("title")
@@ -562,6 +429,9 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
         raw_topic = meta.get("topic")
         if isinstance(raw_topic, str) and raw_topic.strip():
             topic = raw_topic.strip()
+        raw_type = meta.get("type")
+        if isinstance(raw_type, str):
+            note_type = raw_type.strip()
     else:
         body = text
 
@@ -573,6 +443,7 @@ def _parse_file_meta(md_file: Path) -> dict[str, Any] | None:
         "title": title,
         "tags": tags,
         "topic": topic,
+        "type": note_type,
         "summary": summary,
     }
 
@@ -599,15 +470,17 @@ def _load_all_metas_cached(workspace: Path) -> dict[str, dict[str, Any]]:
         result: dict[str, dict[str, Any]] = {}
 
         for rel, (mtime, _) in current.items():
+            meta: dict[str, Any] | None
             cached = cache.get(rel)
             if cached and abs(cached[0] - mtime) <= 0.5 and cached[1] is not None:
-                result[rel] = cached[1]
+                meta = cached[1]
             else:
-                full = workspace / rel
-                meta = _parse_file_meta(full)
+                meta = _parse_file_meta(workspace / rel)
                 if meta:
-                    result[rel] = meta
                     cache[rel] = (mtime, meta)
+            # 综述页是聚合视图，不进候选池：既不会被建议成关联对象
+            if meta and not _is_survey_note(rel, meta.get("type")):
+                result[rel] = meta
 
         # 清理已删除文件的缓存
         stale = set(cache.keys()) - set(current.keys())

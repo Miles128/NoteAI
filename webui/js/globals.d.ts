@@ -37,7 +37,6 @@ declare global {
         retryConvertFile(file: string): Promise<any>;
         dismissConvertFailure(file: string): Promise<any>;
         getDashboardStatus(): Promise<any>;
-        getActivityLog(limit?: number): Promise<any>;
         resolveTopic(filePath: string, topic: string): Promise<any>;
         keepNoteInTopic(filePath: string, currentTopic: string, suggestedTopic: string): Promise<any>;
         applyTopicPlacementThreshold(): Promise<any>;
@@ -100,8 +99,6 @@ declare global {
         publishSemanticTopicWikiPage(topic: string): Promise<any>;
         addSemanticEntityAlias(id: string, alias: string): Promise<any>;
         confirmAllLinks(): Promise<any>;
-        purgeWeakLinks(): Promise<any>;
-        backfillSemanticBidirectional(): Promise<any>;
 
         // LLM 改写
         llmRewriteStream(filePath: string): Promise<any>;
@@ -262,8 +259,6 @@ declare global {
         api: WindowApi;
         __TAURI__: any;
         __TAURI_INTERNALS__: any;
-        checkIsTauri: () => boolean | null;
-        getTauriInvoke: () => any;
         getTauriEventAPI: () => any;
         Storage: StorageModule;
         state: StateModule;
@@ -284,7 +279,6 @@ declare global {
         b64ToUint8(b64: string): Uint8Array;
         b64DecodeUtf8(b64: string): string;
         loadLazyScript(src: string): Promise<boolean>;
-        loadLazyCss(href: string): Promise<boolean>;
         ensureLib(name: string, src: string, css?: string): Promise<boolean>;
         ensureMarkedConfigured(): Promise<boolean>;
         toggleSidebar(): void;
@@ -408,7 +402,6 @@ declare global {
             addFiles?(): Promise<any>;
             addFolder?(): Promise<any>;
             clearFiles?(): void;
-            showAbout?(): Promise<any>;
             showSettings?(): void;
         } | undefined;
         _rewritingFilePath: string | null;
@@ -505,7 +498,6 @@ declare global {
             onRewriteCancel?(): void;
             setEditorRewriting?(filePath: any, isRewriting: any): void;
         } | undefined;
-        SchemaWizard: any;
         SelectionToolsModule: { init?(): void; destroy?(): void; hide?(): void; askKnowledge?(text: any, route?: any): void; searchNotes?(text: any): void; webSearch?(text: any): void } | undefined;
         SettingsGeneral: {
             init?(): void;
@@ -532,7 +524,6 @@ declare global {
         graphCloseLayoutSettings(): void;
         graphOpenLayoutSettings(): void;
         graphResetLayoutSettings(): void;
-        onAddNoteFromFileTree(): void;
         onSearchResultClick(el?: any): void;
         openQuickCreate(tab?: string): void;
         openSearchModal(query?: string): void;
@@ -544,7 +535,6 @@ declare global {
         saveFontFamily(key: string, value: string): Promise<void>;
         saveTypographySettings(): void;
         setLocale(locale: string): void;
-        showAbout(): void;
         showProjectRulesModal(): void;
         toast: any;
         _pendingViewVisible: boolean;
@@ -616,7 +606,6 @@ declare global {
         } | undefined;
         SemanticWorkbenchModule: {
             init(): void;
-            toggle(): void;
             show(category?: string): void;
             hide(): void;
             deactivate(): void;
@@ -627,7 +616,6 @@ declare global {
             isEnabled(): boolean;
             enabledCategories(): string[];
         } | undefined;
-        toggleSemanticWorkbench(): void;
         TreeModule: {
             loadTreeState(): void;
             saveTreeState(): void;
@@ -644,12 +632,8 @@ declare global {
         graphZoomOut(): void;
         graphZoomReset(): void;
         graphReplay(): void;
-        graphSetLayoutMode(mode: string): void;
         graphToggleFilenames(): void;
         loadRelationGraphData(): void;
-        onAddTopicFromFileTree(): void;
-        onConfirmLink(f: string, t: string): void;
-        onRejectLink(f: string, t: string): void;
         refreshPendingBtnState(): void;
         semanticGraphRefresh(): void;
         showTreeContextMenu(e: MouseEvent, itemEl: HTMLElement): void;

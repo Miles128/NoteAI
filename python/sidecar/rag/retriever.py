@@ -371,7 +371,7 @@ def is_index_up_to_date(workspace: str | None = None) -> bool:
             return False
     # Verify index integrity: compare indexed chunk count against the metadata
     # file (same source of truth as count_indexed_chunks) rather than the manifest,
-    # because incremental_update / delete_by_file may update metadata without
+    # because delete_by_file may update metadata without
     # synchronously updating the manifest, causing a false mismatch that triggers
     # a full rebuild on every startup.
     indexed = count_indexed_chunks(workspace, allow_metadata_fallback=False)
@@ -595,38 +595,3 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
     save_manifest(workspace, new_manifest)
 
     return {"success": True, "chunk_count": chunk_count, "incremental": True}
-
-
-def incremental_update(file_path: str, action: str = "update"):
-    workspace = config.workspace_path
-    if not workspace:
-        return {"success": False, "message": "未设置工作区"}
-
-    from sidecar.rag.chunker import chunk_file
-    from sidecar.rag.embedder import encode_documents
-    from sidecar.rag.index import add_chunks, delete_by_file
-
-    p = Path(file_path)
-    if not p.exists():
-        p = Path(workspace) / file_path
-    if not p.exists():
-        return {"success": False, "message": f"文件不存在: {file_path}"}
-
-    rel_path = str(p.relative_to(workspace))
-
-    if action in ("update", "delete"):
-        delete_by_file(workspace, rel_path)
-
-    if action in ("update", "add"):
-        try:
-            text = p.read_text(encoding="utf-8")
-            chunks = chunk_file(rel_path, text)
-            if chunks:
-                texts = [c["content"] for c in chunks]
-                embeddings = encode_documents(texts)
-                add_chunks(workspace, chunks, embeddings)
-            return {"success": True, "chunk_count": len(chunks)}
-        except Exception as e:
-            return {"success": False, "message": str(e)}
-
-    return {"success": True}

@@ -13,6 +13,7 @@
     "build:webui:min": "node scripts/build-webui.mjs --minify",
     "build:highlight": "node scripts/build-highlight.mjs",
     "stage:webui": "node scripts/stage-webui.mjs",
+    "clean:pycache": "node scripts/clean-python-artifacts.mjs",
     "dev:webui": "node scripts/build-webui.mjs --watch",
     "build:desktop": "npm run build:tiptap"
   },
@@ -23,7 +24,6 @@
   "dependencies": {
     "@tiptap/core": "^2.27.2",
     "@tiptap/starter-kit": "^2.27.2",
-    "punycode": "^2.3.1",
     "tiptap-markdown": "^0.8.0"
   },
   "devDependencies": {

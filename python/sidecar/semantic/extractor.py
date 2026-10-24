@@ -19,7 +19,7 @@ from sidecar.semantic.english_common_words import _COMMON_ENGLISH_WORDS
 from sidecar.semantic.ids import content_hash, normalize_text, stable_id
 from sidecar.semantic.store import SemanticStore
 
-PROMPT_VERSION = 10
+PROMPT_VERSION = 11
 # Prompt-level gate, applied BEFORE the LLM generates: noise patterns and
 # variant-spelling dedup rules are spelled out so the model never emits them
 # in the first place. validate_extraction below remains the hard fallback.
@@ -483,9 +483,20 @@ def extract_document_semantics(
             }
         )
 
+    source_snapshot: list[tuple[int, int, str] | None] = [None]
+
     def source_is_current() -> bool:
         source = store.workspace / document["path"]
-        return source.is_file() and content_hash(source.read_text(encoding="utf-8")) == document["content_hash"]
+        if not source.is_file():
+            return False
+        stat = source.stat()
+        stamp = (stat.st_mtime_ns, stat.st_size)
+        cached = source_snapshot[0]
+        if cached is not None and cached[:2] == stamp:
+            return cached[2] == document["content_hash"]
+        digest = content_hash(source.read_text(encoding="utf-8"))
+        source_snapshot[0] = (*stamp, digest)
+        return digest == document["content_hash"]
 
     def save_result(block: dict, parsed: dict, now: str) -> None:
         nonlocal extracted

@@ -86,7 +86,6 @@ class SidecarServer(PathHelpersMixin):
         self._watcher_debounce_lock = threading.Lock()
         self._auto_convert_inflight: set[str] = set()
         self._auto_convert_lock = threading.Lock()
-        self._link_discovery_lock = threading.Lock()
         self._cache = TTLCache(ttl=300, max_size=500)
         self._router = RpcRouter(send_response=self._send_response)
         self._ctx = SimpleNamespace(config=config, logger=logger)

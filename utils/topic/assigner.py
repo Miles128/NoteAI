@@ -3,7 +3,6 @@ from pathlib import Path
 
 from config.constants import TOPIC_SEP
 from config.settings import ABSTRACT_FOLDER, NOTES_FOLDER, config
-from utils.activity_log import add_entry as _log
 from utils.logger import logger
 from utils.text_utils import (
     parse_frontmatter,
@@ -32,6 +31,7 @@ from utils.wiki_store import (
 from utils.wiki_store import (
     sync_wiki_with_files as sync_wiki_with_files,  # noqa: F401  re-export（handler/测试沿用）
 )
+from utils.workspace_log import append_log
 
 
 def is_inbox_orphan_path(file_path, workspace: str | None = None) -> bool:
@@ -168,7 +168,7 @@ def _apply_auto_topic(
     if new_rel != original_rel:
         drop_pending_for_rel(new_rel)
     prefix = "AI 分配" if source == "llm" else "自动分配"
-    _log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
+    append_log("topic_auto", f"{prefix}主题「{topic}」→ {full_path.name}", full_path.name)
     result = {
         "status": "auto_assigned",
         "topic": topic,

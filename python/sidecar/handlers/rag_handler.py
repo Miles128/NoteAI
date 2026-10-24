@@ -346,12 +346,12 @@ class RagHandler(BaseHandler):
             return err
 
         from sidecar.ingest_pipeline import load_ingest_state
-        from sidecar.rag.index import count_indexed_chunks, index_exists, load_manifest, manifest_path
+        from sidecar.rag.index import cached_manifest, count_indexed_chunks, index_exists, manifest_path
 
         try:
             exists = index_exists(workspace)
             chunk_count = count_indexed_chunks(workspace, allow_metadata_fallback=False)
-            manifest = load_manifest(workspace)
+            manifest = cached_manifest(workspace)
             files = manifest.get("files", {})
             expected_chunks = sum(len(entry.get("chunks") or []) for entry in files.values())
             file_count = len(files)

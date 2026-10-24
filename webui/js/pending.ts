@@ -98,14 +98,9 @@ function loadPendingItems() {
     var pendingP = (window.api && window.api.getAllPending)
         ? window.api.getAllPending()
         : Promise.resolve({ items: [], count: 0, topic_options: [] });
-    var logP = (window.api && window.api.getActivityLog)
-        ? window.api.getActivityLog(50).catch(function() { return null; })
-        : Promise.resolve({ entries: [] });
 
-    Promise.all([pendingP, logP]).then(function(results) {
+    pendingP.then(function(result) {
         if (seq !== _pendingLoadSeq) return;
-        var result = results[0];
-        var logResult = results[1];
         _pendingData = result;
         var items = (result && result.items) ? result.items : [];
         var count = (result && result.count) ? result.count : items.length;
@@ -127,8 +122,6 @@ function loadPendingItems() {
                 if (seq === _pendingLoadSeq) renderPendingList(items, listEl);
             });
         }
-
-        renderPendingActivityLog(seq, logResult, countEl, count);
     }).catch(function(e) {
         if (seq !== _pendingLoadSeq) return;
         listEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.loadFailed', { error: window.escapeHtml(String(e)) }) + '</div>';
@@ -182,33 +175,6 @@ function renderPendingSummary(summary: any) {
     el.innerHTML = rows.map(function(row) {
         return '<span>' + window.escapeHtml(window.t(row[1])) + ' <strong>' + summary[row[0]] + '</strong></span>';
     }).join('');
-}
-
-function renderPendingActivityLog(seq: any, logResult: any, countEl: any, pendingCount: any) {
-    var logEl = document.getElementById('pending-view-log');
-    if (!logEl) return;
-    if (seq !== _pendingLoadSeq) return;
-
-    if (logResult === null) {
-        logEl.innerHTML = '<div class="pending-view-empty">' + window.t('common.loading') + '</div>';
-        return;
-    }
-
-    var logEntries = (logResult && logResult.entries) ? logResult.entries : [];
-    if (countEl) countEl.textContent = window.t('common.pendingCount', { count: pendingCount + logEntries.length });
-
-    if (logEntries.length === 0) {
-        logEl.innerHTML = '<div class="pending-view-empty">' + window.t('pending.logEmpty') + '</div>';
-        return;
-    }
-    var logHtml = '';
-    for (var i = logEntries.length - 1; i >= 0; i--) {
-        var e = logEntries[i];
-        var d = new Date(e.ts * 1000);
-        var time = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
-        logHtml += '<div class="pending-log-item"><span class="pending-log-time">' + time + '</span><span class="pending-log-msg">' + window.escapeHtml(e.msg) + '</span></div>';
-    }
-    logEl.innerHTML = logHtml;
 }
 
 function renderPendingTopicItem(item: any, idx: any) {

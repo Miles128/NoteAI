@@ -670,10 +670,6 @@
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
                             <span data-i18n="settings.nav.cli"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="activity-log">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
-                            <span data-i18n="settings.nav.activityLog"></span>
-                        </button>
                         <button class="settings-nav-btn" data-tab="organize-rules">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
                             <span data-i18n="settings.nav.organizeRules"></span>
@@ -1062,7 +1058,8 @@
                                 <div class="settings-rag-topk-grid">
                                     <div class="form-field">
                                         <div class="form-label" data-i18n="settings.ragTopKLabel"></div>
-                                        <input type="number" id="settings-rag-top-k" class="form-input" min="1" max="50" step="1" value="5">
+                                        <input type="number" id="settings-rag-top-k" class="form-input" min="4" max="8" step="1" value="5">
+                                        <div class="settings-hint" data-i18n="settings.ragTopKHint"></div>
                                     </div>
                                 </div>
                                 <div class="card-title" style="margin-top:16px;font-size:13px" data-i18n="settings.ragHydeTitle"></div>
@@ -1171,7 +1168,6 @@
                                     <label class="settings-check-row"><input type="checkbox" value="objects" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabObjects"></span></label>
                                     <label class="settings-check-row"><input type="checkbox" value="quality" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabQuality"></span></label>
                                     <label class="settings-check-row"><input type="checkbox" value="links" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabLinks"></span></label>
-                                    <label class="settings-check-row"><input type="checkbox" value="brief" class="settings-semantic-tab" checked> <span data-i18n="settings.semanticTabBrief"></span></label>
                                 </div>
                             </div>
                             <div class="card" id="settings-semantic-intensity-card" style="margin-top:16px">
@@ -1210,15 +1206,6 @@
                                 <p class="settings-hint" data-i18n="settings.cliVaultHint"></p>
                                 <button type="button" class="btn btn-secondary" id="settings-cli-generate-md-btn" data-i18n="settings.cliGenerateMdBtn"></button>
                                 <div id="settings-cli-md-status" class="settings-hint" style="display:none;margin-top:8px"></div>
-                            </div>
-                        </div>
-                        <div class="settings-tab" id="tab-activity-log">
-                            <div class="card settings-activity-log-card">
-                                <div class="card-title" data-i18n="settings.activityLogTitle"></div>
-                                <p class="settings-hint settings-activity-log-hint" data-i18n="settings.activityLogHint"></p>
-                                <div class="settings-activity-log" id="settings-activity-log">
-                                    <div class="settings-activity-log-empty" data-i18n="settings.activityLogLoading"></div>
-                                </div>
                             </div>
                         </div>
                         <div class="settings-tab" id="tab-about">

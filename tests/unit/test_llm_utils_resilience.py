@@ -16,6 +16,7 @@ from utils.llm_utils import (
     _retry_with_backoff,
     _run_llm_with_timeout,
     _run_stream_with_timeout,
+    call_llm_raw_stream,
 )
 
 # ---------------------------------------------------------------------------
@@ -323,3 +324,128 @@ def test_retry_skips_no_retry_errors(mock_sleep):
         _retry_with_backoff(fn, max_retries=3)
     assert calls == [1]
     assert mock_sleep == []
+
+
+# ---------------------------------------------------------------------------
+# 并发槽位：单次调用只占一个许可 + 超时后不泄漏许可
+# ---------------------------------------------------------------------------
+
+
+class _TrackingSemaphore:
+    """记录实时占用数的信号量代理，用于断言槽位不会被重复获取/重复归还。"""
+
+    def __init__(self, limit: int = 4):
+        self._sem = threading.Semaphore(limit)
+        self._lock = threading.Lock()
+        self.live = 0
+        self.peak = 0
+
+    def acquire(self, timeout=None):
+        acquired = self._sem.acquire(timeout=timeout)
+        if acquired:
+            with self._lock:
+                self.live += 1
+                self.peak = max(self.peak, self.live)
+        return acquired
+
+    def release(self):
+        with self._lock:
+            self.live -= 1
+        self._sem.release()
+
+
+def _patch_fake_stream_llm(monkeypatch, semaphore, stream_factory):
+    monkeypatch.setattr("utils.llm_utils._LLM_SEMAPHORE", semaphore)
+    monkeypatch.setattr("utils.llm_utils.check_api_config", lambda: (True, ""))
+
+    class _FakeLLM:
+        def stream(self, prompt):
+            return stream_factory()
+
+    monkeypatch.setattr("utils.llm_utils._create_llm", lambda *a, **k: _FakeLLM())
+
+
+def test_stream_call_holds_exactly_one_slot(monkeypatch):
+    """流式调用只占一个槽位：外层 _retry_with_backoff 持有后不得在内层重复获取。"""
+    semaphore = _TrackingSemaphore(4)
+    _patch_fake_stream_llm(monkeypatch, semaphore, lambda: iter([_Chunk("a"), _Chunk("b")]))
+
+    assert call_llm_raw_stream("prompt") == "ab"
+    assert semaphore.peak == 1
+    assert semaphore.live == 0
+
+
+def test_four_concurrent_stream_calls_are_all_admitted(monkeypatch):
+    """4 个并发流式调用应同时在飞（历史上双重获取导致有效并发只有 2）。"""
+    semaphore = _TrackingSemaphore(4)
+    barrier = threading.Barrier(4, timeout=3)
+
+    def stream_factory():
+        barrier.wait()  # 只有 4 个调用同时在飞才能通过，否则 BrokenBarrierError
+        return iter([_Chunk("ok")])
+
+    _patch_fake_stream_llm(monkeypatch, semaphore, stream_factory)
+
+    results: list[str] = []
+    errors: list[BaseException] = []
+    lock = threading.Lock()
+
+    def worker():
+        try:
+            value = call_llm_raw_stream("prompt")
+        except BaseException as exc:  # noqa: BLE001 - 记录后由断言暴露
+            with lock:
+                errors.append(exc)
+        else:
+            with lock:
+                results.append(value)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=20)
+
+    assert not errors, f"并发流式调用失败: {errors}"
+    assert sorted(results) == ["ok"] * 4
+    assert semaphore.live == 0
+
+
+def test_run_stream_timeout_returns_slot_when_worker_never_exits(monkeypatch):
+    """旧线程挂死不退出时，超时分支必须兜底归还槽位；旧线程随后退出也不得重复归还。"""
+    import time
+
+    semaphore = _TrackingSemaphore(4)
+    monkeypatch.setattr("utils.llm_utils._LLM_SEMAPHORE", semaphore)
+    worker_will_exit = threading.Event()
+
+    def stream_fn():
+        worker_will_exit.wait(timeout=5)  # 模拟 provider 层挂死
+        yield _Chunk("too late")
+
+    with pytest.raises(StreamTimeoutError):
+        _run_stream_with_timeout(stream_fn, join_timeout=0.2)
+
+    assert semaphore.live == 0  # 超时分支已兜底归还
+
+    worker_will_exit.set()
+    time.sleep(0.3)  # 旧线程退出，其 finally 归还被去重，不应把计数压成负数
+    assert semaphore.live == 0
+
+
+def test_run_stream_timeout_keeps_outer_slot_intact(monkeypatch):
+    """slot_held=True 时本函数不碰信号量，归还责任留给外层 _retry_with_backoff。"""
+    import time
+
+    semaphore = _TrackingSemaphore(4)
+    monkeypatch.setattr("utils.llm_utils._LLM_SEMAPHORE", semaphore)
+
+    def stream_fn():
+        time.sleep(3)
+        yield _Chunk("too late")
+
+    with pytest.raises(StreamTimeoutError):
+        _run_stream_with_timeout(stream_fn, join_timeout=0.2, slot_held=True)
+
+    assert semaphore.live == 0
+    assert semaphore.peak == 0

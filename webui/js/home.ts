@@ -404,7 +404,7 @@ function show() {
 
 function openSemanticChanges() {
     if (window.SemanticWorkbenchModule && window.SemanticWorkbenchModule.show) {
-        window.SemanticWorkbenchModule.show('overview');
+        window.SemanticWorkbenchModule.show('objects');
     }
 }
 

@@ -19,6 +19,7 @@ import numpy as np
 from config.settings import NOTES_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.rag.chunker import chunk_file
 from sidecar.text_similarity import body_hash as _body_hash
+from utils.atomic_write import atomic_write_text
 from utils.helpers import sanitize_filename
 from utils.text_utils import parse_frontmatter, write_frontmatter
 
@@ -157,7 +158,7 @@ def merge_duplicate_notes(
     if output.resolve() in {primary.resolve(), related.resolve()}:
         return {"success": False, "message": "整合稿名称与原笔记冲突，请换一个名称"}
 
-    output.write_text(write_frontmatter(meta, merged_body), encoding="utf-8")
+    atomic_write_text(output, write_frontmatter(meta, merged_body), encoding="utf-8")
     _mark_pair_resolved(root, left_rel, right_rel, primary_body, related_body)
     return {
         "success": True,
@@ -203,7 +204,7 @@ def merge_note_group(
     while output.exists() or output.resolve() in {note.resolve() for note in notes}:
         output = notes[0].parent / f"{output_title}_{counter}.md"
         counter += 1
-    output.write_text(write_frontmatter(primary_meta, merged_body), encoding="utf-8")
+    atomic_write_text(output, write_frontmatter(primary_meta, merged_body), encoding="utf-8")
 
     for left_index, left in enumerate(notes):
         for right_index in range(left_index + 1, len(notes)):

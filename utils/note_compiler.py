@@ -11,6 +11,7 @@ from sidecar.compile_state import file_needs_compile, mark_compiled
 
 from config import config
 from config.settings import NOTES_FOLDER
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.text_utils import parse_frontmatter
 
@@ -198,7 +199,7 @@ def compile_note_file(
     else:
         output = f"{new_body}\n"
 
-    full.write_text(output, encoding="utf-8")
+    atomic_write_text(full, output, encoding="utf-8")
     mark_compiled(rel, full.stat().st_mtime, workspace)
 
     return {

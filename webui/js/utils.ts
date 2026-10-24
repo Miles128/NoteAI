@@ -138,7 +138,6 @@ function ensureLib(name: string, src: string, css?: string): Promise<boolean> {
     });
 }
 
-window.loadLazyCss = loadLazyCss;
 window.ensureLib = ensureLib;
 
 /** 侧边栏等在模块加载完毕前可被点击；占位避免 ReferenceError（各模块会覆盖） */

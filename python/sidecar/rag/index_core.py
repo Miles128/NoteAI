@@ -121,6 +121,15 @@ def _read_manifest(workspace: str) -> dict:
     return data
 
 
+def cached_manifest(workspace: str) -> dict:
+    """按 (mtime, size) 缓存的 manifest 读取；调用方必须当作只读结果。
+
+    ``load_manifest`` 每次直读磁盘并重建 dict，状态轮询（onboarding 每 5s）
+    在大工作区上会反复解析数 MB JSON；manifest 万级条目时这是白付的开销。
+    """
+    return _read_manifest(workspace)
+
+
 def _write_manifest(workspace: str, data: dict) -> None:
     """Atomically write the index manifest."""
 

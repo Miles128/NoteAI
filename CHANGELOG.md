@@ -19,6 +19,26 @@
 - CI/CD 完善：添加 Python lint、type check
 
 ### 变更
+- 知识库体检不再有两行假结果：`rag` 只查向量索引、BM25 缺失也报「正常」（`bm25_index_ready` 的结果算了但没进 detail），`fulltext` 直接硬编码 `{"ok": True}`——全文索引在内存里、不建就永远不知道覆盖了多少。现在 RAG 分三种文案（索引缺失 / 向量与 BM25 均正常 / BM25 缺失但查询时自动重建），全文索引真建一次并报实测条数（用户工作区 224 篇、9.2 万词条）；`semantic` 把早已算出的编译覆盖率写进 detail（192/194 篇时明确提示「有笔记未编译」）
+- 删除 `.links.json` 的 `last_scan` 死字段：全仓 `webui/js/` 零引用，写入方 `discover.py` 两处、读取方 `persist.py` 两处与语义工作台链接分页一并清掉，索引文件回到只有 `links` 一个键
+- 下线 `get_activity_log` RPC（api.ts + Rust 白名单 + Python 路由三层同步，前端方法数 109→108）：删除设置页「操作记录」Tab 后已无任何前端调用方。连带删除 `utils/activity_log.py` 整个兼容壳——`add_entry` 只是 `append_log` 的别名，`get_entries` 是给已删 UI 整形的读取器，`clear_log` 零调用；两个写入方（`topic/assigner.py`、`topic_placement.py`）改为直接调 `append_log`，与 `cascade.py`/`kb_lint.py` 一致
+- 打包瘦身：`bundle.resources` 的 glob 收 `python/` 全部文件且 Tauri 不支持取反，`__pycache__`（2.2 MB，占该目录 69%）与 `.DS_Store` 一直被打进 app 包——新增 `scripts/clean-python-artifacts.mjs`（`npm run clean:pycache`）挂在 `beforeBuildCommand` 最前，`python/` 3.2 MB→1.0 MB；`bundle_sidecar_python.sh` 复制 venv 后同样剔除字节码缓存。删除零引用的依赖：`cryptography`（24 MB，连带 `cffi`/`pycparser`；凭据自 2026-09-20 起明文存放，Fernet 路径已删）与 npm 的 `punycode`（全仓无一处 import）
+- 修复首启向导点遮罩后界面半加载：`workspace-rules.ts` 的遮罩关闭只隐藏 DOM、不结束 `openSetupModal()` 的 Promise，而启动链 `app.ts:60 → checkWorkspaceStatus → maybePromptSetup` 正在 await 它，于是文件树加载、首页刷新与启动入库全部不执行。关闭改走 `resolve(false)` 并透传给调用方，未配置时照常继续 `runPostWorkspaceSetup()`
+- 删除设置页「操作记录」Tab：全仓无一处 JS 读取 `#settings-activity-log`，切进去永远停在「加载中…」；同时删除待确认页的活动日志分支（取的 `#pending-view-log` 元素不存在，每次加载白发一次 `get_activity_log` 再整段丢弃）。连带清理导航按钮、4 条 CSS 规则与 5 个 locale key。`wiki/log.md` 仍照常写入，`parse_log_entries` 的库内读取方（级联、Lint）不受影响
+- 首页「知识动态 · 查看全部」改跳 `objects`：原先跳 `overview`，而 `semantic.categories` 没有这个键，点进去标题直接显示原始 key、列表恒空
+- 语义工作台可见类别改为只认侧栏真实存在的 `data-category`：设置里的「主题简报」勾选没有对应入口（勾了无效），且只留它一项还能通过「至少保留一个」校验、把三个入口全部隐藏，工作台从此进不去。删掉该勾选，并过滤历史 localStorage 中残留的 `brief` 值
+- AGENTS.md 删除对 `embedder.py` 中 `lexical_weights` 的描述：全仓 `lexical` 只命中 AGENTS.md 自己，该机制早已整体删除，按文档排查会白找一轮
+- 二轮审计清理：删除零调用死代码——`rag/retriever.py:incremental_update`（与 `ingest_index.py:replace_file_chunks` 重叠的旧单文件索引路径，全仓无调用者）、`_link_discovery_lock` 空锁（声明并代理到 `BaseHandler`，从未被 `with` 使用）、无读取方的 window 挂载（`showAbout`/`onConfirmLink`/`onRejectLink`/`onAddTopicFromFileTree`/`onAddNoteFromFileTree`/`graphSetLayoutMode`/`toggleSemanticWorkbench`/`SchemaWizard`/`loadLazyCss`/`checkIsTauri`/`getTauriInvoke`）与 `main.mjs` 的 `IconsModule`/`SearchModule` 自我赋值；AGENTS.md 线程安全条目按实际锁清单更正（`_cache_lock`、`_rag_chat_lock` 均不存在）
+- 下线链接治理双件套 `purge_weak_links` / `backfill_semantic_bidirectional`（Python 路由 + Rust 白名单与 `DESTRUCTIVE_METHODS` + `api.ts` 封装 + 单测）：对用户工作区实测，前者只补「两侧都零边」的文档对且一产出就是双份 pending，后者只对已绝迹的弱启发式 reason 生效、对真实库空转
+- 语义抽取 confidence 标定：`semantic_extract.yaml` 两处 JSON 示例值从 `0.0` 改为 `0.9` 并写明取值规则（此前模型照抄示例的 0.0，被工作台 standard 档 `≥0.5` 全部过滤，表现为「编译跑了但工作台空着」）；`PROMPT_VERSION` 10→11，已编译的语义库需重跑全量语义编译才享受新标定
+- 「召回 Top-K」改名「召回候选深度」并收到真实生效区间 4-8（候选数 = `top_k × 3` 且被夹在 [12, 24]，此前 1-50 的滑块几乎无感）；补提示说明最终引用条数由问题类型自动决定、上限 8；后端 `rag_top_k` 读写两侧同步夹紧
+- 全文搜索改为中文可用：`utils/fulltext_index.py` 原先把连续汉字切成一个 token 并只做精确匹配，搜「笔记」命中不了「我的笔记系统」；现按相邻二字组合（bigram）入索引，查询侧同切并要求同组全部命中（等价子串包含），组间改 AND 计分。实测用户工作区 224 篇笔记：建索引 0.5s、单次查询 0.3ms、词条 9.2 万；「笔记」命中 46 篇、「反向传播」17 篇、「A2A」10 篇
+- 综述页退出链接图：新增 `utils/links/persist.py:_is_survey_note`（文件名以「综述」结尾 **或** frontmatter `type: survey`，任一命中即算），链接发现的两个入口按来源侧提前返回、候选池按目标侧过滤，与 README 同级处理；综述页是聚合视图，什么都提一点，过去只贡献高共享数的虚关联。用户工作区实测：判据命中 2 篇（1 篇级联生成落在 Notes/、1 篇手写章节综述），一次性删除相关边 99 条（86 待确认 + 13 已确认，按用户指令不分状态全删），链接索引 897→798、待确认 531→445，备份 `.links.json.pre-survey-exclude-2026-09-26`；wiki/ 下 4 篇主题综述本就被目录跳过，不参与
+- 链接建议不再重灌低置信 pending：`_SEMANTIC_SHARE_MIN` 3→6（3~5 档曾占待确认积压的 65%），强/中两档改判为 ≥8/≥6；同时删除从未挂上链路的 `_vector_search_candidates`（"语义相关"）与 `_one_hop_neighbors`（"已确认链接的邻居"）两个弱启发式生成器
+- LLM 客户端按 (api_key, base_url) 复用：`_ChatClient` 此前每次调用新建 OpenAI SDK 实例（重建 httpx 连接池、多付一次 TCP+TLS 握手约 100-300ms），一次导入发 6+ 次调用就握手 6+ 次
+- 语义抽取的源文件变更校验按 (mtime_ns, size) 记忆整篇哈希：原来每个 block 落库前都重读并哈希一次全文（50 块文档＝50 次全文件读），现在文件未变则只读一次，判定逻辑不变
+- `sync_wiki_with_files` 不再把每篇笔记读两遍（frontmatter 解析与主题回写共用同一次读取）
+- `_rag_index_status` 改走按 stat 键缓存的 manifest 读取（此前直读磁盘重建 dict，onboarding 期间每 5s 一轮）
 - 综述写作规则硬化：`CASCADE_SURVEY_NEW/UPDATE_PROMPT` 重写——综述定位改为「简略概括而非复述」（1-3 句讲清核心结论、禁止完整代码/长表格/逐步操作、篇幅为原文 10%-30%、深度内容用「详见：文件名.md」替代），消除原「全面性/篇幅匹配」导致的综述复述问题
 - 黄金评测集扩充至 105 例：新增属性/定义/指令类拒收与 `reduces` 等英文判断门禁；修复「检索增强生成」定义泄漏与 `reduces` 误拒；`CLAIM_POLICY_VERSION` 5→6
 - 链接治理（`.links.json`）：保存时交叉引用只保留真实引用（正文/摘要提及标题），移除「共享标签/语义相关/邻居/同主题」四路对称弱启发式（此前导致 92% 链接双向爆炸、反向链接面板充满无关内容）；新增 `purge_weak_links` RPC 清洗历史弱链接，新增 `backfill_semantic_bidirectional` RPC 对「共享 ≥6 个实体/概念」的文档对补双向链接（用户工作区 16236 → 1253 条，删除 15585 条弱链接 + 回填 602 条语义双向）
@@ -33,6 +53,9 @@
 - 新笔记自动归类补开关：设置面板新增「新笔记自动归入主题」，`auto_topic` 保存走 `_coerce_bool`（此前只有 `autoSaveConfig` 把值硬写成 `true` 且无人调用）；预览字体补下拉控件，接上早已存在的 `applyContentFonts` 生效路径
 - 链接治理两个操作补成真实 RPC：`purge_weak_links` / `backfill_semantic_bidirectional` 注册到 `links_handler` + Rust 白名单 + `api.ts`，并纳入 `DESTRUCTIVE_METHODS` 限流（此前只是被单测调用的 Python 函数，AGENTS.md 却记载为已在白名单）
 - 待确认页补「全部重试综述」按钮，接上后端一直完整的 `retry_all_cascade_failures`
+- 修复流式 LLM 调用把有效并发砍半：`call_llm_raw_stream` 的槽位在 `_retry_with_backoff` 与 `_run_stream_with_timeout` 各取一次，而 `threading.Semaphore` 不可重入，于是**一次流式调用占掉 4 个槽位里的 2 个**。后果是第 3 个并发调用者在 `acquire(timeout=60)` 等满后直接吃到「LLM 调用并发已满」的硬错误，且该文案不匹配 `_RETRYABLE_KEYWORDS`、不会退避重试；一次全量语义编译的 `ThreadPoolExecutor(max_workers=4)` 与 RAG 对话争抢同一批槽位就能把对话挤爆。现在槽位由 `_retry_with_backoff` 单点持有、内层传 `slot_held=True` 复用，有效并发恢复为 4
+- 流式调用超时不再永久泄漏并发槽位：`stop` 事件只在 chunk 之间检查，provider TCP 层挂死时后台线程永不退出，槽位随其 `finally` 被永久占住，累计 4 次即让整个进程的 AI 功能失效（且不像 reranker 有 60s 冷却兜底）。改为超时分支在调用线程侧兜底归还，新增 `_LLMSlot` 保证「谁归还、归还几次」收敛到一次，旧线程随后退出时其 `finally` 归还被去重
+- 用户可见写路径补齐原子写：全仓 49 处 `.write_text(` 里只有 13 处走 `atomic_write_text`——WIKI.md 的 7 处 CRUD（`utils/wiki/crud.py`，AI 编译的知识层，崩溃即半截）、标签 frontmatter 回写（`tag_extractor` 2 处）、编译后的笔记正文（`note_compiler`）、主题移动/清空/格式优化（`topic/file_ops` 3 处）、笔记合并稿（`duplicate_review` 2 处）、用户 `schema.md` 与 `.ai_memory/project_rules.md`（`schema_manager` 4 处）、设置与 API 配置 JSON（`app_config` 3 处）全是裸写。`atomic_write_text` 同步补上权限位继承：目标已存在时沿用原权限（`mkstemp` 默认 0600，直接 `os.replace` 会把原本 0644 的用户笔记悄悄改成 0600），新文件仍为 0600
 
 ### 移除
 - D1 功能裁撤：标签/关系侧栏视图（tags.ts、integrator.ts、tab-1 整合页、sidebar-tags/graph 面板与 dock）、主题提取链（`extract_topics` RPC + `topic_extractor.py` + `topic_extraction.yaml`），并清理对应 locales（`integrator`/`tags`/`sidebar.tag*`/`common.tagsCount|linksCount`）与 CSS 孤儿（`sidebar-tag*`、`link-card*`、`progress-container`）；7 个 tags RPC 保留为 backend-only（`KNOWN_BACKEND_ONLY_METHODS`）

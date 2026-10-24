@@ -6,6 +6,8 @@ from sidecar.rag.rag_config import (
     DEFAULT_HYDE_THRESHOLD,
     DEFAULT_RERANK_SKIP_SCORE,
     DEFAULT_TOP_K,
+    MAX_TOP_K,
+    MIN_TOP_K,
 )
 from utils.llm_utils import test_api_connection
 from utils.logger import logger
@@ -206,7 +208,7 @@ class ConfigHandler(BaseHandler):
                     params["rag_dense_weight"], DEFAULT_DENSE_WEIGHT, 0.0, 1.0
                 )
             if "rag_top_k" in params:
-                self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, 1, 50)
+                self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, MIN_TOP_K, MAX_TOP_K)
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"

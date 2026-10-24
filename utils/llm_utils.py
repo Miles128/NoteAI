@@ -35,6 +35,37 @@ _LLM_SEMAPHORE = threading.Semaphore(4)
 _LLM_EXECUTOR = None
 
 
+class _LLMSlot:
+    """LLM 并发槽位（_LLM_SEMAPHORE 的一个许可）的持有者，保证最多归还一次。
+
+    流式调用超时时，后台线程可能永不退出（provider TCP 层挂死，而 stop 事件
+    只在 chunk 之间检查），此时若槽位仅由后台线程的 finally 归还就会永久泄漏，
+    累计耗尽全部槽位后整个进程的 AI 功能失效。因此允许调用线程在超时分支兜底
+    归还，由本类去重，保证「谁归还、归还几次」始终收敛到一次。
+    """
+
+    __slots__ = ("_sem", "_lock", "_returned")
+
+    def __init__(self, semaphore: threading.Semaphore):
+        self._sem = semaphore
+        self._lock = threading.Lock()
+        self._returned = False
+
+    def return_slot(self) -> None:
+        with self._lock:
+            if self._returned:
+                return
+            self._returned = True
+        self._sem.release()
+
+
+def _acquire_llm_slot(timeout: float = 60.0) -> _LLMSlot | None:
+    """获取一个并发槽位；超时返回 None（由调用方决定报什么错）。"""
+    if not _LLM_SEMAPHORE.acquire(timeout=timeout):
+        return None
+    return _LLMSlot(_LLM_SEMAPHORE)
+
+
 class _StreamResult(TypedDict):
     text: str
     error: Exception | None
@@ -77,13 +108,13 @@ def _retry_with_backoff(
     last_error = None
     for attempt in range(max_retries + 1):
         try:
-            acquired = _LLM_SEMAPHORE.acquire(timeout=60)
-            if not acquired:
+            slot = _acquire_llm_slot()
+            if slot is None:
                 raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
             try:
                 return fn()
             finally:
-                _LLM_SEMAPHORE.release()
+                slot.return_slot()
         except Exception as e:
             last_error = e
             if getattr(e, "no_retry", False) or not _is_retryable_error(e) or attempt >= max_retries:
@@ -154,6 +185,28 @@ def is_network_error(exception: Exception) -> bool:
     return _is_retryable_error(exception)
 
 
+_SDK_CLIENTS: dict[tuple[str, str], Any] = {}
+_SDK_CLIENTS_LOCK = threading.Lock()
+
+
+def _get_sdk_client(*, api_key: str, base_url: str):
+    """按凭据复用 OpenAI SDK 客户端。
+
+    每次新建会重建 httpx 连接池，白付一次 TCP+TLS 握手（约 100-300ms）；
+    一次导入要发 6+ 次 LLM 调用，复用后只握手一次。改 API key / base_url
+    会换 key，自然拿到新客户端。
+    """
+    key = (api_key, base_url)
+    with _SDK_CLIENTS_LOCK:
+        client = _SDK_CLIENTS.get(key)
+        if client is None:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=api_key, base_url=base_url, timeout=60, max_retries=0)
+            _SDK_CLIENTS[key] = client
+        return client
+
+
 class _ChatClient:
     """OpenAI 兼容 chat completions 直连封装（取代 langchain ChatOpenAI）。
 
@@ -171,13 +224,11 @@ class _ChatClient:
         max_tokens: int,
         extra_body: dict | None = None,
     ):
-        from openai import OpenAI
-
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._extra_body = extra_body
-        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=60, max_retries=0)
+        self._client = _get_sdk_client(api_key=api_key, base_url=base_url)
 
     def _params(self, text: str) -> dict[str, Any]:
         return {
@@ -334,15 +385,24 @@ def _run_stream_with_timeout(
     stream_fn: Callable[[], Any],
     chunk_callback=None,
     join_timeout: int = 120,
+    slot_held: bool = False,
 ) -> str:
-    """流式执行通用包装：信号量限流 + 后台线程执行 + join 超时保护（_do_stream 同款结构）
+    """流式执行通用包装：并发槽位 + 后台线程执行 + join 超时保护（_do_stream 同款结构）
+
+    slot_held=True 表示调用方（_retry_with_backoff）已经持有槽位，此处不得重复获取：
+    threading.Semaphore 不可重入，一次流式调用占用两个槽位会让有效并发直接减半。
 
     超时后置 stop 事件：旧线程停止继续迭代与推送 token；
     已输出部分内容时抛 StreamTimeoutError(partial=True)，上层不重试，避免重复计费。
+    若旧线程挂死不退出，调用线程在此兜底归还槽位，避免并发许可被永久占死——
+    代价是挂死的旧请求仍占着 provider 侧连接，极端情况下实际并发会短暂超过上限，
+    这是「可恢复」优先于「严格限流」的有意取舍。
     """
-    acquired = _LLM_SEMAPHORE.acquire(timeout=60)
-    if not acquired:
-        raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
+    slot = None
+    if not slot_held:
+        slot = _acquire_llm_slot()
+        if slot is None:
+            raise RuntimeError("LLM 调用并发已满，请等待其他请求完成")
 
     result: _StreamResult = {"text": "", "error": None, "done": False, "started": False}
     stop = threading.Event()
@@ -364,7 +424,8 @@ def _run_stream_with_timeout(
             result["error"] = e
         finally:
             result["done"] = True
-            _LLM_SEMAPHORE.release()
+            if slot is not None:
+                slot.return_slot()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
@@ -372,6 +433,8 @@ def _run_stream_with_timeout(
 
     if not result["done"]:
         stop.set()
+        if slot is not None:
+            slot.return_slot()
         logger.warning(f"[llm_utils] stream timeout after {join_timeout}s (partial={result['started']})")
         raise StreamTimeoutError(f"LLM 流式调用超时（{join_timeout}秒）", partial=result["started"])
 
@@ -388,7 +451,8 @@ def _do_stream(prompt_text, temperature, max_tokens, chunk_callback, disable_thi
         llm = _create_llm(temperature, max_tokens, disable_thinking=disable_thinking)
         return llm.stream(prompt_text)
 
-    text = _run_stream_with_timeout(_stream, chunk_callback)
+    # 槽位已由外层 _retry_with_backoff 持有，这里必须复用而非再取一个
+    text = _run_stream_with_timeout(_stream, chunk_callback, slot_held=True)
     logger.info(f"LLM stream done, response length: {len(text)}")
     return text
 

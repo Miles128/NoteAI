@@ -10,6 +10,7 @@ from typing import Any
 
 from config import config
 from config.constants import TOPIC_SEP
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.wiki.parse import (
     _get_wiki_path,
@@ -105,7 +106,7 @@ def _merge_duplicate_topics_in_wiki():  # noqa: PLR0912, PLR0915
         new_lines.append(line)
 
     _renumber_wiki_files(new_lines)
-    wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
+    atomic_write_text(wiki_path, "\n".join(new_lines), encoding="utf-8")
     return merged
 
 
@@ -156,7 +157,7 @@ def _deduplicate_files_in_wiki():
 
     if removed > 0:
         _renumber_wiki_files(new_lines)
-        wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
+        atomic_write_text(wiki_path, "\n".join(new_lines), encoding="utf-8")
     return removed
 
 
@@ -249,7 +250,7 @@ def add_file_to_wiki_topic(file_rel_path, topic, file_title=None):  # noqa: PLR0
         new_content = "\n".join(lines)
         if not new_content.endswith("\n"):
             new_content += "\n"
-        wiki_path.write_text(new_content, encoding="utf-8")
+        atomic_write_text(wiki_path, new_content, encoding="utf-8")
         return True
     except Exception as e:
         logger.warning(f"[wiki] write failed: {e}")
@@ -303,7 +304,7 @@ def rename_wiki_topic(old_topic, new_topic):  # noqa: PLR0912, PLR0915
     _renumber_wiki_files(new_lines)
 
     try:
-        wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
+        atomic_write_text(wiki_path, "\n".join(new_lines), encoding="utf-8")
 
         workspace = config.workspace_path
         if workspace:
@@ -364,7 +365,7 @@ def _remove_topic_from_wiki(topic_name):
         new_lines.append(line)
 
     _renumber_wiki_files(new_lines)
-    wiki_path.write_text("\n".join(new_lines), encoding="utf-8")
+    atomic_write_text(wiki_path, "\n".join(new_lines), encoding="utf-8")
     return True, removed_titles
 
 
@@ -411,7 +412,7 @@ def remove_file_from_wiki_topic(file_rel_path):  # noqa: PLR0912
         new_content = "\n".join(new_lines)
         if not new_content.endswith("\n"):
             new_content += "\n"
-        wiki_path.write_text(new_content, encoding="utf-8")
+        atomic_write_text(wiki_path, new_content, encoding="utf-8")
         return True, old_topic
     except Exception as e:
         logger.warning(f"[remove_file] write failed: {e}")
@@ -471,7 +472,7 @@ def create_topic(topic_name):  # noqa: PLR0912
         for j, sl in enumerate(new_topic_lines):
             lines.insert(insert_idx + j, sl)
 
-        wiki_path.write_text("\n".join(lines), encoding="utf-8")
+        atomic_write_text(wiki_path, "\n".join(lines), encoding="utf-8")
 
         notes_topic_dir = Path(workspace) / config.NOTES_FOLDER
         for part in parts:

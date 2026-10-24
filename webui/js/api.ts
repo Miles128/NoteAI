@@ -312,7 +312,6 @@ var API_DEFS: ApiDef[] = [
     { name: 'retryConvertFile', method: 'retry_convert_file', params: function(file) { return { file: file }; }, write: true },
     { name: 'dismissConvertFailure', method: 'dismiss_convert_failure', params: function(file) { return { file: file }; }, write: true },
     { name: 'getDashboardStatus', method: 'get_dashboard_status' },
-    { name: 'getActivityLog', method: 'get_activity_log', params: function(limit) { return { limit: limit || 50 }; } },
     { name: 'resolveTopic', method: 'resolve_topic', params: function(filePath, topic) { return { file_path: filePath, topic: topic }; }, write: true },
     { name: 'keepNoteInTopic', method: 'keep_note_in_topic', params: function(filePath, currentTopic, suggestedTopic) { return { file_path: filePath, current_topic: currentTopic, suggested_topic: suggestedTopic }; }, write: true },
     { name: 'applyTopicPlacementThreshold', method: 'apply_topic_placement_threshold', params: function() { return {}; }, write: true },
@@ -378,8 +377,6 @@ var API_DEFS: ApiDef[] = [
     { name: 'publishSemanticTopicWikiPage', method: 'publish_semantic_topic_wiki_page', params: function(topic) { return { topic: topic }; }, write: true },
     { name: 'addSemanticEntityAlias', method: 'add_semantic_entity_alias', params: function(id, alias) { return { id: id, alias: alias }; }, write: true },
     { name: 'confirmAllLinks', method: 'confirm_all_links', params: function() { return {}; }, write: true },
-    { name: 'purgeWeakLinks', method: 'purge_weak_links', params: function() { return {}; }, write: true },
-    { name: 'backfillSemanticBidirectional', method: 'backfill_semantic_bidirectional', params: function() { return {}; }, write: true },
 
     // ---- LLM 改写 ----
     { name: 'llmRewriteStream', method: 'llm_rewrite_stream', params: function(filePath) { return { file_path: filePath }; } },
@@ -455,7 +452,5 @@ Object.assign(builtApi, generatedApi, {
 window.api = builtApi as WindowApi;
 
 window.getTauriEventAPI = getTauriEventAPI;
-window.checkIsTauri = checkIsTauri;
-window.getTauriInvoke = getTauriInvoke;
 
 })();

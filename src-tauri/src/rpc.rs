@@ -21,7 +21,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "add_watched_folder",
     "apply_topic_placement_threshold",
     "auto_convert_pending",
-    "backfill_semantic_bidirectional",
     "backup_workspace",
     "cancel_ingest",
     "check_ingest_updates",
@@ -41,7 +40,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "export_notes",
     "generate_vault_agents_md",
     "generate_weekly_brief",
-    "get_activity_log",
     "get_all_pending",
     "get_api_config",
     "get_backlinks",
@@ -91,7 +89,6 @@ static ALLOWED_PYTHON_METHODS: &[&str] = &[
     "preview_topic_merge",
     "publish_semantic_object_wiki_page",
     "publish_semantic_topic_wiki_page",
-    "purge_weak_links",
     "rag_chat",
     "rag_index_status",
     "rag_rebuild_index",
@@ -158,8 +155,6 @@ const DESTRUCTIVE_METHODS: &[&str] = &[
     "run_cli_agent",
     "delete_file",
     "delete_topic",
-    "purge_weak_links",
-    "backfill_semantic_bidirectional",
 ];
 
 /// 滑动窗口配额：每方法 60 秒内至多 30 次。人工操作（均有确认框/RTT 间隔）

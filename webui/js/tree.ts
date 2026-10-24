@@ -890,12 +890,6 @@ window.graphZoomReset = function() {
     if (isSemantic && window.SemanticGraphModule && window.SemanticGraphModule.zoomReset) { window.SemanticGraphModule.zoomReset(); return; }
     if (window.Graph3Tier && window.Graph3Tier.zoomReset) window.Graph3Tier.zoomReset();
 };
-window.onConfirmLink = function(f, t) {
-    if (window.api && window.api.confirmLink) window.api.confirmLink(f, t);
-};
-window.onRejectLink = function(f, t) {
-    if (window.api && window.api.rejectLink) window.api.rejectLink(f, t);
-};
 
 window.hideTreeContextMenu = hideTreeContextMenu;
 window.revealInFinder = revealInFinder;

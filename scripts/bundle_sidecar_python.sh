@@ -20,6 +20,9 @@ echo "Bundling sidecar Python: $SRC -> $DEST"
 rm -rf "$DEST"
 mkdir -p "$(dirname "$DEST")"
 cp -R "$SRC" "$DEST"
+# 字节码缓存对发布包毫无用处，只增加体积（AGENTS.md 亦如此描述）。
+find "$DEST" -name '__pycache__' -type d -prune -exec rm -rf {} +
+find "$DEST" -name '.DS_Store' -type f -delete
 
 # Resolve the interpreter symlink to the real uv-managed binary.
 REAL_PY="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$DEST/bin/python3" 2>/dev/null || true)"

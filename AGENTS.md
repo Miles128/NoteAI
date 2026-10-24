@@ -87,7 +87,7 @@ Tauri v2 shell (src-tauri/)
 
 **请求分流**：RAG 对话默认全部走工作区证据链路，仅前端显式覆盖（`selection_route` = web）时走联网回答；CLI Agent 桥接（`cli_agent_runner.py` + `cli_agent/`）将文件操作指令转交外部 CLI Agent 执行。
 
-**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。注意：`embedder.py` 中的 `lexical_weights`（jieba TF-IDF）当前不参与检索，sparse 检索直接用 bm25s 对原始 query 文本。
+**RAG 流程**（`python/sidecar/rag/`）：query → HyDE rewrite → zvec 混合检索（dense 0.7 + BM25 0.3，bm25s；`ensure_bm25_index` 自动重建缺失的 BM25 索引）→ MMR 去重 → fastembed `TextCrossEncoder`（`Xenova/bge-reranker-base` INT8 ONNX，约 280MB，无 torch）→ 题型分流（`question_shape.py`）→ 综述进讲解骨架、Notes 进可引用原文 → LLM 流式输出。Embedding 使用 `BAAI/bge-small-zh-v1.5`（512 维，fastembed）。sparse 检索直接用 bm25s 对原始 query 文本。
 
 **三层知识架构**：`Notes/`（原始 Markdown，不可变来源）→ `wiki/`（AI 编译的结构化知识）→ `Raw/`（原始 PDF/DOCX 归档）。配置项 `ABSTRACT_FOLDER = "wiki"`。
 
@@ -96,8 +96,10 @@ Tauri v2 shell (src-tauri/)
 - **Config**：单例 `config` 在 `config/app_config.py` 导入时加载。不要直接实例化 `AppConfig`，使用 `from config import config` 或 `from config.settings import config`。工作区路径通过 `config/workspace_state.py` 持久化；运行时值是 `config.workspace_path`。
 - **Frontmatter**：规范解析器是 `utils/text_utils.parse_frontmatter(text)` → `(meta_dict, body_str)`。handler 中应使用 `self._parse_frontmatter()` 或直接导入，避免手写正则。
 - **LLM 调用**：统一走 `utils/llm_utils`。`_LLM_SEMAPHORE = Semaphore(4)` 限制并发；`call_llm_raw()` 使用 `_retry_with_backoff()` 对限流指数退避。同步与流式变体都遵守信号量。输入 prompt 通过 `_clamp_prompt_text()` 截断到 `config.max_context_tokens`。
+- **LLM 槽位归属**：`Semaphore` 不可重入，**一次逻辑调用只能取一个槽位**。`_retry_with_backoff()` 是流式路径的槽位持有者，`_run_stream_with_timeout()` 因此必须传 `slot_held=True`（历史上漏传，导致一次流式调用占两个槽位、有效并发减半）。自行调用 `_run_stream_with_timeout()` 的路径（如 `rewrite_with_llm_stream`）用默认的 `slot_held=False` 自行取还。超时分支由调用线程兜底 `slot.return_slot()`，`_LLMSlot` 保证旧线程的 `finally` 不会重复归还——**不要**改回「只由后台线程归还」。
+- **文件写入**：用户可见内容（笔记正文、WIKI.md、`schema.md`、`project_rules.md`、配置 JSON）一律走 `utils/atomic_write.atomic_write_text()`，不要用裸 `write_text()` / `open(...,'w')`。`mode=None` 时会继承已有文件的权限位，新文件为 0600。纯运行时状态 JSON 可继续用 `temp + replace`。
 - **Chunk ID**：`hashlib.sha256(f"{file_path}::{section_title or ''}::{content[:100]}".encode()).hexdigest()[:16]`，位于 `chunker.py:155`。注意 `section_title` 可能为 `None`。
-- **线程安全**：`SidecarServer` 使用锁保护 stdout（`_stdout_lock`）、缓存（`_cache_lock`）、运行中任务、watcher 防抖、link discovery。RAG 对话通过 `_rag_chat_lock` 单线程化。
+- **线程安全**：`SidecarServer` 用锁保护 stdout（`_stdout_lock`）、运行中任务（`_running_tasks_lock`）、watcher 防抖（`_watcher_debounce_lock`）、自动转换（`_auto_convert_lock`）。`_cache` 是 TTLCache，无独立锁。RAG 对话按会话串行（`rag_handler.py` 的 `SessionGate`），不同会话可并行。历史上的 `_cache_lock` / `_link_discovery_lock` / `_rag_chat_lock` 均不存在（前两者从未被 `with` 使用，已删），不要照旧文档添加。
 - **文件监听**：watchdog 监听工作区；3 秒防抖；忽略点文件、`wiki/` 目录及非媒体后缀。
 - **工作区路径**：始终使用 `config.workspace_path`，禁止硬编码。`scripts/` 中的脚本如需导入项目模块，先执行 `sys.path.insert(0, str(Path(__file__).parent.parent))`，再从 `config.settings` 导入。
 
@@ -130,7 +132,7 @@ Tauri v2 shell (src-tauri/)
 
 ## 7. 产品行为规范
 
-- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸）。全库双向补链走 `backfill_semantic_bidirectional`（实体/概念共享 ≥ `_BIDIRECTIONAL_SHARE_MIN=6`）；历史弱链接清洗走 `purge_weak_links`。两个 RPC 均已在 Rust 白名单（`src-tauri/src/rpc.rs`），并暴露为 `api.purgeWeakLinks()` / `api.backfillSemanticBidirectional()`；两者列入 `DESTRUCTIVE_METHODS` 限流，暂无 UI 按钮（全库操作耗时且影响面大）。
+- **链接索引**（`utils/link_indexer.py` 门面，实现在 `utils/links/{persist,discover,actions}.py`，存储于 `workspace/.links.json`）：保存触发的 `discover_cross_refs_for_file(use_llm=False)` 只产生「正文提及标题 / 对方摘要提及标题 / 共享实体概念」三类真实引用，一律 `pending` 待人工确认；**综述页不参与链接图**（`utils/links/persist.py:_is_survey_note`：文件名以「综述」结尾 **或** frontmatter `type: survey`，两条判据任一命中即剔除），它既不作来源也不进候选池，与 README 同级处理；**禁止**再引入「共享标签 / 语义相关 / 邻居传播 / 同主题」等对称弱启发式（曾导致 92% 链接双向爆炸；对应的 `_vector_search_candidates` / `_one_hop_neighbors` 生成器已作为死代码删除，别再挂回链路上）。语义共享建议的门槛是 `_SEMANTIC_SHARE_MIN = 6`（`utils/links/discover.py`）——3~5 这一档曾占用户待确认积压的 65%（1636 条已批量丢弃），**不要**再调低。两个全库治理接口 `backfill_semantic_bidirectional` / `purge_weak_links` 已于 2026-09-26 下线（Python 路由、Rust 白名单与 `DESTRUCTIVE_METHODS`、`api.ts` 封装全部移除）：前者只补「两侧都零边」的文档对、且一产出就是双份 pending，后者只对已绝迹的弱启发式 reason 生效，对真实工作区空转——**不要**再接回，历史弱链接爆炸的一次清洗已由其备份 `.links.json.bak`（16236→2533）证明完成。
 - **综述写作规则**（硬化于 `prompts/yaml/cascade.yaml` 的 `CASCADE_SURVEY_NEW_PROMPT`/`CASCADE_SURVEY_UPDATE_PROMPT`）：综述定位为**简略概括而非复述**——每个知识点用 1-3 句讲清核心结论；完整代码、长表格、逐步操作等深度内容一律不写入综述，用「详见：文件名.md」替代；篇幅约为原始笔记总量的 10%-30%。修改综述提示词或撰写综述时须遵守此原则。
 - **问答**：`question_shape.py` 启发式分型（定义 / 讲解 / 对比 / 缺口）；检索到的主题综述进入 `【讲解骨架】`，不得作为 `[n]` 引用。Notes 才进 `【可引用原文】`。产品赌注见 `documents/PRD.md` v4.2。
 - NoteAI 内置 AI 功能（自动分类、标签提取、知识问答、综述生成、主题存储格式、两层记忆体系等）的产品行为规范见 [documents/PRD.md](documents/PRD.md) 第 12 章「通用 AI 行为规范」。编码代理修改仓库时无需加载该章节；仅当改动涉及这些产品行为时才查阅。

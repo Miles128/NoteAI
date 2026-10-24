@@ -91,8 +91,7 @@
       "claims": "结论与证据",
       "quality": "实体质量",
       "conflicts": "冲突",
-      "links": "双向链接",
-      "brief": "主题简报"
+      "links": "双向链接"
     },
     "tabs": {
       "overview": "概览",
@@ -233,7 +232,6 @@
     "confirmLink": "确认链接",
     "rejectLink": "拒绝",
     "operationFailed": "操作失败",
-    "logEmpty": "暂无操作记录",
     "todoBadge": "待办事项 ({count})",
     "todoBadgeEmpty": "待办事项"
   },
@@ -488,7 +486,6 @@
       "rag": "RAG 检索",
       "semantic": "语义",
       "cli": "CLI Agent",
-      "activityLog": "操作记录",
       "organizeRules": "整理规则",
       "about": "关于",
       "reliability": "备份与恢复",
@@ -527,7 +524,6 @@
     "semanticTabObjects": "实体与概念",
     "semanticTabQuality": "实体质量",
     "semanticTabLinks": "双向链接",
-    "semanticTabBrief": "主题简报",
     "semanticIntensityTitle": "显示强度",
     "semanticIntensityHint": "强度决定结论、实体与概念的置信度过滤范围。",
     "semanticIntensityLight": "精简（高置信度）",
@@ -642,7 +638,8 @@
     "ragPresetHint": "一键填充预设组合：快速=关闭 HyDE/重排，少取结果；深度=更激进的召回与重排。仍可手动微调下方参数。",
     "ragDenseWeightLabel": "混合检索权重（语义）",
     "ragDenseWeightHint": "语义 {dense}% · BM25 {sparse}%",
-    "ragTopKLabel": "召回 Top-K",
+    "ragTopKLabel": "召回候选深度",
+    "ragTopKHint": "送去重排与去重的候选数量（4 最少、8 最多）。最终引用条数由问题类型自动决定，上限 8 条，不受此项影响。",
     "ragHydeTitle": "HyDE",
     "ragHydeEnabledLabel": "启用 HyDE",
     "ragHydeEnabledDesc": "首条结果得分低于阈值时，用 LLM 生成假设答案再检索",
@@ -682,9 +679,6 @@
     "indexTitle": "知识库索引",
     "indexHint": "仅在使用向量 RAG 时需要。日常入库会增量维护；可手动更新索引。只有索引损坏或为空时才会执行一次修复重建。",
     "rebuildIndexBtn": "更新知识库索引",
-    "activityLogTitle": "操作记录",
-    "activityLogHint": "工作区内 AI 与入库操作，写入 wiki/log.md。健康检查会自动删除断链、更新过时综述。",
-    "activityLogLoading": "加载中…",
     "aboutDesc": "NoteAI 是一款智能知识管理工具，帮助用户高效组织和管理 Markdown 笔记。",
     "aboutFeatures": "功能：",
     "aboutFeature1": "多层主题树知识图谱",

@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.text_utils import (
     CHINESE_STOPWORDS,
@@ -301,7 +302,7 @@ def add_yaml_frontmatter_to_file(
         new_content = add_yaml_frontmatter_to_content(
             content, title=title, tags=tags, source=source, extra_fields=extra_fields
         )
-        p.write_text(new_content, encoding="utf-8")
+        atomic_write_text(p, new_content, encoding="utf-8")
         return True
     except (OSError, ValueError) as e:
         logger.warning(f"[tag_extractor] add_yaml_frontmatter_to_file failed: {e}\n")
@@ -350,7 +351,7 @@ def process_and_tag_file_with_yaml(file_path: str, source: str = "", title: str 
         )
 
         new_content = new_frontmatter + body
-        p.write_text(new_content, encoding="utf-8")
+        atomic_write_text(p, new_content, encoding="utf-8")
 
         result["success"] = True
         result["tags"] = tags

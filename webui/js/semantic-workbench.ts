@@ -39,8 +39,6 @@ function isEnabled() {
     return ui ? ui.semantic_workbench_enabled !== false : _workbenchEnabled;
 }
 
-function toggle() { _visible ? hide() : show(_category); }
-
 function show(category: any) {
     if (!isEnabled()) return;
     if (category) _category = category;
@@ -721,9 +719,16 @@ function applyVisibilityConfigWith(ui: any) {
         if (_visible) hide();
         return;
     }
-    var tabs = Array.isArray(ui.semantic_workbench_tabs) && ui.semantic_workbench_tabs.length
-        ? ui.semantic_workbench_tabs
-        : ['objects', 'quality', 'links'];
+    // 只认侧栏真实存在的类别：历史配置里可能留着已下线的 tab 值，
+    // 直接照单渲染会把所有入口隐藏掉。
+    var available: any = [];
+    document.querySelectorAll('#semantic-categories [data-category]').forEach(function(button) {
+        available.push((button as HTMLElement).dataset.category);
+    });
+    var tabs = (Array.isArray(ui.semantic_workbench_tabs) ? ui.semantic_workbench_tabs : []).filter(function(tab: any) {
+        return available.indexOf(tab) !== -1;
+    });
+    if (!tabs.length) tabs = available.slice();
     _enabledCategories = tabs.slice();
     var visible: any = {};
     tabs.forEach(function(tab: any) { visible[tab] = true; });
@@ -780,7 +785,6 @@ function init() {
     applyVisibilityConfig();
 }
 
-window.SemanticWorkbenchModule = { init: init, toggle: toggle, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };
-window.toggleSemanticWorkbench = toggle;
+window.SemanticWorkbenchModule = { init: init, show: show, hide: hide, deactivate: deactivate, load: loadList, openObject: openObject, isVisible: function() { return _visible; }, applyVisibilityConfig: applyVisibilityConfig, isEnabled: isEnabled, enabledCategories: function() { return _enabledCategories.slice(); } };
 
 })();

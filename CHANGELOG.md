@@ -70,6 +70,9 @@
 - locales 孤儿文案：en/zh-CN 各删 159 个叶子键（1134 → 975，占 14%），主要为命题层（claim/verify/verdict/evidence/conflict）、D1 主题子树、未接线的综述简报面板与已删控件标签；口径为「拼接感知」——`graph.param.*`、`assistant.citationQuality.*` 等由字符串拼接取键的命名空间一律保留
 
 ### 变更
+- 设置导航收敛为 4 项：常规（模型 + 界面）、知识库（整理规则 + RAG + 语义工作台）、高级（备份与健康 + CLI Agent）、关于，取代原先 8 个 Tab 与「更多」折叠菜单。旧调用方的面板名（`model` / `organize-rules` 等）由 `SETTINGS_TAB_ALIASES` 映射到所属分组，调用处零改动；删除 `.settings-nav-more*` 样式与 9 组双语 Tab 标签（改为 `general` / `knowledge` / `advanced`）
+- 检查器收敛为 3 个 Tab：问答 / 属性 / 关联。CLI Agent 并入「问答」作为模式切换（问答 ｜ CLI），反向链接与语义关联合并进「关联」Tab 上下两区；`#inspector-content-cli` 的全部作用域样式与 `cli-agent.ts` 三处选择器同步改名，外部调用 `switchTab('cli'|'backlinks'|'semantic')` 仍可用（别名映射）
+删掉「整理状态」「编译状态」两张卡，「整理 / 编译」两行状态灯，以及「待处理 / 运行中」两块统计——同一份流水线状态在四段流程图（入库 / 分类 / 综述 / 索引）里已经完整呈现。首页从 4 卡 + 4 统计 + 3 状态灯收敛为 2 卡（最近动态 / 待处理资料）+ 2 统计（笔记 / 主题）+ 1 个待处理徽标；「检查更新」按钮移到页头与「刷新」并列，待处理数改为操作按钮旁的徽标，命令面板从两列改单列。同时清掉 15 个双语 locale 键（`home.vitals.organize|compile`、`home.stats.pending|running`、`home.organize*`、`home.compile*`、`home.status*`、`home.jobsRunning`）与对应的 CSS（`.home-vital-*` 全套、统计格第 3/4 块的圆点色）
 - 文档清理：合并 CLAUDE.md → AGENTS.md，合并 简介.md → README.md，删除过时的 docs/API.md、docs/USAGE.md、docs/README.md 及旧设计文档
 - 更新 CI 配置以支持更多检查
 - AGENTS.md 前端架构描述修正：TS 源码 + esbuild 打包（此前仍写 vanilla JS 无 bundler）；inspector 描述移除已删除的命题层

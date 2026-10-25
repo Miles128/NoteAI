@@ -9,41 +9,33 @@
 // ============================================================================
 (function() { 'use strict';
 
-var SETTINGS_MORE_TABS: Record<string, boolean> = {
-    semantic: true,
-    cli: true,
-    'organize-rules': true,
+// 设置导航四大分组：一个导航项对应一组面板，避免 8 个 Tab 把设置项摊得过散
+var SETTINGS_TAB_GROUPS: Record<string, string[]> = {
+    general: ['model', 'ui'],
+    knowledge: ['organize-rules', 'rag', 'semantic'],
+    advanced: ['reliability', 'cli'],
+    about: ['about'],
 };
 
-function setSettingsMoreOpen(open: boolean) {
-    var toggle = document.getElementById('settings-nav-more-toggle');
-    var list = document.getElementById('settings-nav-more-list');
-    if (!toggle || !list) return;
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    list.hidden = !open;
-}
-
-function switchSettingsTab(tabName: string) {
-    if (SETTINGS_MORE_TABS[tabName]) {
-        setSettingsMoreOpen(true);
-    }
+function switchSettingsTab(group: string) {
+    var panels = SETTINGS_TAB_GROUPS[group] || SETTINGS_TAB_GROUPS.general;
     document.querySelectorAll('.settings-nav-btn').forEach((btn: any) => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+        btn.classList.toggle('active', btn.dataset.tab === group);
     });
     document.querySelectorAll('.settings-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.id === 'tab-' + tabName);
+        tab.classList.toggle('active', panels.indexOf(tab.id.replace('tab-', '')) !== -1);
     });
-    if (tabName === 'rag') {
+    if (panels.indexOf('rag') !== -1) {
         window.SettingsComponents!.refreshStorageUsage();
     }
-    if (tabName === 'cli') {
+    if (panels.indexOf('cli') !== -1) {
         window.SettingsComponents!.initCliSettings();
         window.SettingsComponents!.refreshCliAgentsSettings();
     }
-    if (tabName === 'organize-rules' && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
+    if (panels.indexOf('organize-rules') !== -1 && window.OrganizeRulesModule && window.OrganizeRulesModule.load) {
         window.OrganizeRulesModule.load();
     }
-    if (tabName === 'reliability') {
+    if (panels.indexOf('reliability') !== -1) {
         window.SettingsGeneral!.initReliabilitySettings!();
     }
 }
@@ -61,11 +53,6 @@ function switchSettingsTab(tabName: string) {
     if (settingsNav) {
         settingsNav.addEventListener('click', function(e) {
             var btn = (e.target as Element).closest('.settings-nav-btn') as HTMLElement | null;
-            if (btn && btn.id === 'settings-nav-more-toggle') {
-                var expanded = btn.getAttribute('aria-expanded') === 'true';
-                setSettingsMoreOpen(!expanded);
-                return;
-            }
             if (btn && btn.dataset.tab) {
                 switchSettingsTab(btn.dataset.tab);
             }

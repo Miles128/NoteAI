@@ -227,7 +227,7 @@
     }
 
     function _ensureTimeoutNotice() {
-        var body = document.querySelector('#inspector-content-cli .ai-panel-body');
+        var body = document.querySelector('#inspector-chat-cli .ai-panel-body');
         if (!body) return null;
         if (_timeoutNoticeEl && _timeoutNoticeEl.isConnected) {
             return _timeoutNoticeEl;
@@ -477,7 +477,7 @@
     }
 
     function _scrollCliMessages() {
-        var sc = document.querySelector('#inspector-content-cli .ai-panel-body');
+        var sc = document.querySelector('#inspector-chat-cli .ai-panel-body');
         if (sc) sc.scrollTop = sc.scrollHeight;
     }
 
@@ -762,7 +762,7 @@
      * 渲染 agent 选择器到 CLI Tab header
      */
     function renderAgentSelector() {
-        var header = document.querySelector('#inspector-content-cli .ai-panel-header');
+        var header = document.querySelector('#inspector-chat-cli .ai-panel-header');
         if (!header) return;
 
         var existing = document.getElementById('cli-agent-selector');

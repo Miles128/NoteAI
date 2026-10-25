@@ -1110,7 +1110,7 @@ body {
 
 #ai-panel .ai-panel-body,
 #inspector-content-ai .ai-panel-body,
-#inspector-content-cli .ai-panel-body {
+#inspector-chat-cli .ai-panel-body {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
@@ -1691,6 +1691,13 @@ body {
     font-size: 13px;
 }
 
+.home-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
 .home-refresh-btn,
 .home-section-action {
     border: 1px solid var(--border);
@@ -1715,10 +1722,8 @@ body {
 }
 
 .home-command-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
-    gap: 14px;
-    align-items: stretch;
+    display: flex;
+    flex-direction: column;
     margin-bottom: 14px;
 }
 
@@ -1749,7 +1754,7 @@ body {
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--home-green) 10%, transparent);
 }
 
-.home-command-copy strong {
+#home-command-title {
     margin-top: 8px;
     color: var(--home-ink);
     font-size: 26px;
@@ -1765,9 +1770,36 @@ body {
     max-width: 680px;
 }
 
+.home-command-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.home-command-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--home-muted);
+    font-size: 12px;
+}
+
+.home-command-meta-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--home-amber);
+}
+
+.home-command-meta strong {
+    color: var(--home-ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .home-command-action {
     align-self: flex-start;
-    margin-top: 14px;
     border: 1px solid color-mix(in srgb, var(--home-blue) 34%, var(--home-line));
     border-radius: 6px;
     background: color-mix(in srgb, var(--home-blue) 8%, var(--home-panel));
@@ -1794,69 +1826,9 @@ body {
     transform: none;
 }
 
-.home-vital-stack {
-    border: 1px solid var(--home-line);
-    border-radius: 8px;
-    background: var(--home-panel);
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-}
-
-.home-vital-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 34px;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background: var(--bg);
-    color: var(--home-muted);
-    font-size: 12px;
-}
-
-.home-vital-row::before {
-    content: "";
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: var(--home-green);
-    flex: 0 0 auto;
-}
-
-.home-vital-row span {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-vital-row strong {
-    color: var(--home-ink);
-    font-size: 12px;
-    font-weight: 700;
-    white-space: nowrap;
-}
-
-.home-vital-row.is-pending::before {
-    background: var(--home-amber);
-}
-
-.home-vital-row.is-organize::before {
-    background: var(--home-cyan);
-}
-
-.home-vital-row.is-compile::before {
-    background: var(--home-blue);
-}
-
 .home-stat-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
     gap: 10px;
     margin-bottom: 18px;
 }
@@ -1890,14 +1862,6 @@ body {
 
 .home-stat-tile:nth-child(2) .home-stat-label::before {
     background: var(--home-cyan);
-}
-
-.home-stat-tile:nth-child(3) .home-stat-label::before {
-    background: var(--home-amber);
-}
-
-.home-stat-tile:nth-child(4) .home-stat-label::before {
-    background: var(--home-rose);
 }
 
 .home-stat-value {
@@ -1989,7 +1953,7 @@ body {
 
 .home-section-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
 }
 
@@ -2638,27 +2602,6 @@ body {
 
 .settings-nav-btn.active svg {
     opacity: 1;
-}
-
-.settings-nav-more {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.settings-nav-more-toggle[aria-expanded="true"] svg {
-    transform: rotate(180deg);
-}
-
-.settings-nav-more-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding-left: 8px;
-}
-
-.settings-nav-more-list[hidden] {
-    display: none;
 }
 
 .settings-content {

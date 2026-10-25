@@ -32,4 +32,6 @@ lto = "thin"
 
 [lib]
 name = "noteai_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# 桌面端只需要 rlib（bin 链接）与 cdylib；staticlib 是 iOS/Android 用的，
+# 单这一项在 debug 下会多出数百 MB（target/debug 与 deps 各一份）
+crate-type = ["cdylib", "rlib"]

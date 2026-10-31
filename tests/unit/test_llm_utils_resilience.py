@@ -10,6 +10,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 
 import pytest
 
+from config import config
 from utils.llm_utils import (
     StreamTimeoutError,
     _is_retryable_error,
@@ -367,6 +368,7 @@ def _patch_fake_stream_llm(monkeypatch, semaphore, stream_factory):
 
 def test_stream_call_holds_exactly_one_slot(monkeypatch):
     """流式调用只占一个槽位：外层 _retry_with_backoff 持有后不得在内层重复获取。"""
+    monkeypatch.setattr(config, "ai_enabled", True, raising=False)
     semaphore = _TrackingSemaphore(4)
     _patch_fake_stream_llm(monkeypatch, semaphore, lambda: iter([_Chunk("a"), _Chunk("b")]))
 
@@ -377,6 +379,7 @@ def test_stream_call_holds_exactly_one_slot(monkeypatch):
 
 def test_four_concurrent_stream_calls_are_all_admitted(monkeypatch):
     """4 个并发流式调用应同时在飞（历史上双重获取导致有效并发只有 2）。"""
+    monkeypatch.setattr(config, "ai_enabled", True, raising=False)
     semaphore = _TrackingSemaphore(4)
     barrier = threading.Barrier(4, timeout=3)
 

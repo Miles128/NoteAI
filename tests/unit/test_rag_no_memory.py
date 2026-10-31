@@ -216,6 +216,7 @@ def test_empty_vector_retrieval_uses_no_evidence_prompt(monkeypatch, tmp_path) -
 def test_rag_chat_refuses_when_disabled(monkeypatch, tmp_path) -> None:
     config.workspace_path = str(tmp_path)
     monkeypatch.setattr(config, "rag_enabled", False)
+    monkeypatch.setattr(config, "ai_enabled", True, raising=False)
     events: list = []
     handler = RagHandler(
         SimpleNamespace(

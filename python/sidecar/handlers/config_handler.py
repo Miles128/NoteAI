@@ -122,6 +122,7 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score": self.config.rag_rerank_skip_score,
             "rag_dense_weight": self.config.rag_dense_weight,
             "rag_top_k": self.config.rag_top_k,
+            "rag_onnx_threads": self.config.rag_onnx_threads,
             "locale": self.config.locale,
             "theme_preference": self.config.theme_preference,
         }
@@ -230,6 +231,8 @@ class ConfigHandler(BaseHandler):
                 )
             if "rag_top_k" in params:
                 self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, MIN_TOP_K, MAX_TOP_K)
+            if "rag_onnx_threads" in params:
+                self.config.rag_onnx_threads = self._coerce_int(params["rag_onnx_threads"], 0, 0, 32)
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"
@@ -247,6 +250,7 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score",
             "rag_dense_weight",
             "rag_top_k",
+            "rag_onnx_threads",
         )
         if any(k in params for k in rag_keys):
             try:
@@ -255,6 +259,20 @@ class ConfigHandler(BaseHandler):
                 clear_query_cache()
             except Exception:
                 pass
+            if "rag_onnx_threads" in params:
+                # ONNX 线程数在模型加载时固化，改完需要重载模型才生效。
+                try:
+                    from sidecar.rag.embedder import reset_dense_model
+
+                    reset_dense_model()
+                except Exception:
+                    pass
+                try:
+                    from sidecar.rag.reranker import reset_reranker
+
+                    reset_reranker()
+                except Exception:
+                    pass
         return {"success": True, "message": "UI 配置已保存"}
 
     def _get_project_rules(self, params):

@@ -5,9 +5,6 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import bm25s
-import zvec
-
 from sidecar.rag.index_core import (
     _BM25_CACHE,
     _BM25_CACHE_LOCK,
@@ -21,8 +18,12 @@ from sidecar.rag.index_core import (
     _update_metadata_index,
     clear_bm25_cache,
 )
+from sidecar.rag.lazy import lazy_import
 from utils.error_handler import log_exception
 from utils.logger import logger
+
+bm25s = lazy_import("bm25s")
+zvec = lazy_import("zvec")
 
 _BM25_K1 = 1.5
 _BM25_B = 0.75

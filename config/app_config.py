@@ -78,6 +78,8 @@ class AppConfig:
     rag_dense_weight: float = 0.7
     rag_top_k: int = 5
     rag_error_cooldown_seconds: int = 180
+    # ONNX 推理线程上限：0=自动（min(4, CPU 核数)），可设 2/4/8 省电优先。
+    rag_onnx_threads: int = 0
     locale: str = "zh-CN"
     # 界面精简（个性化）。
     ui_hide_statusbar: bool = False

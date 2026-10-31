@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -99,6 +100,8 @@ class SidecarServer(PathHelpersMixin):
         self._intel_handler = IntelHandler(self)
         self._job_handler = JobHandler(self)
         self._rag_handler = RagHandler(self)
+        # 首次问答前才检查 RAG 索引（启动阶段不动 zvec/bm25s）
+        self._rag_index_check_pending = False
         self._semantic_handler = SemanticHandler(self)
         self._reliability_handler = ReliabilityHandler(self)
         self._ingest_handler = IngestHandler(self)
@@ -263,14 +266,16 @@ class SidecarServer(PathHelpersMixin):
                 "result": {"type": "workspace_files_changed"},
             }
         )
-        self._start_task(
-            "kb_startup_lint",
-            self._run_startup_lint,
-            kind="lint",
-            label="知识库整理巡检",
-        )
+        if config.startup_lint_enabled:
+            self._start_task(
+                "kb_startup_lint",
+                self._run_startup_lint,
+                kind="lint",
+                label="知识库整理巡检",
+            )
         if config.ingest_auto_enabled and config.rag_enabled and workspace and Path(workspace).exists():
-            self._start_task("rag_auto_index", self._auto_rebuild_rag_index)
+            # 延后到首次问答前检查，启动阶段不加载 zvec/bm25s
+            self._rag_index_check_pending = True
 
     def _run_startup_lint(self):
         """Refresh non-destructive Inbox findings once per app start."""
@@ -611,9 +616,10 @@ def main():
     server.start()
     logger.warning("[Python Sidecar] Ready")
 
-    # 模型预热延迟 2s：先响应启动 RPC，再在后台加载 embedding/reranker，
-    # 避免加载抢占启动窗口资源；首次 RAG 查询会 ensure_preload 兜底。
-    ModelWarmupManager.schedule_preload(delay=2.0)
+    # 模型预热默认关闭：启动阶段不再加载 374MB 模型（CPU 归零、内存 -700MB）。
+    # 首次 RAG 查询会按需加载；需要恢复旧行为时设置 NOTEAI_PRELOAD_MODELS=1。
+    if os.environ.get("NOTEAI_PRELOAD_MODELS") == "1" and config.ai_enabled and config.rag_enabled:
+        ModelWarmupManager.schedule_preload(delay=2.0)
 
     try:
         for raw_line in sys.stdin:

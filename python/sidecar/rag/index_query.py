@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
-import zvec
-
 from sidecar.rag.index_bm25 import _normalize_sparse_scores, _sparse_search, ensure_bm25_index
 from sidecar.rag.index_core import (
     _COLLECTION_IO_LOCK,
@@ -15,20 +13,31 @@ from sidecar.rag.index_core import (
     _load_metadata,
     filter_usable_chunks,
 )
+from sidecar.rag.lazy import lazy_import
 from sidecar.rag.rag_config import hybrid_weights
 from utils.error_handler import log_exception
 from utils.logger import logger
+
+zvec = lazy_import("zvec")
 
 _HYBRID_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_hybrid")
 _DENSE_EF_CAP = 128
 _DENSE_EF_MULTIPLIER = 8
 
 
-def count_indexed_chunks(workspace: str, *, allow_metadata_fallback: bool = True) -> int:
+def count_indexed_chunks(
+    workspace: str,
+    *,
+    allow_metadata_fallback: bool = True,
+    open_collection: bool = True,
+) -> int:
     """Return approximate chunk count from the metadata inverted index.
 
     Cross-checks the actual collection count when available and falls back to
-    metadata when the collection is empty or inaccessible.
+    metadata when the collection is empty or inaccessible. Pass
+    ``open_collection=False`` to skip opening the vector store entirely —
+    used by status/dashboard views that must stay cheap (metadata is kept
+    in sync by the write path; the authoritative check runs at first chat).
     """
     metadata = _load_metadata(workspace)
     files = metadata.get("files") or {}
@@ -36,7 +45,7 @@ def count_indexed_chunks(workspace: str, *, allow_metadata_fallback: bool = True
     for ids in files.values():
         metadata_total += len(ids)
 
-    collection_count = _collection_count(workspace)
+    collection_count = _collection_count(workspace) if open_collection else -1
 
     if collection_count < 0 and not allow_metadata_fallback:
         return -1

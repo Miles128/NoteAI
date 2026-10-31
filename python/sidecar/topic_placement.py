@@ -114,6 +114,8 @@ def auto_move_misplaced_notes_if_due(
 ) -> dict:
     """Run the Inbox placement pass once per short refresh window."""
     root_key = str(Path(workspace).resolve())
+    if not config.startup_lint_enabled:
+        return {"success": True, "moved": [], "errors": [], "skipped": "startup_lint_disabled"}
     now = time.monotonic()
     with _AUTO_MOVE_LOCK:
         elapsed = now - _AUTO_MOVE_LAST_RUN.get(root_key, float("-inf"))

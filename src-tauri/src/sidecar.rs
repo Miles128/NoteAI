@@ -214,7 +214,18 @@ fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
         .ok_or("No parent dir")?
         .to_path_buf();
 
-    let candidates = vec![
+    let mut candidates = Vec::new();
+    // 开发态：CARGO_TARGET_DIR 可能指向仓库外（全局配置），此时 exe 相对路径
+    // 全部失效；用编译期的 src-tauri 路径兜底。
+    if cfg!(debug_assertions) {
+        candidates.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("python")
+                .join("main.py"),
+        );
+    }
+    candidates.extend([
         exe_dir.join("../Resources/python/main.py"),
         exe_dir.join("..").join("python").join("main.py"),
         exe_dir.join("..").join("..").join("python").join("main.py"),
@@ -225,7 +236,7 @@ fn resolve_sidecar_script(app: &AppHandle) -> Result<PathBuf, String> {
             .join("python")
             .join("main.py"),
         PathBuf::from("python/main.py"),
-    ];
+    ]);
 
     for candidate in candidates {
         if let Ok(path) = candidate.canonicalize() {

@@ -1146,6 +1146,16 @@
                                         <input type="number" id="settings-rag-top-k" class="form-input" min="4" max="8" step="1" value="5">
                                         <div class="settings-hint" data-i18n="settings.ragTopKHint"></div>
                                     </div>
+                                    <div class="form-field">
+                                        <div class="form-label" data-i18n="settings.ragOnnxThreadsLabel"></div>
+                                        <select id="settings-rag-onnx-threads" class="form-input">
+                                            <option value="0" data-i18n="settings.ragOnnxThreadsAuto"></option>
+                                            <option value="2">2</option>
+                                            <option value="4">4</option>
+                                            <option value="8">8</option>
+                                        </select>
+                                        <div class="settings-hint" data-i18n="settings.ragOnnxThreadsHint"></div>
+                                    </div>
                                 </div>
                                 <div class="card-title" style="margin-top:16px;font-size:13px" data-i18n="settings.ragHydeTitle"></div>
                                 <label class="settings-toggle-row">

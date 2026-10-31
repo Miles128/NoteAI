@@ -60,6 +60,12 @@ def start_job(
         _JOBS.move_to_end(job_id)
         _trim_locked()
         snapshot = dict(job)
+    try:
+        from utils.logger import logger
+
+        logger.info("[job] start %s kind=%s", job_id, snapshot.get("kind"))
+    except Exception:
+        pass
     _emit(send_event, snapshot)
     return snapshot
 
@@ -114,6 +120,12 @@ def complete_job(
         job["finished_at"] = ts
         _JOBS.move_to_end(job_id)
         snapshot = dict(job)
+    try:
+        from utils.logger import logger
+
+        logger.info("[job] complete %s", job_id)
+    except Exception:
+        pass
     _emit(send_event, snapshot)
     return snapshot
 
@@ -140,6 +152,12 @@ def fail_job(
         job["finished_at"] = ts
         _JOBS.move_to_end(job_id)
         snapshot = dict(job)
+    try:
+        from utils.logger import logger
+
+        logger.info("[job] failed %s", job_id)
+    except Exception:
+        pass
     _emit(send_event, snapshot)
     return snapshot
 

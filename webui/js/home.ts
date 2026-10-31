@@ -172,7 +172,11 @@ function command(titleKey: any, descKey: any, params?: any, action?: any, action
 }
 
 function deriveRecommendation(summary: any, ingestStatus: any, jobs: any, updatePlan: any, indexStatus: any) {
-    var running = (jobs || []).filter(function(job: any) { return job.status === 'running'; });
+    // 只把真正“更新知识库”的任务算进横幅；巡检/维护类后台任务不打扰用户。
+    var running = (jobs || []).filter(function(job: any) {
+        return job.status === 'running'
+            && (job.kind === 'ingest' || job.kind === 'conversion' || job.kind === 'rag_index');
+    });
     if (running.length) {
         return command('home.commandTitleRunning', 'home.commandDescRunning', { count: running.length }, 'running', 'home.actionRunning');
     }

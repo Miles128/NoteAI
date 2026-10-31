@@ -23,6 +23,7 @@ from sidecar.rag.chat_support import (
     _strip_suggestions_sentinel,
     _template_suggestions,
 )
+from utils.logger import logger
 
 
 class RagHandler(BaseHandler):
@@ -255,6 +256,8 @@ class RagHandler(BaseHandler):
                 RagHandler._session_gates.pop(session_id, None)
 
     def _do_rag_chat_inner(self, params):
+        self._maybe_run_deferred_index_check()
+
         from sidecar.rag.model_preload import ModelWarmupManager
 
         # 兜底触发模型预热：若启动延迟尚未开始（或用户立即提问），确保加载启动

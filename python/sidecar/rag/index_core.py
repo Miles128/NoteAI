@@ -12,15 +12,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import zvec
-
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
+from sidecar.rag.lazy import lazy_import
 from utils.error_handler import log_exception
 from utils.logger import logger
 
+zvec = lazy_import("zvec")
+
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
-_DENSE_METRIC = zvec.MetricType.COSINE
+_DENSE_METRIC_NAME = "COSINE"
 _INDEX_BATCH_SIZE = 128
 _FETCH_BATCH_SIZE = 256
 _INDEX_VERSION = 2
@@ -176,7 +177,9 @@ def _build_schema() -> zvec.CollectionSchema:
                 "dense",
                 zvec.DataType.VECTOR_FP32,
                 dimension=_DENSE_DIM,
-                index_param=zvec.HnswIndexParam(metric_type=_DENSE_METRIC),
+                index_param=zvec.HnswIndexParam(
+                    metric_type=getattr(zvec.MetricType, _DENSE_METRIC_NAME)
+                ),
             ),
         ],
     )

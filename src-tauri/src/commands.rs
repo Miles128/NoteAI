@@ -178,7 +178,7 @@ pub async fn open_file_dialog(app: tauri::AppHandle) -> Result<Option<Vec<String
         .file()
         .add_filter(
             "文档文件",
-            &["pdf", "docx", "doc", "pptx", "ppt", "html", "htm", "txt"],
+            &["docx", "doc", "pptx", "ppt", "html", "htm", "txt"],
         )
         .blocking_pick_files();
     Ok(files.map(|paths| paths.into_iter().map(|p| p.to_string()).collect()))

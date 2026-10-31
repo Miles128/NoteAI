@@ -26,10 +26,9 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.0",
 ]
-# 文档/网页采集转换链（PDF/DOCX/PPTX/HTML → Markdown）。应用内均为惰性导入，
+# 文档/网页采集转换链（DOCX/PPTX/HTML → Markdown）。应用内均为惰性导入，
 # 缺失时仅对应导入/预览功能报错，核心笔记与 RAG 不受影响。
 ingest = [
-    "PyMuPDF>=1.23.0",
     "mammoth>=1.0.0",
     "python-docx>=1.0.0",
     "python-pptx>=1.0.0",

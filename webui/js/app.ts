@@ -19,7 +19,7 @@ async function initApp() {
     (function(){
       var overlay = document.getElementById('drop-overlay');
       var counter = 0;
-      var EXT = ['.pdf','.docx','.doc','.pptx','.ppt','.html','.htm','.txt'];
+      var EXT = ['.docx','.doc','.pptx','.ppt','.html','.htm','.txt'];
       document.addEventListener('dragenter', function(e){ e.preventDefault(); counter++; if(overlay) overlay.style.display='flex'; });
       document.addEventListener('dragleave', function(e){ e.preventDefault(); counter--; if(counter<=0){ counter=0; if(overlay) overlay.style.display='none'; }});
       document.addEventListener('dragover', function(e){ e.preventDefault(); });

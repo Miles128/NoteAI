@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from sidecar.rag.rag_config import (
+    RERANK_IDLE_UNLOAD_SECONDS,
     RERANK_MODEL_FILE,
     RERANK_MODEL_NAME,
     rerank_enabled,
@@ -22,6 +23,9 @@ _RERANKER_COOLDOWN_SECONDS = 60
 _RERANKER_LOCK = threading.Lock()
 _RERANK_BATCH = 64
 _CUSTOM_REGISTERED = False
+_RERANKER_LAST_USED: float = 0.0
+_RERANKER_IDLE_TIMER: threading.Timer | None = None
+_RERANKER_IDLE_GENERATION: int = 0
 
 
 def _onnx_threads() -> int | None:
@@ -76,10 +80,62 @@ def _load_onnx_reranker() -> Any:
 
 def reset_reranker() -> None:
     """Drop the in-memory reranker so model caches can be deleted safely."""
-    global _RERANKER, _RERANKER_DISABLED_UNTIL
+    global _RERANKER, _RERANKER_DISABLED_UNTIL, _RERANKER_IDLE_GENERATION, _RERANKER_IDLE_TIMER
     with _RERANKER_LOCK:
         _RERANKER = None
         _RERANKER_DISABLED_UNTIL = 0.0
+        _RERANKER_IDLE_GENERATION += 1
+        if _RERANKER_IDLE_TIMER is not None:
+            _RERANKER_IDLE_TIMER.cancel()
+            _RERANKER_IDLE_TIMER = None
+
+
+def _touch_reranker() -> None:
+    global _RERANKER_LAST_USED
+    _RERANKER_LAST_USED = time.monotonic()
+
+
+def _schedule_idle_unload_locked(delay: float | None = None) -> None:
+    """Arm the idle-unload timer. Caller must hold ``_RERANKER_LOCK``."""
+    global _RERANKER_IDLE_TIMER, _RERANKER_IDLE_GENERATION
+    wait = RERANK_IDLE_UNLOAD_SECONDS if delay is None else max(0.0, delay)
+    _RERANKER_IDLE_GENERATION += 1
+    generation = _RERANKER_IDLE_GENERATION
+    if _RERANKER_IDLE_TIMER is not None:
+        _RERANKER_IDLE_TIMER.cancel()
+    timer = threading.Timer(wait, _maybe_unload_idle, args=(generation,))
+    timer.daemon = True
+    _RERANKER_IDLE_TIMER = timer
+    timer.start()
+
+
+def _schedule_idle_unload(delay: float | None = None) -> None:
+    """(Re)arm the idle-unload timer; a new schedule invalidates older timers."""
+    with _RERANKER_LOCK:
+        _schedule_idle_unload_locked(delay)
+
+
+def _maybe_unload_idle(generation: int) -> None:
+    global _RERANKER, _RERANKER_IDLE_TIMER
+    reschedule = 0.0
+    with _RERANKER_LOCK:
+        if generation != _RERANKER_IDLE_GENERATION:
+            return
+        _RERANKER_IDLE_TIMER = None
+        if _RERANKER is None:
+            return
+        idle = time.monotonic() - _RERANKER_LAST_USED
+        if idle < RERANK_IDLE_UNLOAD_SECONDS:
+            reschedule = RERANK_IDLE_UNLOAD_SECONDS - idle
+        else:
+            _RERANKER = None
+    if reschedule > 0:
+        _schedule_idle_unload(reschedule)
+        return
+    import gc
+
+    gc.collect()
+    logger.info(f"[rag/reranker] idle unload after {int(RERANK_IDLE_UNLOAD_SECONDS)}s")
 
 
 def get_reranker():
@@ -90,14 +146,18 @@ def get_reranker():
     if time.time() < _RERANKER_DISABLED_UNTIL:
         return None
     if _RERANKER is not None:
+        _touch_reranker()
         return _RERANKER
     with _RERANKER_LOCK:
         if time.time() < _RERANKER_DISABLED_UNTIL:
             return None
         if _RERANKER is not None:
+            _touch_reranker()
             return _RERANKER
         try:
             _RERANKER = _load_onnx_reranker()
+            _touch_reranker()
+            _schedule_idle_unload_locked()
             return _RERANKER
         except Exception as e:
             _RERANKER_DISABLED_UNTIL = time.time() + _RERANKER_COOLDOWN_SECONDS
@@ -109,5 +169,6 @@ def score_documents(reranker: Any, query: str, documents: Iterable[str]) -> list
     texts = list(documents)
     if not texts:
         return []
+    _touch_reranker()
     scores = list(reranker.rerank(query, texts, batch_size=_RERANK_BATCH))
     return [float(s) for s in scores]

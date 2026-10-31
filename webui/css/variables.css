@@ -375,6 +375,32 @@ body[data-theme="paper"] {
     --graph-color-file: #7c5a8a;
 }
 
+[data-accent="olive"] {
+    --primary: #5f7a4f;
+    --primary-dark: #4c6340;
+    --primary-light: rgba(95, 122, 79, 0.1);
+    --primary-hover: rgba(95, 122, 79, 0.16);
+    --switch-active: #5f7a4f;
+    --sidebar-active: rgba(95, 122, 79, 0.11);
+    --color-file: #5f7a4f;
+    --color-link-incoming: #5f7a4f;
+    --color-progress-end: #5f7a4f;
+    --graph-color-file: #5f7a4f;
+}
+
+[data-accent="rose"] {
+    --primary: #a8546b;
+    --primary-dark: #8c4356;
+    --primary-light: rgba(168, 84, 107, 0.1);
+    --primary-hover: rgba(168, 84, 107, 0.16);
+    --switch-active: #a8546b;
+    --sidebar-active: rgba(168, 84, 107, 0.11);
+    --color-file: #a8546b;
+    --color-link-incoming: #a8546b;
+    --color-progress-end: #a8546b;
+    --graph-color-file: #a8546b;
+}
+
 [data-theme="light"],
 [data-theme="paper"] {
     --border: rgba(35, 31, 25, 0.08);

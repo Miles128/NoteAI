@@ -195,6 +195,7 @@ class TestRagHandler:
 
         original_rag_enabled = config.rag_enabled
         config.rag_enabled = False
+        config.ai_enabled = True
 
         try:
             srv = SimpleNamespace(

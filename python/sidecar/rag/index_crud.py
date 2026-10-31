@@ -8,9 +8,6 @@ import time
 import uuid
 from typing import Any
 
-import bm25s
-import zvec
-
 from sidecar.rag.index_bm25 import _bm25_corpus_from_retriever, _build_and_save_bm25, rebuild_search_indices
 from sidecar.rag.index_core import (
     _COLLECTION_CACHE,
@@ -40,7 +37,11 @@ from sidecar.rag.index_core import (
     load_manifest,
     save_manifest,
 )
+from sidecar.rag.lazy import lazy_import
 from utils.logger import logger
+
+bm25s = lazy_import("bm25s")
+zvec = lazy_import("zvec")
 
 
 def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], progress_callback=None) -> dict[str, Any]:

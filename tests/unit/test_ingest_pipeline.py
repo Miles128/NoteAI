@@ -50,8 +50,9 @@ def test_run_ingest_completes_when_rules_configured(workspace: Path) -> None:
     assert load_ingest_state()["status"] == "complete"
 
 
-def test_semantic_stage_failure_does_not_block_ingest(workspace: Path) -> None:
+def test_semantic_stage_failure_does_not_block_ingest(workspace: Path, monkeypatch) -> None:
     write_workspace_rules(workspace)
+    monkeypatch.setattr(config, "ai_enabled", True, raising=False)
     note = workspace / "Notes" / "RAG" / "note.md"
     note.parent.mkdir(parents=True)
     note.write_text("---\ntopic: RAG\n---\n\n正文。", encoding="utf-8")

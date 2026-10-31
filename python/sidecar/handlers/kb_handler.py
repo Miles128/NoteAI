@@ -29,7 +29,7 @@ class KbHandler(BaseHandler):
             return err
         topics_handler = getattr(self._server, "_topics_handler", None)
         if topics_handler is not None:
-            topics_handler.schedule_pending_maintenance()
+            topics_handler.schedule_pending_maintenance(delay_seconds=60.0)
         return get_dashboard_status(workspace)
 
     def _run_kb_lint(self, _params):

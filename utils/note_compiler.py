@@ -15,7 +15,7 @@ from utils.atomic_write import atomic_write_text
 from utils.logger import logger
 from utils.text_utils import parse_frontmatter
 
-_CONVERTED_SOURCE_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".html", ".htm", ".txt"}
+_CONVERTED_SOURCE_EXTS = {".doc", ".docx", ".ppt", ".pptx", ".html", ".htm", ".txt"}
 
 _PAGE_NUM_LINE = re.compile(
     r"^\s*(?:第\s*\d+\s*页|Page\s+\d+\s*(?:of\s+\d+)?|\d+\s*/\s*\d+|[-—]\s*\d+\s*[-—])\s*$",
@@ -104,7 +104,7 @@ def _should_compile_file(full: Path, fm: dict | None, *, force: bool = False) ->
 
 
 def scan_compile_pending(workspace: str) -> list[str]:
-    """Notes from PDF/Word sources that still need compile."""
+    """Notes from Word/web sources that still need compile."""
     ws = Path(workspace)
     out: list[str] = []
     for md in ws.rglob("*.md"):

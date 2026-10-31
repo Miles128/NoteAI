@@ -63,6 +63,12 @@ class AppConfig:
     merge_overrides: dict[str, Any] = field(default_factory=dict)
     ingest_auto_enabled: bool = True
     semantic_compile_enabled: bool = True
+    # AI 总开关：关闭后不再发起任何 LLM 请求，前端隐藏 AI 入口。
+    ai_enabled: bool = True
+    # AI 分项开关（仅在总开关开启时生效）。
+    ai_chat_enabled: bool = True
+    ai_writing_enabled: bool = True
+    ai_compile_enabled: bool = True
     cli_agent_id: str = ""
     rag_enabled: bool = True
     rag_hyde_enabled: bool = True
@@ -72,7 +78,14 @@ class AppConfig:
     rag_dense_weight: float = 0.7
     rag_top_k: int = 5
     rag_error_cooldown_seconds: int = 180
+    # ONNX 推理线程上限：0=自动（min(4, CPU 核数)），可设 2/4/8 省电优先。
+    rag_onnx_threads: int = 0
     locale: str = "zh-CN"
+    # 界面精简（个性化）。
+    ui_hide_statusbar: bool = False
+    ui_hide_home_stats: bool = False
+    # 启动时跑知识库巡检：会初始化 jieba 词典（约 80MB 常驻），默认关闭。
+    startup_lint_enabled: bool = False
 
     def __post_init__(self):
         # Snapshot lock: only guards the __dict__ snapshot taken by

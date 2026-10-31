@@ -25,14 +25,14 @@ VAULT_AGENTS_MD_TEMPLATE = """# AGENTS.md — NoteAI Vault Guide
 - **工作区路径**: `{workspace_path}`
 - **笔记目录**: `{notes_folder}/`
 - **知识库目录**: `wiki/`（AI 生成的综述和索引）
-- **原始文件归档**: `Raw/`（PDF/DOCX/PPTX 等非 Markdown 文件）
+- **原始文件归档**: `Raw/`（DOCX/PPTX 等非 Markdown 文件）
 
 ## 三层知识架构
 
 ```
 Notes/        ← 原始笔记（Markdown，不可变来源）
 wiki/         ← AI 编译的结构化知识（综述、WIKI.md 索引）
-Raw/          ← 原始文件归档（PDF、DOCX、PPTX、图片等）
+Raw/          ← 原始文件归档（DOCX、PPTX、图片等）
 ```
 
 ## 主题体系

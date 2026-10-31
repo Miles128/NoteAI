@@ -8,7 +8,13 @@ from utils.atomic_write import atomic_write_text
 
 class IntelHandler(BaseHandler):
     def _llm_rewrite_stream(self, params):
+        from config import config
         from utils.llm_utils import APIConfigError, rewrite_with_llm_stream
+
+        if not config.ai_enabled:
+            return {"success": False, "message": "AI 功能已关闭。请在 设置 → AI 功能 中开启"}
+        if not config.ai_writing_enabled:
+            return {"success": False, "message": "AI 改写已关闭。请在 设置 → AI 功能 中开启"}
 
         file_path = params.get("file_path", "")
         if not file_path:

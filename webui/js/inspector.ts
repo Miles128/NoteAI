@@ -360,6 +360,7 @@
                 if (tabName) switchTab(tabName);
             });
         });
+        if (window.AIGate) window.AIGate.apply(window.uiConfig);
     }
 
     window.InspectorModule = {

@@ -23,6 +23,7 @@ from sidecar.rag.chat_support import (
     _strip_suggestions_sentinel,
     _template_suggestions,
 )
+from utils.logger import logger
 
 
 class RagHandler(BaseHandler):
@@ -44,10 +45,31 @@ class RagHandler(BaseHandler):
     _SUGGESTIONS_SENTINEL_RE = re.compile(r"SUGGESTIONS_JSON:\s*(\[[^\]]*\])")
 
     @staticmethod
+    def _ai_chat_disabled_message() -> str | None:
+        if not config.ai_enabled:
+            return "AI 功能已关闭。请在 设置 → AI 功能 中开启"
+        if not config.ai_chat_enabled:
+            return "AI 问答已关闭。请在 设置 → AI 功能 中开启"
+        return None
+
+    @staticmethod
     def _rag_disabled_message() -> str:
         return "向量 RAG 未启用。请在 设置 → RAG 检索 中开启「向量 RAG 检索」"
 
+    def _maybe_run_deferred_index_check(self) -> None:
+        """Run the startup-deferred RAG index freshness check before the first query."""
+        server = self._server
+        if not getattr(server, "_rag_index_check_pending", False):
+            return
+        server._rag_index_check_pending = False
+        try:
+            server._auto_rebuild_rag_index()
+        except Exception as e:
+            logger.warning(f"[rag] deferred index check failed: {e}")
+
     def _init_rag_index(self, params):
+        if not config.ai_enabled:
+            return {"success": False, "message": "AI 功能已关闭，无法构建索引"}
         if not config.rag_enabled:
             return {"success": False, "message": self._rag_disabled_message()}
 
@@ -187,6 +209,10 @@ class RagHandler(BaseHandler):
         if not question:
             return {"success": False, "message": "问题不能为空"}
 
+        blocked = self._ai_chat_disabled_message()
+        if blocked:
+            return {"success": False, "message": blocked}
+
         if not config.rag_enabled:
             return {"success": False, "message": self._rag_disabled_message()}
 
@@ -230,6 +256,8 @@ class RagHandler(BaseHandler):
                 RagHandler._session_gates.pop(session_id, None)
 
     def _do_rag_chat_inner(self, params):
+        self._maybe_run_deferred_index_check()
+
         from sidecar.rag.model_preload import ModelWarmupManager
 
         # 兜底触发模型预热：若启动延迟尚未开始（或用户立即提问），确保加载启动
@@ -270,6 +298,9 @@ class RagHandler(BaseHandler):
     def _answer_selection_lookup(self, params, selection: str) -> dict:
         """Stream a quick explanation first, then append evidence from the selected route."""
         from utils.llm_utils import APIConfigError, call_llm_raw_stream
+
+        if not config.ai_writing_enabled:
+            return {"success": False, "message": "AI 划词解释已关闭。请在 设置 → AI 功能 中开启"}
 
         current_file = params.get("current_file") or ""
         context = (params.get("selection_context") or "").strip()[:2000]

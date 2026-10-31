@@ -221,6 +221,7 @@ function _updateRewriteStreamEditor(token: any) {
 }
 
 async function onLLMRewrite() {
+    if (window.AIGate && !window.AIGate.guard('writing')) return;
     var curPath = window.AppState.selectedFilePath;
     if (!curPath) {
         alert(window.t('app.selectFileFirst'));

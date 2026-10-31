@@ -39,6 +39,18 @@ export function applyRagSettingsToForm(uiConfig: any) {
         if (isNaN(savedTopK)) savedTopK = 5;
         topKEl.value = String(Math.min(8, Math.max(4, savedTopK)));
     }
+    var onnxEl = document.getElementById('settings-rag-onnx-threads') as HTMLSelectElement | null;
+    if (onnxEl) {
+        var savedThreads = uiConfig.rag_onnx_threads != null ? parseInt(String(uiConfig.rag_onnx_threads), 10) : 0;
+        if (isNaN(savedThreads) || savedThreads < 0) savedThreads = 0;
+        if (![0, 2, 4, 8].includes(savedThreads)) {
+            var rawThreads = savedThreads;
+            savedThreads = [2, 4, 8].reduce(function (a: number, b: number) {
+                return Math.abs(b - rawThreads) < Math.abs(a - rawThreads) ? b : a;
+            });
+        }
+        onnxEl.value = String(savedThreads);
+    }
     _updateDenseWeightHint();
 
     if (uiConfig.rag_enabled === true) {
@@ -355,6 +367,7 @@ function _readRagPresetFromForm(): Record<string, any> {
         rag_rerank_skip_score: parseFloat(skipEl?.value || '') || saved.rag_rerank_skip_score || 0.75,
         rag_dense_weight: densePct / 100,
         rag_top_k: parseInt(((document.getElementById('settings-rag-top-k') as HTMLInputElement | null)?.value) || '', 10) || 5,
+        rag_onnx_threads: parseInt(((document.getElementById('settings-rag-onnx-threads') as HTMLSelectElement | null)?.value) || '0', 10) || 0,
     };
 }
 

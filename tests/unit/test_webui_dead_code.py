@@ -116,7 +116,12 @@ def _js_sources() -> list[Path]:
     return paths
 
 
-def test_removed_ids_absent_from_html_and_js() -> None:
+def test_removed_html_ids_and_js_symbols_absent() -> None:
+    """所有瘦身批次删除的 id / 符号不得回归：一次扫描，杜绝碎片断言扩张。"""
+    assert not (JS_DIR / "converter.ts").exists()
+    assert not (JS_DIR / "integrator.ts").exists()
+    assert not (JS_DIR / "tags.ts").exists()
+
     html = (WEBUI / "index.html").read_text(encoding="utf-8")
     js_blob = "\n".join(p.read_text(encoding="utf-8") for p in _js_sources())
 
@@ -124,6 +129,9 @@ def test_removed_ids_absent_from_html_and_js() -> None:
         assert f'id="{rid}"' not in html, f"removed id still in index.html: {rid}"
         assert f"getElementById('{rid}')" not in js_blob, f"removed id still queried: {rid}"
         assert f'getElementById("{rid}")' not in js_blob, f"removed id still queried: {rid}"
+    for sym in REMOVED_JS_SYMBOLS:
+        for path in _js_sources():
+            assert sym not in path.read_text(encoding="utf-8"), f"{sym} still referenced in {path.name}"
 
 
 def test_removed_rpc_methods_fully_unwired() -> None:
@@ -142,31 +150,3 @@ def test_removed_rpc_methods_fully_unwired() -> None:
         assert method not in declared, f"api.ts still declares {method}"
         assert method not in allowed, f"rpc.rs still allows {method}"
         assert method not in registered, f"Python still registers {method}"
-
-
-def test_removed_js_symbols_absent_from_sources() -> None:
-    for path in _js_sources():
-        text = path.read_text(encoding="utf-8")
-        for sym in REMOVED_JS_SYMBOLS:
-            assert sym not in text, f"{sym} still referenced in {path.name}"
-
-
-def test_converter_module_is_fully_removed() -> None:
-    assert not (JS_DIR / "converter.ts").exists()
-    main_mjs = (JS_DIR / "main.mjs").read_text(encoding="utf-8")
-    assert "converter.ts" not in main_mjs
-    assert "startFileConversion" not in main_mjs
-
-
-def test_extract_topics_entry_point_removed() -> None:
-    """D1 已删除 tab-1 整合页与 extract_topics 全链。"""
-    html = (WEBUI / "index.html").read_text(encoding="utf-8")
-    main_mjs = (JS_DIR / "main.mjs").read_text(encoding="utf-8")
-
-    assert not (JS_DIR / "integrator.ts").exists()
-    assert not (JS_DIR / "tags.ts").exists()
-    assert 'id="tab-1"' not in html
-    assert "integrator.ts" not in main_mjs
-    assert "tags.ts" not in main_mjs
-    assert 'id="extract-topics-btn"' not in html
-    assert 'onclick="extractTopics()"' not in html

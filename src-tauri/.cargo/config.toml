@@ -1,17 +1,20 @@
-# 限制 Rust 编译产物体积
+# Rust 编译 profile（项目级，随仓库生效）。
+# 全局 ~/.cargo/config.toml 也有同类设置；这里显式写一份，保证换机器 / CI 一致。
 # 参考: https://doc.rust-lang.org/cargo/reference/profiles.html
 
 [profile.dev]
-# 保留增量编译 — 改一行代码只需重编几个文件，别关
-incremental = true
+# 只要行号表；再 strip 掉调试段，依赖与自身产物都能小一大截
+debug = "line-tables-only"
+strip = "debuginfo"
+# 共享 target-dir 下增量缓存会长期堆积（实测数百 MB）；Rust 侧只是薄壳，全量重编可接受
+incremental = false
 
-# 对第三方依赖做轻度优化（默认 debug 完全不优化）
-# 能缩小 deps/ 体积约 30-50%，编译时间影响很小
 [profile.dev.package."*"]
+# 依赖占 deps/ 体积的大头：不做完整调试信息，并轻度优化（运行时更快、体积更小）
 opt-level = 1
+debug = false
+strip = "debuginfo"
 
-# 注意：
-# - deps/（依赖编译产物）是一次性的，Cargo.lock 不变就不变
-# - incremental/（增量缓存）会随时间增长，手动清理方法：
-#     定期跑: rm -rf src-tauri/target/debug/incremental
-#     大扫除: cargo clean（释放所有，下次全量重编）
+# 清理方法（注意 target-dir 在本机被 ~/.cargo/config.toml 指向 ~/.cargo/target 共享目录）：
+#   只清本项目产物：cargo clean -p noteai --manifest-path src-tauri/Cargo.toml
+#   清空共享缓存（其他 Tauri 项目也会重编）：cargo clean --manifest-path src-tauri/Cargo.toml

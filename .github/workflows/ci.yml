@@ -179,15 +179,10 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+          workspaces: src-tauri -> target
 
       - name: Cargo format check
         working-directory: src-tauri

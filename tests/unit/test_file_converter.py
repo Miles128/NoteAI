@@ -99,9 +99,9 @@ def test_parallel_conversions_do_not_overwrite_same_output(tmp_path: Path, monke
 
 def test_move_to_raw_keeps_file_already_in_raw(tmp_path: Path) -> None:
     raw_dir = tmp_path / "Raw"
-    source = raw_dir / "archive.pdf"
+    source = raw_dir / "archive.docx"
     source.parent.mkdir()
-    source.write_bytes(b"pdf")
+    source.write_bytes(b"docx")
 
     moved = FileConverterManager()._move_to_raw(str(source), str(raw_dir))
 
@@ -132,9 +132,9 @@ def test_convert_can_defer_topic_assignment_for_ingest(tmp_path: Path, monkeypat
     assert assignment_calls == []
 
 
-def test_low_quality_scanned_pdf_is_rejected(tmp_path: Path, monkeypatch) -> None:
-    source = tmp_path / "scan.pdf"
-    source.write_bytes(b"pdf")
+def test_low_quality_conversion_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    source = tmp_path / "scan.docx"
+    source.write_bytes(b"docx")
 
     class Converter:
         def to_markdown(self, _path: str) -> str:
@@ -146,8 +146,7 @@ def test_low_quality_scanned_pdf_is_rejected(tmp_path: Path, monkeypatch) -> Non
     result = manager.convert_file(str(source), str(tmp_path / "Notes"), assign_topic=False)
 
     assert result["success"] is False
-    assert result["quality"]["suspected_scanned_pdf"] is True
-    assert "无法可靠提取正文" in result["error"]
+    assert "提取正文过短" in result["error"]
     assert not list((tmp_path / "Notes").glob("*.md")) if (tmp_path / "Notes").exists() else True
 
 

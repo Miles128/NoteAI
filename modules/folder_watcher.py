@@ -22,7 +22,6 @@ _WATCH_FILE = "watched_folders.json"
 
 # 可自动导入的格式：.md 之外与 FileConverterManager.get_supported_formats() 保持一致。
 SUPPORTED_WATCHED_EXTENSIONS = {
-    ".pdf",
     ".md",
     ".docx",
     ".doc",

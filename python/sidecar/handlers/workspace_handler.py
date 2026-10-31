@@ -6,7 +6,7 @@ from config.settings import workspace_manager
 from sidecar.handlers.base import BaseHandler
 from utils.logger import logger
 
-FILE_TREE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
+FILE_TREE_SUFFIXES = {".md", ".txt", ".docx", ".pptx", ".html", ".doc", ".ppt"}
 FILE_TREE_IGNORED_DIRS = {
     "__pycache__",
     "node_modules",

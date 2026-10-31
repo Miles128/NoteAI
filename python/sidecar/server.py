@@ -52,7 +52,7 @@ from utils.topic.assigner import (
 )
 from utils.ttl_cache import TTLCache
 
-WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"}
+WATCHED_WORKSPACE_SUFFIXES = {".md", ".txt", ".docx", ".pptx", ".html", ".doc", ".ppt"}
 
 
 class SidecarServer(PathHelpersMixin):
@@ -470,7 +470,7 @@ class SidecarServer(PathHelpersMixin):
         # Auto-convert non-markdown files when they appear in workspace
         if config.ingest_auto_enabled and not is_directory and change_type in ("created", "moved"):
             ext = path.suffix.lower()
-            if ext in (".pdf", ".docx", ".doc", ".pptx", ".ppt", ".html", ".htm", ".txt"):
+            if ext in (".docx", ".doc", ".pptx", ".ppt", ".html", ".htm", ".txt"):
                 rp = self._rel_parts(path)
                 if not self._is_hidden_or_ignored(rp) and "wiki" not in rp and "Raw" not in rp:
                     self._auto_convert_new_file(str(path))

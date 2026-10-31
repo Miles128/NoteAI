@@ -252,7 +252,7 @@ def build_schema_markdown(options: dict | None = None, workspace: str | None = N
         "## 4. 入库与级联",
         "",
         "- 流水线：转换 → 分类 → 索引 → 级联综述 → 同步 WIKI",
-        "- 支持 PDF/DOCX 等自动转换；`Raw/` 内原件不重复转换",
+        "- 支持 DOCX/网页等自动转换；`Raw/` 内原件不重复转换",
         "- **级联只更新** `wiki/*_综述.md`，不改 `Notes/` 平行笔记正文",
         f"- 自动更新综述：{'开启' if auto_survey else '关闭'}",
         f"- 综述粒度：{survey_level_label}（`wiki/{{主题名}}_综述.md`）",

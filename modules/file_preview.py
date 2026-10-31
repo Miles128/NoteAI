@@ -7,7 +7,7 @@ from utils.logger import logger
 
 
 class FilePreviewer:
-    SUPPORTED_PREVIEW_TYPES = [".md", ".markdown", ".txt", ".pdf", ".doc", ".docx"]
+    SUPPORTED_PREVIEW_TYPES = [".md", ".markdown", ".txt", ".doc", ".docx"]
 
     def __init__(self, workspace_path: str | None = None):
         self.workspace_path = workspace_path
@@ -32,8 +32,6 @@ class FilePreviewer:
                 return self._preview_markdown(full_path, file_size)
             if ext == ".txt":
                 return self._preview_text(full_path, file_size)
-            if ext == ".pdf":
-                return self._preview_pdf(full_path, file_size)
             if ext == ".docx":
                 return self._preview_docx(full_path, file_size)
             if ext == ".doc":
@@ -75,98 +73,6 @@ class FilePreviewer:
             "file_size": file_size,
             **self._utf8_transport(content),
         }
-
-    def _preview_pdf(self, file_path: str, file_size: int) -> dict[str, Any]:
-        try:
-            import fitz
-        except ImportError:
-            return self._preview_pdf_legacy(file_path, file_size)
-
-        pages_data = []
-        total_pages = 0
-        full_text = ""
-        MAX_PREVIEW_PAGES = 50
-        MAX_PAGE_PIXELS = 3000 * 3000  # 单页最大像素限制，防止超大页面导致内存耗尽
-        MAX_TOTAL_IMAGE_SIZE = 200 * 1024 * 1024  # 总图片数据上限 200MB
-        total_image_size = 0
-
-        doc = None
-        try:
-            doc = fitz.open(file_path)
-            total_pages = len(doc)
-            preview_pages = min(total_pages, MAX_PREVIEW_PAGES)
-
-            for page_num in range(preview_pages):
-                page = doc[page_num]
-
-                text = page.get_text("text") or ""
-
-                mat = fitz.Matrix(1.5, 1.5)
-                # 检查页面像素尺寸，防止恶意超大 PDF 导致内存耗尽
-                page_rect = page.rect
-                page_width_px = int(page_rect.width * 1.5)
-                page_height_px = int(page_rect.height * 1.5)
-                if page_width_px * page_height_px > MAX_PAGE_PIXELS:
-                    # 缩小渲染比例
-                    scale = (MAX_PAGE_PIXELS / (page_rect.width * page_rect.height)) ** 0.5
-                    mat = fitz.Matrix(scale, scale)
-
-                pix = page.get_pixmap(matrix=mat, alpha=False)
-                img_bytes = pix.tobytes("png")
-                total_image_size += len(img_bytes)
-                if total_image_size > MAX_TOTAL_IMAGE_SIZE:
-                    break
-                img_base64 = base64.b64encode(img_bytes).decode("utf-8")
-
-                pages_data.append(
-                    {
-                        "page_number": page_num + 1,
-                        "text": text,
-                        "image": img_base64,
-                        "width": pix.width,
-                        "height": pix.height,
-                    }
-                )
-
-                full_text += text + "\n\n"
-
-            return {
-                "success": True,
-                "type": "pdf",
-                "file_name": os.path.basename(file_path),
-                "file_size": file_size,
-                "total_pages": total_pages,
-                "pages": pages_data,
-                "full_text": full_text.strip(),
-                "truncated": total_pages > MAX_PREVIEW_PAGES,
-            }
-        except Exception as e:
-            logger.error(f"PDF预览失败 (PyMuPDF): {e}")
-            return self._preview_pdf_legacy(file_path, file_size)
-        finally:
-            if doc is not None:
-                doc.close()
-
-    def _preview_pdf_legacy(self, file_path: str, file_size: int) -> dict[str, Any]:
-        try:
-            from utils.pdf_utils import extract_pdf_pages
-
-            pages_text = extract_pdf_pages(file_path)
-            pages_data: list[dict[str, Any]] = []
-            for i, text in enumerate(pages_text):
-                pages_data.append({"page_number": i + 1, "text": text.strip(), "image": None, "width": 0, "height": 0})
-            return {
-                "success": True,
-                "type": "pdf",
-                "file_name": os.path.basename(file_path),
-                "file_size": file_size,
-                "total_pages": len(pages_data),
-                "pages": pages_data,
-                "full_text": "\n\n".join(str(p["text"]) for p in pages_data),
-            }
-        except Exception as e:
-            logger.error(f"PDF预览失败 (legacy): {e}")
-            return {"success": False, "error": f"PDF解析失败: {str(e)}"}
 
     def _preview_docx(self, file_path: str, file_size: int) -> dict[str, Any]:
         """DOCX → HTML（mammoth），供前端排版预览。"""
@@ -273,7 +179,6 @@ def get_file_type_display_name(ext: str) -> str:
         ".md": "Markdown",
         ".markdown": "Markdown",
         ".txt": "文本文件",
-        ".pdf": "PDF文档",
         ".doc": "Word文档",
         ".docx": "Word文档",
     }

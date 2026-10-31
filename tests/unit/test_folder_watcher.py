@@ -63,13 +63,13 @@ def test_remove_watched_folder(workspace: Path) -> None:
 
 
 def test_is_supported_watch_file(workspace: Path) -> None:
-    pdf = workspace / "a.pdf"
-    pdf.write_text("x")
-    hidden = workspace / ".hidden.pdf"
+    docx = workspace / "a.docx"
+    docx.write_text("x")
+    hidden = workspace / ".hidden.docx"
     hidden.write_text("x")
     exe = workspace / "a.exe"
     exe.write_text("x")
-    assert is_supported_watch_file(str(pdf))
+    assert is_supported_watch_file(str(docx))
     assert not is_supported_watch_file(str(hidden))
     assert not is_supported_watch_file(str(exe))
 
@@ -77,12 +77,12 @@ def test_is_supported_watch_file(workspace: Path) -> None:
 def test_collect_ingestible_files(workspace: Path) -> None:
     sub = workspace / "sub"
     sub.mkdir()
-    (workspace / "a.pdf").write_text("x")
+    (workspace / "a.docx").write_text("x")
     (workspace / "b.md").write_text("x")
     (workspace / "c.exe").write_text("x")
     (sub / "d.docx").write_text("x")
     flat = collect_ingestible_files(str(workspace), recursive=False)
-    assert flat == [str(workspace / "a.pdf"), str(workspace / "b.md")]
+    assert flat == [str(workspace / "a.docx"), str(workspace / "b.md")]
     recursive = collect_ingestible_files(str(workspace), recursive=True)
     assert len(recursive) == 3
 
@@ -97,7 +97,7 @@ def test_folder_watcher_callback_on_created(tmp_path: Path) -> None:
     watcher = FolderWatcher(on_files=lambda files: collected.extend(files))
     try:
         watcher.start([{"path": str(folder), "recursive": True, "enabled": True}])
-        new_file = folder / "new.pdf"
+        new_file = folder / "new.docx"
         new_file.write_text("x")
         # 等待 watchdog 真实捕获到创建事件并回调
         deadline = time.monotonic() + 5
@@ -114,7 +114,7 @@ def test_folder_watcher_ignores_unsupported_and_hidden(tmp_path: Path) -> None:
     collected = []
     watcher = FolderWatcher(on_files=collected.append)
     watcher._queue_file(str(folder / "notes.exe"))
-    watcher._queue_file(str(folder / ".hidden.pdf"))
+    watcher._queue_file(str(folder / ".hidden.docx"))
     assert collected == []
 
 

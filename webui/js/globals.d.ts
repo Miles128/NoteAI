@@ -299,6 +299,7 @@ declare global {
             handleEvent(evt: any): void;
             rebuildIndex(): void;
             toggle(): void;
+            close(): void;
             ensureOpen(): void;
             ask(question: any): void;
             askSelection(selection: any, options?: any): void;
@@ -581,10 +582,19 @@ declare global {
             initAssistantSettings?(): void;
             applyAssistantSettingsToForm?(uiConfig: any): void;
         } | undefined;
+        SettingsAI: {
+            init(): void;
+            applyToForm(cfg: any): void;
+        } | undefined;
+        AIGate: {
+            apply(cfg: any): void;
+            refresh(): Promise<any>;
+            isOn(feature: 'chat' | 'writing' | 'compile' | 'semantic'): boolean;
+            guard(feature: 'chat' | 'writing' | 'compile' | 'semantic'): boolean;
+        } | undefined;
         Icons: { get(name: string, size?: number): string; all?(): Record<string, string> } | undefined;
         _deactivatePendingBtn?: (() => void) | undefined;
         updateHomeStats?: (() => void) | undefined;
-        _pdfKeyHandler: ((e: KeyboardEvent) => void) | null;
         switchSidebarView(view: string): void;
         closePreview(): void;
         backToContent(): void;
@@ -697,7 +707,6 @@ declare global {
         showEditButton(show: boolean): void;
     }
 
-    declare var pdfjsLib: any;
     declare var hljs: any;
     declare var DOMPurify: any;
 }

@@ -27,7 +27,7 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 
 | You do | NoteAI helps |
 |--------|----------------|
-| 📥 Drop PDFs / web pages / Word files | 🔄 Auto-convert to Markdown, archive originals in `Raw/` |
+| 📥 Drop Word files / web pages / Markdown | 🔄 Auto-convert to Markdown, archive originals in `Raw/` |
 | 📂 Skip folder planning | 🏷️ AI suggests topics; tags derived from filenames — you confirm |
 | 📚 Topics keep growing | 📑 Auto-generate & cascade-update topic surveys |
 | ❓ Ask a question | 🤖 RAG Assistant searches your notes & surveys first |
@@ -35,8 +35,10 @@ NoteAI unifies **capture → organize → research → Q&A** in one desktop app:
 ### ✨ Highlights
 
 - 🖥️ **Native desktop** — Tauri v2 + Python sidecar; local workspace, your data
+- 🎛️ **AI master switch** — one click turns off every AI entry point and blocks model requests; CLI agents stay independent
+- 🎨 **Personalization** — seven accent presets, hide status bar or home stats for a cleaner canvas
 - 📐 **Tolaria-style four-pane layout** — Folder sidebar · Note list · Editor · Inspector with AI / Properties / Backlinks tabs
-- ✍️ **WYSIWYG** — Tiptap Markdown editor; in-app PDF / DOCX preview
+- ✍️ **WYSIWYG** — Tiptap Markdown editor; in-app DOCX preview
 - 🔄 **Ingest pipeline** — convert → compile → classify → index → crossref → cascade → lint → sync (resumable)
 - 🕸️ **Knowledge graph** — topics, tags, bidirectional links (force-directed)
 - 🤖 **RAG Assistant assistant** — HyDE + hybrid search + rerank; Q&A mode with optional follow-up suggestions
@@ -72,7 +74,7 @@ python run.py
 
 1. 📂 **Open a workspace** — any local folder
 2. ⚙️ **Settings → Model** — LLM API key (OpenAI-compatible)
-3. 📄 **Import sources** — PDF / DOCX, web download, or file import
+3. 📄 **Import sources** — DOCX, web download, or file import
 4. 💬 **Open RAG Assistant** — ask questions or browse notes & graph
 
 ### 🧩 Features
@@ -92,7 +94,7 @@ python run.py
 | Feature | Description |
 |---------|-------------|
 | 🌐 Web download | Batch URLs → Markdown (WeChat, Zhihu, etc.) |
-| 📄 Format conversion | PDF / DOCX / PPTX / HTML / TXT → Markdown |
+| 📄 Format conversion | DOCX / PPTX / HTML / TXT → Markdown |
 | 🔄 Auto-convert | Scan on workspace changes (5s debounce); originals → `Raw/` |
 | ✨ Note compile | LLM strips headers/footers, neutral tone, searchable body |
 | 📥 Import files | Copy to `Raw/` → convert in background |
@@ -120,7 +122,7 @@ python run.py
 | Feature | Description |
 |---------|-------------|
 | 📝 Markdown | Tiptap WYSIWYG, autosave |
-| 👁️ Preview | PDF pages; DOCX layout preview |
+| 👁️ Preview | DOCX layout preview |
 | 🪄 AI rewrite | Stream rewrite selection, diff & apply |
 | 📑 Topic surveys | Read all notes in a topic; generate / cascade update |
 
@@ -159,7 +161,7 @@ Each run uses an **Answer First** hierarchy: `Final` is expanded at the top, whi
 <workspace>/
 ├── Notes/              # 📓 Raw notes (Markdown, by topic)
 ├── wiki/               # 📚 Compiled: WIKI.md, surveys, log.md
-├── Raw/                # 📦 Originals (PDF, DOCX, …)
+├── Raw/                # 📦 Originals (DOCX, …)
 ├── schema.md           # 📋 AI rules (Schema wizard)
 ├── .noteai/            # ⚙️ Runtime: rag_index/, ingest state, logs…
 └── .ai_memory/         # 👤 User profile, project rules
@@ -195,10 +197,10 @@ schema → convert → compile → classify → index → crossref → cascade �
 | Layer | Stack |
 |-------|--------|
 | 🦀 Shell | Tauri v2, Rust |
-| 🎨 Frontend | HTML / CSS / vanilla JS, Tiptap, D3, PDF.js |
+| 🎨 Frontend | HTML / CSS / vanilla JS, Tiptap, D3 |
 | 🐍 Backend | Python 3.10+ sidecar, JSON-RPC |
 | 🧬 RAG | zvec + bm25s, fastembed (bge-small-zh), FlagReranker |
-| 📑 Docs | PyMuPDF, mammoth, html2text |
+| 📑 Docs | mammoth, html2text |
 | 🇨🇳 Chinese NLP | jieba |
 | 📦 Deps | uv · `pyproject.toml` |
 
@@ -267,7 +269,7 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 
 | 你做的事 | NoteAI 帮你做的 |
 |---------|----------------|
-| 📥 丢进 PDF / 网页 / Word | 🔄 自动转 Markdown、归档到 `Raw/` |
+| 📥 丢进网页 / Word | 🔄 自动转 Markdown、归档到 `Raw/` |
 | 📂 不想先想文件夹 | 🏷️ AI 建议主题、标签由文件名切出，待你确认 |
 | 📚 主题越积越多 | 📑 自动生成 / 级联更新主题综述 |
 | ❓ 想问一个问题 | 🤖 RAG 助手先查你的笔记与综述，再回答 |
@@ -275,8 +277,10 @@ NoteAI 把 **采集 → 整理 → 研究 → 问答** 放进同一款桌面应�
 ### ✨ 核心亮点
 
 - 🖥️ **桌面原生** — Tauri v2 + Python sidecar，工作区在本地，数据在你手里
+- 🎛️ **AI 总开关** — 一键关闭所有 AI 入口并阻止模型请求；CLI Agent 保持独立
+- 🎨 **个性化** — 七套强调色，可隐藏状态栏与首页统计卡，界面更清爽
 - 📐 **Tolaria 式四栏布局** — 文件夹侧栏 · 笔记列表 · 编辑器 · 检查器（AI / 属性 / 反链）
-- ✍️ **所见即所得** — Tiptap 编辑 Markdown；PDF / DOCX 应用内预览
+- ✍️ **所见即所得** — Tiptap 编辑 Markdown；DOCX 应用内预览
 - 🔄 **自动入库流水线** — 转换 → 编译 → 分类 → 索引 → 交叉引用 → 综述 → 健康检查（可断点续跑）
 - 🕸️ **知识图谱** — 主题、标签、双向链接力导向可视化
 - 🤖 **RAG助手** — HyDE + 混合检索 + 重排序；引用可点击定位到段落，问答后可追问
@@ -302,7 +306,7 @@ python run.py
 
 1. 📂 **打开工作区** — 任意本地文件夹
 2. ⚙️ **设置 → 模型** — 配置 LLM API Key（OpenAI 兼容接口）
-3. 📄 **导入资料** — 拖入 PDF / DOCX，或用网页下载、导入文件
+3. 📄 **导入资料** — 拖入 DOCX，或用网页下载、导入文件
 4. 💬 **打开RAG助手** — 侧栏提问，或浏览笔记与知识图谱
 
 ### 🧩 功能一览
@@ -322,7 +326,7 @@ python run.py
 | 功能 | 说明 |
 |------|------|
 | 🌐 网页下载 | 批量 URL → Markdown（公众号、知乎等优化） |
-| 📄 格式转换 | PDF / DOCX / PPTX / HTML / TXT → Markdown |
+| 📄 格式转换 | DOCX / PPTX / HTML / TXT → Markdown |
 | 🔄 自动转换 | 工作区变更后自动扫描转换（5s 防抖），原件进 `Raw/` |
 | ✨ 笔记编译 | LLM 去页眉页脚、统一语气，产出可检索的正文 |
 | 📥 导入文件 | 选文件 → 复制到 `Raw/` → 后台立即转换 |
@@ -350,7 +354,7 @@ python run.py
 | 功能 | 说明 |
 |------|------|
 | 📝 Markdown 编辑 | Tiptap 所见即所得，自动保存 |
-| 👁️ 多格式预览 | PDF 分页；DOCX 排版预览 |
+| 👁️ 多格式预览 | DOCX 排版预览 |
 | 🪄 AI 改写 | 流式改写选中段落，对比后应用 |
 | 📑 主题综述 | 通读主题下笔记，生成 / 级联更新综述 |
 
@@ -389,7 +393,7 @@ CLI Agent 的最终回复以安全 Markdown 预览显示；可见过程信息完
 <你的工作区>/
 ├── Notes/              # 📓 原始笔记（Markdown，按主题分文件夹）
 ├── wiki/               # 📚 AI 编译层：WIKI.md、主题综述、log.md
-├── Raw/                # 📦 原件归档（PDF、DOCX、PPTX…）
+├── Raw/                # 📦 原件归档（DOCX、PPTX…）
 ├── schema.md           # 📋 工作区 AI 规范（Schema 向导生成）
 ├── .noteai/            # ⚙️ 运行时：rag_index/、ingest 状态、日志…
 └── .ai_memory/         # 👤 用户画像、项目规则
@@ -426,10 +430,10 @@ schema → convert → compile → classify → index → crossref → cascade �
 | 类别 | 技术 |
 |------|------|
 | 🦀 桌面壳 | Tauri v2、Rust |
-| 🎨 前端 | HTML / CSS / 原生 JS、Tiptap、D3、PDF.js |
+| 🎨 前端 | HTML / CSS / 原生 JS、Tiptap、D3 |
 | 🐍 后端 | Python 3.10+ sidecar、JSON-RPC |
 | 🧬 RAG | zvec + bm25s、fastembed（bge-small-zh）、FlagReranker |
-| 📑 文档 | PyMuPDF、mammoth、html2text |
+| 📑 文档 | mammoth、html2text |
 | 🇨🇳 中文 | jieba 分词（标签提取）/ bm25s（稀疏检索） |
 | 📦 包管理 | uv · `pyproject.toml` |
 

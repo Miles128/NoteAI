@@ -251,6 +251,8 @@ async function loadUiConfigToForm() {
                 window.SettingsComponents.applyCliSettingsToForm(uiConfig);
             }
             window.SettingsSemantic?.applySemanticSettingsToForm?.(uiConfig);
+            window.SettingsAI?.applyToForm?.(uiConfig);
+            if (window.AIGate) window.AIGate.apply(uiConfig);
         }
     } catch (e) {
         console.error('[Settings] Load UI config error:', e);

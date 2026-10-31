@@ -480,7 +480,7 @@
     "nav": {
       "model": "模型",
       "ui": "界面",
-      "rag": "RAG 检索",
+      "rag": "AI 功能",
       "semantic": "语义",
       "cli": "CLI Agent",
       "organizeRules": "整理规则",
@@ -637,6 +637,9 @@
     "ragDenseWeightHint": "语义 {dense}% · BM25 {sparse}%",
     "ragTopKLabel": "召回候选深度",
     "ragTopKHint": "送去重排与去重的候选数量（4 最少、8 最多）。最终引用条数由问题类型自动决定，上限 8 条，不受此项影响。",
+    "ragOnnxThreadsLabel": "AI 推理线程",
+    "ragOnnxThreadsAuto": "自动（省电）",
+    "ragOnnxThreadsHint": "Embedding / 重排模型推理占用的 CPU 核数。默认最多 4 核；改小可省电但推理变慢，生效于模型下次加载。",
     "ragHydeTitle": "HyDE",
     "ragHydeEnabledLabel": "启用 HyDE",
     "ragHydeEnabledDesc": "首条结果得分低于阈值时，用 LLM 生成假设答案再检索",

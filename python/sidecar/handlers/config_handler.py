@@ -107,6 +107,13 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
+            "ai_enabled": self.config.ai_enabled,
+            "ai_chat_enabled": self.config.ai_chat_enabled,
+            "ai_writing_enabled": self.config.ai_writing_enabled,
+            "ai_compile_enabled": self.config.ai_compile_enabled,
+            "ui_hide_statusbar": self.config.ui_hide_statusbar,
+            "ui_hide_home_stats": self.config.ui_hide_home_stats,
+            "startup_lint_enabled": self.config.startup_lint_enabled,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "rag_hyde_enabled": self.config.rag_hyde_enabled,
@@ -187,6 +194,20 @@ class ConfigHandler(BaseHandler):
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
                 self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
+            if "ai_enabled" in params:
+                self.config.ai_enabled = bool(params["ai_enabled"])
+            if "ai_chat_enabled" in params:
+                self.config.ai_chat_enabled = bool(params["ai_chat_enabled"])
+            if "ai_writing_enabled" in params:
+                self.config.ai_writing_enabled = bool(params["ai_writing_enabled"])
+            if "ai_compile_enabled" in params:
+                self.config.ai_compile_enabled = bool(params["ai_compile_enabled"])
+            if "ui_hide_statusbar" in params:
+                self.config.ui_hide_statusbar = bool(params["ui_hide_statusbar"])
+            if "ui_hide_home_stats" in params:
+                self.config.ui_hide_home_stats = bool(params["ui_hide_home_stats"])
+            if "startup_lint_enabled" in params:
+                self.config.startup_lint_enabled = bool(params["startup_lint_enabled"])
             if "cli_agent_id" in params:
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:

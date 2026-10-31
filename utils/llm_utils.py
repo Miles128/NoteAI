@@ -306,6 +306,14 @@ def _run_llm_with_timeout(invoke_fn: Callable) -> Any:
         raise RuntimeError("LLM 调用超时（90秒）")
 
 
+def _ensure_ai_enabled() -> None:
+    """总开关关闭时拒绝一切 LLM 调用（兜底，防止绕过 UI 直接触发 RPC）。"""
+    from config import config
+
+    if not getattr(config, "ai_enabled", True):
+        raise RuntimeError("AI 功能已关闭，请在 设置 → AI 功能 中开启")
+
+
 def call_llm(prompt_template: str, temperature: float = 0.7, max_tokens: int | None = None, **kwargs) -> str:
     """统一 LLM 调用入口（模板模式），带指数退避重试。无 kwargs 时自动回退到原始文本模式。"""
     if not kwargs:
@@ -338,6 +346,8 @@ def call_llm_raw(
     if not prompt_text:
         return ""
 
+    _ensure_ai_enabled()
+
     from config import config
 
     budget = config.max_context_tokens if config.max_context_tokens > 0 else 128000
@@ -369,6 +379,8 @@ def call_llm_raw_stream(
 
     if not prompt_text:
         return ""
+
+    _ensure_ai_enabled()
 
     from config import config
 

@@ -480,7 +480,7 @@
     "nav": {
       "model": "Model",
       "ui": "Appearance",
-      "rag": "RAG",
+      "rag": "AI features",
       "semantic": "Semantic",
       "cli": "CLI Agent",
       "organizeRules": "Organization rules",
@@ -637,6 +637,9 @@
     "ragDenseWeightHint": "Semantic {dense}% · BM25 {sparse}%",
     "ragTopKLabel": "Retrieval candidate depth",
     "ragTopKHint": "How many candidates go into reranking and dedup (4 fewest, 8 most). The number of citations in an answer is chosen automatically from the question type and is capped at 8; this setting does not change it.",
+    "ragOnnxThreadsLabel": "AI inference threads",
+    "ragOnnxThreadsAuto": "Auto (power saving)",
+    "ragOnnxThreadsHint": "CPU cores used by embedding / reranker inference. Defaults to at most 4 cores; lower it to save power at the cost of speed. Takes effect when models are next loaded.",
     "ragHydeTitle": "HyDE",
     "ragHydeEnabledLabel": "Enable HyDE",
     "ragHydeEnabledDesc": "When top score is below threshold, LLM generates a hypothetical answer for a second search",

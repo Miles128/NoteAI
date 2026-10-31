@@ -80,6 +80,9 @@ def run_cascade_survey_update(
     if not topic or not config.workspace_path:
         return {"success": False, "message": "未设置工作区或主题为空"}
 
+    if not config.ai_compile_enabled:
+        return {"success": True, "message": "AI 编译已关闭，跳过综述更新", "skipped": True}
+
     rules = load_workspace_rules()
     if not rules.get("auto_update_survey", True):
         return {"success": True, "message": "已关闭自动更新综述", "skipped": True}

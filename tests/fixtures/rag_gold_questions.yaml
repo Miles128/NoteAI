@@ -37,5 +37,5 @@
   shape: default
 - q: 继续
   shape: default
-- q: 列出工作区里所有 PDF
+- q: 列出工作区里所有文档
   shape: default

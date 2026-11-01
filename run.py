@@ -80,7 +80,6 @@ def check_dependencies():
         "python-docx": "docx",
         "python-pptx": "pptx",
         "pillow": "PIL",
-        "pymupdf": "fitz",
         "pyyaml": "yaml",
         "readability-lxml": "readability",
     }

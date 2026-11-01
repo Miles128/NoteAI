@@ -82,11 +82,11 @@ class TestFindFileByName:
 
 class TestWorkspaceTree:
     def test_watched_workspace_suffixes_match_user_visible_inputs(self) -> None:
-        assert {".md", ".txt", ".pdf", ".docx", ".pptx", ".html", ".doc", ".ppt"} == WATCHED_WORKSPACE_SUFFIXES
+        assert {".md", ".txt", ".docx", ".pptx", ".html", ".doc", ".ppt"} == WATCHED_WORKSPACE_SUFFIXES
 
     def test_only_supported_file_types_are_returned(self, workspace: Path) -> None:
         notes = workspace / "Notes"
-        for name in ("a.md", "b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"):
+        for name in ("a.md", "b.txt", "c.docx", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"):
             (notes / name).write_text("x", encoding="utf-8")
         for name in ("ignore.png", "ignore.jpg", "ignore.json"):
             (notes / name).write_text("x", encoding="utf-8")
@@ -107,7 +107,7 @@ class TestWorkspaceTree:
         notes_node = next(node for node in tree if node["name"] == "Notes")
         names = {node["name"] for node in notes_node["children"]}
 
-        assert names == {"b.txt", "c.pdf", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
+        assert names == {"b.txt", "c.docx", "d.docx", "e.pptx", "f.html", "g.doc", "h.ppt"}
         root_names = {node["name"] for node in tree}
         assert "empty" not in root_names
         assert ".hidden" not in root_names

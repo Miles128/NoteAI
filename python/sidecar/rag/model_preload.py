@@ -1,4 +1,4 @@
-"""Model preloader: warms up RAG embedder and reranker in background on sidecar start."""
+"""Model preloader: warms up the RAG embedder on first demand (reranker loads lazily)."""
 
 import threading
 
@@ -36,17 +36,13 @@ class ModelWarmupManager:
 
     @classmethod
     def _preload_all(cls):
-        logger.warning("[preload] Starting model warmup (embedding + reranker)…")
-
-        # Load embedder first (critical path), then reranker in background.
+        # 只预热 embedder（首次检索必用）；reranker（约 500MB）延迟到真正精排时加载，
+        # 空闲后由 reranker 自己的 idle watcher 卸载。
+        logger.warning("[preload] Loading embedding model…")
         cls._preload_embedder()
-        reranker_thread = threading.Thread(target=cls._preload_reranker, daemon=True, name="reranker-warmup")
-        reranker_thread.start()
-        reranker_thread.join()
-
         with cls._lock:
             cls._preload_done = True
-        logger.warning("[preload] Model warmup complete")
+        logger.warning("[preload] Embedding model ready")
 
     @classmethod
     def _preload_embedder(cls):
@@ -56,15 +52,6 @@ class ModelWarmupManager:
             get_model()
         except Exception as e:
             logger.warning(f"[preload] embedder warmup skipped: {e}\n")
-
-    @classmethod
-    def _preload_reranker(cls):
-        try:
-            from sidecar.rag.retriever import _get_reranker
-
-            _get_reranker()
-        except Exception as e:
-            logger.warning(f"[preload] reranker warmup skipped: {e}\n")
 
     @classmethod
     def is_ready(cls) -> bool:

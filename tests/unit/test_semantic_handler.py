@@ -632,7 +632,8 @@ def test_semantic_detail_returns_source_blocks(semantic_handler: SemanticHandler
     assert concept["item"]["sources"][0]["excerpt"] == "混合检索结合向量与关键词。"
 
 
-def test_start_full_compile_uses_every_note(semantic_handler: SemanticHandler) -> None:
+def test_start_full_compile_uses_every_note(semantic_handler: SemanticHandler, monkeypatch) -> None:
+    config.ai_enabled = True
     captured = {}
 
     def fake_start(task_name, target, args=(), kwargs=None, kind="task", label=None):

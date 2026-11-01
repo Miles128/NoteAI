@@ -274,6 +274,12 @@ class SemanticHandler(BaseHandler):
         return retry_failed_blocks(store, limit=limit)
 
     def _start_semantic_compile(self, _params):
+        from config import config
+
+        if not config.ai_enabled:
+            return {"success": False, "message": "AI 功能已关闭。请在 设置 → AI 功能 中开启"}
+        if not config.semantic_compile_enabled:
+            return {"success": False, "message": "语义抽取已关闭。请在 设置 → AI 功能 中开启"}
         workspace, err = self._require_workspace()
         if err:
             return err

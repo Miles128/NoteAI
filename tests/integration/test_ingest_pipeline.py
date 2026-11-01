@@ -132,11 +132,10 @@ class TestFileConverter:
         converter = FileConverterManager(str(workspace))
         assert converter is not None
 
-    def test_converter_supports_pdf(self, workspace: Path) -> None:
+    def test_converter_no_longer_supports_pdf(self, workspace: Path) -> None:
         from modules.file_converter import FileConverterManager
 
-        converter = FileConverterManager(str(workspace))
-        assert hasattr(converter, "convert_file") or hasattr(converter, "convert")
+        assert ".pdf" not in FileConverterManager.get_supported_formats()
 
 
 class TestTopicAssigner:

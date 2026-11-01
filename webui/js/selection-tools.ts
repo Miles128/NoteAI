@@ -49,9 +49,9 @@
         _bar.className = 'selection-tools-popover';
         _bar.hidden = true;
         _bar.innerHTML = [
-            '<button type="button" data-action="rag"></button>',
+            '<button type="button" data-action="rag" data-ai-feature="writing"></button>',
             '<button type="button" data-action="local"></button>',
-            '<button type="button" data-action="web"></button>',
+            '<button type="button" data-action="web" data-ai-feature="writing"></button>',
             '<button type="button" data-action="copy"></button>'
         ].join('');
         document.body.appendChild(_bar);
@@ -141,6 +141,7 @@
     }
 
     function askKnowledge(text: any, route: any) {
+        if (window.AIGate && !window.AIGate.guard('writing')) return;
         var selected = _normalizeSelectionText(text);
         if (!selected) return;
         if (window.AssistantModule && window.AssistantModule.askSelection) {

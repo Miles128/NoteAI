@@ -1,6 +1,7 @@
 import os
 import shutil
 import threading
+import time
 from pathlib import Path
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -53,10 +54,16 @@ def _ensure_fastembed_cache():
         pass
 
 
+from sidecar.rag.rag_config import EMBED_IDLE_UNLOAD_SECONDS
 from utils.logger import logger
 
 _DENSE_MODEL = None
 _DENSE_MODEL_LOCK = threading.Lock()
+_DENSE_USE_LOCK = threading.Lock()
+_DENSE_IN_FLIGHT = 0
+_DENSE_LAST_USED: float = 0.0
+_DENSE_IDLE_TIMER: threading.Timer | None = None
+_DENSE_IDLE_GENERATION = 0
 
 DENSE_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 DENSE_DIM = 512
@@ -69,10 +76,26 @@ _FF_MODEL_FOLDER = "models--Qdrant--bge-small-zh-v1.5"
 
 
 def _onnx_inference_threads() -> int | None:
-    n = os.cpu_count()
-    if not n:
-        return None
-    return min(8, max(1, n))
+    """Cap ONNX threads: AI spikes should not peg every core by default.
+
+    Priority: 设置页 rag_onnx_threads > 环境变量 NOTEAI_ONNX_THREADS > 自动 min(4, cpu)。
+    """
+    try:
+        from config import config
+
+        cfg_threads = int(getattr(config, "rag_onnx_threads", 0) or 0)
+    except Exception:
+        cfg_threads = 0
+    if cfg_threads > 0:
+        return max(1, min(32, cfg_threads))
+    raw = os.environ.get("NOTEAI_ONNX_THREADS", "").strip()
+    if raw:
+        try:
+            return max(1, min(32, int(raw)))
+        except ValueError:
+            pass
+    n = os.cpu_count() or 1
+    return max(1, min(4, n))
 
 
 def _purge_bge_zh_snapshot(cache_root: Path) -> None:
@@ -100,9 +123,85 @@ def _is_recoverable_embed_load_err(err: BaseException) -> bool:
 
 def reset_dense_model() -> None:
     """Drop the cached dense model, mainly for tests or workspace switches."""
-    global _DENSE_MODEL
+    global _DENSE_MODEL, _DENSE_IDLE_GENERATION, _DENSE_IDLE_TIMER
     with _DENSE_MODEL_LOCK:
         _DENSE_MODEL = None
+        _DENSE_IDLE_GENERATION += 1
+        if _DENSE_IDLE_TIMER is not None:
+            _DENSE_IDLE_TIMER.cancel()
+            _DENSE_IDLE_TIMER = None
+
+
+def _touch_dense_usage_locked() -> None:
+    global _DENSE_LAST_USED
+    with _DENSE_USE_LOCK:
+        _DENSE_LAST_USED = time.monotonic()
+
+
+def _begin_dense_use() -> None:
+    global _DENSE_IN_FLIGHT, _DENSE_LAST_USED
+    with _DENSE_USE_LOCK:
+        _DENSE_IN_FLIGHT += 1
+        _DENSE_LAST_USED = time.monotonic()
+
+
+def _end_dense_use() -> None:
+    global _DENSE_IN_FLIGHT, _DENSE_LAST_USED
+    with _DENSE_USE_LOCK:
+        _DENSE_IN_FLIGHT = max(0, _DENSE_IN_FLIGHT - 1)
+        _DENSE_LAST_USED = time.monotonic()
+
+
+def _schedule_dense_idle_unload_locked(delay: float | None = None) -> None:
+    """Arm the idle-unload timer. Caller must hold ``_DENSE_MODEL_LOCK``."""
+    global _DENSE_IDLE_TIMER, _DENSE_IDLE_GENERATION
+    wait = EMBED_IDLE_UNLOAD_SECONDS if delay is None else max(0.0, delay)
+    _DENSE_IDLE_GENERATION += 1
+    generation = _DENSE_IDLE_GENERATION
+    if _DENSE_IDLE_TIMER is not None:
+        _DENSE_IDLE_TIMER.cancel()
+    timer = threading.Timer(wait, _maybe_unload_dense_idle, args=(generation,))
+    timer.daemon = True
+    _DENSE_IDLE_TIMER = timer
+    timer.start()
+
+
+def _maybe_unload_dense_idle(generation: int) -> None:
+    global _DENSE_MODEL, _DENSE_IDLE_TIMER
+    reschedule = 0.0
+    with _DENSE_MODEL_LOCK:
+        if generation != _DENSE_IDLE_GENERATION:
+            return
+        _DENSE_IDLE_TIMER = None
+        if _DENSE_MODEL is None:
+            return
+        with _DENSE_USE_LOCK:
+            busy = _DENSE_IN_FLIGHT
+            idle = time.monotonic() - _DENSE_LAST_USED
+        if busy > 0:
+            reschedule = EMBED_IDLE_UNLOAD_SECONDS
+        elif idle < EMBED_IDLE_UNLOAD_SECONDS:
+            reschedule = EMBED_IDLE_UNLOAD_SECONDS - idle
+        else:
+            _DENSE_MODEL = None
+    if reschedule > 0:
+        with _DENSE_MODEL_LOCK:
+            _schedule_dense_idle_unload_locked(reschedule)
+        return
+    import gc
+
+    gc.collect()
+    logger.info(f"[rag/embedder] idle unload after {int(EMBED_IDLE_UNLOAD_SECONDS)}s")
+
+
+def _create_dense_model(download_callback=None):
+    from fastembed import TextEmbedding
+
+    return TextEmbedding(
+        DENSE_MODEL_NAME,
+        cache_dir=str(_fastembed_cache_root()),
+        threads=_onnx_inference_threads(),
+    )
 
 
 def _get_dense_model(download_callback=None):
@@ -111,19 +210,16 @@ def _get_dense_model(download_callback=None):
     _ensure_fastembed_cache()
     with _DENSE_MODEL_LOCK:
         if _DENSE_MODEL is not None:
+            _touch_dense_usage_locked()
             return _DENSE_MODEL
         for attempt in range(2):
             try:
                 if download_callback:
                     download_callback("正在加载 Embedding 模型…" if attempt == 0 else "正在重新下载 Embedding 模型…")
-                from fastembed import TextEmbedding
-
-                _dense = TextEmbedding(
-                    DENSE_MODEL_NAME,
-                    cache_dir=str(_fastembed_cache_root()),
-                    threads=_onnx_inference_threads(),
-                )
+                _dense = _create_dense_model(download_callback)
                 _DENSE_MODEL = _dense
+                _touch_dense_usage_locked()
+                _schedule_dense_idle_unload_locked()
                 return _DENSE_MODEL
             except Exception as e:
                 if attempt == 0 and _is_recoverable_embed_load_err(e):
@@ -156,17 +252,21 @@ def encode(
     if not texts:
         return {"dense_vecs": []}
     texts = [t if t and t.strip() else " " for t in texts]
-    model = _get_dense_model(download_callback=download_callback)
-    prefixed = _bge_prefix(texts, is_query=False)
+    _begin_dense_use()
+    try:
+        model = _get_dense_model(download_callback=download_callback)
+        prefixed = _bge_prefix(texts, is_query=False)
 
-    embeddings = []
-    total = len(prefixed)
-    for idx, emb in enumerate(model.embed(prefixed)):
-        embeddings.append(emb.tolist())
-        if progress_callback and total > 1 and idx % max(1, total // 10) == 0:
-            progress_callback(min(idx + 1, total), total, "正在生成 Embedding...")
+        embeddings = []
+        total = len(prefixed)
+        for idx, emb in enumerate(model.embed(prefixed)):
+            embeddings.append(emb.tolist())
+            if progress_callback and total > 1 and idx % max(1, total // 10) == 0:
+                progress_callback(min(idx + 1, total), total, "正在生成 Embedding...")
 
-    dense_vecs = np.array(embeddings)
+        dense_vecs = np.array(embeddings)
+    finally:
+        _end_dense_use()
     if progress_callback and total > 0:
         progress_callback(total, total, "Embedding 生成完成")
     return {"dense_vecs": dense_vecs}
@@ -175,10 +275,14 @@ def encode(
 def encode_query(query: str) -> dict:
     if not query:
         return {"dense_vec": None}
-    model = _get_dense_model()
-    prefixed = _bge_prefix([query], is_query=True)
-    embeddings = list(model.embed(prefixed))
-    dense = embeddings[0].tolist()
+    _begin_dense_use()
+    try:
+        model = _get_dense_model()
+        prefixed = _bge_prefix([query], is_query=True)
+        embeddings = list(model.embed(prefixed))
+        dense = embeddings[0].tolist()
+    finally:
+        _end_dense_use()
     return {"dense_vec": dense}
 
 

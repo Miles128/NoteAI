@@ -888,6 +888,7 @@ window.AssistantModule = (function() {
         handleEvent: handleEvent,
         rebuildIndex: rebuildIndex,
         toggle: toggle,
+        close: function () { if (_panelVisible) toggle(); },
         ensureOpen: ensureOpen,
         ask: ask,
         askSelection: askSelection
@@ -895,6 +896,7 @@ window.AssistantModule = (function() {
 })();
 
 function toggleAIPanel() {
+    if (window.AIGate && !window.AIGate.guard('chat')) return;
     if (window.AssistantModule) window.AssistantModule.toggle();
 }
 

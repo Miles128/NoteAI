@@ -107,6 +107,13 @@ class ConfigHandler(BaseHandler):
             "typography": self.config.typography if isinstance(self.config.typography, dict) else {},
             "ingest_auto_enabled": self.config.ingest_auto_enabled,
             "semantic_compile_enabled": self.config.semantic_compile_enabled,
+            "ai_enabled": self.config.ai_enabled,
+            "ai_chat_enabled": self.config.ai_chat_enabled,
+            "ai_writing_enabled": self.config.ai_writing_enabled,
+            "ai_compile_enabled": self.config.ai_compile_enabled,
+            "ui_hide_statusbar": self.config.ui_hide_statusbar,
+            "ui_hide_home_stats": self.config.ui_hide_home_stats,
+            "startup_lint_enabled": self.config.startup_lint_enabled,
             "cli_agent_id": self.config.cli_agent_id,
             "rag_enabled": self.config.rag_enabled,
             "rag_hyde_enabled": self.config.rag_hyde_enabled,
@@ -115,6 +122,7 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score": self.config.rag_rerank_skip_score,
             "rag_dense_weight": self.config.rag_dense_weight,
             "rag_top_k": self.config.rag_top_k,
+            "rag_onnx_threads": self.config.rag_onnx_threads,
             "locale": self.config.locale,
             "theme_preference": self.config.theme_preference,
         }
@@ -187,6 +195,20 @@ class ConfigHandler(BaseHandler):
                 self.config.ingest_auto_enabled = bool(params["ingest_auto_enabled"])
             if "semantic_compile_enabled" in params:
                 self.config.semantic_compile_enabled = bool(params["semantic_compile_enabled"])
+            if "ai_enabled" in params:
+                self.config.ai_enabled = bool(params["ai_enabled"])
+            if "ai_chat_enabled" in params:
+                self.config.ai_chat_enabled = bool(params["ai_chat_enabled"])
+            if "ai_writing_enabled" in params:
+                self.config.ai_writing_enabled = bool(params["ai_writing_enabled"])
+            if "ai_compile_enabled" in params:
+                self.config.ai_compile_enabled = bool(params["ai_compile_enabled"])
+            if "ui_hide_statusbar" in params:
+                self.config.ui_hide_statusbar = bool(params["ui_hide_statusbar"])
+            if "ui_hide_home_stats" in params:
+                self.config.ui_hide_home_stats = bool(params["ui_hide_home_stats"])
+            if "startup_lint_enabled" in params:
+                self.config.startup_lint_enabled = bool(params["startup_lint_enabled"])
             if "cli_agent_id" in params:
                 self.config.cli_agent_id = str(params["cli_agent_id"] or "").strip()
             if "rag_enabled" in params:
@@ -209,6 +231,8 @@ class ConfigHandler(BaseHandler):
                 )
             if "rag_top_k" in params:
                 self.config.rag_top_k = self._coerce_int(params["rag_top_k"], DEFAULT_TOP_K, MIN_TOP_K, MAX_TOP_K)
+            if "rag_onnx_threads" in params:
+                self.config.rag_onnx_threads = self._coerce_int(params["rag_onnx_threads"], 0, 0, 32)
             if "locale" in params:
                 loc = str(params["locale"]).strip()
                 self.config.locale = "en" if loc == "en" else "zh-CN"
@@ -226,6 +250,7 @@ class ConfigHandler(BaseHandler):
             "rag_rerank_skip_score",
             "rag_dense_weight",
             "rag_top_k",
+            "rag_onnx_threads",
         )
         if any(k in params for k in rag_keys):
             try:
@@ -234,6 +259,20 @@ class ConfigHandler(BaseHandler):
                 clear_query_cache()
             except Exception:
                 pass
+            if "rag_onnx_threads" in params:
+                # ONNX 线程数在模型加载时固化，改完需要重载模型才生效。
+                try:
+                    from sidecar.rag.embedder import reset_dense_model
+
+                    reset_dense_model()
+                except Exception:
+                    pass
+                try:
+                    from sidecar.rag.reranker import reset_reranker
+
+                    reset_reranker()
+                except Exception:
+                    pass
         return {"success": True, "message": "UI 配置已保存"}
 
     def _get_project_rules(self, params):

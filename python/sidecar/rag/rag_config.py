@@ -15,6 +15,10 @@ DEFAULT_DENSE_WEIGHT = 0.7
 # INT8 量化 ONNX（Xenova/bge-reranker-base，约 280MB），中英都可用；不下载 1GB fp32。
 RERANK_MODEL_NAME = "Xenova/bge-reranker-base"
 RERANK_MODEL_FILE = "onnx/model_quantized.onnx"
+# 精排器（约 500MB 常驻）空闲这么久后卸载，下一次使用再加载。
+RERANK_IDLE_UNLOAD_SECONDS = 600
+# 向量模型（约 150MB 常驻）同理，按需加载、空闲卸载。
+EMBED_IDLE_UNLOAD_SECONDS = 600
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:

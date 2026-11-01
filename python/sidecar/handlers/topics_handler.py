@@ -58,7 +58,9 @@ latest_note_mtime = _latest_note_mtime
 class TopicsHandler(BaseHandler, Topics3TierMixin):
     _pending_maintenance_schedule_lock = threading.Lock()
     _pending_maintenance_last_scheduled: dict[str, float] = {}
-    _pending_maintenance_interval_seconds = 30.0
+    # 首页每分钟轮询一次 dashboard 都会请求维护；去重间隔必须大于轮询周期，
+    # 否则维护任务会跟着轮询每分钟空跑一次。
+    _pending_maintenance_interval_seconds = 300.0
 
     def _collect_stale_topics(self, workspace: str) -> list[str]:
         return collect_stale_topics(workspace)
@@ -206,11 +208,12 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             "maintenance_started": maintenance_started,
         }
 
-    def schedule_pending_maintenance(self) -> bool:
-        """Start deduplicated Inbox maintenance without blocking snapshot reads."""
-        start_task = getattr(self._server, "_start_task", None)
-        if not callable(start_task):
-            return False
+    def schedule_pending_maintenance(self, *, delay_seconds: float = 0.0) -> bool:
+        """Start deduplicated Inbox maintenance without blocking snapshot reads.
+
+        ``delay_seconds`` defers the heavy work off the startup path: dashboards
+        request it 60s later so the first seconds of app life stay idle-cheap.
+        """
         workspace = config.workspace_path
         if not workspace:
             return False
@@ -220,17 +223,29 @@ class TopicsHandler(BaseHandler, Topics3TierMixin):
             elapsed = now - self._pending_maintenance_last_scheduled.get(root_key, float("-inf"))
             if elapsed < self._pending_maintenance_interval_seconds:
                 return False
-            started = bool(
-                start_task(
-                    "pending_maintenance",
-                    self._run_pending_maintenance,
-                    kind="maintenance",
-                    label="Inbox maintenance",
-                )
+            start_task = getattr(self._server, "_start_task", None)
+            if not callable(start_task):
+                return False
+            self._pending_maintenance_last_scheduled[root_key] = now
+
+        def _launch() -> None:
+            task_start = getattr(self._server, "_start_task", None)
+            if not callable(task_start):
+                return
+            task_start(
+                "pending_maintenance",
+                self._run_pending_maintenance,
+                kind="maintenance",
+                label="Inbox maintenance",
             )
-            if started:
-                self._pending_maintenance_last_scheduled[root_key] = now
-            return started
+
+        if delay_seconds > 0:
+            timer = threading.Timer(delay_seconds, _launch)
+            timer.daemon = True
+            timer.start()
+        else:
+            _launch()
+        return True
 
     def _run_pending_maintenance(self) -> None:
         from sidecar.pending_items import run_pending_cleanups_if_due

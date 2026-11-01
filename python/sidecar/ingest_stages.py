@@ -85,6 +85,10 @@ def run_compile_stage(ctx: IngestCtx) -> None:
     if ctx.stage_done("compile"):
         ctx.prog("compile", 0.28, "跳过笔记编译（已完成）")
         return
+    if not config.ai_compile_enabled:
+        ctx.prog("compile", 0.28, "AI 编译已关闭，跳过笔记编译")
+        ctx.mark_stage_done("compile")
+        return
     from utils.note_compiler import compile_notes_batch, scan_compile_pending
 
     compile_targets: list[str] = list(ctx.converted_note_paths)
@@ -114,6 +118,10 @@ def run_compile_stage(ctx: IngestCtx) -> None:
 
 def run_classify_stage(ctx: IngestCtx) -> None:
     pipe = _pipe()
+    if not config.ai_compile_enabled:
+        ctx.prog("classify", 0.28, "AI 分类已关闭，跳过主题分类")
+        ctx.mark_stage_done("classify")
+        return
     if ctx.stage_done("classify"):
         ctx.prog("classify", 0.45, "跳过分类（已完成）")
         return
@@ -171,7 +179,7 @@ def run_semantic_stage(ctx: IngestCtx) -> None:
     if ctx.stage_done("semantic"):
         ctx.prog("semantic", 0.52, "跳过语义编译（已完成）")
         return
-    if not config.semantic_compile_enabled:
+    if not config.semantic_compile_enabled or not config.ai_enabled:
         ctx.prog("semantic", 0.52, "语义编译已关闭")
         ctx.mark_stage_done("semantic")
         return

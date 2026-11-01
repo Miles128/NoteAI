@@ -527,6 +527,14 @@
     background: #7c5a8a;
 }
 
+.accent-olive {
+    background: #5f7a4f;
+}
+
+.accent-rose {
+    background: #a8546b;
+}
+
 [data-theme="light"] .card,
 [data-theme="paper"] .card {
     border-color: transparent;

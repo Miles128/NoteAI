@@ -1,0 +1,22 @@
+/* ==========================================================================
+   AI 功能开关 + 界面精简
+   由 js/ai-gate.ts 给 body 打属性后生效，避免各模块自行判断开关。
+   ========================================================================== */
+
+body[data-ai-master="off"] [data-ai-feature],
+body[data-ai-chat="off"] [data-ai-feature="chat"],
+body[data-ai-writing="off"] [data-ai-feature="writing"],
+body[data-ai-compile="off"] [data-ai-feature="compile"],
+body[data-ai-semantic="off"] [data-ai-feature="semantic"] {
+    display: none !important;
+}
+
+/* 个性化：隐藏状态栏 */
+body.ui-hide-statusbar #app-statusbar {
+    display: none !important;
+}
+
+/* 个性化：隐藏首页统计卡 */
+body.ui-hide-home-stats .home-stat-grid {
+    display: none !important;
+}

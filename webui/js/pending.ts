@@ -269,7 +269,8 @@ function renderPendingInfoItem(item: any, idx: any, kind: any) {
     }
     if (item.action === 'retry_cascade' || item.action === 'retry_convert' || item.action === 'retry_ingest' || item.action === 'refresh_survey') {
         var retryLabel = item.action === 'refresh_survey' ? window.t('pending.rewriteSurvey') : window.t('pending.retryItem');
-        html += '<div class="pending-item-actions"><button data-action="retry-item">' + retryLabel + '</button>';
+        var aiAttr = (item.action === 'retry_cascade' || item.action === 'refresh_survey') ? ' data-ai-feature="compile"' : '';
+        html += '<div class="pending-item-actions"><button data-action="retry-item"' + aiAttr + '>' + retryLabel + '</button>';
         if (item.action !== 'retry_ingest' && item.action !== 'refresh_survey') {
             html += '<button class="btn-reject" data-action="dismiss-item">' + window.t('pending.dismissItem') + '</button>';
         }
@@ -662,6 +663,7 @@ function scanPendingMergeCandidates() {
 }
 
 function retryAllCascadeFailures() {
+    if (window.AIGate && !window.AIGate.guard('compile')) return;
     var btn = document.getElementById('pending-cascade-retry-btn');
     if (!window.api || !window.api.retryAllCascadeFailures) return;
     _setButtonBusy(btn, true, 'pending.retrying');

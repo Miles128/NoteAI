@@ -7,7 +7,7 @@
 var THEME_STORAGE_KEY = window.Storage.KEYS.THEME;
 var ACCENT_STORAGE_KEY = window.Storage.KEYS.ACCENT_COLOR;
 var TYPOGRAPHY_STORAGE_KEY = 'noteai_typography_settings';
-var ACCENT_VALUES = new Set(['theme', 'blue', 'rust', 'teal', 'plum']);
+var ACCENT_VALUES = new Set(['theme', 'blue', 'rust', 'teal', 'plum', 'olive', 'rose']);
 var currentAccentColor = 'theme';
 var FONT_FAMILIES: Record<string, string> = {
     system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", sans-serif',

@@ -72,7 +72,7 @@ function b64DecodeUtf8(b64: string): string {
     return new TextDecoder('utf-8').decode(b64ToUint8(b64));
 }
 
-/** 幂等懒加载经典脚本（不重复注入同一 src）。用于 pdfjs/tiptap 等按需库。 */
+/** 幂等懒加载经典脚本（不重复注入同一 src）。用于 tiptap 等按需库。 */
 var _lazyScripts: Record<string, any> = {};
 function loadLazyScript(src: string): Promise<boolean> {
     if (_lazyScripts[src] === true) return Promise.resolve(true);

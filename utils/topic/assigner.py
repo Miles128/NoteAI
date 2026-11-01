@@ -322,6 +322,8 @@ def auto_assign_topic_for_file(file_path, use_llm=True):
     workspace = config.workspace_path
     if not workspace:
         return None
+    if not config.ai_compile_enabled:
+        return None
 
     full_path = Path(file_path)
     if not full_path.exists():

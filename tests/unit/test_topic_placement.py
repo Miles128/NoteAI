@@ -81,6 +81,7 @@ def test_inbox_auto_move_deduplicates_immediate_refresh(tmp_path: Path, monkeypa
     root = tmp_path / "ws"
     calls: list[Path] = []
     _AUTO_MOVE_LAST_RUN.pop(str(root.resolve()), None)
+    monkeypatch.setattr("sidecar.topic_placement.config.startup_lint_enabled", True)
     monkeypatch.setattr(
         "sidecar.topic_placement._auto_move_misplaced_notes_locked",
         lambda workspace: calls.append(Path(workspace)) or {"success": True, "moved": [], "errors": []},

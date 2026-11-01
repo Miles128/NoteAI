@@ -17,7 +17,6 @@ from utils.helpers import (
     sanitize_filename,
 )
 from utils.logger import logger
-from utils.pdf_utils import extract_pdf_pages, extract_pdf_text
 from utils.tag_extractor import (
     add_yaml_frontmatter_to_content,
     extract_tags_from_filename,
@@ -67,94 +66,6 @@ class BaseConverter(ABC):
     def _extract_text(self, file_path: str) -> str:
         """提取文本内容（由子类实现）"""
         pass
-
-
-class PDFConverter(BaseConverter):
-    """PDF转Markdown转换器（仅使用快速路径）"""
-
-    SUPPORTED_FORMATS = [".pdf"]
-    _display_name = "PDF"
-
-    MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION = 3
-    SIGNATURE_MIN_LENGTH = 5
-    SIGNATURE_MAX_LENGTH = 200
-    SIGNATURE_MAX_LINES = 5
-
-    def _extract_text(self, file_path: str) -> str:
-        """使用 PyMuPDF 提取 PDF 文本"""
-        return extract_pdf_text(file_path)
-
-    def _post_process(self, content: str, file_path: str) -> str:
-        """PDF 特定后处理：clean_text → 签名移除 → 图片移除"""
-        content = clean_text(content)
-        content = self._remove_repeated_signatures(content, file_path)
-        content = remove_images_from_markdown(content)
-        return content
-
-    def _extract_page_texts(self, file_path: str) -> list[str]:
-        """提取每一页的文本用于签名检测"""
-        return extract_pdf_pages(file_path)
-
-    def _find_signature_lines(self, page_texts: list[str]) -> set:
-        """
-        识别在每一页都出现的重复文本行（签名、页眉、页脚等）
-
-        Returns:
-            包含重复文本的集合
-        """
-        if len(page_texts) < self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION:
-            return set()
-
-        signature_candidates = []
-        for page_text in page_texts:
-            lines = page_text.split("\n")
-            lines = [line.strip() for line in lines if line.strip()]
-            signature_candidates.append(set(lines))
-
-        common_lines = signature_candidates[0]
-        for candidate_set in signature_candidates[1:]:
-            common_lines &= candidate_set
-
-        valid_signatures = set()
-        for line in common_lines:
-            if self.SIGNATURE_MIN_LENGTH <= len(line) <= self.SIGNATURE_MAX_LENGTH:
-                valid_signatures.add(line)
-
-        logger.info(f"检测到 {len(valid_signatures)} 条重复签名/页眉/页脚")
-        return valid_signatures
-
-    def _remove_repeated_signatures(self, markdown_content: str, file_path: str) -> str:
-        """从Markdown内容中移除重复出现的签名、页眉、页脚（单次打开PDF）"""
-        import fitz
-
-        with fitz.open(file_path) as doc:
-            page_count = len(doc)
-            page_texts = [page.get_text() for page in doc]
-
-        if page_count < self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION:
-            logger.info(f"页数({page_count})少于{self.MIN_PAGE_COUNT_FOR_SIGNATURE_DETECTION}，跳过签名检测")
-            return markdown_content
-
-        signature_lines = self._find_signature_lines(page_texts)
-
-        if not signature_lines:
-            return markdown_content
-
-        lines = markdown_content.split("\n")
-        filtered_lines = []
-        skip_count = 0
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped in signature_lines:
-                skip_count += 1
-                continue
-            filtered_lines.append(line)
-
-        if skip_count > 0:
-            logger.info(f"已移除 {skip_count} 行签名/页眉/页脚内容")
-
-        return "\n".join(filtered_lines)
 
 
 class TXTConverter(BaseConverter):
@@ -407,7 +318,6 @@ class HTMLConverter(BaseConverter):
 class FileConverterManager:
     """文件转换管理器"""
 
-    PDF_FORMATS = [".pdf"]
     DOCX_FORMATS = [".docx"]
     LEGACY_DOC_FORMATS = [".doc"]
     PPT_FORMATS = [".pptx"]
@@ -417,7 +327,6 @@ class FileConverterManager:
 
     def __init__(self, progress_callback: Callable | None = None):
         self.progress_callback = progress_callback
-        self._pdf_converter: PDFConverter | None = None
         self._docx_converter: DOCXConverter | None = None
         self._legacy_doc_converter: LegacyDOCConverter | None = None
         self._txt_converter: TXTConverter | None = None
@@ -441,13 +350,6 @@ class FileConverterManager:
         if has_paragraph and has_sentence_end:
             return False
         return True
-
-    @property
-    def pdf_converter(self):
-        """懒加载PDF转换器"""
-        if self._pdf_converter is None:
-            self._pdf_converter = PDFConverter(self.progress_callback)
-        return self._pdf_converter
 
     @property
     def docx_converter(self):
@@ -490,8 +392,6 @@ class FileConverterManager:
     def _get_converter(self, ext: str):
         """根据扩展名获取合适的转换器"""
         ext = ext.lower()
-        if ext in self.PDF_FORMATS:
-            return self.pdf_converter
         if ext in self.DOCX_FORMATS:
             return self.docx_converter
         if ext in self.LEGACY_DOC_FORMATS:
@@ -521,15 +421,11 @@ class FileConverterManager:
             issues.append("提取正文过短")
         if suspicious_ratio > 0.02:
             issues.append("疑似乱码")
-        suspected_scanned_pdf = ext.lower() == ".pdf" and non_whitespace < 80
-        if suspected_scanned_pdf:
-            issues.append("疑似扫描 PDF，无法可靠提取正文")
 
         return {
             "acceptable": not issues,
             "characters": non_whitespace,
             "suspicious_ratio": round(suspicious_ratio, 4),
-            "suspected_scanned_pdf": suspected_scanned_pdf,
             "issues": issues,
         }
 
@@ -638,7 +534,12 @@ class FileConverterManager:
                 result["error"] = "；".join(extracted_quality["issues"])
                 return result
 
-            if self._needs_llm_rewrite(markdown_content) and len(markdown_content) <= 6000:
+            if (
+                config.ai_enabled
+                and config.ai_compile_enabled
+                and self._needs_llm_rewrite(markdown_content)
+                and len(markdown_content) <= 6000
+            ):
                 try:
                     from utils.llm_utils import call_llm_raw, check_api_config
 
@@ -851,8 +752,7 @@ class FileConverterManager:
     def get_supported_formats(cls) -> list[str]:
         """获取支持的格式列表"""
         return (
-            cls.PDF_FORMATS
-            + cls.DOCX_FORMATS
+            cls.DOCX_FORMATS
             + cls.LEGACY_DOC_FORMATS
             + cls.PPT_FORMATS
             + cls.LEGACY_PPT_FORMATS

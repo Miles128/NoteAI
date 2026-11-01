@@ -8,7 +8,6 @@ var formatModifiedTime = window.formatModifiedTime;
 let currentPreviewData: any = null;
 let isPreviewActive = false;
 let currentLoadRequestId = 0;
-var pdfViewerState: { pdfDoc: any; pageNum: number; pageCount: number; scale: number } | null = null;
 
 function generateLoadRequestId() {
     currentLoadRequestId += 1;
@@ -235,7 +234,6 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
         if (result && result.success) {
             const fileType = result.type || 'markdown';
             const isMarkdown = fileType === 'markdown' || fileName.toLowerCase().endsWith('.md');
-            const isPdf = fileType === 'pdf' || fileName.toLowerCase().endsWith('.pdf');
             const isDocx = fileType === 'docx' || fileType === 'word'
                 || /\.docx?$/i.test(fileName);
             
@@ -248,8 +246,7 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
                 metadata: result.metadata || {
                     type: isDocx ? window.t('preview.typeWord') : undefined,
                     size: result.file_size,
-                },
-                pdfData: result
+                }
             };
 
             updateTitlebarFileName(fileName, isMarkdown);
@@ -258,13 +255,7 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
                 maybeLoadSemanticPageMeta(path, currentPreviewData.content, requestId);
             }
 
-            if (isPdf) {
-                if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
-                    await window.TiptapEditorModule.hideEditorUI();
-                }
-                showEditButton(false);
-                await loadPdfViewer(path, fileName, requestId);
-            } else if (isDocx) {
+            if (isDocx) {
                 if (window.TiptapEditorModule && window.TiptapEditorModule.hideEditorUI) {
                     await window.TiptapEditorModule.hideEditorUI();
                 }
@@ -333,201 +324,6 @@ async function loadFilePreview(path: string, fileName: string): Promise<void> {
             showPreviewError(window.t('preview.loadFailed'), (e as Error).message);
         }
     }
-}
-
-async function loadPdfViewer(path: string, fileName: string, requestId: number): Promise<void> {
-    var previewContent = document.getElementById('preview-content');
-    if (!previewContent) return;
-
-    previewContent.innerHTML = `
-        <div class="pdf-viewer-container">
-            <div class="pdf-toolbar">
-                <div class="pdf-toolbar-left">
-                    <span class="pdf-file-name">${window.escapeHtml(fileName)}</span>
-                </div>
-                <div class="pdf-toolbar-center">
-                    <button class="pdf-nav-btn" id="pdf-prev-btn" title="${window.t('preview.prevPage')}">
-                        ${window.Icons && window.Icons.get('chevronLeft', 16)}
-                    </button>
-                    <span class="pdf-page-info"><span id="pdf-page-num">1</span> / <span id="pdf-page-count">0</span></span>
-                    <button class="pdf-nav-btn" id="pdf-next-btn" title="${window.t('preview.nextPage')}">
-                        ${window.Icons && window.Icons.get('chevronRight', 16)}
-                    </button>
-                </div>
-                <div class="pdf-toolbar-right">
-                    <button class="pdf-zoom-btn" id="pdf-zoom-out-btn" title="${window.t('preview.zoomOut')}">−</button>
-                    <span class="pdf-zoom-level" id="pdf-zoom-level">100%</span>
-                    <button class="pdf-zoom-btn" id="pdf-zoom-in-btn" title="${window.t('preview.zoomIn')}">+</button>
-                </div>
-            </div>
-            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
-                <canvas id="pdf-render-canvas"></canvas>
-            </div>
-        </div>
-    `;
-
-    previewContent.style.display = 'flex';
-    previewContent.style.flexDirection = 'column';
-    previewContent.style.padding = '0';
-    previewContent.style.overflow = 'hidden';
-
-    try {
-        var rawResult = await window.api.readFileRaw(path);
-        if (requestId !== currentLoadRequestId) return;
-
-        if (!rawResult || !rawResult.success) {
-            showPdfError(window.t('preview.loadFailed'), rawResult ? rawResult.message : window.t('preview.cannotRead'));
-            return;
-        }
-
-        var bytes = window.b64ToUint8(rawResult.content);
-
-        if (typeof pdfjsLib === 'undefined') {
-            // pdfjs 不再随首屏加载：打开 PDF 时按需注入（幂等）
-            try {
-                await window.loadLazyScript('pdfjs-legacy.min.js');
-            } catch (e) {
-                showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
-                return;
-            }
-            if (typeof pdfjsLib === 'undefined') {
-                showPdfError(window.t('preview.pdfViewerMissing'), window.t('preview.pdfJsUnavailable'));
-                return;
-            }
-        }
-
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-legacy.worker.min.js';
-
-        var loadingTask = pdfjsLib.getDocument({ data: bytes });
-        var pdfDoc = await loadingTask.promise;
-
-        if (requestId !== currentLoadRequestId) {
-            pdfDoc.destroy();
-            return;
-        }
-
-        pdfViewerState = {
-            pdfDoc: pdfDoc,
-            pageNum: 1,
-            pageCount: pdfDoc.numPages,
-            scale: 1.0
-        };
-
-        document.getElementById('pdf-page-count')!.textContent = String(pdfDoc.numPages);
-        document.getElementById('pdf-page-num')!.textContent = '1';
-        document.getElementById('pdf-zoom-level')!.textContent = '100%';
-
-        renderPdfPage(pdfViewerState.pageNum);
-
-        document.getElementById('pdf-prev-btn')!.addEventListener('click', function() {
-            if (!pdfViewerState || pdfViewerState.pageNum <= 1) return;
-            pdfViewerState.pageNum--;
-            renderPdfPage(pdfViewerState.pageNum);
-        });
-
-        document.getElementById('pdf-next-btn')!.addEventListener('click', function() {
-            if (!pdfViewerState || pdfViewerState.pageNum >= pdfViewerState.pageCount) return;
-            pdfViewerState.pageNum++;
-            renderPdfPage(pdfViewerState.pageNum);
-        });
-
-        document.getElementById('pdf-zoom-in-btn')!.addEventListener('click', function() {
-            if (!pdfViewerState) return;
-            pdfViewerState.scale = Math.min(pdfViewerState.scale + 0.25, 3.0);
-            document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
-            renderPdfPage(pdfViewerState.pageNum);
-        });
-
-        document.getElementById('pdf-zoom-out-btn')!.addEventListener('click', function() {
-            if (!pdfViewerState) return;
-            pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.25, 0.5);
-            document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
-            renderPdfPage(pdfViewerState.pageNum);
-        });
-
-        var canvasWrapper = document.getElementById('pdf-canvas-wrapper')!;
-        canvasWrapper.addEventListener('wheel', function(e) {
-            if (!pdfViewerState) return;
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                if (e.deltaY < 0) {
-                    pdfViewerState.scale = Math.min(pdfViewerState.scale + 0.1, 3.0);
-                } else {
-                    pdfViewerState.scale = Math.max(pdfViewerState.scale - 0.1, 0.5);
-                }
-                document.getElementById('pdf-zoom-level')!.textContent = Math.round(pdfViewerState.scale * 100) + '%';
-                renderPdfPage(pdfViewerState.pageNum);
-            }
-        }, { passive: false });
-
-        if (window._pdfKeyHandler) {
-            document.removeEventListener('keydown', window._pdfKeyHandler);
-            window._pdfKeyHandler = null;
-        }
-        window._pdfKeyHandler = function pdfKeyHandler(e: KeyboardEvent) {
-            if (!pdfViewerState) {
-                document.removeEventListener('keydown', window._pdfKeyHandler as EventListener);
-                window._pdfKeyHandler = null;
-                return;
-            }
-            if (e.key === 'ArrowRight' || e.key === 'PageDown') {
-                if (pdfViewerState.pageNum < pdfViewerState.pageCount) {
-                    pdfViewerState.pageNum++;
-                    renderPdfPage(pdfViewerState.pageNum);
-                }
-            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-                if (pdfViewerState.pageNum > 1) {
-                    pdfViewerState.pageNum--;
-                    renderPdfPage(pdfViewerState.pageNum);
-                }
-            }
-        };
-        document.addEventListener('keydown', window._pdfKeyHandler);
-
-    } catch (e) {
-        console.error('[Preview] PDF load error:', e);
-        if (requestId === currentLoadRequestId) {
-            showPdfError(window.t('preview.pdfLoadFailed'), (e as Error).message || window.t('common.unknownError'));
-        }
-    }
-}
-
-async function renderPdfPage(pageNum: number): Promise<void> {
-    if (!pdfViewerState || !pdfViewerState.pdfDoc) return;
-
-    var canvas = document.getElementById('pdf-render-canvas') as HTMLCanvasElement | null;
-    if (!canvas) return;
-
-    document.getElementById('pdf-page-num')!.textContent = String(pageNum);
-
-    try {
-        var page = await pdfViewerState.pdfDoc.getPage(pageNum);
-        var viewport = page.getViewport({ scale: pdfViewerState.scale });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        canvas.style.width = viewport.width + 'px';
-        canvas.style.height = viewport.height + 'px';
-
-        var ctx = canvas.getContext('2d');
-        var renderContext = {
-            canvasContext: ctx,
-            viewport: viewport
-        };
-
-        await page.render(renderContext).promise;
-        page.cleanup();
-    } catch (e) {
-        console.error('[Preview] PDF render error:', e);
-    }
-}
-
-function showPdfError(title: string, message: string) {
-    var previewContent = document.getElementById('preview-content');
-    if (!previewContent) return;
-    previewContent.style.display = '';
-    previewContent.style.padding = '16px';
-    showPreviewError(title, message);
 }
 
 function renderPreviewContent(previewData: any) {
@@ -629,18 +425,6 @@ function closePreview() {
 
     removeSemanticMetaBar();
 
-    if (pdfViewerState && pdfViewerState.pdfDoc) {
-        try {
-            pdfViewerState.pdfDoc.destroy();
-        } catch(e) {}
-        pdfViewerState = null;
-    }
-
-    if (window._pdfKeyHandler) {
-        document.removeEventListener('keydown', window._pdfKeyHandler);
-        window._pdfKeyHandler = null;
-    }
-    
     const previewPanel = document.getElementById('preview-panel');
     const previewContent = document.getElementById('preview-content');
 

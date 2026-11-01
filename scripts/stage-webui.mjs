@@ -19,7 +19,7 @@ export const STAGE_DIR = join(SRC, 'app');
 
 // 运行时必需条目（相对 webui/）：文件或目录，原样镜像到 webui/app/。
 // 来源：index.html 的全部本地 src/href + 各模块 loadLazyScript/loadLazyCss
-// 动态加载路径（d3/marked/purify/highlight/tiptap/pdfjs/locales）。
+// 动态加载路径（d3/marked/purify/highlight/tiptap/locales）。
 const STATIC_ENTRIES = [
     'index.html',
     'css',
@@ -34,8 +34,6 @@ const STATIC_ENTRIES = [
     'highlight.min.js',
     'hljs-github.css',
     'hljs-github-dark.css',
-    'pdfjs-legacy.min.js',
-    'pdfjs-legacy.worker.min.js',
 ];
 
 export async function stageWebui({ strict = true } = {}) {
@@ -58,8 +56,7 @@ export async function stageWebui({ strict = true } = {}) {
 // 监听输入变化（不含输出目录自身，避免自触发），防抖后重组。
 const WATCH_ROOTS = ['index.html', 'css', 'js', 'locales', 'lib', 'dist',
     'd3.min.js', 'marked.min.js', 'purify.min.js', 'highlight.min.js',
-    'hljs-github.css', 'hljs-github-dark.css',
-    'pdfjs-legacy.min.js', 'pdfjs-legacy.worker.min.js'];
+    'hljs-github.css', 'hljs-github-dark.css'];
 
 export function watchStage({ debounceMs = 500 } = {}) {
     let timer = null;

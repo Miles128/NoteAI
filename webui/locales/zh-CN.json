@@ -481,15 +481,10 @@
     "topicThresholdApplied": "阈值已应用，自动移动 {count} 篇笔记",
     "title": "设置",
     "nav": {
-      "model": "模型",
-      "ui": "界面",
-      "rag": "RAG 检索",
-      "semantic": "语义",
-      "cli": "CLI Agent",
-      "organizeRules": "整理规则",
-      "about": "关于",
-      "reliability": "备份与恢复",
-      "more": "更多"
+      "general": "常规",
+      "knowledge": "知识库",
+      "advanced": "高级",
+      "about": "关于"
     },
     "language": "语言",
     "languageZh": "中文",
@@ -795,15 +790,11 @@
     "actionResume": "继续整理",
     "actionRebuildIndex": "更新索引",
     "vitals": {
-      "pending": "待处理",
-      "organize": "整理",
-      "compile": "编译"
+      "pending": "待处理"
     },
     "stats": {
       "notes": "笔记",
-      "topics": "主题",
-      "pending": "待处理",
-      "running": "运行中"
+      "topics": "主题"
     },
     "activityTitle": "最近动态",
     "weeklyBrief": "生成本周简报",
@@ -818,17 +809,6 @@
     "pendingTitle": "待处理资料",
     "openPending": "查看",
     "pendingEmpty": "没有待处理资料",
-    "organizeTitle": "整理状态",
-    "organizeIdle": "当前没有整理任务",
-    "organizeComplete": "整理已完成",
-    "organizeNeedsResume": "整理需要续跑",
-    "compileTitle": "编译状态",
-    "compileIdle": "当前没有编译任务",
-    "statusRunning": "运行中",
-    "jobsRunning": "{count} 个任务运行中",
-    "statusComplete": "完成",
-    "statusFailed": "失败",
-    "statusCancelled": "已取消",
     "checkUpdates": "检查更新",
     "checkingUpdates": "检查中…",
     "flow": {
@@ -1013,6 +993,7 @@
     "cli": "CLI",
     "properties": "属性",
     "backlinks": "链接",
+    "relations": "关联",
     "semantic": "语义",
     "propertiesEmpty": "选择一篇笔记查看属性",
     "backlinksEmpty": "暂无反向链接",

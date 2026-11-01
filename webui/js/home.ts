@@ -86,50 +86,6 @@ function renderPending(summary: any) {
     }).join('');
 }
 
-function statusLabel(status: any) {
-    if (status === 'running') return window.t('home.statusRunning');
-    if (status === 'complete') return window.t('home.statusComplete');
-    if (status === 'failed') return window.t('home.statusFailed');
-    if (status === 'cancelled') return window.t('home.statusCancelled');
-    return status || '-';
-}
-
-function renderOrganize(status: any, jobs: any) {
-    var running = (jobs || []).filter(function(job: any) {
-        return job.status === 'running' && (job.kind === 'ingest' || job.kind === 'conversion');
-    });
-    var body = document.getElementById('home-organize-body');
-    if (!body) return;
-    if (running.length) {
-        body.innerHTML = '<div class="home-status-row"><span>' + esc(window.t('home.jobsRunning', { count: running.length })) + '</span><strong>' + esc(window.t('home.statusRunning')) + '</strong></div>';
-        return;
-    }
-    var msg = window.t('home.organizeIdle');
-    if (status && status.running) {
-        msg = status.message || window.t('ingest.pipelineRunning');
-    } else if (status && status.status === 'complete') {
-        msg = status.message || window.t('home.organizeComplete');
-    } else if (status && status.needs_resume) {
-        msg = status.message || window.t('home.organizeNeedsResume');
-    }
-    body.innerHTML = '<div class="home-status-row"><span>' + esc(msg) + '</span><strong>' +
-        esc((status && status.status) ? statusLabel(status.status) : window.t('home.flow.ready')) + '</strong></div>';
-}
-
-function renderCompile(jobs: any) {
-    var compileJobs = (jobs || []).filter(function(job: any) {
-        return job.kind === 'survey' || job.kind === 'rag_index' ||
-            job.id === 'ingest_cascade_surveys' || job.id === 'rag-index-progress';
-    });
-    var body = document.getElementById('home-compile-body');
-    if (!body) return;
-    if (!compileJobs.length) {
-        body.innerHTML = '<div class="home-empty">' + esc(window.t('home.compileIdle')) + '</div>';
-        return;
-    }
-    body.innerHTML = '<div class="home-status-row"><span>' + esc(window.t('home.jobsRunning', { count: compileJobs.length })) + '</span><strong>' + esc(window.t('home.statusRunning')) + '</strong></div>';
-}
-
 function renderFlow(summary: any, ingestStatus: any, jobs: any, indexStatus: any) {
     var ingestRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'ingest'; }) || (ingestStatus && ingestStatus.running);
     var conversionRunning = hasRunningJob(jobs, function(job: any) { return job.kind === 'conversion'; });
@@ -254,7 +210,6 @@ function renderDashboardStatus(status: any) {
     var summary = status.pending_summary || summarizePending(status.pending || {});
     var jobs = status.jobs || [];
     var ingestStatus = status.ingest || {};
-    var running = jobs.filter(function(job: any) { return job.status === 'running'; });
     var stats = status.stats || {};
     _lastPending = status.pending || _lastPending || {};
     if (window.JobCenterModule && window.JobCenterModule.replaceJobs) {
@@ -263,19 +218,9 @@ function renderDashboardStatus(status: any) {
 
     setText('home-stat-notes', stats.notes || 0);
     setText('home-stat-topics', stats.topics || 0);
-    setText('home-stat-pending', summary.count || 0);
-    setText('home-stat-running', running.length);
     setText('home-vital-pending', summary.count || 0);
-    setText('home-vital-organize', running.some(function(job: any) { return job.kind === 'ingest' || job.kind === 'conversion'; })
-        ? window.t('home.statusRunning')
-        : window.t('home.statusComplete'));
-    setText('home-vital-compile', running.some(function(job: any) { return job.kind === 'survey' || job.kind === 'rag_index'; })
-        ? window.t('home.statusRunning')
-        : window.t('home.statusComplete'));
     setCommand(deriveRecommendation(summary, ingestStatus, jobs, status.update_plan, status.index));
     renderPending(summary);
-    renderOrganize(ingestStatus, jobs);
-    renderCompile(jobs);
     renderFlow(summary, ingestStatus, jobs, status.index || {});
     loadActivity();
 }

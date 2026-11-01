@@ -185,7 +185,7 @@ function showSettings() {
         window.TreeModule.initTreeFileCountSetting();
     }
     if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
-        window.SettingsModule.switchSettingsTab('model');
+        window.SettingsModule.switchSettingsTab('general');
     }
 }
 

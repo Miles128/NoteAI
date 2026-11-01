@@ -208,27 +208,23 @@
                             <h2 data-i18n="home.title"></h2>
                             <p data-i18n="home.subtitle"></p>
                         </div>
-                        <button type="button" class="home-refresh-btn" id="home-refresh-btn" data-i18n="home.refresh"></button>
+                        <div class="home-header-actions">
+                            <button type="button" class="home-refresh-btn" id="home-start-ingest-btn" data-i18n="home.checkUpdates"></button>
+                            <button type="button" class="home-refresh-btn" id="home-refresh-btn" data-i18n="home.refresh"></button>
+                        </div>
                     </div>
                     <div class="home-command-panel">
                         <div class="home-command-copy">
                             <span class="home-command-kicker" data-i18n="home.commandKicker"></span>
                             <strong id="home-command-title" data-i18n="home.commandTitle"></strong>
                             <span id="home-command-desc" data-i18n="home.commandDesc"></span>
-                            <button type="button" class="home-command-action" id="home-command-action-btn" data-home-action="refresh" data-i18n="home.actionRefresh"></button>
-                        </div>
-                        <div class="home-vital-stack">
-                            <div class="home-vital-row is-pending">
-                                <span data-i18n="home.vitals.pending"></span>
-                                <strong id="home-vital-pending">0</strong>
-                            </div>
-                            <div class="home-vital-row is-organize">
-                                <span data-i18n="home.vitals.organize"></span>
-                                <strong id="home-vital-organize" data-i18n="home.statusComplete"></strong>
-                            </div>
-                            <div class="home-vital-row is-compile">
-                                <span data-i18n="home.vitals.compile"></span>
-                                <strong id="home-vital-compile" data-i18n="home.statusComplete"></strong>
+                            <div class="home-command-row">
+                                <span class="home-command-meta">
+                                    <span class="home-command-meta-dot"></span>
+                                    <span data-i18n="home.vitals.pending"></span>
+                                    <strong id="home-vital-pending">0</strong>
+                                </span>
+                                <button type="button" class="home-command-action" id="home-command-action-btn" data-home-action="refresh" data-i18n="home.actionRefresh"></button>
                             </div>
                         </div>
                     </div>
@@ -240,14 +236,6 @@
                         <div class="home-stat-tile">
                             <span class="home-stat-label" data-i18n="home.stats.topics"></span>
                             <span class="home-stat-value" id="home-stat-topics">0</span>
-                        </div>
-                        <div class="home-stat-tile">
-                            <span class="home-stat-label" data-i18n="home.stats.pending"></span>
-                            <span class="home-stat-value" id="home-stat-pending">0</span>
-                        </div>
-                        <div class="home-stat-tile">
-                            <span class="home-stat-label" data-i18n="home.stats.running"></span>
-                            <span class="home-stat-value" id="home-stat-running">0</span>
                         </div>
                     </div>
                     <div class="home-flow-map">
@@ -288,19 +276,6 @@
                                 <button type="button" class="home-section-action" onclick="togglePendingView()" data-i18n="home.openPending"></button>
                             </div>
                             <div class="home-section-body" id="home-pending-body"></div>
-                        </section>
-                        <section class="home-section">
-                            <div class="home-section-header">
-                                <h3 data-i18n="home.organizeTitle"></h3>
-                                <button type="button" class="home-section-action" id="home-start-ingest-btn" data-i18n="home.checkUpdates"></button>
-                            </div>
-                            <div class="home-section-body" id="home-organize-body"></div>
-                        </section>
-                        <section class="home-section">
-                            <div class="home-section-header">
-                                <h3 data-i18n="home.compileTitle"></h3>
-                            </div>
-                            <div class="home-section-body" id="home-compile-body"></div>
                         </section>
                     </div>
                 </div>
@@ -552,58 +527,55 @@
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="10" rx="3"></rect><circle cx="9.5" cy="13" r="1.2" fill="currentColor"></circle><circle cx="14.5" cy="13" r="1.2" fill="currentColor"></circle><line x1="12" y1="4" x2="12" y2="8"></line><circle cx="12" cy="3.5" r="1.2" fill="currentColor"></circle></svg>
                         <span data-i18n="inspector.ai"></span>
                     </button>
-                    <button class="inspector-tab" data-inspector-tab="cli" data-i18n-title="inspector.cli">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y1="19"></line></svg>
-                        <span data-i18n="inspector.cli"></span>
-                    </button>
                     <button class="inspector-tab" data-inspector-tab="properties" data-i18n-title="inspector.properties">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="13" y2="17"></line></svg>
                         <span data-i18n="inspector.properties"></span>
                     </button>
-                    <button class="inspector-tab" data-inspector-tab="backlinks" data-i18n-title="inspector.backlinks">
+                    <button class="inspector-tab" data-inspector-tab="relations" data-i18n-title="inspector.relations">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                        <span data-i18n="inspector.backlinks"></span>
-                    </button>
-                    <button class="inspector-tab" data-inspector-tab="semantic" data-i18n-title="inspector.semantic">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"></circle><circle cx="18" cy="6" r="2.5"></circle><circle cx="12" cy="18" r="2.5"></circle><line x1="8" y1="7" x2="10.5" y2="16"></line><line x1="16" y1="7" x2="13.5" y2="16"></line></svg>
-                        <span data-i18n="inspector.semantic"></span>
+                        <span data-i18n="inspector.relations"></span>
                     </button>
                     <button class="ai-panel-close-btn" onclick="toggleAIPanel()" data-i18n-title="common.close">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
                 </div>
                 <div class="inspector-tab-content is-active" id="inspector-content-ai">
-                    <div class="ai-panel-header">
-                        <span class="ai-panel-header-dot"></span>
-                        <span class="ai-panel-header-title" data-i18n="assistant.panelTitle"></span>
-                    </div>
-                    <div class="ai-panel-body">
-                        <div class="ai-panel-messages" id="ai-panel-messages">
+                    <div class="inspector-chat-block is-active" id="inspector-chat-ai">
+                        <div class="ai-panel-header">
+                            <span class="ai-panel-header-dot"></span>
+                            <div class="inspector-chat-switch" role="tablist">
+                                <button type="button" class="inspector-chat-switch-btn is-active" data-chat-mode="ai" data-i18n="inspector.ai"></button>
+                                <button type="button" class="inspector-chat-switch-btn" data-chat-mode="cli" data-i18n="inspector.cli"></button>
+                            </div>
+                        </div>
+                        <div class="ai-panel-body">
+                            <div class="ai-panel-messages" id="ai-panel-messages">
+                            </div>
+                        </div>
+                        <div class="ai-panel-input">
+                            <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
+                            <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            </button>
                         </div>
                     </div>
-                    <div class="ai-panel-input">
-                        <textarea id="ai-input" rows="2" autocomplete="off"></textarea>
-                        <button class="ai-panel-send" id="ai-send-btn" data-i18n-title="assistant.send">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="inspector-tab-content" id="inspector-content-cli">
-                    <div class="ai-panel-header">
-                        <span class="ai-panel-header-dot"></span>
-                        <span class="ai-panel-header-title" data-i18n="cli.panelTitle"></span>
-                        <span class="cli-mode-badge" id="cli-mode-badge" hidden></span>
-                    </div>
-                    <div class="ai-panel-body">
-                        <div class="ai-panel-messages" id="cli-panel-messages">
-                            <p class="ai-chat-line ai-msg ai-system" id="cli-empty-hint"><span class="ai-msg-speaker" data-i18n="assistant.system"></span>：<span class="ai-msg-content" data-i18n="cli.emptyHint"></span></p>
+                    <div class="inspector-chat-block" id="inspector-chat-cli">
+                        <div class="ai-panel-header">
+                            <span class="ai-panel-header-dot"></span>
+                            <span class="ai-panel-header-title" data-i18n="cli.panelTitle"></span>
+                            <span class="cli-mode-badge" id="cli-mode-badge" hidden></span>
                         </div>
-                    </div>
-                    <div class="ai-panel-input">
-                        <textarea id="cli-input" rows="2" autocomplete="off" data-i18n-placeholder="cli.inputPlaceholder"></textarea>
-                        <button class="ai-panel-send" id="cli-send-btn" data-i18n-title="assistant.send">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                        </button>
+                        <div class="ai-panel-body">
+                            <div class="ai-panel-messages" id="cli-panel-messages">
+                                <p class="ai-chat-line ai-msg ai-system" id="cli-empty-hint"><span class="ai-msg-speaker" data-i18n="assistant.system"></span>：<span class="ai-msg-content" data-i18n="cli.emptyHint"></span></p>
+                            </div>
+                        </div>
+                        <div class="ai-panel-input">
+                            <textarea id="cli-input" rows="2" autocomplete="off" data-i18n-placeholder="cli.inputPlaceholder"></textarea>
+                            <button class="ai-panel-send" id="cli-send-btn" data-i18n-title="assistant.send">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="inspector-tab-content" id="inspector-content-properties">
@@ -611,14 +583,18 @@
                         <div class="inspector-empty" data-i18n="inspector.propertiesEmpty"></div>
                     </div>
                 </div>
-                <div class="inspector-tab-content" id="inspector-content-backlinks">
-                    <div class="inspector-backlinks-body" id="inspector-backlinks-body">
-                        <div class="inspector-empty" data-i18n="inspector.backlinksEmpty"></div>
+                <div class="inspector-tab-content" id="inspector-content-relations">
+                    <div class="inspector-relations-section">
+                        <div class="inspector-relations-title" data-i18n="inspector.backlinks"></div>
+                        <div class="inspector-backlinks-body" id="inspector-backlinks-body">
+                            <div class="inspector-empty" data-i18n="inspector.backlinksEmpty"></div>
+                        </div>
                     </div>
-                </div>
-                <div class="inspector-tab-content" id="inspector-content-semantic">
-                    <div class="inspector-semantic-body" id="inspector-semantic-body">
-                        <div class="inspector-empty" data-i18n="inspector.semanticEmpty"></div>
+                    <div class="inspector-relations-section">
+                        <div class="inspector-relations-title" data-i18n="inspector.semantic"></div>
+                        <div class="inspector-semantic-body" id="inspector-semantic-body">
+                            <div class="inspector-empty" data-i18n="inspector.semanticEmpty"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -640,42 +616,18 @@
                 <h2 data-i18n="settings.title"></h2>
                 <div class="settings-body">
                     <div class="settings-nav" id="settings-nav">
-                        <button class="settings-nav-btn active" data-tab="model">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 3 3 3 3 0 0 0 3-3V5a3 3 0 0 0-3-3Z"/><path d="M19 10a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2 2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2Z"/><path d="M5 10a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2 2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2Z"/><path d="M8 18a3 3 0 0 0-3 3v1h14v-1a3 3 0 0 0-3-3Z"/></svg>
-                            <span data-i18n="settings.nav.model"></span>
+                        <button class="settings-nav-btn active" data-tab="general">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                            <span data-i18n="settings.nav.general"></span>
                         </button>
-                        <button class="settings-nav-btn" data-tab="ui">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                            <span data-i18n="settings.nav.ui"></span>
-                        </button>
-                        <button class="settings-nav-btn" data-tab="rag">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/><path d="M11 8v6"/></svg>
-                            <span data-i18n="settings.nav.rag"></span>
-                        </button>
-                        <button class="settings-nav-btn" data-tab="reliability">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                            <span data-i18n="settings.nav.reliability"></span>
-                        </button>
-                        <div class="settings-nav-more">
-                            <button type="button" class="settings-nav-btn settings-nav-more-toggle" id="settings-nav-more-toggle" aria-expanded="false" aria-controls="settings-nav-more-list">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                                <span data-i18n="settings.nav.more"></span>
-                            </button>
-                            <div class="settings-nav-more-list" id="settings-nav-more-list" hidden>
-                        <button class="settings-nav-btn" data-tab="semantic">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="m19.1 4.9-2.8 2.8"/><path d="m7.7 16.3-2.8 2.8"/></svg>
-                            <span data-i18n="settings.nav.semantic"></span>
-                        </button>
-                        <button class="settings-nav-btn" data-tab="cli">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                            <span data-i18n="settings.nav.cli"></span>
-                        </button>
-                        <button class="settings-nav-btn" data-tab="organize-rules">
+                        <button class="settings-nav-btn" data-tab="knowledge">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
-                            <span data-i18n="settings.nav.organizeRules"></span>
+                            <span data-i18n="settings.nav.knowledge"></span>
                         </button>
-                            </div>
-                        </div>
+                        <button class="settings-nav-btn" data-tab="advanced">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                            <span data-i18n="settings.nav.advanced"></span>
+                        </button>
                         <button class="settings-nav-btn" data-tab="about">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                             <span data-i18n="settings.nav.about"></span>

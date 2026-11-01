@@ -201,7 +201,7 @@ async function maybePromptSetup(flag: any) {
     if (typeof window.showSettings === 'function') {
         window.showSettings();
         if (window.SettingsModule && window.SettingsModule.switchSettingsTab) {
-            window.SettingsModule.switchSettingsTab('organize-rules');
+            window.SettingsModule.switchSettingsTab('knowledge');
         }
     }
     return await openSetupModal();

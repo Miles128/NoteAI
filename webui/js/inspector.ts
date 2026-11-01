@@ -1,12 +1,10 @@
 /**
  * Inspector Module (右侧多 Tab 检查器)
  *
- * 对标 Tolaria 的 Right Inspector 面板，包含四个 Tab：
- * 1. AI - 现有 AI 聊天
- * 2. CLI - CLI Agent
- * 3. Properties - 当前笔记的 frontmatter 属性
- * 4. Backlinks - 反向链接（引用当前笔记的其他笔记）
- * 5. Semantic - 当前笔记的语义参数（实体/概念/相关）
+ * 对标 Tolaria 的 Right Inspector 面板，三个 Tab：
+ * 1. AI - 知识库问答 / CLI Agent（同一面板内切换对话模式）
+ * 2. Properties - 当前笔记的 frontmatter 属性
+ * 3. Relations - 反向链接 + 语义关联（实体/概念/相关）
  */
 (function() {
     'use strict';
@@ -44,11 +42,24 @@
         // 切换到非 AI Tab 时刷新数据
         if (tabName === 'properties' && _currentFilePath) {
             loadProperties(_currentFilePath);
-        } else if (tabName === 'backlinks' && _currentFilePath) {
+        } else if (tabName === 'relations' && _currentFilePath) {
             loadBacklinks(_currentFilePath);
-        } else if (tabName === 'semantic' && _currentFilePath) {
             loadSemantic(_currentFilePath);
-        } else if (tabName === 'cli') {
+        }
+    }
+
+    /**
+     * 切换对话模式（知识库问答 / CLI Agent）
+     */
+    function setChatMode(mode: any) {
+        var aiBlock = document.getElementById('inspector-chat-ai');
+        var cliBlock = document.getElementById('inspector-chat-cli');
+        if (aiBlock) aiBlock.classList.toggle('is-active', mode !== 'cli');
+        if (cliBlock) cliBlock.classList.toggle('is-active', mode === 'cli');
+        document.querySelectorAll('.inspector-chat-switch-btn').forEach(function(btn: any) {
+            btn.classList.toggle('is-active', btn.getAttribute('data-chat-mode') === mode);
+        });
+        if (mode === 'cli') {
             const cliAgentModule = window.CliAgentModule;
             if (cliAgentModule && cliAgentModule.loadAgents) {
                 cliAgentModule.loadAgents().then(function() {
@@ -59,6 +70,7 @@
             }
         }
     }
+
 
     /**
      * 解析 frontmatter
@@ -345,9 +357,8 @@
         _currentFilePath = filePath;
         if (_currentTab === 'properties' && filePath) {
             loadProperties(filePath);
-        } else if (_currentTab === 'backlinks' && filePath) {
+        } else if (_currentTab === 'relations' && filePath) {
             loadBacklinks(filePath);
-        } else if (_currentTab === 'semantic' && filePath) {
             loadSemantic(filePath);
         }
     }
@@ -358,6 +369,12 @@
             tab.addEventListener('click', function() {
                 var tabName = tab.getAttribute('data-inspector-tab');
                 if (tabName) switchTab(tabName);
+            });
+        });
+
+        document.querySelectorAll('.inspector-chat-switch-btn').forEach(function(btn: any) {
+            btn.addEventListener('click', function() {
+                setChatMode(btn.getAttribute('data-chat-mode') || 'ai');
             });
         });
     }

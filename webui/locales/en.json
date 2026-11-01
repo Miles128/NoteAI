@@ -481,15 +481,10 @@
     "topicThresholdApplied": "Threshold applied; moved {count} notes automatically",
     "title": "Settings",
     "nav": {
-      "model": "Model",
-      "ui": "Appearance",
-      "rag": "RAG",
-      "semantic": "Semantic",
-      "cli": "CLI Agent",
-      "organizeRules": "Organization rules",
-      "about": "About",
-      "reliability": "Backup & restore",
-      "more": "More"
+      "general": "General",
+      "knowledge": "Knowledge base",
+      "advanced": "Advanced",
+      "about": "About"
     },
     "language": "Language",
     "languageZh": "中文",
@@ -795,15 +790,11 @@
     "actionResume": "Resume",
     "actionRebuildIndex": "Update index",
     "vitals": {
-      "pending": "Pending",
-      "organize": "Organize",
-      "compile": "Compile"
+      "pending": "Pending"
     },
     "stats": {
       "notes": "Notes",
-      "topics": "Topics",
-      "pending": "Pending",
-      "running": "Running"
+      "topics": "Topics"
     },
     "activityTitle": "Recent activity",
     "weeklyBrief": "Weekly brief",
@@ -818,17 +809,6 @@
     "pendingTitle": "Pending sources",
     "openPending": "Open",
     "pendingEmpty": "No pending sources",
-    "organizeTitle": "Organization status",
-    "organizeIdle": "No organization jobs are running",
-    "organizeComplete": "Organization complete",
-    "organizeNeedsResume": "Organization needs resume",
-    "compileTitle": "Compilation status",
-    "compileIdle": "No compilation jobs are running",
-    "statusRunning": "Running",
-    "jobsRunning": "{count} running",
-    "statusComplete": "Complete",
-    "statusFailed": "Failed",
-    "statusCancelled": "Cancelled",
     "checkUpdates": "Check updates",
     "checkingUpdates": "Checking…",
     "flow": {
@@ -1013,6 +993,7 @@
     "cli": "CLI",
     "properties": "Props",
     "backlinks": "Links",
+    "relations": "Relations",
     "semantic": "Semantic",
     "propertiesEmpty": "Select a note to view properties",
     "backlinksEmpty": "No backlinks",

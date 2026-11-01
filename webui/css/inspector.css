@@ -603,12 +603,12 @@
     background: color-mix(in srgb, #000 24%, var(--surface));
 }
 
-#inspector-content-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul {
+#inspector-chat-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul {
     padding-left: 0;
     list-style: none;
 }
 
-#inspector-content-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul > li::before {
+#inspector-chat-cli .cli-final-card .cli-agent-output.ai-msg-md.preview-content ul > li::before {
     content: '- ';
     color: var(--text-muted);
 }
@@ -668,14 +668,14 @@
     word-break: break-word;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content {
     font-size: 13px;
     line-height: 1.62;
     color: var(--text);
     overflow-wrap: anywhere;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(h1, h2, h3, h4, h5, h6) {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content :is(h1, h2, h3, h4, h5, h6) {
     margin: 12px 0 5px;
     font-size: 13px;
     line-height: 1.45;
@@ -683,21 +683,21 @@
     color: var(--text);
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(p, ul, ol, blockquote, table, pre) {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content :is(p, ul, ol, blockquote, table, pre) {
     margin: 6px 0;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(ul, ol) {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content :is(ul, ol) {
     padding-left: 20px;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content li {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content li {
     margin: 2px 0;
     font-size: 13px;
     line-height: 1.62;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content pre {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content pre {
     padding: 8px 10px;
     overflow-x: auto;
     border: 1px solid var(--border);
@@ -706,11 +706,11 @@
     line-height: 1.5;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content code {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content code {
     font-size: 12px;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content table {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content table {
     display: block;
     width: 100%;
     overflow-x: auto;
@@ -718,7 +718,7 @@
     font-size: 12px;
 }
 
-#inspector-content-cli .cli-agent-output.ai-msg-md.preview-content :is(th, td) {
+#inspector-chat-cli .cli-agent-output.ai-msg-md.preview-content :is(th, td) {
     padding: 5px 7px;
     border: 1px solid var(--border);
     text-align: left;
@@ -879,16 +879,73 @@
     grid-template-rows: auto 1fr !important;
 }
 
-.inspector-panel .inspector-tab-content#inspector-content-ai,
-.inspector-panel .inspector-tab-content#inspector-content-cli {
+.inspector-panel .inspector-tab-content#inspector-content-ai {
     display: none;
+    flex-direction: column;
+    gap: 0;
+}
+
+.inspector-panel .inspector-tab-content#inspector-content-ai.is-active {
+    display: flex;
+}
+
+/* 问答 / CLI 两个对话块共用 AI Tab，同一时间只显示一个 */
+.inspector-chat-block {
+    display: none;
+    flex: 1 1 auto;
+    min-height: 0;
     grid-template-rows: auto 1fr auto;
     gap: 0;
 }
 
-.inspector-panel .inspector-tab-content#inspector-content-ai.is-active,
-.inspector-panel .inspector-tab-content#inspector-content-cli.is-active {
+.inspector-chat-block.is-active {
     display: grid;
+}
+
+.inspector-chat-switch {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 6px;
+    background: var(--bg);
+}
+
+.inspector-chat-switch-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.inspector-chat-switch-btn.is-active {
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 600;
+}
+
+/* 关联 Tab：反向链接与语义关联上下分区，各自滚动 */
+.inspector-relations-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.inspector-relations-section + .inspector-relations-section {
+    border-top: 1px solid var(--border);
+}
+
+.inspector-relations-title {
+    flex: 0 0 auto;
+    padding: 10px 14px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
 
 /* When note-list is collapsed, hide its resizer too */

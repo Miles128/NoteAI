@@ -10,14 +10,17 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
 from sidecar.rag.lazy import lazy_import
 from utils.error_handler import log_exception
 from utils.logger import logger
 
-zvec = lazy_import("zvec")
+if TYPE_CHECKING:
+    import zvec
+else:
+    zvec = lazy_import("zvec")
 
 _COLLECTION_NAME = "noteai_chunks"
 _DENSE_DIM = 512
@@ -177,9 +180,7 @@ def _build_schema() -> zvec.CollectionSchema:
                 "dense",
                 zvec.DataType.VECTOR_FP32,
                 dimension=_DENSE_DIM,
-                index_param=zvec.HnswIndexParam(
-                    metric_type=getattr(zvec.MetricType, _DENSE_METRIC_NAME)
-                ),
+                index_param=zvec.HnswIndexParam(metric_type=getattr(zvec.MetricType, _DENSE_METRIC_NAME)),
             ),
         ],
     )

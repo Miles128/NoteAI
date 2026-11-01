@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import importlib
 import threading
+from types import ModuleType
+from typing import Any
 
 __all__ = ["lazy_import"]
 
@@ -21,10 +23,10 @@ __all__ = ["lazy_import"]
 class _LazyModule:
     def __init__(self, name: str) -> None:
         self._name = name
-        self._module = None
+        self._module: ModuleType | None = None
         self._lock = threading.Lock()
 
-    def __getattr__(self, item: str):
+    def __getattr__(self, item: str) -> Any:
         module = self._module
         if module is None:
             with self._lock:

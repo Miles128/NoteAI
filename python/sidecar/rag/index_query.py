@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from typing import TYPE_CHECKING
 
 from sidecar.rag.index_bm25 import _normalize_sparse_scores, _sparse_search, ensure_bm25_index
 from sidecar.rag.index_core import (
@@ -18,7 +19,10 @@ from sidecar.rag.rag_config import hybrid_weights
 from utils.error_handler import log_exception
 from utils.logger import logger
 
-zvec = lazy_import("zvec")
+if TYPE_CHECKING:
+    import zvec
+else:
+    zvec = lazy_import("zvec")
 
 _HYBRID_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_hybrid")
 _DENSE_EF_CAP = 128

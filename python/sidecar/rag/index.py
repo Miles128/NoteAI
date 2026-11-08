@@ -1,20 +1,14 @@
-"""Lightweight local RAG index using zvec + BM25s.
+"""Lightweight local RAG index using zvec (dense + built-in FTS).
 
 Public API stays on this module so callers keep ``from sidecar.rag.index import ...``.
-Implementation is split across ``index_core`` / ``index_crud`` / ``index_bm25`` / ``index_query``.
+Implementation is split across ``index_core`` / ``index_crud`` / ``index_fts`` / ``index_query``.
 Private helpers are resolved via ``__getattr__`` for test and internal callers.
 """
 
 from __future__ import annotations
 
-from sidecar.rag.index_bm25 import (
-    bm25_index_ready,
-    ensure_bm25_index,
-    rebuild_search_indices,
-)
 from sidecar.rag.index_core import (
     cached_manifest,
-    clear_bm25_cache,
     clear_collection_cache,
     filter_usable_chunks,
     index_exists,
@@ -31,6 +25,7 @@ from sidecar.rag.index_crud import (
     delete_files_batched,
     replace_file_chunks,
 )
+from sidecar.rag.index_fts import rebuild_search_indices
 from sidecar.rag.index_query import (
     count_indexed_chunks,
     fetch_chunks_by_file,
@@ -39,15 +34,12 @@ from sidecar.rag.index_query import (
 
 __all__ = [
     "add_chunks",
-    "bm25_index_ready",
     "build_index",
     "cached_manifest",
-    "clear_bm25_cache",
     "clear_collection_cache",
     "count_indexed_chunks",
     "delete_by_file",
     "delete_files_batched",
-    "ensure_bm25_index",
     "fetch_chunks_by_file",
     "filter_usable_chunks",
     "hybrid_search",
@@ -63,9 +55,9 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    from sidecar.rag import index_bm25, index_core, index_crud, index_query
+    from sidecar.rag import index_core, index_crud, index_fts, index_query
 
-    for mod in (index_core, index_crud, index_bm25, index_query):
+    for mod in (index_core, index_crud, index_fts, index_query):
         if hasattr(mod, name):
             value = getattr(mod, name)
             globals()[name] = value

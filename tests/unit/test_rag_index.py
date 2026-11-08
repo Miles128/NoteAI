@@ -3,16 +3,15 @@ from pathlib import Path
 import numpy as np
 import pytest
 import zvec
+from sidecar.rag.index_core import _metadata_path
 from sidecar.rag.index import (
     _empty_metadata,
     _filter_candidates,
     _load_metadata,
     _save_metadata,
     _update_metadata_index,
-    bm25_index_ready,
     build_index,
-    clear_bm25_cache,
-    ensure_bm25_index,
+    clear_collection_cache,
     filter_usable_chunks,
     hybrid_search,
     index_exists,
@@ -209,7 +208,7 @@ class TestBuildAndSearch:
         assert len(hits) == 1
         assert hits[0]["id"] == "c1"
 
-    def test_bm25_ready_after_build(self, workspace: Path):
+    def test_fts_used_after_build(self, workspace: Path):
         chunks = [
             {
                 "id": "c1",
@@ -222,13 +221,22 @@ class TestBuildAndSearch:
         ]
         embeddings = [{"dense_vec": np.random.rand(512).astype(np.float32).tolist()}]
         build_index(str(workspace), chunks, embeddings)
-        assert bm25_index_ready(str(workspace)) is True
 
-    def test_ensure_bm25_rebuilds_when_dir_missing(self, workspace: Path):
+        hits = hybrid_search(
+            str(workspace),
+            query_dense=embeddings[0]["dense_vec"],
+            query_text="关键词",
+            top_k=2,
+        )
+        assert hits
+        assert any(hit.get("fts_used") for hit in hits)
+        assert any(hit.get("sparse_score", 0) > 0 for hit in hits)
+
+    def test_fts_survives_collection_cache_reset(self, workspace: Path):
         chunks = [
             {
                 "id": "c1",
-                "content": "重建 BM25 索引测试",
+                "content": "重开集合后的 FTS 检索",
                 "file_path": "a.md",
                 "topic": "T1",
                 "tags": [],
@@ -239,25 +247,16 @@ class TestBuildAndSearch:
         build_index(str(workspace), chunks, embeddings)
         ws = str(workspace)
 
-        import shutil
-
-        from config.settings import RAG_INDEX_FOLDER, WORKSPACE_APP_FOLDER
-
-        bm25_dir = workspace / WORKSPACE_APP_FOLDER / RAG_INDEX_FOLDER / "bm25s"
-        shutil.rmtree(bm25_dir)
-        clear_bm25_cache(ws)
-
-        assert bm25_index_ready(ws) is False
-        assert ensure_bm25_index(ws) is True
+        clear_collection_cache(ws)
 
         hits = hybrid_search(
             ws,
             query_dense=embeddings[0]["dense_vec"],
-            query_text="重建 BM25",
+            query_text="重开 FTS",
             top_k=1,
         )
         assert hits
-        assert hits[0].get("bm25_used") is True
+        assert hits[0].get("fts_used") is True
         assert hits[0].get("sparse_score", 0) > 0
 
 
@@ -396,3 +395,27 @@ class TestCollectionCache:
 
         assert sum(collection.batch_sizes) == 3859
         assert max(collection.batch_sizes) <= _INDEX_BATCH_SIZE
+
+
+class TestMetadataMigration:
+    def test_legacy_metadata_is_merged_and_removed(self, tmp_path):
+        import json
+
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        legacy = _metadata_path(str(ws))
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        legacy.write_text(
+            json.dumps({
+                "topics": {"t": ["c1"]},
+                "tags": {"x": ["c1"]},
+                "files": {"a.md": ["c1"]},
+            }),
+            encoding="utf-8",
+        )
+
+        meta = _load_metadata(str(ws))
+        assert meta["topics"]["t"] == ["c1"]
+        assert meta["tags"]["x"] == ["c1"]
+        assert meta["files"]["a.md"] == ["c1"]
+        assert not legacy.exists(), "旧 metadata.json 应在合并后删除"

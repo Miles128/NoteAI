@@ -1,6 +1,6 @@
 """RAG pipeline package.
 
-The RAG stack (zvec, bm25s, fastembed ONNX embed/rerank) is an optional feature.
+The RAG stack (zvec with built-in FTS, fastembed ONNX embed/rerank) is an optional feature.
 If dependencies are missing, callers can use ``utils.package_manager.ensure_feature("rag")``
 to install them on demand.
 """
@@ -17,7 +17,7 @@ def _check_rag_available() -> tuple[bool, str]:
     if _RAG_AVAILABLE is not None:
         return _RAG_AVAILABLE, _RAG_IMPORT_ERROR
     missing = []
-    for mod_name in ("zvec", "bm25s", "fastembed", "numpy"):
+    for mod_name in ("zvec", "fastembed", "numpy"):
         try:
             __import__(mod_name)
         except ImportError:

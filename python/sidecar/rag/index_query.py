@@ -5,7 +5,6 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
-from sidecar.rag.index_bm25 import _normalize_sparse_scores, _sparse_search, ensure_bm25_index
 from sidecar.rag.index_core import (
     _COLLECTION_IO_LOCK,
     _doc_to_result,
@@ -14,6 +13,7 @@ from sidecar.rag.index_core import (
     _load_metadata,
     filter_usable_chunks,
 )
+from sidecar.rag.index_fts import fts_search, normalize_sparse_scores
 from sidecar.rag.lazy import lazy_import
 from sidecar.rag.rag_config import hybrid_weights
 from utils.error_handler import log_exception
@@ -27,6 +27,17 @@ else:
 _HYBRID_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rag_hybrid")
 _DENSE_EF_CAP = 128
 _DENSE_EF_MULTIPLIER = 8
+_RESULT_FIELDS = [
+    "content",
+    "file_path",
+    "topic",
+    "tags_json",
+    "section_title",
+    "doc_kind",
+    "book_id",
+    "chapter_id",
+    "chapter_order",
+]
 
 
 def count_indexed_chunks(
@@ -101,7 +112,7 @@ def _dense_search(
     docs = collection.query(
         query,
         topk=search_topk,
-        output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+        output_fields=_RESULT_FIELDS,
         include_vector=True,
     )
 
@@ -165,31 +176,35 @@ def hybrid_search(
 
     candidates = _filter_candidates(workspace, topics, tags, file_paths)
 
-    bm25_active = False
-    if query_text:
-        bm25_active = ensure_bm25_index(workspace)
-        if not bm25_active:
-            logger.warning("[rag/index] BM25 unavailable after ensure — dense-only fallback")
+    fts_active = bool(query_text)
 
     dense_future = _HYBRID_POOL.submit(_dense_search, collection, query_dense, candidates, top_k)
     sparse_future = None
-    if query_text and bm25_active:
-        sparse_future = _HYBRID_POOL.submit(_sparse_search, workspace, query_text, candidates, top_k)
+    if fts_active:
+        sparse_future = _HYBRID_POOL.submit(
+            fts_search, collection, query_text, top_k, candidates
+        )
 
     dense_results = dense_future.result()
-    sparse_scores: dict[str, float] = sparse_future.result() if sparse_future else {}
-    sparse_scores = _normalize_sparse_scores(sparse_scores)
+    sparse_scores: dict[str, float] = {}
+    if sparse_future is not None:
+        try:
+            sparse_scores = sparse_future.result()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"[rag/index] FTS search failed, dense-only: {exc}\n")
+            fts_active = False
+    sparse_scores = normalize_sparse_scores(sparse_scores)
 
     dense_map = {r["id"]: r for r in dense_results}
 
     dense_weight, sparse_weight = hybrid_weights()
 
-    # Merge dense + sparse (BM25 normalized to 0..1 when active)
+    # Merge dense + sparse (FTS 分数归一化到 0..1)
     results_map = {}
     for cid, r in dense_map.items():
         sparse = sparse_scores.get(cid, 0.0)
         r["sparse_score"] = sparse
-        r["bm25_used"] = bm25_active
+        r["fts_used"] = fts_active
         r["score"] = dense_weight * r["dense_score"] + sparse_weight * sparse
         results_map[cid] = r
 
@@ -200,7 +215,7 @@ def hybrid_search(
             try:
                 fetched = collection.fetch(
                     sparse_ids,
-                    output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+                    output_fields=_RESULT_FIELDS,
                     include_vector=True,
                 )
                 for cid, doc in fetched.items():
@@ -208,7 +223,7 @@ def hybrid_search(
                         continue
                     r = _doc_to_result(doc)
                     r["sparse_score"] = sparse_scores[cid]
-                    r["bm25_used"] = True
+                    r["fts_used"] = True
                     r["score"] = sparse_weight * sparse_scores[cid]
                     results_map[cid] = r
             except Exception as e:
@@ -236,7 +251,7 @@ def fetch_chunks_by_file(workspace: str, file_path: str, limit: int = 2) -> list
         docs = collection.query(
             filter=filter_expr,
             topk=limit,
-            output_fields=["content", "file_path", "topic", "tags_json", "section_title"],
+            output_fields=_RESULT_FIELDS,
         )
         return [_doc_to_result(doc) for doc in docs]
     except Exception as e:

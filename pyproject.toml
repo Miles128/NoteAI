@@ -2,7 +2,7 @@
 name = "NoteAI"
 version = "0.1.0"
 description = "AI驱动的Markdown笔记知识库管理桌面应用"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
     { name = "NoteAI Contributors" }
@@ -18,6 +18,7 @@ dependencies = [
     "watchdog>=4.0.0",
     "send2trash>=1.8.0",
     "numpy>=1.24.0",
+    "ragkit>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -39,13 +40,15 @@ ingest = [
     "html2text>=2024.2.26",
 ]
 rag = [
-    "bm25s>=0.2.0",
-    "zvec>=0.5.0",
+    "zvec>=0.8.0",
     "fastembed>=0.4.0",
 ]
 all = [
     "NoteAI[rag,ingest]",
 ]
+
+[tool.uv.sources]
+ragkit = { path = "../shibei/packages/ragkit", editable = true }
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -63,7 +66,7 @@ include = ["config*", "modules*", "prompts*", "sidecar*", "utils*", "tests*"]
 noteai = "run:main"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 120
 exclude = ["docs/archive"]
 
@@ -119,7 +122,7 @@ filterwarnings = [
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true

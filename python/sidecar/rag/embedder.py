@@ -247,7 +247,7 @@ def encode(
 ) -> dict:
     """生成 dense 向量。
 
-    sparse 检索由 bm25s 直接对原始文本建索引，embedder 只负责 dense 向量。
+    sparse 检索由 zvec 内置 FTS 完成，embedder 只负责 dense 向量。
     """
     if not texts:
         return {"dense_vecs": []}

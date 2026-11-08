@@ -27,7 +27,7 @@ _DENSE_DIM = 512
 _DENSE_METRIC_NAME = "COSINE"
 _INDEX_BATCH_SIZE = 128
 _FETCH_BATCH_SIZE = 256
-_INDEX_VERSION = 2
+_INDEX_VERSION = 3
 
 _lock = threading.Lock()
 
@@ -43,17 +43,11 @@ _COLLECTION_IO_LOCK = threading.RLock()
 _INDEX_OPERATION_LOCKS: dict[str, threading.Lock] = {}
 _INDEX_OPERATION_LOCKS_GUARD = threading.Lock()
 
-# In-memory BM25 retriever cache (bm25s.load is costly on every query).
-_BM25_CACHE: dict[str, tuple[Any, list[dict]]] = {}
-_BM25_CACHE_LOCK = threading.Lock()
-
 # manifest/metadata 的内存缓存：(stat_key, data)。读侧按 stat 键失效，
 # 写侧（_write_manifest/_save_metadata）显式清除——避免每轮 RAG 查询
 # 重复读盘解析大 JSON（万级 chunk 时数百 KB~MB）。
 _MANIFEST_CACHE: dict[str, tuple[tuple[float, int] | None, dict]] = {}
 _MANIFEST_CACHE_LOCK = threading.Lock()
-_METADATA_CACHE: dict[str, tuple[tuple[float, int] | None, dict[str, Any]]] = {}
-_METADATA_CACHE_LOCK = threading.Lock()
 
 
 def _normalize_workspace(workspace: str) -> str:
@@ -81,12 +75,6 @@ def _rag_index_dir(workspace: str) -> Path:
 def _collection_path(workspace: str) -> Path:
     p = _rag_index_dir(workspace) / "zvec_collection"
     p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def _bm25s_dir(workspace: str) -> Path:
-    p = _rag_index_dir(workspace) / "bm25s"
-    p.mkdir(parents=True, exist_ok=True)
     return p
 
 
@@ -165,15 +153,46 @@ def _bump_manifest_version(workspace: str) -> None:
     _write_manifest(workspace, manifest)
 
 
+def _ensure_fts_index(workspace: str, collection: zvec.Collection, *, force: bool = False) -> None:
+    """确保 ``content`` 字段有 FTS 索引；旧索引首次打开时自动补建。"""
+    manifest = _read_manifest(workspace)
+    if manifest.get("fts_indexed") and not force:
+        return
+    try:
+        collection.create_index(
+            "content", zvec.FtsIndexParam(tokenizer_name="jieba")
+        )
+    except Exception as exc:  # noqa: BLE001
+        log_exception(
+            "[rag/index] FTS index create failed", exc, level="warning", logger=logger
+        )
+        return
+    manifest["fts_indexed"] = True
+    _write_manifest(workspace, manifest)
+
+    # 一次性清理旧的 bm25s 索引目录（已被 zvec FTS 取代）
+    legacy = _rag_index_dir(workspace) / "bm25s"
+    if legacy.exists():
+        shutil.rmtree(legacy, ignore_errors=True)
+
+
 def _build_schema() -> zvec.CollectionSchema:
     return zvec.CollectionSchema(
         name=_COLLECTION_NAME,
         fields=[
-            zvec.FieldSchema("content", zvec.DataType.STRING),
+            zvec.FieldSchema(
+                "content",
+                zvec.DataType.STRING,
+                index_param=zvec.FtsIndexParam(tokenizer_name="jieba"),
+            ),
             zvec.FieldSchema("file_path", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
             zvec.FieldSchema("topic", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
             zvec.FieldSchema("tags_json", zvec.DataType.STRING),
             zvec.FieldSchema("section_title", zvec.DataType.STRING),
+            zvec.FieldSchema("doc_kind", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
+            zvec.FieldSchema("book_id", zvec.DataType.STRING, index_param=zvec.InvertIndexParam()),
+            zvec.FieldSchema("chapter_id", zvec.DataType.STRING),
+            zvec.FieldSchema("chapter_order", zvec.DataType.STRING),
         ],
         vectors=[
             zvec.VectorSchema(
@@ -289,14 +308,12 @@ def _get_collection(workspace: str) -> zvec.Collection:
         if destroy and Path(path).exists():
             logger.info("[RAG] index version mismatch, rebuilding collection")
             shutil.rmtree(path, ignore_errors=True)
-            bm25s = _bm25s_dir(ws)
-            if bm25s.exists():
-                shutil.rmtree(bm25s, ignore_errors=True)
             _remove_stale_lock(path)
         elif not destroy:
             gc.collect()
 
         collection = _open_or_create_collection(path, ws)
+        _ensure_fts_index(ws, collection)
 
         with _COLLECTION_CACHE_LOCK:
             cached = _COLLECTION_CACHE.get(ws)
@@ -304,15 +321,6 @@ def _get_collection(workspace: str) -> zvec.Collection:
                 return cached
             _COLLECTION_CACHE[ws] = collection
             return collection
-
-
-def clear_bm25_cache(workspace: str | None = None) -> None:
-    """Drop cached BM25 retriever(s)."""
-    with _BM25_CACHE_LOCK:
-        if workspace is None:
-            _BM25_CACHE.clear()
-        else:
-            _BM25_CACHE.pop(workspace, None)
 
 
 def clear_collection_cache(workspace: str | None = None) -> None:
@@ -333,7 +341,6 @@ def clear_collection_cache(workspace: str | None = None) -> None:
             else:
                 _COLLECTION_CACHE.pop(_normalize_workspace(workspace), None)
         gc.collect()
-        clear_bm25_cache(workspace)
 
 
 def _escape_filter_value(value: str) -> str:
@@ -356,47 +363,77 @@ def filter_usable_chunks(results: list[dict]) -> list[dict]:
 
 
 def index_exists(workspace: str) -> bool:
-    return _collection_path(workspace).exists() and _metadata_path(workspace).exists()
+    if not _collection_path(workspace).exists():
+        return False
+    return (
+        manifest_path(workspace).exists()
+        or _manifest_path(workspace).exists()
+        or _metadata_path(workspace).exists()
+    )
 
 
 def _empty_metadata() -> dict[str, Any]:
     return {"topics": {}, "tags": {}, "files": {}, "version": 2}
 
 
+def _migrate_legacy_metadata(workspace: str) -> None:
+    """把旧的 metadata.json 合并进 file_manifest.json，然后删除旧文件。"""
+    legacy = _metadata_path(workspace)
+    if not legacy.exists():
+        return
+    manifest = _read_manifest(workspace)
+    if manifest.get("topics") or manifest.get("tags"):
+        legacy.unlink(missing_ok=True)
+        return
+    try:
+        data = json.loads(legacy.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    manifest["topics"] = data.get("topics") or {}
+    manifest["tags"] = data.get("tags") or {}
+    files = manifest.setdefault("files", {})
+    for path, ids in (data.get("files") or {}).items():
+        entry = files.get(path)
+        if isinstance(entry, dict):
+            entry.setdefault("chunks", list(ids))
+        else:
+            files[path] = {"chunks": list(ids)}
+    _write_manifest(workspace, manifest)
+    legacy.unlink(missing_ok=True)
+
+
 def _load_metadata(workspace: str) -> dict[str, Any]:
-    path = _metadata_path(workspace)
-    stat_key = _stat_key(path)
-    with _METADATA_CACHE_LOCK:
-        cached = _METADATA_CACHE.get(workspace)
-        if cached is not None and cached[0] == stat_key:
-            # deepcopy 保护：读侧可能后续 mutate（写路径），缓存本体须保持干净
-            return copy.deepcopy(cached[1])
-    data = _empty_metadata()
-    if stat_key is not None:
-        try:
-            with path.open("r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    loaded.setdefault("topics", {})
-                    loaded.setdefault("tags", {})
-                    loaded.setdefault("files", {})
-                    data = loaded
-        except Exception as e:
-            log_exception("[rag/index] failed to load metadata", e, level="warning", logger=logger)
-    with _METADATA_CACHE_LOCK:
-        _METADATA_CACHE[workspace] = (stat_key, copy.deepcopy(data))
-    return data
+    """metadata 是 manifest 的视图：topics/tags + files->chunk ids。"""
+    _migrate_legacy_metadata(workspace)
+    manifest = _read_manifest(workspace)
+    files = {
+        path: list(entry.get("chunks") or [])
+        for path, entry in (manifest.get("files") or {}).items()
+        if isinstance(entry, dict)
+    }
+    return {
+        "topics": copy.deepcopy(manifest.get("topics") or {}),
+        "tags": copy.deepcopy(manifest.get("tags") or {}),
+        "files": files,
+        "version": manifest.get("metadata_version", 2),
+    }
 
 
 def _save_metadata(workspace: str, metadata: dict[str, Any]) -> None:
-    path = _metadata_path(workspace)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(metadata, f, ensure_ascii=False)
-    tmp.replace(path)
-    with _METADATA_CACHE_LOCK:
-        _METADATA_CACHE.pop(workspace, None)
+    """只写 topics/tags/files 三个视图字段，其余 manifest 内容保持不变。"""
+    manifest = _read_manifest(workspace)
+    manifest["topics"] = metadata.get("topics") or {}
+    manifest["tags"] = metadata.get("tags") or {}
+    files = manifest.setdefault("files", {})
+    for path, ids in (metadata.get("files") or {}).items():
+        entry = files.get(path)
+        if isinstance(entry, dict):
+            entry["chunks"] = list(ids)
+        else:
+            files[path] = {"chunks": list(ids)}
+    _write_manifest(workspace, manifest)
 
 
 def _update_metadata_index(metadata: dict[str, Any], chunk: dict, mode: str = "add") -> None:
@@ -443,6 +480,10 @@ def _chunk_to_doc(chunk: dict, embedding: dict) -> zvec.Doc:
             "topic": topic,
             "tags_json": json.dumps(tags, ensure_ascii=False),
             "section_title": section_title,
+            "doc_kind": (chunk.get("doc_kind") or "note")[:32],
+            "book_id": (chunk.get("book_id") or "")[:64],
+            "chapter_id": (chunk.get("chapter_id") or "")[:64],
+            "chapter_order": (chunk.get("chapter_order") or "")[:16],
         },
     )
 
@@ -468,6 +509,10 @@ def _doc_to_result(doc: zvec.Doc, score: float | None = None) -> dict:
         "topic": fields.get("topic", ""),
         "tags": _tags_from_fields(fields),
         "section_title": fields.get("section_title", ""),
+        "doc_kind": fields.get("doc_kind", ""),
+        "book_id": fields.get("book_id", ""),
+        "chapter_id": fields.get("chapter_id", ""),
+        "chapter_order": fields.get("chapter_order", ""),
         "dense_vec": dense_vec,
         "dense_score": score if score is not None else 0.0,
         "sparse_score": 0.0,

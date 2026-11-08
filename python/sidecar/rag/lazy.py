@@ -1,4 +1,4 @@
-"""Lazy module proxies so heavy extensions (zvec, bm25s) load only on first use.
+"""Lazy module proxies so heavy extensions (zvec, fastembed) load only on first use.
 
 These two C extensions cost ~20-25 MB of RSS at import time. Most sidecar
 startup paths (config, lint, file listening) never touch retrieval, so the

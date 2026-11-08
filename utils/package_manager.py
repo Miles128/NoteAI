@@ -27,8 +27,7 @@ _INSTALL_LOCK = threading.Lock()
 
 _FEATURE_GROUPS: dict[str, list[str]] = {
     "rag": [
-        "bm25s>=0.2.0",
-        "zvec>=0.5.0",
+        "zvec>=0.8.0",
         "fastembed>=0.4.0",
     ],
 }
@@ -37,13 +36,12 @@ _FEATURE_LABELS: dict[str, dict[str, str]] = {
     "rag": {
         "name_zh": "向量 RAG 检索",
         "name_en": "Vector RAG",
-        "desc_zh": "语义检索、BM25 混合搜索与 ONNX 重排（fastembed、bm25s、zvec）",
+        "desc_zh": "语义检索、FTS 混合搜索与 ONNX 重排（fastembed、zvec）",
         "desc_en": "Semantic search, BM25 hybrid retrieval, and reranker models",
     },
 }
 
 _import_map: dict[str, str] = {
-    "bm25s": "bm25s",
     "zvec": "zvec",
     "fastembed": "fastembed",
     "numpy": "numpy",

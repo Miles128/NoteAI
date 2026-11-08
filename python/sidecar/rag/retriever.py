@@ -1,3 +1,4 @@
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -52,19 +53,34 @@ def _get_reranker():
     return get_reranker()
 
 
-def _cache_key(query: str, topics, tags, current_file: str = "") -> str:
-    ws = config.workspace_path or ""
-    return f"{ws}||{query}||{','.join(sorted(topics or []))}||{','.join(sorted(tags or []))}||{current_file}"
+def _cache_key(query: str, topics, tags, current_file: str = "", doc_kinds: list[str] | None = None) -> str:
+    from ragkit.cache import make_cache_key
+
+    return make_cache_key(
+        config.workspace_path or "",
+        query,
+        sorted(topics or []),
+        sorted(tags or []),
+        current_file,
+        sorted(doc_kinds or []),
+    )
 
 
-def _get_cached(query: str, topics, tags, current_file: str = ""):
-    key = _cache_key(query, topics, tags, current_file)
+def _get_cached(query: str, topics, tags, current_file: str = "", doc_kinds: list[str] | None = None):
+    key = _cache_key(query, topics, tags, current_file, doc_kinds)
     return _query_cache.get(key)
 
 
-def _set_cached(query: str, topics, tags, current_file: str, value):
-    key = _cache_key(query, topics, tags, current_file)
+def _set_cached(query: str, topics, tags, current_file: str, value, doc_kinds: list[str] | None = None):
+    key = _cache_key(query, topics, tags, current_file, doc_kinds)
     _query_cache.set(key, value)
+
+
+def _matches_doc_kinds(item: dict, doc_kinds: list[str] | None) -> bool:
+    if not doc_kinds:
+        return True
+    kind = item.get("doc_kind") or "note"
+    return kind in doc_kinds
 
 
 def retrieve(
@@ -73,6 +89,7 @@ def retrieve(
     tags: list | None = None,
     current_file: str = "",
     progress_callback=None,
+    doc_kinds: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run the hybrid retrieval pipeline.
 
@@ -91,7 +108,7 @@ def retrieve(
     if not workspace:
         return {"results": [], "retrieval_debug": debug}
 
-    cached = _get_cached(query, topics, tags, current_file)
+    cached = _get_cached(query, topics, tags, current_file, doc_kinds)
     if cached is not None:
         cached_results, cached_debug = cached
         if isinstance(cached_debug, dict) and cached_debug:
@@ -177,15 +194,17 @@ def retrieve(
         dynamic_top_k = select_dynamic_top_k(query, results)
 
     results = filter_usable_chunks(results)[:dynamic_top_k]
+    results = [item for item in results if _matches_doc_kinds(item, doc_kinds)]
 
     from sidecar.rag.context_expand import expand_retrieval_context
 
     expanded = expand_retrieval_context(results, topics=topics, workspace=workspace)
+    expanded = [item for item in expanded if _matches_doc_kinds(item, doc_kinds)]
     expanded = filter_usable_chunks(expanded)
     expanded = limit_unique_sources(expanded, dynamic_top_k)
 
     debug["final"] = len(expanded)
-    _set_cached(query, topics, tags, current_file, (expanded, debug))
+    _set_cached(query, topics, tags, current_file, (expanded, debug), doc_kinds)
     return {"results": expanded, "retrieval_debug": debug}
 
 
@@ -220,64 +239,20 @@ def _hyde_search(workspace, query, topics, tags, top_k, progress_callback=None) 
 
 
 def _mmr_dedup(results: list, top_k: int = 5, lambda_param: float = 0.5) -> list:
+    """MMR 去重：有 dense_vec 用余弦，缺向量时由 ragkit 退化为词集合 Jaccard。"""
     if len(results) <= top_k:
         return results
-
-    import numpy as np
-
     try:
-        dense_vecs = []
-        needs_encode = False
-        for r in results:
-            vec = r.get("dense_vec")
-            if vec and len(vec) == 512:
-                dense_vecs.append(vec)
-            else:
-                needs_encode = True
-                break
+        from ragkit.mmr import mmr_select
 
-        if needs_encode or not dense_vecs:
-            from sidecar.rag.embedder import encode
-
-            contents = [r.get("content", "") for r in results]
-            if not any(contents):
-                return results[:top_k]
-
-            embeddings = encode(contents)
-            dense_vecs_arr = embeddings["dense_vecs"]
-        else:
-            dense_vecs_arr = np.array(dense_vecs, dtype=np.float32)
-
-        norms = np.linalg.norm(dense_vecs_arr, axis=1, keepdims=True)
-        norms = np.where(norms == 0, 1, norms)
-        norm_vecs = dense_vecs_arr / norms
-
-        selected_indices = [0]
-        remaining = set(range(1, len(results)))
-
-        while len(selected_indices) < top_k and remaining:
-            best_idx = -1
-            best_score = -float("inf")
-
-            for idx in remaining:
-                relevance = results[idx].get("score", 0)
-                max_sim = 0.0
-                for sel_idx in selected_indices:
-                    sim = float(np.dot(norm_vecs[idx], norm_vecs[sel_idx]))
-                    max_sim = max(max_sim, sim)
-
-                mmr_score = lambda_param * relevance - (1 - lambda_param) * max_sim
-                if mmr_score > best_score:
-                    best_score = mmr_score
-                    best_idx = idx
-
-            if best_idx >= 0:
-                selected_indices.append(best_idx)
-                remaining.discard(best_idx)
-            else:
-                break
-
-        return [results[i] for i in selected_indices]
+        return mmr_select(
+            results,
+            top_k,
+            relevance_key="score",
+            vector_key="dense_vec",
+            text_key="content",
+            lambda_param=lambda_param,
+        )
     except Exception as e:
         logger.warning(f"[rag/retriever] MMR dedup error: {e}\n")
         return results[:top_k]
@@ -329,25 +304,55 @@ def _excluded_dirs() -> set[str]:
     }
 
 
+def _scan_book_chapters(workspace_path: Path) -> dict[str, dict]:
+    """只收录已发布书籍的章节；草稿/待确认书稿不进入默认问答。"""
+    root = workspace_path / config.BOOKS_FOLDER
+    if not root.is_dir():
+        return {}
+    files: dict[str, dict] = {}
+    for book_dir in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+        if not book_dir.is_dir() or book_dir.name.startswith("."):
+            continue
+        manifest_path = book_dir / "book.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(manifest, dict) or manifest.get("status") != "published":
+            continue
+        chapters_dir = book_dir / "chapters"
+        if not chapters_dir.is_dir():
+            continue
+        for md_file in sorted(chapters_dir.glob("*.md")):
+            if md_file.name.startswith("."):
+                continue
+            stat = md_file.stat()
+            rel = str(md_file.relative_to(workspace_path))
+            files[rel] = {"mtime": stat.st_mtime, "size": stat.st_size}
+    return files
+
+
 def _scan_files(workspace_path: Path):
-    """Scan knowledge notes only; workspace tooling and README files are not sources."""
+    """Scan knowledge notes and published book chapters."""
     excluded_dirs = _excluded_dirs()
     files: dict[str, dict] = {}
     notes_root = workspace_path / NOTES_FOLDER
-    if not notes_root.is_dir():
-        return files
-    for md_file in sorted(notes_root.rglob("*.md")):
-        rel_parts = md_file.relative_to(workspace_path).parts
-        if md_file.name.startswith(".") or md_file.stem.casefold() == "readme":
-            continue
-        if any(part.startswith(".") or part in excluded_dirs for part in rel_parts[:-1]):
-            continue
-        if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
-            continue
+    if notes_root.is_dir():
+        for md_file in sorted(notes_root.rglob("*.md")):
+            rel_parts = md_file.relative_to(workspace_path).parts
+            if md_file.name.startswith(".") or md_file.stem.casefold() == "readme":
+                continue
+            if any(part.startswith(".") or part in excluded_dirs for part in rel_parts[:-1]):
+                continue
+            if md_file.name.endswith("_综述.md") or md_file.name.endswith("综述.md"):
+                continue
 
-        stat = md_file.stat()
-        rel = str(md_file.relative_to(workspace_path))
-        files[rel] = {"mtime": stat.st_mtime, "size": stat.st_size}
+            stat = md_file.stat()
+            rel = str(md_file.relative_to(workspace_path))
+            files[rel] = {"mtime": stat.st_mtime, "size": stat.st_size}
+    files.update(_scan_book_chapters(workspace_path))
     return files
 
 
@@ -537,7 +542,7 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
     collection = _get_collection(workspace)
     for rel_path in deleted + modified:
         try:
-            delete_by_file(workspace, rel_path, collection=collection, rebuild_bm25s=False)
+            delete_by_file(workspace, rel_path, collection=collection)
         except Exception as e:
             logger.warning(f"[rag/retriever] delete_by_file failed {rel_path}: {e}\n")
 
@@ -560,7 +565,7 @@ def _rebuild_index_locked(progress_callback=None, *, force_full: bool = False, w
             )
         except Exception as e:
             return {"success": False, "message": f"Embedding 生成失败: {e}"}
-        add_chunks(workspace, new_chunks, embeddings, rebuild_bm25s=False)
+        add_chunks(workspace, new_chunks, embeddings)
 
     # Rebuild BM25s and metadata from the full collection
     all_chunk_ids: list[str] = []

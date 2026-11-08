@@ -8,13 +8,11 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sidecar.rag.index_bm25 import _bm25_corpus_from_retriever, _build_and_save_bm25, rebuild_search_indices
 from sidecar.rag.index_core import (
     _COLLECTION_CACHE,
     _COLLECTION_CACHE_LOCK,
     _COLLECTION_IO_LOCK,
     _INDEX_BATCH_SIZE,
-    _bm25s_dir,
     _build_schema,
     _bump_manifest_version,
     _chunk_to_doc,
@@ -37,14 +35,13 @@ from sidecar.rag.index_core import (
     load_manifest,
     save_manifest,
 )
+from sidecar.rag.index_fts import rebuild_search_indices
 from sidecar.rag.lazy import lazy_import
 from utils.logger import logger
 
 if TYPE_CHECKING:
-    import bm25s
     import zvec
 else:
-    bm25s = lazy_import("bm25s")
     zvec = lazy_import("zvec")
 
 
@@ -113,12 +110,6 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
             _COLLECTION_CACHE[ws] = collection
         shutil.rmtree(backup_path, ignore_errors=True)
 
-        # Build BM25s index
-        if progress_callback:
-            progress_callback(total, total, "构建 BM25 索引...")
-
-        _build_and_save_bm25(chunks, _bm25s_dir(ws), ws)
-
         # Build metadata indices
         metadata = _empty_metadata()
         for chunk in chunks:
@@ -126,6 +117,9 @@ def build_index(workspace: str, chunks: list[dict], embeddings: list[dict], prog
         _save_metadata(ws, metadata)
 
         _bump_manifest_version(ws)
+        from sidecar.rag.index_core import _ensure_fts_index
+
+        _ensure_fts_index(ws, collection)
 
     return {"success": True, "chunk_count": total, "_collection": collection}
 
@@ -134,8 +128,6 @@ def add_chunks(
     workspace: str,
     chunks: list[dict],
     embeddings: list[dict],
-    *,
-    rebuild_bm25s: bool = True,
 ) -> None:
     if not chunks:
         return
@@ -157,27 +149,6 @@ def add_chunks(
         _write_docs_batched(collection, docs)
         collection.flush()
         _save_metadata(workspace, metadata)
-
-    # Rebuild BM25s with merged corpus
-    if not rebuild_bm25s:
-        return
-    try:
-        bm25_dir = _bm25s_dir(workspace)
-        if bm25_dir.exists() and any(bm25_dir.iterdir()):
-            old_retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-            old_corpus = _bm25_corpus_from_retriever(old_retriever)
-        else:
-            old_corpus = []
-
-        old_map = {c.get("id"): c for c in old_corpus if c.get("id")}
-        for c in chunks:
-            if c.get("id"):
-                old_map[c["id"]] = c
-        merged_corpus = list(old_map.values())
-
-        _build_and_save_bm25(merged_corpus, bm25_dir, workspace)
-    except Exception as e:
-        logger.warning(f"[rag/index] BM25s rebuild failed: {e}\n")
 
 
 def replace_file_chunks(workspace: str, replacements: dict[str, dict]) -> int:
@@ -238,8 +209,6 @@ def delete_by_file(
     workspace: str,
     file_path: str,
     collection: zvec.Collection | None = None,
-    *,
-    rebuild_bm25s: bool = True,
 ) -> list[dict]:
     """Delete all chunks belonging to a file.
 
@@ -247,8 +216,6 @@ def delete_by_file(
         workspace: target workspace.
         file_path: relative file path stored in chunk metadata.
         collection: optional opened zvec collection; if omitted, one is fetched.
-        rebuild_bm25s: when False, skip BM25s rebuild (callers that batch deletes
-            should rebuild once at the end).
 
     Returns:
         List of removed chunk dicts.
@@ -265,24 +232,10 @@ def delete_by_file(
 
         _save_metadata(workspace, metadata)
 
-    # Rebuild BM25s without deleted docs
-    if not rebuild_bm25s:
-        return removed
-
-    try:
-        bm25_dir = _bm25s_dir(workspace)
-        if not bm25_dir.exists() or not any(bm25_dir.iterdir()):
-            return removed
-        retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-        old_corpus = _bm25_corpus_from_retriever(retriever)
-        removed_ids = {c["id"] for c in removed}
-        new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
-        _build_and_save_bm25(new_corpus, bm25_dir, workspace)
+    if removed:
         manifest = load_manifest(workspace)
         manifest.get("files", {}).pop(file_path, None)
         save_manifest(workspace, manifest)
-    except Exception as e:
-        logger.warning(f"[rag/index] BM25s rebuild after delete failed: {e}\n")
 
     return removed
 
@@ -329,11 +282,7 @@ def _delete_file_chunks(
 
 
 def delete_files_batched(workspace: str, file_paths: list[str]) -> list[dict]:
-    """Delete chunks of multiple files under one writer lock.
-
-    BM25 is rebuilt exactly once at the end instead of once per file —
-    deleting K files previously triggered K full corpus rebuilds.
-    """
+    """Delete chunks of multiple files under one writer lock."""
     if not file_paths:
         return []
     removed_all: list[dict] = []
@@ -347,20 +296,10 @@ def delete_files_batched(workspace: str, file_paths: list[str]) -> list[dict]:
         _save_metadata(workspace, metadata)
 
     if removed_all:
-        try:
-            bm25_dir = _bm25s_dir(workspace)
-            if bm25_dir.exists() and any(bm25_dir.iterdir()):
-                retriever = bm25s.BM25.load(bm25_dir, load_corpus=True)
-                old_corpus = _bm25_corpus_from_retriever(retriever)
-                removed_ids = {c["id"] for c in removed_all}
-                new_corpus = [c for c in old_corpus if c.get("id") not in removed_ids]
-                _build_and_save_bm25(new_corpus, bm25_dir, workspace)
-            manifest = load_manifest(workspace)
-            files_manifest = manifest.setdefault("files", {})
-            for file_path in file_paths:
-                files_manifest.pop(file_path, None)
-            save_manifest(workspace, manifest)
-        except Exception as e:
-            logger.warning(f"[rag/index] BM25s rebuild after batch delete failed: {e}\n")
+        manifest = load_manifest(workspace)
+        files_manifest = manifest.setdefault("files", {})
+        for file_path in file_paths:
+            files_manifest.pop(file_path, None)
+        save_manifest(workspace, manifest)
 
     return removed_all

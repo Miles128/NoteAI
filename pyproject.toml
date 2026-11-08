@@ -18,7 +18,7 @@ dependencies = [
     "watchdog>=4.0.0",
     "send2trash>=1.8.0",
     "numpy>=1.24.0",
-    "ragkit>=0.1.0",
+    "shibei-ragkit>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -48,7 +48,7 @@ all = [
 ]
 
 [tool.uv.sources]
-ragkit = { path = "../shibei/packages/ragkit", editable = true }
+shibei-ragkit = { git = "https://github.com/Miles128/shibei-ragkit.git", tag = "v0.1.0" }
 
 [build-system]
 requires = ["setuptools>=61"]

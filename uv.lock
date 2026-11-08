@@ -855,9 +855,9 @@ dependencies = [
     { name = "openai" },
     { name = "pydantic" },
     { name = "pyyaml" },
-    { name = "ragkit" },
     { name = "requests" },
     { name = "send2trash" },
+    { name = "shibei-ragkit" },
     { name = "tiktoken" },
     { name = "validators" },
     { name = "watchdog" },
@@ -914,11 +914,11 @@ requires-dist = [
     { name = "python-docx", marker = "extra == 'ingest'", specifier = ">=1.0.0" },
     { name = "python-pptx", marker = "extra == 'ingest'", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ragkit", editable = "../shibei/packages/ragkit" },
     { name = "readability-lxml", marker = "extra == 'ingest'", specifier = ">=0.8.1" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "send2trash", specifier = ">=1.8.0" },
+    { name = "shibei-ragkit", git = "https://github.com/Miles128/shibei-ragkit.git?tag=v0.1.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "validators", specifier = ">=0.22.0" },
     { name = "watchdog", specifier = ">=4.0.0" },
@@ -1376,11 +1376,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ragkit"
-version = "0.1.0"
-source = { editable = "../shibei/packages/ragkit" }
-
-[[package]]
 name = "readability-lxml"
 version = "0.8.4.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1552,6 +1547,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b2
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
 ]
+
+[[package]]
+name = "shibei-ragkit"
+version = "0.1.0"
+source = { git = "https://github.com/Miles128/shibei-ragkit.git?tag=v0.1.0#7774070a0b40939806cd857a1823bdd404866f4d" }
 
 [[package]]
 name = "six"
